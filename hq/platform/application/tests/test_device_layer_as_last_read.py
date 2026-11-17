@@ -13,6 +13,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderInventory
 
 from ..request_connection import connection
+from ..standards import Standing
 from .connection_requests import a_device, a_request, a_tailnet
 
 # Longer than a page visit's freshness.
@@ -28,7 +29,7 @@ def read_only_hq(*, age: timedelta = timedelta(0)) -> None:
 
 
 def device_layer():
-    return next(layer for layer in connection(a_request()).layers if layer.id == "device")
+    return next(layer for layer in connection(a_request()).checks.results if layer.check.id == "device")
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
@@ -38,18 +39,18 @@ class DeviceLayerAsLastReadTests(TestCase):
 
         layer = device_layer()
 
-        self.assertFalse(layer.conclusive)
+        self.assertEqual(layer.state, Standing.UNAVAILABLE)
 
     def test_a_current_reading_without_the_address_fails(self):
         read_only_hq()
 
         layer = device_layer()
 
-        self.assertTrue(layer.conclusive)
-        self.assertFalse(layer.holds)
+        self.assertNotEqual(layer.state, Standing.UNAVAILABLE)
+        self.assertFalse(layer.met)
 
     def test_no_reading_cannot_say(self):
         layer = device_layer()
 
-        self.assertFalse(layer.conclusive)
-        self.assertIn("has not read", layer.detail)
+        self.assertEqual(layer.state, Standing.UNAVAILABLE)
+        self.assertIn("has not read", layer.reading.detail)

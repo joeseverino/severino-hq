@@ -1,5 +1,4 @@
-{% filter_bar filtered=table.active_count clear="?" data_table_toolbar=True %}
-  <input type="search" name="q" value="{{ table.query }}" placeholder="{{ table.search_placeholder }}" aria-label="{{ table.search_placeholder }}">
+{% filter_bar search=table.search_placeholder query=table.query filtered=table.active_count clear="?" data_table_toolbar=True %}
   {% choices %}
   {% for filter in table.filters %}
     <div class="table-filter-menu">
@@ -16,15 +15,12 @@
   {% endfor %}
   {% if table.sorts %}
     <label class="table-sort">Sort
-      <select name="sort">
-        {% if table.query %}<option value="_relevance"{% if table.selected_sort == "_relevance" %} selected{% endif %}>Relevance</option>{% endif %}
-        {% for sort in table.sorts %}<option value="{{ sort.value }}"{% if sort.value == table.selected_sort %} selected{% endif %}>{{ sort.label }}</option>{% endfor %}
-      </select>
+      {% select "sort" table.sort_choices chosen=table.selected_sort %}
     </label>
   {% endif %}
 {% endfilter_bar %}
 <div class="table-selection" data-table-selection aria-live="polite" hidden>
   <strong><span data-selection-count>0</span> selected</strong>
-  <button class="btn ghost" type="button" data-copy-selected>Copy IDs</button>
-  <button class="btn ghost" type="button" data-clear-selected>Clear selection</button>
+  {% button "Copy IDs" look="ghost" data_copy_selected=True %}
+  {% button "Clear selection" look="ghost" data_clear_selected=True %}
 </div>

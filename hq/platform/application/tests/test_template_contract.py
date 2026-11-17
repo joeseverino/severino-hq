@@ -36,17 +36,17 @@ OUTSIDE = {
     "templates/example/_own.html": "{% load example_tags %}{{ value|doubled }}{% lorem 1 w %}",
     "templates/example/tags.html": (
         "{% load nav_tags %}\n{% problems_about %}\n{{ value|readable }}\n{{ count|counted }}\n"
-        '{% post_button "Go" url color="red" %}'
+        '{% table_heading "Go" color="red" %}\n{% present first second %}x{% endpresent %}'
     ),
     "templates/example/markup.html": (
         '<div class="compact invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p><svg data-chart></svg></div>\n'
-        '<span class="muted" style="--part: {{ width }}">x</span>'
+        '<span class="nowrap" style="--part: {{ width }}">x</span>'
     ),
     "templates/example/parts.html": (
         '{% card %}{% section "A" %}B{% aside %}C{% endsection %}{% aside %}C{% endcard %}\n'
         "{% aside %}D\n"
-        '{% card css="muted invented-card" %}{% endcard %}{% card css=chosen %}{% endcard %}\n'
-        '{% post_button "Go" url css="invented-button" %}\n{% table_heading "A" css="invented-note" %}\n'
+        '{% card css="nowrap invented-card" %}{% endcard %}{% card css=chosen %}{% endcard %}\n'
+        '{% button "Go" url post=True css="invented-button" %}\n{% table_heading "A" css="invented-note" %}\n'
         '{% facts %}{% fact "A" value=n %}{% detail %}B{% endfacts %}'
     ),
     "templatetags/example_tags.py": (
@@ -79,6 +79,7 @@ class TemplateValidationTests(SimpleTestCase):
             "tags.html:3": "readable",
             "tags.html:4": "counted",
             "tags.html:5": "color",
+            "tags.html:6": "present",
             "markup.html:1": "invented",
             "markup.html:2": "data-secret",
             "markup.html:3": "style attribute",
@@ -214,11 +215,10 @@ class PageDialogTests(SimpleTestCase):
         self.assertIn('data-modal-open="connection"', html)
         self.assertNotIn('id="modal-connection"', html)
 
-    def test_a_dialog_needs_a_usable_id_and_a_get(self):
+    def test_a_dialog_needs_a_usable_id(self):
+        # Only a link opens one: a command's control takes no dialog.
         with self.assertRaises(ValueError):
             PageDialog("Import Records", "Import", "example/_form.html")
-        with self.assertRaises(ValueError):
-            PageAction("Go", "/", method="post", modal=PageDialog("go", "Go", "example/_form.html"))
 
 
 class TextHelperTests(SimpleTestCase):

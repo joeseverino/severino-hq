@@ -8,17 +8,16 @@ from django.urls import reverse
 from django.views.generic import TemplateView, View
 
 from hq.platform.application import action_items as queue_state, fragments
-from hq.platform.application.attention import readable_by
-from hq.platform.application.dashboard import waiting, work_queue
-from hq.platform.application.decisions import urgency
+from hq.platform.application.dashboard import readable_queue, waiting
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.tone import Tone
 from hq.platform.application.web_writes import execute_posted, refused
 
 ACTION_ITEM_FILTERS = ("q", "status", "source", "about")
 # The urgencies the filter narrows to, in the words every pill says.
-_URGENCIES = tuple((status, urgency(status)) for status in ("serious", "attention"))
+_URGENCIES = tuple((tone, tone.urgency) for tone in Tone if tone.acted_on)
 
 
 def _action_items(request, current=None):
@@ -26,7 +25,7 @@ def _action_items(request, current=None):
 
     if current is None:
         with projection_scope():
-            current = readable_by(web_principal(request.user), work_queue())
+            current = readable_queue(web_principal(request.user))
     all_items = queue_state.with_aside_state(current, request.user)
     items = queue_state.filter_items(
         all_items,
@@ -83,6 +82,7 @@ class ActionItemsView(PageMixin, TemplateView):
             action_status=status,
             action_source=source,
             action_about=about,
+            action_kept={"about": about},
             action_filtered=bool(query or status or source or about),
         )
         return context
@@ -111,6 +111,10 @@ class ActionItemAsideView(View):
     """
 
     aside = False
+
+    @property
+    def runs(self) -> tuple[str, ...]:
+        return (queue_state.SET_ASIDE if self.aside else queue_state.RESTORE,)
 
     def post(self, request):
         rows = queue_state.named_rows(request.POST.getlist("key"))

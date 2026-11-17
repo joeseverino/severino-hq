@@ -73,15 +73,21 @@ ENTRIES = {
                     "example-01",
                     "An example note.",
                     (
-                        PageAction("Read", "/example/1/status/", method="post", value="read", field="status"),
-                        PageAction("Delete", "/example/1/delete/", danger=True),
+                        PageAction._built(
+                            label="Read", url="/example/1/status/", method="post", value="read", field="status"
+                        ),
+                        PageAction._built(label="Delete", url="/example/1/delete/", danger=True),
                     ),
                 ),
                 ("example-02", "Another example note.", (PageAction("Open", "/example/2/"),)),
                 (
                     "example-03",
                     "An example note that wraps on a phone.",
-                    (PageAction("Spam", "/example/3/", method="post", disabled=True, title="An example reason."),),
+                    (
+                        PageAction._built(
+                            label="Spam", url="/example/3/", method="post", disabled=True, title="An example reason."
+                        ),
+                    ),
                 ),
             )
         },

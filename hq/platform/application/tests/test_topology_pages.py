@@ -1,6 +1,7 @@
 """The topology pages: the whole map, one node in focus, its actions and its lenses."""
 
 from datetime import datetime, timedelta
+from itertools import pairwise
 
 from django.contrib.auth import get_user_model
 from django.db import connection as database_connection
@@ -12,6 +13,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.topology_views import TopologyView
 from hq.platform.application.derivation_testing import uncached
+from hq.platform.application.markup_testing import hrefs, links, select, text, texts, within
 from hq_sdk.testing import plain
 
 from ..action_links import topology_investigation_links, topology_url
@@ -22,7 +24,6 @@ from ..security import Capability
 from ..topology import derive_topology, topology as serialized_topology
 from ..topology_lenses import apply_lens, lens_for, topology_lenses
 from .host_only import host_only
-from .markup import hrefs, select, text, texts, within
 from .topology_principals import MANAGE, NONE, READ
 
 
@@ -278,14 +279,13 @@ class FocusedPageTests(TestCase):
 
     def test_the_details_render_once_in_the_panel_ordered_by_importance(self):
         response = self.page("zone:example.com")
-        body = response.content.decode()
-
         self.assertEqual(len(select(response, "data-topology-body-of", "zone:example.com")), 1)
         panel = within(response, "id", "topology-detail")
         self.assertTrue(any(element.attrs.get("data-topology-body-of") == "zone:example.com" for element in panel))
         # Each value says when it was read, and no list of links is comma-joined.
         self.assertTrue(any(element.tag == "time" and element.attrs.get("datetime") for element in panel))
-        self.assertNotRegex(body, r"</a>,\s*<a")
+        said, named = text(response), [words for words, _target in links(response) if words]
+        self.assertFalse([(one, next_one) for one, next_one in pairwise(named) if f"{one}, {next_one}" in said])
         detail = response.context["topology_detail"]
         for direction in ("in", "out"):
             ranks = [row["rank"] for row in detail["relations"] if row["direction"] == direction]

@@ -227,6 +227,9 @@ repository's contents:
 "automation": {"repository": "example/playbooks", "grant": "automation-projects"}
 ```
 
+`hq-host bootstrap` after adding the entry starts the worker, which takes
+whatever was queued before the host had one.
+
 `hq-host controller` reads the grants on every pass, so a grant added there
 takes effect on the next pass with no other step. Install the app on each
 repository a grant names. Until then, each applying pass reports
@@ -309,11 +312,12 @@ from the tree, and every unit and the deploy call it.
 | `install` | installs every shipped unit, renders secrets, preflights the controller and the content index, enables every timer and path |
 | `sync IMAGE` | replaces the tree with the image's, refusing a unit that names a path the tree lacks |
 | `verify` | reports where the host differs from its release: tree, units, anything retired, and the Actions runner's sudo rules. It holds them to one runner unit, not root, with its NOPASSWD rule for `hq-host deploy *`, no unrestricted rule, and no command `sudo -l` lists that HQ does not render. A failure names the command and the grep that finds its file. Root alone can list another account's rules, so the rules are checked here (`severino-hq-script-drift.timer`, daily) |
-| `bootstrap` | renders the drop-ins and sudo rule `host.json` decides |
+| `bootstrap` | renders the drop-ins and sudo rule `host.json` decides, then, when `host.json` has an `automation` entry and a deploy has installed the worker's unit, starts `severino-hq-automation.service` without waiting on it, so a run or scan queued while the host had no entry is taken then |
 | `backup` | snapshots and archives HQ's volumes, where docker says they are ([Backup](Backup.md)) |
 | `upgrade ARGS` | moves one compose service to a pinned image, through its own sudo rule ([Container upgrades](#container-upgrades)) |
 | `unit --serve` | answers one request on the unit socket: stops, starts or restarts the systemd unit a container names in its `severino-hq.unit` label, once that unit's own start commands are found to run the container ([Architecture](Architecture.md#a-container-its-unit-runs)) |
-| `check` | the host's half of `mise run check --release`, as any account and read-only. It runs `verify`, and with it the runner's sudo rules (or, where sudo asks for a password, the drift unit's run since the release was installed). It checks the established units, free disk, and that every program a sudo rule names is root's alone. Where sudo lets it read nftables, it checks that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). `mise run check:host`, which `check --release` runs, builds it from HEAD for the host's platform and runs it from a temporary directory over SSH on `SEVERINO_HQ_DEPLOY_HOST`, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
+| `edge-receiver` | as any account, writes to a pipe a tar of the tree's `hq-edge` and its `SHA256SUMS` line, for an administrator to install on an edge, once the tree is proven to be the release ([Remote targets](#remote-targets)) |
+| `check` | the host's half of `mise run check --release`, as any account and read-only. It runs `verify`, and with it the runner's sudo rules (or, where sudo asks for a password, the drift unit's run since the release was installed). It checks the established units, free disk, and that every program a sudo rule names, and the edge receiver, is root's alone. Where sudo lets it read nftables, it checks that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). `mise run check:host`, which `check --release` runs, builds it from HEAD for the host's platform and runs it from a temporary directory over SSH on `SEVERINO_HQ_DEPLOY_HOST`, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
 
 ### Units
 
@@ -332,7 +336,7 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 | `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
 | `severino-hq-renovate.service` / `.path` | `hq-host renovate`, when a handoff reaches the spool |
-| `severino-hq-automation.service` / `.timer` / `.path` | `hq-host automation`, when HQ creates the automation doorbell (a run or a Refresh queued), else 15 minutes after each worker ends. The worker removes the doorbell before it claims; one created while it works still stands when it ends, and the path unit starts it again |
+| `severino-hq-automation.service` / `.timer` / `.path` | `hq-host automation`, when HQ creates the automation doorbell (a run or a Refresh queued), at `hq-host bootstrap` on a host with an `automation` entry, else 15 minutes after each worker ends. The worker removes the doorbell before it claims; one created while it works still stands when it ends, and the path unit starts it again |
 | `severino-hq-backup.service` / `.timer` | `hq-host backup`, nightly ([Backup](Backup.md)) |
 | `severino-hq-script-drift.service` / `.timer` | `hq-host verify`, daily |
 | `severino-hq-unit.socket` / `severino-hq-unit@.service` | `hq-host unit --serve`, one instance per connection from the controller |
@@ -415,6 +419,13 @@ nothing. `hq-host deploy`:
 5. Rehearses the release on a copy of production's data, touching nothing
    live (`Rehearsal` in `controller/host/rehearse.go`, which states its
    security properties). It renders no secrets.
+   - Each service that runs a program of the image's tree (`hq-host`,
+     `hq-secrets`) starts that program once with `dry-run`, through
+     `systemd-run --wait`, in the sandbox the image's own unit and drop-ins
+     give it. A dry run makes the program's reads of the host (the mount
+     table, the renderer's tmpfs, the port floor under `/proc/sys`) and
+     nothing else, so a path the sandbox hides, a system call it filters or a
+     setting this systemd refuses fails the release here.
    - The database is copied read-only, as HQ's account, into a scratch volume.
    - The image's web process boots on the copy with no network. It is checked
      for readiness, its bridge socket, the copy's integrity, scheduled work
@@ -424,7 +435,7 @@ nothing. `hq-host deploy`:
    - The live web unit and container must not have restarted meanwhile.
 
    The public log gets one verdict line,
-   `Rehearsal: result=pass ready=yes socket=ok ...`, and
+   `Rehearsal: result=pass sandbox=ok ready=yes ...`, and
    `/var/log/severino-hq/rehearsal.log` each step's output. A failed check, or
    too little free space for the copy, refuses the release as not deployed,
    before anything below runs.
@@ -453,7 +464,8 @@ its failed units and the last run of the controller and glance units. It reads t
 `SEVERINO_HQ_DEPLOY_HOST` as the operator account, with no sudo and no docker
 group: the container is found through the cgroup of the process serving HQ,
 whose files any account can read. A reading that fails is a row saying so; the
-task exits 1 then, or when the release was never marked live.
+task exits 1 then, or when the release was never marked live. The perf reading
+is the run perf's closing line names, wherever perf ran.
 
 ### The bridge
 
@@ -607,19 +619,43 @@ a deploy cannot rewrite its own remote authorization.
   [`deploy/targets/severino-hq-cpanel-controller`](../deploy/targets/severino-hq-cpanel-controller),
   installed as that account, with its key forced to the script.
 
-`hq-edge` ships in the composed image at `/app/deploy/bin/hq-edge`. To install
-or update it, run this on the edge as an account that may use Docker and sudo,
-with `image` set to the digest-pinned composition HQ runs (the one in
-`/var/lib/severino-hq/release` on HQ's host). It needs cosign and read access
-to the image, verifies the compose workflow's signature, and stops if the
-image is built for another platform than the edge's:
+`hq-edge` ships in the composed image at `/app/deploy/bin/hq-edge`, and so in
+HQ's host tree at `/usr/local/lib/severino-hq/deploy/bin/hq-edge`. The HQ
+host already holds it verified, so the edge needs nothing but the account
+that installed it: SSH, `sudo`, `tar` and coreutils. To install or update it,
+run this from a machine with SSH to both, as an account on HQ's host and an
+administrator on the edge, with `hq` and `edge` set to those two:
 
 ```sh
-image=ghcr.io/OWNER/REPO/composition@sha256:DIGEST && cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/OWNER/REPO/\.github/workflows/compose\.yml@refs/heads/main$' "$image" >/dev/null && docker pull -q "$image" >/dev/null && built="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")" && here="$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')" && { [ "$built" = "$here" ] || { echo "hq-edge in this release is built for $built; this edge runs $here" >&2; false; }; } && container="$(docker create --pull never "$image")" && docker cp "$container:/app/deploy/bin/hq-edge" ./hq-edge && docker rm "$container" >/dev/null && sudo install -o root -g root -m 0755 ./hq-edge /usr/local/sbin/severino-hq-edge-controller && rm ./hq-edge && sudo /usr/local/sbin/severino-hq-edge-controller version
+hq=admin@hq.example.com && edge=admin@edge.example.com && ssh "$hq" /usr/local/lib/severino-hq/deploy/bin/hq-host edge-receiver | ssh "$edge" 'rm -rf hq-edge.new && mkdir -m 0700 hq-edge.new && tar -x -C hq-edge.new' && ssh -t "$edge" 'cd hq-edge.new && sha256sum -c SHA256SUMS && ./hq-edge version && sudo install -o root -g root -m 0755 hq-edge /usr/local/sbin/severino-hq-edge-controller && cd && rm -r hq-edge.new && sudo /usr/local/sbin/severino-hq-edge-controller version'
 ```
 
-It prints the receiver's version last. The dispatcher and the sudo rule name
-the same path, so neither changes.
+`hq-host edge-receiver` writes a tar of `hq-edge` and its `SHA256SUMS` line,
+and only when the two verdicts `hq-host check` reports for it hold: the tree
+is the release HQ runs, and the receiver is root's alone. A check that fails
+either names what is wrong; `edge-receiver` prints the same finding and writes
+nothing. On the edge, `sha256sum -c` refuses bytes that are not the ones the
+tree holds, a partial or missing transfer included, and running the
+unpacked receiver's `version` unprivileged stops a binary built for another
+platform before `sudo` installs it. The line prints the version it unpacked,
+then the version installed. The dispatcher and the sudo rule name the same
+path, so neither changes.
+
+What the edge trusts, and what proves the binary is the image's:
+
+- The edge trusts its administrator's SSH and the HQ host's tree, nothing
+  more. It needs no Docker, cosign, registry sign-in or credential it did not
+  already have, and the controller's key still reaches only the receiver's
+  operations, so no deploy can replace the receiver.
+- The deploy verifies the image's signature against the compose workflow's
+  identity before it pulls it, and `hq-host verify` holds the tree to that
+  image byte for byte. `edge-receiver` reads that verdict through `sudo -n`,
+  or, where sudo asks for a password, from the drift unit's run since the
+  release was installed, as `check` does.
+- The receiver in the tree is root's and writable by no one else, nor is any
+  directory above it, so the bytes `edge-receiver` reads are the bytes verify
+  compared. The `SHA256SUMS` line is their digest, and the edge installs only
+  bytes that match it, from a directory only the administrator can write.
 
 ## Container upgrades
 

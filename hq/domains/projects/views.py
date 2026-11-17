@@ -17,10 +17,11 @@ lazy from django.template.loader import render_to_string
 
 from hq.domains.projects.github import github_repository
 from hq.platform.application import related
-from hq.platform.application.action_links import capability_action_link, command_url
-from hq.platform.application.capabilities import capability_words, command_spec
+from hq.platform.application.action_links import capability_action_link, read_link
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
+from hq.platform.application.moments import moment
 from hq.platform.application.pages import PageAction, PageBadge, PageMixin
 from hq.platform.application.projects import (
     DEPENDENCY_UPDATES,
@@ -38,11 +39,12 @@ from hq.platform.application.tables import (
     TableSort,
     TableToggle,
 )
-from hq.platform.application.timestamps import moment
 from hq.platform.application.where_it_runs import where_it_runs
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
-lazy from hq.platform.application.asks import Ask, AskMixin, Standing, Took, read_standing, read_status_url
+lazy from hq.platform.application import standards
+lazy from hq.platform.application.asks import Ask, AskMixin, Standing, read_standing, read_status_url
 lazy from hq.platform.application.connection_setup import docs_url
+lazy from hq.platform.application.dashboard import finding_rows
 lazy from hq.platform.application.dependency_updates import KIND as RUN_KIND, RUN_NOW, asked_at, last_run
 lazy from hq.platform.application.github_estate import repositories, repository_for
 lazy from hq.platform.application.github_posture import STANDARD, posture_of, postures
@@ -50,8 +52,7 @@ lazy from hq.platform.application.github_profile import KIND, READ_NOW, profile,
 lazy from hq.platform.application.linked_accounts import GITHUB, linked_login
 lazy from hq.platform.application.outbound_work import ask
 lazy from hq.platform.application.page_reads import Remedy
-lazy from hq.platform.application.standards import MET, UNMET, gap
-lazy from hq.platform.application.workflow_contracts import ActionLink
+lazy from hq.platform.application.standards import unmet_finding
 
 from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
@@ -71,7 +72,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
         TableColumn("Name", "name"),
         TableColumn("Status", "status", css="key-col"),
         TableColumn("Updates"),
-        TableColumn("Technologies", "technologies_used"),
+        TableColumn("Technologies", "technologies_used", css="optional-col"),
         TableColumn("Repository", kind="status"),
         TableColumn("Edited", "updated_at"),
         TableColumn("", css="row-actions"),
@@ -107,7 +108,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_page_actions(self):
-        return (PageAction(capability_words("project.create"), reverse("projects:create"), primary=True),)
+        return (PageAction.command("project.create", primary=True),)
 
     @override
     def get_queryset(self):
@@ -133,9 +134,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
             repository = repository_for(project.repository_url)
             project.repository = repository
             project.pushed_at = moment(str(repository.pushed_at or "")) if repository is not None else None
-            project.row_actions = (
-                PageAction(capability_words("project.update"), reverse("projects:edit", args=[project.slug])),
-            )
+            project.row_actions = (PageAction.command("project.update", project.slug),)
         return context
 
 
@@ -162,7 +161,6 @@ class ProjectUpdatesRunView(AskMixin, View):
     """Ask for a dependency update run now, which the controller's next pass hands off."""
 
     capability = RUN_NOW
-    reads = (RUN_KIND,)
 
     @override
     def back(self) -> str:
@@ -221,7 +219,7 @@ class ProjectDetailView(PageMixin, DetailView):
 
         # Its state beside its name, as a service shows its reach; the category
         # leads the line of facts under it.
-        context["page_badges"] = (PageBadge(self.object.get_status_display(), self.object.status),)
+        context["page_badges"] = (PageBadge(self.object.state.label, self.object.state.tone),)
         context["page_facts"] = self.facts()
         return context
 
@@ -263,15 +261,15 @@ class ProjectDetailView(PageMixin, DetailView):
         actions = []
         if github_repository(project.repository_url):
             actions.append(ask(REFRESH, project.slug))
-        if project.repository_url and (updates := command_url(DEPENDENCY_UPDATES, project.slug)):
+        if project.repository_url:
             switch = "off" if project.dependency_updates else "on"
-            actions.append(PageAction(capability_words(DEPENDENCY_UPDATES, switch), updates))
+            actions.append(PageAction.command(DEPENDENCY_UPDATES, project.slug, variant=switch))
         if project.dependency_updates and self.repository is not None:
             run_now = run_now_ask(project, web_principal(self.request.user), self.run_asked)
             actions += [run_now] if run_now is not None else []
         actions += [
-            PageAction(capability_words("project.update"), reverse("projects:edit", args=[project.slug])),
-            PageAction("Delete", reverse("projects:delete", args=[project.slug]), danger=True),
+            PageAction.command("project.update", project.slug),
+            PageAction.command("project.delete", project.slug),
         ]
         return tuple(actions)
 
@@ -391,15 +389,6 @@ class WatchingRefreshView(AskMixin, View):
     def payload(self):
         return {"login": self.login}
 
-    @override
-    def asked(self, result, at) -> Took:
-        asked = moment(result["asked_at"])
-        return Took(
-            read_standing((KIND,), asked),
-            read_status_url((KIND,), asked),
-            command_spec(READ_NOW).requested(f"@{self.login}"),
-        )
-
 
 class PostureView(PageMixin, TemplateView):
     """Every repository the GitHub App reads, against the standard it is held to.
@@ -430,22 +419,25 @@ class PostureView(PageMixin, TemplateView):
         for check in STANDARD:
             states = [(item.subject, item.state_of(check.id)) for item in found]
             held = [state for _, state in states if state]
-            failing = [repo for repo, state in states if state == UNMET]
+            failing = [repo for repo, state in states if state == standards.Standing.UNMET]
             if failing:
                 unmet.append((check, failing, len(held)))
-            elif held and all(state == MET for state in held):
+            elif held and all(state == standards.Standing.MET for state in held):
                 everywhere.append(check)
         unmet.sort(key=lambda found: not found[0].serious)
-        context["unmet"] = [
-            gap(
-                check,
-                facts=(("Repositories", f"{len(failing)} of {held} {'repository' if held == 1 else 'repositories'}"),),
-                links=tuple(
-                    ActionLink(name="open", label=repo.short, effect="read", url=f"{repo.url}/settings")
-                    for repo in failing
-                ),
-            )
-            for check, failing, held in unmet
-        ]
+        context["unmet"] = finding_rows(
+            "standards",
+            "Standards",
+            (
+                unmet_finding(
+                    check,
+                    evidence=(
+                        ("Repositories", f"{len(failing)} of {held} {'repository' if held == 1 else 'repositories'}"),
+                    ),
+                    offers=tuple(read_link("open", repo.short, f"{repo.url}/settings") for repo in failing),
+                )
+                for check, failing, held in unmet
+            ),
+        )
         context["everywhere"] = everywhere
         return context

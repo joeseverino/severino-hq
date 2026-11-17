@@ -1,15 +1,15 @@
 {% extends "page.html" %}
 {% block page %}
-<div class="form-actions">
-  {% if gap %}<p class="muted">{{ gap.reason|breakable }} {% include "partials/_write_gap.html" %}</p>{% else %}
+{% button_row %}
+  {% if gap %}{% muted element="p" %}{{ gap.reason|breakable }} {% include "partials/_write_gap.html" %}{% endmuted %}{% else %}
   {% url 'contacts:set_status' submission.id as status_url %}
-  {% if submission.status != "read" %}{% post_button "Mark read" status_url name="status" value="read" %}{% endif %}
-  {% if submission.status != "replied" %}{% post_button "Mark replied" status_url name="status" value="replied" %}{% endif %}
-  {% if submission.status != "archived" %}{% post_button "Archive" status_url name="status" value="archived" %}{% endif %}
-  {% if submission.status != "spam" %}{% post_button "Spam" status_url name="status" value="spam" %}{% endif %}
-  <a class="btn danger" href="{% url 'contacts:delete' submission.id %}">Delete</a>
+  {% if submission.status != "read" %}{% words "contact.submission.review" "read" as said %}{% button said status_url post=True name="status" value="read" %}{% endif %}
+  {% if submission.status != "replied" %}{% words "contact.submission.review" "replied" as said %}{% button said status_url post=True name="status" value="replied" %}{% endif %}
+  {% if submission.status != "archived" %}{% words "contact.submission.review" "archived" as said %}{% button said status_url post=True name="status" value="archived" %}{% endif %}
+  {% if submission.status != "spam" %}{% words "contact.submission.review" "spam" as said %}{% button said status_url post=True name="status" value="spam" %}{% endif %}
+  {% url 'contacts:delete' submission.id as delete_url %}{% words "contact.submission.delete" as said %}{% button said delete_url look="danger" %}
   {% endif %}
-</div>
+{% endbutton_row %}
 
 <div class="section-flow">
 {% section "Message" %}
@@ -18,7 +18,7 @@
     {% fact "Email" %}<a href="{{ reply_href }}">{{ submission.email|breakable }}</a>{% endfact %}
   {% endfacts %}
   <p>{{ submission.message|breakable|linebreaksbr }}</p>
-{% aside %}{% status submission.status|default:"unread" tone=submission.status|default:"unread" %}{% if submission.pending %} {% waiting as waits %}{% status waits tone="attention" %}{% endif %}
+{% aside %}{% status state %}{% if submission.pending %} {% waiting as waits %}{% status waits tone="attention" %}{% endif %}
 {% endsection %}
 
 {% section "Delivery" %}
@@ -32,7 +32,7 @@
     {% fact "Device" %}{{ submission.device|or_empty }}{% endfact %}
     {% fact "Country" %}{{ submission.country|or_empty }}{% endfact %}
     {% if submission.source_url %}{% fact "Sent from" %}{% entity submission.source_url|outside label=submission.source_url %}{% endfact %}{% endif %}
-    {% fact "User agent" %}<span class="muted">{{ submission.user_agent|or_empty }}</span>{% endfact %}
+    {% fact "User agent" %}{% muted %}{{ submission.user_agent|or_empty }}{% endmuted %}{% endfact %}
   {% endfacts %}
 {% endsection %}
 

@@ -16,16 +16,18 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
 )
 from hq.platform.application.derivation_testing import uncached
+from hq.platform.application.markup_testing import elements, hrefs, text
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.worded import worded
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from .. import readings
-from ..attention import infrastructure
+from ..attention import infrastructure, raised
 from ..command_center import command_center
 from ..connection_lifecycle import Lifecycle
-from ..estate import Estate, attention as estate_attention, cards, estate_reading, overview
+from ..estate import Estate, cards, estate_reading, overview
 from ..glance import dashboard_panels
 from ..inventory_testing import store
 from ..machines import machine, machine_catalog
@@ -33,8 +35,8 @@ from ..projection import projection_scope
 from ..public_registry import wanted_addresses
 from ..security import Capability, Principal
 from ..tailnet_presence import tailnet_presence
+from .glance_readings import HOST, reported_hour, reported_machine, reported_weather
 from .host_only import host_only
-from .markup import elements, hrefs, text
 
 READ = Principal("test", "read", frozenset({Capability.READ}))
 # 203.0.113.0/24 stands in for a public range here.
@@ -286,7 +288,7 @@ class EstateCardTests(TestCase):
             (figure,) = (
                 kpi for kpi in overview(principal=cli_principal()).kpis if kpi.url == reverse("control_plane:services")
             )
-        unread = [service for service in services if service.health.state == "unknown"]
+        unread = [service for service in services if service.health.state is None]
 
         self.assertTrue(unread, "the estate has no service without a health reading")
         self.assertEqual(len(figure.drawing.dots), len(services) - len(unread))
@@ -368,7 +370,7 @@ class EdgeCertificateExpiryTests(TestCase):
 
     def items(self):
         with projection_scope():
-            return [item for item in infrastructure() if "certificate-expiring:resource:" in item.key]
+            return [item for item in worded(infrastructure()) if "certificate-expiring:resource:" in item.key]
 
     def test_an_edge_certificate_outside_the_window_is_not_the_next_expiry(self):
         self.edge(40)
@@ -472,12 +474,12 @@ class StaleGlanceTests(TestCase):
         DashboardMachine.objects.create(machine=machine_spec, position=0)
         readings.record(
             readings.machine_telemetry("example-host"),
-            {"metrics": [{"label": "CPU", "value": "4%"}]},
+            reported_machine("example-host", host=HOST),
             observed_at=timezone.now() - timedelta(days=26),
         )
         readings.record(
             readings.weather("41.8781,-87.6298"),
-            {"metrics": [{"label": "Now", "value": "Clear"}]},
+            reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
             observed_at=timezone.now() - timedelta(minutes=1),
         )
 
@@ -496,7 +498,7 @@ class StaleGlanceTests(TestCase):
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
         readings.record(
             readings.weather("41.8781,-87.6298"),
-            {"metrics": [{"label": "Now", "value": "Clear"}]},
+            reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
             observed_at=timezone.now() - stale_after(DASHBOARD_GLANCE) + timedelta(minutes=1),
         )
 
@@ -510,7 +512,7 @@ class OldGlanceTests(TestCase):
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
         readings.record(
             readings.weather("41.8781,-87.6298"),
-            {"metrics": [{"label": "Now", "value": "Clear"}]},
+            reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
             observed_at=timezone.now() - timedelta(days=20),
         )
         weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")
@@ -522,7 +524,7 @@ class ActionItemTests(TestCase):
     def test_a_connection_that_does_not_answer_is_an_action_item(self):
         connection("example-ssh", reachable=False, detail="Timed out")
 
-        found = [item for item in infrastructure() if "connection-not-answering" in item.key]
+        found = [item for item in worded(infrastructure()) if "connection-not-answering" in item.key]
 
         self.assertEqual(len(found), 1)
         self.assertIn("example-ssh", found[0].title)
@@ -545,7 +547,7 @@ class ActionItemTests(TestCase):
             },
         )
 
-        found = [item for item in infrastructure() if "registration-lapsing" in item.key]
+        found = [item for item in worded(infrastructure()) if "registration-lapsing" in item.key]
 
         self.assertEqual(len(found), 1)
         self.assertIn("will not renew", found[0].title)
@@ -577,7 +579,7 @@ class ActionItemTests(TestCase):
         declare_record("other-record", "other.example.com", "100.64.0.7")
 
         with projection_scope():
-            found = [item for item in estate_attention() if item.eyebrow == "Machines"]
+            found = [item for item in worded(raised("hq.estate")) if item.key.startswith("finding:machine-offline:")]
 
         self.assertEqual([item.subject.label for item in found], ["example-host"])
         self.assertEqual(found[0].status, "serious")
@@ -598,7 +600,7 @@ class ActionItemTests(TestCase):
         declare_record("dev-record", "dev.example.com", "100.64.0.9")
 
         with projection_scope():
-            found = [item for item in estate_attention() if item.eyebrow == "Machines"]
+            found = [item for item in worded(raised("hq.estate")) if item.key.startswith("finding:machine-offline:")]
 
         self.assertEqual(found, [])
 
@@ -612,7 +614,7 @@ class ActionItemTests(TestCase):
             )
 
         with projection_scope():
-            found = [item for item in infrastructure() if "certificate-expiring:resource:" in item.key]
+            found = [item for item in worded(infrastructure()) if "certificate-expiring:resource:" in item.key]
 
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0].status, "serious")
@@ -861,10 +863,7 @@ class EstateQueryBudgetTests(TestCase):
 
         self.estate_of(3)
         with_estate = self.snapshot_queries()
-        with (
-            mock.patch("hq.platform.application.estate.cards", return_value=()),
-            mock.patch("hq.platform.application.estate.attention", return_value=()),
-        ):
+        with mock.patch("hq.platform.application.estate.cards", return_value=()):
             without = self.snapshot_queries()
 
         self.assertLessEqual(with_estate - without, 1)
@@ -874,18 +873,12 @@ class WatchedTests(TestCase):
     def test_online_is_out_of_what_hq_watches(self):
         from types import SimpleNamespace as Row
 
+        from ..machines import MachineState
+
         def machine(state, presence=None):
             return Row(state=state, presence=presence)
 
-        estate = Estate(
-            machines=(
-                machine(("online", "reachable")),
-                machine(("not answering", "unreachable")),
-                machine(("offline", "unreachable")),
-                machine(("away", "unprobed")),
-                machine(("not monitored", "unprobed")),
-            )
-        )
+        estate = Estate(machines=(*(machine(state) for state in MachineState),))
 
         self.assertEqual(len(estate.watched), 3)
 

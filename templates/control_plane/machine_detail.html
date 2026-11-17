@@ -11,7 +11,7 @@
     {% endfacts %}
   {% aside %}
     {% if machine.telemetry_observed_at %}
-      <span class="muted">{% include "partials/_reading_age.html" with at=machine.telemetry_observed_at only %}</span>
+      {% muted %}{% include "partials/_reading_age.html" with at=machine.telemetry_observed_at only %}{% endmuted %}
     {% endif %}
   {% endsection %}
 {% endif %}
@@ -28,7 +28,7 @@ last done to it is read before its parts.
   under it. How they stand is the band at the top of the page.
   {% endcomment %}
 {% section "Containers" %}
-  {% if unused_images %}<ul class="dot-list"><li>{% status unused_images|length|counted:"unused image,unused images"|add:"," unused_size "can be freed" tone="attention" pill=False %}</li></ul>{% endif %}
+  {% if unused_images %}{% dot_list %}<li>{% status unused_images|length|counted:"unused image,unused images"|add:"," unused_size "can be freed" tone="attention" pill=False %}</li>{% enddot_list %}{% endif %}
   {% if unused_images %}{% include "partials/_command.html" with command="ssh "|add:machine.name|add:' "sudo docker image prune -a"' only %}{% endif %}
   {% include "partials/_problems.html#rest" with rest=problems_in.containers %}
   {% if machine.containers %}{% include "control_plane/_container_rows.html" with containers=machine.on_show label="Shown containers" %}{% endif %}
@@ -42,7 +42,7 @@ last done to it is read before its parts.
       {% include "control_plane/_container_rows.html" with containers=machine.folded label="Hidden containers" %}
     {% endsection %}
   {% endif %}
-{% aside %}{% if docker %}<span class="muted">{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}</span>{% endif %}
+{% aside %}{% if docker %}{% muted %}{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}{% endmuted %}{% endif %}
 {% endsection %}
 {% endif %}
 
@@ -92,7 +92,7 @@ last done to it is read before its parts.
     {% if machine.presence.blocks_incoming %}{% fact "Shields" value="Up. Blocks all inbound connections." %}{% endif %}
     {% if machine.presence.external %}{% fact "Belongs to" value="Another tailnet (shared in)" %}{% endif %}
     {% if not machine.presence.authorized %}{% fact "Authorized" %}<strong>No</strong>. It cannot connect until you approve it.{% endfact %}{% endif %}
-    {% if machine.presence.lock_error %}{% fact "Tailnet lock" %}<strong>Not signed</strong>: {{ machine.presence.lock_error|breakable }}{% endfact %}{% endif %}
+    {% if machine.presence.lock_error %}{% fact "Tailnet lock" %}<strong>Not signed</strong>: {{ machine.presence.lock_error|breakable }}{% endfact %}{% elif tailnet_signer %}{% fact "Tailnet lock" value="Signing device" %}{% endif %}
     {% comment %}
     Offered and approved, never one of the two. A route is advertised by the
     machine and then has to be approved in the coordination server; until it
@@ -111,7 +111,7 @@ last done to it is read before its parts.
         {% endcomment %}
         {% if machine.presence.unapproved_routes and route_approval %}
           {% url 'control_plane:approve_routes' machine.route_approval_key as approve_url %}
-          {% post_button "Approve routes" approve_url title=route_approval.reason disabled=route_approval_off %}
+          {% button "Approve routes" approve_url post=True title=route_approval.reason disabled=route_approval_off %}
         {% endif %}
       {% endfact %}
     {% endif %}
@@ -132,7 +132,7 @@ last done to it is read before its parts.
   heading of its own, because it is asked about this machine.
   {% endcomment %}
   {% if device_names %}
-    <a class="btn" href="{% url 'control_plane:tailnet' %}?source={{ asked.source|urlencode }}&amp;target={{ asked.target|urlencode }}" data-modal-open="whatif">Policy test</a>
+    {% url 'control_plane:tailnet' as tailnet_url %}{% with source=asked.source|urlencode target=asked.target|urlencode %}{% button "Policy test" tailnet_url|add:"?source="|add:source|add:"&target="|add:target modal="whatif" %}{% endwith %}
   {% endif %}
 {% endsection %}
 </div>

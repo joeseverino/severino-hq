@@ -6,7 +6,6 @@ from urllib.parse import quote, urlencode
 lazy from datetime import timedelta
 
 from django.conf import settings
-from django.contrib import messages
 from django.contrib.auth.views import LoginView
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import redirect, render
@@ -21,19 +20,19 @@ from hq.platform.application.agent_access import REMOVE_AGENT, SET_AGENT_ACCESS,
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.appearance import SET_THEME
 from hq.platform.application.avatars import avatar_of
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.card_items import ListRow
 from hq.platform.application.command_center import command_center
+from hq.platform.application.demo import DEMO_SESSION_KEY, SET_DEMO
 from hq.platform.application.denials import COALESCE_WINDOW, LABEL as DENIAL_LABEL
+from hq.platform.application.moments import moment
 from hq.platform.application.own_devices import SET_OWN_DEVICE, devices_of
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.search import global_search
 from hq.platform.application.security import Capability, agent_grantable, safe_next, web_principal
-from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import PageNavigation, PageSection, counted
-from hq.platform.application.web_writes import execute_posted, refusal_response, refused
+from hq.platform.application.web_writes import execute_posted, refusal_response, refused, run_posted
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
 lazy from hq.platform.application.connection_catalog import connection_catalog
 lazy from hq.platform.application.hq_context import hq_context
@@ -44,9 +43,7 @@ lazy from hq.platform.application.visit_refresh import worth_asking
 lazy from hq.platform.mcp import listing
 
 from . import design_gallery
-from .audit import record_event
 from .forms import OwnDeviceForm, PolicyForm
-from .middleware import DEMO_SESSION_KEY
 from .models import AuditLog
 from .write_bounds import Bound, RowCap, writes
 lazy from .network import client_ip
@@ -133,21 +130,14 @@ class DemoModeView(View):
 
     POST because it changes what every number on every page means, and a thing
     that can be flipped by following a link can be flipped by an image tag on
-    another page. Nothing is written beyond the session, so the audit entry is
-    the only trace it leaves, and it is recorded because an operator who
-    forgets the mode is on can screenshot fiction and file it as fact.
+    another page. The menu's switch posts no state, so the view sends the
+    opposite of the one this browser holds.
     """
 
     def post(self, request):
-        showing = not request.session.get(DEMO_SESSION_KEY)
-        request.session[DEMO_SESSION_KEY] = showing
-        record_event(
-            action=AuditLog.Action.UPDATED,
-            obj=request.user,
-            type_label="Demo mode",
-            message="Demo mode on" if showing else "Demo mode off",
-            user=request.user,
-        )
+        result = run_posted(request, SET_DEMO, {"showing": not request.session.get(DEMO_SESSION_KEY)}).answer
+        if not result["ok"]:
+            return refusal_response(result)
         # No message. The switch shows its own state and the header carries a
         # mark while it is on: a paragraph on every flip is a third telling
         # of something already said twice.
@@ -170,6 +160,8 @@ class AgentAccessView(View):
 class AgentBlockView(View):
     """Block, allow or remove one agent's client. The form sends a state, never a toggle."""
 
+    runs = (SET_AGENT_BLOCK, REMOVE_AGENT)
+
     def post(self, request):
         client_id = request.POST.get("client_id", "")
         if "removed" in request.POST:
@@ -189,6 +181,8 @@ class AgentBlockView(View):
 class AgentDeviceView(View):
     """Approve or block one device an agent called from. The form sends a state, never a toggle."""
 
+    runs = (APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE)
+
     # Each control's field, and the command that sets it.
     SETS: ClassVar[dict[str, str]] = {"approved": APPROVE_AGENT_DEVICE, "blocked": BLOCK_AGENT_DEVICE}
 
@@ -207,6 +201,8 @@ class AgentDeviceView(View):
 class OwnDeviceView(View):
     """Register or remove one of the signed-in person's own devices. The form sends a state."""
 
+    runs = (SET_OWN_DEVICE,)
+
     def post(self, request):
         requested = request.POST.get("registered")
         client_id = request.POST.get("client_id", "")
@@ -218,25 +214,29 @@ class OwnDeviceView(View):
         return redirect(safe_next(request, fallback=reverse("agent_policy")))
 
 
-def _set(command: str, state: str, url: str, target: dict[str, str], field: str, value: str, **style) -> PageAction:
+def _set(
+    command: str, state: str, target: dict[str, str], field: str, value: str, *, primary: bool = False
+) -> PageAction | None:
     """A row's control that sets one ``field`` of the record ``target``
     names, which travels in the body since its identifier may be any string."""
 
-    words = capability_words(command, state)
-    return PageAction(words, url, method="post", field=field, value=value, fields=target, **style)
+    return PageAction.command(command, variant=state, field=field, value=value, fields=target, primary=primary)
+
+
+def _offered(*actions: PageAction | None) -> tuple[PageAction, ...]:
+    return tuple(action for action in actions if action is not None)
 
 
 def agent_actions(standing: agent_activity.AgentStanding, here: str) -> tuple[PageAction, ...]:
     """What may be done to one agent from its row: let it back in, or block or
     remove it. Removal never lifts a block, so a blocked agent offers only that."""
 
-    url = reverse("agent_block")
     target = {"client_id": standing.subject, "next": here}
     if standing.identity.blocked_at:
-        return (_set(SET_AGENT_BLOCK, "off", url, target, "blocked", "0", primary=True),)
-    return (
-        _set(SET_AGENT_BLOCK, "on", url, target, "blocked", "1"),
-        _set(REMOVE_AGENT, "", url, target, "removed", "1", danger=True),
+        return _offered(_set(SET_AGENT_BLOCK, "off", target, "blocked", "0", primary=True))
+    return _offered(
+        _set(SET_AGENT_BLOCK, "on", target, "blocked", "1"),
+        _set(REMOVE_AGENT, "", target, "removed", "1"),
     )
 
 
@@ -250,25 +250,24 @@ def device_actions(device: agent_activity.DeviceRow, here: str) -> tuple[PageAct
     record = device.record
     if record is None:
         return ()
-    url = reverse("agent_device")
     target = {"device": str(record.pk), "next": f"{here}#{device.anchor}"}
     if record.blocked_at:
-        return (_set(BLOCK_AGENT_DEVICE, "off", url, target, "blocked", "0", primary=True),)
+        return _offered(_set(BLOCK_AGENT_DEVICE, "off", target, "blocked", "0", primary=True))
     actions = []
     if device.yours:
         if record.approved_at:
-            actions.append(_set(APPROVE_AGENT_DEVICE, "off", url, target, "approved", "0"))
+            actions.append(_set(APPROVE_AGENT_DEVICE, "off", target, "approved", "0"))
         else:
-            actions.append(_set(APPROVE_AGENT_DEVICE, "on", url, target, "approved", "1", primary=True))
-    actions.append(_set(BLOCK_AGENT_DEVICE, "on", url, target, "blocked", "1"))
-    return tuple(actions)
+            actions.append(_set(APPROVE_AGENT_DEVICE, "on", target, "approved", "1", primary=True))
+    actions.append(_set(BLOCK_AGENT_DEVICE, "on", target, "blocked", "1"))
+    return _offered(*actions)
 
 
 def own_device_actions(device, here: str) -> tuple[PageAction, ...]:
     """Removing one of the signed-in person's own devices, from its row."""
 
     target = {"client_id": device.client_id, "next": here}
-    return (_set(SET_OWN_DEVICE, "off", reverse("own_device"), target, "registered", "0", danger=True),)
+    return _offered(_set(SET_OWN_DEVICE, "off", target, "registered", "0"))
 
 
 class ThemeView(View):
@@ -385,17 +384,12 @@ class AgentPolicyView(PageMixin, TemplateView):
         )
         if refusal := refused(request, result, form=form):
             return self.render_to_response(self.get_context_data(form=form), status=refusal.status)
-        changed, problems = result["changed"], result["problems"]
-        if changed:
-            messages.success(request, f"Saved {counted(changed, 'change')}. Each is in the audit log.")
         # A rule that could not change is said over the tables, drawn as they
         # now hold, beside the ones that did.
-        if problems:
+        if problems := result["problems"]:
             for problem in problems:
                 form.add_error(None, problem)
             return self.render_to_response(self.get_context_data(form=form), status=400)
-        if not changed:
-            messages.info(request, "Nothing changed.")
         return redirect("agent_policy")
 
 

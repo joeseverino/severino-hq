@@ -5,6 +5,7 @@ answer, asked once and named here for transport: this module imports no
 model and decides no number.
 """
 
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict
 from functools import partial
 from typing import Any, TypedDict
@@ -12,9 +13,9 @@ from typing import Any, TypedDict
 from django.utils import timezone
 
 from . import sections
-from .attention import contacts_state, readable_by
+from .attention import finding_insight, readable_by
 from .derivations import derivation
-from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant
+from .derived_inputs import DASHBOARD_READS, QUEUE_READS, READER_QUEUE_READS, composed_variant
 from .domains import (
     all_domains,
     domain_attention_items,
@@ -23,13 +24,16 @@ from .domains import (
     provided,
     reader_variant,
 )
+from .finding_model import Finding
 from .plugins import source_overview
 from .projection import projection_scope
 from .read_models import ActivityEvent, recent_activity
+from .record_findings import contacts_state
 from .security import Capability, Principal
 from .workflows import WrittenAction, WrittenWorkflow, serialize_workflow
 lazy from .action_items import item_key, item_revision, waiting_count
 lazy from .card_items import Insight
+lazy from .routes import reverse
 lazy from .ui import DomainOverview
 
 
@@ -84,18 +88,32 @@ def work_queue() -> list[QueueItem]:
     a change to one composes the rest from what is stored.
     """
 
-    return [queue_item(entry["source_id"], entry["source"], entry["item"]) for entry in domain_attention_items()]
+    return gathered_rows(domain_attention_items())
+
+
+def _reader(principal: Principal) -> tuple[Any, ...]:
+    # Who, as well as what they may read: a credential reads only its own person's held requests,
+    # and a held request is never offered to its asker.
+    return (principal.actor, principal.interface, principal.person_key, *reader_variant(principal))
+
+
+@derivation("attention.readable", reads=READER_QUEUE_READS, vary=_reader)
+def readable_queue(principal: Principal) -> list[QueueItem]:
+    """The composed queue as ``principal`` may read it (``attention.readable_by``),
+    derived once per change, the one way each door reads it."""
+
+    return readable_by(principal, work_queue())
 
 
 def _count_variant(principal: Principal, user_pk: int) -> tuple[Any, ...]:
-    return (user_pk, principal.actor, principal.interface, *reader_variant(principal))
+    return (user_pk, *_reader(principal))
 
 
-@derivation("attention.count", reads=(*QUEUE_READS, "core.ActionItemRead"), vary=_count_variant)
+@derivation("attention.count", reads=(*READER_QUEUE_READS, "core.ActionItemRead"), vary=_count_variant)
 def waiting(principal: Principal, user_pk: int) -> int:
     """How many items wait on one person: the queue as they may read it, less what they set aside."""
 
-    return waiting_count(readable_by(principal, work_queue()), user_pk)
+    return waiting_count(readable_queue(principal), user_pk)
 
 
 class QueueItem(TypedDict):
@@ -115,6 +133,8 @@ class QueueItem(TypedDict):
     actions: list[WrittenAction]
     subject: WrittenAction | None
     notice: bool
+    # A request a person decides, never set aside (``Insight.held``).
+    held: bool
     family: str
     # Why it is as urgent as its status says (``Insight.why``).
     why: str
@@ -131,11 +151,26 @@ class QueueItem(TypedDict):
     read_capabilities: list[str]
 
 
-def queue_item(source_id: str, source: str, item: Insight) -> QueueItem:
-    """One action item in the shape the queue partial and the API carry."""
+def finding_rows(source_id: str, source: str, findings: Iterable[Finding]) -> tuple[QueueItem, ...]:
+    """``findings`` as the queue's rows, each worded by ``attention.finding_insight``:
+    how a page draws what is wrong with the thing it is about."""
+
+    url = reverse("control_plane:findings")
+    return tuple(_queue_item(source_id, source, finding_insight(finding, url)) for finding in findings)
+
+
+def gathered_rows(entries: Iterable[Mapping[str, Any]]) -> list[QueueItem]:
+    """Entries the queue gathered (``plugins.gather_attention``), each its
+    finding as ``finding_rows`` words it, in the order gathered."""
+
+    return [row for entry in entries for row in finding_rows(entry["source_id"], entry["source"], (entry["finding"],))]
+
+
+def _queue_item(source_id: str, source: str, item: Insight) -> QueueItem:
+    # Private, so a row reaches a page only as a finding (``finding_rows``).
 
     return {
-        "key": item_key(source_id, item),
+        "key": item_key(source_id, item.key),
         "revision": item_revision(item),
         "source_id": source_id,
         "source": source,
@@ -149,6 +184,7 @@ def queue_item(source_id: str, source: str, item: Insight) -> QueueItem:
         "actions": [asdict(action) for action in item.actions],
         "subject": asdict(item.subject) if item.subject else None,
         "notice": item.notice,
+        "held": item.held,
         "family": item.family,
         "why": item.why,
         "clears": item.clears,
@@ -171,7 +207,6 @@ class Kpis(TypedDict):
     projects_needing_output: int
     draft_content: int
     published_content: int
-    docs_needing_review: int
     unread_contacts: int
     # Money as its decimal text.
     expenses_total: str
@@ -196,7 +231,6 @@ class Glance(_Activity):
     active_projects: list[dict[str, Any]]
     draft_content: list[dict[str, Any]]
     recent_published: list[dict[str, Any]]
-    docs_needing_review: list[dict[str, Any]]
 
 
 class _Snapshot(Glance):
@@ -228,6 +262,8 @@ def _snapshot_variant(principal) -> tuple[Any, ...]:
     return (
         principal.actor,
         principal.interface,
+        # Whose held requests its queue holds (``readable_queue``).
+        principal.person_key,
         tuple(sorted(str(item) for item in principal.capabilities)),
         *composed_variant(),
     )
@@ -238,7 +274,7 @@ def _snapshot_variant(principal) -> tuple[Any, ...]:
 _SNAPSHOT_READS: tuple[str, ...] = tuple(
     dict.fromkeys(
         (
-            *QUEUE_READS,
+            *READER_QUEUE_READS,
             *DASHBOARD_READS,
             "content.ContentItem_related_projects",
             "core.AuditLog",
@@ -252,9 +288,8 @@ def _operating_snapshot(principal) -> _Snapshot:
     unread_contacts_count, contacts_status = contacts_state()
     projects = sections.projects_reading()
     content = sections.content_reading()
-    documentation = sections.documentation_reading()
     expenses = sections.expenses_reading()
-    priority = readable_by(principal, work_queue())
+    priority = readable_queue(principal)
 
     return {
         "upstreams": {"contacts": contacts_status},
@@ -266,7 +301,6 @@ def _operating_snapshot(principal) -> _Snapshot:
             "projects_needing_output": projects["needing_output"],
             "draft_content": content["drafts"],
             "published_content": content["published"],
-            "docs_needing_review": documentation["needing_review"],
             "unread_contacts": unread_contacts_count,
             "expenses_total": str(expenses["total"]),
             "expenses_count": expenses["count"],
@@ -282,7 +316,6 @@ def _operating_snapshot(principal) -> _Snapshot:
         "active_projects": sections.recent_active_projects(),
         "draft_content": sections.recent_draft_content(),
         "recent_published": sections.recently_published(),
-        "docs_needing_review": sections.docs_awaiting_review(),
         **_activity(principal),
     }
 
@@ -293,5 +326,5 @@ WITHHELD_ACTIVITY = "not read: recent_activity, because this caller may not read
 
 def _activity(principal) -> _Activity:
     if principal.permits(Capability.READ_AUDIT_LOG):
-        return {"recent_activity": recent_activity(principal=principal, limit=8)["items"], "unread": []}
+        return {"recent_activity": recent_activity(limit=8)["items"], "unread": []}
     return {"recent_activity": [], "unread": [WITHHELD_ACTIVITY]}

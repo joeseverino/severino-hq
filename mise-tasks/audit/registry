@@ -8,7 +8,9 @@ set -eu
 # The operator's shell door (manage.py hq_call) answers as the MCP tools do, so
 # this is the registry an agent reads, on the template's throwaway database.
 if [ "${usage_composed:-}" = true ]; then
-    export SEVERINO_HQ_PLUGINS="${HQ_LOCAL_PLUGINS:-}" PYTHONPATH="${HQ_LOCAL_PYTHONPATH:-}" SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=0
+    # shellcheck source=tools/lib/extension-set.sh
+    . ./tools/lib/extension-set.sh
+    compose_extensions
 fi
 for tool in describe_capabilities describe_resources; do
     printf '{"tool":"%s","arguments":{}}' "$tool" | uv run python manage.py hq_call

@@ -29,12 +29,12 @@ detail, observed_age and observed_at, as TopologyView.node_items builds it.
               {% for link in row.entities %}
                 <li>
                   <span>{% entity link %}</span>
-                  <span class="relation-reading muted">{{ link.kind_label|breakable }}{% if row.observed_age %}{% dot %}{% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}</span>
+                  {% muted css="relation-reading" %}{{ link.kind_label|breakable }}{% if row.observed_age %}{% dot %}{% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}{% endmuted %}
                 </li>
               {% endfor %}
             </ul>
           {% elif row.detail or row.observed_age %}
-            <p class="relation-reading muted">{{ row.detail|breakable }}{% if row.detail and row.observed_age %}{% dot %}{% endif %}{% if row.observed_age %}{% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}</p>
+            {% muted element="p" css="relation-reading" %}{{ row.detail|breakable }}{% if row.detail and row.observed_age %}{% dot %}{% endif %}{% if row.observed_age %}{% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}{% endmuted %}
           {% endif %}
         </li>
       {% endfor %}

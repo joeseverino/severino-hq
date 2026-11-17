@@ -9,8 +9,10 @@ builder in the traceback, and never reaches a page.
 import re
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, fields
-from types import MappingProxyType
-from typing import Any, dataclass_transform
+from enum import Enum
+from functools import cache
+from types import MappingProxyType, UnionType
+from typing import Any, Literal, Union, dataclass_transform, get_args, get_origin
 
 # What only a machine writes, by what it is.
 MACHINE_TEXT = {
@@ -47,6 +49,45 @@ def in_words(text: str, *, label: bool = False) -> str:
     return text
 
 
+@cache
+def _members_of(kind: type) -> tuple[tuple[str, type[Enum], bool], ...]:
+    """Each field of ``kind`` typed by an enum: its name, the enum, and
+    whether it may be empty instead (typed ``Tone | Literal[""]``)."""
+
+    typed = []
+    for field in fields(kind):
+        if isinstance(field.type, type) and issubclass(field.type, Enum):
+            typed.append((field.name, field.type, False))
+            continue
+        options = get_args(field.type) if isinstance(field.type, UnionType) or get_origin(field.type) is Union else ()
+        enums = [option for option in options if isinstance(option, type) and issubclass(option, Enum)]
+        if len(enums) == 1 and len(options) == 2 and Literal[""] in options:
+            typed.append((field.name, enums[0], True))
+    return tuple(typed)
+
+
+def as_members(view: Any) -> None:
+    """Hold each field of ``view`` typed by an enum to one of its members.
+
+    A member's value (``"good"`` for ``Tone.GOOD``) is taken and turned into
+    the member as the view is built, so a caller may write either, and a word
+    the enum does not have fails where it was written.
+    """
+
+    for name, enum, or_empty in _members_of(type(view)):
+        value = getattr(view, name)
+        if isinstance(value, enum) or (or_empty and value == ""):
+            continue
+        try:
+            member = enum(value)
+        except ValueError:
+            empty = " or empty" if or_empty else ""
+            raise ValueError(
+                f"{type(view).__name__}.{name} is one of {', '.join(map(str, enum))}{empty}; got {value!r}."
+            ) from None
+        object.__setattr__(view, name, member)
+
+
 def said_in_words(view: Any) -> None:
     """Refuse a view model whose text a machine wrote, or a value that is not text.
 
@@ -54,8 +95,10 @@ def said_in_words(view: Any) -> None:
     and each str a field holds, in a tuple too, is words. A field named
     ``label`` or ``…_label`` is a label. A field marked ``QUOTED`` holds a
     record's own text, shown as it was written, so it is not held to words.
+    A field typed by an enum holds its member (``as_members``).
     """
 
+    as_members(view)
     for field in fields(view):
         if field.metadata.get("quoted"):
             continue

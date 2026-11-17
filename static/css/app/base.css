@@ -34,7 +34,20 @@ body {
 /* Prose is broken into lines the way a typesetter would, so a paragraph does
    not end on one stranded word. */
 p, li, dd, blockquote, figcaption { text-wrap: pretty; }
+/* A list drawn as a part (rows, chips, a strip, a ladder) draws no markers
+   and sits flush, set once here; a part with an inset or a margin of its own
+   sets it in its rule, which outranks this one. A list of prose
+   (`.prose-list`, a field's `.errors`) keeps the browser's markers. */
+:where(.attention-links, .step-list, .resolution-workflow, .timeline-list, .cadence-strip,
+  .check-ladder, .errorlist, .dropzone-files, .dot-list, .page-nav-list, .relation-list > ul,
+  .relation-values, .link-chips, .stack-list, .request-path, .messages, .calendar-sources,
+  .week-plan, .week-plan-notes, .list-rows, .address-list, .bar-list, .tile-strip, .posture-repos) {
+  list-style: none; margin: 0; padding: 0;
+}
 a { color: var(--accent-2); text-decoration: none; }
+/* A button starts from none of the browser's paint: one with a class of its
+   own draws itself, and the push button's look is `.btn`'s (page.css). */
+button { margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
 /* Every control's focus ring, drawn inside its own box as Primer's is: a ring
    outside would be cut by any box above that clips what it holds (a band's
    rim, a day of the month, a scroller), and inside, nothing around it can. */
@@ -97,7 +110,6 @@ pre code { background: transparent; padding: 0; color: inherit; }
    on to the parts inside it, which are boxes of their own. */
 .cut:not(pre *, td *, th *) { text-decoration: inherit; }
 :is(code, .token):is(td *, th *) { overflow-wrap: break-word; }
-.whole:is(td *, th *) { display: inline-block; max-width: 100%; }
 /* A row header's identifier is a box of its own, as a cell's is (tables.css):
    WebKit leaves an inline chip's padding out of the width its column asks
    for, so the name would run into the cell's padding. */
@@ -189,7 +201,6 @@ pre ::selection { color: var(--code-ink); }
    only ever focused programmatically: an outline there would be a box drawn
    around the whole page. */
 .content:focus { outline: none; }
-@media (prefers-reduced-motion: reduce) { .skip-link { transition: none; } }
 
 /* One row, always. The sections are the header's job; the search field is the
    part that gives way. It collapses to a button that expands back over the nav
@@ -232,23 +243,23 @@ pre ::selection { color: var(--code-ink); }
   background: var(--accent); display: inline-block;
 }
 .brand:hover { text-decoration: none; }
-/* A popover (base.html) set in the header's row: what the browser gives a
-   popover (hidden, fixed, framed, painted Canvas) is undone here; open, it
-   is a panel (routes.css). */
+/* A popover set in a row (the header's nav, base.html; a filter bar's
+   choices unfolded, forms.css): what the browser gives a popover (hidden,
+   fixed, framed, painted Canvas) is undone here; open, each is a panel
+   (routes.css, forms.css). `overflow` stays visible: the popover's own
+   `overflow: auto` would make the row a scroll container. */
+.primary-nav, .filter-bar-choices {
+  position: static; inset: auto; inline-size: auto; block-size: auto;
+  margin: 0; padding: 0; border: 0; background: none; color: inherit; overflow: visible;
+}
 .primary-nav {
   grid-area: nav;
   display: flex;
-  position: static; inset: auto; inline-size: auto; block-size: auto;
-  margin: 0; padding: 0; border: 0; background: none; color: inherit;
   /* Single row, deliberately: a control wrapped onto a second row would sit
      beneath an open dropdown, where the panel covers it and swallows its
      clicks. Grouping keeps the bar short enough that one row is enough. */
   flex-wrap: nowrap;
   gap: var(--space-1);
-  /* Never squeezed below its own content, which its track gives it, and
-     `overflow` stays visible: the popover's own `overflow: auto` would make
-     the bar a scroll container. */
-  overflow: visible;
 }
 .primary-nav a {
   color: var(--muted); font-weight: 500; font-size: var(--text-sm);
@@ -361,6 +372,16 @@ input[data-empty]:not(:focus)::-webkit-datetime-edit { -webkit-text-fill-color: 
 input:where([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=time], [type=datetime-local], [type=search], :not([type])):focus,
 select:focus,
 textarea:focus { border-color: var(--accent-2); }
+
+/* Less motion, asked for: nothing moves, decided here once for every
+   element, so no part writes its own. An important declaration in this
+   first layer outranks one in any later layer. A WebKit progress bar's fill
+   is a pseudo-element `*` does not reach, in a rule of its own, since a
+   prefix another engine does not know drops every selector beside it. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+  ::-webkit-progress-value { transition: none !important; }
+}
 
 }
 

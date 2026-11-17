@@ -1,7 +1,5 @@
 """The contract every reading is registered under."""
 
-import hashlib
-import json
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -9,8 +7,9 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainSerializer, ValidationError, WithJsonSchema
 
+from hq.platform.core.digests import digest
 lazy from hq.platform.application.json_schemas import json_schema
-lazy from hq.platform.application.timestamps import moment
+lazy from hq.platform.application.moments import moment
 
 from ..permissions import Permission
 lazy from . import OBSERVATIONS
@@ -96,11 +95,13 @@ class ObservationSpec:
     # The parts it is read in, each with the subset of ``requires`` it needs,
     # where one part can be refused while the others read.
     parts: tuple[ReadingPart, ...] = ()
-    # Join keys: the hostnames and addresses a record is about, and the
-    # containers it names (``container_key``).
+    # Join keys: the hostnames and addresses a record is about, the
+    # containers it names (``container_key``), and the public keys it names,
+    # each the key of whatever holds its private half.
     hostnames: Callable[[Mapping[str, Any]], Iterable[str]] = _none
     addresses: Callable[[Mapping[str, Any]], Iterable[str]] = _none
     containers: Callable[[Mapping[str, Any]], Iterable[str]] = _none
+    keys: Callable[[Mapping[str, Any]], Iterable[str]] = _none
     # The record's name as a person would say it, and what it is in a few
     # words beside that name ("bridge · 172.21.0.0/16").
     title: Callable[[Mapping[str, Any]], str] = lambda _record: ""
@@ -108,10 +109,12 @@ class ObservationSpec:
     # What a record is to the subject it joins, as a short present-tense
     # phrase shown beside its title: "Served by Pages project".
     relation: str = ""
-    # The phrase when the join was through ``addresses``, or through
-    # ``containers``, as the container says it; ``relation`` if blank.
+    # The phrase when the join was through ``addresses``, through
+    # ``containers``, as the container says it, or through ``keys``, as the
+    # key's holder says it; ``relation`` if blank.
     address_relation: str = ""
     container_relation: str = ""
+    key_relation: str = ""
     # Whether the containers a record names reach each other through it: a
     # network does, unless the runtime made it for every container. Set, the
     # topology draws "talks to" between each pair it names that are declared.
@@ -128,9 +131,10 @@ class ObservationSpec:
     issuer: Callable[[Mapping[str, Any]], str] = _blank
     # One of ``READERS``.
     read_by: str = "controller"
-    # A clock of its own, slower than the sweep's, for a reading whose provider
-    # rations calls: read when it is this old or somebody asks, and carried by
-    # every sweep between. None reads on every sweep.
+    # How often HQ reads it itself; for a controller's, a clock of its own,
+    # slower than the sweep's, for a reading whose provider rations calls: read
+    # when it is this old or somebody asks, and carried by every sweep between.
+    # None for a controller's reads on every sweep.
     every: timedelta | None = None
     # The provider console page for a record, built only from ids the record
     # stores (an account id, a name). Blank when the record lacks them.
@@ -192,9 +196,15 @@ class ObservationSpec:
     def short(self) -> str:
         return self.short_label or self.label
 
-    def relation_to(self, *, by_address: bool, by_container: bool = False) -> str:
-        """The phrase for a record joined by container, address or hostname."""
+    @property
+    def joins_keys(self) -> bool:
+        return self.keys is not _none
 
+    def relation_to(self, *, by_address: bool, by_container: bool = False, by_key: bool = False) -> str:
+        """The phrase for a record joined by key, container, address or hostname."""
+
+        if by_key and self.key_relation:
+            return self.key_relation
         if by_container and self.container_relation:
             return self.container_relation
         if by_address and self.address_relation:
@@ -218,7 +228,7 @@ class ObservationSpec:
         schema = json_schema(self.record)
         names = {*member_names(schema), *(part.name for part in self.parts)}
         held = {"schema": schema, "declared": sorted(names & set(declared))}
-        return hashlib.sha256(json.dumps(held, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return digest(held)
 
     def clean(self, records: Iterable[Any]) -> tuple[list[dict[str, Any]], int]:
         """The records as the schema admits them, and how many it refused."""
@@ -270,8 +280,10 @@ def registry(specs: tuple[ObservationSpec, ...]) -> Mapping[str, ObservationSpec
             raise ValueError(f"{spec.kind!r}: unknown facet {spec.facet!r}.")
         if spec.read_by not in READERS:
             raise ValueError(f"{spec.kind!r}: read_by is one of {READERS}.")
-        if spec.every is not None and spec.read_by != "controller":
-            raise ValueError(f"{spec.kind!r}: only a controller's reading keeps its own clock.")
+        if spec.every is not None and spec.read_by == "request":
+            raise ValueError(f"{spec.kind!r}: a request's reading keeps no clock.")
+        if spec.every is None and spec.read_by == "hq":
+            raise ValueError(f"{spec.kind!r}: a reading HQ takes itself declares how often.")
         if spec.connects is not None and spec.containers is _none:
             raise ValueError(f"{spec.kind!r}: connects needs the containers it names.")
         _check_parts(spec)

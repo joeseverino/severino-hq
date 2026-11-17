@@ -1,15 +1,16 @@
 """Contract tests for HQ's shared connection registry."""
 
-import re
 from dataclasses import replace
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ProviderConnection
+from hq.platform.application.markup_testing import text
+from hq.platform.application.pages import runs_at
 
 from ..command_center import command_center
 from ..connection_catalog import connection_catalog
@@ -229,7 +230,8 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
         action = operator.abilities[0].action
         self.assertIsNotNone(action)
         self.assertEqual(action.capability, "project.create")
-        self.assertEqual(action.url, "/commands/project.create/")
+        # Addressed where a page's control for the command is: the route whose view runs it.
+        self.assertEqual(runs_at(action.url), "project.create")
 
     def test_machine_catalog_emits_the_same_safe_actions_as_the_web_projection(self):
         with offering(_finance_spec()):
@@ -495,7 +497,6 @@ class ConnectionRegistrationTests(TestCase):
         cases = (
             ("non-ConnectionInstance", object()),
             ("incomplete instance", replace(good, kind=" ")),
-            ("invalid status", replace(good, status="fine")),
             ("no status label", replace(good, status_label=" ")),
             ("invalid granted scopes", replace(good, granted_scopes=("accounts:read", "accounts:read"))),
             ("invalid granted scopes", replace(good, granted_scopes=("accounts read",))),
@@ -511,6 +512,11 @@ class ConnectionRegistrationTests(TestCase):
                 self.assertRaisesRegex(ImproperlyConfigured, refusal),
             ):
                 connection_catalog(principal=FINANCE)
+
+    def test_a_connection_read_in_a_word_that_is_no_tone_is_refused_as_it_is_made(self):
+        good = _finance_spec().instance_provider()[0]
+        with self.assertRaisesRegex(ValueError, "status"):
+            replace(good, status="fine")
 
     def test_documentation_urls_are_restricted_to_safe_destinations(self):
         spec = replace(_finance_spec(), documentation_url="javascript:alert(1)")
@@ -557,11 +563,8 @@ class ConnectionWorkspaceTests(TestCase):
     def test_a_keyless_connection_with_no_store_needs_no_key(self):
         response = self.page_for("none")
 
-        self.assertContains(response, "No key needed")
         # The row names it beside the connection, so its state cell does not repeat it.
-        state_cells = re.findall(r'<td [^>]*class="tight-col"[^>]*>(.*?)</td>', response.content.decode(), re.DOTALL)
-        self.assertTrue(state_cells)
-        self.assertFalse([cell for cell in state_cells if "No key needed" in cell])
+        self.assertEqual(text(response).count("No key needed"), 1)
         self.assertNotContains(response, "Does not say where its secret is kept")
 
     def test_a_connection_with_a_key_must_say_where_it_is_kept(self):
@@ -666,13 +669,14 @@ class GrantEvidenceTests(TestCase):
         now = timezone.now()
         fresh = self.instance(observed_at=now - timedelta(minutes=5))
         old = self.instance(observed_at=now - timedelta(hours=30))
-        life = lambda instance, authority, hours=24: connection_lifecycle(  # noqa: E731
-            instance, authority, stale_after_hours=hours, now=now
-        )
+        life = lambda instance, authority: connection_lifecycle(instance, authority, now=now)  # noqa: E731
         self.assertEqual(life(self.instance(credential_model="rejected"), "proven"), "revoked")
         self.assertEqual(life(self.instance(), "proven"), "configured")
-        self.assertEqual(life(old, "proven"), "stale")
-        self.assertEqual(life(old, "proven", hours=48), "ready")
+        with override_settings(SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=12 * 60 * 60):
+            self.assertEqual(life(old, "proven"), "stale")
+        # How old a reading may get is its kind's cadence: a public registry's
+        # stands for days.
+        self.assertEqual(life(replace(old, kind="registry.domain"), "proven"), "ready")
         self.assertEqual(life(fresh, "missing"), "unauthorized")
         self.assertEqual(life(self.instance(status="serious", observed_at=now), "proven"), "unreachable")
         self.assertEqual(life(self.instance(status="neutral", observed_at=now), "proven"), "configured")
@@ -699,8 +703,6 @@ class GrantEvidenceTests(TestCase):
             validate_connection_spec(spec(self.ability(grant="scoped")))
         with self.assertRaisesRegex(ImproperlyConfigured, "lists required scopes"):
             validate_connection_spec(spec(self.ability(grant="none", required_scopes=("a:read",))))
-        with self.assertRaisesRegex(ImproperlyConfigured, "staleness window"):
-            validate_connection_spec(replace(spec(self.ability(grant="none")), stale_after_hours=0))
         validate_connection_spec(spec(self.ability(grant="scoped", required_scopes=("a:read",))))
 
     def test_a_keyless_instance_cannot_also_report_grants(self):

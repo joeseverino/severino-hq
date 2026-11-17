@@ -126,8 +126,7 @@ class StoreReferenceTests(TestCase):
                     "expires_at": "2030-01-01T00:00:00Z",
                     "store": {**STORE, "API_TOKEN": SECRET},
                 }
-            ],
-            principal=cli_principal(),
+            ]
         )
 
         row = ProviderConnection.objects.get()
@@ -357,7 +356,6 @@ class RenderedFixTests(TestCase):
                     "expires_at": (timezone.now() + timedelta(days=5)).isoformat(),
                 }
             ],
-            principal=cli_principal(),
             controller_id="example-controller",
         )
 

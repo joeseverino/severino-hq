@@ -8,10 +8,11 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import texts
+
 from ..findings import derive_findings
 from ..projection import projection_scope
 from ..topology import derive_topology
-from .markup import texts
 from .test_tailnet_posture import EVERYTHING
 from .test_unit_findings import SERVICE, SPEC, failed, service, sweep, timer
 

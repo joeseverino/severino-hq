@@ -21,19 +21,22 @@ from hq.platform.application.entity_links import (
     declared_link as declared,
     entity_link,
     kind_label as label,
+    record_link,
     web_url as _web_url,
 )
 from hq.platform.application.labels import DOT_MARKUP, human_bytes
 from hq.platform.application.moments import (
     WHEN_FORMS as _WORDS_FORMS,
+    moment,
     span as said,
+    stamp_day,
     when_exact as _when_exact,
 )
 from hq.platform.application.money import money as _money
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.printable import admitted
-from hq.platform.application.timestamps import moment
-from hq.platform.application.ui import MISSING, STATUS_VALUES, counted as _counted
+from hq.platform.application.tone import Tone
+from hq.platform.application.ui import MISSING, counted as _counted, measured as _measured, no_value
 from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
@@ -66,15 +69,31 @@ def counted(count, phrases):
 
 @register.filter
 def measured(value, unit):
-    """``{{ miles|floatformat:2|measured:"mi" }}``: a figure and its unit, or a
-    word the count leaves alone (``measured:"more"``), as one value, so the
-    word never opens a line alone below its number. For a measure no other
-    value tag says (``bytes``, ``seconds``, ``money``) and a word ``counted``
-    would make plural; a missing figure is the missing mark, with no word."""
+    """``{{ miles|measured:"mi,2" }}``: a figure and its unit, or a word the
+    count leaves alone (``measured:"more"``), as one value, so the word never
+    opens a line alone below its number. A count of decimals after a comma
+    rounds the figure as ``floatformat`` would (``"%,-1"``, only when not
+    whole). For a measure no other value tag says (``bytes``, ``seconds``,
+    ``money``) and a word ``counted`` would make plural. ``ui.measured``
+    writes it; a missing figure is the missing mark, with no word."""
 
-    if value is None or value == "":
-        return or_empty(value)
-    return held(f"{value} {unit}")
+    if no_value(value):
+        return empty_value()
+    return held(_measured(value, *measured_unit(unit)))
+
+
+def measured_unit(argument) -> tuple[str, int | None]:
+    """The filter argument as ``(unit, places)``; ``places`` is None when it is left out."""
+
+    unit, comma, places = str(argument).rpartition(",")
+    if not comma:
+        return places, None
+    try:
+        return unit, int(places)
+    except ValueError:
+        raise template.TemplateSyntaxError(
+            f"measured takes a unit and a count of decimals; got {argument!r}."
+        ) from None
 
 
 def counted_phrases(phrases) -> tuple[str, str | None]:
@@ -96,7 +115,7 @@ def dot():
     after the first part. A no-break space holds it to that part and the line
     may break only after it, so no line starts with a dot or holds one alone;
     a reader hears the two parts. A run of whole parts that is a list of its
-    own is a ``.dot-list``; Python joins text as ``labels.dotted`` does."""
+    own is ``{% dot_list %}``; Python joins text as ``labels.dotted`` does."""
     return mark_safe(DOT_MARKUP)  # noqa: S308 - HQ's own literal markup
 
 
@@ -129,8 +148,8 @@ def money(value, form=""):
 
     if form not in ("", "whole"):
         raise template.TemplateSyntaxError(f"money takes 'whole' or nothing; got {form!r}.")
-    if value is None or value == "":
-        return or_empty(value)
+    if no_value(value):
+        return empty_value()
     return _money(value, cents=form != "whole")
 
 
@@ -138,15 +157,50 @@ def money(value, form=""):
 def or_empty(value):
     """The value, or the one muted mark for a value that is not there.
 
-    Built in, so every HQ and extension template has it without a load. Zero is
-    a value and is shown; only None and the empty string are missing. A number
-    passes as it is; anything else is what ``breakable`` makes of it.
+    Built in, so every HQ and extension template has it without a load. What
+    is missing is ``ui.no_value``'s: zero is a value and is shown. A number
+    passes as it is; anything else is what ``breakable`` makes of it. Markup
+    around the value is ``{% present %}``'s.
     """
-    if value is None or value == "":
+    if no_value(value):
         return empty_value()
     if not isinstance(value, bool) and isinstance(value, Number):
         return value
     return breakable(value)
+
+
+def present(content: Callable[[], str], value) -> str:
+    """``{% present repo.release %}{% entity repo.release.link %}{% endpresent %}``:
+    what the tag encloses, drawn only when ``value`` is there, and otherwise
+    the mark ``or_empty`` draws, for a value shown in markup (a ``<code>``, a
+    link, a status, an include) that the filter cannot hold."""
+
+    return empty_value() if no_value(value) else content()
+
+
+class PresentNode(template.Node):
+    child_nodelists = ("nodelist",)
+
+    def __init__(self, value, nodelist: template.NodeList) -> None:
+        self.value = value
+        self.nodelist = nodelist
+
+    def render(self, context) -> str:
+        return present(lambda: self.nodelist.render(context), self.value.resolve(context))
+
+
+@register.tag("present")
+def present_tag(parser, token) -> PresentNode:
+    bits = token.split_contents()
+    if len(bits) != 2:
+        raise template.TemplateSyntaxError("present takes one value: {% present value %}...{% endpresent %}")
+    nodelist = parser.parse(("endpresent",))
+    parser.delete_first_token()
+    return PresentNode(parser.compile_filter(bits[1]), nodelist)
+
+
+# The template contract reads the tag's parameters from what it wraps.
+present_tag.__wrapped__ = present  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
 
 
 def _instant(value) -> date | datetime | None:
@@ -156,12 +210,7 @@ def _instant(value) -> date | datetime | None:
         return value
     text = str(value or "").strip()
     found = moment(text) if "T" in text or " " in text else None
-    if found is not None:
-        return found
-    try:
-        return date.fromisoformat(text)
-    except ValueError:
-        return None
+    return found if found is not None else stamp_day(text)
 
 
 def _dated_mark(value: date):
@@ -204,8 +253,8 @@ def when(value, form=""):
         raise template.TemplateSyntaxError(
             f"when takes {', '.join(repr(name) for name in _WHEN_FORMS if name)} or nothing; got {form!r}."
         )
-    if value is None or value == "":
-        return or_empty(value)
+    if no_value(value):
+        return empty_value()
     found = _instant(value)
     if found is None:
         return breakable(value)
@@ -392,7 +441,7 @@ def cell_line(text, url="", *, lines=2):
     row as tall as its neighbors."""
 
     drawn = breakable(text)
-    # A name brings its own box and strut; words are cut by the line's box.
+    # A name brings its own box; words are cut by the line's box.
     inside = (
         drawn
         if drawn.startswith('<span class="token" data-sole')
@@ -477,6 +526,16 @@ def outside(url):
     no href from data HQ did not write (``web_url``)."""
 
     return declared("", _web_url(url), kind="dependency")
+
+
+@register.filter
+def record(row, section=""):
+    """``{% entity row|record label=row.name %}``: a record named by its own
+    page, which its model declares (``get_absolute_url``), never a route and
+    key a template spells; ``row|record:"updates"`` opens it at ``#updates``.
+    No record names nothing, drawn as the missing mark."""
+
+    return None if row is None else record_link(row, str(section or ""))
 
 
 @register.filter
@@ -668,16 +727,30 @@ def slotted(
 CARD_ELEMENTS = frozenset(("section", "article", "figure", "details", "div"))
 
 
-def card_frame(name: str, given: dict) -> dict:
-    """A card's opening and closing tags. Built here rather than in its
-    partial, since the element is a choice and every attribute but the class
-    is drawn only when it has a value, as ``html_attributes`` draws one."""
+def framed(name: str, given: dict, elements: frozenset[str], default: str, own: str, named: dict) -> dict:
+    """A part's opening and closing tags, its element one of ``elements``, its
+    class ``own`` before the page's ``css``, and each ``data_*`` option an
+    attribute. Built here rather than in its partial, since the element is a
+    choice and every attribute but the class is drawn only when it has a
+    value, as ``html_attributes`` draws one."""
 
-    element = given.get("element", "section")
-    if element not in CARD_ELEMENTS:
-        raise template.TemplateSyntaxError(f"{name} element= is one of {', '.join(sorted(CARD_ELEMENTS))}")
+    element = given.get("element", default)
+    if element not in elements:
+        raise template.TemplateSyntaxError(f"{name} element= is one of {', '.join(sorted(elements))}")
+    named = {"class": " ".join((own, given.get("css") or "")).strip(), **named}
+    named |= {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
+    # The element is one of ``elements``, a tag name and never text, and
+    # html_attributes escapes the attributes.
+    return {
+        "opening": mark_safe(f"<{element}{html_attributes(named)}>"),  # noqa: S308 - see above
+        "closing": mark_safe(f"</{element}>"),  # noqa: S308 - see above
+    }
+
+
+def card_frame(name: str, given: dict) -> dict:
+    """A card's opening and closing tags."""
+
     named = {
-        "class": " ".join(("card", given.get("css") or "")).strip(),
         "id": given.get("id"),
         "aria-labelledby": given.get("heading"),
         "aria-label": given.get("label"),
@@ -685,13 +758,41 @@ def card_frame(name: str, given: dict) -> dict:
         "open": True if given.get("open") else None,
         "data-alone": True if given.get("alone") else None,
     }
-    named |= {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
-    # The element is one of CARD_ELEMENTS, a tag name and never text, and
-    # html_attributes escapes the attributes.
-    return {
-        "opening": mark_safe(f"<{element}{html_attributes(named)}>"),  # noqa: S308 - see above
-        "closing": mark_safe(f"</{element}>"),  # noqa: S308 - see above
+    return framed(name, given, CARD_ELEMENTS, "section", "card", named)
+
+
+# Words said in the muted voice: a line, a paragraph or a block, its element a
+# choice. A cell or a list item holds the tag; a run of parts said quietly is
+# ``{% dot_list muted=True %}`` (stack_tags).
+MUTED_ELEMENTS = frozenset(("span", "p", "div"))
+
+
+def muted_frame(name: str, given: dict) -> dict:
+    """Muted words' opening and closing tags. A ``tip`` is what a press or a
+    hover shows, as a status's tip is; ``hidden`` and ``role`` are for a line a
+    script shows and a reader hears."""
+
+    tip = given.get("tip")
+    named = {
+        "id": given.get("id"),
+        "title": given.get("title"),
+        "role": given.get("role"),
+        "hidden": True if given.get("hidden") else None,
+        "tabindex": "0" if tip else None,
+        "data-tip": tip,
     }
+    return framed(name, given, MUTED_ELEMENTS, "span", "muted", named)
+
+
+# Words said quietly beside what they are about (a context line, a sentence
+# under a value), the one way a page or an extension writes muted text.
+slotted(
+    "muted",
+    "partials/_muted.html",
+    ("content",),
+    frozenset(("element", "css", "id", "title", "tip", "hidden", "role")),
+    shape=muted_frame,
+)
 
 
 slotted(
@@ -705,11 +806,16 @@ slotted(
 # stands, or its number, then what it says.
 slotted("steps", "partials/_steps.html", ("content",), frozenset(("numbered",)))
 slotted("step", "partials/_step.html", ("content",), frozenset(("icon", "tone", "done", "title")))
+# A list of sentences, each marked as the browser marks it, or numbered when
+# they are read in order.
+slotted("prose_list", "partials/_prose_list.html", ("content",), frozenset(("numbered",)))
 # A row of links, each a chip of its own.
 slotted("link_chips", "partials/_link_chips.html", ("content",), frozenset())
+# A row of buttons standing on its own, a form's closing row among them.
+slotted("button_row", "partials/_button_row.html", ("content",), frozenset(("bar",)))
 # The content column of the page frame, which base.html and the component
 # catalog draw in.
-slotted("page_main", "partials/_page_main.html", ("content",), frozenset())
+slotted("page_main", "partials/_page_main.html", ("content", "print_footer"), frozenset())
 slotted(
     "card",
     "partials/_card.html",
@@ -727,15 +833,17 @@ def reading_frame(name: str, given: dict) -> dict:
     """A reading's options as its partial draws them: its tone as the shared
     tone class, and each ``data_*`` option as an attribute of the reading."""
 
-    tone, note_tone = given.get("tone") or "", given.get("note_tone") or ""
-    if tone and tone not in STATUS_VALUES:
-        raise template.TemplateSyntaxError(f"{name} tone= is one of {', '.join(sorted(STATUS_VALUES))}")
+    note_tone = given.get("note_tone") or ""
+    try:
+        tone = Tone(given.get("tone") or Tone.NEUTRAL)
+    except ValueError:
+        raise template.TemplateSyntaxError(f"{name} tone= is one of {', '.join(Tone)}") from None
     if note_tone not in NOTE_TONES:
         raise template.TemplateSyntaxError(f"{name} note_tone= is one of {', '.join(sorted(filter(None, NOTE_TONES)))}")
     data = {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
     return {
         **{option: value for option, value in given.items() if not option.startswith("data_")},
-        "tone_class": f" tone-{tone}" if tone not in ("", "neutral") else "",
+        "tone_class": f" tone-{tone}" if tone is not Tone.NEUTRAL else "",
         "attributes": html_attributes(data),
     }
 

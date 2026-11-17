@@ -1,0 +1,14 @@
+id: condition-type-named-by-conditions
+valid:
+  - 'drifted = holding(resource.conditions, DRIFTED)'
+  - 'condition = {"type": READY, "status": True}'
+  - 'state = {"state": "Ready"}'
+  - 'label = "Ready to deploy"'
+  - 'label = "Drifted from the plan"'
+invalid:
+  - 'drifted = item.get("type") == "Drifted"'
+  - "problems = ('Degraded', 'Drifted')"
+  - 'since = held_since(resource.conditions, "Degraded")'
+  - 'active = item.get("type") in {"Drifted", "Degraded"}'
+  - 'condition = {"type": "Ready", "status": True}'
+  - 'condition = {"type": "Drifted", "status": True, "reason": "Drifted"}'

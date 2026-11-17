@@ -4,12 +4,13 @@ import annotationlib
 import inspect
 from annotationlib import Format
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields as dataclass_fields, is_dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Any, TypeAliasType, Union, get_args, get_origin, is_typeddict
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
+from .contracts import Effect
 from .display_words import display
 from .json_schemas import fields, json_schema
 from .search_contracts import SearchDefinition
@@ -51,8 +52,8 @@ def command_adapter(command_type: type) -> TypeAdapter[Any]:
     A stdlib dataclass or TypedDict with no config of its own takes the config
     of whatever holds it, so the command and every such type inside it take
     this one. Pydantic accepts a config only for a type that has none of its
-    own to hold, which an alias of the command is. A Pydantic model keeps its
-    own config: an extension's is a ``StrictCommand``.
+    own to hold, which an alias of the command is. A command is such a type;
+    ``CapabilitySpec`` refuses one whose own config leaves it open.
     """
 
     alias: Any = TypeAliasType(command_type.__name__, command_type)
@@ -95,12 +96,6 @@ IDEMPOTENCY_FIELD_SCHEMA: dict[str, Any] = {
 }
 
 
-def declares_idempotency_key(command_type: type) -> bool:
-    """Whether the command carries the key into its own domain operation."""
-
-    return IDEMPOTENCY_FIELD in command_schema(command_type).get("properties", {})
-
-
 # Where the record a command acts on goes in what asking for it wants done.
 TARGET = "{target}"
 
@@ -117,6 +112,18 @@ STALE_WRITE_KEYWORD = "expected_updated_at"
 # The names of the fields the caller sent, handed only to a handler that names
 # it, so a write to a record it holds sets those and keeps the rest.
 SENT_KEYWORD = "sent"
+
+
+# The runner's consent (``capabilities.Consented``), handed in place of the
+# principal only to a handler that names it: one that writes a declaration.
+CONSENT_KEYWORD = "consented"
+
+
+def takes_consent(handler: Callable[..., Any]) -> bool:
+    """Whether a capability handler declares ``consented`` by name: it writes a
+    declaration, which only a consented act may."""
+
+    return _declares(handler, CONSENT_KEYWORD)
 
 
 def takes_stale_write_token(handler: Callable[..., Any]) -> bool:
@@ -198,7 +205,7 @@ def capability_schema(spec: CapabilitySpec) -> dict[str, Any]:
     schema = records.as_its_model_declares(spec.command_type, command_schema(spec.command_type))
     if kept := kept_by(spec):
         schema = records.as_an_update_declares(schema, kept.always_sent)
-    if spec.effect == "read":
+    if not spec.effect.changes:
         return schema
     properties = dict(schema.get("properties", {}))
     properties[IDEMPOTENCY_FIELD] = dict(IDEMPOTENCY_FIELD_SCHEMA)
@@ -243,11 +250,20 @@ class CommandAbout:
             raise ValueError("A command's facts are drawn under a heading: give CommandAbout a label.")
 
 
+def _declared(command: type) -> frozenset[str]:
+    """The field names ``command`` declares, without evaluating its annotations."""
+
+    if is_dataclass(command):
+        return frozenset(each.name for each in dataclass_fields(command))
+    return frozenset(getattr(command, "__required_keys__", ())) | frozenset(getattr(command, "__optional_keys__", ()))
+
+
 @dataclass(frozen=True, slots=True)
 class CapabilitySpec(Requires):
     name: str
     summary: str
-    effect: str
+    # Given as its value's string too, as an extension may write it.
+    effect: Effect
     required_capability: Capability | str | tuple[Capability | str, ...]
     command_type: type
     handler: Callable[..., Mapping[str, Any]]
@@ -291,6 +307,24 @@ class CapabilitySpec(Requires):
     # is drawn, so what it lists (a run that just ended) is current, and
     # given its reader, so it lists only what they may read.
     about: Callable[[Principal], CommandAbout] | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "effect", Effect(self.effect))
+        # A type with a config of its own keeps it over the one
+        # ``command_adapter`` closes a command with, so a command has none.
+        command = self.command_type
+        if issubclass(command, BaseModel) or "__pydantic_config__" in vars(command):
+            raise TypeError(
+                f"Capability {self.name!r} command {command.__name__} keeps a Pydantic config of its own; "
+                "declare it a frozen dataclass or a TypedDict, which HQ closes."
+            )
+        # A retry is the runner's to answer once (``execute_once``), so no
+        # handler is handed the key to answer it a second way.
+        if IDEMPOTENCY_FIELD in _declared(command):
+            raise TypeError(
+                f"Capability {self.name!r} command {command.__name__} declares {IDEMPOTENCY_FIELD}; "
+                "the capability runner keeps the retry key, so leave it out."
+            )
 
     @property
     def title(self) -> str:

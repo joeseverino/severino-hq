@@ -11,6 +11,7 @@ from hq.platform.application.routes import reverse
 from ..connection_shapes import API_TOKEN
 from ..consoles import cloudflare_dashboard
 from ..names import LEADS_TO, normalized_hostname
+from ..observations import cloudflare as readings
 from ..observations.contract import ReadingPart
 from ..permissions import Cloudflare
 from ..provider_spec import (
@@ -629,6 +630,7 @@ CONTACT_INBOX = ProviderSpec(
 )
 
 DEFINITIONS = (DNS_RECORD, ZONE, CONTACT_INBOX)
+OBSERVATIONS = readings.OBSERVATIONS
 
 SHARED = (
     SharedValue(

@@ -1,0 +1,6 @@
+{% load static %}{% comment %}
+ask.js with every frame it clones, the pieces `_ask.html#frames` draws empty.
+A page loads the script only through this part (ScriptFrameTests), so no page
+has it without its frames.
+{% endcomment %}{% include "partials/_ask.html#frames" %}
+<script src="{% static 'js/ask.js' %}" {% csp_nonce_attr %} defer></script>

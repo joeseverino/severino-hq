@@ -12,6 +12,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.markup_testing import select, with_class
 from hq.platform.application.plugin_testing import form_keyed
 
 from ..mail_policy import (
@@ -25,7 +26,6 @@ from ..mail_policy import (
     parse_dmarc,
     parse_spf,
 )
-from .markup import select, with_class
 
 
 class DmarcReadingTests(SimpleTestCase):
@@ -251,7 +251,8 @@ class MailPageTests(TestCase):
 
         # The one sender the record lists, then the blank row for adding one.
         self.assertEqual(len(with_class(response, "name-list-row")), 2)
-        self.assertEqual(len(select(response, "data-name-list-remove")), 1)
+        # The template's button is the one a row added later takes.
+        self.assertEqual(len([button for button in select(response, "data-name-list-remove") if not button.inert]), 1)
 
     def test_a_policy_past_all_failing_mail_is_refused_beside_its_field_as_sent(self):
         before = ManagedResource.objects.get(key="dmarc").spec["content"]

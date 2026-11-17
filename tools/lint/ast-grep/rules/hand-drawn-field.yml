@@ -1,0 +1,29 @@
+# A form's field is drawn by HQ's field template (templates/django/forms/
+# field.html), which {{ form }} and {{ field.as_field_group }} render, so its
+# label, help, errors and required mark come with it; a row of a form's or a
+# card's buttons is the button row tag's. A `field` or `form-actions` class
+# written by hand is a second way to draw either, so a template writes
+# neither. The field parts that draw one control their own way (a table row's,
+# a drop zone's) are the field template's siblings. No fix: a field is the
+# view's form object, which a template does not name.
+id: hand-drawn-field
+language: html
+severity: error
+message: A form's field or its row of buttons drawn by hand, where the field template and the button row tag draw them.
+note: Declare the field on the view's Django form and draw it with {{ form }} or {{ field.as_field_group }}; write a row of buttons as {% button_row %}...{% endbutton_row %}.
+files:
+  - "**/templates/**/*.html"
+ignores:
+  - "templates/django/forms/field.html"
+  - "templates/partials/_button_row.html"
+  - "templates/partials/_row_field.html"
+  - "templates/partials/_dropzone.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?(?:field|form-actions)(?:[^\w-]|$)'

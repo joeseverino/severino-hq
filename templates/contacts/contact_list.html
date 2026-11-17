@@ -12,10 +12,7 @@
   {% endfor %}
 {% endswitch %}
 
-{% filter_bar filtered=q clear=search_cleared shown=submissions|length total=status_total %}
-  <input type="search" name="q" value="{{ q }}" placeholder="Filter by name, email, or message" aria-label="Filter by name, email, or message">
-  {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
-{% endfilter_bar %}
+{% filter_bar search="Filter by name, email, or message" query=q keep=status_kept filtered=q clear=search_cleared shown=submissions|length total=status_total %}{% endfilter_bar %}
 
 {% comment %}With nothing received, one sentence says so; the tabs, the count and an empty table would say it three more times.{% endcomment %}
 {% if not total_count and not q %}
@@ -39,18 +36,18 @@
     {% for s in submissions %}
       <tr{% row_state emphasized=s.unread %}>
         <td>{{ s.id|breakable }}</td>
-        <td class="muted">{{ s.created_at|when }}</td>
+        <td>{% muted %}{{ s.created_at|when }}{% endmuted %}</td>
         <td>
           <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name|breakable }}</strong></a>
-          <div class="muted">{% cell_line s.email %}</div>
+          {% muted element="div" %}{% cell_line s.email %}{% endmuted %}
         </td>
         <td>{% url 'contacts:detail' s.id as message_url %}{% cell_line s.message_preview message_url %}</td>
-        <td>{% status s.status tone=s.status %}{% if s.pending %} {% status "Waiting" tone="attention" %}{% endif %}</td>
-        <td class="muted">{{ s.country|or_empty }}</td>
+        <td>{% status s.state %}{% if s.pending %} {% status "Waiting" tone="attention" %}{% endif %}</td>
+        <td>{% muted %}{{ s.country|or_empty }}{% endmuted %}</td>
         {% row_actions s.actions gap=gap %}
       </tr>
     {% empty %}
-      <tr><td colspan="7" class="muted">{% if selected_status or q %}Nothing matches.{% else %}No messages yet.{% endif %}</td></tr>
+      <tr><td colspan="7">{% muted %}{% if selected_status or q %}Nothing matches.{% else %}No messages yet.{% endif %}{% endmuted %}</td></tr>
     {% endfor %}
   </tbody>
 </table>

@@ -17,11 +17,12 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.projects.models import Project
-from hq.platform.application.card_items import Insight, Kpi
+from hq.platform.application.card_items import Kpi
+from hq.platform.application.contracts import Effect
 from hq.platform.application.drawings import Dot, Dots
 from hq.platform.application.report_testing import report_connections
-from hq.platform.application.security import cli_principal
 from hq.platform.application.services import CONTAINER_KIND
+from hq.platform.application.tests.links import example_command
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, DomainOverview, stacked_bar_chart
 from hq.platform.core import seeds
 from hq.platform.core.network import SOCKET_PEER
@@ -141,7 +142,6 @@ def build_estate(user):
                 "failure": "address",
             },
         ],
-        principal=cli_principal(),
         controller_id="example-controller",
     )
     # A name only an Access application names: an observed row.
@@ -514,44 +514,41 @@ def _urgent_dashboard():
     """The dashboard with a short urgent queue read in place: a held request
     and a finding, each with a long line, beside their buttons."""
 
+    from dataclasses import asdict
     from uuid import UUID
 
-    from hq.platform.application.approvals import APPROVE, REJECT
-    from hq.platform.application.dashboard import queue_item
-    from hq.platform.application.workflow_contracts import ActionLink
+    from hq.platform.application.approvals import DECISIONS, _decision_link
+    from hq.platform.application.dashboard import finding_rows
+    from hq.platform.application.finding_model import Finding, opens
 
     held = UUID(int=1)
-    decide = (
-        ActionLink(
-            name,
-            label,
-            "remote_write",
-            reverse("control_plane:approval_decide", kwargs={"approval_id": held, "decision": decision}),
-            method="POST",
-            recommended=decision == "approve",
-        )
-        for name, label, decision in ((APPROVE, "Approve", "approve"), (REJECT, "Reject", "reject"))
+    approval = Finding(
+        rule="approval",
+        subject=str(held),
+        severity="serious",
+        title="example-agent wants to change the expected answer of photos.example.com from 192.0.2.10 to 198.51.100.20",
+        explanation="DNS rewrite photos-example: answer from 192.0.2.10 to 198.51.100.20, and 2 more fields.",
+        primary=opens("", reverse("core:approval_entry", kwargs={"approval_id": held})),
+        held=True,
     )
-    approval = Insight(
-        "serious",
-        "Approval",
-        "example-agent wants to change the expected answer of photos.example.com from 192.0.2.10 to 198.51.100.20",
-        "1",
-        "DNS rewrite photos-example: answer from 192.0.2.10 to 198.51.100.20, and 2 more fields.",
-        key=f"approval:{held}",
-        url=reverse("core:approval_entry", kwargs={"approval_id": held}),
-        actions=tuple(decide),
-    )
-    finding = Insight(
-        "serious",
-        "Estate",
-        "wildcard-example-com expires in 4 days",
-        "1",
-        "Expires in 4 days. Renewal opens at 30 days; renew it or check why renewal did not run, since a "
+    finding = Finding(
+        rule="example-expiry",
+        subject="wildcard-example-com",
+        severity="serious",
+        title="wildcard-example-com expires in 4 days",
+        explanation="Expires in 4 days. Renewal opens at 30 days; renew it or check why renewal did not run, since a "
         "certificate that lapses takes every name it covers down with it.",
-        actions=(ActionLink("renew", "Renew certificate", "remote_write", "/example/renew/", method="POST"),),
     )
-    queue = [{**queue_item("example.urgent", "Example", item), "aside": False} for item in (approval, finding)]
+    # Each row with what its reader is offered: a held request's decisions
+    # (``approvals.offers``), the finding's own remedy.
+    offered = (
+        [_decision_link(held, decision) for decision in DECISIONS],
+        [example_command("renew", "Renew certificate", "remote_write", "/example/renew/", method="POST")],
+    )
+    queue = [
+        {**row, "actions": [asdict(action) for action in actions], "aside": False}
+        for row, actions in zip(finding_rows("example.urgent", "Example", (approval, finding)), offered, strict=True)
+    ]
     with (
         _dashboard(populated=False),
         mock.patch("hq.platform.application.action_items.with_aside_state", return_value=queue),
@@ -566,9 +563,10 @@ def _rechecks(*, populated):
     quoted unit name long enough to wrap. No row holds a third button, so a
     table of them is as narrow as two buttons leave it."""
 
-    from hq.platform.application.dashboard import queue_item
-    from hq.platform.application.finding_model import CHECK_AGAIN
-    from hq.platform.application.workflow_contracts import ActionLink
+    from dataclasses import asdict
+
+    from hq.platform.application.dashboard import finding_rows
+    from hq.platform.application.finding_model import CHECK_AGAIN, Finding
 
     titles = (
         (
@@ -577,24 +575,19 @@ def _rechecks(*, populated):
         ),
         ("Edge certificate example.com expires in 19 days", "Visitors get a certificate error once it expires."),
     )
+    found = tuple(
+        Finding(rule="example-recheck", subject=str(place), severity="serious", title=title, explanation=detail)
+        for place, (title, detail) in enumerate(titles)
+    )
     queue = [
         {
-            **queue_item(
-                "example.rechecks",
-                "Example",
-                Insight(
-                    "serious",
-                    "Example",
-                    title,
-                    "1",
-                    detail,
-                    key=f"example:recheck-{place}",
-                    actions=(ActionLink("verify", CHECK_AGAIN, "read", f"/example/check/{place}/", method="POST"),),
-                ),
-            ),
+            **row,
+            "actions": [
+                asdict(example_command("verify", CHECK_AGAIN, Effect.READ, f"/example/check/{place}/", method="POST"))
+            ],
             "aside": False,
         }
-        for place, (title, detail) in enumerate(titles)
+        for place, row in enumerate(finding_rows("example.rechecks", "Example", found))
     ]
     with (
         _dashboard(populated=populated),

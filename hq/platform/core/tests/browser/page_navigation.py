@@ -18,10 +18,7 @@ from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 
 _MAP = "part/page-navigation"
 # app.js after fragment.js, as base.html loads them.
-_SCRIPT = (
-    '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
-    '<script defer src="{{ static }}js/app.js" nonce="{{ nonce }}"></script>'
-)
+_SCRIPT = '{% include "scripts/fragment.html" %}<script defer src="{{ static }}js/app.js" nonce="{{ nonce }}"></script>'
 
 # The catalog's map over sections a screen tall each, so the last ones are
 # reached only by scrolling the page, as on a dense page.
@@ -62,7 +59,7 @@ _SCROLL_TO = "(id) => { window.scrollTo({top: document.getElementById(id).offset
 
 def _page(markup=_DENSE):
     drawn = Template(markup).render(Context({**CATALOG[_MAP].context, "lines": range(40)}))
-    script = Template(_SCRIPT).render(Context({"static": settings.STATIC_URL, "nonce": NONCE}))
+    script = Template(_SCRIPT).render(Context({"static": settings.STATIC_URL, "nonce": NONCE, "csp_nonce": NONCE}))
     return part_page(_MAP, drawn).replace("</head>", script + "</head>")
 
 

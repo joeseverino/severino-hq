@@ -7,10 +7,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.observations.public_registry import DIGEST_KIND as DIGEST
 
 from ..containers import DECLARED, LABEL, PROVENANCE, REGISTRY, VULNERABLE, containers
+from ..report_testing import bridged
 from ..security import cli_principal
-from ..standards import MET, UNAVAILABLE, UNMET
+from ..standards import Standing
 from .test_containers import estate, inventory
 from .test_upgrades import TARGET, declare, published
 
@@ -156,11 +158,11 @@ class StandardTests(TestCase):
 
         chain = item("app").supply_chain
 
-        self.assertEqual(chain.state_of("pinned"), MET)
-        self.assertEqual(chain.state_of("source-known"), MET)
-        self.assertEqual(chain.state_of("provenance"), MET)
-        self.assertEqual(chain.state_of("sbom"), MET)
-        self.assertEqual(chain.state_of("no-urgent"), UNMET)
+        self.assertEqual(chain.state_of("pinned"), Standing.MET)
+        self.assertEqual(chain.state_of("source-known"), Standing.MET)
+        self.assertEqual(chain.state_of("provenance"), Standing.MET)
+        self.assertEqual(chain.state_of("sbom"), Standing.MET)
+        self.assertEqual(chain.state_of("no-urgent"), Standing.UNMET)
         self.assertTrue(chain.serious)
 
     def test_what_was_not_read_is_unavailable_not_a_failure(self):
@@ -169,9 +171,9 @@ class StandardTests(TestCase):
 
         chain = item("app").supply_chain
 
-        self.assertEqual(chain.state_of("provenance"), UNAVAILABLE)
-        self.assertEqual(chain.state_of("sbom"), UNAVAILABLE)
-        self.assertEqual(chain.state_of("no-urgent"), UNAVAILABLE)
+        self.assertEqual(chain.state_of("provenance"), Standing.UNAVAILABLE)
+        self.assertEqual(chain.state_of("sbom"), Standing.UNAVAILABLE)
+        self.assertEqual(chain.state_of("no-urgent"), Standing.UNAVAILABLE)
 
 
 class UpgradeTests(TestCase):
@@ -213,16 +215,17 @@ class UpgradeTests(TestCase):
 
 class CadenceTests(TestCase):
     def test_a_digest_is_read_once_and_a_failure_is_retried_later(self):
-        from ..public_registry import RETRY_AFTER, _due
+        from ..freshness import RETRY_AFTER
+        from ..public_registry import _due
 
         now = timezone.now()
         read = {"digest": "x", "read_at": (now - timedelta(days=400)).isoformat()}
         failed = {"digest": "x", "unread": "down", "read_at": now.isoformat()}
 
-        self.assertFalse(_due(read, None, now, force=True))
-        self.assertFalse(_due(failed, None, now, force=False))
-        self.assertTrue(_due(failed, None, now + RETRY_AFTER + timedelta(seconds=1), force=False))
-        self.assertTrue(_due(None, None, now, force=False))
+        self.assertFalse(_due(read, DIGEST, now, force=True))
+        self.assertFalse(_due(failed, DIGEST, now, force=False))
+        self.assertTrue(_due(failed, DIGEST, now + RETRY_AFTER + timedelta(seconds=1), force=False))
+        self.assertTrue(_due(None, DIGEST, now, force=False))
 
     def test_a_vulnerability_detail_is_read_once_until_osv_modifies_it(self):
         from ..public_registry import vulnerability_reader
@@ -257,22 +260,21 @@ class CadenceTests(TestCase):
 
 class RegistryReadTests(TestCase):
     def sweep(self):
-        from ..sweep import record_sweep
 
         with self.captureOnCommitCallbacks(execute=True):
-            record_sweep(
+            bridged(
+                "inventory",
                 {
                     "portainer.container": {
                         "ok": True,
                         "records": list(ProviderInventory.objects.get(kind="portainer.container").records),
                     }
                 },
-                principal=cli_principal(),
             )
 
     def test_a_sweep_that_finds_a_digest_hq_has_not_read_starts_the_read(self):
         estate()
-        with mock.patch("hq.platform.application.scheduled_work.start") as start:
+        with mock.patch("hq.platform.application.outbound_work.start_for_host") as start:
             self.sweep()
         start.assert_called_once_with("registry.refresh")
 
@@ -282,7 +284,7 @@ class RegistryReadTests(TestCase):
         estate()
         inventory("registry.digest", [attested(APP), attested("docker.io/example/kuma@sha256:bbb")])
         self.assertFalse(registry_due())
-        with mock.patch("hq.platform.application.scheduled_work.start") as start:
+        with mock.patch("hq.platform.application.outbound_work.start_for_host") as start:
             self.sweep()
         start.assert_not_called()
 

@@ -1,0 +1,243 @@
+"""What a rendered page offers, read the way a browser reads it: links, hooks and text."""
+
+from dataclasses import dataclass, field
+from html.parser import HTMLParser
+from typing import override
+
+from django.http import HttpResponse
+
+_VOID = frozenset({"area", "br", "col", "hr", "img", "input", "link", "meta", "source", "wbr"})
+# The spans `|breakable` writes for a token, which are no edge in its text.
+_TOKEN_PARTS = frozenset({"strut", "token", "cut", "whole", "part", "joined", "seam", "mark"})
+# Elements whose text is their name or their value: a mark held inside one is the sentence's.
+_NAMED = frozenset({"a", "button", "code"})
+
+# What a test reads: a response, its body, or the markup a template rendered.
+type Page = str | bytes | HttpResponse
+
+
+@dataclass
+class Element:
+    tag: str
+    attrs: dict[str, str]
+    text: str = ""
+    ancestors: tuple[Element, ...] = field(default=(), repr=False, compare=False)
+    chunks: list[str] = field(default_factory=list, repr=False, compare=False)
+    # What the line beneath a row (`data-row-detail`) holds, met only once the
+    # row is opened, copies what the row holds back. A block the row moved
+    # there (`row-below`) is its only copy, so it is read as the row's.
+    beneath: bool = field(default=False, repr=False, compare=False)
+    # A <template> and what it holds, markup a script clones, which a browser
+    # parses into no element of the page; and an element marked inert, which
+    # no one reaches (a filter bar's sizer).
+    inert: bool = field(default=False, repr=False, compare=False)
+    # Within a declarative shadow root (`<template shadowrootmode>`), which a
+    # browser draws as the page, in a tree of its own: its ids and what points
+    # at them are the root's alone.
+    shadowed: bool = field(default=False, repr=False, compare=False)
+    # For a row's open line (`data-row-detail`), the row it opens: what the
+    # row moved there (`row-below`, its editor) is still the row's.
+    opens: Element | None = field(default=None, repr=False, compare=False)
+
+    @property
+    def classes(self) -> frozenset[str]:
+        return frozenset(self.attrs.get("class", "").split())
+
+    @property
+    def words(self) -> str:
+        """The element's text as a reader sees it: whitespace collapsed, a space between elements."""
+
+        return " ".join(" ".join(self.chunks).split())
+
+    def inside(self, row: Element) -> bool:
+        """Whether the element is within ``row``, the line it opens included."""
+
+        return any(row in (ancestor, ancestor.opens) for ancestor in self.ancestors)
+
+
+class _Page(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.elements: list[Element] = []
+        self.words: list[str] = []
+        self._open: list[Element] = []
+        self._token: Element | None = None
+        # Whether an element's edge, other than a token's own, stands between
+        # this data and the last.
+        self._edge = True
+
+    @override
+    def handle_starttag(self, tag, attrs):
+        element = Element(tag, {name: value or "" for name, value in attrs}, ancestors=tuple(self._open))
+        moved = any("row-below" in opened.classes for opened in (*self._open, element))
+        element.beneath = not moved and (
+            "data-row-detail" in element.attrs or any("data-row-detail" in opened.attrs for opened in self._open)
+        )
+        root = tag == "template" and "shadowrootmode" in element.attrs
+        element.shadowed = root or any(opened.shadowed for opened in self._open)
+        element.inert = (
+            (tag == "template" and not root) or "inert" in element.attrs or any(opened.inert for opened in self._open)
+        )
+        if tag == "tr" and "data-row-detail" in element.attrs:
+            element.opens = next(
+                (row for row in reversed(self.elements) if row.tag == "tr" and row.ancestors == element.ancestors), None
+            )
+        # A shadow root's template is no element of the page; what it holds is.
+        if not element.inert and not root:
+            self.elements.append(element)
+        self._edge = self._edge or not _TOKEN_PARTS & element.classes
+        if tag not in _VOID:
+            self._open.append(element)
+
+    @override
+    def handle_endtag(self, tag):
+        for depth in range(len(self._open) - 1, -1, -1):
+            if self._open[depth].tag == tag:
+                self._edge = self._edge or not _TOKEN_PARTS & self._open[depth].classes
+                del self._open[depth:]
+                return
+
+    @override
+    def handle_data(self, data):
+        if any(element.inert for element in self._open):
+            return
+        # A token (`|breakable`) marks where it may wrap with markup; read, it
+        # is one word, with any text it touches.
+        # The mark it holds to a value is read with the word it ends.
+        # Text beneath a row is no word of the page, nor does it join one.
+        beneath = bool(self._open) and self._open[-1].beneath
+        token = next((element for element in self._open if {"token", "mark"} & element.classes), None)
+        joined = not beneath and self._joins(token, data)
+        if not beneath:
+            self._token = token
+            self._edge = False
+            if joined:
+                self.words[-1] += data
+            else:
+                self.words.append(data)
+        # Text hidden from the accessibility tree is no part of the name of a
+        # link or a button around it (a mark held to its name), though a
+        # reader sees it.
+        hidden = next((at for at, element in enumerate(self._open) if element.attrs.get("aria-hidden") == "true"), None)
+        for at, element in enumerate(self._open):
+            if hidden is not None and at < hidden and element.tag in _NAMED:
+                continue
+            if beneath and not element.beneath:
+                continue
+            element.text += data
+            if joined and element.chunks:
+                element.chunks[-1] += data
+            else:
+                element.chunks.append(data)
+
+    def _joins(self, token: Element | None, data: str) -> bool:
+        """Whether ``data`` continues the last word: the same token, or text touching one."""
+
+        if token is not None and token is self._token:
+            return True
+        if token is None and self._token is None:
+            return False
+        return not (self._edge or not self.words or self.words[-1][-1:].isspace() or data[:1].isspace())
+
+
+def _page(html: Page) -> _Page:
+    page = _Page()
+    body = html.content if isinstance(html, HttpResponse) else html
+    page.feed(body.decode() if isinstance(body, bytes) else body)
+    page.close()
+    return page
+
+
+def _shown(html: Page) -> list[Element]:
+    """Every element a reader meets before opening a row, in page order."""
+
+    return [element for element in _page(html).elements if not element.beneath]
+
+
+def all_elements(html: Page) -> list[Element]:
+    """Every element, in page order, the line beneath each row included."""
+
+    return _page(html).elements
+
+
+def select(html: Page, attribute: str, value: str | None = None) -> list[Element]:
+    """Every element carrying ``attribute`` (equal to ``value`` when given)."""
+
+    return [
+        element
+        for element in _shown(html)
+        if attribute in element.attrs and (value is None or element.attrs[attribute] == value)
+    ]
+
+
+def elements(html: Page, tag: str) -> list[Element]:
+    """Every ``tag`` element, in page order."""
+
+    return [element for element in _shown(html) if element.tag == tag]
+
+
+def with_class(html: Page, name: str) -> list[Element]:
+    """Every element whose class list includes ``name``, in page order."""
+
+    return [element for element in _shown(html) if name in element.classes]
+
+
+def within(html: Page, attribute: str, value: str | None = None) -> list[Element]:
+    """Every element inside one carrying ``attribute``, in page order, a row's
+    open line counted as inside the row it opens.
+
+    With ``value``, only inside one whose attribute equals it; for ``class``,
+    one whose class list includes it.
+    """
+
+    def holds(ancestor: Element) -> bool:
+        if ancestor.opens is not None and holds(ancestor.opens):
+            return True
+        if attribute not in ancestor.attrs:
+            return False
+        if value is None:
+            return True
+        return value in ancestor.classes if attribute == "class" else ancestor.attrs[attribute] == value
+
+    return [element for element in _shown(html) if any(holds(ancestor) for ancestor in element.ancestors)]
+
+
+def links(html: Page) -> list[tuple[str, str]]:
+    """Each link's words and its target, in page order."""
+
+    return [
+        (element.words, element.attrs["href"])
+        for element in _shown(html)
+        if element.tag == "a" and "href" in element.attrs
+    ]
+
+
+def texts(html: Page, tag: str) -> list[str]:
+    """The words of each ``tag`` element, whitespace collapsed, in page order."""
+
+    return [element.words for element in elements(html, tag)]
+
+
+def hrefs(html: Page) -> list[str]:
+    """Every link's target, in page order."""
+
+    return [element.attrs["href"] for element in _shown(html) if element.tag == "a" and "href" in element.attrs]
+
+
+def actions(html: Page) -> list[str]:
+    """Every form's action, in page order."""
+
+    return [element.attrs.get("action", "") for element in _shown(html) if element.tag == "form"]
+
+
+def copied(block: Element) -> str:
+    """What a Copy button puts on the clipboard from ``block``, a <pre>: its
+    text as app.js reads it, a no-break space as the space it stands for."""
+
+    return block.text.strip().replace("\xa0", " ")
+
+
+def text(html: Page) -> str:
+    """The words a reader sees, whitespace collapsed."""
+
+    return " ".join(" ".join(_page(html).words).split())

@@ -7,7 +7,8 @@ from typing import Any
 
 from django.conf import settings
 
-from .tones import ATTENTION, GOOD, NEUTRAL, SERIOUS, Tile, iso
+from ..tone import Tone
+from .band import Tile, iso
 lazy from ..entity_links import web_url
 lazy from ..github_estate import repository_for
 lazy from ..plugins import installed_plugins
@@ -81,12 +82,12 @@ class Release:
         return "Not known"
 
     @property
-    def tone(self) -> str:
+    def tone(self) -> Tone:
         if self.runs_deployed is False:
-            return SERIOUS
+            return Tone.SERIOUS
         if self.behind:
-            return ATTENTION
-        return GOOD if self.behind is False else NEUTRAL
+            return Tone.ATTENTION
+        return Tone.GOOD if self.behind is False else Tone.NEUTRAL
 
 
 def repository(container: Any) -> Any:
@@ -132,7 +133,7 @@ def release(container: Any) -> Release:
         signed=bool(build.get("signed")) if build is not None else None,
         signed_unread="" if build is not None else _unread(standing),
         vulnerabilities=standing.vulnerabilities if read else NOT_READ,
-        vulnerabilities_note=standing.vulnerabilities_note if read else _unread(standing),
+        vulnerabilities_note=standing.vulnerabilities_note if read else "",
         vulnerabilities_unread="" if read else _unread(standing),
         repository=repository(container),
         extensions=tuple((plugin.name, plugin.version) for plugin in installed_plugins()),
@@ -145,7 +146,7 @@ def release_tile(release: Release) -> Tile:
         release.short or "Not stamped",
         release.standing if release.revision else "This build does not say which commit it is.",
         release.commit_url,
-        release.tone if release.revision else NEUTRAL,
+        release.tone if release.revision else Tone.NEUTRAL,
         "deploy",
     )
 

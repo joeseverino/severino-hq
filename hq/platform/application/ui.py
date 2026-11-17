@@ -2,8 +2,11 @@
 
 import math
 import re
+from collections.abc import Sized
 from dataclasses import dataclass
 from datetime import date, timedelta
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from numbers import Number
 from typing import ClassVar
 
 from .card_items import Kpi, TimelineItem
@@ -18,23 +21,47 @@ from .chart_numbers import (
 )
 from .display_words import display
 from .labels import dotted, plural
-
-# The one status vocabulary. Every surface that shows state (dashboard cards,
-# insight panels, extension-provided projections) draws from this set, so a
-# state means the same thing and looks the same wherever it is rendered.
-# Reserved: these never double as categorical series colors, and each is always
-# rendered with its own text so state is never carried by color alone.
-STATUS_VALUES = frozenset({"good", "attention", "serious", "neutral"})
+from .money import signed_number
+from .tone import Tone
 
 # An advisory's severity as the tone it is drawn in, wherever one is listed:
-# critical and high serious, medium attention, the rest neutral.
-SEVERITY_TONES = {"critical": "serious", "high": "serious", "medium": "attention", "moderate": "attention"}
+# critical and high serious, medium attention, the rest neutral. A weather
+# alert's severity (extreme, severe, moderate, minor) reads the same way.
+SEVERITY_TONES = {
+    "critical": Tone.SERIOUS,
+    "extreme": Tone.SERIOUS,
+    "high": Tone.SERIOUS,
+    "severe": Tone.SERIOUS,
+    "medium": Tone.ATTENTION,
+    "moderate": Tone.ATTENTION,
+}
 
 
-def severity_tone(severity: object) -> str:
+# What a button may look like beside a plain one. The button's own class is
+# written by ``button_classes`` alone, so a control that looks like a button
+# is drawn by the button tag (action_tags.button) or a Python part through it.
+BUTTON_LOOKS = frozenset({"primary", "ghost", "danger", "compact", "link", "menu"})
+# The looks that paint a button's box, which a row of a menu or a link among
+# words is drawn without, so no rule takes that paint back off.
+_PAINTED = frozenset({"primary", "ghost"})
+
+
+def button_classes(look: str = "") -> str:
+    """A button's classes, its looks (``"primary compact"``) after its own."""
+
+    words = look.split()
+    unknown = sorted(set(words) - BUTTON_LOOKS)
+    if unknown:
+        raise ValueError(f"A button looks {', '.join(sorted(BUTTON_LOOKS))}, never {', '.join(unknown)}.")
+    if {"link", "menu"} & set(words):
+        words = [word for word in words if word not in _PAINTED]
+    return " ".join(dict.fromkeys(("btn", *words)))
+
+
+def severity_tone(severity: object) -> Tone:
     """The tone an advisory's severity is drawn in."""
 
-    return SEVERITY_TONES.get(str(severity or "").lower(), "neutral")
+    return SEVERITY_TONES.get(str(severity or "").lower(), Tone.NEUTRAL)
 
 
 def _one_of(name: str, value: str, allowed: frozenset[str], *, or_empty: bool = False) -> None:
@@ -47,8 +74,18 @@ def _one_of(name: str, value: str, allowed: frozenset[str], *, or_empty: bool = 
 
 
 # What a value that is not there looks like, everywhere: in a template through
-# the built-in `or_empty` filter, in a view model through this constant.
+# the built-in `or_empty` filter or `{% present %}` tag, in a view model
+# through this constant.
 MISSING = "–"
+
+
+def no_value(value: object) -> bool:
+    """Whether ``value`` is not there and is drawn as ``MISSING``: None, the
+    empty string or an empty collection. Zero and False are values, and show."""
+
+    if value is None or value == "":
+        return True
+    return isinstance(value, Sized) and not isinstance(value, str) and len(value) == 0
 
 
 def counted(count: int, one: str, many: str | None = None) -> str:
@@ -62,6 +99,59 @@ def counted(count: int, one: str, many: str | None = None) -> str:
     """
     one, many = counted_forms(one, many)
     return f"{count:,} {one if count == 1 else many}"
+
+
+def measured(value: Decimal | float | str | None, unit: str, places: int | None = None, *, plus: bool = False) -> str:
+    """A figure and its unit: "4.25 mi", "1,250 ft", "12%", "72°", "3 more", or
+    with no unit the figure alone.
+
+    ``places`` rounds the figure half away from zero, as ``floatformat`` does:
+    that many decimals, or with a negative count that many only when the figure
+    is not whole. Left out, a number is written as it came. A figure is
+    grouped by thousands and signed as ``money.signed_number`` signs one, so a
+    figure that rounds to zero is never negative, and ``plus`` signs a change.
+    Zero is a figure; a ``no_value`` is the missing mark. A figure already
+    written as words ("1:23") is written as it is.
+    """
+
+    if no_value(value):
+        return MISSING
+    joint = "" if unit in ("%", "°", "") else " "
+    number = _figure(value)
+    if number is None:
+        return f"{value}{joint}{unit}"
+
+    # Decimals are settled by the figure before it is signed, so zero is
+    # written to the same decimals and a figure that rounds to it reads as zero.
+    decimals = _decimals(number, places)
+
+    def written(magnitude: Decimal) -> str:
+        if decimals is not None:
+            magnitude = magnitude.quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP)
+        return f"{magnitude:,f}{joint}{unit}"
+
+    return signed_number(number, written, plus=plus)
+
+
+def _figure(value: object) -> Decimal | None:
+    """``value`` as a number, or None when it is words; a float through its
+    shortest form, so 1.1 means 1.1."""
+
+    if isinstance(value, bool):
+        return None
+    try:
+        number = Decimal(str(value)) if isinstance(value, (Number, str)) else None
+    except InvalidOperation:
+        return None
+    return number if number is not None and number.is_finite() else None
+
+
+def _decimals(number: Decimal, places: int | None) -> int | None:
+    """How many decimals ``measured`` writes ``number`` to; None, as it came."""
+
+    if places is None:
+        return None
+    return 0 if places < 0 and number == number.to_integral_value() else abs(places)
 
 
 def counted_forms(one: str, many: str | None = None) -> tuple[str, str]:
@@ -281,6 +371,12 @@ class Chart:
         # From `plot_left` rather than the module constant, so a chart given a
         # non-standard plot reports the gutter it actually has.
         return self.plot_left / self.width * 100
+
+    @property
+    def legend(self) -> tuple[tuple[int, str], ...]:
+        """Each series' place in the palette and the name its legend shows."""
+
+        return tuple((series.slot, series.label) for series in self.series)
 
     @property
     def table_headings(self) -> tuple[str, ...]:

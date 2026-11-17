@@ -8,11 +8,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory
+from hq.platform.application.markup_testing import all_elements, select, texts, with_class
 
 from ..hq_self import LABEL, hq_hostnames, hq_service, served_at
 from ..machines import machine
 from .host_only import host_only
-from .markup import all_elements, select, texts, with_class
 
 SITE = override_settings(
     SEVERINO_SITE_HOST="hq.example.com",

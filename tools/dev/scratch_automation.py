@@ -75,7 +75,7 @@ USER = "dev"
 # As the host's timer: a doorbell missed still starts a worker this long after the last.
 FLOOR_SECONDS = 15 * 60
 POLL_SECONDS = 1.0
-# The doorbell's name, as hq.platform.application.cadence.AUTOMATION_DOORBELL.
+# The doorbell's name, as hq.platform.application.cadence.DOORBELLS names it.
 DOORBELL = "automation-doorbell"
 # The machine a scratch server declares itself as, when its inventory has none at this host's addresses.
 HERE = "scratch-host"

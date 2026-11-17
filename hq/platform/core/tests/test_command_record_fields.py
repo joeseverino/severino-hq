@@ -16,9 +16,9 @@ from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.command_targets import CommandTargetOption, record_options
 from hq.platform.application.integration_specs import capability_schema
 from hq.platform.application.integrations import integration_graph
+from hq.platform.application.markup_testing import select, within
 from hq.platform.application.references import NO_LONGER_OFFERED
 from hq.platform.application.security import Capability, Principal
-from hq.platform.application.tests.markup import select, within
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow

@@ -19,11 +19,9 @@ than decorating the mistake.
   <p class="error-page-body">{{ body|breakable }}{% if request_id %} Its request id is <code>{{ request_id|breakable:"." }}</code>{% endif %}</p>
   {% if search %}
   {% url 'search' as search_url %}
-  {% filter_bar verb="Search" action=search_url %}
-    <input type="search" name="q" placeholder="Find anything" aria-label="Find anything">
-  {% endfilter_bar %}
+  {% filter_bar search="Find anything" verb="Search" action=search_url %}{% endfilter_bar %}
   {% endif %}
   <p class="page-actions">
-    <a class="btn primary" href="{% url 'dashboard' %}">Back to dashboard</a>
+    {% url 'dashboard' as dashboard_url %}{% button "Back to dashboard" dashboard_url look="primary" %}
   </p>
 </div>

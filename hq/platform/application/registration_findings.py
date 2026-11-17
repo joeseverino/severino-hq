@@ -5,6 +5,7 @@ from datetime import UTC
 from .expiry import days_until
 from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, parse_stamp
 from .moments import expiry_words, when_day
+from .tone import Tone
 from .ui import ended
 
 # Ninety days, the window a certificate gets: long enough to act on a domain
@@ -48,7 +49,7 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="registration-lapsing",
                 subject=node.id,
                 title=f"{domain} {expiry_words(days)} and will not renew",
-                severity="serious" if days <= SERIOUS_DAYS else "attention",
+                severity=Tone.SERIOUS if days <= SERIOUS_DAYS else Tone.ATTENTION,
                 explanation=(
                     f"On {when_day(expires.date())} its records, certificate and every name under it stop working."
                 ),
@@ -72,13 +73,13 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "registration-lapsing",
         "Domain registration expiring",
-        "serious",
+        Tone.SERIOUS,
         _registration_lapsing,
         operator_action=("Renew the domain or turn on auto-renew at its registrar."),
         no_help_reason=("HQ cannot renew a domain."),
         bars={
-            "serious": f"a domain that will not renew lapses within {SERIOUS_DAYS} days",
-            "attention": f"a domain that will not renew lapses within {WINDOW_DAYS} days",
+            Tone.SERIOUS: f"a domain that will not renew lapses within {SERIOUS_DAYS} days",
+            Tone.ATTENTION: f"a domain that will not renew lapses within {WINDOW_DAYS} days",
         },
         clears=f"auto-renew is on, or the domain runs more than {WINDOW_DAYS} days out",
     ),

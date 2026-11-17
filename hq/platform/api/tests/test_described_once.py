@@ -30,7 +30,6 @@ from hq.platform.application.json_schemas import json_schemas
 from hq.platform.application.resources import TopQuery
 from hq.platform.mcp.declarations import HANDLERS
 from hq.platform.mcp.shapes import answer_type
-from hq_sdk.capabilities import StrictCommand
 
 from .. import openapi
 from ..fragments import OpenAPIError
@@ -194,11 +193,13 @@ class ExampleLabel:
     label: ExampleUnsaid
 
 
-class ExampleCommand(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class ExampleCommand:
     value: int = 0
 
 
-class ExampleNoteCommand(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class ExampleNoteCommand:
     note: str = ""
 
 
@@ -206,7 +207,7 @@ def _example_write(command: ExampleCommand, *, principal) -> dict:
     return {"ok": True}
 
 
-def _example_targeted(command: StrictCommand, *, principal, current_key: str) -> dict:
+def _example_targeted(command: ExampleNoteCommand, *, principal, current_key: str) -> dict:
     return {"ok": True}
 
 

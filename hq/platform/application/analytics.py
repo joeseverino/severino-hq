@@ -23,9 +23,10 @@ from hq.domains.analytics.contracts import (
 )
 from hq.domains.analytics.models import AnalyticsCoverage, AnalyticsSite, RumDaily, VitalsDaily
 from hq.domains.control_plane.names import normalized_hostname
+lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 
 from .cadence import sweep_interval
-from .security import Capability, Principal
+from .moments import stamp_day
 
 # The window the analytics page opens on. A day, because the question that
 # brings someone to this page is "what is happening", and a four-week average is
@@ -124,7 +125,7 @@ def _restate_rows(site: AnalyticsSite, reported: list[dict[str, Any]]) -> int:
     taken = 0
     rows: dict[tuple[Any, ...], RumDaily] = {}
     for row in reported:
-        day = _as_date(row["date"])
+        day = stamp_day(row["date"])
         value = row["value"].strip()
         # A count with no day or no value has no grain to be stored at.
         if not day or not value:
@@ -148,7 +149,7 @@ def _restate_vitals(site: AnalyticsSite, reported: list[dict[str, Any]]) -> int:
     taken = 0
     days: dict[date, VitalsDaily] = {}
     for reading in reported:
-        day = _as_date(reading["date"])
+        day = stamp_day(reading["date"])
         if not day:
             continue
         taken += 1
@@ -161,8 +162,7 @@ def _restate_vitals(site: AnalyticsSite, reported: list[dict[str, Any]]) -> int:
 def record_analytics(
     payload: dict[str, Any],
     *,
-    principal: Principal,
-    controller_id: str = "",
+    admitted: Admitted,
 ) -> dict[str, Any]:
     """Store one controller's reading of every site it can see.
 
@@ -172,11 +172,9 @@ def record_analytics(
     which the bridge holds every report to before this runs.
     """
 
-    # The same capability every controller report carries. Analytics arrives by
-    # the same road, from the same principal, and inventing a second capability
-    # for it would mean two answers to "may this controller report".
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
-
+    # Sites are keyed by their tag, not by controller, so the admission is
+    # only checked.
+    admission(admitted)
     recorded = {"sites": 0, "coverage": 0, "rows": 0, "vitals": 0}
     for entry in payload["sites"]:
         site_tag = entry["site_tag"].strip()
@@ -193,8 +191,8 @@ def record_analytics(
         )
         recorded["sites"] += 1
 
-        start = _as_date(entry["start"])
-        end = _as_date(entry["end"])
+        start = stamp_day(entry["start"])
+        end = stamp_day(entry["end"])
         if start and end and start <= end and (end - start).days < MAX_QUERY_DAYS:
             covered = [
                 AnalyticsCoverage(site=site, date=start + timedelta(days=offset))
@@ -209,15 +207,6 @@ def record_analytics(
         recorded["vitals"] += _restate_vitals(site, entry["vitals"])
 
     return {"ok": True, "recorded": recorded, "observed_at": timezone.now().isoformat()}
-
-
-def _as_date(value: Any) -> date | None:
-    if isinstance(value, date):
-        return value
-    try:
-        return date.fromisoformat(str(value))
-    except TypeError, ValueError:
-        return None
 
 
 # ----- Reading ---------------------------------------------------------------

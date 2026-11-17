@@ -22,6 +22,7 @@ import httpx2
 
 from hq.platform.application.http_read import UNREACHABLE
 from hq.platform.core.tests.task import Usage
+lazy from hq.platform.application.entity_links import https_url
 
 HERE = Path(__file__).resolve().parent
 STORED = "Stored in {item} ({vault}); the controller reads it on its next render."
@@ -148,7 +149,7 @@ def https(call: Call) -> Any:
     elsewhere: httpx2 follows one only when asked.
     """
 
-    if not call.url.startswith("https://"):
+    if not https_url(call.url):
         raise UsageError("The API base must be an https:// address.")
     bearer = call.header == "Authorization"
     headers = {call.header: f"Bearer {call.token}" if bearer else call.token} if call.token else {}

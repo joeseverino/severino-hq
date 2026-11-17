@@ -161,8 +161,8 @@ def pressed_words(text: str, words: set[str]) -> list[str]:
 class CommandBuilderTests(SimpleTestCase):
     def test_no_builder_of_a_commands_control_takes_words(self):
         """The builders read the declaration, so none of them has a ``label``
-        for a caller to override it with (the rule
-        command-builders-take-no-label holds their callers)."""
+        for a caller to override it with: a call that passes one does not
+        type-check or run."""
 
         for builder in COMMAND_BUILDERS.values():
             with self.subTest(builder.__name__):
@@ -175,9 +175,8 @@ class CallSiteWordsTests(SimpleTestCase):
     """No button, link or toast for a command brings text of its own.
 
     The checks with one fixed answer are ast-grep rules (lint:ast-grep):
-    capability-linked-by-action-links, command-builders-take-no-label,
-    command-control-says-declared-words and
-    requested-said-by-integration-specs.
+    capability-linked-by-action-links, command-control-says-declared-words
+    and requested-said-by-integration-specs.
     """
 
     def test_no_control_restates_a_declared_word(self):

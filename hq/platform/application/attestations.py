@@ -10,8 +10,10 @@ URLs and a handful of provenance fields; the statements themselves are dropped.
 import re
 from collections.abc import Iterable, Mapping
 from typing import Any
+from urllib.parse import urlsplit
 
 from .github_public import github_repository
+lazy from .entity_links import https_url
 
 SPDX = "https://spdx.dev/Document"
 CYCLONEDX = "https://cyclonedx.org/bom"
@@ -82,7 +84,7 @@ def provenance_of(predicate_type: str, predicate: Mapping[str, Any]) -> dict[str
 def _builder(builder_id: str, environment: Mapping[str, Any]) -> str:
     """The builder, named as a person would: a GitHub Actions run, or its id."""
 
-    if builder_id.startswith("https://github.com/") and "/actions/runs/" in builder_id:
+    if urlsplit(https_url(builder_id)).hostname == "github.com" and "/actions/runs/" in builder_id:
         return builder_id
     if environment.get("github_run_id") and environment.get("github_repository"):
         return f"https://github.com/{environment['github_repository']}/actions/runs/{environment['github_run_id']}"

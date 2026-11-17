@@ -44,11 +44,11 @@ from hq.platform.application import readings
 from hq.platform.application.approvals import entry_event, is_held
 from hq.platform.application.asks import REFRESHING
 from hq.platform.application.capabilities import execute_capability
-from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
+from hq.platform.application.payload_words import changed_words
 from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.report_testing import report_connections
-from hq.platform.application.security import Capability, Principal, cli_principal
+from hq.platform.application.security import Capability, Principal
 from hq.platform.application.services import CONTAINER_KIND
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core import seeds
@@ -419,26 +419,38 @@ def _glance():
         readings.record(
             readings.machine_telemetry(key),
             {
-                "status": "good",
-                "summary": "Host load 0.42",
-                "metrics": [
-                    {"label": "Container CPU", "value": "37%", "detail": ""},
-                    {"label": "Container memory", "value": "81%", "detail": ""},
-                    {"label": "Docker storage", "value": "64%", "detail": ""},
-                ],
+                "key": key,
+                "docker": {
+                    "containers": 14,
+                    "cpu_percent": 37.0,
+                    "cores": 8,
+                    "memory_used": 13_900_000_000,
+                    "memory_total": 17_179_869_184,
+                    "storage": 64_000_000_000,
+                },
             },
             observed_at=now,
         )
     readings.record(
         readings.weather("41.0000,-87.0000"),
         {
-            "status": "serious",
-            "summary": "Example City, EX",
-            "metrics": [
-                {"label": "Now", "value": "Partly Sunny", "detail": "This Afternoon"},
-                {"label": "Temperature", "value": "73°F", "detail": ""},
-                {"label": "Wind", "value": "SW 10 mph", "detail": "NWS hourly forecast"},
-                {"label": "Alerts", "value": "2", "detail": "active for this point"},
+            "point": "41.0000,-87.0000",
+            "city": "Example City",
+            "state": "EX",
+            "hours": [
+                {
+                    "start": now.isoformat(),
+                    "name": "This Afternoon",
+                    "temperature": 73,
+                    "temperature_unit": "F",
+                    "forecast": "Partly Sunny",
+                    "wind_speed": "10 mph",
+                    "wind_direction": "SW",
+                }
+            ],
+            "alerts": [
+                {"event": "Heat Advisory", "headline": "Heat Advisory until evening", "severity": "Severe"},
+                {"event": "Air Quality Alert", "severity": "Moderate"},
             ],
         },
         observed_at=now,
@@ -552,7 +564,6 @@ def build_dense_estate(user):
                 "detail": "4 zones.",
             },
         ],
-        principal=cli_principal(),
         controller_id="example-controller",
     )
     # The last thing a connection did names a resource as long as a real
@@ -746,10 +757,8 @@ def _held_policy_insert(agent: Principal) -> None:
 
     tests = [{"src": f"user-{index}@example.com", "accept": ["tag:server:443"]} for index in range(3)]
     declared = {"grants": [_policy_grant(index) for index in range(8)], "tests": tests}
-    save_managed_resource(
-        ManagedResourceCommand(key=POLICY, kind="tailscale.policy", spec={"document": json.dumps(declared, indent=2)}),
-        principal=cli_principal(),
-        copied_from_live=True,
+    ManagedResource.objects.create(
+        key=POLICY, kind="tailscale.policy", spec={"document": json.dumps(declared, indent=2)}
     )
     grants = declared["grants"]
     inserted = {"src": ["group:an-example-group-of-administrators"], "dst": ["tag:server"], "ip": ["*"]}
@@ -832,6 +841,9 @@ def _audit_trail(user):
         return AuditLog.objects.create(action=action, message=message, **(defaults | fields))
 
     operation = "an-example-operation-0123456789abcdef"
+    # Two locations of its advanced config, each known by its path.
+    root, api = {"path": "/", "allowed_sources": ["group:example"]}, {"path": "/api", "forward_host": ""}
+    moved = [{**root, "allowed_sources": ["group:example", "group:elsewhere"]}, {**api, "forward_host": "203.0.113.30"}]
     for index in range(3):
         logged(
             AuditLog.Action.UPDATED,
@@ -851,10 +863,10 @@ def _audit_trail(user):
                 "forward_host": [ADDRESS, EDGE_ADDRESS],
                 "domain_names": [[_hostname(0)], [_hostname(0), _hostname(1)]],
                 "certificate": ["an-example-wildcard-certificate", "an-example-certificate-with-a-long-name"],
-                # A record field, as each value in it that moved, by where it is.
+                # A record field, as each value in it that moved, by where it is, as the log writes it.
                 "advanced_config": {
-                    "Locations › Entry 2 › Forward host": ["", EDGE_ADDRESS],
-                    "Locations › Entry 1 › Allowed sources": ["group:example", "group:example, group:elsewhere"],
+                    row.label: [row.before, row.after]
+                    for row in changed_words({"locations": [root, api]}, {"locations": moved})
                 },
             },
             "requested_from": SERVICE,

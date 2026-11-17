@@ -9,7 +9,7 @@ socket, and the page says so as plainly as for anything else.
 from collections.abc import Mapping
 from typing import Any
 
-from .standards import Check, Measurement, measure
+from .standards import Check, Measurement, Reading, measure
 lazy from .containers import by_design, socket_holders
 
 # Host paths whose write access is the machine's, not the container's: the
@@ -31,12 +31,16 @@ def _runtime(container: Any) -> Mapping[str, Any] | None:
     return container.runtime
 
 
+RUNTIME_UNREAD = "Its runtime has not been read"
+MOUNTS_UNREAD = "Its mounts have not been read"
+
+
 def _on(test):
     """A check of the runtime reading, unavailable when it was not read."""
 
-    def check(container: Any) -> bool | None:
+    def check(container: Any) -> Reading:
         runtime = _runtime(container)
-        return None if runtime is None else test(runtime)
+        return Reading.unavailable(RUNTIME_UNREAD) if runtime is None else Reading.judged(test(runtime))
 
     return check
 
@@ -55,7 +59,7 @@ def system_path(source: str) -> bool:
     return path in SYSTEM_ROOTS or any(path == root or path.startswith(f"{root}/") for root in SYSTEM_PATHS)
 
 
-def _socket_held(container: Any) -> bool | None:
+def _socket_held(container: Any) -> Reading:
     """No Docker socket, or one its declaration says it exists to hold.
 
     A socket proxy or a management agent cannot do its job without the
@@ -66,10 +70,10 @@ def _socket_held(container: Any) -> bool | None:
 
     mounts = container.mounts
     if mounts is None:
-        return None
-    if _no_socket([mount for mount in mounts if mount.get("type") == "bind"]):
-        return True
-    return holds_socket(container)
+        return Reading.unavailable(MOUNTS_UNREAD)
+    return Reading.judged(
+        _no_socket([mount for mount in mounts if mount.get("type") == "bind"]) or holds_socket(container)
+    )
 
 
 def _no_socket(binds) -> bool:
@@ -98,12 +102,12 @@ def holds_socket(container: Any) -> bool:
     return (container.machine.name, container.running.name) in socket_holders()
 
 
-def _system_path_kept(container: Any) -> bool | None:
+def _system_path_kept(container: Any) -> Reading:
     mounts = container.mounts
     if mounts is None:
-        return None
+        return Reading.unavailable(MOUNTS_UNREAD)
     binds = [mount for mount in mounts if mount.get("type") == "bind"]
-    return not writable_system_binds(binds, docker_held=holds_socket(container))
+    return Reading.judged(not writable_system_binds(binds, docker_held=holds_socket(container)))
 
 
 def _confined(runtime: Mapping[str, Any]) -> bool:
@@ -114,14 +118,14 @@ def _no_powerful_capability(runtime: Mapping[str, Any]) -> bool:
     return not (set(runtime.get("cap_add") or ()) & POWERFUL_CAPABILITIES)
 
 
-def _health_checked(container: Any) -> bool | None:
+def _health_checked(container: Any) -> Reading:
     """Its own health check, or a name it serves that HQ requests: either
     says whether it works. An image with no shell cannot run the first."""
 
     runtime = _runtime(container)
     if runtime is None:
-        return None
-    return bool(runtime.get("healthcheck")) or bool(container.running.check) or bool(container.serves)
+        return Reading.unavailable(RUNTIME_UNREAD)
+    return Reading.judged(bool(runtime.get("healthcheck")) or bool(container.running.check) or bool(container.serves))
 
 
 def _bound_to_an_address(runtime: Mapping[str, Any]) -> bool:

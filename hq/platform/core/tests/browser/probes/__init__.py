@@ -7,7 +7,7 @@ apps register their system checks: a module-level ``CHECKS`` mapping each
 check's name to a ``Check`` of its probe (a source, or its source and
 argument, or a function returning that pair when reading it needs a tool the
 image lacks). The survey (`survey.py`) collects them from every module here,
-and planted.py holds each to a plant it must find.
+and the component and accessibility tests hold a check to a plant it must find.
 
 A check holds only what a reader would see break, the bar docs/Design.md
 opens with, and says in ``reader_sees`` what that is."""

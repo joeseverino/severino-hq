@@ -38,7 +38,7 @@
         {% endif %}
       </span>
       {% comment %}The line under the value, alone or above the parts of its whole.{% endcomment %}
-      {% partialdef note %}<span class="muted">{% if item.detail_tone %}{% status item.detail tone=item.detail_tone pill=False href=item.detail_url %}{% elif item.detail_url %}<a class="subtle-link" href="{{ item.detail_url }}">{{ item.detail|breakable }}</a>{% else %}{{ item.detail|breakable }}{% endif %}</span>{% endpartialdef %}
+      {% partialdef note %}{% muted %}{% if item.detail_tone %}{% status item.detail tone=item.detail_tone pill=False href=item.detail_url %}{% elif item.detail_url %}<a class="subtle-link" href="{{ item.detail_url }}">{{ item.detail|breakable }}</a>{% else %}{{ item.detail|breakable }}{% endif %}{% endmuted %}{% endpartialdef %}
       {% comment %}
       The parts of the whole, under the figure and its line, the legend's rows
       set one under another so they fit a figure's column. In a card a figure

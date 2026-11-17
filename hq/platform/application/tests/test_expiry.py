@@ -45,6 +45,15 @@ class DaysUntilTests(SimpleTestCase):
         self.assertEqual(renewal_window({"renewal_window_days": "soon"}), 30)
         self.assertEqual(renewal_opens_at(NOW, 30), NOW - timedelta(days=30))
 
+    def test_a_certificate_declared_without_a_window_renews_when_hq_says_it_does(self):
+        """The window the adapter writes for the controller is the one HQ's pages read for an absent one."""
+
+        from hq.domains.control_plane.provider_adapters.tls import ResolvedTLSCertificateSpec, TLSCertificateSpec
+
+        for model in (TLSCertificateSpec, ResolvedTLSCertificateSpec):
+            with self.subTest(model=model.__name__):
+                self.assertEqual(model.model_fields["renewal_window_days"].default, renewal_window({}))
+
 
 @tag("source", "tree")
 @reads("**/*.py")

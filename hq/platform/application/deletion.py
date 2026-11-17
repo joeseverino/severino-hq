@@ -10,11 +10,11 @@ from typing import Annotated, Literal, TypedDict
 from django.db import transaction
 
 from hq.domains.calendars.models import Entry
-from hq.platform.core.audit import audit_operation
 
-from .command_fields import Describe
+from .answer_fields import CallMessage
+from .command_fields import Confirm, Describe, confirm
 from .record_saves import Held, held
-from .security import Capability, Principal
+from .security import Principal
 
 # A delete runs for every record domain, so its refusals name none.
 _RECORD = Held("That record was not found.", "That record changed after it was read.")
@@ -22,7 +22,7 @@ _RECORD = Held("That record was not found.", "That record changed after it was r
 
 @dataclass(frozen=True, slots=True)
 class DeleteCommand:
-    confirm: Annotated[str, Describe("The record's identifier again, to confirm the delete.")]
+    confirm: Confirm
 
 
 class DeletedPart(TypedDict):
@@ -38,6 +38,7 @@ class RecordDeleted(TypedDict):
 
     ok: Literal[True]
     deleted: DeletedPart
+    message: CallMessage
 
 
 def delete_record(
@@ -46,20 +47,13 @@ def delete_record(
     lookup: dict,
     target: str,
     command: DeleteCommand,
-    principal: Principal,
-    capability: Capability | str,
-    operation: str,
     type_name: str,
+    called: str,
     expected_updated_at: str | None = None,
     after_commit=None,
 ) -> RecordDeleted:
-    principal.require(capability)
-    if command.confirm != target:
-        raise ValueError(f"confirm must exactly match target {target!r}")
-    with (
-        transaction.atomic(),
-        audit_operation(operation=operation, principal=principal),
-    ):
+    confirm(command.confirm, target)
+    with transaction.atomic():
         obj = held(model, _RECORD, lookup, expected_updated_at)
         label = str(obj)
         cleanup = after_commit(obj) if after_commit else None
@@ -69,6 +63,7 @@ def delete_record(
     return {
         "ok": True,
         "deleted": {"type": type_name, "target": target, "label": label},
+        "message": f"{called} “{label}” deleted.",
     }
 
 
@@ -81,9 +76,7 @@ def delete_calendar_entry(
         lookup={"uid": target},
         target=target,
         command=command,
-        principal=principal,
-        capability=Capability.DELETE_CALENDAR,
-        operation="calendar.entry.delete",
         type_name="calendar entry",
+        called="Event",
         expected_updated_at=expected_updated_at,
     )

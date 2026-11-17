@@ -12,7 +12,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from hq.platform.application.asks import APPLIES_SHORTLY, WAITING
+from hq.platform.application.asks import WAITING
 from hq.platform.application.contact_submissions import (
     DELETE,
     MOST_SHOWN,
@@ -22,18 +22,16 @@ from hq.platform.application.contact_submissions import (
     list_contact_submissions,
 )
 from hq.platform.application.labels import dotted
-from hq.platform.application.moments import when
+from hq.platform.application.moments import moment, when
 from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.security import safe_next
-from hq.platform.application.timestamps import moment
-from hq.platform.application.ui import counted, ended
+from hq.platform.application.ui import counted
 from hq.platform.application.web_writes import execute_posted, refused
 
 from . import inbox
-from .forms import STATUS_CHOICES, ContactReviewForm
+from .forms import STATUS_CHOICES, ContactReviewForm, submission_state
 
 STATUS_LABELS = dict(STATUS_CHOICES)
-QUEUED = APPLIES_SHORTLY
 GONE = "That message was not found."
 
 
@@ -61,17 +59,13 @@ def _row_actions(submission: dict) -> tuple[PageAction, ...]:
     """What a message's row offers: the reviews it is not already in, and its
     deletion, which asks first on a page of its own."""
 
-    status_url = reverse("contacts:set_status", args=[submission["id"]])
-    status = submission.get("status")
-    return (
-        *(
-            [PageAction("Mark read", status_url, method="post", value="read", field="status")]
-            if status == "unread"
-            else []
-        ),
-        *([PageAction("Spam", status_url, method="post", value="spam", field="status")] if status != "spam" else []),
-        PageAction("Delete", reverse("contacts:delete", args=[submission["id"]]), danger=True),
+    pk, status = submission["id"], submission.get("status")
+    marks = [mark for mark, shown in (("read", status == "unread"), ("spam", status != "spam")) if shown]
+    offered = (
+        *(PageAction.command(REVIEW, pk, variant=mark, field="status", value=mark) for mark in marks),
+        PageAction.command(DELETE, pk),
     )
+    return tuple(action for action in offered if action is not None)
 
 
 def contact_list(request):
@@ -97,11 +91,17 @@ def contact_list(request):
         {
             "not_read": current.state == inbox.NOT_READ,
             "submissions": [
-                {**each, "unread": each.get("status") == "unread", "actions": _row_actions(each)}
+                {
+                    **each,
+                    "state": submission_state(each),
+                    "unread": each.get("status") == "unread",
+                    "actions": _row_actions(each),
+                }
                 for each in submissions
             ],
             "status_tabs": status_tabs,
             "selected_status": selected_status,
+            "status_kept": {"status": selected_status},
             "q": q,
             # The search cleared, on the tab it was asked on.
             "search_cleared": reverse("contacts:list") + (f"?status={selected_status}" if selected_status else ""),
@@ -120,10 +120,10 @@ def contact_list(request):
 contact_list.page_reads = ("cloudflare.contact_submission",)  # type: ignore[attr-defined]
 
 
-def _review(request, pk: int, review: dict[str, str]) -> bool:
+def _review(request, pk: int, review: dict[str, str]) -> None:
     """Queue one review; say why not when it is refused."""
 
-    return refused(request, execute_posted(request, REVIEW, review, target=pk)) is None
+    refused(request, execute_posted(request, REVIEW, review, target=pk))
 
 
 def contact_detail(request, pk: int):
@@ -135,8 +135,7 @@ def contact_detail(request, pk: int):
     if request.method == "POST":
         form = ContactReviewForm(request.POST)
         if form.is_valid():
-            if _review(request, pk, dict(form.cleaned_data)):
-                messages.success(request, f"Message saved. {QUEUED}")
+            _review(request, pk, dict(form.cleaned_data))
             return redirect("contacts:detail", pk=pk)
     else:
         form = ContactReviewForm(
@@ -153,6 +152,7 @@ def contact_detail(request, pk: int):
         "contacts/contact_detail.html",
         {
             "submission": submission,
+            "state": submission_state(submission),
             "reply_href": reply,
             "form": form,
             "gap": change_gap(),
@@ -188,9 +188,11 @@ def contact_set_status(request, pk: int):
         "assigned_to": submission.get("assigned_to") or "",
         "admin_notes": submission.get("admin_notes") or "",
     }
-    if _review(request, pk, review):
-        messages.success(request, f"Message marked {ended(STATUS_LABELS[status].lower())} {QUEUED}")
+    _review(request, pk, review)
     return redirect(_safe_next(request))
+
+
+contact_set_status.runs = (REVIEW,)  # type: ignore[attr-defined]
 
 
 def contact_delete(request, pk: int):
@@ -203,7 +205,6 @@ def contact_delete(request, pk: int):
         result = execute_posted(request, DELETE, {"confirm": str(pk)}, target=pk)
         if refused(request, result):
             return redirect("contacts:detail", pk=pk)
-        messages.success(request, f"Message deleted. {APPLIES_SHORTLY}")
         return redirect("contacts:list")
 
     return render(
@@ -234,3 +235,6 @@ def _sent(submission) -> str:
 
     at = moment(submission.get("created_at"))
     return when(at) if at is not None else ""
+
+
+contact_delete.runs = (DELETE,)  # type: ignore[attr-defined]

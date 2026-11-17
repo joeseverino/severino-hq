@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.tests.worded import worded
 
 from ..attention import infrastructure
 from ..findings import estate_findings
@@ -22,7 +23,7 @@ def rewrite(key: str, *, generation: int = 1, observed_generation: int = 1, **fi
 
 
 def keys_about(key: str) -> set[str]:
-    return {item.key for item in infrastructure() if item.key.endswith(f"resource:{key}")}
+    return {item.key for item in worded(infrastructure()) if item.key.endswith(f"resource:{key}")}
 
 
 class InfrastructureQueueTests(TestCase):

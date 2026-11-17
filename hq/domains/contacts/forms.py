@@ -1,13 +1,29 @@
 from django import forms
 
-# Mirrors the `status` values the contact_submissions table can hold.
-STATUS_CHOICES = [
-    ("unread", "Unread"),
-    ("read", "Read"),
-    ("replied", "Replied"),
-    ("archived", "Archived"),
-    ("spam", "Spam"),
-]
+from hq.platform.application.tone import Tone, TonedChoices
+
+
+class SubmissionStatus(TonedChoices):
+    """The `status` values the contact_submissions table can hold, each in
+    the tone its pill takes: a message nobody has read waits on someone."""
+
+    UNREAD = "unread", Tone.ATTENTION, "Unread"
+    READ = "read", Tone.NEUTRAL, "Read"
+    REPLIED = "replied", Tone.GOOD, "Replied"
+    ARCHIVED = "archived", Tone.NEUTRAL, "Archived"
+    SPAM = "spam", Tone.NEUTRAL, "Spam"
+
+
+STATUS_CHOICES = SubmissionStatus.choices
+
+
+def submission_state(submission: dict) -> SubmissionStatus | str:
+    """A stored message's status as the member its pill is drawn from, unread
+    when it has none; a word the table holds that HQ does not know stays a
+    word, drawn in no tone."""
+
+    status = str(submission.get("status") or SubmissionStatus.UNREAD)
+    return SubmissionStatus(status) if status in SubmissionStatus.values else status
 
 
 class ContactReviewForm(forms.Form):

@@ -17,6 +17,7 @@ from .facts import Subject, readings
 from .path_model import Route
 from .projection import read_once
 from .reach import LOCAL_NETWORK, PUBLIC, UNKNOWN as UNKNOWN_REACH, Reach, narrowed, network_of, reach_of
+from .tone import Tone
 lazy from . import paths
 lazy from .paths import path_to, routed_names
 
@@ -37,14 +38,20 @@ SHORT = {OPEN: "Internet", GATED: "Internet, behind a login", UNKNOWN: "Unknown"
 # The tone a page draws a level in. Internet-facing is stated plainly, since a
 # public site is meant to be; only what HQ could not read is a warning, and
 # exposure raises urgency where it matters, on the finding.
-TONES = {OPEN: "neutral", UNKNOWN: "attention", GATED: "neutral", PRIVATE: "neutral", UNROUTED: "neutral"}
+TONES = {
+    OPEN: Tone.NEUTRAL,
+    UNKNOWN: Tone.ATTENTION,
+    GATED: Tone.NEUTRAL,
+    PRIVATE: Tone.NEUTRAL,
+    UNROUTED: Tone.NEUTRAL,
+}
 # What a serious problem becomes at each exposure. Unknown keeps it serious.
 _SERIOUS_AT = {
-    OPEN: "serious",
-    GATED: "attention",
-    PRIVATE: "attention",
-    UNKNOWN: "serious",
-    UNROUTED: "neutral",
+    OPEN: Tone.SERIOUS,
+    GATED: Tone.ATTENTION,
+    PRIVATE: Tone.ATTENTION,
+    UNKNOWN: Tone.SERIOUS,
+    UNROUTED: Tone.NEUTRAL,
 }
 # The ports a machine's front door answers on: a request routed to the machine
 # lands on whichever container publishes one of them.
@@ -146,10 +153,10 @@ def status_at(status: str, level: str) -> str:
     wherever it is reachable, and is information where nothing reaches it.
     """
 
-    if status == "serious":
+    if status == Tone.SERIOUS:
         return _SERIOUS_AT[level]
-    if status == "attention" and level == UNROUTED:
-        return "neutral"
+    if status == Tone.ATTENTION and level == UNROUTED:
+        return Tone.NEUTRAL
     return status
 
 

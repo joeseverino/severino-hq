@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import Field
 
 from ..connection_shapes import LOGIN
+from ..observations import adguard as readings
 from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
 
 
@@ -77,6 +78,7 @@ DEFINITION = ProviderSpec(
     readout=_readout,
 )
 DEFINITIONS = (DEFINITION,)
+OBSERVATIONS = readings.OBSERVATIONS
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.

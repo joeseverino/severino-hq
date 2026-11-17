@@ -35,12 +35,12 @@ cannot go missing from the other.
               A one-service compose file names the project after the service, so
               printing both says one thing twice.
               {% endcomment %}
-              {% if container.stack and container.stack != container.name %}<br><span class="muted">{{ container.stack|breakable }}</span>{% endif %}
+              {% if container.stack and container.stack != container.name %}<br>{% muted %}{{ container.stack|breakable }}{% endmuted %}{% endif %}
             </td>
             {% with standing=standings|dictkey:container.name %}<td>{% if standing %}<code class="cell-whole" tabindex="0" data-tip="{{ container.image }}">{{ standing.label|breakable }}</code>{% else %}<code class="cell-whole">{{ container.image_label|breakable }}</code>{% endif %}</td>{% endwith %}
             {% with standing=standings|dictkey:container.name %}{% if standing %}{% include "control_plane/_container_standing.html" %}{% else %}<td>{% empty_value %}</td><td>{% empty_value %}</td>{% endif %}{% endwith %}
             <td class="optional-col">{{ container.published|breakable }}</td>
-            <td>{% if not container.healthy %}{% status container.state|default:"unknown" tone="unreachable" %} {% endif %}{% with up=uptimes|dictkey:container.name %}<span class="cell-part">{{ up|default:container.uptime|default:container.status|breakable }}{% if container.health %}<span class="muted">,</span>{% endif %}</span>{% endwith %}{% if container.health %} <span class="cell-part muted" title="{{ container.check|capfirst }}">{{ container.health|breakable }}</span>{% endif %}</td>
+            <td>{% if not container.state.running %}{% status container.state %} {% endif %}{% with up=uptimes|dictkey:container.name %}<span class="cell-part">{{ up|default:container.uptime|default:container.status|breakable }}{% if container.check %}{% muted %},{% endmuted %}{% endif %}</span>{% endwith %}{% if container.check %} {% muted css="cell-part" title=container.check.said|capfirst %}{{ container.check|breakable }}{% endmuted %}{% endif %}</td>
           </tr>
         {% endfor %}
       </tbody>

@@ -45,6 +45,13 @@ var (
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
+func orDefault(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
 // PortainerEnvironment is one environment from GET /endpoints, as HQ files it.
 type PortainerEnvironment struct {
 	ID                int64  `json:"id"`

@@ -1,0 +1,99 @@
+#!/bin/sh
+#MISE description="The working tree's lines per language and per area (host code, Python and Go tests, templates, CSS, scripts, Go controller, tools) as scc counts them, generated and vendored files (.gitattributes) and what git ignores left out; with --base, each row that moved from that ref to the working tree, and the total; reach for it to state a landing's net lines added or removed; read-only"
+#MISE hide=true
+#MISE extends="audit"
+#MISE depends=["setup:sandbox aqua:boyter/scc"]
+#USAGE flag "--base <ref>" help="Print each row's change from this ref (735ee6d36, origin/main), read through git archive"
+
+# scc does the counting. Which files count is git's word on both sides: the
+# working tree leaves out what git ignores and what .gitattributes marks
+# linguist-generated or linguist-vendored, through one ignore file in
+# gitignore form; the base is git archive of the ref with the same attributes
+# excluded by pathspec, so the working tree is never read for it. scc's own
+# .gitignore and .ignore reading is off on both sides, so it never decides
+# differently from git.
+set -eu
+
+work="$(mktemp -d)"
+trap 'rm -rf "${work}"' EXIT
+
+# An area is a name scc counts a file under in place of its language, the
+# first pattern a path matches winning, backed by that language so its
+# comments still count as comments. A file no area takes stays its language.
+area_scc() {
+    scc --no-gitignore --no-ignore --no-cocomo --no-complexity --no-size "$@" \
+        --count-as-pattern 're:(^|/)tests/.*\.py$:Python tests:Python' \
+        --count-as-pattern 're:_test\.go$:Go tests:Go' \
+        --count-as-pattern 're:^controller/.*\.go$:Go controller:Go' \
+        --count-as-pattern 're:^(hq|hq_sdk|hq_runner)/.*\.py$:Host code:Python' \
+        --count-as-pattern 're:^templates/.*\.html$:Templates:HTML' \
+        --count-as-pattern 're:^static/.*\.css$:CSS:CSS' \
+        --count-as-pattern 're:^static/.*\.js$:Scripts:JavaScript' \
+        --count-as-pattern 're:^tools/.*\.py$:Tools:Python'
+}
+
+language_scc() {
+    scc --no-gitignore --no-ignore --no-cocomo --no-complexity --no-size "$@"
+}
+
+# Each path anchored at the root, with the characters gitignore reads as a
+# pattern escaped, so a name means only itself.
+git ls-files -z --others --ignored --exclude-standard --directory >"${work}/left-out.z"
+git ls-files -z -- ':(attr:linguist-generated)' ':(attr:linguist-vendored)' >>"${work}/left-out.z"
+tr '\0' '\n' <"${work}/left-out.z" | sed -e 's/[][\\*?!# ]/\\&/g' -e 's|^|/|' >"${work}/left-out"
+
+if [ -z "${usage_base:-}" ]; then
+    echo "By language"
+    language_scc --ignore-file "${work}/left-out"
+    echo "By area"
+    area_scc --ignore-file "${work}/left-out"
+    exit 0
+fi
+
+base="${usage_base}"
+git rev-parse --verify --quiet "${base}^{tree}" >/dev/null || {
+    echo "audit:loc: ${base} names no commit" >&2
+    exit 2
+}
+git archive --output="${work}/base.tar" "${base}" -- . \
+    ':(exclude,attr:linguist-generated)' ':(exclude,attr:linguist-vendored)'
+mkdir "${work}/base"
+tar -xf "${work}/base.tar" -C "${work}/base"
+
+language_scc --format json --ignore-file "${work}/left-out" >"${work}/tree-language.json"
+area_scc --format json --ignore-file "${work}/left-out" >"${work}/tree-area.json"
+(cd "${work}/base" && language_scc --format json) >"${work}/base-language.json"
+(cd "${work}/base" && area_scc --format json) >"${work}/base-area.json"
+
+# Each row that moved, the largest change first, then the total. The $ names
+# are jq's variables.
+# shellcheck disable=SC2016
+moved='
+  def keyed: map({key: .Name, value: .}) | from_entries;
+  ($base | keyed) as $b | (. | keyed) as $t
+  | [($b + $t) | keys[] as $name
+     | ($b[$name] // {}) as $was | ($t[$name] // {}) as $now
+     | {name: $name,
+        files: (($now.Count // 0) - ($was.Count // 0)),
+        was: ($was.Lines // 0), now: ($now.Lines // 0),
+        code: (($now.Code // 0) - ($was.Code // 0)),
+        comments: (($now.Comment // 0) - ($was.Comment // 0)),
+        blanks: (($now.Blank // 0) - ($was.Blank // 0))}
+     | .lines = .now - .was]
+  | (map(select(.files != 0 or .lines != 0 or .code != 0 or .comments != 0 or .blanks != 0))
+     | sort_by(-(if .lines < 0 then -.lines else .lines end), .name)) as $rows
+  | ($rows + [{name: "Total",
+               files: (map(.files) | add // 0), was: (map(.was) | add // 0), now: (map(.now) | add // 0),
+               lines: (map(.lines) | add // 0), code: (map(.code) | add // 0),
+               comments: (map(.comments) | add // 0), blanks: (map(.blanks) | add // 0)}])
+  | .[] | [.name, .files, .was, .now, .lines, .code, .comments, .blanks] | @tsv'
+table() {
+    jq -r --slurpfile base "$1" "\$base[0] as \$base | ${moved}" "$2" >"${work}/rows"
+    awk -F '\t' 'BEGIN { printf "%-16s %7s %9s %9s %8s %8s %9s %8s\n", "", "Files", "Was", "Now", "Lines", "Code", "Comments", "Blanks" }
+        { printf "%-16s %+7d %9d %9d %+8d %+8d %+9d %+8d\n", $1, $2, $3, $4, $5, $6, $7, $8 }' "${work}/rows"
+}
+
+echo "By language, ${base} to the working tree"
+table "${work}/base-language.json" "${work}/tree-language.json"
+echo "By area, ${base} to the working tree"
+table "${work}/base-area.json" "${work}/tree-area.json"

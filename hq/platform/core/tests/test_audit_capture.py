@@ -542,7 +542,7 @@ class RecordedChangeTests(TestCase):
             first,
             {
                 "spec": {"Answer": ["192.0.2.10", "192.0.2.99"]},
-                "conditions": {"Entry 2": ["", "type Synced, status False"]},
+                "conditions": {"Synced": ["", "type Synced, status False"]},
                 "status": {"Phase": ["", "pending"]},
             },
         )

@@ -35,10 +35,12 @@ ESTATE_READS: tuple[str, ...] = (
     "analytics.RumDaily",
 )
 
-# The composed queue: the estate, and each record domain that reports work.
-QUEUE_READS: tuple[str, ...] = (
+# The findings: the estate, and each record section a finding rule reads
+# (``record_findings``).
+FINDINGS_READS: tuple[str, ...] = (
     *ESTATE_READS,
     "assets.Asset",
+    "calendars.Entry",
     "content.ContentItem",
     "content.ContentItem_related_documentation",
     "docs_index.DocumentationRecord",
@@ -46,13 +48,20 @@ QUEUE_READS: tuple[str, ...] = (
     "receipts.Receipt",
 )
 
+# The composed queue: the findings, and the held requests.
+QUEUE_READS: tuple[str, ...] = FINDINGS_READS
+
+# The queue as one reader reads it (``attention.readable_by``): the composed
+# queue, and whether each held request's asker is paused or blocked, which
+# decides whether it is offered for approval (``approvals.refusals``).
+READER_QUEUE_READS: tuple[str, ...] = (*QUEUE_READS, "core.AgentAccess", "core.AgentIdentity", "core.AgentDevice")
+
 
 # The dashboard's cards and overviews: the estate, and each record domain's
 # headline reading.
 DASHBOARD_READS: tuple[str, ...] = (
     *ESTATE_READS,
     "content.ContentItem",
-    "docs_index.DocumentationRecord",
     "expenses.Expense",
 )
 

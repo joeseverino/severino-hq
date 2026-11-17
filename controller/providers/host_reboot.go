@@ -26,8 +26,8 @@ const hostRebootMaxBytes = 64 << 10
 
 // hostRebootUnanswered is why an edge's restart state is missing when its
 // receiver did not answer: one older than the version that reads it refuses.
-const hostRebootUnanswered = "the edge did not say whether it waits on a restart; an edge target older than version " +
-	edge.Version + " does not, so redeploy it if it is"
+const hostRebootUnanswered = "the edge did not say whether it waits on a restart, which an edge target older than version " +
+	edge.Version + " cannot; if it is older, " + edge.Redeploy
 
 var (
 	hostRebootPackage         = api.MustPattern("HostRebootRecord", "properties", "packages", "items")

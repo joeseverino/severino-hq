@@ -18,9 +18,10 @@ from hq.domains.control_plane.models import (
 from hq.platform.application import readings
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.glance import DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE, DASHBOARD_SETTINGS
+from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
-from hq.platform.application.tests.markup import text
+from hq.platform.application.tests.glance_readings import HOST
 from hq.platform.core.models import AuditLog
 
 GRANTED = frozenset(Capability)
@@ -109,13 +110,13 @@ class DashboardRefreshTests(TestCase):
         DashboardMachine.objects.create(machine=machine)
         readings.record(
             readings.machine_telemetry(machine.key),
-            {"metrics": [{"label": "CPU", "value": "4%"}]},
+            {"key": machine.key, "host": HOST},
             observed_at=timezone.now() - timedelta(hours=1),
         )
         self.panel = f"machine-{machine.pk}"
 
     def refresh(self, **fields):
-        with patch("hq.platform.application.glance.ring_glance_doorbell"):
+        with patch("hq.platform.application.cadence._ring"):
             return self.client.post(
                 reverse("dashboard_glance"), form_keyed(fields), headers={"X-Requested-With": "XMLHttpRequest"}
             )

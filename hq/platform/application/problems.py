@@ -14,10 +14,11 @@ from typing import Any
 
 from .derivations import derivation
 from .derived_inputs import QUEUE_READS, estate_variant
-from .first_seen import about, look_due, note_open
+from .first_seen import look_due, note_open
 lazy from . import domains
 lazy from .attention import readable_by
-lazy from .dashboard import queue_item
+lazy from .dashboard import gathered_rows
+lazy from .findings import finding_key
 lazy from .projection import projection_scope
 lazy from .security import Principal
 
@@ -33,8 +34,7 @@ def _by_subject() -> dict[str, tuple[dict[str, Any], ...]]:
     """The host's open items by the page each is about, in the queue's order."""
 
     found: dict[str, list[dict[str, Any]]] = {}
-    for entry in _host_entries():
-        item = queue_item(entry["source_id"], entry["source"], entry["item"])
+    for item in gathered_rows(_host_entries()):
         if item["notice"] or not (item["subject"] or {}).get("url"):
             continue
         found.setdefault(item["subject"]["url"], []).append(item)
@@ -61,9 +61,10 @@ class About:
     urls: Iterable[str] = ()
     keys: Iterable[str] = ()
     under: Iterable[str] = ()
-    # The one thing among its subject's many the part is about, such as a
-    # container on its machine: an item about another of them is not its.
-    part: str = ""
+    # The things among its subject's many the part is about, such as a
+    # container on its machine and the image it runs: an item about another
+    # of them is not its.
+    parts: Iterable[str] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,7 +75,7 @@ class _Part:
     pages: frozenset[str]
     keys: frozenset[str]
     roots: tuple[str, ...]
-    part: str
+    parts: frozenset[str]
 
     @classmethod
     def of(cls, name: str, about: About) -> _Part:
@@ -83,18 +84,19 @@ class _Part:
             frozenset(filter(None, about.urls)),
             frozenset(filter(None, about.keys)),
             tuple(root.rstrip("/") for root in about.under if root),
-            about.part,
+            frozenset(filter(None, about.parts)),
         )
 
     def holds(self, entry: Mapping[str, Any], item: Mapping[str, Any]) -> bool:
         """Whether the queue's ``item``, drawn from ``entry``, is about this part."""
 
-        if self.part and entry["item"].part and entry["item"].part != self.part:
+        finding = entry["finding"]
+        if self.parts and finding.part and finding.part not in self.parts:
             return False
         link = str(item["url"] or "")
         return (
             (item["subject"] or {}).get("url") in self.pages
-            or entry["item"].key in self.keys
+            or finding_key(finding) in self.keys
             or any(link == root or link.startswith(f"{root}/") for root in self.roots)
         )
 
@@ -104,7 +106,9 @@ def problems_by_part(parts: Mapping[str, About], principal: Principal) -> tuple[
     a page, each with the first part it is about, in the queue's order."""
 
     tests = [_Part.of(name, about) for name, about in parts.items()]
-    entries = [(entry, queue_item(entry["source_id"], entry["source"], entry["item"])) for entry in _host_entries()]
+    # A held request is about no part of a page: it is decided on its own.
+    kept = [entry for entry in _host_entries() if not entry["finding"].held]
+    entries = list(zip(kept, gathered_rows(kept), strict=True))
     told = {id(item) for item in readable_by(principal, [item for _, item in entries])}
     found = []
     for entry, item in entries:
@@ -133,5 +137,5 @@ def note_open_problems() -> bool:
     if not look_due():
         return False
     with projection_scope():
-        note_open(tuple(about(entry["item"]) for entry in _host_entries()))
+        note_open(tuple(finding_key(entry["finding"]) for entry in _host_entries()))
     return True

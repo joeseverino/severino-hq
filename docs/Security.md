@@ -37,7 +37,7 @@ or anything acting for them may do. The roles are declared once, in
 | Role | Holds |
 | --- | --- |
 | `operator` | every capability, the host's and every extension's (`operator_capabilities`) |
-| `viewer` | the reads: `read` and every extension's read capabilities |
+| `viewer` | the reads: `read` and every extension's read capabilities, and `show_demo`, which switches stand-in values on in their own browser |
 
 What each subject holds, with `HELD_ONLY_AT` and `NEEDS_A_PERSON` applied on top:
 
@@ -73,14 +73,16 @@ What each subject holds, with `HELD_ONLY_AT` and `NEEDS_A_PERSON` applied on top
 
 ### What a page reads under
 
-Every page reads under one capability, and a signed-in person opens it only
-while their role holds it. A viewer opens every page that reads under `read`,
-which is most of HQ and every extension page that declares nothing, and is
-refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
+Every page reads under `read`, and under the one capability it declares
+beside it, and a signed-in person opens it only while their role holds both.
+`read` is never replaced, since every page reads the estate HQ draws around
+it. A viewer opens every page that declares nothing, which is most of HQ, and
+is refused the audit log (`read_audit_log`) and the calendar
+(`read_calendar`).
 
 - A view declares its capability as `required_capability`, a class's attribute
   or a function view's `hq_sdk.web.capability_required`. A page that declares
-  nothing reads under `read`, never under nothing, and one that declares it
+  nothing reads under `read` alone, never under nothing, and one that declares it
   empty (`hq_sdk.web.CapabilityRequiredMixin` left as it comes) is never served.
 - The check is `LoginRequiredMiddleware`'s, before the view runs, so a refused
   page has read nothing. It answers with the 403 page, which names no
@@ -106,7 +108,7 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   not.
 - `PageReadCapabilityTests` walks the URL configuration, every installed
   extension's included, and holds that a person with no role opens no page and
-  that each page reads under one capability an operator holds.
+  that every capability each page reads under is one an operator holds.
 
 ## What HQ enforces
 
@@ -172,8 +174,8 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   `outerHTML`, `srcdoc` or a script URL throws instead of parsing, so a
   DOM-based XSS sink cannot execute even if one is introduced.
   `trusted-types 'none'` means no policy can be declared to opt back out. It
-  costs nothing, because every dynamic node HQ builds uses
-  `createElement`/`textContent`.
+  costs nothing, because every node a script adds is a clone of a
+  `<template>` the server drew, filled through `textContent`.
 - The API reference at `/api/docs/` is the one exception. The vendored Scalar
   bundle (`static/vendor/scalar`, version and SHA-256 in `UPSTREAM`, checked by
   a test) renders through `innerHTML`. Its policy is derived from the main one
@@ -282,6 +284,10 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   internal interface (`HELD_ONLY_AT`), so no person, device or agent signs
   anyone out through it. A token HQ refuses is a 400, which Pocket ID does not
   retry; an unknown subject is a 200.
+- Demo data (`appearance.demo.set`) lives in one browser's session, so its
+  `show_demo` capability is held only by a person (`HELD_ONLY_AT`): no agent
+  is offered it, a device is refused it for having no session, and it ends
+  with the session.
 - Sign out (a POST; a GET is refused) ends Pocket ID's session as well as
   HQ's. The library's `OIDCLogoutView` sends a session signed in through the
   provider to its end-session endpoint (`end_session_url`) with the ID token
@@ -615,10 +621,22 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   held, as is anything destructive an agent asks for (a deletion, or stopping
   a container). Adopting a public record is not held, since it makes HQ's copy
   equal what is live. `needs_approval` in `default_hold.py` is the one answer,
-  read by the hold, by the use cases' own floor (`consent_gap`), by the
-  provider contract and by the policy page's words. A person in the browser,
-  or on their own device, is never held. An agent's "on" over a call the
-  default would hold is the person's consent, recorded as such
+  read by the hold, by the consent every declaration write asks
+  (`Consent.admits` in `capabilities.py`), by the provider contract and by
+  the policy page's words. A declaration writer takes that consent in place of
+  a principal, and only the capability runner makes one, a sealed token its
+  writer reads only through the runner's unsealer (`sealing.py`), so no gated
+  declaration is written without a person's consent, whichever capability's
+  handler writes it. The controller's report is evidence of what exists,
+  never consent to act on it: the sweep writes down what it found with no
+  consent (`save_adopted`, which takes only a read of the stored sweep), so
+  it takes a `requires_approval` kind on switched off, inert until a person
+  switches it on, and keeping what is live over HQ's copy
+  (`accept_observed`) asks the consent of the kind it writes. A fabricated
+  report therefore never yields an enabled declaration of such a kind. A
+  person in the browser, or on their own device, is never held. An agent's
+  "on" over a call the default would hold is the person's consent, recorded
+  as such
   (`Decision.overrides_a_hold`).
 - A held request writes and queues nothing. It is decided on its audit entry
   (`/audit/?awaiting=1`), or from its action item, against a fingerprinted
@@ -772,7 +790,13 @@ nothing leaked.
       reaches a bridge action, the socket's directory admits the web account
       alone, and both ends refuse a peer that is another uid. The controller's
       container mounts that directory read-only and holds neither HQ's
-      database nor its application environment.
+      database nor its application environment. A controller report's
+      writer takes the bridge's admission (`Admitted` in
+      `bridge_actions.py`), which only the bridge makes as it runs the
+      report, so no other door has one to hand a writer. It is a sealed
+      token (`sealing.py`): its seal lives only in the closure that runs the
+      reports, and a writer reads it only through `admission`, which refuses
+      a stand-in.
 - [ ] Provider credentials remain outside the web container entirely. The
       controller report guard rejects any status carrying a key named
       `private`, `secret`, `token`, `password`, or `credential`.

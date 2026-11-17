@@ -6,6 +6,8 @@ from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, field_validator, model_validator
 
+from hq.platform.application.expiry import DEFAULT_RENEWAL_WINDOW_DAYS
+
 from ..connection_shapes import ACME
 from ..names import certificate_covers, normalized_hostname
 from ..provider_spec import (
@@ -110,7 +112,7 @@ class TLSCertificateSpec(ProviderModel):
     )
 
     renewal_window_days: int = Field(
-        default=30,
+        default=DEFAULT_RENEWAL_WINDOW_DAYS,
         ge=1,
         le=60,
         title="Renew this many days early",
@@ -144,7 +146,7 @@ class ResolvedTLSCertificateSpec(ProviderModel):
     # probed for a TLS handshake against a password manager, and a target that
     # cannot answer one would read as a target that failed to.
     publish_to: list[OnePasswordPublication] = Field(default_factory=list)
-    renewal_window_days: int = Field(default=30, ge=1, le=60)
+    renewal_window_days: int = Field(default=DEFAULT_RENEWAL_WINDOW_DAYS, ge=1, le=60)
 
     @field_validator("domains")
     @classmethod

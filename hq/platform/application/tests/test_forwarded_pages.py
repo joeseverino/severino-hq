@@ -12,6 +12,7 @@ from django.core.handlers.asgi import ASGIRequest
 from django.test import TestCase, override_settings
 
 from .. import arrivals
+from ..request_channel import forwarding_of
 from ..request_connection import connection
 from ..request_path import address_chain
 from .people import someone
@@ -56,12 +57,12 @@ class ForwardedByATrustedProxyTests(TestCase):
         self.assertEqual(found.address, CALLER)
         self.assertTrue(found.forwarded)
         self.assertFalse(found.untrusted_forwarding)
-        forwarder = next(layer for layer in found.layers if layer.id == "forwarder")
-        self.assertTrue(forwarder.holds)
-        self.assertEqual(forwarder.evidence, PROXY)
+        forwarder = next(layer for layer in found.checks.results if layer.check.id == "forwarder")
+        self.assertTrue(forwarder.met)
+        self.assertEqual(forwarder.reading.evidence, PROXY)
 
     def test_the_path_page_shows_the_proxy_hop_and_judges_the_caller(self):
-        chain = address_chain(through_the_proxy())
+        chain = address_chain(forwarding_of(through_the_proxy()))
 
         self.assertEqual([(hop.value, hop.role) for hop in chain], [(CALLER, "judged"), (PROXY, "proxy")])
 

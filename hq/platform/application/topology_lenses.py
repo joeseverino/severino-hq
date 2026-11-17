@@ -2,9 +2,10 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import timedelta
 
-from .timestamps import moment
+from .freshness import behind
+from .moments import moment
+from .tone import Tone
 from .topology_model import JOINED_KINDS, Topology, TopologyTrace
 
 TRACE_DIRECTIONS = ("inbound", "outbound", "both")
@@ -26,12 +27,7 @@ class TopologyLens:
     select: Callable[[Topology], frozenset[str]]
 
 
-_ATTENTION_STATES = frozenset({"attention", "serious"})
-
-# How far behind its own kind's latest observation a node may fall before the
-# gap means it was skipped rather than swept a moment later. Sweeps write one
-# timestamp for everything they confirm, so siblings land together.
-_STALE_AFTER = timedelta(hours=1)
+_ATTENTION_STATES = frozenset({Tone.ATTENTION, Tone.SERIOUS})
 
 
 def _incoming_kinds(topology: Topology) -> dict[str, set[str]]:
@@ -88,8 +84,7 @@ def _stale_observations(topology: Topology) -> frozenset[str]:
     for node in topology.nodes:
         if not node.observed_at or node.kind in JOINED_KINDS or node.kind_key not in read:
             continue
-        observed = moment(node.observed_at, naive="keep")
-        if observed is not None and read[node.kind_key] - observed > _STALE_AFTER:
+        if behind(moment(node.observed_at, naive="keep"), read[node.kind_key]):
             stale.add(node.id)
     return frozenset(stale)
 

@@ -24,7 +24,6 @@ from django.urls import reverse
 from hq.platform.core import example_estate
 from hq.platform.core.example_estate import names, records
 from hq.platform.core.example_estate.testing import throwaway_media
-from hq.platform.core.table_cells import sets_only_custom_properties
 
 from ..routes import routed
 
@@ -128,7 +127,7 @@ class _Page(HTMLParser):
             return
         if tag == "style":
             self.styled.append("<style>")
-        elif "style" in attrs and not sets_only_custom_properties(attrs["style"] or ""):
+        elif "style" in attrs:
             self.styled.append(f'<{tag} style="{(attrs["style"] or "")[:80]}">')
         if tag == "form":
             self.form_depth += 1

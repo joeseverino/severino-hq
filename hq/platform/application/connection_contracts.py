@@ -11,7 +11,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from .contracts import Effect
+from .display_words import as_members
 from .security import Requires
+from .tone import Tone
 
 # Named for annotations alone: a class's annotations can be read as it is made
 # (a dataclass's are), which would load a lazy import at once.
@@ -50,7 +53,8 @@ class ConnectionAbility:
     name: str
     label: str
     summary: str
-    effect: str = "read"
+    # Given as its value's string too, as an extension may write it.
+    effect: Effect = Effect.READ
     required_scopes: tuple[str, ...] = ()
     # One of GRANT_MODELS, or blank. Required scopes imply ``scoped``; the other
     # two are how an ability says, truthfully, that no scope check can exist.
@@ -64,6 +68,9 @@ class ConnectionAbility:
     # against that resource can then be discovered from this ability without a
     # provider-specific command list.
     subject_resource: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "effect", Effect(self.effect))
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +99,7 @@ class ConnectionInstance:
     id: str
     label: str
     kind: str
-    status: str
+    status: Tone
     status_label: str
     detail: str = ""
     endpoint: str = ""
@@ -124,6 +131,7 @@ class ConnectionInstance:
         return self.credential_model == "none"
 
     def __post_init__(self) -> None:
+        as_members(self)
         if self.credential_model not in INSTANCE_CREDENTIAL_MODELS:
             raise ValueError(
                 f"Connection {self.id!r} must say its credential_model, one of "
@@ -146,10 +154,6 @@ class ConnectionSpec(Requires):
     setup_route: str = ""
     documentation_url: str = ""
     secret_store: str = ""
-    # How old an observation may be before this family's connections are
-    # reported stale rather than ready. A sweep-fed family refreshes in minutes;
-    # one read on request can be honest for far longer.
-    stale_after_hours: int = 24
     # What this family's emptiness means, in its own words. The default suits a
     # family that emits from configuration; one fed by controller reports
     # overrides it to say so.

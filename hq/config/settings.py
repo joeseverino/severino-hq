@@ -27,6 +27,7 @@ from hq.config.devtools import (
 )
 
 from . import sandbox
+from .networks import TAILNET_RANGES
 
 # The plugin registry is loaded by name: settings is imported by everything, and
 # a static import here would put it inside the application's own import cycle.
@@ -308,8 +309,7 @@ SEVERINO_TRUSTED_NETWORKS = env_list(
     default=[
         "127.0.0.0/8",
         "::1/128",
-        "100.64.0.0/10",  # Tailscale (CGNAT)
-        "fd7a:115c:a1e0::/48",  # Tailscale (IPv6 ULA)
+        *TAILNET_RANGES,
     ],
 )
 # Whose `X-Forwarded-For` HQ believes. Narrower than the networks above on
@@ -705,7 +705,7 @@ SEVERINO_SEAL_PUBLIC_KEY = env_secret("SEVERINO_SEAL_PUBLIC_KEY")
 SEVERINO_MCP_ALLOWED_HOSTS = env_list("SEVERINO_MCP_ALLOWED_HOSTS")
 SEVERINO_MCP_ALLOWED_NETWORKS = env_list(
     "SEVERINO_MCP_ALLOWED_NETWORKS",
-    default=["100.64.0.0/10", "fd7a:115c:a1e0::/48"],
+    default=list(TAILNET_RANGES),
 )
 SEVERINO_MCP_ALLOWED_ORIGINS = env_list("SEVERINO_MCP_ALLOWED_ORIGINS")
 # How much one agent may ask, on /mcp/ and the machine API alike
@@ -900,8 +900,6 @@ SEVERINO_SITE_NAME = env_str("SEVERINO_SITE_NAME", "Severino HQ")
 SEVERINO_RENDERED_COPY = False
 # The month the fiscal year starts, for the dashboard's expense window.
 SEVERINO_FISCAL_YEAR_START_MONTH = 1
-# Days before an active document is due for review.
-SEVERINO_DOC_REVIEW_INTERVAL_DAYS = 180
 
 # Public DNS and reverse-DNS lookups. The one question HQ cannot answer from
 # the inside: a resolver on this network follows the internal rewrites and

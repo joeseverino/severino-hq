@@ -47,8 +47,9 @@ tailnet keeps the client's own rules for every call, and a person's own device
 needs no approval ([Security](Security.md#agents)).
 
 The catalogs' `permitted` flags (capabilities, resources and connections,
-here and on `/api/mcp/` alike) say what the caller may use after that cap, by
-the same rule its use is refused by.
+here and on `/api/mcp/` alike), and the `refused` flag of MCP's capability
+index, say what the caller may use after that cap, by the same rule its use
+is refused by.
 
 A capability held only by a person (an upload, an approval, adopting
 playbooks) is out of any token's reach, whatever its grant. So neither the
@@ -180,7 +181,7 @@ carried, and lists at `/v2/resources/runs/` by `playbook`, `machine`,
 `correlation` and `state`.
 
 - Each is a read under the caller's own `read` grant.
-- A hold is its asker's alone (`approvals.asked_by`, as a task is): another
+- A hold is its asker's alone (`approvals.own_held_request`, as a task is): another
   caller's id answers `not_found`, as an id nothing holds does.
 - A run shows what Jobs shows of it: its machines, who asked and approved it,
   its worker while one runs it, and each task's host, name, outcome and
@@ -691,7 +692,6 @@ validated by.
 
 | Caller | Its key |
 |---|---|
-| A command that queues controller work | stored with the operation it queues; generated when the caller sent none |
 | A command form in the browser | generated and kept hidden |
 | A `read` capability | none |
 
@@ -746,8 +746,9 @@ changed type. Each line it prints is oasdiff's account of one break. A
 deliberate break is admitted by copying that line into
 `hq/platform/api/hq-api.breaking-exemptions.md`, oasdiff's own `--err-ignore`
 file, followed by `Reason:` and why clients can take it; an entry with no
-reason fails the gate. Once the change is on main the entry matches nothing and
-is deleted. The controller's two documents are left out, since both of their
+reason fails the gate. The gate hands oasdiff only the lines the change adds
+since its base, so an entry already on main admits nothing, and any change may
+delete it. The controller's two documents are left out, since both of their
 ends ship in one image.
 
 ### The document
@@ -860,15 +861,14 @@ one answer. The exceptions are the shapes that are MCP's own: `get_findings`
 (`dashboard_answer.AgentSnapshot`) and `describe_capabilities`
 (`capability_answer`). `describe_capabilities` answers in two levels, as an API
 catalog is read. With no `name` and no `resource`, it is an index of each
-capability's name, label, summary, effect, resource and `permitted`, without
-its schema. Narrowed, it is each entry in full, as `/api/v2/capabilities/`
+capability's name, label, summary, effect and resource, without its schema,
+and `refused` on one the caller lacks a permission for. Narrowed, it is each entry in full, as `/api/v2/capabilities/`
 answers it. The definitions the entries' `input_schema`s share are held once in
 the answer's root `$defs`, which each `#/$defs/<name>` there points to. The API
 answers every entry in full with each schema whole, since its readers index one
 entry's schema alone and its document and recorded examples hold that shape.
 `dashboard_snapshot` answers what needs doing: the figures, the cards, the
-priority queue's first page, with `priority_count` counting it whole, and the
-docs due a review. For the whole queue and each other list the page shows (the
+priority queue's first page, with `priority_count` counting it whole. For the whole queue and each other list the page shows (the
 recent activity, the active projects, the draft and published content), its
 `lists` names the `recent_activity` or `list_resource` call that reads it, and
 leaves out one the caller may not read. Every domain, an extension's too,
@@ -929,7 +929,8 @@ that is beside its handler (`@tool(..., requires=...)`, an access from
 binding refuses a call by the same rule, `forbidden`, before the handler runs,
 so the list and the refusal never disagree. The catalogs
 (`describe_capabilities`, `describe_resources`, `describe_connections`) are
-listed to everyone, since each says `permitted` of every entry. `list_resource`
+listed to everyone, since each says of every entry whether the caller may
+use it. `list_resource`
 and `get_resource` are listed to a caller who may read some kind each serves,
 and `execute_capability` to one who may run some capability. A change is held
 for a person only after its caller's grant is checked, so a caller without one
@@ -937,6 +938,10 @@ has nothing to ask for. prompts/list and resources/list follow the same rule.
 Each prompt and fixed view declares its access beside it (`requires` in
 `hq/platform/mcp/prompts.py` and `hq/platform/mcp/resources.py`) and is listed
 only to a caller it admits. `prompts/get` and `resources/read` refuse by it.
+Each machine API endpoint declares its access the same way (`_endpoint(...,
+requires=...)` in `hq/platform/api/views.py`) and refuses by it before its
+view runs. A read behind a door asks nobody's permission again: the door's
+declaration is the one place its authority is written.
 The Agents page lists as an operator's own device, the widest caller, so it
 shows every tool.
 

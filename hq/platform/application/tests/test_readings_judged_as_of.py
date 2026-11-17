@@ -11,10 +11,10 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
 from hq.domains.control_plane.tests import bridge_client
 
-from ..cadence import slowest_sweep_interval
 from ..derivation_testing import frozen, uncached
 from ..filesystem_findings import FilesystemSpace
 from ..findings import RULES, derive_findings
+from ..freshness import stale_after
 from ..moments import when
 from ..reading_facts import FactRow
 from ..reboot_findings import EdgeRebootState, RebootState
@@ -29,10 +29,12 @@ from . import (
 )
 from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
 
-# Past the slowest the controller ever reads, so nothing it says is current.
-AGED = slowest_sweep_interval() + timedelta(minutes=10)
-# The production case: read twelve hours ago, the renderer current when read.
-READ_AGO = timedelta(hours=12, minutes=10)
+# Past the line every reading of a machine is out of date at, so nothing it
+# says is current.
+AGED = max(
+    stale_after(kind) for kind in (RENDER_STATUS_KIND, UNIT_KIND, filesystems.KIND, reboots.KIND, reboots.EDGE_KIND)
+) + timedelta(minutes=10)
+OUT_OF_DATE = stale_after(RENDER_STATUS_KIND)
 JUST_BEFORE = timedelta(minutes=50)
 
 
@@ -51,25 +53,40 @@ def refuse_a_sweep() -> None:
     assert answer.status == 422, answer.body
 
 
+def read_ago(age: timedelta) -> None:
+    """A render status read ``age`` ago, the renderer refreshed shortly before."""
+
+    before = age + JUST_BEFORE
+    render.sweep(render.read(attempted=before, confirmed=before, rendered=before), age=age)
+
+
 class ProductionCaseTests(TestCase):
-    """A render status read twelve hours ago, the renderer refreshed shortly before."""
+    """A render status read long ago, the renderer current when read."""
 
     def setUp(self):
         tailnet_connection()
-        before = READ_AGO + JUST_BEFORE
-        render.sweep(render.read(attempted=before, confirmed=before, rendered=before), age=READ_AGO)
-        self.read_at = ProviderInventory.objects.get(kind=RENDER_STATUS_KIND).observed_at
 
-    def test_it_is_unread_since_its_reading_and_never_stale_against_now(self):
+    def test_until_it_is_out_of_date_it_is_judged_as_of_its_reading(self):
+        read_ago(OUT_OF_DATE - timedelta(minutes=10))
+
         self.assertEqual(raised("render-stale"), [])
-        self.assertEqual(unread_evidence("render-status-unread").get("Last read"), when(self.read_at))
+        self.assertEqual(raised("render-status-unread"), [])
+
+    def test_out_of_date_it_is_unread_since_its_reading_and_never_stale_against_now(self):
+        read_ago(OUT_OF_DATE + timedelta(minutes=10))
+        read_at = ProviderInventory.objects.get(kind=RENDER_STATUS_KIND).observed_at
+
+        self.assertEqual(raised("render-stale"), [])
+        self.assertEqual(unread_evidence("render-status-unread").get("Last read"), when(read_at))
 
     def test_an_open_refusal_is_named_as_its_cause(self):
+        read_ago(OUT_OF_DATE + timedelta(minutes=10))
+        read_at = ProviderInventory.objects.get(kind=RENDER_STATUS_KIND).observed_at
         refuse_a_sweep()
 
         said = unread_evidence("render-status-unread")
 
-        self.assertEqual(said.get("Last read"), when(self.read_at))
+        self.assertEqual(said.get("Last read"), when(read_at))
         self.assertIn(f"/{RENDER_STATUS_KIND}/ok", said.get("Why it has not been read since", ""))
 
 
@@ -150,7 +167,7 @@ def _descendants(row: type) -> set[type]:
 
 class AgedReadingGuardTests(TestCase):
     """Every rule in ``findings.RULES``, over every reading of a machine aged
-    past the slowest sweep."""
+    past out of date."""
 
     def setUp(self):
         tailnet_connection()

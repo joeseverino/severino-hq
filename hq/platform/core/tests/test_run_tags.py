@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from django.template import Context, Template
 from django.test import SimpleTestCase
 
-from hq.platform.application.tests.markup import all_elements
+from hq.platform.application.markup_testing import all_elements
 
 
 def _drawn(evidence) -> dict[str, str]:
@@ -36,10 +36,10 @@ class RunEvidenceTagTests(SimpleTestCase):
             )
         )
 
-        self.assertEqual(set(drawn), {"Machines", "Correlation", "Lease", "Readings", "Tasks"})
+        self.assertEqual(set(drawn), {"Machines", "Correlation", "Claimed by", "Readings", "Tasks"})
         self.assertIn("example.other_reading", drawn["Readings"])
         self.assertIn("example-investigation-7", drawn["Correlation"])
-        self.assertIn("example-worker", drawn["Lease"])
+        self.assertIn("example-worker", drawn["Claimed by"])
         self.assertIn("Example task", drawn["Tasks"])
         self.assertIn("Example <b>m</b>", drawn["Tasks"])
 

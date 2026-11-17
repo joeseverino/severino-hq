@@ -15,15 +15,11 @@ from typing import Any
 
 lazy from django.conf import settings
 
-from hq.platform.application.routes import reverse
-
-from .card_items import Insight
 from .derivations import passed
-from .github_estate import REPOSITORY_KIND, Repository, attention as repository_attention, repositories
-from .item_help import cannot_help, do_step, run_step, steps
-from .standards import UNMET, Check as _Check, Measurement, measure
-from .timestamps import moment
-from .ui import counted, ended
+from .github_estate import Repository, repositories
+from .moments import moment
+from .standards import Check as _Check, Measurement, Reading, measure
+from .ui import ended
 lazy from .projects import repository_key
 
 BOTH = "both"
@@ -52,21 +48,30 @@ def Check(id: str, label: str, scope: str, test, why: str, fix: str, *, unmet: s
     )
 
 
+ACCESS_UNREAD = "Its access has not been read"
+
+
 def _access(repo: Repository) -> dict[str, Any] | None:
     return repo.record.get("access")
 
 
-def _only_you(repo: Repository) -> bool | None:
-    access = _access(repo)
-    if access is None:
-        return None
+def _on_access(test: Callable[[Repository, dict[str, Any]], bool]) -> Callable[[Repository], Reading]:
+    """A check of the access reading, unavailable when it was not read."""
+
+    def check(repo: Repository) -> Reading:
+        access = _access(repo)
+        return Reading.unavailable(ACCESS_UNREAD) if access is None else Reading.judged(test(repo, access))
+
+    return check
+
+
+def _only_you(repo: Repository, access: dict[str, Any]) -> bool:
     owner = repo.name.split("/", 1)[0].lower()
     return all(item["login"].lower() == owner for item in access["collaborators"])
 
 
-def _keys_read_only(repo: Repository) -> bool | None:
-    access = _access(repo)
-    return None if access is None else all(key["read_only"] for key in access["deploy_keys"])
+def _keys_read_only(_repo: Repository, access: dict[str, Any]) -> bool:
+    return all(key["read_only"] for key in access["deploy_keys"])
 
 
 def _idle(key: dict[str, Any]) -> bool:
@@ -74,42 +79,49 @@ def _idle(key: dict[str, Any]) -> bool:
     return seen is not None and passed(seen + timedelta(days=KEY_IDLE_DAYS))
 
 
-def _keys_in_use(repo: Repository) -> bool | None:
-    access = _access(repo)
-    return None if access is None else not any(_idle(key) for key in access["deploy_keys"])
+def _keys_in_use(_repo: Repository, access: dict[str, Any]) -> bool:
+    return not any(_idle(key) for key in access["deploy_keys"])
 
 
-def _setting(name: str, *, expected: Any) -> Callable[[Repository], bool | None]:
-    def test(repo: Repository) -> bool | None:
-        access = _access(repo)
-        return None if access is None else access.get(name) == expected
-
-    return test
+def _setting(name: str, *, expected: Any) -> Callable[[Repository], Reading]:
+    return _on_access(lambda _repo, access: access.get(name) == expected)
 
 
-def _no_variables(repo: Repository) -> bool | None:
+def _no_variables(repo: Repository) -> Reading:
     variables = repo.record.get("variables")
-    return None if variables is None else not variables
+    return (
+        Reading.unavailable("Its Actions variables have not been read")
+        if variables is None
+        else Reading.judged(not variables)
+    )
 
 
-def _rule(name: str) -> Callable[[Repository], bool | None]:
-    def test(repo: Repository) -> bool | None:
+def _rule(name: str) -> Callable[[Repository], Reading]:
+    def test(repo: Repository) -> Reading:
         rules = repo.record.get("rules")
-        return None if rules is None else bool(rules.get(name))
+        return (
+            Reading.unavailable("Its rulesets have not been read")
+            if rules is None
+            else Reading.judged(bool(rules.get(name)))
+        )
 
     return test
 
 
-def _security(name: str) -> Callable[[Repository], bool | None]:
-    def test(repo: Repository) -> bool | None:
+def _security(name: str) -> Callable[[Repository], Reading]:
+    def test(repo: Repository) -> Reading:
         security = (_access(repo) or {}).get("security")
-        return None if not security else security.get(name) == "enabled"
+        if not security:
+            return Reading.unavailable("Its security settings have not been read")
+        return Reading.judged(security.get(name) == "enabled")
 
     return test
 
 
-def _code_scanning(repo: Repository) -> bool | None:
-    return "code_scanning" in (repo.record.get("alerts") or {}) or None
+def _code_scanning(repo: Repository) -> Reading:
+    if "code_scanning" in (repo.record.get("alerts") or {}):
+        return Reading.met()
+    return Reading.unavailable("No code scanning alerts have been read")
 
 
 STANDARD: tuple[Check, ...] = (
@@ -117,7 +129,7 @@ STANDARD: tuple[Check, ...] = (
         "only-you",
         "Only you have access",
         BOTH,
-        _only_you,
+        _on_access(_only_you),
         "Anyone else with access can read private code or push to it.",
         "Remove the collaborator in the repository's access settings.",
         serious=True,
@@ -127,7 +139,7 @@ STANDARD: tuple[Check, ...] = (
         "keys-read-only",
         "Deploy keys can only read",
         BOTH,
-        _keys_read_only,
+        _on_access(_keys_read_only),
         "A deploy key that can write can push to the repository without you.",
         "Replace the key with a read-only one.",
         serious=True,
@@ -137,7 +149,7 @@ STANDARD: tuple[Check, ...] = (
         "keys-in-use",
         "Every deploy key is in use",
         BOTH,
-        _keys_in_use,
+        _on_access(_keys_in_use),
         f"A key unused for {KEY_IDLE_DAYS} days is access nothing needs.",
         "Delete the key, or find what stopped using it.",
         unmet=f"A deploy key has gone unused for {KEY_IDLE_DAYS} days",
@@ -447,31 +459,7 @@ PINS_UNREAD = (
 PINS_CALLED = "It calls another repository's workflow, which HQ has not read, so HQ does not offer to require pinning."
 
 
-def help_for(check: _Check, missing: list[Repository]) -> Any:
-    """The item's workflow: each repository's exact commands, or why there are none."""
-
-    key = f"github-posture:{check.id}"
-    derive = COMMANDS.get(check.id)
-    if derive is None:
-        return cannot_help(key, REASONS[check.id])
-    runs = tuple(run_step(label, command) for repo in missing for label, command in derive(repo))
-    return steps(key, runs + _called_workflows(check, missing), reason=_left_out(check, missing))
-
-
-def _called_workflows(check: _Check, missing: list[Repository]) -> tuple[Any, ...]:
-    """One step for each workflow a repository calls from another: the thing
-    to check before requiring pinning there."""
-
-    if check.id != "actions-pinned":
-        return ()
-    return tuple(
-        do_step(f"{repo.short}: check that {workflow} pins its own actions, then require pinning.")
-        for repo in missing
-        for workflow in calls_workflows(repo)
-    )
-
-
-def _left_out(check: _Check, missing: list[Repository]) -> str:
+def left_out(check: _Check, missing: list[Repository]) -> str:
     """What the commands do not cover, and why: only pinning can leave some out."""
 
     if check.id != "actions-pinned":
@@ -527,43 +515,3 @@ def posture_of(repo: Repository) -> Measurement | None:
 def postures() -> list[Measurement]:
     found = (posture_of(repo) for repo in sorted(repositories().values(), key=lambda item: item.name))
     return [posture for posture in found if posture is not None]
-
-
-def attention() -> tuple[Insight, ...]:
-    """One item per check not met, naming every repository that misses it, so
-    the queue grows with the gaps in the standard rather than with the estate."""
-
-    found = postures()
-    items = []
-    for check in STANDARD:
-        unmet = [item.subject for item in found if item.state_of(check.id) == UNMET]
-        missing = [repo.short for repo in unmet]
-        if not missing:
-            continue
-        items.append(
-            Insight(
-                status="serious" if check.serious else "attention",
-                eyebrow="Repo checks",
-                family="Repository checks",
-                key=f"github-posture:{check.id}",
-                title=f"{check.label}: not met in {counted(len(missing), 'repository', 'repositories')}",
-                value=str(len(missing)),
-                # A setting to change in each repository that misses it.
-                magnitude=len(missing),
-                body=f"{ended(', '.join(missing))} {check.fix}",
-                why=check.why,
-                action="Open repo checks",
-                url=reverse("posture"),
-                workflow=help_for(check, unmet),
-                # The oldest of the readings it names: the claim is no newer.
-                observed_at=min((repo.observed_at for repo in unmet if repo.observed_at), default=None),
-                reads=REPOSITORY_KIND,
-            )
-        )
-    return tuple(items)
-
-
-def build_attention() -> tuple[Insight, ...]:
-    """What GitHub holds for you: the repositories' own items, then the standard's."""
-
-    return repository_attention() + attention()

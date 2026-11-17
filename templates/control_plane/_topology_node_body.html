@@ -3,7 +3,7 @@ The selected node in the details pane: its name, what kind of thing it is,
 how many links it has, how it stands and the way to its own page.
 {% endcomment %}
 {% section item.node.label count=item.degree lede=item.node.subtitle data_topology_body_of=item.node.id %}
-  {% if item.node.detail %}<p class="muted">{{ item.node.detail|breakable }}</p>{% endif %}
+  {% if item.node.detail %}{% muted element="p" %}{{ item.node.detail|breakable }}{% endmuted %}{% endif %}
 
   {% comment %}
     Triage, in the order an operator asks it: is anyone converging this,
@@ -21,23 +21,23 @@ how many links it has, how it stands and the way to its own page.
     {% if item.node.unconfirmed_fields %}
       {% fact "HQ could not check" %}{% for field in item.node.unconfirmed_fields %}<code>{{ field|breakable:forloop }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}
     {% endif %}
-    {% fact "Last read" %}{% if item.observed_age %}{{ item.node.observed_at|when:"ago" }}{% elif item.observable %}<span class="muted">Not read yet.</span>{% else %}<span class="muted">HQ does not read this.</span>{% endif %}{% endfact %}
+    {% fact "Reading" %}{% if item.observable %}{% include "partials/_reading_age.html" with at=item.observed_age only %}{% else %}{% muted %}HQ does not read this.{% endmuted %}{% endif %}{% endfact %}
   {% endfacts %}
 
   {% comment %}Every row walks the graph to the other end.{% endcomment %}
   {% if item.relations %}
     {% include "partials/_relation_list.html" with relations=item.relations only %}
   {% else %}
-    <p class="muted">Connected to nothing.</p>
+    {% muted element="p" %}Connected to nothing.{% endmuted %}
   {% endif %}
 
-  {% if topology_trace and item.hop %}<p class="muted">{{ item.hop|counted:"step" }} from {{ topology_trace_focus.label|breakable }}</p>{% endif %}
+  {% if topology_trace and item.hop %}{% muted element="p" %}{{ item.hop|counted:"step" }} from {{ topology_trace_focus.label|breakable }}{% endmuted %}{% endif %}
   {% if item.node.actions %}
     <div><span class="row-actions">{% include "partials/_action_links.html" with actions=item.node.actions only %}</span></div>
   {% endif %}
   <div><span class="row-actions" role="group" aria-label="Follow links from {{ item.node.label }}">
-    <a class="btn ghost compact" href="{{ item.inbound_url }}">Dependents</a>
-    <a class="btn ghost compact" href="{{ item.outbound_url }}">Dependencies</a>
+    {% button "Dependents" item.inbound_url look="ghost compact" %}
+    {% button "Dependencies" item.outbound_url look="ghost compact" %}
   </span></div>
-{% aside %}{% if item.node.status_label or item.link.url %}<ul class="dot-list">{% if item.node.status_label %}<li>{% status item.node.status_label tone=item.node.status %}</li>{% endif %}{% if item.link.url %}<li>{% entity item.link label="Open" %}</li>{% endif %}</ul>{% endif %}
+{% aside %}{% if item.node.status_label or item.link.url %}{% dot_list %}{% if item.node.status_label %}<li>{% status item.node.status_label tone=item.node.status %}</li>{% endif %}{% if item.link.url %}<li>{% entity item.link label="Open" %}</li>{% endif %}{% enddot_list %}{% endif %}
 {% endsection %}

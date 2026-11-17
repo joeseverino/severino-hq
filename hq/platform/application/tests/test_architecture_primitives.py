@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 
+from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.reads import reads
@@ -109,28 +110,6 @@ class OnePrimitiveTests(SimpleTestCase):
         found = [name for name, path in template_files() if built.search(path.read_text(encoding="utf-8"))]
         self.assertEqual(found, [])
 
-    def test_a_related_list_is_drawn_by_its_partial(self):
-        """A record page lists what it is related to through
-        `partials/_related.html` (groups from `application.related`), never
-        under a "Related" heading over a list of its own shape."""
-
-        found = [
-            name
-            for name, path in template_files()
-            if re.search(r"<h[1-6][^>]*>\s*Related\b", path.read_text(encoding="utf-8"))
-        ]
-        self.assertEqual(found, [])
-
-    def test_templates_name_entities_through_the_entity_tag(self):
-
-        # A button to a page (Cancel, Edit) is an action, not a mention.
-        mention = re.compile(
-            r'<a href="\{% url \'(control_plane:(detail|machine|service)|zones:detail|'
-            r"projects:detail)\'"
-        )
-        found = [name for name, path in template_files() if mention.search(path.read_text(encoding="utf-8"))]
-        self.assertEqual(found, [])
-
     def test_entity_pages_are_addressed_by_entity_link(self):
 
         page = re.compile(
@@ -201,8 +180,8 @@ class FragmentPrimitiveTests(SimpleTestCase):
     PRIMITIVE = "fragment.js"
 
     def test_the_primitive_loads_before_the_scripts_that_use_it(self):
-        base = (self.ROOT / "templates" / "base.html").read_text(encoding="utf-8")
-        deferred = re.findall(r"js/([\w-]+\.js)'[^>]*\bdefer\b", base)
+        base = render_to_string("base.html")
+        deferred = re.findall(r'js/([\w-]+\.js)"[^>]*\bdefer\b', base)
 
         self.assertGreater(len(deferred), 1)
         self.assertEqual(deferred[0], self.PRIMITIVE)

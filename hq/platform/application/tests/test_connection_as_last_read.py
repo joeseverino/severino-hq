@@ -13,13 +13,14 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
+from hq.platform.application.markup_testing import select
 from hq.platform.core.tests.forwarding import arrived
 
 from .. import cadence
 from ..request_connection import connection
-from ..request_path import CONTRADICTED, UNPROVEN, request_path
+from ..request_path import request_path
+from ..standards import Standing
 from .connection_requests import A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
-from .markup import select
 
 # How long the panel was left unopened.
 AWAY = timedelta(hours=13)
@@ -88,8 +89,8 @@ class AsLastReadTests(TestCase):
         read(HQ_HOST)
         current = device_check(a_request())
 
-        self.assertEqual(old.state, UNPROVEN)
-        self.assertEqual(current.state, CONTRADICTED)
+        self.assertEqual(old.state, Standing.UNAVAILABLE)
+        self.assertEqual(current.state, Standing.UNMET)
 
 
 class PanelTests(TestCase):
@@ -126,14 +127,14 @@ class PanelTests(TestCase):
         from ..security import cli_principal
 
         unread = [
-            standing
-            for standing in estate_posture(connection_catalog(principal=cli_principal())).standings
-            if standing.reading.met is None
+            result
+            for result in estate_posture(connection_catalog(principal=cli_principal())).results
+            if result.state == "unavailable"
         ]
         page = self.panel()
 
         shown = {element.attrs["data-posture-unread"]: element.words for element in select(page, "data-posture-unread")}
         self.assertTrue(unread)
-        for standing in unread:
-            with self.subTest(check=standing.check.id):
-                self.assertIn(standing.reading.evidence, shown[standing.check.id])
+        for result in unread:
+            with self.subTest(check=result.check.id):
+                self.assertIn(result.reading.evidence, shown[result.check.id])

@@ -2,8 +2,8 @@
 
 ``{% change_table preview %}`` draws ``partials/_change_table.html`` from an
 ``approval_review.ChangePreview``: a section named by its label, the rows
-under Field, Before and After (Field and Value where nothing stood before)
-in the change's own order, each row's kind of change under Status, each
+under Field, Before and After in the change's own order, each row's kind of
+change under Status (Field and Value alone where nothing stood before), each
 changed record of many one row with its fields folded under it, the records
 that stay named on one line under it, and the line diff of what would not
 parse. An empty preview draws nothing.
@@ -16,6 +16,7 @@ from django.utils.safestring import SafeString
 from django.utils.text import slugify
 
 from hq.platform.application.payload_words import ChangeRow
+from hq.platform.application.tone import Tone
 from hq.platform.core.templatetags.status_tags import status_pill
 
 register = template.Library()
@@ -25,7 +26,7 @@ _WHOLE_WORDS = {"added": "New", "removed": "Removed"}
 
 # What a row's kind of change is called in its Status column, and its tone:
 # what comes is good news, what moves asks attention, what goes is serious.
-_KINDS = {"added": ("New", "good"), "changed": ("Changed", "attention"), "removed": ("Removed", "serious")}
+_KINDS = {"added": ("New", Tone.GOOD), "changed": ("Changed", Tone.ATTENTION), "removed": ("Removed", Tone.SERIOUS)}
 
 
 @register.simple_tag

@@ -1,0 +1,15 @@
+id: json-digest-by-digests
+valid:
+  - 'fingerprint = digest({"capability": name, "payload": payload})'
+  - 'text = canonical(parsed)'
+  - 'shown = json.dumps(value, indent=2, sort_keys=True)'
+  - 'key = json.dumps(value, sort_keys=True)'
+  - 'body = json.dumps(payload).encode()'
+  - 'digest = hashlib.sha256(name.encode()).hexdigest()'
+invalid:
+  - 'text = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)'
+  - 'text = json.dumps(value, separators=(",", ":"), sort_keys=True).encode()'
+  - 'return hashlib.sha256(json.dumps(held, sort_keys=True).encode()).hexdigest()'
+  - 'return hashlib.sha256(json.dumps(seen).encode()).hexdigest()[:16]'
+  - 'return sha256(json.dumps(seen).encode()).hexdigest()'
+  - 'return blake2b(json.dumps(seen).encode(), digest_size=8).hexdigest()'

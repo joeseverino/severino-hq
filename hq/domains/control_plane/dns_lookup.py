@@ -21,22 +21,23 @@ from hq.platform.application.connection_contracts import (
 from hq.platform.application.http_read import UNREACHABLE, fetch, redirect_target
 from hq.platform.application.reach import public_host
 from hq.platform.application.security import Capability
+from hq.platform.application.tone import Tone
 from hq.platform.core.errors import UpstreamUnavailable
+lazy from hq.platform.application.entity_links import https_url
 
 
 def connection_specs():
     """Emit the keyless public registries used by lookup capabilities."""
 
     def configured_instance(*, identifier: str, label: str, kind: str, setting: str, abilities: tuple[str, ...]):
-        endpoint = getattr(settings, setting).strip()
-        parsed = urlsplit(endpoint)
-        if parsed.scheme != "https" or not parsed.hostname:
+        parsed = urlsplit(https_url(getattr(settings, setting)))
+        if not parsed.hostname:
             return None
         return ConnectionInstance(
             id=identifier,
             label=label,
             kind=kind,
-            status="good",
+            status=Tone.GOOD,
             status_label="configured",
             detail="Needs no key. Checked only when a lookup runs.",
             endpoint=f"https://{parsed.netloc}",
@@ -120,7 +121,7 @@ def _https_public_redirects(response: httpx2.Response) -> None:
     target = redirect_target(response)
     if target is None:
         return
-    if target.scheme != "https":
+    if not https_url(str(target)):
         raise LookupUnavailable("A registry redirected away from HTTPS.")
     # A registry is on the public internet. A redirect to anything else is
     # a request HQ would make on the registry's behalf, from inside.
@@ -139,9 +140,8 @@ def _base(name: str) -> str:
     the scheme has to be https and the host has to be present.
     """
 
-    configured = getattr(settings, name).strip()
-    parsed = urlsplit(configured)
-    if parsed.scheme != "https" or not parsed.hostname:
+    parsed = urlsplit(https_url(getattr(settings, name)))
+    if not parsed.hostname:
         raise LookupUnavailable("That lookup service is not set up.")
     return f"https://{parsed.netloc}"
 
@@ -163,7 +163,7 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
         response, raw = fetch(
             "GET",
             url,
-            headers={"Accept": accept, "User-Agent": "severino-hq"},
+            headers={"Accept": accept},
             timeout=seconds,
             limit=MAX_ANSWER_BYTES,
             follow_redirects=True,

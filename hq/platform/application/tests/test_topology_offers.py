@@ -9,19 +9,18 @@ from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.markup_testing import actions, hrefs
 from hq.platform.application.tests.reads import reads
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
-from .markup import actions, hrefs
-
 ROOT = Path(__file__).resolve().parents[4]
-# The edit and removal routes, which only ``resource_capabilities.Offered`` builds a link to.
+# The edit and removal routes, which a control reaches only through the
+# commands their views run (``pages.command_reach``), never by name.
 _ROUTES = re.compile(r"""["']control_plane:(?:edit|remove)["']""")
 # A file that names a route without offering it: a benchmark visits each
 # page, and the example estate records the door its rows came through.
 _NAMES_WITHOUT_OFFERING = {
-    "hq/platform/application/resource_capabilities.py",
     "hq/platform/core/management/commands/bench_pages.py",
     "hq/platform/core/example_estate/history.py",
 }
@@ -137,8 +136,8 @@ class SourcedRecordTests(TestCase):
         from hq.platform.application.resource_capabilities import offered_changes, resource_capabilities
 
         record = self._procedure()
-        self.assertEqual(offered_changes([record])[record.key], ("", ""))
-        self.assertEqual(resource_capabilities(record).offered, ("", ""))
+        self.assertEqual(offered_changes([record])[record.key], (False, False))
+        self.assertEqual(resource_capabilities(record).offered, (False, False))
         panel = self.client.get(reverse("control_plane:topology_node"), {"node": f"resource:{record.key}"})
         self.assertEqual(panel.status_code, 200)
         self.assertEqual(_offers(panel, self._routes(record.key)), {})
@@ -150,13 +149,13 @@ class SourcedRecordTests(TestCase):
         dropped = ManagedResource.objects.create(
             key="automation-example-retired", kind=named.kind, spec={**named.spec, "operation": "example.retired"}
         )
-        self.assertIn(offered_changes([dropped])[dropped.key].remove_url, self._routes(dropped.key))
+        self.assertTrue(offered_changes([dropped])[dropped.key].removes)
 
 
 @tag("source", "tree")
 @reads("**/*.py", "**/templates/**")
 class OfferedLinksTests(SimpleTestCase):
-    def test_only_offered_builds_a_declarations_edit_or_removal_link(self):
+    def test_no_file_links_a_declarations_edit_or_removal_by_its_route(self):
         files = [*ROOT.joinpath("hq").rglob("*.py"), *ROOT.joinpath("templates").rglob("*.html")]
         naming = {
             relative
@@ -167,5 +166,5 @@ class OfferedLinksTests(SimpleTestCase):
         }
 
         self.assertEqual(sorted(naming), [])
-        # The guard reads the one file that is allowed to build them.
-        self.assertTrue(_ROUTES.search((ROOT / "hq/platform/application/resource_capabilities.py").read_text()))
+        # The guard reads a link built by the route's name.
+        self.assertTrue(_ROUTES.search('reverse("control_plane:edit", kwargs={"key": key})'))

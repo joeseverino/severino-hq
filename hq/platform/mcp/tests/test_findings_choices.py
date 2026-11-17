@@ -12,12 +12,13 @@ from django.utils import timezone
 from mcp import Client
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.application.action_links import ActionLink
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.finding_model import Finding, FindingRemedy
-from hq.platform.application.findings import RULES, SEVERITIES, derive_findings
+from hq.platform.application.findings import RULES, derive_findings
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.inventory_records import kind_read
+from hq.platform.application.tests.links import example_command
+from hq.platform.application.tone import Tone
 from hq.platform.application.topology_model import Topology, TopologyEdge, TopologyNode
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
@@ -61,7 +62,7 @@ class FindingsChoicesTests(TestCase):
             return next(option["enum"] for option in properties[name]["anyOf"] if "enum" in option)
 
         self.assertEqual(values("rule"), [rule.name for rule in RULES])
-        self.assertEqual(values("severity"), list(SEVERITIES))
+        self.assertEqual(values("severity"), [tone.value for tone in Tone])
 
     def test_a_rule_the_registry_lacks_is_refused(self):
         _, (answer,) = session(("get_findings", {"rule": "example-unknown"}))
@@ -140,7 +141,7 @@ class FindingActionsTests(TestCase):
             kind_read(REWRITE, when)
 
     def test_every_action_on_a_seeded_finding_is_a_tool_call_and_no_answer_holds_a_path(self):
-        listed, (answer,) = session(("get_findings", {}))
+        listed, (answer,) = session(("get_findings", {"severity": "serious", "limit": 100}))
 
         self.assertFalse(answer.is_error)
         found = answer.structured_content["findings"]
@@ -149,13 +150,13 @@ class FindingActionsTests(TestCase):
         self.assertLessEqual(
             {"remedies", "offers", "investigations", "workflow.verify"},
             {where for where, _ in carried},
-            [(finding["rule"], finding["subject"]) for finding in found],
+            [(finding["rule"], finding.get("subject")) for finding in found],
         )
         for where, call in carried:
             with self.subTest(where=where, call=call):
                 self.assertIn(call["tool"], listed)
                 self.assertIsInstance(call["arguments"], dict)
-        self.assertEqual(list(paths(answer.structured_content)), [])
+        self.assertEqual(list(paths(answer.structured_content)), [], [finding["rule"] for finding in found])
 
     def test_each_read_a_finding_offers_answers_and_each_command_is_addressed_as_it_takes(self):
         _, (answer,) = session(("get_findings", {}))
@@ -204,7 +205,7 @@ CONTROLLER_STALE = Topology(
             "Example",
             "Controller",
             actions=(
-                ActionLink(
+                example_command(
                     "command",
                     "Refresh",
                     "infrastructure_change",

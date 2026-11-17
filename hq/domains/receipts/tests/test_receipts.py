@@ -14,9 +14,9 @@ from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import MAX_RECEIPT_BYTES, validate_receipt_file
+from hq.platform.application.markup_testing import elements, links, select, text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import InputError
-from hq.platform.application.tests.markup import elements, links, select, text
 
 
 def _receipt(**fields):
@@ -50,7 +50,7 @@ class ReceiptLinkTests(TestCase):
         # A receipt with no vendor is named by its file.
         self.assertIn("scan.pdf", text(response))
         self.assertContains(response, "No expense or asset")
-        self.assertNotContains(response, ">expense</a>")
+        self.assertNotIn("expense", [words for words, _target in found])
 
     def test_a_match_s_row_links_it_to_this_receipt(self):
         receipt = _receipt(vendor="Example Host", amount=Decimal("12.00"))

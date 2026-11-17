@@ -16,14 +16,29 @@ class HostFirewallRecord(ObservationRecord):
     read_at: Stamp = None
 
 
+# A tailnet lock public key as the lock commands take it: "tlpub:" and the
+# key's hex.
+LOCK_KEY = r"^tlpub:[0-9a-f]{1,128}$"
+
+
+class TailnetLockSigner(ObservationRecord):
+    """One key tailnet lock trusts to sign: the public half a device holds,
+    the kind of key it is, its votes and the labels it was added with."""
+
+    key: str = Field(pattern=LOCK_KEY)
+    kind: str = Field(default="", max_length=32)
+    votes: int = Field(default=0, ge=0)
+    metadata: dict[str, str] = Field(default={}, max_length=16)
+
+
 class HostTailnetLockRecord(ObservationRecord):
     """Tailnet lock as the controller's own machine sees it: `tailscale lock
-    status`, counted. It names no key, only how many sign."""
+    status`, with each key it trusts to sign."""
 
     record: str
     enabled: bool = False
     node_key_signed: bool = False
-    trusted_keys: int = Field(default=0, ge=0)
+    signers: tuple[TailnetLockSigner, ...] = Field(default=(), max_length=64)
     # The machines lock filters out of the tailnet, by name.
     locked_out: tuple[str, ...] = ()
 
@@ -359,7 +374,9 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Tailnet lock",
         HostTailnetLockRecord,
         title=lambda record: "On" if record.get("enabled") else "Off",
+        keys=lambda record: tuple(str(signer.get("key", "")) for signer in record.get("signers") or ()),
         relation="Tailnet lock seen from",
+        key_relation="Signs for tailnet lock",
     ),
     ObservationSpec(
         FILESYSTEM_KIND,

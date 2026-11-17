@@ -6,8 +6,8 @@
   {% if item.tag_list %}{% fact "Tags" %}{% for t in item.tag_list %}{% status t chip=True %}{% endfor %}{% endfact %}{% endif %}
   {% if item.published_url %}{% fact "Published URL" %}{% entity item.published_url|outside label=item.published_url %}{% endfact %}{% endif %}
   {% if item.published_at %}{% fact item.is_published|yesno:"Published,Planned date" %}{{ item.published_at|when }}{% endfact %}{% endif %}
-  {% fact "Added to HQ" %}<span class="muted">{{ item.created_at|when }}</span>{% endfact %}
-  {% fact "Updated" %}<span class="muted">{{ item.updated_at|when }}</span>{% endfact %}
+  {% fact "Added to HQ" %}{% muted %}{{ item.created_at|when }}{% endmuted %}{% endfact %}
+  {% fact "Updated" %}{% muted %}{{ item.updated_at|when }}{% endmuted %}{% endfact %}
   {% comment %}No visits is a fact about the page, said beside the others rather than in a card of its own.{% endcomment %}
   {% if traffic.path and not traffic.measured %}{% fact "Traffic" %}{% with days=traffic.days|counted:"day" %}{% include "partials/_empty_state.html" with message="No visits in the last "|add:days inline=True %}{% endwith %}{% endfact %}{% endif %}
 {% endfacts %}{% endcard %}

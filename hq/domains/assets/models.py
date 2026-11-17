@@ -8,6 +8,7 @@ from django.urls import reverse
 
 from hq.platform.application import business_use
 from hq.platform.application.references import CERTIFICATE, Referable, ReferenceField
+from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.core.models import TimestampedModel, free_slug
 lazy from hq.platform.application.moments import when_day
 
@@ -36,12 +37,13 @@ ASSET_CATEGORY_CHOICES = [
 
 
 class Asset(TimestampedModel):
-    class Status(models.TextChoices):
-        ACTIVE = "active", "Active"
-        RETIRED = "retired", "Retired"
-        SOLD = "sold", "Sold"
-        RETURNED = "returned", "Returned"
-        REPLACED = "replaced", "Replaced"
+    class Status(TonedChoices):
+        ACTIVE = "active", Tone.GOOD, "Active"
+        # Out of use, by plan: nothing to act on.
+        RETIRED = "retired", Tone.NEUTRAL, "Retired"
+        SOLD = "sold", Tone.NEUTRAL, "Sold"
+        RETURNED = "returned", Tone.NEUTRAL, "Returned"
+        REPLACED = "replaced", Tone.NEUTRAL, "Replaced"
 
     item_name = models.CharField(max_length=160)
     slug = models.SlugField(max_length=180, unique=True, blank=True)
@@ -97,6 +99,12 @@ class Asset(TimestampedModel):
 
     def get_absolute_url(self) -> str:
         return reverse("assets:detail", args=[self.slug])
+
+    @property
+    def state(self) -> Asset.Status:
+        """Its status as the member its pill is drawn from, in its words and tone."""
+
+        return self.Status(self.status)
 
     @property
     def bought_note(self) -> str:

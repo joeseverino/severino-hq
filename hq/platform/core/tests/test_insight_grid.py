@@ -4,7 +4,7 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
 from hq.platform.application.card_items import Insight
-from hq.platform.application.tests.markup import with_class
+from hq.platform.application.markup_testing import with_class
 
 
 def _eyebrows(items: list[Insight]) -> list[str]:

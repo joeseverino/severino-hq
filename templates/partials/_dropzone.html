@@ -16,6 +16,7 @@ the input's aria-describedby names.
     <span class="dropzone-title">{{ title|default:field.label|breakable }}</span>
     <span class="dropzone-hint"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ hint|default:field.help_text|breakable }}</span>
     <ul class="dropzone-files" data-dropzone-files hidden></ul>
+    <template data-dropzone-file><li></li></template>
   </label>
   {% if field.errors %}<ul class="errors"{% if field.auto_id %} id="{{ field.auto_id }}_error"{% endif %}>{% for error in field.errors %}<li>{{ error|breakable }}</li>{% endfor %}</ul>{% endif %}
 </div>

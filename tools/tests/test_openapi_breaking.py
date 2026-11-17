@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from collections.abc import Iterator
@@ -12,6 +13,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, tag
 
+from tools.gate.chain import ROOT as CHECKOUT
 from tools.gate.tests.base import fixture_git
 
 # Each form oasdiff matches an --err-ignore line to: an operation's change, a
@@ -98,7 +100,24 @@ def terminal() -> Iterator[IO[str]]:
 class VerdictTests(SimpleTestCase):
     """oasdiff judges planted documents in a fixture repository, as the gate runs it on the real one."""
 
-    def judge(self, exemptions: str, **revision: set[int]) -> tuple[int, list[str]]:
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+
+        # oasdiff is lazy, and its shim runs it only from a directory whose mise config pins it,
+        # which the fixture repository is not: installed at the checkout's pin, as setup:sandbox
+        # installs a lazy tool, its own directory leads the PATH the gate runs it from.
+        def mise(*args: str) -> str:
+            done = subprocess.run(["mise", "-C", str(CHECKOUT), *args], capture_output=True, text=True, check=True)
+            return done.stdout.strip()
+
+        mise("install", "--quiet", "github:oasdiff/oasdiff")
+        path = f"{Path(mise('which', 'oasdiff')).parent}{os.pathsep}{os.environ.get('PATH', '')}"
+        cls.enterClassContext(patch.dict(os.environ, {"PATH": path}))
+
+    def judge(self, exemptions: str, *, on_base: str = "", **revision: set[int]) -> tuple[int, list[str]]:
+        """The gate verdict with the base and proposed exemptions kept separate."""
+
         from tools import openapi_breaking
 
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -106,11 +125,12 @@ class VerdictTests(SimpleTestCase):
         git("init", "-q")
         (root / DOCUMENT).parent.mkdir(parents=True)
         (root / DOCUMENT).write_text(document(range(12)))
-        (root / EXEMPTIONS).write_text(exemptions)
+        (root / EXEMPTIONS).write_text(on_base)
         git("add", ".")
         git("commit", "-q", "--no-verify", "-m", "base")
         base = git("rev-parse", "HEAD")
         (root / DOCUMENT).write_text(document(range(12), **revision))
+        (root / EXEMPTIONS).write_text(exemptions)
         with (
             patch.object(openapi_breaking, "ROOT", root),
             patch.object(openapi_breaking, "merge_base", return_value=base),
@@ -140,6 +160,12 @@ class VerdictTests(SimpleTestCase):
         warned = [line for line in lines[: errors[0]] if " 5 warnings" in line]
         self.assertEqual(len(warned), 1)
         self.assertIn("oasdiff breaking", warned[0])
+
+    def test_an_entry_the_base_already_holds_admits_nothing(self):
+        entry = f"- error at {DOCUMENT}, in API POST /api/v2/example/4/ API path removed without deprecation. Reason: none\n"
+        code, lines = self.judge(entry, on_base=entry, removed={4})
+        self.assertEqual(code, 1)
+        self.assertTrue([line for line in lines if "/api/v2/example/4/" in line and line.startswith("error at")])
 
     def test_warnings_alone_pass(self):
         code, lines = self.judge("# Admitted breaks\n", trimmed={1, 3})

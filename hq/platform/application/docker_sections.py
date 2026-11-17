@@ -21,9 +21,8 @@ from .docker_estate import IMAGE_BEHIND, image_verdicts
 from .entity_links import entity_link
 from .facts import Subject, readings
 from .labels import human_bytes
-from .moments import when_day
+from .moments import moment, when_day
 from .service_context import Cell, ServiceSection
-from .timestamps import moment
 from .ui import MISSING, counted
 
 

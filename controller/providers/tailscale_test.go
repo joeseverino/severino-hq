@@ -267,47 +267,6 @@ func TestTailscaleApproveRoutes(t *testing.T) {
 	}
 }
 
-func policyView(t *testing.T, policy string) tailnetPolicyView {
-	t.Helper()
-	view, err := tailnetPolicyDocument(policy).view()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return view
-}
-
-func TestRefuseWeakerTests(t *testing.T) {
-	live := `{"tests": [
-		{"src": "a-laptop", "accept": ["a-server:443"], "deny": ["a-server:22"]},
-		{"src": "a-phone", "proto": "tcp", "accept": ["a-server:443"]}]}`
-	cases := []struct {
-		name, declared, refusal string
-	}{
-		{"no tests", `{"tests": []}`, "carries no tests"},
-		{"dropped deny", `{"tests": [
-			{"src": "a-laptop", "accept": ["a-server:443"]},
-			{"src": "a-phone", "proto": "tcp", "accept": ["a-server:443"]}]}`, `no longer tests that "a-laptop" is denied "a-server:22"`},
-		{"dropped source", `{"tests": [{"src": "a-laptop", "accept": ["a-server:443"], "deny": ["a-server:22"]}]}`, `drops the tests for "a-phone" over tcp`},
-		{"kept and extended", `{"tests": [
-			{"src": "a-laptop", "accept": ["a-server:443", "a-server:80"], "deny": ["a-server:22", "a-server:23"]},
-			{"src": "a-phone", "proto": "tcp", "accept": ["a-server:443"]}]}`, ""},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			err := refuseWeakerTests(policyView(t, live), policyView(t, c.declared))
-			if c.refusal == "" {
-				if err != nil {
-					t.Fatal(err)
-				}
-				return
-			}
-			if err == nil || !strings.Contains(err.Error(), c.refusal) {
-				t.Fatalf("%v", err)
-			}
-		})
-	}
-}
-
 const (
 	livePolicy     = `{"acls":[{"action":"accept","src":["*"],"dst":["*:*"]}],"tests":[{"src":"a-laptop","accept":["a-server:443"]}]}`
 	declaredPolicy = `{"acls":[{"action":"accept","src":["a-laptop"],"dst":["a-server:443"]}],"tests":[{"src":"a-laptop","accept":["a-server:443"]}]}`
@@ -319,12 +278,12 @@ func policyReconcile(t *testing.T, api *tailnetAPIServer, document string, apply
 	return r.runAction(t.Context(), runtime.ResourceKindTailscalePolicy, "reconcile", Object{"document": document}, nil, apply)
 }
 
-// The write is held to the version the deny check judged, taken from that
-// same read, never a second GET.
-func TestPolicyWriteUsesTheETagOfTheCheckedRead(t *testing.T) {
+// The write is held to the version of the read it was compared with, never a
+// second GET, and is the only check an apply asks of Tailscale: the write runs
+// the document's tests.
+func TestPolicyWriteUsesTheETagOfTheComparedRead(t *testing.T) {
 	api := newTailnetAPI(t, map[string]tailnetAnswer{
-		"GET /tailnet/-/acl":           {body: livePolicy, etag: `"v1"`},
-		"POST /tailnet/-/acl/validate": {},
+		"GET /tailnet/-/acl": {body: livePolicy, etag: `"v1"`},
 		"POST /tailnet/-/acl": {body: declaredPolicy, then: map[string]tailnetAnswer{
 			"GET /tailnet/-/acl": {body: declaredPolicy, etag: `"v2"`},
 		}},
@@ -333,12 +292,48 @@ func TestPolicyWriteUsesTheETagOfTheCheckedRead(t *testing.T) {
 	if err != nil || !res.Changed {
 		t.Fatalf("%v %#v", err, res)
 	}
-	want := []string{"POST /oauth/token", "GET /tailnet/-/acl", "POST /tailnet/-/acl/validate", "POST /tailnet/-/acl", "GET /tailnet/-/acl"}
+	want := []string{"POST /oauth/token", "GET /tailnet/-/acl", "POST /tailnet/-/acl", "GET /tailnet/-/acl"}
 	if got := api.requests(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("%v", got)
 	}
 	if write, _ := api.sent("POST /tailnet/-/acl"); write.ifMatch != `"v1"` {
 		t.Fatalf("If-Match %q", write.ifMatch)
+	}
+}
+
+// An approved document is applied whatever it opens or whichever tests it
+// drops: the person who approved it judged that, and Tailscale runs the tests
+// it keeps on the write.
+func TestApprovedPolicyDroppingADenyTestApplies(t *testing.T) {
+	live := `{"grants":[],"tests":[{"src":"a-laptop","accept":["a-server:443"],"deny":["a-server:22"]}]}`
+	declared := `{"grants":[{"src":["a-laptop"],"dst":["a-server"],"ip":["22"]}],"tests":[{"src":"a-laptop","accept":["a-server:443"]}]}`
+	untested := `{"grants":[{"src":["a-laptop"],"dst":["a-server"],"ip":["22"]}]}`
+	for _, document := range []string{declared, untested} {
+		api := newTailnetAPI(t, map[string]tailnetAnswer{
+			"GET /tailnet/-/acl": {body: live, etag: `"v1"`},
+			"POST /tailnet/-/acl": {body: document, then: map[string]tailnetAnswer{
+				"GET /tailnet/-/acl": {body: document, etag: `"v2"`},
+			}},
+		})
+		res, err := policyReconcile(t, api, document, true)
+		if err != nil || !res.Changed {
+			t.Fatalf("%s: %v %#v", document, err, res)
+		}
+		if write, wrote := api.sent("POST /tailnet/-/acl"); !wrote || write.body != document {
+			t.Fatalf("%s: wrote %v %q", document, wrote, write.body)
+		}
+	}
+}
+
+// A write Tailscale refuses for a failing test says what Tailscale said.
+func TestPolicyWriteRefusedByItsTestsSaysWhy(t *testing.T) {
+	api := newTailnetAPI(t, map[string]tailnetAnswer{
+		"GET /tailnet/-/acl":  {body: livePolicy, etag: `"v1"`},
+		"POST /tailnet/-/acl": {status: http.StatusBadRequest, body: `{"message":"test(s) failed","data":[{"user":"a-laptop","errors":["a-server:443 denied"]}]}`},
+	})
+	_, err := policyReconcile(t, api, declaredPolicy, true)
+	if err == nil || !strings.Contains(err.Error(), "test(s) failed; a-laptop: a-server:443 denied") {
+		t.Fatalf("%v", err)
 	}
 }
 
@@ -523,7 +518,7 @@ const apiDevices = `{"devices": [
 	 "authorized": true, "user": "ops@example.com", "tags": ["tag:server", "tag:edge"],
 	 "advertisedRoutes": ["0.0.0.0/0", "::/0"], "enabledRoutes": ["0.0.0.0/0"],
 	 "clientConnectivity": {"endpoints": ["192.0.2.10:41641"]}, "sshEnabled": true,
-	 "tailnetLockKey": "tlpub:0f4e1c9a2b7d3e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7"},
+	 "tailnetLockKey": "nlpub:0f4e1c9a2b7d3e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7"},
 	{"hostname": "a-laptop", "name": "a-laptop.example.ts.net.", "lastSeen": "2026-09-01T00:00:00Z",
 	 "expires": "2027-01-01T00:00:00Z", "keyExpiryDisabled": true, "authorized": false}]}`
 

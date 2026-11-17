@@ -5,10 +5,10 @@ never loose between the page's cards."""
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import Element, all_elements
 from hq.platform.application.problems import problem_counts
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import cli_principal
-from hq.platform.application.tests.markup import Element, all_elements
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.names import MACHINE
 from hq.platform.core.example_estate.testing import throwaway_media
@@ -33,8 +33,13 @@ class ProblemRowTests(TestCase):
     def test_a_row_about_a_container_sits_in_the_machines_containers_card(self):
         page = all_elements(self.client.get(reverse("control_plane:machine", kwargs={"name": MACHINE})))
 
-        # Each row's urgency panel names the rule that raised it.
-        marks = [element for element in page if element.tag == "dialog" and _ABOUT_A_CONTAINER in element.words]
+        # Each row's urgency panel names the rule that raised it; its copy on
+        # the row's open line is the row's too.
+        marks = [
+            element
+            for element in page
+            if element.tag == "dialog" and _ABOUT_A_CONTAINER in element.words and not element.beneath
+        ]
         self.assertTrue(marks)
         for mark in marks:
             row = next(ancestor for ancestor in mark.ancestors if "data-attention-item" in ancestor.attrs)

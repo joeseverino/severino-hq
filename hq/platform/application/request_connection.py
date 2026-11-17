@@ -1,10 +1,11 @@
 """How this request reached HQ, and what had to be true for it to arrive.
 
-It describes the reader: their address, device and person, and each layer that
-had to hold for the request to get this far. Every line is read from something
-that would change if the fact changed (the settings the middleware enforces,
-the installed backends, the tailnet, the policy as Tailscale evaluated it), so
-a layer can say it does not hold, where "secure" would stay with the gate off.
+It describes the reader: their address, device and person, and each check of
+the request standard (``request_standard``) that had to hold for the request
+to get this far. Every line is read from something that would change if the
+fact changed (the settings the middleware enforces, the installed backends,
+the tailnet, the policy as Tailscale evaluated it), so a check can say it is
+not met, where "secure" would stay with the gate off.
 """
 
 from dataclasses import dataclass
@@ -12,24 +13,24 @@ from datetime import datetime
 from ipaddress import ip_address
 from typing import Any
 
-from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
+from hq.platform.core.network import split_host_port
 
 from . import tailnet
-from .freshness import PAGE_VISIT, freshness
 from .labels import dotted, human_bytes
 from .reach import network_of, on_link_networks
-from .request_channel import Channel, channel_for_request, displayed_client_ip, encryption, forwarded_chain
+from .request_channel import Channel, encryption, forwarding_of
 from .request_identity import Identity, identity_of
-from .request_layers import Layer, ServingDeviceResolution, admission_layers
+from .request_standard import RequestFacts, ServingDeviceResolution, measure_request
+from .standards import CheckResult, Measurement, Standing
+from .tone import Tone
 from .ui import MISSING, counted
 lazy from . import connections
 lazy from .entity_links import entity_link
 lazy from .hq_self import hq_machine, hq_service, own_addresses, served_at
 lazy from .infrastructure import declared_machines
 lazy from .locate import index_of
-lazy from .moments import ago
+lazy from .moments import ago, moment
 lazy from .tailnet_presence import tailnet_presence
-lazy from .timestamps import moment
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,23 +80,11 @@ def _peering(presence) -> Peering | None:
 
 @dataclass(frozen=True, slots=True)
 class Connection:
-    """One request, described from the outside in."""
+    """One request, described from the outside in: what HQ read of it, and
+    that read measured against the request standard."""
 
-    address: str
-    channel: Channel
-    device: tailnet.Device | None
-    serves: tailnet.Device | None
-    observer: tailnet.Device | None
-    identity: Identity
-    # A device correlated from a forwarded address that HQ will show as
-    # evidence but will not use for admission until the forwarding peer is a
-    # declared proxy. Keeping it separate from ``device`` prevents display
-    # knowledge from quietly becoming authorization knowledge.
-    reported_device: tailnet.Device | None = None
-    reported_address: str = ""
-    layers: tuple[Layer, ...] = ()
-    secure_transport: bool = False
-    host: str = ""
+    facts: RequestFacts
+    checks: Measurement
     # The machine pages behind the two ends, where HQ knows a machine at the
     # address each one answers at. A tailnet name is rarely the name HQ uses,
     # so this is resolved by address rather than by matching the two names.
@@ -103,31 +92,75 @@ class Connection:
     machine_name: str = ""
     forwarder_name: str = ""
     forwarder_url: str = ""
-    forwarded: bool = False
     local_forwarder: bool = False
     serves_url: str = ""
-    # What HQ was told about its machines, read once and answering every
-    # relationship this page draws: which machine each end of the link is, and
-    # which of a node's addresses are ones HQ was actually declared at.
-    declared: tuple = ()
-    untrusted_forwarding: bool = False
-    serves_verified: bool = False
-    serving_basis: str = ""
-    # The caller device's tailnet presence, as the machine page reads it: the
-    # one account of the link's path, handshake and traffic.
-    presence: Any = None
+
+    @property
+    def address(self) -> str:
+        return self.facts.address
+
+    @property
+    def channel(self) -> Channel:
+        return self.facts.channel
+
+    @property
+    def device(self) -> tailnet.Device | None:
+        return self.facts.device
+
+    @property
+    def serves(self) -> tailnet.Device | None:
+        return self.facts.serves
+
+    @property
+    def observer(self) -> tailnet.Device | None:
+        return self.facts.observer
+
+    @property
+    def identity(self) -> Identity:
+        return self.facts.identity
+
+    @property
+    def reported_device(self) -> tailnet.Device | None:
+        return self.facts.reported_device
+
+    @property
+    def forwarded(self) -> bool:
+        return self.facts.forwarded
+
+    @property
+    def untrusted_forwarding(self) -> bool:
+        return self.facts.untrusted_forwarding
+
+    @property
+    def serving_basis(self) -> str:
+        return self.facts.serving.basis
+
+    @property
+    def presence(self) -> Any:
+        return self.facts.presence
+
+    @property
+    def host(self) -> str:
+        return self.facts.host
+
+    @property
+    def declared(self) -> tuple:
+        return self.facts.declared
+
+    @property
+    def failing(self) -> tuple[CheckResult, ...]:
+        """The checks not met that count against the request: a check of HQ's
+        standard is an open item, shown quietly, unless Advanced HQ Posture is on."""
+
+        return tuple(result for result in self.checks.unmet if result.enforced)
+
+    @property
+    def unverified(self) -> tuple[CheckResult, ...]:
+        return tuple(result for result in self.checks.results if result.state == Standing.UNAVAILABLE)
 
     @property
     def holds(self) -> bool:
-        return all(layer.holds and layer.conclusive for layer in self.layers)
-
-    @property
-    def failing(self) -> tuple[Layer, ...]:
-        return tuple(layer for layer in self.layers if layer.conclusive and not layer.holds)
-
-    @property
-    def unverified(self) -> tuple[Layer, ...]:
-        return tuple(layer for layer in self.layers if not layer.conclusive)
+        return not self.failing and not self.unverified
 
     @property
     def verdict(self) -> str:
@@ -145,12 +178,19 @@ class Connection:
 
         if self.channel.id != "tailnet" or self.verdict == "confirmed":
             return self.channel.tone
-        return "attention" if self.verdict == "failing" else "neutral"
+        return Tone.ATTENTION if self.verdict == "failing" else Tone.NEUTRAL
 
     @property
     def summary(self) -> str:
+        """How the checks stand; one left open quietly is counted, never failed."""
+
+        total = len(self.checks.results)
         if self.holds:
-            return f"All {len(self.layers)} checks passed"
+            return (
+                f"All {total} checks passed"
+                if self.checks.met == total
+                else f"{self.checks.met} of {total} checks passed"
+            )
         parts = []
         if self.failing:
             parts.append(f"{len(self.failing)} failed")
@@ -166,21 +206,22 @@ class Connection:
 
         if self.holds:
             return self.summary
-        return f"{counted(len(self.layers), 'check')}, {self.summary}"
+        return f"{counted(len(self.checks.results), 'check')}, {self.summary}"
 
     @property
     def transport(self) -> str:
-        return encryption(self.channel, self.secure_transport)
+        return encryption(self.channel, self.facts.secure)
 
     @property
     def transport_path(self) -> str:
         """Which segment each encrypted transport protects."""
 
-        if self.forwarded and self.channel.id == "tailnet" and self.secure_transport:
+        secure = self.facts.secure
+        if self.forwarded and self.channel.id == "tailnet" and secure:
             if self.local_forwarder:
                 return "WireGuard + TLS to HQ's machine"
             return dotted(f"TLS to {self.forwarder_name or 'proxy'}", "WireGuard to HQ")
-        if self.channel.id == "tailnet" and self.secure_transport:
+        if self.channel.id == "tailnet" and secure:
             return "WireGuard + TLS end to end"
         return self.transport
 
@@ -207,7 +248,7 @@ class Connection:
 
     @property
     def peer_address(self) -> str:
-        return self.reported_address if self.reported_device else self.address
+        return self.facts.reported_address if self.reported_device else self.address
 
     @property
     def path(self) -> str:
@@ -241,7 +282,9 @@ class Connection:
     def link_observed_by_hq(self) -> bool:
         """Whether the daemon measurement is provably from HQ's own node."""
 
-        return bool(self.serves_verified and self.observer and self.serves and self.observer.name == self.serves.name)
+        return bool(
+            self.facts.serving.verified and self.observer and self.serves and self.observer.name == self.serves.name
+        )
 
     @property
     def measurement_label(self) -> str:
@@ -304,109 +347,74 @@ class Connection:
 
     @property
     def tailnet_observed_at(self) -> datetime | None:
-        """When the device/path evidence was last swept from Tailscale."""
-
-        return _tailnet_observed_at(self.presence, self.observer)
+        return self.facts.tailnet_observed_at
 
     @property
     def tailnet_current(self) -> bool:
-        """Whether the tailnet reading is recent enough that opening the panel
-        would not ask for it again. Only then is a value read from it said as
-        it is now; otherwise as it was when last read, which is no fault."""
-
-        return _tailnet_current(self.tailnet_observed_at)
+        return self.facts.tailnet_current
 
 
-def _tailnet_observed_at(presence, observer: tailnet.Device | None) -> datetime | None:
-    if presence is not None:
-        return presence.observed_at
-    return observer.observed_at if observer is not None else None
+def request_facts(request, *, edge=None, firewall=None, principal=None) -> RequestFacts:
+    """What HQ reads about the request in front of it, once; ``principal``
+    is the caller an agent's door authenticated."""
 
-
-def _tailnet_current(observed: datetime | None) -> bool:
-    """The one judgment of ``Connection.tailnet_current``, also handed to the
-    admission layers, which are built before the connection exists."""
-
-    return observed is not None and not freshness(PAGE_VISIT, observed).due
-
-
-def connection(request, *, edge=None, firewall=None, principal=None) -> Connection:
-    """Everything HQ can say about the request in front of it; ``principal``
-    is the caller an agent's door authenticated, judged by its device's approval."""
-
-    address = client_ip(request)
-    peer = socket_peer(request)
-    forwarded = bool(forwarded_chain(request))
-    forwarding_trusted = forwarded and is_trusted_proxy(peer)
-    untrusted_forwarding = forwarded and not forwarding_trusted
-    # (see `_serving_device_resolution` for why the observer flag is not the answer)
-    # A chain that never named the caller is its own answer, and a more useful
-    # one than the class its last proxy happens to fall in. Reporting "local
-    # network" here would describe the proxy and read as a fact about the
-    # person, which is the one confusion this page exists to prevent.
-    channel = channel_for_request(request)
+    forwarding = forwarding_of(request)
+    address, peer, untrusted_forwarding = forwarding.client, forwarding.peer, forwarding.untrusted
     # One read of the sweep, answering every question asked of it below.
     known = tailnet.devices()
     device = tailnet.device_at(address, known)
-    forwarder = tailnet.device_at(peer, known) if forwarded else None
-    reported_address = displayed_client_ip(request) if untrusted_forwarding else ""
+    reported_address = forwarding.reported if untrusted_forwarding else ""
     reported_device = tailnet.device_at(reported_address, known)
-    identity = identity_of(request, None if untrusted_forwarding else device, principal)
-
     declared = declared_machines()
-
     own = hq_service(request, catalog=connections.machines_once())
-    serving = _serving_device_resolution(known, declared, served_at(request), machine=own.machine if own else "")
-    # A fallback observer is useful provenance, but it is not a placement
-    # result. Never use it as HQ's policy target or draw it as HQ's endpoint.
-    serves = serving.device if serving.verified else None
-    observer = tailnet.observer(known)
     peer_device = reported_device if untrusted_forwarding else device
-    presence = tailnet_presence().get(peer_device.name) if peer_device else None
-    machine_name = _machine_name(peer_device.addresses if peer_device else (), declared)
-    forwarder_name = _machine_name((peer,), declared) if forwarded else ""
-    serves_name = _machine_name(serves.addresses if serves else (), declared)
-    return Connection(
+    return RequestFacts(
+        request=request,
         address=address,
-        channel=channel,
+        # A chain that never named the caller is its own answer, and a more
+        # useful one than the class its last proxy happens to fall in.
+        # Reporting "local network" here would describe the proxy and read as
+        # a fact about the person, which is the one confusion this page
+        # exists to prevent.
+        channel=forwarding.channel,
+        identity=identity_of(request, None if untrusted_forwarding else device, principal),
+        host=request.get_host(),
+        secure=bool(request.is_secure()),
+        forwarding=forwarding,
+        known=known,
         device=device,
+        forwarder=tailnet.device_at(peer, known) if forwarding.forwarded else None,
         reported_device=reported_device,
         reported_address=reported_address,
-        serves=serves,
-        observer=observer,
+        # (see `_serving_device_resolution` for why the observer flag is not the answer)
+        serving=_serving_device_resolution(known, declared, served_at(request), machine=own.machine if own else ""),
+        observer=tailnet.observer(known),
+        presence=tailnet_presence().get(peer_device.name) if peer_device else None,
+        lock=tailnet.policy().lock if device is not None else {},
+        declared=declared,
+        edge=edge,
+        firewall=firewall,
+    )
+
+
+def connection(request, *, edge=None, firewall=None, principal=None) -> Connection:
+    """Everything HQ can say about the request in front of it, judged by
+    ``principal``'s device approval when an agent's door authenticated it."""
+
+    facts = request_facts(request, edge=edge, firewall=firewall, principal=principal)
+    peer_device = facts.reported_device if facts.untrusted_forwarding else facts.device
+    machine_name = _machine_name(peer_device.addresses if peer_device else (), facts.declared)
+    forwarder_name = _machine_name((facts.peer,), facts.declared) if facts.forwarded else ""
+    serves = facts.serves
+    return Connection(
+        facts,
+        measure_request(facts),
         machine_url=_machine_url(machine_name),
         machine_name=machine_name,
         forwarder_name=forwarder_name,
         forwarder_url=_machine_url(forwarder_name),
-        forwarded=forwarded,
-        local_forwarder=forwarded and network_of(peer) == "loopback",
-        serves_url=_machine_url(serves_name),
-        declared=declared,
-        identity=identity,
-        untrusted_forwarding=untrusted_forwarding,
-        serves_verified=serving.verified,
-        serving_basis=serving.basis,
-        presence=presence,
-        secure_transport=bool(request.is_secure()),
-        host=request.get_host(),
-        layers=admission_layers(
-            request,
-            address,
-            channel,
-            device,
-            forwarder,
-            serves,
-            identity,
-            known,
-            forwarded=forwarded,
-            forwarding_trusted=forwarding_trusted,
-            forwarding_peer=peer,
-            serving=serving,
-            observer=observer,
-            tailnet_current=_tailnet_current(_tailnet_observed_at(presence, observer)),
-            edge=edge,
-            firewall=firewall,
-        ),
+        local_forwarder=facts.forwarded and network_of(facts.peer) == "loopback",
+        serves_url=_machine_url(_machine_name(serves.addresses if serves else (), facts.declared)),
     )
 
 

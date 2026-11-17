@@ -8,9 +8,10 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.platform.application import roles
-from hq.platform.application.card_items import Insight, Kpi
+from hq.platform.application.card_items import Kpi
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot, work_queue
 from hq.platform.application.domains import Domain, host_domains
+from hq.platform.application.finding_model import Finding
 from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
@@ -36,7 +37,12 @@ def contributor(name, *, origin="extension", attention=None, dashboard=None, ove
 
 
 def urgent(title):
-    return Insight("serious", "Example", title, "1", "Look into it.", key=title)
+    return Finding(rule="example", subject=title, severity="serious", title=title, explanation="Look into it.")
+
+
+def good_source(domain: str) -> tuple[Finding, ...]:
+    # The content section raises one item; every other host section raises none.
+    return (urgent("Good source item"),) if domain == "hq.content" else ()
 
 
 def cards(name, count=3):
@@ -65,8 +71,14 @@ class UnreadableSourceTests(TestCase):
         self.assertIn(source_id, record.getMessage())
         self.assertIsNotNone(record.exc_info)
 
-    def test_a_raising_host_attention_source_is_one_item_and_the_rest_of_the_queue_renders(self):
-        self.assertTheQueueRendersBeside("host")
+    def test_a_raising_host_section_is_one_item_and_the_rest_of_the_queue_renders(self):
+        def raised(domain: str) -> tuple[Finding, ...]:
+            if domain == "hq.expenses":
+                raise RuntimeError("stored readings no longer parse")
+            return good_source(domain)
+
+        self.enterContext(patch("hq.platform.application.attention.raised", side_effect=raised))
+        self.assertTheQueueRenders("hq.expenses", "Expenses")
 
     def test_a_raising_extension_attention_source_is_one_item_and_the_rest_of_the_queue_renders(self):
         self.assertTheQueueRendersBeside("extension")
@@ -76,32 +88,35 @@ class UnreadableSourceTests(TestCase):
             contributor("good", origin=origin, attention=lambda: (urgent("Good source item"),)),
             contributor("broken", origin=origin, attention=broken),
         )
+        self.assertTheQueueRenders("example.broken", "Example broken")
+
+    def assertTheQueueRenders(self, source_id, label):
         with self.assertLogs(LOGGER, "ERROR") as logs:
             home = self.client.get("/")
-        self.assertLogsTheFailure(logs, "example.broken")
+        self.assertLogsTheFailure(logs, source_id)
         items = self.client.get("/action-items/")
         snapshot = operating_snapshot(principal=cli_principal())
 
         self.assertEqual(home.status_code, 200)
         self.assertContains(home, "Good source item")
         self.assertContains(items, "Good source item")
-        self.assertContains(items, "Example broken could not be read")
+        self.assertContains(items, f"{label} could not be read")
         labels = {item["label"]: item["status"] for item in snapshot["priority"]}
         self.assertEqual(labels["Good source item"], "serious")
-        self.assertEqual(labels["Example broken could not be read"], "attention")
+        self.assertEqual(labels[f"{label} could not be read"], "attention")
 
     def test_a_source_that_reads_again_is_asked_again_and_its_neighbors_are_not(self):
-        good = Mock(return_value=(urgent("Good source item"),))
+        good = Mock(side_effect=good_source)
+        self.enterContext(patch("hq.platform.application.attention.raised", good))
         failing = Mock(side_effect=RuntimeError("stored readings no longer parse"))
-        self.composing(
-            contributor("good", origin="host", attention=good),
-            contributor("flaky", attention=failing),
-        )
+        self.composing(contributor("flaky", attention=failing))
 
         for _ in range(2):
             with projection_scope(), self.assertLogs(LOGGER, "ERROR"):
                 queued = [item["label"] for item in work_queue()]
             self.assertIn("Example flaky could not be read", queued)
+            self.assertIn("Good source item", queued)
+            composed = good.call_count
         failing.side_effect = None
         failing.return_value = (urgent("Flaky source item"),)
         with projection_scope():
@@ -110,8 +125,10 @@ class UnreadableSourceTests(TestCase):
         self.assertIn("Flaky source item", queued)
         self.assertNotIn("Example flaky could not be read", queued)
         self.assertEqual(failing.call_count, 3)
-        # The host's part did not compose the failure, so it stood throughout.
-        good.assert_called_once()
+        # The host's part did not compose the failure, so it stood throughout:
+        # each of its sections was asked once, on the first composition.
+        self.assertEqual(good.call_count, composed)
+        self.assertEqual(len({call.args for call in good.call_args_list}), composed)
 
     def test_a_raising_dashboard_source_is_an_unreadable_card_beside_the_good_ones(self):
         self.composing(

@@ -17,6 +17,6 @@ block of its own, so a grid or flex parent never stretches the button.
 `body_template` is rendered with the surrounding context.
 {% endcomment %}
 <div>
-  <button class="btn ghost compact" type="button" command="show-modal" commandfor="modal-{{ id }}" aria-haspopup="dialog">{% include "partials/_icon.html" with name="info" %}{{ label|default:title|button_words }}</button>
+  {% with dialog="modal-"|add:id %}{% button label|default:title look="ghost compact" icon="info" command="show-modal" commandfor=dialog aria_haspopup="dialog" %}{% endwith %}
   {% include "partials/_modal.html" with id=id title=title lede=lede body_template=body_template %}
 </div>

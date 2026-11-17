@@ -2,28 +2,42 @@
 
 from unittest import mock
 
-from django.test import RequestFactory, SimpleTestCase, override_settings
+from django.test import SimpleTestCase
 
-from ..request_layers import _name_layer
+from ..request_channel import TAILNET_CHANNEL
+from ..request_identity import Identity
+from ..request_standard import RequestFacts, _name
+from ..standards import Standing
 
 
-@override_settings(ALLOWED_HOSTS=["*"])
 class NameLayerTests(SimpleTestCase):
-    def layer(self, host):
-        request = RequestFactory().get("/", HTTP_HOST=host)
-        with mock.patch("hq.platform.application.request_layers.public_answers_for", return_value=()) as answers:
-            return _name_layer(request), answers
+    def reading(self, host):
+        facts = RequestFacts(
+            request=None, address="192.0.2.10", channel=TAILNET_CHANNEL, identity=Identity(), host=host
+        )
+        with mock.patch("hq.platform.application.request_standard.public_answers_for", return_value=()) as answers:
+            return _name(facts), answers
 
     def test_a_request_by_address_is_not_judged_by_dns(self):
-        for host in ("192.0.2.10:8000", "[2001:db8::1]:8000"):
+        for host in ("192.0.2.10:8000", "[2001:db8::1]:8000", "not a name!", ""):
             with self.subTest(host=host):
-                layer, answers = self.layer(host)
+                reading, answers = self.reading(host)
 
-                self.assertEqual(layer.state, "unknown")
+                self.assertIs(reading.standing, Standing.UNAVAILABLE)
                 answers.assert_not_called()
 
     def test_a_name_with_no_public_record_holds(self):
-        layer, answers = self.layer("hq.example.test:8000")
+        reading, answers = self.reading("hq.example.test:8000")
 
-        self.assertEqual(layer.state, "holds")
+        self.assertIs(reading.standing, Standing.MET)
         answers.assert_called_once_with("hq.example.test")
+
+    def test_a_name_with_a_public_record_does_not(self):
+        facts = RequestFacts(
+            request=None, address="192.0.2.10", channel=TAILNET_CHANNEL, identity=Identity(), host="hq.example.test"
+        )
+        with mock.patch("hq.platform.application.request_standard.public_answers_for", return_value=("203.0.113.7",)):
+            reading = _name(facts)
+
+        self.assertIs(reading.standing, Standing.UNMET)
+        self.assertIn("203.0.113.7", reading.evidence)

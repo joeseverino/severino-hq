@@ -4,10 +4,7 @@ Each takes an optional ``idempotency_key``, declared once from its effect; a
 repeat carrying the same key returns the first result. A ``read`` takes none.
 """
 
-import tempfile
-from pathlib import Path
-
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest, ReadRequest
 from hq.domains.projects.models import Project
@@ -20,11 +17,6 @@ from ..security import Capability, Principal, cli_principal
 
 REFRESH = "infrastructure.controller.refresh"
 RECONCILE = "infrastructure.resource.reconcile"
-DIRECTORY = Path(tempfile.mkdtemp())
-MARKERS = override_settings(
-    SEVERINO_CONTROLLER_DOORBELL=str(DIRECTORY / "doorbell"),
-    SEVERINO_ACTIVITY_MARKER=str(DIRECTORY / "activity"),
-)
 
 
 class DeclaredOnceTests(TestCase):
@@ -49,7 +41,6 @@ class DeclaredOnceTests(TestCase):
                 self.assertFalse(schema["additionalProperties"])
 
 
-@MARKERS
 class RefreshTests(TestCase):
     def ask(self, principal=None, **payload):
         return execute_capability(REFRESH, payload, principal=principal or cli_principal())
@@ -58,7 +49,7 @@ class RefreshTests(TestCase):
         result = self.ask(every_connection=True, idempotency_key="refresh-once")
 
         self.assertTrue(result["ok"], result)
-        self.assertTrue(result["requested"])
+        self.assertTrue(result["standing"], result)
 
     def test_it_still_runs_without_one_and_records_nothing_to_replay(self):
         self.assertTrue(self.ask(every_connection=True)["ok"])
@@ -131,9 +122,8 @@ class ReadTests(TestCase):
         self.assertEqual(result["error"]["code"], "invalid_input")
 
 
-@MARKERS
 class ReconcileTests(TestCase):
-    """A command that stores the key with what it queues takes it the same way."""
+    """A command that queues an operation takes the key the same way."""
 
     KEY = "example-rewrite"
 
@@ -153,12 +143,6 @@ class ReconcileTests(TestCase):
 
         self.assertTrue(result["ok"], result)
         self.assertTrue(result["queued"])
-        self.assertTrue(OperationRequest.objects.get().idempotency_key.startswith("command:"))
-
-    def test_the_callers_key_is_the_one_the_operation_keeps(self):
-        self.ask(idempotency_key="reconcile-once")
-
-        self.assertEqual(OperationRequest.objects.get().idempotency_key, "reconcile-once")
 
     def test_a_repeat_with_the_same_key_returns_the_first_result(self):
         first = self.ask(idempotency_key="reconcile-once")
@@ -167,6 +151,47 @@ class ReconcileTests(TestCase):
 
         self.assertEqual(second, first)
         self.assertEqual(OperationRequest.objects.count(), 1)
+
+    def test_a_key_used_for_another_record_is_a_conflict(self):
+        ManagedResource.objects.create(
+            key="example-other", kind="adguard.rewrite", spec={"domain": "other.example.com", "answer": "192.0.2.11"}
+        )
+        self.ask(idempotency_key="reconcile-once")
+
+        other = execute_capability(
+            RECONCILE, {"idempotency_key": "reconcile-once"}, principal=cli_principal(), target="example-other"
+        )
+
+        self.assertEqual(other["error"]["code"], "idempotency_conflict")
+        self.assertEqual(OperationRequest.objects.count(), 1)
+
+
+class CommandKeyTests(TestCase):
+    """The runner keeps the retry key: no command is handed it to answer a retry a second way."""
+
+    def test_a_command_that_declares_the_key_is_refused(self):
+        from dataclasses import dataclass
+        from typing import TypedDict
+
+        from ..integration_specs import CapabilitySpec
+
+        @dataclass(frozen=True)
+        class Keyed:
+            idempotency_key: str = ""
+
+        class KeyedDict(TypedDict, total=False):
+            idempotency_key: str
+
+        for command in (Keyed, KeyedDict):
+            with self.subTest(command=command.__name__), self.assertRaisesMessage(TypeError, IDEMPOTENCY_FIELD):
+                CapabilitySpec(
+                    name="example.keyed",
+                    summary="Example.",
+                    effect="remote_write",
+                    required_capability=Capability.READ,
+                    command_type=command,
+                    handler=lambda command, *, principal: {"ok": True},
+                )
 
 
 class PolicyTests(TestCase):

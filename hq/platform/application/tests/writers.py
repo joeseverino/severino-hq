@@ -2,7 +2,7 @@
 
 A function writes when its body writes a model (an instance's ``save`` or
 ``delete``, a manager's or queryset's bulk write), calls the service a view
-declares (``self.service``, which a form mixin's contract makes a mutation),
+declares (``self.service``, which the walk cannot follow, so it counts as one),
 or calls a function that does, followed through every name a module defines
 or imports from ``hq``. Read from the source, so a writer added later is found
 without anybody listing it.
@@ -10,7 +10,7 @@ without anybody listing it.
 
 import ast
 import secrets
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import asdict, dataclass, field
 from functools import partial
 from pathlib import Path
@@ -19,9 +19,10 @@ from typing import Any
 # Every import of Django or HQ is lazy, so the walk's own process (apart.py) loads none.
 lazy from django.http import HttpResponse
 
+lazy from hq.platform.application.markup_testing import all_elements
+
 from .apart import apart
 lazy from ..web_writes import RETRY_KEY_FIELD
-lazy from .markup import all_elements
 lazy from .source import source_files
 
 # The chokepoint as a browser's form reaches it, under the key the form
@@ -36,27 +37,17 @@ CHOKEPOINTS = frozenset(
     }
 )
 
-# The one way around the runner, handed the write itself as a lambda it runs
-# under the posted key, and the one module whose lambdas it keys: the
-# published form mixins, for an extension's view whose service is no
-# capability. An extension's view reaching it is listed in its own repository;
-# a view of the host's reaching it is a write outside the runner.
-KEYED_LAMBDAS = {"hq.platform.application.writes.outside_the_runner": "hq.platform.application.writes"}
-
-# What a host view's write run through ``outside_the_runner`` is said to call.
-OUTSIDE = "outside the runner"
 # What a view method's call is said to be when the walk cannot follow it and it hands
 # over a principal, which only a write or the chokepoint takes from a view.
 UNFOLLOWED = "a call it cannot follow, handed principal="
+
+# What a call to a view's declared service resolves to.
+DECLARED_SERVICE = "a declared service"
 
 # Rows that record who called, not what they changed: an audit event, a
 # refusal (an audit event, coalesced) and an identity observation (when an
 # agent was last seen). None is a domain write, so a function reaching only
 # these does not write, and anything may reach them.
-
-# What a call to a view's declared service resolves to.
-DECLARED_SERVICE = "a declared service"
-
 RECORDS_OF_CALLERS = frozenset(
     {
         "hq.platform.core.audit.record_event",
@@ -78,8 +69,6 @@ class _Function:
     node: ast.FunctionDef | ast.AsyncFunctionDef
     owner: str = ""
     calls: set[str] = field(default_factory=set)
-    # What it calls inside a lambda a keyed chokepoint runs, under the posted key.
-    keyed_calls: set[str] = field(default_factory=set)
     writes: bool = False
     # Whether it hands ``principal=`` to a call the walk cannot follow.
     hands_principal: bool = False
@@ -202,25 +191,11 @@ def _canonical(name: str, modules: dict[str, _Module]) -> str:
     return name
 
 
-def _bases(node: ast.ClassDef, module: str, entry: _Module, modules: dict[str, _Module]) -> set[str]:
-    """The dotted name of each base ``node`` names, where it is defined."""
-
-    named = set()
-    for base in node.bases:
-        if isinstance(base, ast.Name):
-            named.add(f"{module}.{base.id}" if base.id in entry.defines else entry.bound.get(base.id, ""))
-        elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name) and base.value.id in entry.bound:
-            named.add(f"{entry.bound[base.value.id]}.{base.attr}")
-    return {_canonical(name, modules) for name in named - {""}}
-
-
-def _functions(modules: dict[str, _Module], classes: dict[str, set[str]]) -> Iterator[_Function]:
-    """Every function the modules define, at their top level or in a class, and each class's bases into ``classes``."""
+def _functions(modules: dict[str, _Module]) -> Iterator[_Function]:
+    """Every function the modules define, at their top level or in a class."""
 
     for module, entry in modules.items():
         for node in entry.tree.body:
-            if isinstance(node, ast.ClassDef):
-                classes[f"{module}.{node.name}"] = _bases(node, module, entry, modules)
             for owner, child in _members(node):
                 yield _read(child, module, owner, entry, modules)
 
@@ -237,7 +212,7 @@ def _members(node: ast.stmt) -> Iterator[tuple[str, ast.FunctionDef | ast.AsyncF
 def _read(
     node: ast.FunctionDef | ast.AsyncFunctionDef, module: str, owner: str, entry: _Module, modules: dict[str, _Module]
 ) -> _Function:
-    """The function ``node`` defines, with what it calls, what it calls under a posted key, and whether it writes."""
+    """The function ``node`` defines, with what it calls and whether it writes."""
 
     found = _Function(node.name, module, node, owner)
     called = partial(_called, module=module, owner=owner, bound=entry.bound, local=entry.defines)
@@ -245,11 +220,8 @@ def _read(
     def resolve(call: ast.Call) -> str:
         return _canonical(called(call), modules)
 
-    for call, under_key in _runs(node, resolve, module):
+    for call in _runs(node):
         name = resolve(call)
-        if under_key:
-            found.keyed_calls.update({name} - {""})
-            continue
         found.writes = found.writes or _writes_directly(call)
         if name:
             found.calls.add(name)
@@ -258,14 +230,11 @@ def _read(
     return found
 
 
-def _runs(
-    node: ast.FunctionDef | ast.AsyncFunctionDef, resolve: Callable[[ast.Call], str], module: str
-) -> Iterator[tuple[ast.Call, bool]]:
-    """The calls running ``node`` makes, each with whether it runs under a posted key.
+def _runs(node: ast.FunctionDef | ast.AsyncFunctionDef) -> Iterator[ast.Call]:
+    """The calls running ``node`` makes.
 
     A function it defines counts once it uses it, and not when it only hands
-    the function back (a factory). A lambda ``module`` hands a chokepoint in
-    ``KEYED_LAMBDAS`` runs under that call's key.
+    the function back (a factory).
     """
 
     returned = {
@@ -276,19 +245,14 @@ def _runs(
     used = {
         name.id for name in ast.walk(node) if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Load)
     } - returned
-    pending: list[tuple[ast.AST, bool]] = [(statement, False) for statement in node.body]
+    pending: list[ast.AST] = list(node.body)
     while pending:
-        current, under_key = pending.pop()
+        current = pending.pop()
         if isinstance(current, ast.FunctionDef | ast.AsyncFunctionDef) and current.name not in used:
             continue
         if isinstance(current, ast.Call):
-            yield current, under_key
-            if not under_key and KEYED_LAMBDAS.get(resolve(current)) == module:
-                arguments = (*current.args, *(keyword.value for keyword in current.keywords))
-                pending.append((current.func, False))
-                pending.extend((argument, isinstance(argument, ast.Lambda)) for argument in arguments)
-                continue
-        pending.extend((child, under_key) for child in ast.iter_child_nodes(current))
+            yield current
+        pending.extend(ast.iter_child_nodes(current))
 
 
 def _dotted(function: _Function) -> str:
@@ -297,11 +261,10 @@ def _dotted(function: _Function) -> str:
 
 def writers(
     root: Path, also: Sequence[Path] = (), packages: Sequence[Path] = ()
-) -> tuple[dict[str, _Function], set[str], dict[str, set[str]]]:
-    """Every function by dotted name, the names of those that make a domain write, and each class's bases."""
+) -> tuple[dict[str, _Function], set[str]]:
+    """Every function by dotted name, and the names of those that make a domain write."""
 
-    classes: dict[str, set[str]] = {}
-    functions = {_dotted(function): function for function in _functions(_modules(root, also, packages), classes)}
+    functions = {_dotted(function): function for function in _functions(_modules(root, also, packages))}
     for function in functions.values():
         declared = f"{function.module}.{function.owner}.service"
         if function.owner and declared in function.calls and declared not in functions:
@@ -315,7 +278,7 @@ def writers(
             if name not in writing and name not in RECORDS_OF_CALLERS and function.calls & writing:
                 writing.add(name)
                 grew = True
-    return functions, writing, classes
+    return functions, writing
 
 
 @dataclass(frozen=True)
@@ -347,73 +310,22 @@ def _view_writes(root: str, view_modules: list[str], packages: list[str]) -> lis
 
 
 def _found(root: Path, view_modules: list[Path], packages: list[Path]) -> list[ViewWrite]:
-    functions, writing, classes = writers(root, view_modules, packages)
+    functions, writing = writers(root, view_modules, packages)
     view_names = {_module_name(root, path, packages) for path in view_modules}
-    # An installed extension's views, which alone may still write outside the runner.
-    extension_names = {
-        _module_name(root, path, packages) for path in view_modules if any(map(path.is_relative_to, packages))
-    }
-    entered, keyed = _keyed(functions, classes)
     found = []
     for name, function in sorted(functions.items()):
-        if function.module not in view_names or name in KEYED_LAMBDAS:
-            continue
-        if name in keyed:
-            if (
-                name in entered
-                and function.module not in extension_names
-                and function.module not in KEYED_LAMBDAS.values()
-            ):
-                found.append(ViewWrite(function.module, name.removeprefix(f"{function.module}."), OUTSIDE))
+        if function.module not in view_names:
             continue
         if function.hands_principal and function.owner:
             found.append(ViewWrite(function.module, name.removeprefix(f"{function.module}."), UNFOLLOWED))
         if function.writes:
             found.append(ViewWrite(function.module, name.removeprefix(f"{function.module}."), DIRECT))
         for service in sorted(function.calls & writing):
-            if service in CHOKEPOINTS or KEYED_LAMBDAS.get(service) == function.module:
+            if service in CHOKEPOINTS:
                 continue
-            if service in functions and functions[service].module in view_names and service not in keyed:
+            if service in functions and functions[service].module in view_names:
                 continue
             found.append(ViewWrite(f"{function.module}", name.removeprefix(f"{function.module}."), service))
-    return found
-
-
-def _keyed(functions: dict[str, _Function], classes: dict[str, set[str]]) -> tuple[set[str], set[str]]:
-    """The functions a write under the posted key enters by (those a keyed lambda
-    calls, and a subclass's override of one, a form view's ``run``), and those
-    with everything they call.
-
-    A write outside the runner is said at the function it enters by: a host
-    helper an extension's write happens to call is that extension's write.
-    One is still a write when a view calls it outside such a lambda, which
-    ``view_writes`` reports at that caller.
-    """
-
-    keyed = {name for function in functions.values() for name in function.keyed_calls if name in functions}
-    for name, function in functions.items():
-        if function.owner and any(
-            f"{base}.{function.name}" in keyed for base in _ancestors(f"{function.module}.{function.owner}", classes)
-        ):
-            keyed.add(name)
-    entered = set(keyed)
-    pending = list(keyed)
-    while pending:
-        for called in functions[pending.pop()].calls:
-            if called in functions and called not in keyed:
-                keyed.add(called)
-                pending.append(called)
-    return entered, keyed
-
-
-def _ancestors(name: str, classes: dict[str, set[str]]) -> set[str]:
-    found: set[str] = set()
-    pending = list(classes.get(name, ()))
-    while pending:
-        base = pending.pop()
-        if base not in found:
-            found.add(base)
-            pending.extend(classes.get(base, ()))
     return found
 
 

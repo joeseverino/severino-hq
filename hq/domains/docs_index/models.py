@@ -4,53 +4,25 @@ The Obsidian vault remains the source of truth, so HQ stores no runbook bodies
 and no secrets, only enough to point an assistant at the right place.
 """
 
-from datetime import timedelta
 from typing import override
 
-from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from django.urls import reverse
 
 from hq.platform.application.labels import dotted
+from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.application.ui import ended
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule
-lazy from hq.platform.application.derivations import today
 
 
-class DocumentationQuerySet(models.QuerySet):
-    def needing_review(self):
-        """Active docs past the configured review interval (or never reviewed).
-
-        The one shared definition used by the dashboard, the docs list filter,
-        and the reports page.
-        """
-        review_days = settings.SEVERINO_DOC_REVIEW_INTERVAL_DAYS
-
-        cutoff = today() - timedelta(days=review_days)
-        return self.filter(
-            Q(last_reviewed__isnull=True) | Q(last_reviewed__lt=cutoff),
-            status=self.model.Status.ACTIVE,
-        ).exclude(
-            # Not documentation about a system, so reviewing clears nothing, and a
-            # queue must never hold an item reviewing cannot clear: a public
-            # article draft belongs to the Content pipeline, a report is a frozen
-            # record, and a queue note is generated from its items, so it is
-            # current whenever the tool writes it.
-            doc_type__in=(
-                self.model.DocType.PUBLIC_ARTICLE_DRAFT,
-                self.model.DocType.REPORT,
-                self.model.DocType.QUEUE,
-            )
-        )
-
-
-class DocStatus(models.TextChoices):
-    DRAFT = "draft", "Draft"
-    ACTIVE = "active", "Active"
-    DEPRECATED = "deprecated", "Deprecated"
-    ARCHIVED = "archived", "Archived"
+class DocStatus(TonedChoices):
+    DRAFT = "draft", Tone.NEUTRAL, "Draft"
+    ACTIVE = "active", Tone.GOOD, "Active"
+    # Still read, and due its replacement or its archive.
+    DEPRECATED = "deprecated", Tone.ATTENTION, "Deprecated"
+    ARCHIVED = "archived", Tone.NEUTRAL, "Archived"
 
 
 class DocumentationRecord(TimestampedModel):
@@ -79,6 +51,8 @@ class DocumentationRecord(TimestampedModel):
     # Declared above the model so the rule in ``Meta`` can name its values.
     Status = DocStatus
 
+    # A classification, not a standing, so it takes no tone: a page draws
+    # it as a chip in its own words.
     class Sensitivity(models.TextChoices):
         PUBLIC = "public", "Public"
         INTERNAL = "internal", "Internal"
@@ -123,7 +97,8 @@ class DocumentationRecord(TimestampedModel):
     )
     external_url = models.URLField("external URL", blank=True)
 
-    last_reviewed = models.DateField(null=True, blank=True)
+    # The vault stamps it on every edit of the doc, so it is when the doc last changed.
+    last_reviewed = models.DateField("last changed", null=True, blank=True)
     published_at = models.DateField(
         null=True,
         blank=True,
@@ -137,8 +112,6 @@ class DocumentationRecord(TimestampedModel):
     related_projects = models.ManyToManyField("projects.Project", blank=True, related_name="documentation_records")
     related_assets = models.ManyToManyField("assets.Asset", blank=True, related_name="documentation_records")
     related_expenses = models.ManyToManyField("expenses.Expense", blank=True, related_name="documentation_records")
-
-    objects = DocumentationQuerySet.as_manager()
 
     class Meta:
         ordering = ("-updated_at",)
@@ -165,6 +138,12 @@ class DocumentationRecord(TimestampedModel):
 
     def get_absolute_url(self) -> str:
         return reverse("docs_index:detail", args=[self.doc_id])
+
+    @property
+    def state(self) -> DocStatus:
+        """Its status as the member its pill is drawn from, in its words and tone."""
+
+        return DocStatus(self.status)
 
     @property
     def is_safe_for_ai_export(self) -> bool:

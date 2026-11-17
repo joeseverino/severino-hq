@@ -6,5 +6,5 @@ references, so it carries no secret.
 {% step %}
   <strong>{{ step.label|breakable }}</strong>
   {% if step.command %}{% include "partials/_command.html" with command=step.command only %}{% endif %}
-  {% for note in step.notes %}<span class="muted">{{ note|breakable }}</span>{% endfor %}
+  {% for note in step.notes %}{% muted %}{{ note|breakable }}{% endmuted %}{% endfor %}
 {% endstep %}

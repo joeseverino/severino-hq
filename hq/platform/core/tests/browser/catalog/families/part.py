@@ -19,11 +19,13 @@ from hq.domains.jobs.models import Job, JobState
 from hq.platform.application import calendar
 from hq.platform.application.appearance import Theme
 from hq.platform.application.approval_review import SUMMARY, Asked, ChangePreview, compare, grouped
+from hq.platform.application.approvals import DECISIONS, NO_OFFER, Offer, _decision_link
 from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, WAITING, Ask, Standing
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 from hq.platform.application.capability_policy import RULE_LABELS, Column, Group, PolicyCell, Row
 from hq.platform.application.card_items import Insight, Kpi, ListRow, Timeline, TimelineItem
 from hq.platform.application.command_center import DiscoveryItem
+from hq.platform.application.contracts import Effect
 from hq.platform.application.credential_mint import CredentialFix
 from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, StripTile, Trend
 from hq.platform.application.entity_links import EntityLink
@@ -31,16 +33,17 @@ from hq.platform.application.finding_model import OperatorStep
 from hq.platform.application.freshness import CURRENT, STALE, Freshness
 from hq.platform.application.pages import Page, PageAction, PageVisit
 from hq.platform.application.payload_words import ChangeRow
-from hq.platform.application.posture import CheckOutcome, CheckStanding, Posture, PostureCheck
 from hq.platform.application.relationships import RelationGroup, Relationship, Relationships
 from hq.platform.application.request_channel import NETWORK_CHANNEL, TAILNET_CHANNEL
 from hq.platform.application.request_connection import Connection, Peering
 from hq.platform.application.request_identity import Identity
-from hq.platform.application.request_layers import Layer
+from hq.platform.application.request_standard import RequestFacts, ServingDeviceResolution
 from hq.platform.application.security import MCP_INTERFACE
+from hq.platform.application.standards import Check, Reading, Standing as CheckStanding, measure
 from hq.platform.application.tables import TableSort
 from hq.platform.application.tailnet import Device
 from hq.platform.application.tailnet_presence import Presence
+from hq.platform.application.tone import Tone
 from hq.platform.application.ui import (
     PageNavigation,
     PageSection,
@@ -49,12 +52,13 @@ from hq.platform.core.models import AgentIdentity
 from hq.platform.core.templatetags.action_tags import MOST_BESIDE
 from hq.platform.core.tests.browser.catalog.common import DRAWN_AT, HEAD, Entry
 from hq.platform.core.tests.browser.selectors import SELECTORS
-lazy from hq.platform.application.dashboard import queue_item
+lazy from hq.platform.application.dashboard import finding_rows
+lazy from hq.platform.application.finding_model import Finding
 lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.path_model import Certificate, Hop, Route
-lazy from hq.platform.application.request_path import CONTRADICTED, PROVEN, HopCheck
-lazy from hq.platform.application.work_runs import RunEvidence
+lazy from hq.platform.application.request_path import HopCheck
+lazy from hq.platform.application.work_runs import RunEvidence, outcome_tone
 
 # The fields of an example record, as a change sets them and as two records hold them.
 _CHANGED_AFTER = {
@@ -187,22 +191,23 @@ def _month_gone_by(month=date(2026, 1, 1)):
 def _problems(*titles, family="", status="attention"):
     """The queue's items about a thing, each with its meaning and the check that reads again."""
 
-    return [
-        queue_item(
+    return list(
+        finding_rows(
             "example",
             "Example",
-            Insight(
-                status=status,
-                eyebrow="",
-                title=title,
-                value="",
-                body="What it means for the thing this page is about, in one sentence.",
-                key=f"example:{title}",
-                family=family,
+            tuple(
+                Finding(
+                    rule="example",
+                    subject=title,
+                    severity=status,
+                    title=title,
+                    explanation="What it means for the thing this page is about, in one sentence.",
+                    family=family,
+                )
+                for title in titles
             ),
         )
-        for title in titles
-    ]
+    )
 
 
 def _policy():
@@ -214,7 +219,7 @@ def _policy():
     options = (("", "Default"), *((rule, words) for rule, words in RULE_LABELS.items()))
     column = Column("example-agent", "example-agent", "MCP", AgentIdentity(client_id="example-agent"))
 
-    def row(name, label, effect, effect_label, default, rule, unavailable=""):
+    def row(name, label, effect, default, rule, unavailable=""):
         cell = PolicyCell(
             f"example-agent-{name}",
             column.label,
@@ -223,7 +228,7 @@ def _policy():
             unavailable=unavailable,
             label=f"{label}, for {column.label}",
         )
-        return Row(name, label, effect, effect_label, default, (cell,))
+        return Row(name, label, effect, default, (cell,))
 
     return {
         "columns": (column,),
@@ -232,21 +237,19 @@ def _policy():
             Group(
                 "Example records",
                 (
-                    row("example.edit", "Edit an example record", "write", "Changes HQ", "On", "allow"),
-                    row("example.move", "Move an example record", "write", "Changes HQ", "On", None),
+                    row("example.edit", "Edit an example record", Effect.REMOTE_WRITE, "On", "allow"),
+                    row("example.move", "Move an example record", Effect.REMOTE_WRITE, "On", None),
                     row(
                         "example.stop",
                         "Stop an example container",
-                        "destructive",
-                        "Stops or deletes",
+                        Effect.DESTRUCTIVE,
                         "Ask me first",
                         "approve",
                     ),
                     row(
                         "example.delete",
                         "Delete an example record",
-                        "destructive",
-                        "Stops or deletes",
+                        Effect.DESTRUCTIVE,
                         "Ask me first",
                         "deny",
                     ),
@@ -254,7 +257,7 @@ def _policy():
             ),
             Group(
                 "Example hosts",
-                (row("example.read", "Read an example host", "read", "", "On", None, "Not granted"),),
+                (row("example.read", "Read an example host", Effect.READ, "On", None, "Not granted"),),
             ),
         ),
     }
@@ -311,14 +314,14 @@ def _approval(state, **decided):
             "tone": "attention" if pending else "",
             "asked": Asked("example-agent", "wants to adopt the playbooks", "", ""),
             "preview": compare({}, _CHANGED_AFTER, label="Would change"),
-            "warnings": (
-                "example-ansible-requirements.yml changed. It sets which Ansible collections playbooks can use.",
-            )
-            if pending
-            else (),
+            "warnings": ("The check playbook can read changed files every playbook can read.",) if pending else (),
             "resource_url": "/example/",
             "resource_label": "Playbooks",
             "resource_open": "Open Playbooks",
+            # As an operator is offered it: both decisions while it waits.
+            "offer": Offer(tuple(_decision_link(held.id, decision) for decision in DECISIONS), "")
+            if pending
+            else NO_OFFER,
         }
     }
 
@@ -330,14 +333,24 @@ def _route():
     return Route(
         via="example record",
         hops=(
-            Hop("device", "Your device", name="example-laptop", check=HopCheck(PROVEN, "Example address 192.0.2.10.")),
-            Hop("dns", "Internal DNS", name="app.example.com", check=HopCheck(PROVEN, "Example answer 192.0.2.20.")),
+            Hop(
+                "device",
+                "Your device",
+                name="example-laptop",
+                check=HopCheck(CheckStanding.MET, "Example address 192.0.2.10."),
+            ),
+            Hop(
+                "dns",
+                "Internal DNS",
+                name="app.example.com",
+                check=HopCheck(CheckStanding.MET, "Example answer 192.0.2.20."),
+            ),
             Hop(
                 "ingress",
                 "Proxy",
                 name="example-proxy-host-with-a-long-name.example.com",
                 certificate=Certificate("Proxy", name="app.example.com", issuer="Example CA"),
-                check=HopCheck(CONTRADICTED, "The example request came another way."),
+                check=HopCheck(CheckStanding.UNMET, "The example request came another way."),
             ),
             Hop(
                 "machine",
@@ -395,27 +408,31 @@ def _connection(channel=TAILNET_CHANNEL, *, path="direct", held=True, linked=Tru
         else None
     )
     tailnet = channel is TAILNET_CHANNEL
-    return Connection(
+    facts = RequestFacts(
+        request=None,
         address="192.0.2.10",
         channel=channel,
         device=laptop if tailnet else None,
-        serves=hq if tailnet else None,
-        observer=None,
+        serving=ServingDeviceResolution(hq if tailnet else None, verified=tailnet, basis="example"),
         identity=Identity(username="example", tailnet_user=laptop.user if tailnet else ""),
-        layers=(
-            Layer(
-                "example-check",
-                "Example check",
-                holds=not failing,
-                detail="An example check.",
-                conclusive=held or failing,
-            ),
-        ),
-        secure_transport=True,
+        secure=True,
         host="hq.example.com",
+        presence=presence,
+    )
+    detail = "An example check."
+    reading = (
+        Reading.unmet(detail=detail)
+        if failing
+        else Reading.met(detail=detail)
+        if held
+        else Reading.unavailable("", detail=detail)
+    )
+    check = Check("example-check", "Example check", lambda _facts: reading, "", "", unmet="")
+    return Connection(
+        facts,
+        measure(facts, (check,)),
         machine_url="/example/machines/example-laptop/" if linked else "",
         serves_url="/example/machines/example-hq/" if linked else "",
-        presence=presence,
     )
 
 
@@ -423,12 +440,11 @@ def _posture(met, *, advanced=True):
     """The estate's posture, one example check for each reading in ``met``:
     met, not met, or ``None`` for not read."""
 
-    def standing(index, held):
-        outcome = CheckOutcome(met=held, evidence="")
-        check = PostureCheck(f"example-{index}", f"Example check {index}", "", "", "", "", read=lambda inputs: outcome)
-        return CheckStanding(check, outcome)
+    def check(index, held):
+        reading = Reading.unavailable("") if held is None else Reading.judged(held)
+        return Check(f"example-{index}", f"Example check {index}", lambda _subject: reading, "", "", unmet="")
 
-    return Posture(advanced, tuple(standing(index, held) for index, held in enumerate(met, 1)))
+    return measure(None, tuple(check(index, held) for index, held in enumerate(met, 1)), enforced=advanced)
 
 
 def _repository_postures():
@@ -632,10 +648,10 @@ def _palette():
     }
 
 
-def _event(task: str, outcome: str, tone: str, *, host: str = "example-01", message: str = "") -> dict:
+def _event(task: str, outcome: str, *, host: str = "example-01", message: str = "") -> dict:
     """A task's outcome as a run reports it (the bridge's ``RunEvent``), with its tone."""
 
-    return {"host": host, "task": task, "outcome": outcome, "message": message, "tone": tone}
+    return {"host": host, "task": task, "outcome": outcome, "message": message, "tone": outcome_tone(outcome)}
 
 
 _LONG_HOST = "example-machine-with-a-long-name-01.example.com"
@@ -643,7 +659,7 @@ _EXAMPLE_RUNS = (
     (
         "Run example.cache_flush",
         "Running",
-        "active",
+        JobState.RUNNING.tone,
         "Applying the example playbook.",
         RunEvidence(
             hosts=("example-01", "example-02"),
@@ -651,16 +667,16 @@ _EXAMPLE_RUNS = (
             worker="example-automation-worker",
             lease_until=datetime(2026, 3, 2, 9, 35, tzinfo=UTC),
             events=(
-                _event("Flush the example cache", "changed", "active"),
-                _event("Check the example cache", "ok", "good", host="example-02"),
+                _event("Flush the example cache", "changed"),
+                _event("Check the example cache", "ok", host="example-02"),
             ),
         ),
     ),
-    ("Refresh playbooks", "Queued", "paused", "Waiting for HQ to start it.", RunEvidence()),
+    ("Refresh playbooks", "Queued", JobState.QUEUED.tone, "Waiting for HQ to start it.", RunEvidence()),
     (
         "Run example.package_upgrade",
         "Failed",
-        "serious",
+        JobState.FAILED.tone,
         "The example upgrade failed on one machine.",
         RunEvidence(
             hosts=(_LONG_HOST,),
@@ -669,7 +685,6 @@ _EXAMPLE_RUNS = (
                 _event(
                     "Upgrade every example package to the release the example repository pins",
                     "failed",
-                    "serious",
                     host=_LONG_HOST,
                     message="example-package-with-a-long-name 2.0.1 conflicts with "
                     "example-other-package-with-a-long-name 1.4.0, which the example machine also holds.",
@@ -680,17 +695,14 @@ _EXAMPLE_RUNS = (
     (
         "Run example.disk_report",
         "Done",
-        "good",
+        JobState.SUCCEEDED.tone,
         "Reported every example disk.",
         RunEvidence(
             hosts=("example-01",),
             stated=("example.filesystem", "example.reading_with_a_longer_name"),
             events=tuple(
-                _event(f"Example task {number}", outcome, tone)
-                for number, (outcome, tone) in enumerate(
-                    (("ok", "good"), ("changed", "active"), ("skipped", "paused"), ("unreachable", "serious")) * 3,
-                    start=1,
-                )
+                _event(f"Example task {number}", outcome)
+                for number, outcome in enumerate(("ok", "changed", "skipped", "unreachable") * 3, start=1)
             ),
         ),
     ),
@@ -892,7 +904,7 @@ ENTRIES = {
                 (
                     Share("Cash", 4200, 1, url="/example/?type=cash", detail="$4,200.00"),
                     Share("Investments", 12800, 3, url="/example/?type=investment", detail="$12,800.00"),
-                    Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone="attention"),
+                    Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone=Tone.ATTENTION),
                 ),
             )
         },
@@ -930,6 +942,12 @@ ENTRIES = {
         "{% card %}<p>An example line about the card.</p>"
         '{% section "Example preview" count=2 %}<p>An example line in the inner section.</p>'
         '{% aside %}<span class="pill pill-neutral">Example state</span>{% endsection %}{% endcard %}'
+    ),
+    # Muted words as a line beside a value and as a paragraph under it.
+    "part/muted": Entry(
+        '{% section "Example muted words" %}<p>3 example checks {% muted %}since the last read{% endmuted %}</p>'
+        '{% muted element="p" %}An example sentence under the value, long enough to wrap at a phone width.'
+        "{% endmuted %}{% endsection %}"
     ),
     # A reading as a folded section, open: its long lines wrap in the frame and
     # only its height scrolls.
@@ -1011,19 +1029,19 @@ ENTRIES = {
                     "$15,500.00",
                     "+$1,240.00 in the last 30 days",
                     url="/example/accounts/",
-                    detail_tone="good",
+                    detail_tone=Tone.GOOD,
                     drawing=AllocationBar(
                         "Example assets by kind",
                         (
                             Share("Cash", 4200, 1, url="/example/?type=cash", detail="$4,200.00"),
                             Share("Investments", 12800, 3, url="/example/?type=investment", detail="$12,800.00"),
-                            Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone="attention"),
+                            Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone=Tone.ATTENTION),
                         ),
                     ),
                 ),
-                Kpi("Since yesterday", "+$120.00", tone="good"),
-                Kpi("Available credit", "$8,000.00", tone="neutral"),
-                Kpi("Unrealized gain", "−$40.00", tone="attention"),
+                Kpi("Since yesterday", "+$120.00", tone=Tone.GOOD),
+                Kpi("Available credit", "$8,000.00", tone=Tone.NEUTRAL),
+                Kpi("Unrealized gain", "−$40.00", tone=Tone.ATTENTION),
             ]
         },
     ),
@@ -1051,15 +1069,21 @@ ENTRIES = {
                     "Example savings",
                     detail="3 example accounts",
                     actions=(
-                        PageAction("↑", "/example/group/", method="post", value="up", title="Move up", disabled=True),
-                        PageAction("↓", "/example/group/", method="post", value="down", title="Move down"),
-                        PageAction("Remove", "/example/group/", method="post", value="delete", danger=True),
+                        PageAction._built(
+                            label="↑", url="/example/group/", method="post", value="up", title="Move up", disabled=True
+                        ),
+                        PageAction._built(
+                            label="↓", url="/example/group/", method="post", value="down", title="Move down"
+                        ),
+                        PageAction._built(
+                            label="Remove", url="/example/group/", method="post", value="delete", danger=True
+                        ),
                     ),
                 ),
                 ListRow(
                     "Example checking",
                     url="/example/checking/",
-                    status="attention",
+                    status=Tone.ATTENTION,
                     badge="Needs review",
                     meta="2 example accounts",
                     at=date(2026, 11, 2),
@@ -1209,7 +1233,7 @@ ENTRIES = {
     # A stack list ({% stack_list %}): a status with its words, one whose
     # link stands alone, and a note; then in a table, a row's notes under its name and a list
     # the open row shows under its label. A new option of the tag comes with
-    # an entry here (test_stack_tags).
+    # an entry here (CatalogTests in test_part_tags).
     "part/stack-list": Entry(
         '{% section "Example advisories" %}{% stack_list data_example="example" %}'
         '<li class="prose">{% status "High" tone="serious" %} <a href="/example/advisory/">EXAMPLE-2026-0001</a> '
@@ -1267,14 +1291,14 @@ ENTRIES = {
     # A month with days gone by, each kind of entry on them: their words are
     # still links a reader follows, so they read as text in play does.
     "part/month-gone-by": Entry(
-        '{% section "Example month" %}{% include "calendars/_month_grid.html" %}{% endsection %}',
+        '{% section "Example month" %}{% include "partials/_month_grid.html" %}{% endsection %}',
         {"calendar": _month_gone_by()},
     ),
     # A month compact, as the dashboard draws it beside its recent projects:
     # where things are, each a dot or a sliver, the day opening the rest.
     "part/month-compact": Entry(
         '<div class="section-flow">{% section "Example month 2" %}'
-        '{% include "calendars/_month_grid.html" with compact=True %}{% endsection %}'
+        '{% include "partials/_month_grid.html" with compact=True %}{% endsection %}'
         '{% section "Example projects" %}{% include "partials/_record_list.html" %}{% endsection %}</div>',
         {
             "calendar": _month_gone_by(date(2026, 5, 1)),
@@ -1293,7 +1317,7 @@ ENTRIES = {
     # flow of sections: the month takes the room, the sections keep their
     # basis beside it and pair up once they wrap under it.
     "part/month-split": Entry(
-        '<div class="split">{% section "Example month 3" %}{% include "calendars/_month_grid.html" %}'
+        '<div class="split">{% section "Example month 3" %}{% include "partials/_month_grid.html" %}'
         '{% endsection %}<aside class="section-flow">{% section "Example identity 6" %}' + _NARROW + "{% endsection %}"
         '{% section "Example link 6" %}' + _NARROW + "{% endsection %}</aside></div>",
         {"calendar": _month_gone_by(date(2026, 9, 1))},
@@ -1313,7 +1337,7 @@ ENTRIES = {
         },
     ),
     # Facts ({% facts %}) in each layout and with each option; a new layout
-    # or option of the tags comes with an entry here (test_facts_tags). A
+    # or option of the tags comes with an entry here (CatalogTests in test_part_tags). A
     # zero beside a linked count stands on its value's line, as the Agents
     # card's counts do.
     "part/facts-band": Entry(
@@ -1489,7 +1513,8 @@ ENTRIES = {
         },
     ),
     # The notice ({% notice %}) in each tone and with each option; a new tone
-    # or option of the tag comes with an entry here (test_notice_tags).
+    # or option of the tag comes with an entry here (test_notice_tags for
+    # a tone, CatalogTests in test_part_tags for an option).
     "part/notice-neutral": Entry(
         '{% notice css="example" data_example="example" %}An example line that needs saying first, '
         'with <a href="/example/">an example link</a>.{% endnotice %}'
@@ -1720,7 +1745,7 @@ ENTRIES = {
     "part/command-center-empty": Entry('{% include "partials/_command_center.html#results" %}', {"q": "example-none"}),
     # A control label ({% control_label %}) with no control, naming the answer
     # that follows it; the filter bar above draws it for its controls
-    # (test_label_tags).
+    # (CatalogTests in test_part_tags).
     "part/control-label": Entry(
         '{% card element="article" label="Example stage" %}{% control_label "Example receiving" %}'
         "<p><strong>Example provider</strong></p>{% endcard %}"
@@ -1846,8 +1871,8 @@ ENTRIES = {
                 actions=(
                     Ask("Refresh", "/example/refresh/", title="Reads the example repository again."),
                     PageAction("View diff", "/example/scan/"),
-                    PageAction("Adopt all", "/example/adopt/", method="post"),
-                    PageAction("Reject all", "/example/reject/", method="post"),
+                    PageAction._built(label="Adopt all", url="/example/adopt/", method="post"),
+                    PageAction._built(label="Reject all", url="/example/reject/", method="post"),
                 ),
             ),
             "page_beside": MOST_BESIDE,
@@ -1912,7 +1937,7 @@ ENTRIES = {
         {
             "items": [
                 Insight(
-                    "attention",
+                    Tone.ATTENTION,
                     "Example readiness",
                     "Example records missing a category",
                     "12",
@@ -1920,15 +1945,15 @@ ENTRIES = {
                     action="Give each one a category.",
                     url="/example/records/",
                 ),
-                Insight("good", "Example pace", "Example pace this month", "On track", "Ahead of the example plan."),
+                Insight(Tone.GOOD, "Example pace", "Example pace this month", "On track", "Ahead of the example plan."),
                 Insight(
-                    "serious",
+                    Tone.SERIOUS,
                     "Example spend",
                     "An example reading with a title long enough to wrap on a phone",
                     "$1,204.50",
                     "Spent past the example budget by a margin worth reading about.",
                 ),
-                Insight("neutral", "", "An example reading with nothing to show", "", "An example interpretation."),
+                Insight(Tone.NEUTRAL, "", "An example reading with nothing to show", "", "An example interpretation."),
             ]
         },
     ),
@@ -1940,14 +1965,14 @@ ENTRIES = {
         {
             "items": [
                 Insight(
-                    "neutral",
+                    Tone.NEUTRAL,
                     "Example receiving",
                     "Who accepts example mail?",
                     "mx1.example.com, mx2.example.com, mx3.example.com",
                     "Three example servers, tried in priority order.",
                 ),
                 Insight(
-                    "attention",
+                    Tone.ATTENTION,
                     "Example enforcing",
                     "What happens to failing example mail?",
                     "Delivered anyway",
@@ -1980,18 +2005,18 @@ ENTRIES = {
     # on), a stop not read, and one that does not hold, drawn opened.
     "part/check-ladder-route": Entry(
         '{% section "Example path 4" %}{% check_ladder route=True %}'
-        '{% check_rung state="holds" kind="Device" open=True data_example="device" %}example-laptop{% detail %}Example OS'
+        '{% check_rung state="met" kind="Device" open=True data_example="device" %}example-laptop{% detail %}Example OS'
         '{% more %}2 checks{% page %}<a href="/example/machines/example-laptop/">example-laptop</a>{% body %}<p>Example HQ confirmed this example device.</p>'
         "{% check_ladder %}"
-        '{% check_rung state="holds" evidence="192.0.2.10" %}Example address is the device\'s'
+        '{% check_rung state="met" evidence="192.0.2.10" %}Example address is the device\'s'
         "{% body %}<p>The address the request came from is the device's own.</p>{% endcheck_rung %}"
-        '{% check_rung state="does-not" evidence=long %}Example policy admits the device'
+        '{% check_rung state="unmet" evidence=long %}Example policy admits the device'
         "{% body %}<p>No example rule admits it.</p>{% stack_list %}<li><code>example:rule-one</code></li>"
         "<li><code>example:rule-two</code></li>{% endstack_list %}{% endcheck_rung %}"
         "{% endcheck_ladder %}{% endcheck_rung %}"
         '{% check_rung kind="Tailnet" %}example-tailnet.example.com{% more %}Details'
         "{% body %}<p>Example HQ could not read the tailnet.</p>{% endcheck_rung %}"
-        '{% check_rung state="does-not" kind="HQ" open=True %}hq.example.com{% more %}Details'
+        '{% check_rung state="unmet" kind="HQ" open=True %}hq.example.com{% more %}Details'
         "{% body %}<p>This request disagrees with what example HQ read here.</p>"
         '{% notice tone="warning" %}Point example-hq.example.com at the example proxy.{% endnotice %}{% endcheck_rung %}'
         "{% endcheck_ladder %}{% endsection %}",
@@ -2000,9 +2025,9 @@ ENTRIES = {
     # Checks read down as rows, with no route: each in a frame of its own.
     "part/check-ladder": Entry(
         '{% section "Example checks 2" %}{% check_ladder %}'
-        '{% check_rung state="holds" evidence="192.0.2.10" %}Example address is known'
+        '{% check_rung state="met" evidence="192.0.2.10" %}Example address is known'
         "{% body %}<p>Example HQ knows this address.</p>{% endcheck_rung %}"
-        '{% check_rung state="does-not" %}Example sign-in is linked{% body %}<p>No example account links it.</p>'
+        '{% check_rung state="unmet" %}Example sign-in is linked{% body %}<p>No example account links it.</p>'
         "{% endcheck_rung %}"
         "{% check_rung %}Example lock is read{% body %}<p>Example HQ could not read it.</p>{% endcheck_rung %}"
         "{% endcheck_ladder %}{% endsection %}",
@@ -2025,7 +2050,7 @@ ENTRIES = {
         },
     ),
     # The connection dialog before its panel arrives.
-    "part/connection-loading": Entry('{% include "core/_connection_loading.html" %}'),
+    "part/connection-loading": Entry('{% include "partials/_connection_loading.html" %}'),
     # You, the link and HQ: over the tailnet with every check confirmed and
     # both ends leading to their machines, under Advanced HQ Posture.
     "part/connection-peering": Entry(
@@ -2126,15 +2151,17 @@ ENTRIES = {
         },
     ),
     # A reading's age in each of its states: current, out of date, the moment
-    # alone, and none.
+    # alone, none, and none with why.
     "part/reading-age": Entry(
         '{% section "Example readings 4" %}{% facts %}'
         '{% fact "Example current" %}{% include "partials/_reading_age.html" with reading=current only %}{% endfact %}'
         '{% fact "Example stale" %}{% include "partials/_reading_age.html" with reading=stale only %}{% endfact %}'
         '{% fact "Example moment" %}{% include "partials/_reading_age.html" with at=at only %}{% endfact %}'
-        '{% fact "Example never" %}{% include "partials/_reading_age.html" %}{% endfact %}'
+        '{% fact "Example never" %}{% include "partials/_reading_age.html" only %}{% endfact %}'
+        '{% fact "Example unread" %}{% include "partials/_reading_age.html" with unread=unread only %}{% endfact %}'
         "{% endfacts %}{% endsection %}",
         {
+            "unread": "the registry refused an anonymous read (HTTP 401); the image may be private.",
             "current": Freshness(CURRENT, _NOW - timedelta(minutes=4), timedelta(hours=1)),
             "stale": Freshness(STALE, _NOW - timedelta(days=3), timedelta(hours=1)),
             "at": _NOW - timedelta(hours=2),
@@ -2164,7 +2191,7 @@ ENTRIES = {
     # The facts on a title's line ({% title_meta %}): a list of parts with a
     # dot between each, long enough to wrap under the title on a phone, each
     # part wrapping whole, a state as a pill and as words among them. A new option of the tag comes with an entry here
-    # (test_title_tags).
+    # (CatalogTests in test_part_tags).
     "part/title-meta": Entry(
         '{% include "partials/_page_head.html" %}{% section "Example section 3" %}<p>An example line.</p>{% endsection %}',
         {
@@ -2253,11 +2280,11 @@ ENTRIES = {
                         date(2026, 1, 19),
                         "Example certificate with a name long enough to wrap",
                         detail="example-host-01.example.com",
-                        status="attention",
+                        status=Tone.ATTENTION,
                         badge="Due soon",
                     ),
-                    TimelineItem(date(2026, 2, 2), "Example review", detail="Every quarter", status="good"),
-                    TimelineItem(date(2026, 3, 16), "Example payment", status="serious", badge="Overdue"),
+                    TimelineItem(date(2026, 2, 2), "Example review", detail="Every quarter", status=Tone.GOOD),
+                    TimelineItem(date(2026, 3, 16), "Example payment", status=Tone.SERIOUS, badge="Overdue"),
                 ),
             )
         },
@@ -2314,7 +2341,7 @@ ENTRIES = {
     # read, with a certificate, with facts under its name, and a name long
     # enough to break.
     "part/path-hops": Entry(
-        '{% section "Example path 5" %}{% include "control_plane/_path_hops.html" with route=route '
+        '{% section "Example path 5" %}{% include "partials/_path_hops.html" with route=route '
         'label="Path via example record" %}{% endsection %}',
         {"route": _route()},
     ),

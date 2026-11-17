@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
+from hq.config.networks import is_loopback
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.labels import dotted
@@ -234,7 +235,7 @@ def locate(
     # otherwise it is the machine with something listening on that port.
     # Silent when more than one qualifies, and a container is named only when
     # exactly one claims the port: a guess beside four facts reads as a fifth.
-    if _is_loopback(host_address):
+    if is_loopback(host_address):
         if loopback_on:
             claimed = _listening(loopback_on, port, at)
             return Origin(address=address, host=loopback_on, container=claimed[0] if len(claimed) == 1 else "")
@@ -276,12 +277,6 @@ def locate(
         host=name,
         container=claimed[0] if len(claimed) == 1 else "",
     )
-
-
-def _is_loopback(address: str) -> bool:
-    """Whether an address means "this machine", by the ranges rather than a name."""
-
-    return network_of(address) == "loopback"
 
 
 def _listening(host: str, port: str, at: Whereabouts | None = None) -> list[str]:

@@ -48,7 +48,7 @@ func newCheckHost(t *testing.T) *checkHost {
 		FreeBytes: DeployFreeBytes, Free: func(string) (uint64, error) { return h.free, nil },
 		Command: h.command, Out: &h.out,
 	}
-	for _, path := range []string{"deploy/bin/hq-host", ".source"} {
+	for _, path := range []string{"deploy/bin/hq-host", "deploy/bin/hq-edge", ".source"} {
 		h.file(filepath.Join(lib, path), 0o755)
 	}
 	for _, unit := range []string{"severino-hq-web.service", "severino-hq-backup.timer"} {
@@ -138,6 +138,7 @@ func TestACurrentHostIsReady(t *testing.T) {
 	h.says(out, "ok      the host is the release it runs, the runner's sudo rules with it")
 	h.says(out, "ok      every established unit is installed")
 	h.says(out, filepath.Join(h.checker.Lib, "deploy", "bin", "hq-host")+" is root's alone")
+	h.says(out, filepath.Join(h.checker.Lib, "deploy", "bin", "hq-edge")+" is root's alone")
 }
 
 func TestEachHostFaultFailsAndSaysWhatItIs(t *testing.T) {
@@ -175,6 +176,14 @@ func TestEachHostFaultFailsAndSaysWhatItIs(t *testing.T) {
 		"a sudo target that is missing": {func(h *checkHost) {
 			os.Remove(filepath.Join(h.checker.Lib, "deploy", "bin", "hq-host"))
 		}, "hq-host cannot be read"},
+		"no edge receiver to install": {func(h *checkHost) {
+			os.Remove(filepath.Join(h.checker.Lib, "deploy", "bin", "hq-edge"))
+		}, "hq-edge cannot be read; an edge installs <lib>/deploy/bin/hq-edge as its root receiver"},
+		"an edge receiver others can write": {func(h *checkHost) {
+			if err := os.Chmod(filepath.Join(h.checker.Lib, "deploy", "bin", "hq-edge"), 0o757); err != nil {
+				h.t.Fatal(err)
+			}
+		}, "hq-edge is writable by its group or others"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newCheckHost(t)

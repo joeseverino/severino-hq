@@ -1,0 +1,32 @@
+# An act is recorded once, by the application use case that does it, under the
+# operation and principal its door bound: a capability's handler or runner, or
+# an audited read's own function (reports.exported, receipts.file_taken). A
+# view or an MCP or API adapter that writes an audit row itself records under
+# whatever the request happened to bind, a second way the other doors never
+# take. record_event stays public because extensions record through hq_sdk.
+id: adapters-record-no-event
+language: python
+severity: error
+message: A view or an MCP or API adapter writes an audit row itself.
+note: Call the application function that does or reads the thing, and let it record the event under its own operation.
+files:
+  - "hq/**/views.py"
+  - "hq/**/*_views.py"
+  - "hq/**/views/**"
+  - "hq/platform/mcp/**"
+  - "hq/platform/api/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+rule:
+  kind: call
+  has:
+    field: function
+    any:
+      - kind: identifier
+        regex: ^(record_event|record_operation)$
+      - kind: attribute
+        has:
+          field: attribute
+          regex: ^(record_event|record_operation)$

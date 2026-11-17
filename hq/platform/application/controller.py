@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import timedelta
+from functools import partial
 from typing import Any
 
 from django.core.exceptions import ValidationError
@@ -13,13 +14,14 @@ from django.utils import timezone
 lazy from django.conf import settings
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS
-from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.models import OPERATION_LAPSE, ManagedResource, OperationRequest
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND
 from hq.domains.control_plane.providers import (
     PROVIDERS,
     controller_capability_registry,
     enabled_controller_actions,
+    registry_label,
 )
 from hq.platform.core.attribution import own_operation
 from hq.platform.core.audit import Outcome, work_ended
@@ -30,13 +32,14 @@ lazy from hq.domains.control_plane.secret_shapes import struck
 
 from . import agent_access
 from .adoption import manages_through, observes_only
-from .conditions import stamped
+from .conditions import DRIFTED, PROBLEMS, holding, stamped
 from .infrastructure import controller_contract, resolved_spec, serialize_resource
 from .inventory import read_as, read_since, strike_removed
+from .labels import lower_first
 from .plugin_admission import admitted_sources
-from .resource_operations import REPLACES, enqueue, serialize_operation
+from .resource_operations import REPLACES, Prepared, enqueue, serialize_operation
 lazy from .automation_sources import propose
-lazy from .cadence import request_reading, swept
+lazy from .cadence import ask, swept
 lazy from .dependency_updates import plan as dependency_updates
 lazy from .derivations import present
 lazy from .expiry import certificate_expiry, renewal_opens_at, renewal_window
@@ -45,6 +48,7 @@ lazy from .github_profile import plan as github_profiles
 lazy from .github_repositories import plan as github_repositories
 lazy from .resource_capabilities import LIFECYCLE_VERBS
 lazy from .security import CONTROLLER_INTERFACE, cli_principal
+lazy from .work_runs import AUDITED_OUTCOMES
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +129,7 @@ def _fail_lapsed_runs(now) -> None:
     lapsed = (
         OperationRequest.objects.select_for_update()
         .select_related("resource")
-        .filter(state=OperationRequest.State.CLAIMED, lease_expires_at__lte=now, action=OperationRequest.Action.RUN)
+        .filter(OPERATION_LAPSE.q(now), action=OperationRequest.Action.RUN)
         .exclude(resource__spec__retry="safe")
     )
     for operation in lapsed:
@@ -154,37 +158,43 @@ def release_lapsed(now) -> None:
     """
 
     _fail_lapsed_runs(now)
-    switched_off = Q(
-        resource__in=ManagedResource.objects.filter(enabled=False).values("pk"),
-    ) & ~Q(action=OperationRequest.Action.DELETE)
-    OperationRequest.objects.filter(
-        state=OperationRequest.State.CLAIMED,
-        lease_expires_at__lte=now,
-    ).update(
-        state=Case(
-            When(switched_off, then=Value(OperationRequest.State.CANCELLED)),
-            default=Value(OperationRequest.State.QUEUED),
-        ),
-        completed_at=Case(When(switched_off, then=Value(now)), default=None),
-        result=Case(
-            When(
-                switched_off,
-                then=Value(
-                    {
-                        "ok": False,
-                        "message": "The record was switched off in HQ before its controller finished.",
-                        "reason": "SwitchedOff",
-                    },
-                    output_field=JSONField(),
-                ),
+
+    def off(**kind: str) -> Q:
+        return Q(resource__in=ManagedResource.objects.filter(enabled=False, **kind).values("pk")) & ~Q(
+            action=OperationRequest.Action.DELETE
+        )
+
+    lapsed = OperationRequest.objects.filter(OPERATION_LAPSE.q(now))
+    switched_off = off()
+    # The ending names its record's kind, so one statement words each kind it ends.
+    with transaction.atomic():
+        kinds = set(lapsed.filter(switched_off).values_list("resource__kind", flat=True))
+        lapsed.update(
+            state=Case(
+                When(switched_off, then=Value(OperationRequest.State.CANCELLED)),
+                default=Value(OperationRequest.State.QUEUED),
             ),
-            default=F("result"),
-        ),
-        claimed_by="",
-        claimed_at=None,
-        lease_expires_at=None,
-        claim_attempt="",
-    )
+            completed_at=Case(When(switched_off, then=Value(now)), default=None),
+            result=Case(
+                *(
+                    When(off(kind=kind), then=Value(_called_off(kind), output_field=JSONField()))
+                    for kind in sorted(kinds)
+                ),
+                default=F("result"),
+            ),
+            claimed_by="",
+            claimed_at=None,
+            lease_expires_at=None,
+            claim_attempt="",
+        )
+
+
+def _called_off(kind: str) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "message": f"The {lower_first(registry_label(kind))} was switched off in HQ before its controller finished.",
+        "reason": "SwitchedOff",
+    }
 
 
 def _compatible_operations(operations, capabilities: tuple[tuple[str, str], ...]):
@@ -266,15 +276,11 @@ def _automatic_reconcile(resource: ManagedResource) -> tuple[bool, str, str]:
         return True, "Automatic: the certificate's expiry could not be read.", "invalid-expiry"
     if resource.generation != resource.observed_generation:
         return True, "Automatic: HQ's config for it changed.", "generation"
-    drifted = any(
-        item.get("status") is True and item.get("type") in {"Drifted", "Degraded"} for item in resource.conditions
-    )
-    if drifted:
+    problems = holding(resource.conditions, *PROBLEMS)
+    if problems:
         # Keyed on what drifted, so a new difference is new work the same day
         # and the same one is acted on once.
-        said = "|".join(
-            str(item.get("message", "")) for item in resource.conditions if item.get("type") in {"Drifted", "Degraded"}
-        )
+        said = "|".join(str(item.get("message", "")) for item in problems)
         digest = hashlib.sha256(said.encode()).hexdigest()[:16]
         return True, "Automatic: it was changed outside HQ.", f"drift-{digest}"
     return False, "", ""
@@ -306,6 +312,17 @@ def _automatic_action(
     return False, "", ""
 
 
+def _automatic(resource: ManagedResource, controller_id: str, reason: str) -> Prepared:
+    """What the controller queues of its own accord on ``resource``: as itself, toward its declaration."""
+
+    return resource, {
+        "requested_actor": controller_id,
+        "requested_interface": CONTROLLER_INTERFACE,
+        "reason": reason,
+        "input": {"generation": resource.generation},
+    }
+
+
 @transaction.atomic
 def _finding_repairs(controller_id: str, now) -> list[str]:
     """Queue repairs for findings the controller contract already runs itself.
@@ -328,13 +345,9 @@ def _finding_repairs(controller_id: str, now) -> list[str]:
         # Keyed on the evidence, not the attempt.
         idempotency_key = (f"finding:{repair.rule}:{resource.pk}:g{resource.generation}:{now.date().isoformat()}")[:200]
         _, created = enqueue(
-            resource,
             OperationRequest.Action.RECONCILE,
-            idempotency_key=idempotency_key,
-            requested_actor=controller_id,
-            requested_interface=CONTROLLER_INTERFACE,
-            reason=repair.reason,
-            input={"generation": resource.generation},
+            partial(_automatic, resource, controller_id, repair.reason),
+            once=idempotency_key,
         )
         if created:
             queued.append(resource.key)
@@ -371,15 +384,7 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
         idempotency_key = (
             f"controller:{action}:{resource.pk}:g{resource.generation}:{identity}:{now.date().isoformat()}"
         )[:200]
-        operation, created = enqueue(
-            resource,
-            action,
-            idempotency_key=idempotency_key,
-            requested_actor=controller_id,
-            requested_interface=CONTROLLER_INTERFACE,
-            reason=reason,
-            input={"generation": resource.generation},
-        )
+        operation, created = enqueue(action, partial(_automatic, resource, controller_id, reason), once=idempotency_key)
         if created:
             scheduled.append(str(operation.id))
     # The second source, after the contract-driven pass so anything already
@@ -423,12 +428,8 @@ def claim_next_operation(
     if attempt:
         held = (
             OperationRequest.objects.select_related("resource")
-            .filter(
-                state=OperationRequest.State.CLAIMED,
-                claimed_by=controller_id,
-                claim_attempt=attempt,
-                lease_expires_at__gt=now,
-            )
+            .filter(state=OperationRequest.State.CLAIMED, claimed_by=controller_id, claim_attempt=attempt)
+            .exclude(OPERATION_LAPSE.q(now))
             .first()
         )
         if held is not None:
@@ -487,7 +488,7 @@ def _next_resolvable(operations):
             continue
         if standing:
             with own_operation(operation):
-                _end(operation, OperationRequest.State.FAILED, {"ok": False, "message": standing, "reason": "Drifted"})
+                _end(operation, OperationRequest.State.FAILED, {"ok": False, "message": standing, "reason": DRIFTED})
             continue
         try:
             return operation, controller_contract(operation.resource)
@@ -573,7 +574,7 @@ def renew_operation(operation_id: str, *, controller_id: str, lease_seconds: int
         return _stop("Cancelled")
     if operation.state != OperationRequest.State.CLAIMED:
         raise ValueError(f"Operation is {operation.state!r}, not claimed.")
-    if operation.lease_expires_at is None or operation.lease_expires_at <= now:
+    if OPERATION_LAPSE.holds(operation, now):
         raise ValueError("Operation lease has expired.")
     expires = now + timedelta(seconds=lease_seconds)
     OperationRequest.objects.filter(pk=operation.pk).update(lease_expires_at=expires, updated_at=now)
@@ -592,7 +593,7 @@ def _read_back_lifecycle(operation: OperationRequest) -> None:
 
     kind = operation.resource.kind
     if operation.action in LIFECYCLE_VERBS and swept(kind):
-        transaction.on_commit(lambda: request_reading(kind))
+        ask(reads=(kind,))
 
 
 def report_operation(
@@ -610,7 +611,7 @@ def report_operation(
         raise ValueError(f"Operation is {operation.state!r}, not claimed.")
     if operation.claimed_by != controller_id:
         raise ValueError("Operation is leased by a different controller.")
-    if operation.lease_expires_at and operation.lease_expires_at <= timezone.now():
+    if OPERATION_LAPSE.holds(operation, timezone.now()):
         raise ValueError("Operation lease has expired.")
 
     requested_generation = operation.input.get("generation")
@@ -666,11 +667,6 @@ def _end(operation: OperationRequest, state: str, result: dict[str, Any]) -> Non
     work_ended(operation, Outcome(message=message, seconds=seconds, ok=ok, facets=() if ok else (failure,)))
 
 
-# The task outcomes a run's audit trail records one row each: what changed a
-# machine or went wrong. Every outcome stays in the run's result.
-_AUDITED_OUTCOMES = frozenset({"changed", "failed", "unreachable"})
-
-
 def _hold_stated(operation: OperationRequest, stated: dict[str, Any]) -> None:
     """Refuse what a run's playbook stated unless it keeps to ``RunStated``
     and names only the run's own machines.
@@ -719,7 +715,7 @@ def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[s
         unknown=any(condition.get("reason") == OUTCOME_UNKNOWN for condition in report.conditions),
     )
     for event in events:
-        if event["outcome"] in _AUDITED_OUTCOMES:
+        if event["outcome"] in AUDITED_OUTCOMES:
             said = {name: event[name] for name in ("host", "task", "outcome")}
             work_ended(
                 operation,

@@ -10,14 +10,15 @@ from django.urls import reverse
 from django.utils import timezone
 from pydantic import ValidationError
 
-from hq.platform.application.action_links import ActionLink
+from hq.platform.application.action_links import read_link
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.controller import ControllerReport, report_operation
 from hq.platform.application.finding_model import Finding
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
+from hq.platform.application.markup_testing import actions, hrefs, select, text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import cli_principal
-from hq.platform.application.tests.markup import actions, hrefs, select, text
+from hq.platform.application.tests.consent import consented
 from hq.platform.application.topology_model import TopologyNode
 
 from ..models import DashboardMachine, ManagedResource, OperationRequest, ProviderConnection
@@ -42,7 +43,7 @@ class InfrastructureWebTests(TestCase):
                 kind="tls.certificate",
                 spec=certificate_spec(),
             ),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         self.resource = ManagedResource.objects.get(key="example-wildcard")
 
@@ -74,6 +75,11 @@ class InfrastructureWebTests(TestCase):
         self.assertTrue(select(page, "name", "show_on_dashboard"))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(DashboardMachine.objects.get().machine, machine)
+
+        (shown,) = select(self.client.get(edit_url), "name", "show_on_dashboard")
+        self.assertIn("checked", shown.attrs)
+        (help_,) = select(page, "id", shown.attrs["aria-describedby"])
+        self.assertIn("dashboard header", help_.text)
 
     def test_detail_shows_active_observation_and_policy_gated_renewal(self):
         managing_everything()
@@ -242,8 +248,8 @@ class InfrastructureViewsTests(TestCase):
             "HQ dev stopped confirming two kinds",
             "serious",
             "The graph proves one shared cause.",
-            offers=(ActionLink("open", "Open connections", "read", "/connections/"),),
-            investigations=(ActionLink("impact", "Trace impact", "read", "/topology/?trace"),),
+            offers=(read_link("open", "Open connections", "/connections/"),),
+            investigations=(read_link("impact", "Trace impact", "/topology/?trace"),),
         )
         with patch("hq.domains.control_plane.finding_views.estate_findings", return_value=(finding,)):
             response = self.client.get(reverse("control_plane:findings"))

@@ -27,8 +27,9 @@ you, the line drawn here as `status`.
 {% comment %}
 Serious items show here as the queue's own cards, fix button included, with no
 heading row: the greeting above says what they are, and the card is named for
-assistive tech. Anything else, or more than NEEDS_YOU_IN_PLACE, is only the
-count above and in the header.
+assistive tech. Held requests are always here, first. Anything else, or
+serious items past NEEDS_YOU_IN_PLACE, is only the count above and in the
+header.
 {% endcomment %}
 {% if needs_you %}
 {% url 'action_items_set_aside' as set_aside_url %}{% url 'action_items_bring_back' as bring_back_url %}
@@ -45,7 +46,7 @@ the row is gone once every step is done.
 {% section "Get started" %}
   {% steps %}
     {% for step in getting_started %}
-      {% step icon=step.done|yesno:"check-circle,"|default:step.icon done=step.done %}{% if step.done %}<strong>{{ step.label|breakable }}</strong> <span class="muted">Done.</span>{% else %}<a href="{{ step.url }}">{{ step.label|breakable }}</a> <span class="muted">{{ step.why|breakable }}</span>{% endif %}{% endstep %}
+      {% step icon=step.done|yesno:"check-circle,"|default:step.icon done=step.done %}{% if step.done %}<strong>{{ step.label|breakable }}</strong> {% muted %}Done.{% endmuted %}{% else %}<a href="{{ step.url }}">{{ step.label|breakable }}</a> {% muted %}{{ step.why|breakable }}{% endmuted %}{% endif %}{% endstep %}
     {% endfor %}
   {% endsteps %}
 {% aside %}<span class="count">{{ getting_started_left|measured:"left" }}{% if install_guide %}{% dot %}{% entity install_guide|outside label="Install guide" %}{% endif %}</span>
@@ -75,7 +76,7 @@ is said here, over the ones most recently changed, and nowhere else on the page.
   {% partialdef calendar inline %}
   {% if not calendar.empty %}
   {% section moment=calendar.month when="month" id="dashboard-calendar" data_fragment=True data_fragment_name="calendar" data_fragment_links=True data_fragment_history="replace" %}
-    {% include "calendars/_month_grid.html" with compact=True %}
+    {% include "partials/_month_grid.html" with compact=True %}
   {% aside %}
       <nav class="calendar-nav" aria-label="Change month">
         <a href="{{ calendar_paging.previous }}" rel="prev" aria-label="Previous month">&lsaquo;</a>

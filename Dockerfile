@@ -214,8 +214,9 @@ COPY --exclude=controller --exclude=hq_runner --exclude=mise.toml --exclude=mise
 # the units that name it, which hq-host copies out of the signed image: the
 # host's copy is the image's, byte for byte, and checked daily like every script.
 COPY --from=programs /hq-secrets /hq-host /app/deploy/bin/
-# The edge receiver rides in the same signed tree, from which an administrator
-# installs it on an edge by hand (docs/Deployment.md, Remote targets).
+# The edge receiver rides in the same signed tree, from which `hq-host
+# edge-receiver` hands it to an administrator to install on an edge
+# (docs/Deployment.md, Remote targets).
 COPY --from=programs /hq-edge /app/deploy/bin/
 
 # The image carries what a start would otherwise make: the collected, hashed

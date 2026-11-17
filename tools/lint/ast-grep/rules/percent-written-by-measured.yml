@@ -1,0 +1,28 @@
+# application.ui.measured is the one place a figure meets its unit: it rounds
+# half away from zero, signs a negative with a true minus sign and groups the
+# thousands, where a format spec rounds a float to the even digit and writes a
+# hyphen. So no f-string a page or an answer shows writes a share as a percent
+# itself, by a "%" format spec or a percent sign typed after a value. A
+# command's own report to its terminal (management/) says it as it likes.
+id: percent-written-by-measured
+language: python
+severity: error
+message: An f-string writes a percentage itself.
+note: Write measured(share * 100, "%", places) from hq.platform.application.ui.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/management/**"
+rule:
+  kind: interpolation
+  any:
+    # f"{share:.0%}"
+    - has:
+        kind: format_specifier
+        regex: '%$'
+    # f"{cpu:.0f}%"
+    - precedes:
+        kind: string_content
+        regex: '^%'

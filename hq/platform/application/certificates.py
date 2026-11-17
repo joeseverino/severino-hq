@@ -23,12 +23,15 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core import secrets
 from hq.platform.core.secrets import NO_SEAL_KEY
 
+from .answer_fields import CallMessage
 from .command_fields import Describe
 from .infrastructure import delivery_targets
 from .moments import when_day
 from .record_errors import CertificateError, PolicyError, RecordNotFound
 from .sealed_secrets import sealed_slots, set_secret
 from .security import Principal
+from .ui import ended
+lazy from .asks import APPLIES_SHORTLY
 
 UPLOAD = "certificate.upload"
 # Where an uploaded certificate's private key is sealed; the controller's
@@ -91,6 +94,7 @@ class CertificateStored(TypedDict):
     fingerprint_sha256: Annotated[str, Describe("The uploaded certificate's SHA-256 fingerprint.")]
     not_after: Annotated[str, Describe("When the uploaded certificate expires, an ISO 8601 date-time.")]
     domains: Annotated[list[str], Describe("The names the uploaded certificate covers.")]
+    message: CallMessage
 
 
 @transaction.atomic
@@ -156,6 +160,7 @@ def store_certificate(
         "fingerprint_sha256": details["fingerprint_sha256"],
         "not_after": details["not_after"].isoformat(),
         "domains": details["domains"],
+        "message": f"Stored a certificate for {ended(', '.join(details['domains']))} {APPLIES_SHORTLY}",
     }
 
 

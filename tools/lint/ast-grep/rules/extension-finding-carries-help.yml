@@ -1,0 +1,47 @@
+# Every item an extension raises comes with help, never a problem alone. A
+# Finding from hq_sdk.plugin is worded by no host rule, so its help rides in
+# its own fields: the page the work is done on (primary=), commands or
+# instructions (workflow=, steps=), a remedy or an offer (remedies=,
+# offers=), or why none can be offered (no_help_reason=). One built with none
+# of those, and no ** that could carry one, is a problem alone. It reads an
+# extension's src/, where the plugin check runs it; the host's own items are
+# attention-item-carries-help's and test_item_help's.
+id: extension-finding-carries-help
+language: python
+severity: error
+message: An extension's finding is built without help.
+note: Give it primary=opens(label, url), or workflow=, steps=, remedies=, offers= or no_help_reason= (finding_model.Finding).
+files:
+  - "src/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "**/migrations/**"
+rule:
+  kind: call
+  has:
+    field: function
+    regex: (^|\.)Finding$
+  inside:
+    stopBy: end
+    kind: module
+    has:
+      kind: import_from_statement
+      all:
+        - has:
+            field: module_name
+            regex: ^hq_sdk\.plugin$
+        - has:
+            field: name
+            regex: ^Finding$
+  not:
+    has:
+      field: arguments
+      any:
+        - has:
+            kind: dictionary_splat
+        - has:
+            kind: keyword_argument
+            has:
+              field: name
+              regex: ^(primary|workflow|steps|remedies|offers|no_help_reason)$

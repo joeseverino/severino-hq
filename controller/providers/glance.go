@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"math"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,21 +12,22 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
-// The dashboard glance: host, container and weather readings on demand. HQ
-// shows the text as it is written here.
+// The dashboard glance: host, container and weather readings on demand,
+// reported as the numbers, instants and states they are. HQ words them.
 
-// missing is application.ui.MISSING.
-const missing = "–"
-
-const (
-	lookaheadHours = 12
-	rainChance     = 30
+// How many hours of the forecast, and how many alerts, a reading carries: as
+// many as the contract takes.
+var (
+	lookaheadHours = api.MustLimit("GlanceObservationWeather", "properties", "hours", "maxItems")
+	alertsLimit    = api.MustLimit("GlanceObservationWeather", "properties", "alerts", "maxItems")
 )
 
-// hostGlanceScript runs on the host with python3 and prints one reading.
+// hostGlanceScript runs on the host with python3 and prints one
+// runtime.GlanceObservationHost.
 const hostGlanceScript = `import json
 import os
 import shutil
@@ -71,54 +70,6 @@ type PortainerSource interface {
 	Environments(ctx context.Context, ref string) ([]PortainerEnvironment, error)
 }
 
-// GlanceMetric is one line of a panel.
-type GlanceMetric struct {
-	Label  string `json:"label"`
-	Value  string `json:"value"`
-	Detail string `json:"detail"`
-}
-
-// GlanceMachine is one machine on the infrastructure panel.
-type GlanceMachine struct {
-	Key           string         `json:"key"`
-	Status        string         `json:"status"`
-	Summary       string         `json:"summary"`
-	Metrics       []GlanceMetric `json:"metrics"`
-	RefreshFailed string         `json:"refresh_failed,omitempty"`
-}
-
-type infrastructurePanel struct {
-	PanelID  string          `json:"panel_id"`
-	Machines []GlanceMachine `json:"machines"`
-}
-
-// GlanceHour is one hour of the forecast.
-type GlanceHour struct {
-	Time          string `json:"time"`
-	Temperature   string `json:"temperature"`
-	Forecast      string `json:"forecast"`
-	Precipitation string `json:"precipitation"`
-}
-
-type weatherPanel struct {
-	PanelID string         `json:"panel_id"`
-	Point   string         `json:"point"`
-	Status  string         `json:"status"`
-	Summary string         `json:"summary"`
-	Metrics []GlanceMetric `json:"metrics"`
-	Hours   []GlanceHour   `json:"hours"`
-}
-
-// weatherFailure marks a weather refresh that failed, so HQ keeps the last good one.
-type weatherFailure struct {
-	PanelID       string         `json:"panel_id"`
-	Point         string         `json:"point"`
-	Status        string         `json:"status"`
-	Summary       string         `json:"summary"`
-	Metrics       []GlanceMetric `json:"metrics"`
-	RefreshFailed string         `json:"refresh_failed"`
-}
-
 // glanceFailed is the token HQ shows for a failed refresh: the contract's
 // failure class when the error carries one.
 func glanceFailed(err error) string {
@@ -126,21 +77,6 @@ func glanceFailed(err error) string {
 		return string(failure)
 	}
 	return "unclassified"
-}
-
-// humanBytes is application.labels.human_bytes.
-func humanBytes(value float64) string {
-	amount := math.Max(0, value)
-	for _, unit := range []string{"B", "KB", "MB", "GB", "TB"} {
-		if amount < 1024 || unit == "TB" {
-			if unit == "B" || unit == "KB" || unit == "MB" {
-				return fmt.Sprintf("%.0f %s", amount, unit)
-			}
-			return fmt.Sprintf("%.1f %s", amount, unit)
-		}
-		amount /= 1024
-	}
-	return "0 B"
 }
 
 func (r *Registry) controllerID() string {
@@ -174,38 +110,35 @@ func timedStep[T any](kind, step string, read func() (T, error)) (T, error) {
 // fails is marked, so HQ keeps its last good reading and shows this one as a
 // note.
 func (r *Registry) Glance(ctx context.Context, plan runtime.GlancePlan) (runtime.GlanceObservations, error) {
-	readings, _ := timedStep("stage", "glance", func() ([]any, error) {
-		readings := make([]any, len(plan.Panels))
+	return timedStep("stage", "glance", func() (runtime.GlanceObservations, error) {
+		readings := make([]*runtime.GlanceObservation, len(plan.Panels))
 		var group sync.WaitGroup
 		for i, panel := range plan.Panels {
 			group.Go(func() { readings[i] = r.glancePanel(ctx, plan, panel) })
 		}
 		group.Wait()
-		return slices.DeleteFunc(readings, func(reading any) bool { return reading == nil }), nil
+		observations := runtime.GlanceObservations{}
+		for _, reading := range readings {
+			if reading != nil {
+				observations = append(observations, *reading)
+			}
+		}
+		return observations, nil
 	})
-	data, err := json.Marshal(readings)
-	if err != nil {
-		return nil, err
-	}
-	observations := runtime.GlanceObservations{}
-	if err := json.Unmarshal(data, &observations); err != nil {
-		return nil, err
-	}
-	return observations, nil
 }
 
 // glancePanel is one panel's reading, or its failure; nil for a panel this
 // controller does not read.
-func (r *Registry) glancePanel(ctx context.Context, plan runtime.GlancePlan, panel runtime.GlancePanelID) any {
-	var reading any
+func (r *Registry) glancePanel(ctx context.Context, plan runtime.GlancePlan, panel runtime.GlancePanelID) *runtime.GlanceObservation {
+	reading := &runtime.GlanceObservation{PanelID: panel}
 	var err error
 	switch panel {
 	case runtime.GlancePanelIDInfrastructure:
-		reading, err = timedStep("stage", string(panel), func() (any, error) {
+		reading.Machines, err = timedStep("stage", string(panel), func() ([]runtime.GlanceObservationMachine, error) {
 			return r.infrastructureGlance(ctx, plan.Targets.Infrastructure)
 		})
 	case runtime.GlancePanelIDWeather:
-		reading, err = timedStep("stage", string(panel), func() (any, error) {
+		reading.Weather, err = timedStep("stage", string(panel), func() (*runtime.GlanceObservationWeather, error) {
 			return r.weatherGlance(ctx, plan.Targets.Weather)
 		})
 	default:
@@ -217,20 +150,18 @@ func (r *Registry) glancePanel(ctx context.Context, plan runtime.GlancePlan, pan
 	kind := glanceFailed(err)
 	slog.Warn(fmt.Sprintf("dashboard glance failed: %s (%s): %s", panel, kind, runtime.Clip(err.Error(), runtime.ReasonLimit)),
 		slog.String("event", "controller.glance.failed"), slog.String("panel", string(panel)))
-	summary := "Refresh failed (" + kind + ")."
 	if panel == runtime.GlancePanelIDInfrastructure {
-		return infrastructurePanel{PanelID: string(panel), Machines: []GlanceMachine{{
-			Key: r.controllerID(), Status: "serious", Summary: summary, Metrics: []GlanceMetric{}, RefreshFailed: kind,
-		}}}
+		reading.Machines = []runtime.GlanceObservationMachine{{Key: r.controllerID(), RefreshFailed: kind}}
+	} else {
+		reading.Weather = &runtime.GlanceObservationWeather{Point: plan.Targets.Weather.Point, RefreshFailed: kind}
 	}
-	return weatherFailure{PanelID: string(panel), Point: plan.Targets.Weather.Point, Status: "serious",
-		Summary: summary, Metrics: []GlanceMetric{}, RefreshFailed: kind}
+	return reading
 }
 
 // infrastructureGlance reads every machine at once: one over its own SSH
 // connection, the rest through Portainer, which reads only the environments
-// that are those machines.
-func (r *Registry) infrastructureGlance(ctx context.Context, targets []runtime.GlanceMachineTarget) (infrastructurePanel, error) {
+// that are those machines. A machine neither reaches has no reading.
+func (r *Registry) infrastructureGlance(ctx context.Context, targets []runtime.GlanceMachineTarget) ([]runtime.GlanceObservationMachine, error) {
 	available := map[string]bool{}
 	for _, ref := range r.Supplied.SSHRefs() {
 		available[ref] = true
@@ -250,7 +181,7 @@ func (r *Registry) infrastructureGlance(ctx context.Context, targets []runtime.G
 		}
 	}
 	group, groupCtx := errgroup.WithContext(ctx)
-	docker := map[string]GlanceMachine{}
+	docker := map[string]runtime.GlanceObservationMachine{}
 	if len(throughDocker) > 0 {
 		group.Go(func() error {
 			machines, err := r.portainerGlance(groupCtx, throughDocker)
@@ -260,12 +191,12 @@ func (r *Registry) infrastructureGlance(ctx context.Context, targets []runtime.G
 			return err
 		})
 	}
-	machines := make([]GlanceMachine, len(targets))
+	machines := make([]runtime.GlanceObservationMachine, len(targets))
 	for i, target := range targets {
 		key := strings.TrimSpace(target.Key)
 		if ref := reachable(target); ref != "" {
 			group.Go(func() (err error) {
-				machines[i], err = timedStep("stage", "machine "+key, func() (GlanceMachine, error) {
+				machines[i], err = timedStep("stage", "machine "+key, func() (runtime.GlanceObservationMachine, error) {
 					return r.hostGlance(groupCtx, key, ref)
 				})
 				return err
@@ -273,62 +204,30 @@ func (r *Registry) infrastructureGlance(ctx context.Context, targets []runtime.G
 		}
 	}
 	if err := group.Wait(); err != nil {
-		return infrastructurePanel{}, err
+		return nil, err
 	}
 	for i, target := range targets {
 		key := strings.TrimSpace(target.Key)
-		if !throughDocker[key] {
-			continue
-		}
-		if machine, ok := docker[key]; ok {
-			machines[i] = machine
-		} else {
-			machines[i] = GlanceMachine{Key: key, Status: "attention",
-				Summary: "No host telemetry connection is available.", Metrics: []GlanceMetric{}}
+		if throughDocker[key] {
+			machines[i] = docker[key]
+			machines[i].Key = key
 		}
 	}
-	return infrastructurePanel{PanelID: string(runtime.GlancePanelIDInfrastructure), Machines: machines}, nil
+	return machines, nil
 }
 
-func percent(part, whole int64) float64 {
-	if whole == 0 {
-		return 0
-	}
-	return float64(part) / float64(whole) * 100
-}
-
-// hostReading is what hostGlanceScript prints.
-type hostReading struct {
-	CPUPercent   float64 `json:"cpu_percent"`
-	Cores        int64   `json:"cores"`
-	Load1m       float64 `json:"load_1m"`
-	MemoryUsed   int64   `json:"memory_used"`
-	MemoryTotal  int64   `json:"memory_total"`
-	StorageUsed  int64   `json:"storage_used"`
-	StorageTotal int64   `json:"storage_total"`
-}
-
-func (r *Registry) hostGlance(ctx context.Context, key, ref string) (GlanceMachine, error) {
+func (r *Registry) hostGlance(ctx context.Context, key, ref string) (runtime.GlanceObservationMachine, error) {
 	output, err := timedStep("call", "host reading", func() ([]byte, error) {
 		return r.commands().SSH(ctx, ref, "python3 -", []byte(hostGlanceScript))
 	})
 	if err != nil {
-		return GlanceMachine{}, err
+		return runtime.GlanceObservationMachine{}, err
 	}
-	var reading hostReading
+	var reading runtime.GlanceObservationHost
 	if err := json.Unmarshal(output, &reading); err != nil {
-		return GlanceMachine{}, fmt.Errorf("host reading from %s: %w", ref, err)
+		return runtime.GlanceObservationMachine{}, fmt.Errorf("host reading from %s: %w", ref, err)
 	}
-	return GlanceMachine{
-		Key: key, Status: "good", Summary: fmt.Sprintf("Host load %.2f", reading.Load1m),
-		Metrics: []GlanceMetric{
-			{Label: "CPU", Value: fmt.Sprintf("%.0f%%", reading.CPUPercent), Detail: fmt.Sprintf("%d cores", reading.Cores)},
-			{Label: "Memory", Value: fmt.Sprintf("%.0f%%", percent(reading.MemoryUsed, reading.MemoryTotal)),
-				Detail: humanBytes(float64(reading.MemoryUsed)) + " of " + humanBytes(float64(reading.MemoryTotal)) + " used"},
-			{Label: "Storage", Value: fmt.Sprintf("%.0f%%", percent(reading.StorageUsed, reading.StorageTotal)),
-				Detail: humanBytes(float64(reading.StorageUsed)) + " of " + humanBytes(float64(reading.StorageTotal)) + " used on /"},
-		},
-	}, nil
+	return runtime.GlanceObservationMachine{Key: key, Host: &reading}, nil
 }
 
 // getAnswer GETs address and decodes the answer into T, logging the call's time.
@@ -360,7 +259,7 @@ func dockerStorage(disk dockerDiskUsage) int64 {
 
 // portainerGlance measures the containers of each reachable Portainer
 // environment that is one of the wanted machines, the environments at once.
-func (r *Registry) portainerGlance(ctx context.Context, wanted map[string]bool) ([]GlanceMachine, error) {
+func (r *Registry) portainerGlance(ctx context.Context, wanted map[string]bool) ([]runtime.GlanceObservationMachine, error) {
 	refs := r.Supplied.Refs(runtime.ConnectionProviderPortainer)
 	if len(refs) == 0 {
 		return nil, &ProviderError{Message: "no Portainer connection was supplied"}
@@ -369,7 +268,7 @@ func (r *Registry) portainerGlance(ctx context.Context, wanted map[string]bool) 
 		return nil, &ProviderError{Message: "Portainer is not connected to HQ on this host"}
 	}
 	var mu sync.Mutex
-	machines := []GlanceMachine{}
+	machines := []runtime.GlanceObservationMachine{}
 	group, groupCtx := errgroup.WithContext(ctx)
 	for _, ref := range refs {
 		base, err := r.Portainer.URL(ref)
@@ -393,7 +292,7 @@ func (r *Registry) portainerGlance(ctx context.Context, wanted map[string]bool) 
 					continue
 				}
 				group.Go(func() error {
-					machine, err := timedStep("stage", "environment "+environment.Name, func() (GlanceMachine, error) {
+					machine, err := timedStep("stage", "environment "+environment.Name, func() (runtime.GlanceObservationMachine, error) {
 						return r.environmentGlance(groupCtx, base+"/endpoints/"+itoa(environment.ID)+"/docker", headers)
 					})
 					if err != nil {
@@ -453,7 +352,7 @@ func waitFor(ctx context.Context, d time.Duration) error {
 // environmentGlance measures one Docker environment's running containers: the
 // machine, its storage and the container list at once, then two samples of
 // each container, glanceCPUWindow apart, for its CPU over that window.
-func (r *Registry) environmentGlance(ctx context.Context, docker string, headers map[string]string) (GlanceMachine, error) {
+func (r *Registry) environmentGlance(ctx context.Context, docker string, headers map[string]string) (runtime.GlanceObservationMachine, error) {
 	var info dockerInfo
 	var disk dockerDiskUsage
 	var containers []dockerContainer
@@ -469,12 +368,12 @@ func (r *Registry) environmentGlance(ctx context.Context, docker string, headers
 	containers, err := getAnswer[[]dockerContainer](groupCtx, r, docker+"/containers/json?all=false", headers, "running containers")
 	if err != nil {
 		_ = group.Wait()
-		return GlanceMachine{}, err
+		return runtime.GlanceObservationMachine{}, err
 	}
 	for _, container := range containers {
 		if container.ID == "" {
 			_ = group.Wait()
-			return GlanceMachine{}, &ProviderError{Message: "running containers: a container has no id"}
+			return runtime.GlanceObservationMachine{}, &ProviderError{Message: "running containers: a container has no id"}
 		}
 	}
 	first, statsErr := r.sampleContainers(groupCtx, docker, headers, containers)
@@ -486,10 +385,10 @@ func (r *Registry) environmentGlance(ctx context.Context, docker string, headers
 		second, statsErr = r.sampleContainers(groupCtx, docker, headers, containers)
 	}
 	if err := group.Wait(); err != nil {
-		return GlanceMachine{}, err
+		return runtime.GlanceObservationMachine{}, err
 	}
 	if statsErr != nil {
-		return GlanceMachine{}, statsErr
+		return runtime.GlanceObservationMachine{}, statsErr
 	}
 	var cpu float64
 	var memoryUsed int64
@@ -500,27 +399,15 @@ func (r *Registry) environmentGlance(ctx context.Context, docker string, headers
 			cpu += share
 		}
 	}
-	return GlanceMachine{
-		Status:  "good",
-		Summary: fmt.Sprintf("%d cores · %s memory", info.NCPU, humanBytes(float64(info.MemTotal))),
-		Metrics: containerMetrics(int64(len(containers)), cpu, info.NCPU, memoryUsed, info.MemTotal, dockerStorage(disk)),
-	}, nil
-}
-
-// containerMetrics is what the containers take of their machine. Docker states
-// a container's CPU as a share of one core, so the sum is divided by the cores.
-func containerMetrics(running int64, cpu float64, cores, memoryUsed, memoryTotal, storage int64) []GlanceMetric {
-	machineCPU := cpu
-	if cores != 0 {
-		machineCPU = cpu / float64(cores)
+	// Docker states a container's CPU as a share of one core, so the sum is
+	// divided by the cores for the machine's share.
+	if info.NCPU != 0 {
+		cpu /= float64(info.NCPU)
 	}
-	return []GlanceMetric{
-		{Label: "Containers", Value: strconv.FormatInt(running, 10), Detail: "running"},
-		{Label: "CPU", Value: fmt.Sprintf("%.0f%%", machineCPU), Detail: fmt.Sprintf("of %d cores", cores)},
-		{Label: "Memory", Value: fmt.Sprintf("%.0f%%", percent(memoryUsed, memoryTotal)),
-			Detail: humanBytes(float64(memoryUsed)) + " of " + humanBytes(float64(memoryTotal))},
-		{Label: "Docker storage", Value: humanBytes(float64(storage)), Detail: "layers, volumes and build cache"},
-	}
+	return runtime.GlanceObservationMachine{Docker: &runtime.GlanceObservationDocker{
+		Containers: len(containers), CPUPercent: cpu, Cores: int(info.NCPU),
+		MemoryUsed: int(memoryUsed), MemoryTotal: int(info.MemTotal), Storage: int(dockerStorage(disk)),
+	}}, nil
 }
 
 // nwsUserAgent is the contact NWS asks every client to send.
@@ -547,13 +434,13 @@ type nwsForecast struct {
 }
 
 type nwsPeriod struct {
-	Name                       string   `json:"name"`
-	StartTime                  string   `json:"startTime"`
-	Temperature                *float64 `json:"temperature"`
-	TemperatureUnit            string   `json:"temperatureUnit"`
-	WindSpeed                  string   `json:"windSpeed"`
-	WindDirection              string   `json:"windDirection"`
-	ShortForecast              string   `json:"shortForecast"`
+	Name                       string    `json:"name"`
+	StartTime                  time.Time `json:"startTime"`
+	Temperature                *float64  `json:"temperature"`
+	TemperatureUnit            string    `json:"temperatureUnit"`
+	WindSpeed                  string    `json:"windSpeed"`
+	WindDirection              string    `json:"windDirection"`
+	ShortForecast              string    `json:"shortForecast"`
 	ProbabilityOfPrecipitation struct {
 		Value *float64 `json:"value"`
 	} `json:"probabilityOfPrecipitation"`
@@ -565,62 +452,9 @@ type nwsAlerts struct {
 		Properties struct {
 			Event    string `json:"event"`
 			Headline string `json:"headline"`
+			Severity string `json:"severity"`
 		} `json:"properties"`
 	} `json:"features"`
-}
-
-// isoMoment is application.timestamps.moment(stamp, naive="keep").
-func isoMoment(stamp string) (time.Time, bool) {
-	text := strings.TrimSpace(stamp)
-	for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05.999999999", "2006-01-02 15:04:05.999999999Z07:00",
-		"2006-01-02 15:04:05.999999999", "2006-01-02T15:04Z07:00", "2006-01-02T15:04", "2006-01-02"} {
-		if found, err := time.Parse(layout, text); err == nil {
-			return found, found.Year() != 1 || found.YearDay() != 1
-		}
-	}
-	return time.Time{}, false
-}
-
-// hour is the period's start as a 12-hour clock reading, "" when it has none.
-func (p nwsPeriod) hour() string {
-	found, ok := isoMoment(p.StartTime)
-	if !ok {
-		return ""
-	}
-	hour := found.Hour() % 12
-	if hour == 0 {
-		hour = 12
-	}
-	meridiem := "PM"
-	if found.Hour() < 12 {
-		meridiem = "AM"
-	}
-	return fmt.Sprintf("%d %s", hour, meridiem)
-}
-
-// chance is the period's chance of rain in whole percent.
-func (p nwsPeriod) chance() int {
-	if value := p.ProbabilityOfPrecipitation.Value; value != nil {
-		return int(*value)
-	}
-	return 0
-}
-
-// temperature is the period's temperature as written, or missing.
-func (p nwsPeriod) temperature() string {
-	if p.Temperature == nil {
-		return missing
-	}
-	return degrees(*p.Temperature)
-}
-
-func degrees(value float64) string { return strconv.FormatFloat(value, 'f', -1, 64) }
-
-func orDefault(value, fallback string) string {
-	if value == "" {
-		return fallback
-	}
-	return value
 }
 
 // weatherPoint is the configured point as latitude and longitude.
@@ -642,14 +476,14 @@ func weatherPoint(raw string) (string, error) {
 
 // weatherGlance reads the forecast for the plan's point from the API the plan
 // names: HQ states the National Weather Service's address once.
-func (r *Registry) weatherGlance(ctx context.Context, target runtime.GlanceWeatherTarget) (weatherPanel, error) {
+func (r *Registry) weatherGlance(ctx context.Context, target runtime.GlanceWeatherTarget) (*runtime.GlanceObservationWeather, error) {
 	located, err := weatherPoint(target.Point)
 	if err != nil {
-		return weatherPanel{}, err
+		return nil, err
 	}
-	api := strings.TrimRight(strings.TrimSpace(target.Endpoint), "/")
-	if api == "" {
-		return weatherPanel{}, &ProviderError{Message: "the glance plan names no weather API"}
+	endpoint := strings.TrimRight(strings.TrimSpace(target.Endpoint), "/")
+	if endpoint == "" {
+		return nil, &ProviderError{Message: "the glance plan names no weather API"}
 	}
 	headers := map[string]string{"Accept": "application/geo+json", "User-Agent": nwsUserAgent}
 	// The alerts need only the point, so they are read while the forecast is.
@@ -657,10 +491,10 @@ func (r *Registry) weatherGlance(ctx context.Context, target runtime.GlanceWeath
 	alertsRead := make(chan error, 1)
 	go func() {
 		var err error
-		alerts, err = getAnswer[nwsAlerts](ctx, r, api+"/alerts/active?point="+located, headers, "weather alerts")
+		alerts, err = getAnswer[nwsAlerts](ctx, r, endpoint+"/alerts/active?point="+located, headers, "weather alerts")
 		alertsRead <- err
 	}()
-	point, err := getAnswer[nwsPoint](ctx, r, api+"/points/"+located, headers, "weather point")
+	point, err := getAnswer[nwsPoint](ctx, r, endpoint+"/points/"+located, headers, "weather point")
 	var forecast nwsForecast
 	if err == nil {
 		forecast, err = getAnswer[nwsForecast](ctx, r, point.Properties.ForecastHourly, headers, "hourly forecast")
@@ -669,84 +503,32 @@ func (r *Registry) weatherGlance(ctx context.Context, target runtime.GlanceWeath
 		err = alertsErr
 	}
 	if err != nil {
-		return weatherPanel{}, err
+		return nil, err
 	}
 	periods := forecast.Properties.Periods
 	if len(periods) > lookaheadHours {
 		periods = periods[:lookaheadHours]
 	}
-	var current nwsPeriod
-	if len(periods) > 0 {
-		current = periods[0]
-	}
 	place := point.Properties.RelativeLocation.Properties
-	status := "good"
-	if len(alerts.Features) > 0 {
-		status = "serious"
-	}
-	metrics := []GlanceMetric{
-		{Label: "Now", Value: orDefault(current.ShortForecast, "Unavailable"), Detail: current.Name},
-		{Label: "Temperature", Value: current.temperature() + "°" + orDefault(current.TemperatureUnit, "F")},
-	}
-	metrics = append(metrics, outlook(periods)...)
-	metrics = append(metrics, GlanceMetric{Label: "Wind",
-		Value:  strings.TrimSpace(current.WindDirection + " " + orDefault(current.WindSpeed, missing)),
-		Detail: "NWS hourly forecast"})
-	metrics = append(metrics, alertMetric(alerts)...)
-	hours := []GlanceHour{}
+	reading := &runtime.GlanceObservationWeather{Point: located, City: place.City, State: place.State,
+		Hours:  make([]runtime.GlanceObservationHour, 0, len(periods)),
+		Alerts: make([]runtime.GlanceObservationAlert, 0, alertsLimit)}
 	for _, period := range periods {
-		hours = append(hours, GlanceHour{
-			Time: period.hour(), Temperature: period.temperature() + "°",
-			Forecast: period.ShortForecast, Precipitation: fmt.Sprintf("%d%%", period.chance()),
+		chance := 0
+		if value := period.ProbabilityOfPrecipitation.Value; value != nil {
+			chance = int(*value)
+		}
+		reading.Hours = append(reading.Hours, runtime.GlanceObservationHour{
+			Start: period.StartTime, Name: period.Name, Temperature: period.Temperature,
+			TemperatureUnit: period.TemperatureUnit, Forecast: period.ShortForecast, Chance: chance,
+			WindSpeed: period.WindSpeed, WindDirection: period.WindDirection,
 		})
 	}
-	summary := strings.Join(nonEmpty([]string{place.City, place.State}), ", ")
-	return weatherPanel{PanelID: string(runtime.GlancePanelIDWeather), Point: located, Status: status,
-		Summary: orDefault(summary, "National Weather Service"), Metrics: metrics, Hours: hours}, nil
-}
-
-// outlook is the range ahead and when rain next comes, from the hourly periods.
-func outlook(periods []nwsPeriod) []GlanceMetric {
-	found := []GlanceMetric{}
-	var low, high *float64
-	for _, period := range periods {
-		if t := period.Temperature; t != nil {
-			if low == nil || *t < *low {
-				low = t
-			}
-			if high == nil || *t > *high {
-				high = t
-			}
-		}
+	for _, feature := range alerts.Features[:min(len(alerts.Features), alertsLimit)] {
+		alert := feature.Properties
+		reading.Alerts = append(reading.Alerts, runtime.GlanceObservationAlert{
+			Event: alert.Event, Headline: alert.Headline, Severity: alert.Severity,
+		})
 	}
-	if low != nil {
-		found = append(found, GlanceMetric{Label: "Range", Value: degrees(*low) + "–" + degrees(*high) + "°",
-			Detail: fmt.Sprintf("next %d hours", len(periods))})
-	}
-	for i, period := range periods {
-		if period.chance() < rainChance {
-			continue
-		}
-		when := period.hour()
-		if i == 0 {
-			when = "Now"
-		}
-		found = append(found, GlanceMetric{Label: "Rain", Value: fmt.Sprintf("%s · %d%%", when, period.chance()),
-			Detail: period.ShortForecast})
-		break
-	}
-	return found
-}
-
-// alertMetric is the active alert by name, with how many more there are.
-func alertMetric(alerts nwsAlerts) []GlanceMetric {
-	if len(alerts.Features) == 0 {
-		return []GlanceMetric{}
-	}
-	first := alerts.Features[0].Properties
-	more := ""
-	if n := len(alerts.Features); n > 1 {
-		more = fmt.Sprintf(" +%d", n-1)
-	}
-	return []GlanceMetric{{Label: "Alerts", Value: orDefault(first.Event, "Weather alert") + more, Detail: first.Headline}}
+	return reading, nil
 }

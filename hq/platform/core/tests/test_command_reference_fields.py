@@ -19,9 +19,9 @@ from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.command_targets import record_options
 from hq.platform.application.integration_specs import capability_schema
+from hq.platform.application.markup_testing import within
 from hq.platform.application.references import Referable, Target
 from hq.platform.application.security import Principal, web_principal
-from hq.platform.application.tests.markup import within
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
 

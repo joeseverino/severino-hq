@@ -13,12 +13,9 @@ from typing import override
 
 from django.core.management.base import BaseCommand, CommandError
 
-from hq.domains.docs_index.importer import (
-    ManifestImportError,
-    validate_manifest_data,
-)
-from hq.platform.application.documentation import sync_documentation
-from hq.platform.application.record_errors import PolicyError
+from hq.domains.docs_index.importer import validate_manifest_data
+from hq.platform.application.capabilities import execute_capability
+from hq.platform.application.documentation import SYNC
 from hq.platform.application.refusal_status import refusal_of, refused
 from hq.platform.application.security import cli_principal
 from hq.platform.application.ui import counted
@@ -114,19 +111,19 @@ class Command(BaseCommand):
             )
 
     def _import(self, data, *, options, report_orphans: bool):
-        try:
-            result = sync_documentation(
-                data,
-                principal=cli_principal(),
-                update_existing=not options["no_update"],
-                report_orphans=report_orphans,
-                prune_orphans=options["prune"],
-                confirm_prune=options["prune"],
-            )
-        except (ManifestImportError, PolicyError) as exc:
-            raise CommandError(str(exc)) from exc
+        result = execute_capability(
+            SYNC,
+            {
+                "manifest": data,
+                "update_existing": not options["no_update"],
+                "report_orphans": report_orphans,
+                "prune_orphans": options["prune"],
+                "confirm_prune": options["prune"],
+            },
+            principal=cli_principal(),
+        )
         if refused(result):
-            raise CommandError(f"Manifest validation failed: {refusal_of(result).message}")
+            raise CommandError(f"The manifest was not imported: {refusal_of(result).message}")
         return result["stats"]
 
     def _report_orphans(self, stats, *, pruned: bool) -> None:

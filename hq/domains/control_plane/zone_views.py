@@ -9,7 +9,6 @@ second truth, only a second way of slicing the first.
 
 from dataclasses import replace
 
-from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
@@ -18,17 +17,14 @@ from django.views import View
 from hq.domains.control_plane.forms import MailFailuresForm, MailPolicyForm, MailSendersForm
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
-from hq.platform.application.asks import APPLIES_SHORTLY
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.inventory import inventory_state
 from hq.platform.application.mail_policy import mail_overview, parse_spf
 from hq.platform.application.pages import PageAction, page_context
-from hq.platform.application.pins import DOMAIN, FAVORITE, FAVORITES, PIN, pinned
+from hq.platform.application.pins import DOMAIN, PIN, pinned
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
     REMOVAL_CAPABILITY,
-    UPDATE_CAPABILITY,
     public_dns_enabled,
     resource_capabilities,
 )
@@ -43,7 +39,6 @@ from hq.platform.application.zones import (
     find_zone,
     zone_catalog,
 )
-from hq.platform.core.templatetags.nav_tags import returning_to
 from hq.platform.core.templatetags.value_tags import entity
 
 
@@ -206,12 +201,13 @@ class ZoneMailView(View):
         )
         if refusal := refused(request, result, form=form):
             return self._page(request, found, form, status=refusal.status)
-        messages.success(request, f"{form.record} saved. {APPLIES_SHORTLY}")
         return redirect("zones:mail", zone=found.zone)
 
 
 class ZonePinView(View):
     """Star a domain so it sorts first, for this operator only."""
+
+    runs = (PIN,)
 
     def post(self, request, zone: str):
         name = normalized_hostname(zone)
@@ -223,23 +219,14 @@ class ZonePinView(View):
         return redirect(safe_next(request) or reverse("zones:index"))
 
 
-def _pin_action(zone) -> PageAction:
+def _pin_action(zone) -> PageAction | None:
     """Star a domain from its own head.
 
     Starring decides which domain `/domains/` opens: the catalog sorts pinned
     first, and that page goes to the first managed domain.
     """
 
-    return PageAction(
-        f"★ {FAVORITE}" if zone.pinned else f"☆ Add to {FAVORITES}",
-        reverse("zones:pin", args=[zone.zone]),
-        method="post",
-        title=(
-            f"Domains opens on your first {FAVORITE}. Press to remove this one from {FAVORITES}."
-            if zone.pinned
-            else f"Domains opens on your first {FAVORITE}."
-        ),
-    )
+    return PageAction.command(PIN, zone.zone, variant="off" if zone.pinned else "on")
 
 
 class ZoneDetailView(View):
@@ -304,12 +291,13 @@ def _record_actions(record, here: str) -> tuple[PageAction, ...]:
     """What a record's declaration offers from its row: Edit, which comes back
     to this page, and Remove."""
 
-    actions = []
-    if record.edit_url:
-        actions.append(PageAction(capability_words(UPDATE_CAPABILITY), returning_to(record.edit_url, here)))
-    if record.remove_url:
-        actions.append(PageAction(capability_words(REMOVAL_CAPABILITY), record.remove_url, danger=True))
-    return tuple(actions)
+    offered = (
+        record.offered.edit(record.resource_key, next=here) if record.offered else None,
+        PageAction.command(REMOVAL_CAPABILITY, record.resource_key)
+        if record.offered and record.offered.removes
+        else None,
+    )
+    return tuple(filter(None, offered))
 
 
 def _record_rows(records, here: str) -> list[tuple]:
@@ -328,19 +316,12 @@ def _declaration_actions(zone) -> tuple[PageAction, ...]:
         return ()
     capabilities = resource_capabilities(resource)
     offered = capabilities.offered
-    actions = [PageAction(capability_words(UPDATE_CAPABILITY), offered.edit_url)] if offered.edit_url else []
-    if offered.remove_url:
-        actions.append(
-            PageAction(
-                capabilities.removal_words,
-                offered.remove_url,
-                danger=True,
-                title=(
-                    "HQ stops changing this domain. Its records stay live." if capabilities.removal == "forget" else ""
-                ),
-            )
-        )
-    return tuple(actions)
+    key = zone.resource_key
+    shown = (
+        offered.edit(key),
+        PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant) if offered.removes else None,
+    )
+    return tuple(filter(None, shown))
 
 
 class ZoneAdoptView(View):
@@ -353,13 +334,5 @@ class ZoneAdoptView(View):
     """
 
     def post(self, request, zone):
-        result = execute_posted(request, ADOPT_ZONE, {"zone": zone, "token": request.POST.get("token", "")})
-        if refused(request, result):
-            return redirect("zones:detail", zone=zone)
-        adopted = len(result["adopted"])
-
-        messages.success(
-            request,
-            f"HQ now manages {zone} and {counted(adopted, 'record')} in it. Nothing changed at Cloudflare.",
-        )
+        refused(request, execute_posted(request, ADOPT_ZONE, {"zone": zone, "token": request.POST.get("token", "")}))
         return redirect("zones:detail", zone=zone)

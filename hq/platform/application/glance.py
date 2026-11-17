@@ -1,13 +1,15 @@
 """Typed, cached dashboard observations and their explicit refresh queue."""
 
-import re
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
+from pydantic import BaseModel, ValidationError
 
+from hq.domains.control_plane.glance_shapes import GlanceObservation, Hour, Machine, Weather
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
@@ -15,20 +17,24 @@ from hq.domains.control_plane.models import (
     ManagedResource,
     ProviderConnection,
 )
+lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 lazy from hq.platform.application.routes import reverse
-lazy from hq.platform.application.ui import STATUS_VALUES
 
 from . import readings
-from .asks import FAILED, QUEUED, REFRESHING, RUNNING, Ask, Standing, Took
-from .cadence import ring_glance_doorbell
+from .answer_fields import CallMessage
+from .asks import FAILED, QUEUED, REFRESHING, RUNNING, Ask, Asked, AskedAnswer, Standing
+from .cadence import ask
 from .command_fields import Describe
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
+from .contracts import Effect
 from .drawings import StripTile
 from .freshness import DASHBOARD_GLANCE, freshness
-from .labels import dotted
+from .labels import dotted, human_bytes
+from .moments import moment, when_hour
 from .record_errors import InputError, PolicyError
 from .security import Capability, Principal
-from .timestamps import moment
+from .tone import Tone
+from .ui import MISSING, counted, measured, severity_tone
 lazy from .capabilities import capability_words, command_spec
 lazy from .projection import read_once
 
@@ -46,7 +52,7 @@ def connection_specs():
                 id="national-weather-service",
                 label="National Weather Service",
                 kind="nws",
-                status="good",
+                status=Tone.GOOD,
                 status_label="keyless",
                 detail="Weather for the dashboard. Public, no key needed.",
                 endpoint=NWS_API,
@@ -71,14 +77,14 @@ def connection_specs():
                     "nws.hourly_forecast",
                     "Hourly forecast",
                     "Current conditions and the hourly forecast for the point.",
-                    effect="read",
+                    effect=Effect.READ,
                     grant="none",
                 ),
                 ConnectionAbility(
                     "nws.active_alerts",
                     "Active weather alerts",
                     "Active National Weather Service alerts for the point.",
-                    effect="read",
+                    effect=Effect.READ,
                     grant="none",
                 ),
             ),
@@ -93,9 +99,8 @@ def connection_specs():
 class DashboardPanelSpec:
     """What a glance panel is and how its readings are shown.
 
-    ``labels`` renames a reported metric everywhere it is shown; ``short_labels``
-    names it in the compact head. ``alert_metric`` is the metric counted as the
-    panel's alert chip, dropped while it reads zero.
+    ``short_labels`` names a reading in the compact head. ``alert_metric`` is
+    the reading drawn as the panel's alert chip.
     """
 
     id: str
@@ -104,7 +109,6 @@ class DashboardPanelSpec:
     icon: str
     head_labels: bool = True
     alert_metric: str = ""
-    labels: tuple[tuple[str, str], ...] = ()
     short_labels: tuple[tuple[str, str], ...] = ()
     # The reading the head leads with, then the ones in the line under it, by
     # display label. The first lead the reading holds is the one shown.
@@ -156,7 +160,6 @@ def panel_specs(
             configuration.infrastructure_label,
             "Choose “Show on dashboard” in a machine's settings.",
             icon="server",
-            labels=(("Container CPU", "CPU"), ("Container memory", "Memory")),
             short_labels=(("Containers", "containers"), ("Docker storage", "Storage")),
             lead=("Containers", "CPU"),
             caption=("CPU", "Memory"),
@@ -172,7 +175,6 @@ def panel_specs(
                 icon="weather",
                 head_labels=False,
                 alert_metric="Alerts",
-                labels=(("Now", "Conditions"),),
                 lead=("Temperature",),
                 caption=("Conditions", "Rain", "Range"),
                 link=("Forecast at weather.gov", _forecast_url(configuration.weather_point)),
@@ -292,6 +294,7 @@ class DashboardSettingsSaved(TypedDict):
     """The dashboard's settings, saved."""
 
     ok: Literal[True]
+    message: CallMessage
 
 
 @transaction.atomic
@@ -304,7 +307,7 @@ def save_dashboard_settings(command: DashboardSettingsCommand, *, principal: Pri
     configuration.infrastructure_label = command.infrastructure_label.strip()[:40] or "Homelab"
     configuration.audit_said = "Dashboard settings saved"
     configuration.save()
-    return {"ok": True}
+    return {"ok": True, "message": "Dashboard settings saved."}
 
 
 def _panel(
@@ -316,19 +319,10 @@ def _panel(
     refreshable: bool,
     subject: str = "",
 ) -> dict[str, Any]:
-    """One panel as the glance template reads it, from its spec and reading.
-    ``subject`` is what its head names, where panels alike stand side by side."""
+    """One panel as the glance template reads it, from its spec and its reading
+    as words (``machine_words``, ``weather_words``). ``subject`` is what its
+    head names, where panels alike stand side by side."""
 
-    payload = dict(payload)
-    if spec.alert_metric and payload.get("metrics"):
-        payload["metrics"] = [
-            metric
-            for metric in payload["metrics"]
-            if not (
-                str(metric.get("label", "")).strip().casefold() == spec.alert_metric.casefold()
-                and str(metric.get("value", "")).strip() == "0"
-            )
-        ]
     shown = tuple(_glance_reading(metric, spec) for metric in payload.get("metrics", []))
     return {
         "id": spec.id,
@@ -346,22 +340,167 @@ def _panel(
         "refreshable": refreshable,
         "standing": _standing(payload, refreshing=refreshing),
         "readings": shown,
-        "hours": tuple(_hour_tile(hour) for hour in payload.get("hours") or ()),
+        "hours": payload.get("hours", ()),
         **_head(shown, spec),
     }
 
 
-def _hour_tile(hour: dict[str, str]) -> StripTile:
-    """A forecast hour as a tile: its time, its temperature, and a chance of
-    rain said only when there is one."""
+def _metric(label: str, value: str, detail: str = "") -> dict[str, str]:
+    return {"label": label, "value": value, "detail": detail}
 
-    chance = hour.get("precipitation", "")
-    return StripTile(
-        hour.get("time", ""),
-        hour.get("temperature", ""),
-        note="" if chance in {"", "0%"} else chance,
-        tip=hour.get("forecast", ""),
-    )
+
+def _used(part: int, whole: int) -> str:
+    return measured(part * 100 / whole if whole else 0, "%", 0)
+
+
+def _failed(failure: str) -> dict[str, Any]:
+    """A panel whose last reading failed and had nothing before it to keep."""
+
+    return {
+        "status": Tone.SERIOUS,
+        "summary": f"Refresh failed ({failure}).",
+        "metrics": [],
+        "refresh_failed": failure,
+    }
+
+
+def machine_words(machine: Machine) -> dict[str, Any]:
+    """A machine's reading as its panel and its page say it: a tone, a summary
+    and its metrics, each a label, a value and a detail."""
+
+    failed = {"refresh_failed": machine.refresh_failed} if machine.refresh_failed else {}
+    if host := machine.host:
+        return {
+            "status": Tone.GOOD,
+            "summary": f"Host load {measured(host.load_1m, '', 2)}",
+            "metrics": [
+                _metric("CPU", measured(host.cpu_percent, "%", 0), counted(host.cores, "core")),
+                _metric(
+                    "Memory",
+                    _used(host.memory_used, host.memory_total),
+                    f"{human_bytes(host.memory_used)} of {human_bytes(host.memory_total)} used",
+                ),
+                _metric(
+                    "Storage",
+                    _used(host.storage_used, host.storage_total),
+                    f"{human_bytes(host.storage_used)} of {human_bytes(host.storage_total)} used on /",
+                ),
+            ],
+            **failed,
+        }
+    if docker := machine.docker:
+        return {
+            "status": Tone.GOOD,
+            "summary": dotted(counted(docker.cores, "core"), f"{human_bytes(docker.memory_total)} memory"),
+            "metrics": [
+                _metric("Containers", str(docker.containers), "running"),
+                _metric("CPU", measured(docker.cpu_percent, "%", 0), f"of {counted(docker.cores, 'core')}"),
+                _metric(
+                    "Memory",
+                    _used(docker.memory_used, docker.memory_total),
+                    f"{human_bytes(docker.memory_used)} of {human_bytes(docker.memory_total)}",
+                ),
+                _metric("Docker storage", human_bytes(docker.storage), "layers, volumes and build cache"),
+            ],
+            **failed,
+        }
+    if failed:
+        return _failed(machine.refresh_failed)
+    return {
+        "status": Tone.ATTENTION,
+        "summary": "No host telemetry connection is available.",
+        "metrics": [],
+    }
+
+
+# A chance of rain, in percent, that the weather panel names as coming.
+RAIN_CHANCE = 30
+
+
+def _degrees(hour: Hour) -> str:
+    return measured(hour.temperature, "°", -1)
+
+
+def _alert_tone(weather: Weather) -> Tone:
+    """The most severe tone among the alerts in force."""
+
+    return Tone.worst((severity_tone(alert.severity.lower()) for alert in weather.alerts), default=Tone.NEUTRAL)
+
+
+def weather_words(weather: Weather) -> dict[str, Any]:
+    """The forecast as the weather panel says it: a tone, the place, its
+    metrics, and the hours ahead as tiles."""
+
+    hours = weather.hours
+    if not hours and weather.refresh_failed:
+        return _failed(weather.refresh_failed)
+    metrics = []
+    if hours:
+        now = hours[0]
+        metrics.append(_metric("Conditions", now.forecast or MISSING, now.name))
+        if now.temperature is not None:
+            metrics.append(_metric("Temperature", _degrees(now) + (now.temperature_unit or "F")))
+    if temperatures := [hour.temperature for hour in hours if hour.temperature is not None]:
+        metrics.append(
+            _metric(
+                "Range",
+                f"{measured(min(temperatures), '', -1)}–{measured(max(temperatures), '°', -1)}",
+                f"next {counted(len(hours), 'hour')}",
+            )
+        )
+    if rain := next(((index, hour) for index, hour in enumerate(hours) if hour.chance >= RAIN_CHANCE), None):
+        index, hour = rain
+        metrics.append(
+            _metric(
+                "Rain",
+                dotted("Now" if index == 0 else when_hour(hour.start), measured(hour.chance, "%")),
+                hour.forecast,
+            )
+        )
+    if hours and (wind := f"{hours[0].wind_direction} {hours[0].wind_speed}".strip()):
+        metrics.append(_metric("Wind", wind, "NWS hourly forecast"))
+    if alerts := weather.alerts:
+        more = f" +{len(alerts) - 1}" if len(alerts) > 1 else ""
+        metrics.append(_metric("Alerts", (alerts[0].event or "Weather alert") + more, alerts[0].headline))
+    words = {
+        "status": _alert_tone(weather) if alerts else Tone.GOOD,
+        "summary": ", ".join(part for part in (weather.city, weather.state) if part) or "National Weather Service",
+        "metrics": metrics,
+        # Each hour's time and temperature, and a chance of rain said only when
+        # there is one.
+        "hours": tuple(
+            StripTile(
+                when_hour(hour.start),
+                _degrees(hour),
+                note=measured(hour.chance, "%") if hour.chance else "",
+                tip=hour.forecast,
+            )
+            for hour in hours
+        ),
+    }
+    if weather.refresh_failed:
+        words["refresh_failed"] = weather.refresh_failed
+    return words
+
+
+def _stored[Shape: BaseModel](shape: type[Shape], value: Any) -> Shape | None:
+    """A stored reading's value as the shape the controller reports, or None.
+
+    A reading kept in an older shape is none: it keeps its time, so the panel
+    falls due as it would have and the dashboard asks for it again.
+    """
+
+    try:
+        return shape.model_validate(value) if value is not None else None
+    except ValidationError:
+        return None
+
+
+def machine_metrics(telemetry: Any) -> list[dict[str, str]]:
+    """A machine's stored telemetry as the metrics its page lists."""
+
+    machine = _stored(Machine, telemetry)
+    return machine_words(machine)["metrics"] if machine else []
 
 
 def _head(shown: tuple[dict[str, Any], ...], spec: DashboardPanelSpec) -> dict[str, Any]:
@@ -379,15 +518,8 @@ def _head(shown: tuple[dict[str, Any], ...], spec: DashboardPanelSpec) -> dict[s
         "caption": tuple(
             by_label[label] for label in spec.caption if label in by_label and by_label[label] is not lead
         ),
-        "alert": _alert_text(alert) if alert else "",
+        "alert": alert["value"] if alert else "",
     }
-
-
-def _alert_text(alert: dict[str, Any]) -> str:
-    """The alert by name, or a count when the reading holds only a number."""
-
-    value = str(alert["value"])
-    return f"{value} {'alert' if value == '1' else 'alerts'}" if value.isdigit() else value
 
 
 def dashboard_panels(
@@ -420,12 +552,12 @@ def dashboard_panels(
                 else "HQ has no way to read this machine yet."
             ),
         )
-        payload, observed_at = (reading.value or {}, reading.observed_at) if reading is not None else ({}, None)
+        machine = _stored(Machine, reading.value if reading else None)
         panels.append(
             _panel(
                 spec,
-                payload=payload,
-                observed_at=observed_at,
+                payload=machine_words(machine) if machine else {},
+                observed_at=reading.observed_at if reading else None,
                 # A request nothing can answer is not a refresh in progress.
                 refreshing=panel_id in pending and resource.pk in routes,
                 refreshable=resource.pk in routes,
@@ -435,10 +567,11 @@ def dashboard_panels(
     # Nothing empty takes space: with no machine chosen there is no machine
     # reading to draw, and Get started's step is what asks for one.
     if "weather" in specs:
+        forecast = _stored(Weather, weather.value if weather else None)
         panels.append(
             _panel(
                 specs["weather"],
-                payload=weather.value if weather else {},
+                payload=weather_words(forecast) if forecast else {},
                 observed_at=weather.observed_at if weather else None,
                 refreshing="weather" in pending and bool(routes),
                 # Weather rides with a machine's refresh, so it can be asked
@@ -479,15 +612,6 @@ def refresh_ask(standing: Standing) -> Ask:
     )
 
 
-def asked_refresh(result: dict[str, Any]) -> Took:
-    """How an ask for the dashboard's readings stands once it is stored."""
-
-    return Took(
-        Standing(QUEUED, REFRESHING) if result["requested"] else Standing(),
-        message=command_spec(DASHBOARD_REFRESH).requested(),
-    )
-
-
 def glance_context(
     configuration: DashboardConfiguration | None = None,
     panels: tuple[dict[str, Any], ...] | None = None,
@@ -521,9 +645,8 @@ def _with_freshness(panel: dict[str, Any], found) -> dict[str, Any]:
 def _glance_reading(metric: dict[str, str], spec: DashboardPanelSpec) -> dict[str, Any]:
     """Display labels without altering the stored observation."""
 
-    reported = metric.get("label", "")
-    label = dict(spec.labels).get(reported, reported)
-    short_label = dict(spec.short_labels).get(reported, label)
+    label = metric.get("label", "")
+    short_label = dict(spec.short_labels).get(label, label)
     return {
         **metric,
         "label": label,
@@ -532,7 +655,7 @@ def _glance_reading(metric: dict[str, str], spec: DashboardPanelSpec) -> dict[st
         "tip": dotted(label, metric.get("detail")),
         # The words drawn after its value, for a panel that names its readings.
         "unit": short_label if spec.head_labels else "",
-        "alert": bool(spec.alert_metric) and reported == spec.alert_metric,
+        "alert": bool(spec.alert_metric) and label == spec.alert_metric,
     }
 
 
@@ -553,28 +676,25 @@ def _panel_names(ids: list[str]) -> list[str]:
     return [names.get(panel_id, panel_id) for panel_id in ids]
 
 
-def _ask_for(ids: list[str], *, why: str) -> str:
-    """Queue a reading of each panel in ``ids``, recorded once; when it was asked."""
-
-    now = timezone.now()
-    asked = DashboardRefreshRequest.objects.select_for_update().in_bulk(ids, field_name="panel_id")
-    # Each panel by the name its head shows.
-    for panel_id, name in zip(ids, _panel_names(ids), strict=True):
-        request = asked.get(panel_id) or DashboardRefreshRequest(panel_id=panel_id)
-        request.requested_at, request.completed_at = now, None
-        request.audit_said = f"Asked for {why}: {name}"
-        request.save()
-    if ids:
-        transaction.on_commit(ring_glance_doorbell)
-    return now.isoformat()
-
-
-class PanelsRefreshRequested(TypedDict):
+class PanelsRefreshRequested(AskedAnswer):
     """The dashboard panels asked to be read again."""
 
-    ok: Literal[True]
     requested: Annotated[list[str], Describe("The panels asked to be read again, by id.")]
-    requested_at: Annotated[str, Describe("When they were asked for, an ISO 8601 date-time.")]
+
+
+def _ask_for(ids: list[str], *, why: str, message: str = "") -> PanelsRefreshRequested:
+    """Queue a reading of each panel in ``ids``, recorded once."""
+
+    if ids:
+        # Each panel by the name its head shows.
+        ask(
+            panels={
+                panel_id: f"Asked for {why}: {name}" for panel_id, name in zip(ids, _panel_names(ids), strict=True)
+            },
+            doorbell="glance",
+        )
+    standing = Standing(QUEUED, REFRESHING) if ids else Standing()
+    return {**Asked(standing, message=message).answer(), "requested": ids}
 
 
 @transaction.atomic
@@ -588,8 +708,7 @@ def request_dashboard_refresh(_command: DashboardRefreshCommand, *, principal: P
     ids = [f"machine-{machine.pk}" for machine in machines if machine.pk in routes]
     if ids and configuration.weather_point:
         ids.append("weather")
-    requested_at = _ask_for(ids, why="a fresh reading of the dashboard")
-    return {"ok": True, "requested": ids, "requested_at": requested_at}
+    return _ask_for(ids, why="a fresh reading of the dashboard", message=command_spec(DASHBOARD_REFRESH).requested())
 
 
 @transaction.atomic
@@ -607,8 +726,8 @@ def request_stale_panel_refresh(_command: DashboardRefreshCommand, *, principal:
         for panel in dashboard_panels()
         if panel.get("due") and panel.get("refreshable") and not panel.get("refreshing")
     ]
-    requested_at = _ask_for(wanted, why="the dashboard's due readings")
-    return {"ok": True, "requested": wanted, "requested_at": requested_at}
+    # Posted as the page opens, which says nothing of it.
+    return _ask_for(wanted, why="the dashboard's due readings")
 
 
 def dashboard_refresh_plan(controller_id: str) -> dict[str, Any]:
@@ -659,28 +778,6 @@ def dashboard_refresh_plan(controller_id: str) -> dict[str, Any]:
     }
 
 
-def _clean_metric(metric: Any) -> dict[str, str]:
-    if not isinstance(metric, dict):
-        raise ValueError("Dashboard metrics must be objects.")
-    label = str(metric.get("label", "")).strip()[:40]
-    value = str(metric.get("value", "")).strip()[:80]
-    detail = str(metric.get("detail", "")).strip()[:120]
-    if not label or not value:
-        raise ValueError("Dashboard metrics require a label and value.")
-    return {"label": label, "value": value, "detail": detail}
-
-
-_HOUR_FIELDS = ("time", "temperature", "forecast", "precipitation")
-
-
-def _clean_hour(hour: Any) -> dict[str, str]:
-    """One forecast hour, holding only the four fields the dashboard shows."""
-
-    if not isinstance(hour, dict) or set(hour) - set(_HOUR_FIELDS):
-        raise ValueError("A forecast hour holds only time, temperature, forecast and precipitation.")
-    return {field: str(hour.get(field, "")).strip()[:40] for field in _HOUR_FIELDS}
-
-
 def _refresh_is_pending(panel_id: str) -> bool:
     pending = DashboardRefreshRequest.objects.filter(completed_at__isnull=True)
     lookup = {"panel_id__startswith": "machine-"} if panel_id == "infrastructure" else {"panel_id": panel_id}
@@ -699,54 +796,40 @@ def _answer(panel_id: str, *, as_of: Any, observed_at: Any) -> None:
     ).update(completed_at=observed_at)
 
 
-def _record_machine_readings(item: dict[str, Any], *, controller_id: str, as_of: Any, observed_at: Any) -> None:
+def _record_machine_readings(
+    observation: GlanceObservation, *, controller_id: str, as_of: Any, observed_at: Any
+) -> None:
     expected = {target["key"] for target in dashboard_refresh_plan(controller_id)["targets"]["infrastructure"]}
     matched = False
-    for machine_reading in item.get("machines") or []:
-        key = str(machine_reading.get("key", "")).strip()
-        if key not in expected:
+    for machine in observation.machines:
+        if machine.key not in expected:
             continue
-        resource = ManagedResource.objects.filter(kind="machine", key=key, enabled=True).first()
+        resource = ManagedResource.objects.filter(kind="machine", key=machine.key, enabled=True).first()
         if resource is None:
             continue
         matched = True
         reading_key = readings.machine_telemetry(resource.key)
-        previous = readings.stored(reading_key)
-        telemetry, since = _settle(
-            _clean_panel(machine_reading),
-            previous=previous.value if previous else None,
-            previous_at=previous.observed_at if previous else None,
-            now=observed_at,
+        _keep(
+            reading_key, machine, worked=lambda kept: kept.host is not None or kept.docker is not None, now=observed_at
         )
-        telemetry["controller_id"] = controller_id
-        readings.record(reading_key, telemetry, observed_at=since)
         _answer(f"machine-{resource.pk}", as_of=as_of, observed_at=observed_at)
     if not matched:
         raise ValueError("No machine HQ knows matched the controller's report.")
 
 
 def _record_weather_reading(
-    item: dict[str, Any], *, configuration: DashboardConfiguration, as_of: Any, observed_at: Any
+    observation: GlanceObservation, *, configuration: DashboardConfiguration, as_of: Any, observed_at: Any
 ) -> None:
-    point = str(item.get("point", "")).strip()
-    if not point or point != configuration.weather_point:
+    weather = observation.weather
+    if weather is None or weather.point != configuration.weather_point:
         raise ValueError("Weather was reported without a configured point.")
-    stored = readings.stored(readings.weather(point))
-    payload, since = _settle(
-        _clean_panel(item),
-        previous=stored.value if stored else None,
-        previous_at=stored.observed_at if stored else None,
-        now=observed_at,
-    )
-    readings.record(readings.weather(point), payload, observed_at=since)
+    _keep(readings.weather(weather.point), weather, worked=lambda kept: bool(kept.hours), now=observed_at)
     _answer("weather", as_of=as_of, observed_at=observed_at)
 
 
 @transaction.atomic
-def record_dashboard_observations(
-    payload: list[dict[str, Any]], *, principal: Principal, controller_id: str
-) -> dict[str, Any]:
-    principal.require(Capability.MANAGE_INFRASTRUCTURE)
+def record_dashboard_observations(payload: list[dict[str, Any]], *, admitted: Admitted) -> dict[str, Any]:
+    controller_id = admission(admitted).controller_id
     configuration = dashboard_configuration()
     allowed = {spec.id for spec in panel_specs(configuration)}
     now = timezone.now()
@@ -760,46 +843,32 @@ def record_dashboard_observations(
         planned = moment(item.get("as_of"), naive="refuse")
         if planned is None:
             raise ValueError(f"The reading of {panel_id!r} does not say when its plan was made.")
+        try:
+            observation = GlanceObservation.model_validate(item)
+        except ValidationError as exc:
+            raise ValueError(f"The reading of {panel_id!r} is not the shape the contract states.") from exc
         as_of = min(planned, now)
         if panel_id == "infrastructure":
-            _record_machine_readings(item, controller_id=controller_id, as_of=as_of, observed_at=now)
+            _record_machine_readings(observation, controller_id=controller_id, as_of=as_of, observed_at=now)
         else:
-            _record_weather_reading(item, configuration=configuration, as_of=as_of, observed_at=now)
+            _record_weather_reading(observation, configuration=configuration, as_of=as_of, observed_at=now)
         stored.append(panel_id)
     return {"ok": True, "recorded": stored, "observed_at": now.isoformat()}
 
 
-def _clean_panel(item: dict[str, Any]) -> dict[str, Any]:
-    status = str(item.get("status", "neutral")).strip()
-    if status not in STATUS_VALUES:
-        raise ValueError(f"Unknown dashboard status {status!r}.")
-    cleaned = {
-        "status": status,
-        "summary": str(item.get("summary", "")).strip()[:200],
-        "metrics": [_clean_metric(metric) for metric in item.get("metrics", [])][:8],
-    }
-    hours = [_clean_hour(hour) for hour in item.get("hours") or []][:12]
-    if hours:
-        cleaned["hours"] = hours
-    # The type of error, and nothing else a controller might say about it.
-    failed = re.sub(r"[^A-Za-z0-9_]", "", str(item.get("refresh_failed") or ""))[:60]
-    if failed:
-        cleaned["refresh_failed"] = failed
-    return cleaned
-
-
-def _settle(
-    reading: dict[str, Any], *, previous: dict[str, Any] | None, previous_at: Any, now: Any
-) -> tuple[dict[str, Any], Any]:
-    """What a panel should hold after a refresh, and since when.
+def _keep[Shape: (Machine, Weather)](key: str, reading: Shape, *, worked: Callable[[Shape], bool], now: Any) -> None:
+    """Store a panel's reading, as the controller reported it.
 
     A failed refresh never replaces a reading that worked. The last good reading
     keeps its own time, so the panel ages toward "Out of date" on its own, and
-    the failure is carried as a note. Only a panel with nothing to show reports
+    the failure is carried as a note. Only a panel with nothing to show stores
     the failure itself.
     """
 
-    if reading.get("refresh_failed") and previous and previous.get("metrics"):
-        kept = {key: value for key, value in previous.items() if key != "refresh_failed"}
-        return {**kept, "refresh_failed": reading["refresh_failed"]}, previous_at
-    return reading, now
+    previous = readings.stored(key)
+    kept = _stored(type(reading), previous.value if previous else None)
+    if reading.refresh_failed and previous is not None and kept is not None and worked(kept):
+        kept = kept.model_copy(update={"refresh_failed": reading.refresh_failed})
+        readings.record(key, kept.model_dump(mode="json", exclude_defaults=True), observed_at=previous.observed_at)
+        return
+    readings.record(key, reading.model_dump(mode="json", exclude_defaults=True), observed_at=now)

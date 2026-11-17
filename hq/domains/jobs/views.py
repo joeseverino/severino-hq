@@ -10,9 +10,10 @@ from django.views.generic import DetailView, ListView, TemplateView, View
 from hq.platform.application.pages import PageAction, PageBadge, PageMixin
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Projected, TableColumn, TableFilter, TableListMixin, TableQuery, TableSort
+from hq.platform.application.tone import Tone
 lazy from hq.platform.application import outbound_work, work_runs
-lazy from hq.platform.application.asks import FAILED, AskMixin, Standing, Took
-lazy from hq.platform.application.automation_runs import cancel_action, listed_with_actions, run_here_url
+lazy from hq.platform.application.asks import AskMixin
+lazy from hq.platform.application.automation_runs import AGAIN, cancel_action, capability_name, listed_with_actions
 lazy from hq.platform.application.capabilities import capability_spec
 lazy from hq.platform.application.labels import lower_first
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
@@ -20,8 +21,8 @@ lazy from hq.platform.application.run_pages import run_context
 
 from .models import Job, JobState
 
-# A run's tone (``work_runs.TONES``) in the notice's own names for it.
-NOTICE_TONES = {"serious": "error", "attention": "warning"}
+# A run's tone (``JobState``'s) in the notice's own names for it.
+NOTICE_TONES = {Tone.SERIOUS: "error", Tone.ATTENTION: "warning"}
 
 
 class JobListView(PageMixin, TableListMixin, ListView):
@@ -103,7 +104,7 @@ class JobListView(PageMixin, TableListMixin, ListView):
             (first, _), *rest = context["ended_badly"]
             # The worst state leads ENDED_BADLY, and the banner reads in the tone its run does.
             worst = next(state for state, titles in ended.items() if titles)
-            context["ended_badly_tone"] = NOTICE_TONES[work_runs.TONES[JobState(worst)]]
+            context["ended_badly_tone"] = NOTICE_TONES[JobState(worst).tone]
             said = " or ".join((first, *(lower_first(label) for label, _ in rest)))
             many = sum(len(titles) for _, titles in context["ended_badly"]) > 1
             context["ended_badly_title"] = f"{said} on {'their' if many else 'its'} last run"
@@ -137,11 +138,13 @@ class RunView(PageMixin, TemplateView):
         # Its playbook again on the same machines, once it has ended, while that playbook is adopted.
         ended = self.run.state not in {JobState.QUEUED, JobState.RUNNING}
         again = (
-            (PageAction("Run again", run_here_url(playbook, self.run.evidence.hosts)),)
+            PageAction.command(
+                capability_name(playbook), variant=AGAIN, query={"hosts": tuple(self.run.evidence.hosts)}
+            )
             if ended and playbook and capability_spec(self.run.kind)
-            else ()
+            else None
         )
-        return (*again, *((cancel,) if cancel is not None else ()))
+        return tuple(action for action in (again, cancel) if action is not None)
 
     @override
     def get_context_data(self, **kwargs):
@@ -175,22 +178,10 @@ class WorkAskView(AskMixin, View):
     @cached_property
     def work(self):
         work = outbound_work.declared_work().get(self.capability)
-        if work is None:
+        if work is None or not work.offered:
             raise Http404("No such work is declared.")
         return work
 
     @override
     def target(self) -> str | None:
         return self.request.POST.get(SUBJECT_FIELD, "") if self.work.takes_subject else None
-
-    @override
-    def asked(self, result, at) -> Took:
-        job = Job.objects.filter(pk=result["job"]).first() if result.get("job") else None
-        if job is None:
-            # Another subject's run of the same work holds the one live slot.
-            return Took(Standing(FAILED, result.get("message", "")))
-        return Took(
-            work_runs.standing_of(work_runs.job_run(job)),
-            reverse("jobs:status", args=[job.pk]),
-            result.get("message", ""),
-        )

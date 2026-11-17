@@ -13,6 +13,7 @@ from typing import Any, NamedTuple
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.module_loading import import_string
+from django.utils.text import capfirst
 
 from .derivations import derivation
 from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant, estate_variant
@@ -29,6 +30,7 @@ from .plugins import (
     source_cards,
 )
 from .routes import reverse
+lazy from . import attention
 lazy from .security import Capability, Principal, could_hold
 
 # Order bands. Below HOST_ORDER_FLOOR is reserved for extension-supplied
@@ -84,6 +86,14 @@ class Records:
     # (verb, summary, label) where the derived wording would say less than it
     # should; an empty one keeps the derived.
     wording: tuple[tuple[str, str, str], ...] = ()
+    # (verb, variant, words): a mode a page offers its command in (``CapabilitySpec.variants``).
+    variants: tuple[tuple[str, str, str], ...] = ()
+
+    @property
+    def called(self) -> str:
+        """What a sentence calls one record as it opens: "Content item", "Expense"."""
+
+        return capfirst(self.title or self.noun)
 
     @property
     def write(self) -> str:
@@ -114,6 +124,12 @@ class DomainDescriptor:
     apps: tuple[str, ...] = ()
     mounts: tuple[Mount, ...] = ()
     records: Records | None = None
+
+    def __post_init__(self) -> None:
+        # What a host section puts on the queue is its finding rules' findings
+        # (``FindingRule.domain``), and the held requests are Approvals'.
+        if self.integration.attention is not None:
+            raise ImproperlyConfigured(f"{self.id} raises queue items as finding rules, not an attention provider.")
 
 
 # Runtime behavior is one typed, lazy ``PluginIntegration`` for both. The
@@ -257,7 +273,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         integration=PluginIntegration(
             capabilities=_provider("hq.platform.application.calendar_specs:capabilities"),
             resources=_provider("hq.platform.application.calendar_specs:resources"),
-            attention=_provider("hq.platform.application.calendar_entries:attention"),
         ),
         apps=("hq.domains.calendars",),
         mounts=(Mount("calendar/", "hq.domains.calendars.urls"),),
@@ -267,17 +282,13 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Projects",
         description="The projects being built, their repositories and what GitHub says of them.",
         navigation=(NavigationItem("Projects", "projects:list", "projects", 100, "Projects"),),
-        # No attention provider, deliberately. "Active work with nothing
+        # No finding rule for it, deliberately. "Active work with nothing
         # written about it yet" is a shape of the portfolio, not a decision:
         # only months of work clear it, so it does not belong in the queue.
         # The number shows on the projects card as "N need output".
         integration=PluginIntegration(
             resources=_provider("hq.domains.projects.specs:resources"),
             dashboard=_provider("hq.platform.application.sections:projects"),
-            # What GitHub holds for a person: a deploy waiting on approval, a
-            # failing default branch, a serious alert, a lapsing admission.
-            # Decisions, not the portfolio's shape, which is why it is here.
-            attention=_provider("hq.platform.application.github_posture:build_attention"),
             outbound=_provider("hq.platform.application.projects:outbound_work"),
         ),
         apps=("hq.domains.projects",),
@@ -314,11 +325,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Docs",
         description="Pointers to the documentation of each system and project, kept by sensitivity.",
         navigation=(NavigationItem("Docs", "docs_index:list", "docs_index", 101, "Projects"),),
-        integration=PluginIntegration(
-            resources=_provider("hq.domains.docs_index.specs:resources"),
-            attention=_provider("hq.platform.application.attention:documentation"),
-            dashboard=_provider("hq.platform.application.sections:documentation"),
-        ),
+        integration=PluginIntegration(resources=_provider("hq.domains.docs_index.specs:resources")),
         apps=("hq.domains.docs_index",),
         mounts=(Mount("docs/", "hq.domains.docs_index.urls"),),
         records=Records(
@@ -347,7 +354,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(NavigationItem("Writeups", "content:writeups", "content", 110, "Web"),),
         integration=PluginIntegration(
             resources=_provider("hq.domains.content.specs:resources"),
-            attention=_provider("hq.platform.application.attention:content"),
             dashboard=_provider("hq.platform.application.sections:content"),
         ),
         apps=("hq.domains.content",),
@@ -361,6 +367,11 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             command="hq.platform.application.content:ContentCommand",
             save="hq.platform.application.content:save_content",
             title="content item",
+            variants=(
+                ("create", "writeup_or_page", "Add a writeup or page"),
+                ("create", "writeup", "Add a writeup"),
+                ("create", "page", "Add a page"),
+            ),
         ),
     ),
     DomainDescriptor(
@@ -379,7 +390,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         integration=PluginIntegration(
             capabilities=_provider("hq.domains.contacts.specs:capabilities"),
             resources=_provider("hq.domains.contacts.specs:resources"),
-            attention=_provider("hq.platform.application.attention:contacts"),
         ),
         apps=("hq.domains.contacts",),
         mounts=(Mount("contacts/", "hq.domains.contacts.urls"),),
@@ -403,9 +413,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # Last in Web, because it is the section that reports on the others.
         # Reading it is what you do after publishing, not before.
         navigation=(NavigationItem("Analytics", "analytics:overview", "analytics", 114, "Web"),),
-        integration=PluginIntegration(
-            resources=_provider("hq.domains.analytics.specs:resources"),
-        ),
+        integration=PluginIntegration(resources=_provider("hq.domains.analytics.specs:resources")),
         apps=("hq.domains.analytics",),
         mounts=(Mount("analytics/", "hq.domains.analytics.urls"),),
     ),
@@ -416,7 +424,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(NavigationItem("Expenses", "expenses:list", "expenses", 120, "Business"),),
         integration=PluginIntegration(
             resources=_provider("hq.domains.expenses.specs:resources"),
-            attention=_provider("hq.platform.application.attention:expenses"),
             dashboard=_provider("hq.platform.application.sections:expenses"),
         ),
         apps=("hq.domains.expenses",),
@@ -436,10 +443,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Receipts",
         description="Receipts, matched to the expense or asset each paid for.",
         navigation=(NavigationItem("Receipts", "receipts:list", "receipts", 121, "Business"),),
-        integration=PluginIntegration(
-            resources=_provider("hq.domains.receipts.specs:resources"),
-            attention=_provider("hq.platform.application.attention:receipts"),
-        ),
+        integration=PluginIntegration(resources=_provider("hq.domains.receipts.specs:resources")),
         apps=("hq.domains.receipts",),
         mounts=(Mount("receipts/", "hq.domains.receipts.urls"),),
         # Receipts arrive as uploads, so there is no create command.
@@ -457,6 +461,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 ("update", "Change a receipt's details. The file itself does not change.", ""),
                 ("delete", "Delete one receipt and its file.", ""),
             ),
+            # Its match page links it to one of the expenses it may be for.
+            variants=(("update", "expense", "Link to expense"), ("update", "link", "Link")),
         ),
     ),
     DomainDescriptor(
@@ -464,10 +470,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Assets",
         description="What the business owns, what it cost and what it serves.",
         navigation=(NavigationItem("Assets", "assets:list", "assets", 122, "Business"),),
-        integration=PluginIntegration(
-            resources=_provider("hq.domains.assets.specs:resources"),
-            attention=_provider("hq.platform.application.attention:assets"),
-        ),
+        integration=PluginIntegration(resources=_provider("hq.domains.assets.specs:resources")),
         apps=("hq.domains.assets",),
         mounts=(Mount("assets/", "hq.domains.assets.urls"),),
         records=Records(
@@ -544,7 +547,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # No page of its own. Its card is machines, services, domains and
         # connections at once, each figure linking to the page that lists it.
         integration=PluginIntegration(
-            attention=_provider("hq.platform.application.estate:attention"),
             dashboard=Viewed("hq.platform.application.estate:cards"),
             overview=Viewed("hq.platform.application.estate:overview"),
             calendars=_provider("hq.platform.application.calendar_sources:estate_sources"),
@@ -563,7 +565,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
-        integration=PluginIntegration(attention=_provider("hq.platform.application.attention:infrastructure")),
         apps=("hq.domains.control_plane",),
         mounts=(Mount("infrastructure/", "hq.domains.control_plane.urls"),),
     ),
@@ -673,6 +674,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         integration=PluginIntegration(
             capabilities=_provider("hq.platform.application.automation_adoption:capability_specs"),
             resources=_provider("hq.platform.application.run_reads:resources"),
+            outbound=_provider("hq.platform.application.host_work:outbound"),
         ),
         apps=("hq.domains.jobs",),
         mounts=(Mount("jobs/", "hq.domains.jobs.urls"),),
@@ -700,7 +702,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # approval's page, which each item opens, and all of them in the
         # audit log's approval queue, which the queue's heading opens.
         integration=PluginIntegration(
-            attention=_provider("hq.platform.application.attention:waiting_for_approval"),
             attention_url=_provider("hq.platform.application.attention:approval_queue"),
             resources=_provider("hq.platform.application.held_reads:resources"),
         ),
@@ -923,14 +924,42 @@ def attention_urls() -> dict[str, str]:
     }
 
 
+def resources_of(domain: str) -> tuple[str, ...]:
+    """The resources a host section declares, by name: what a reader of its records reads."""
+
+    return tuple(
+        spec.name
+        for found in host_domains()
+        if found.id == domain and found.integration.resources is not None
+        for spec in found.integration.resources()
+    )
+
+
+def queue_sources() -> tuple[str, ...]:
+    """Every domain that raises items on the queue, by id."""
+
+    raising = attention.raising_domains()
+    return tuple(
+        domain.id for domain in all_domains() if domain.id in raising or domain.integration.attention is not None
+    )
+
+
+def _host_queue(domain: str) -> Callable[[], tuple[Any, ...]]:
+    if domain == attention.APPROVALS:
+        return attention.waiting_for_approval
+    return partial(attention.raised, domain)
+
+
 @derivation("attention.queue", reads=QUEUE_READS, vary=estate_variant)
 def host_attention() -> tuple[dict[str, Any], ...]:
-    """What the host's own sections report, derived once per change of the estate."""
+    """What the host's own sections report, derived once per change of the
+    estate: their finding rules' findings, and the held requests."""
 
+    raising = attention.raising_domains()
     return gather_attention(
-        (domain.id, domain.label, domain.integration.attention, domain.read_capabilities)
-        for domain in all_domains()
-        if domain.origin == "host"
+        (domain.id, domain.label, _host_queue(domain.id), domain.read_capabilities)
+        for domain in host_domains()
+        if domain.id in raising
     )
 
 

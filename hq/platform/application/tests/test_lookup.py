@@ -203,6 +203,24 @@ class ReadCapabilityTests(TestCase):
         self.assertFalse(reader.permits(Capability.LOOK_UP_PUBLIC_RECORDS))
         self.assertTrue(granted.permits(Capability.LOOK_UP_PUBLIC_RECORDS))
 
+    def test_a_caller_without_the_grant_is_refused_every_lookup(self):
+        """Through the runner, which checks the spec's grant, and the panel's stored read, which runs off it."""
+
+        from ..lookup import stored_address
+        from ..security import AuthorizationError
+
+        reader = Principal("example-agent", "mcp", frozenset({Capability.READ}))
+        for name, payload in (
+            ("lookup.name.read", {"name": "example.test"}),
+            ("lookup.address.read", {"address": GLOBAL}),
+        ):
+            with self.subTest(name=name):
+                result = execute_capability(name, payload, principal=reader)
+
+                self.assertEqual(result["error"]["code"], "forbidden")
+        with self.assertRaises(AuthorizationError):
+            stored_address(AddressCommand(address=GLOBAL), principal=reader)
+
 
 class AddressCacheTests(TestCase):
     """The answer barely moves, so asking twice should not cost two calls."""

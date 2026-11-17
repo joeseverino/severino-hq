@@ -3,4 +3,4 @@ Each reason HQ cannot do something here, at the top of the card that
 describes the record, each a sentence of its own. The state and what it means
 are on the title's line (`control_plane/_record_status.html`).
 {% endcomment %}
-{% for line in controller.lines %}<p class="muted">{{ line|breakable }}</p>{% endfor %}
+{% for line in controller.lines %}{% muted element="p" %}{{ line|breakable }}{% endmuted %}{% endfor %}

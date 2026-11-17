@@ -58,7 +58,7 @@
               {% fact "Registry handle" %}<code>{{ reading.allocation.handle|breakable }}</code>{% endfact %}
             {% endif %}
             {% if reading.note %}
-              {% fact "Note" %}<span class="muted">{{ reading.note|breakable }}</span>{% endfact %}
+              {% fact "Note" %}{% muted %}{{ reading.note|breakable }}{% endmuted %}{% endfact %}
             {% endif %}
           {% endfacts %}
           {% if reread %}

@@ -8,7 +8,7 @@ gate.
 
 import os
 import platform
-import shutil
+import re
 import signal
 import subprocess
 import sys
@@ -29,6 +29,7 @@ from hq.platform.core.attribution import from_the_shell
 from hq.platform.core.tests import task
 from hq.platform.core.tests.browser.in_flight import SETTLED
 from hq.platform.core.tests.task import ESTATE, PageRefused, RefError, estate_name, trusted_mise, usage, worktree
+from tools.dev import extension_set
 from tools.gate import turn
 from tools.perf import measure, runs, table
 from tools.perf.targets import (
@@ -49,8 +50,8 @@ lazy from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, viewp
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "var" / "perf"
-# The extension set dev:scratch composes, gitignored.
-LOCAL = ROOT / "mise.local.toml"
+# How a run's closing line names the file it kept, the one way a caller learns which run that is.
+KEPT = re.compile(r"; kept in (var/perf/\S+\.json)$")
 # Set when a run starts again host alone, to the refusal that made it.
 ALONE_BECAUSE = "PERF_HOST_ALONE_BECAUSE"
 # What perf says of a page asked that the base answers 404 and this tree serves.
@@ -72,6 +73,8 @@ class Plan:
     extensions: list[str]
     # Why the host is measured with no extension composed, or nothing when the set is composed.
     alone: str = ""
+    # The set a base's server composes, as the environment names it: the one its commit can load.
+    base_set: dict[str, str] = field(default_factory=dict)
 
     @property
     def target(self) -> str:
@@ -174,17 +177,27 @@ def served(
     return list(dict.fromkeys(chosen))
 
 
-def set_up() -> str:
-    """Django set up with the pages the servers measured will compose, and why the host is
-    measured alone, as ``alone_because``."""
+def set_up(base: str | None = None) -> tuple[str, dict[str, str]]:
+    """Django set up with the pages the servers measured will compose, why the host is measured
+    alone, as ``alone_because``, and the set the ``base`` commit's server composes. A base that can
+    load no extension this tree composes has the host measured alone on both sides, so the
+    extensions' cost is never counted as the change's."""
 
     alone = alone_because()
+    base_set: dict[str, str] = {}
+    if base and not alone and os.environ.get("SEVERINO_HQ_PLUGINS"):
+        picked = extension_set.at_commit(base)
+        print(f"Base {base[:12]}: {picked.said}", flush=True)
+        if picked.plugins:
+            base_set = picked.named
+        else:
+            alone = picked.said
     if alone:
         # The pages are the host's own, as the servers measured will compose them.
         os.environ["SEVERINO_HQ_PLUGINS"] = ""
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
     django.setup()
-    return alone
+    return alone, base_set
 
 
 def _unsaid(_said: str) -> None:
@@ -220,10 +233,10 @@ def refuse_early() -> None:
     print(tokens(base=bool(asked.text("base")), image=asked.switch("image")), flush=True)
 
 
-def plan() -> Plan:
+def plan(base: str | None = None) -> Plan:
     """The pages asked, the phone's and the wide desktop's viewports, and the task's flags."""
 
-    alone = set_up()
+    alone, base_set = set_up(base)
     asked = usage()
     seed = seed_of(asked.text("seed"))
     # The pages the set's navigation reaches, and those asked, under the settings it is shown with.
@@ -242,6 +255,7 @@ def plan() -> Plan:
         seed=seed,
         extensions=[spec for spec in os.environ.get("SEVERINO_HQ_PLUGINS", "").split(",") if spec],
         alone=alone,
+        base_set=base_set,
     )
 
 
@@ -266,20 +280,10 @@ def chromium() -> Iterator[Any]:
             browser.close()
 
 
-@contextmanager
-def base_tree(commit: str) -> Iterator[Path]:
-    """A worktree of ``commit`` with this checkout's mise.local.toml, so its server composes the same extensions."""
-
-    with worktree(commit) as tree:
-        if LOCAL.is_file():
-            shutil.copy2(LOCAL, tree / LOCAL.name)
-        yield tree
-
-
-def image_of(tree: Path, commit: str, *, here: bool, composed: bool) -> str:
+def image_of(tree: Path, commit: str, *, here: bool, composed: bool, named: dict[str, str]) -> str:
     """The image to run for ``tree``: the one IMAGE hands over here, else the host image
-    image:build makes, composed with this checkout's extension set where the plan composes one,
-    as production runs it. A base tree has no image:compose of its own, so this checkout's
+    image:build makes, composed where the plan composes the extensions with the set ``named`` for
+    it (a base's) or this checkout's, as production runs it. A base tree has no image:compose of its own, so this checkout's
     composes it with the base's own composition/Dockerfile and staging."""
 
     if here and os.environ.get("IMAGE"):
@@ -293,7 +297,7 @@ def image_of(tree: Path, commit: str, *, here: bool, composed: bool) -> str:
         return host
     tag = f"{host}-composed"
     command = ["mise", "-C", str(ROOT), "run", "image:compose", "--host", host, "--tag", tag, "--context", str(tree)]
-    done = subprocess.run(command, capture_output=True, text=True, env=clean_env(), check=False)
+    done = subprocess.run(command, capture_output=True, text=True, env=clean_env(**named), check=False)
     if done.returncode:
         tail = "\n".join(f"{done.stdout}\n{done.stderr}".strip().splitlines()[-20:])
         raise NotMeasured(f"image:compose exited {done.returncode}: {tail}")
@@ -451,11 +455,12 @@ def serve(
     kept.save()
     log = OUT / f"{kept.name}.{side}.log"
     print(f"Starting {commit} ({asked.target}, {asked.seed}); its server's output is in {log}", flush=True)
+    named = {} if here else asked.base_set
     try:
         target = (
-            Image(image_of(tree, commit, here=here, composed=bool(asked.extensions)), log, asked.seed)
+            Image(image_of(tree, commit, here=here, composed=bool(asked.extensions), named=named), log, asked.seed)
             if asked.image
-            else Scratch(tree, log, asked.seed, trusted=not here, alone=bool(asked.alone))
+            else Scratch(tree, log, asked.seed, trusted=not here, alone=bool(asked.alone), named=named)
         )
         with recorder.timed("start"):
             target.__enter__()
@@ -464,7 +469,7 @@ def serve(
         # Whatever stopped the start, a scratch boot or a composed image's build, a tree whose HQ
         # serves the host alone but cannot load the set is measured alone on both sides, so the
         # extensions' cost is never counted as the change's.
-        refused = None if asked.alone else set_refused(tree, trusted=not here)
+        refused = None if asked.alone else set_refused(tree, trusted=not here, named=named)
         if refused:
             raise SetRefused(f"{commit} cannot load the extension set: {refused}") from error
         return None
@@ -590,7 +595,7 @@ def measure_run(base_commit: str | None, here_commit: str, asked: Plan, kept: ru
         live = {}
         if base_commit:
             live["base"] = serve(
-                stack.enter_context(base_tree(base_commit)),
+                stack.enter_context(worktree(base_commit)),
                 base_commit[:12],
                 here=False,
                 asked=asked,
@@ -628,7 +633,12 @@ def main() -> int:
     signal.signal(signal.SIGTERM, stop)
     ref = usage().text("base")
     try:
-        asked = plan()
+        base_commit = task.commit_of(ref) if ref else None
+    except RefError as error:
+        print(f"perf --base {ref}: {error}", file=sys.stderr)
+        return 2
+    try:
+        asked = plan(base_commit)
     except Unservable as error:
         print(f"perf: {error}", file=sys.stderr)
         return 2
@@ -636,11 +646,6 @@ def main() -> int:
         print(said, flush=True)
         return 0
     here_commit = commit_of(ROOT)
-    try:
-        base_commit = task.commit_of(ref) if ref else None
-    except RefError as error:
-        print(f"perf --base {ref}: {error}", file=sys.stderr)
-        return 2
     stem = runs.name(here_commit, base_commit and base_commit[:12], asked.target, datetime.now(UTC))
     kept = runs.Run.start(OUT, stem, target=asked.target, plan=asked.key(), alone=asked.alone or None)
     try:

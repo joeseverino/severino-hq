@@ -15,8 +15,12 @@ from django.utils.text import Truncator
 from hq.platform.application.payload_words import STEP, ChangeRow, path_words, value_words
 from hq.platform.application.ui import counted
 lazy from hq.domains.control_plane.bridge_actions import ACTIONS
+lazy from hq.platform.application.approvals import LAPSE, REQUEST
 lazy from hq.platform.application.capabilities import capability_spec
-lazy from hq.platform.application.scheduled_work import job_names
+lazy from hq.platform.application.capability_renames import RECORDED_AS
+lazy from hq.platform.application.outbound_work import job_names
+lazy from hq.platform.application.reports import EXPORT
+lazy from hq.platform.application.security import MCP_OPERATION
 
 lazy from .models import AuditLog
 
@@ -83,24 +87,13 @@ def _said(row: ChangeRow) -> str:
     return f"{field}: {before} to {after}"
 
 
-# The operations HQ binds that no capability, job or controller action
-# declares, by name, in a person's words. A name bound anywhere in the host
-# resolves through ``title_of`` (``test_audit_words`` reads every binding).
-TITLES: dict[str, str] = {
-    "approval.request": "Asked for a change a person approves",
-    "approval.lapse": "A held change lapsed",
-    "mcp": "An agent connected over MCP",
-    "infrastructure.reconcile.request": "Asked the controller to apply a record",
-    "infrastructure.start.request": "Asked the controller for a start",
-    "infrastructure.stop.request": "Asked the controller for a stop",
-    "infrastructure.restart.request": "Asked the controller for a restart",
-    "automation.run.request": "Asked to run a playbook",
-    "infrastructure.resource.forget": "Stopped managing a record",
-    "tailnet.routes.approve.request": "Asked to approve a machine's routes",
-    "certificate.renew.request": "Asked to renew a certificate",
-    "project.refresh_content": "Refreshed the site's content",
-    "report.export": "Exported a year summary",
-}
+def _titled() -> dict[str, str]:
+    """The operations HQ binds that no capability, job or controller action
+    declares, each titled where it is bound."""
+
+    return {operation: operation.title for operation in (REQUEST, LAPSE, MCP_OPERATION, EXPORT)}
+
+
 # A controller's call runs as ``bridge.<action>``, and one the bridge turned
 # away as ``bridge.<action>.refused``, as the bridge binds them.
 BRIDGE = "bridge."
@@ -111,7 +104,9 @@ REFUSED_TITLE = "HQ turned away a controller's call"
 def title_of(operation: str) -> str | None:
     """What a person calls the operation named ``operation``, in the words of
     whatever declared it, or None when nothing did: a capability's title, a
-    job's label, a controller action's title, or ``TITLES``.
+    job's label, a controller action's title, or the title bound beside its
+    name. A name a handler's binding once gave its rows reads as the
+    capability that records the act now (``capability_renames.RECORDED_AS``).
 
     The one place an operation's name becomes its title, so a name nothing
     declares is never shown as its code dressed up as words.
@@ -119,10 +114,10 @@ def title_of(operation: str) -> str | None:
 
     if not operation:
         return None
-    spec = capability_spec(operation)
+    spec = capability_spec(RECORDED_AS.get(operation, operation))
     if spec is not None:
         return spec.title
-    if title := job_names().get(operation) or TITLES.get(operation):
+    if title := job_names().get(operation) or _titled().get(operation):
         return title
     if operation.startswith(BRIDGE):
         action = operation.removeprefix(BRIDGE)

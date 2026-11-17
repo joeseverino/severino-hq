@@ -27,7 +27,6 @@ Security properties:
   name no execution field (``automation_manifest._closed``).
 """
 
-import hashlib
 import json
 import re
 from collections import Counter
@@ -57,20 +56,23 @@ from pydantic import (
 )
 
 from hq.domains.control_plane.models import AdoptedCatalog, SourceProposal
-lazy from hq.platform.core.audit import audit_operation
+from hq.platform.core.digests import digest
 
 from . import automation_sources
+from .answer_fields import CallMessage
 from .automation_manifest import PLAYBOOK, REVISION, OperationManifest, ProcedureTerms, Statement
 from .automation_sources import InputBound, ProcedureDeclaration
 from .command_fields import Describe
+from .contracts import Closed, Effect
 from .integration_specs import CapabilitySpec
+from .projection import read_once
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 lazy from . import agent_registry
 lazy from .approval_review import SUMMARY
 lazy from .automation_runs import RETRY_WORDS, access_words, anywhere, timeout_words
 lazy from .findings import rule_for
-lazy from .labels import dotted, effect_label, lower_first
+lazy from .labels import dotted, lower_first
 lazy from .payload_words import field_words
 lazy from .ui import ended
 
@@ -88,10 +90,7 @@ REFUSED_KINDS = {
 }
 # Where a role's own files sit, beside a playbook or at the project's root.
 ROLES = "roles"
-# The file that names the collections the worker's image is built with.
-REQUIREMENTS = "requirements.yml"
-# How a change's effect ranks, so a raise is seen as one.
-EFFECT_RANK = {"read": 0, "infrastructure_change": 1, "destructive": 2}
+
 # The most characters of an object id a comparison shows: enough to tell two apart.
 SHOWN_OBJECT = 12
 
@@ -104,11 +103,11 @@ TEXT = frozenset({"str", "path"})
 type Scalar = Literal["str", "path", "int", "float", "bool"]
 
 
-class AdoptedInput(BaseModel):
+class AdoptedInput(Closed):
     """One input of a playbook, as adopted: its argument spec's terms, and
     the sidecar's limit on a text input."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    model_config = ConfigDict(frozen=True, strict=True)
 
     type: Literal["str", "path", "int", "float", "bool", "list"]
     elements: Scalar | None = None
@@ -232,9 +231,10 @@ def _newest_digest() -> str:
 
 
 def adopted() -> AdoptedCatalog | None:
-    """The catalog HQ runs from now, or None before any adoption."""
+    """The catalog HQ runs from now, or None before any adoption: read once
+    for every part of a page that names it."""
 
-    return AdoptedCatalog.objects.first()
+    return read_once("automation.adopted", AdoptedCatalog.objects.first)
 
 
 def manifests(digest: str) -> tuple[OperationManifest, ...]:
@@ -290,6 +290,12 @@ def _scalar(kind: str, choices: tuple[Any, ...], bound: InputBound | None) -> An
     return SCALARS[kind]
 
 
+class _Inputs(Closed):
+    """A procedure's parameters, fixed once read."""
+
+    model_config = ConfigDict(frozen=True)
+
+
 def input_type(operation_id: str, inputs: Mapping[str, AdoptedInput]) -> type[BaseModel]:
     """The closed model a procedure's parameters are validated with, from its
     inputs as adopted: each by its Ansible type, its choices or its bound."""
@@ -310,9 +316,7 @@ def input_type(operation_id: str, inputs: Mapping[str, AdoptedInput]) -> type[Ba
         else:
             fields[name] = (described, Field(default=spec.default, validate_default=True))
     title = "".join(part.title() for part in operation_id.replace(".", "_").split("_"))
-    model: type[BaseModel] = create_model(
-        f"{title}Inputs", __config__=ConfigDict(extra="forbid", frozen=True), __module__=__name__, **fields
-    )
+    model: type[BaseModel] = create_model(f"{title}Inputs", __base__=_Inputs, __module__=__name__, **fields)
     return model
 
 
@@ -469,10 +473,10 @@ def _procedure(
     return procedure
 
 
-def _does(effect: str) -> str:
+def _does(effect: Effect) -> str:
     """What a procedure of ``effect`` does, in the words its command's page says it with."""
 
-    return lower_first(effect_label(effect))
+    return lower_first(effect.label)
 
 
 def titles(procedures: Mapping[str, AdoptedProcedure]) -> dict[str, str]:
@@ -502,7 +506,7 @@ def _gains(before: AdoptedProcedure, after: AdoptedProcedure, named: str) -> lis
         gained.append(f"{named} can run on more machines.")
     if set(after.target_kinds) - set(before.target_kinds):
         gained.append(f"{named} can run on more types of record.")
-    if EFFECT_RANK[after.effect] > EFFECT_RANK[before.effect]:
+    if after.effect.rank > before.effect.rank:
         gained.append(ended(f"{named} now {_does(after.effect)}, where before it {_does(before.effect)}"))
     if after.privilege and after.privilege != before.privilege:
         gained.append(ended(f"{named} gains {access_words(after.privilege)}"))
@@ -510,12 +514,7 @@ def _gains(before: AdoptedProcedure, after: AdoptedProcedure, named: str) -> lis
     # read anything its login can by a change no person looked at.
     if after.files != before.files:
         gained.append(f"{named} runs different files.")
-    moved = sorted(
-        path for path in {*before.shared, *after.shared} if before.shared.get(path) != after.shared.get(path)
-    )
-    if any(PurePosixPath(path).name == REQUIREMENTS for path in moved):
-        gained.append(f"{named} can use other Ansible collections.")
-    if any(PurePosixPath(path).name != REQUIREMENTS for path in moved):
+    if before.shared != after.shared:
         gained.append(f"{named} can read changed files every playbook can read.")
     return gained
 
@@ -533,7 +532,7 @@ def _widens(
         if procedure is None:
             continue
         if was is None:
-            if procedure.effect != "read" or procedure.privilege is not None:
+            if procedure.effect.changes or procedure.privilege is not None:
                 widens.append(ended(f"{called[key]} is new, and it {_does(procedure.effect)}"))
             continue
         widens.extend(_gains(was, procedure, called[key]))
@@ -544,7 +543,7 @@ def _summary(procedure: AdoptedProcedure) -> str:
     """Its Effect, Runs on and Access, in the Playbooks table's words."""
 
     where = ", ".join(procedure.hosts) or anywhere(procedure.target_kinds)
-    return dotted(effect_label(procedure.effect), where, access_words(procedure.privilege))
+    return dotted(procedure.effect.label, where, access_words(procedure.privilege))
 
 
 def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
@@ -555,7 +554,7 @@ def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
 
     return {
         SUMMARY: {"label": named, "value": _summary(procedure)},
-        "effect": effect_label(procedure.effect),
+        "effect": procedure.effect.label,
         "runs_on": list(procedure.hosts) or anywhere(procedure.target_kinds),
         "access": access_words(procedure.privilege),
         "timeout": timeout_words(procedure.timeout_seconds),
@@ -611,12 +610,7 @@ class AdoptionPlan:
 
 
 def _digest(procedures: Iterable[AdoptedProcedure]) -> str:
-    material = json.dumps(
-        {"procedures": [procedure.model_dump(mode="json") for procedure in procedures]},
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(material.encode()).hexdigest()
+    return digest({"procedures": [procedure.model_dump(mode="json") for procedure in procedures]})
 
 
 def _commit_refusals(proposal: SourceProposal) -> list[str]:
@@ -776,16 +770,16 @@ class Adopted(TypedDict):
     adopted: Annotated[bool, Describe("False when nothing it names waited to be adopted.")]
     digest: Annotated[str, Describe("The digest that names the adopted playbooks.")]
     widened: Annotated[list[str], Describe("What runs may now do that they could not before.")]
+    message: CallMessage
 
 
 # A playbook as a change of a scan names it: its id, or its sidecar where two declare one id.
 PlaybookKey = Annotated[StrictStr, Field(min_length=1, max_length=200, title="Playbook")]
 
 
-class AdoptProposal(BaseModel):
+@dataclass(frozen=True, slots=True)
+class AdoptProposal:
     """The scan result to adopt, and the one playbook to adopt from it."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
     proposal: Annotated[StrictInt, Field(ge=1, title="Scan result"), Describe("The scan result's ID.")]
     playbook: Annotated[
@@ -821,35 +815,40 @@ def adopt(command: AdoptProposal, *, principal: Principal) -> Adopted:
     that waits, so each runs from the proposal's commit; every other playbook
     stays as it was adopted."""
 
-    with audit_operation(operation=ADOPT, principal=principal):
-        planned = plan(command.proposal, command.playbook or "")
-        chosen = _decided(planned, command.playbook)
-        current = adopted()
-        if not chosen:
-            return {"ok": True, "adopted": False, "digest": current.digest if current else "", "widened": []}
-        catalog = dict(planned.before)
-        for change in chosen:
-            if change.procedure is None:
-                catalog.pop(change.key, None)
-            else:
-                catalog[change.key] = change.procedure
-        ordered = [catalog[key] for key in sorted(catalog)]
-        proposal = planned.proposal
-        row = AdoptedCatalog.objects.create(
-            proposal=proposal,
-            branch=proposal.branch,
-            revision=proposal.revision,
-            committer=proposal.committer,
-            procedures=[procedure.model_dump(mode="json") for procedure in ordered],
-            digest=_digest(ordered),
-        )
+    planned = plan(command.proposal, command.playbook or "")
+    chosen = _decided(planned, command.playbook)
+    current = adopted()
+    if not chosen:
+        return {
+            "ok": True,
+            "adopted": False,
+            "digest": current.digest if current else "",
+            "widened": [],
+            "message": "Already adopted.",
+        }
+    catalog = dict(planned.before)
+    for change in chosen:
+        if change.procedure is None:
+            catalog.pop(change.key, None)
+        else:
+            catalog[change.key] = change.procedure
+    ordered = [catalog[key] for key in sorted(catalog)]
+    proposal = planned.proposal
+    row = AdoptedCatalog.objects.create(
+        proposal=proposal,
+        branch=proposal.branch,
+        revision=proposal.revision,
+        committer=proposal.committer,
+        procedures=[procedure.model_dump(mode="json") for procedure in ordered],
+        digest=_digest(ordered),
+    )
     # Every caller's commands moved: this process builds its own anew once
     # the row commits, every other at its next request (``generation``), and
     # a stream is told.
     transaction.on_commit(catch_up, robust=True)
     agent_registry.tools_changed(_everyone)
     widened = _widens(planned.before, planned.procedures, (change.key for change in chosen))
-    return {"ok": True, "adopted": True, "digest": row.digest, "widened": widened}
+    return {"ok": True, "adopted": True, "digest": row.digest, "widened": widened, "message": "Adopted."}
 
 
 class Rejected(TypedDict):
@@ -857,12 +856,12 @@ class Rejected(TypedDict):
 
     ok: Literal[True]
     rejected: Annotated[bool, Describe("False when what it names was already rejected.")]
+    message: CallMessage
 
 
-class RejectProposal(BaseModel):
+@dataclass(frozen=True, slots=True)
+class RejectProposal:
     """The scan result to reject, and the one playbook to reject from it."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
     proposal: Annotated[StrictInt, Field(ge=1, title="Scan result"), Describe("The scan result's ID.")]
     playbook: Annotated[
@@ -880,23 +879,22 @@ def reject(command: RejectProposal, *, principal: Principal) -> Rejected:
     as adopted, or the whole scan result, so nothing of it waits to be
     adopted until the next Refresh reads another."""
 
-    with audit_operation(operation=REJECT, principal=principal):
-        proposal = SourceProposal.objects.select_for_update().filter(pk=command.proposal).first()
-        if proposal is None:
-            raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
-        if proposal.rejected_at is not None or command.playbook in proposal.rejected_playbooks:
-            return {"ok": True, "rejected": False}
-        chosen = _decided(judged(proposal.pk), command.playbook)
-        if not chosen:
-            raise PolicyError("Nothing in this scan result waits to be adopted, so there is nothing to reject.")
-        if command.playbook is not None:
-            proposal.rejected_playbooks = [*proposal.rejected_playbooks, command.playbook]
-            proposal.save(update_fields=("rejected_playbooks", "updated_at"))
-        else:
-            proposal.rejected_at = timezone.now()
-            proposal.rejected_by = principal.actor
-            proposal.save(update_fields=("rejected_at", "rejected_by", "updated_at"))
-    return {"ok": True, "rejected": True}
+    proposal = SourceProposal.objects.select_for_update().filter(pk=command.proposal).first()
+    if proposal is None:
+        raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
+    if proposal.rejected_at is not None or command.playbook in proposal.rejected_playbooks:
+        return {"ok": True, "rejected": False, "message": "Already rejected."}
+    chosen = _decided(judged(proposal.pk), command.playbook)
+    if not chosen:
+        raise PolicyError("Nothing in this scan result waits to be adopted, so there is nothing to reject.")
+    if command.playbook is not None:
+        proposal.rejected_playbooks = [*proposal.rejected_playbooks, command.playbook]
+        proposal.save(update_fields=("rejected_playbooks", "updated_at"))
+    else:
+        proposal.rejected_at = timezone.now()
+        proposal.rejected_by = principal.actor
+        proposal.save(update_fields=("rejected_at", "rejected_by", "updated_at"))
+    return {"ok": True, "rejected": True, "message": "Rejected."}
 
 
 def prune_proposals() -> int:
@@ -927,7 +925,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             "Adopt what a scanned commit changes in the playbooks HQ runs: one playbook's change, or every "
             "change that waits. A commit GitHub did not verify, or one carrying an ansible.cfg or a plugins "
             "directory, is refused. Only an operator adopts, and never through an agent.",
-            "infrastructure_change",
+            Effect.INFRASTRUCTURE_CHANGE,
             # Held only at the operator's own interfaces (security.HELD_ONLY_AT).
             Capability.ADOPT_PLAYBOOKS,
             AdoptProposal,
@@ -941,6 +939,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             ),
             label="Adopt the playbooks",
             verb="Adopt",
+            variants=(("all", "Adopt all"),),
             home=automation_sources.PLAYBOOKS,
         ),
         CapabilitySpec(
@@ -948,7 +947,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             "Reject what a scanned commit changes: one playbook's change, which stays as adopted, or the whole "
             "commit, so nothing waits to be adopted until a Refresh reads another. Only an operator rejects, "
             "and never through an agent.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.ADOPT_PLAYBOOKS,
             RejectProposal,
             reject,
@@ -958,6 +957,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             ),
             label="Reject a scanned commit",
             verb="Reject",
+            variants=(("all", "Reject all"),),
             home=automation_sources.PLAYBOOKS,
         ),
     )

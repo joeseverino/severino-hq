@@ -7,10 +7,12 @@ from django.test import SimpleTestCase, TestCase
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
+from hq.platform.application.contracts import Closed
 
 from ..command_center import command_center
 from ..integrations import integration_graph
 from ..plugins import plugin_resource_specs
+from ..report_testing import bridged
 from ..resources import (
     EmptyQuery,
     InvalidResourceInput,
@@ -164,11 +166,9 @@ class ResourceExecutionTests(TestCase):
     def test_a_reading_answers_its_age_and_each_records_waiting_and_nothing_else(self):
         import json
 
-        from ..security import cli_principal
-        from ..sweep import record_sweep
-
         bulk = [{"name": f"image-{n}", "digest": "sha256:" + "0" * 64} for n in range(40)]
-        record_sweep(
+        bridged(
+            "inventory",
             {
                 "github.repository": {
                     "ok": True,
@@ -184,7 +184,6 @@ class ResourceExecutionTests(TestCase):
                     ],
                 }
             },
-            principal=cli_principal(),
             controller_id="controller",
         )
 
@@ -322,14 +321,12 @@ class ResourceRegistrationTests(SimpleTestCase):
             integration_graph()
 
     def test_a_query_that_declares_fields_fails_at_registry_construction(self):
-        from pydantic import BaseModel, ConfigDict, Field
+        from pydantic import Field
 
-        class Named(BaseModel):
-            model_config = ConfigDict(extra="forbid")
+        class Named(Closed):
             fields: str = ""
 
-        class Aliased(BaseModel):
-            model_config = ConfigDict(extra="forbid")
+        class Aliased(Closed):
             keys: str = Field("", alias="fields")
 
         for query in (Named, Aliased):

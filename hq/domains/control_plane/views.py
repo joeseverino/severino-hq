@@ -2,26 +2,25 @@ import json
 from functools import cached_property
 from typing import Any, override
 
-from django.contrib import messages
-from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.views.generic import DetailView, ListView
 
-from hq.platform.application.action_links import READ_NOW_CAPABILITY, command_url
-from hq.platform.application.approval_review import asked_by
-from hq.platform.application.approvals import DESTRUCTIVE_EFFECT
+from hq.platform.application.approvals import AUDIT_LABELS
 from hq.platform.application.capabilities import capability_words, command_spec
+from hq.platform.application.certificates import UPLOAD as CERTIFICATE_UPLOAD
+from hq.platform.application.conditions import DRIFTED, holding
+from hq.platform.application.contracts import Effect
 from hq.platform.application.doors import NOBODY
 from hq.platform.application.entity_links import kind_label, record_name, web_url
+from hq.platform.application.history import asked_by
 from hq.platform.application.infrastructure import (
     declared_machines,
     delivery_targets,
-    is_drifted,
     serialize_public_status,
     serialize_resource,
 )
-from hq.platform.application.integration_specs import requested as requested_note
 from hq.platform.application.inventory import service_hostnames
 from hq.platform.application.labels import field_label
 from hq.platform.application.pages import PageAction, PageMixin, page_context
@@ -29,10 +28,10 @@ from hq.platform.application.payload_words import value_words
 from hq.platform.application.refusal_status import refuse
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
+    REMOVAL_CAPABILITY,
     Allowed,
     channels_inside,
     resource_capabilities,
-    verb_words,
 )
 from hq.platform.application.resource_context import (
     controller_summary,
@@ -43,20 +42,25 @@ from hq.platform.application.resource_context import (
     record_summary,
     resource_context,
 )
-from hq.platform.application.resource_operations import ACTION_CAPABILITY, HISTORY_ROWS, changes, supervision
+from hq.platform.application.resource_operations import (
+    ACTION_CAPABILITY,
+    HISTORY_ROWS,
+    READS_AGAIN,
+    changes,
+    supervision,
+)
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.service_context import operation_history
 from hq.platform.application.topology_model import RELATIONS
-from hq.platform.application.ui import counted
 from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 from hq.platform.application.whereabouts import whereabouts
 from hq.platform.application.work_runs import run_rows
-from hq.platform.core.templatetags.nav_tags import returning_to
 lazy from hq.platform.application.page_relations import for_container
 
-from .models import ManagedResource, OperationRequest
+from .forms import RemovalReasonForm
+from .models import ApprovalRequest, ManagedResource, OperationRequest
 from .provider_adapters.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
 from .providers import PROVIDERS, describe_providers, read_spec, readout_rows, shown_spec
@@ -170,6 +174,7 @@ class ResourceRemoveView(View):
     """
 
     template_name = "control_plane/resource_confirm_remove.html"
+    runs = (REMOVAL_CAPABILITY,)
 
     def get(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)
@@ -191,6 +196,7 @@ class ResourceRemoveView(View):
                 "spec_rows": _spec_rows(resource),
                 "forget": forget,
                 "holds_records": bool(PROVIDERS[resource.kind].contains),
+                "removal_reason": RemovalReasonForm(),
                 "confirm": {
                     "url": request.path,
                     "label": capabilities.removal_words,
@@ -209,18 +215,7 @@ class ResourceRemoveView(View):
         if refused(request, result):
             return redirect("control_plane:detail", key=key)
         if "forgotten" in result:
-            # Nothing was queued because nothing exists at the provider that HQ
-            # made. Saying "queued removal" here would promise a deletion that
-            # is neither happening nor wanted.
-            released = len(result["released"])
-            messages.success(
-                request,
-                f"Stopped tracking “{result['forgotten']}”"
-                + (f" and {counted(released, 'record')} in it" if released else "")
-                + ". Nothing live was changed.",
-            )
             return redirect("control_plane:list")
-        messages.success(request, requested(OperationRequest.Action.DELETE, resource.key, queued=result["queued"]))
         return redirect("control_plane:detail", key=key)
 
 
@@ -233,9 +228,7 @@ class InfrastructureListView(PageMixin, ListView):
     @override
     def get_page_actions(self):
         return (
-            PageAction(
-                capability_words("infrastructure.resource.create"), reverse("control_plane:create"), primary=True
-            ),
+            PageAction.command("infrastructure.resource.create", primary=True),
             PageAction("Services", reverse("control_plane:services")),
             PageAction("Setting reference", reverse("control_plane:providers")),
         )
@@ -374,22 +367,17 @@ class InfrastructureDetailView(PageMixin, DetailView):
             return ()
         key = self.object.key
         capabilities = self.capabilities
-        drifted = is_drifted(self.object)
+        drifted = bool(holding(self.object.conditions, DRIFTED))
         provider = PROVIDERS[self.object.kind]
         actions = [
             verb_action(
                 verb,
                 key,
                 allowed,
-                # Applying a record that only reports on itself reads it again.
-                label=(
-                    capability_words(READ_NOW_CAPABILITY)
-                    if verb == "reconcile" and provider.reported_fields
-                    else verb_words(verb)
-                ),
-                title="" if allowed.enabled else allowed.reason,
                 origin=self.request.get_full_path(),
                 primary=verb == "renew",
+                # Applying a record that only reports on itself reads it again.
+                variant=READS_AGAIN if verb == "reconcile" and provider.reported_fields else "",
             )
             for verb, allowed in capabilities.page_actions
         ]
@@ -398,13 +386,11 @@ class InfrastructureDetailView(PageMixin, DetailView):
             # restoring HQ's copy is the button beside it rather than the only one.
             actions.insert(
                 0,
-                PageAction(
-                    capability_words("infrastructure.resource.accept_observed"),
-                    returning_to(
-                        command_url("infrastructure.resource.accept_observed", key),
-                        self.request.get_full_path(),
-                    ),
+                PageAction.command(
+                    "infrastructure.resource.accept_observed",
+                    key,
                     primary=True,
+                    query={"next": self.request.get_full_path()},
                 ),
             )
         console = (
@@ -417,29 +403,13 @@ class InfrastructureDetailView(PageMixin, DetailView):
         if gap := capabilities.write_gap:
             # Beside the verbs it holds back: what they need, at the step that gives it.
             actions.append(PageAction(gap.needs, gap.setup_url, title=gap.reason))
-        if capabilities.offered.edit_url:
-            actions.append(
-                PageAction(
-                    capability_words("infrastructure.resource.update"),
-                    returning_to(capabilities.offered.edit_url, self.request.get_full_path()),
-                )
-            )
+        if edit := capabilities.offered.edit(key, next=self.request.get_full_path()):
+            actions.append(edit)
         if PROVIDERS[self.object.kind].material_form:
-            actions.append(
-                PageAction(
-                    "Replace certificate" if getattr(self.object, "material", None) else "Upload certificate",
-                    reverse("control_plane:upload_certificate", args=[key]),
-                    primary=True,
-                )
-            )
-        if capabilities.offered.remove_url:
-            actions.append(
-                PageAction(
-                    capabilities.removal_words,
-                    capabilities.offered.remove_url,
-                    danger=True,
-                )
-            )
+            replaces = "replace" if getattr(self.object, "material", None) else ""
+            actions.append(PageAction.command(CERTIFICATE_UPLOAD, key, variant=replaces, primary=True))
+        if capabilities.offered.removes:
+            actions.append(PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant))
         return tuple(actions)
 
     @override
@@ -448,7 +418,9 @@ class InfrastructureDetailView(PageMixin, DetailView):
         capabilities = self.capabilities
         context["capabilities"] = capabilities
         context["page_visit"] = page_visit("resource", self.object.key)
-        context["controller"] = controller_summary(capabilities.actions, verb_words)
+        context["controller"] = controller_summary(
+            capabilities.actions, lambda verb: capability_words(ACTION_CAPABILITY[verb])
+        )
         derived = self.derived
         context["status"] = record_status(self.object, health=derived.health, newest=newest_reading(self.object.kind))
         # A running container is summarized by what it runs, in its own band.
@@ -478,7 +450,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         # A change a credential asked for that nobody has answered, said on the
         # page an operator opens when a declaration has not moved.
         # Each said as who asked for it, from the audit row that opened it.
-        asked = asked_by(derived.awaiting_approval)
+        asked = asked_by(ApprovalRequest, derived.awaiting_approval, formerly=AUDIT_LABELS)
         context["awaiting_approval"] = tuple(asked.get(str(held.pk), NOBODY) for held in derived.awaiting_approval)
         # Nothing for a container: its panel is the sweep's answer and a
         # container declares identity and nothing else.
@@ -499,30 +471,26 @@ class InfrastructureDetailView(PageMixin, DetailView):
         return context
 
 
-def requested(action: str, key: str, *, queued: bool) -> str:
-    """What a press of one of a resource's verbs says, in the verb's own words."""
-
-    return requested_note(verb_words(action), key, again=not queued)
-
-
 def is_destructive(verb: str) -> bool:
     """Whether a resource's verb takes something away from whoever is using it,
     as its capability declares: asked for by name on a page of its own, never
     pressed straight from a head."""
 
-    return command_spec(ACTION_CAPABILITY[verb]).effect == DESTRUCTIVE_EFFECT
+    return command_spec(ACTION_CAPABILITY[verb]).effect is Effect.DESTRUCTIVE
 
 
 def verb_action(
-    verb: str, key: str, allowed: Allowed, *, label: str, title: str, origin: str, primary: bool = False
-) -> PageAction:
-    """One of a resource's verbs as a head control. A destructive one opens its
-    confirmation, named, and comes back to ``origin``; the rest post at once."""
+    verb: str, key: str, allowed: Allowed, *, origin: str, primary: bool = False, variant: str = ""
+) -> PageAction | None:
+    """One of a resource's verbs as a head control, unusable with the reason
+    it is not ``allowed``. A destructive one opens its confirmation, named,
+    which comes back to ``origin``; the rest post at once."""
 
-    url = reverse(f"control_plane:{verb}", args=[key])
-    if is_destructive(verb):
-        return PageAction(label, returning_to(url, origin), danger=True, disabled=not allowed.enabled, title=title)
-    return PageAction(label, url, method="post", primary=primary, disabled=not allowed.enabled, title=title)
+    refusal = "" if allowed.enabled else allowed.reason
+    back = {"next": origin} if is_destructive(verb) else None
+    return PageAction.command(
+        ACTION_CAPABILITY[verb], key, variant=variant, primary=primary, query=back, refused=refusal
+    )
 
 
 class OperationView(View):
@@ -535,14 +503,21 @@ class OperationView(View):
 
     action = OperationRequest.Action.RECONCILE
 
-    def get(self, request, key):
-        """A destructive verb's confirmation, naming what stops; any other verb only posts."""
+    @property
+    def runs(self) -> tuple[str, ...]:
+        return (ACTION_CAPABILITY[self.action],)
 
-        if not is_destructive(self.action):
-            return HttpResponseNotAllowed(["POST"])
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        # A destructive verb's confirmation is a page of its own; any other verb only posts.
+        self.http_method_names = ["get", "post", "options"] if is_destructive(self.action) else ["post", "options"]
+
+    def get(self, request, key):
+        """A destructive verb's confirmation, naming what stops."""
+
         resource = get_object_or_404(ManagedResource, key=key)
         name = record_name(resource.kind, resource.spec, resource.key)
-        label = f"{verb_words(self.action)} {name}"
+        label = f"{capability_words(ACTION_CAPABILITY[self.action])} {name}"
         return render(
             request,
             "control_plane/resource_confirm_verb.html",
@@ -570,10 +545,7 @@ class OperationView(View):
         # container) and send `next`. Validated through the shared helper, so
         # the field cannot become an open redirect.
         destination = safe_next(request, fallback=reverse("control_plane:detail", kwargs={"key": key}))
-        result = _web_operation(request, resource, self.action)
-        if refused(request, result):
-            return redirect(destination)
-        messages.success(request, requested(self.action, resource.key, queued=result["queued"]))
+        refused(request, _web_operation(request, resource, self.action))
         return redirect(destination)
 
 

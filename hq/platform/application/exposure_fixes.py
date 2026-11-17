@@ -2,7 +2,7 @@
 
 from hq.domains.control_plane.providers import PROVIDERS
 
-from .action_links import command_action, command_url
+from .action_links import command_action
 from .container_findings import UPDATE_CAPABILITY
 from .workflow_contracts import ActionLink
 
@@ -21,7 +21,6 @@ def gate_links(service) -> tuple[ActionLink, ...]:
                 command_action(
                     "gate",
                     UPDATE_CAPABILITY,
-                    command_url(UPDATE_CAPABILITY, claim.resource_key),
                     target=claim.resource_key,
                     intent="Add an access list",
                     reason="Set its access list, so the proxy admits only whom the list allows.",

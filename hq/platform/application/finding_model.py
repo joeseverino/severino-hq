@@ -7,7 +7,7 @@ vocabulary without importing the pipeline that collects it."""
 import json
 import re
 import shlex
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
@@ -16,14 +16,17 @@ from pydantic import ConfigDict, with_config
 
 from hq.domains.control_plane.providers import PROVIDERS
 
-from .action_links import ActionLink
+from .action_links import ActionLink, read_link
 from .command_fields import Describe
 from .core_capabilities import CONTROLLER_REFRESH
-from .timestamps import moment
+from .display_words import as_members
+from .moments import moment
+from .tone import Tone
 from .topology_model import Topology, TopologyNode
 from .ui import ended
 from .workflows import WorkflowPlan
-lazy from .capabilities import capability_words
+lazy from .capabilities import capability_spec, capability_words
+lazy from .pages import command_reach
 
 if TYPE_CHECKING:
     from .cadence import ControllerSweepCommand
@@ -37,12 +40,14 @@ class FindingRemedy:
     ``intent`` is this remedy's own words for what the press does here, where
     the command's name would not say it ("Mark it as running only
     sometimes" through the command that changes a record): declared once,
-    here, and read by every surface that offers the remedy.
+    here, and read by every surface that offers the remedy. Its effect is
+    the command's, and it is reached where the command is (``reach``),
+    unless ``url`` and ``method`` name a route that runs it on something
+    other than its target, such as a container's adoption by its token.
     """
 
     capability: str
     target: str
-    effect: str = ""
     intent: str = ""
     variant: str = ""
     url: str = ""
@@ -56,6 +61,22 @@ class FindingRemedy:
     def label(self) -> str:
         return self.intent or capability_words(self.capability, self.variant)
 
+    @property
+    def effect(self) -> str:
+        """What running it does, as its command declares; empty for a command HQ does not hold."""
+
+        spec = capability_spec(self.capability)
+        return spec.effect if spec else ""
+
+    @property
+    def reach(self) -> tuple[str, str]:
+        """Where it is pressed, and how: its own route, else where its command is reached."""
+
+        if self.url:
+            return self.url, self.method
+        url, answers_get = command_reach(self.capability, self.target, self.variant)
+        return url, "GET" if answers_get else "POST"
+
 
 @dataclass(frozen=True, slots=True)
 class Finding:
@@ -64,7 +85,7 @@ class Finding:
     rule: str
     subject: str
     title: str
-    severity: str
+    severity: Tone
     explanation: str
     evidence: tuple[tuple[str, str], ...] = ()
     remedies: tuple[FindingRemedy, ...] = ()
@@ -86,8 +107,8 @@ class Finding:
     # Why HQ can neither run a remedy nor name the exact command for this one.
     # Derivation fills it from the rule when the finding carries neither.
     no_help_reason: str = ""
-    # When this was first seen open, where a look recorded it
-    # (application.first_seen). Derivation leaves it unset.
+    # When this was first seen open: when its condition began, where the
+    # detector read it, else where a look recorded it (application.first_seen).
     since: datetime | None = None
     # The page of what it is about, as the topology names it. Derivation sets
     # it beside the offers, so a card links its title without the topology.
@@ -112,6 +133,31 @@ class Finding:
     # The page a card leads with, where its subject's own page is not it: the
     # certificate to renew, the containers to upgrade.
     primary: ActionLink | None = None
+    # How many things one finding stands for, where it counts a backlog of
+    # records: what the queue's row counts, and what brings a set-aside one back.
+    count: int = 0
+    # News rather than a problem (a draft in hand, a deploy on its way): the
+    # queue keeps it in its own section, below what needs doing.
+    notice: bool = False
+    # Its only remedy does not exist yet (an alert no released version fixes):
+    # it stays a finding, and the queue leaves it out until one does.
+    awaiting_fix: bool = False
+    # A request a person decides, by its Approve or Reject: it ends only when
+    # decided, so a reader can never set it aside (``Insight.held``).
+    held: bool = False
+    # What a finding no host rule raises says of itself, where a rule would:
+    # an extension's or a held request's. A host rule's finding is worded by
+    # its rule alone (``attention.finding_insight``), which ignores these.
+    # Why it is as urgent as its severity says, in one sentence.
+    why: str = ""
+    # What clears it, a clause after "Clears once".
+    clears: str = ""
+    # What kind of matter it is, as its owner heads a list of them; several
+    # of one family from one source fold under it in the queue.
+    family: str = ""
+
+    def __post_init__(self) -> None:
+        as_members(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +171,7 @@ class FindingRule:
 
     name: str
     title: str
-    severity: str
+    severity: Tone
     detect: Callable[[FindingEstate], tuple[Finding, ...]]
     # The precise action that resolves a finding of this rule by hand. Required:
     # a finding either offers an operation through the gated queue or says
@@ -150,14 +196,28 @@ class FindingRule:
     # ast-grep rule threshold-says-what-clears-it asks it of every rule whose
     # bars name a constant.
     clears: str = ""
+    # The host section whose records a rule is about (``hq.expenses``): its
+    # findings are raised under that section, and told only to a reader of
+    # what the section declares. Empty for a rule about the estate, whose
+    # subject gates it and which Infrastructure raises.
+    domain: str = ""
+    # Whether its detector reads HQ's own records (a model, a stored reading)
+    # rather than the projection. It runs as the estate is gathered, before
+    # derivation, which reads nothing of its own.
+    gathered: bool = False
 
     def __post_init__(self) -> None:
+        as_members(self)
         if not self.operator_action.strip():
             raise ValueError(f"Finding rule {self.name!r} must say how it is resolved.")
         if not self.no_help_reason.strip():
             raise ValueError(f"Finding rule {self.name!r} must say why HQ cannot resolve it itself.")
         if not self.bars.get(self.severity, "").strip():
             raise ValueError(f"Finding rule {self.name!r} must say the bar its {self.severity} findings cross (bars).")
+
+
+# What each rule that reads HQ's records found, by rule (``gathered_findings``).
+Gathered = Mapping[str, tuple[Finding, ...]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,7 +249,7 @@ def open_the_path(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     """
 
     return (
-        FindingRemedy(capability="tailnet.reach.allow", target=node.label, effect="infrastructure_change"),
+        FindingRemedy(capability="tailnet.reach.allow", target=node.label),
         *reconcile_remedy(node),
     )
 
@@ -252,7 +312,7 @@ def per_connection(
     key: str,
     *,
     rule: str,
-    severity: str,
+    severity: Tone,
     shown_as: str,
     says: Callable[[TopologyNode, tuple[str, ...]], Said],
 ) -> tuple[Finding, ...]:
@@ -336,9 +396,7 @@ def _decoded(value: str) -> Finding:
         steps=tuple(
             OperatorStep(label=label, command=command, notes=tuple(notes)) for label, command, notes in item["steps"]
         ),
-        offers=tuple(
-            ActionLink(name, label, "read", url, reason=reason) for name, label, url, reason in item["offers"]
-        ),
+        offers=tuple(read_link(name, label, url, reason=reason) for name, label, url, reason in item["offers"]),
         observed_at=moment(item["observed_at"]),
         reads=item["reads"],
         primary=opens(*item["primary"]) if item["primary"] else None,
@@ -348,7 +406,7 @@ def _decoded(value: str) -> Finding:
 def opens(label: str, url: str) -> ActionLink:
     """The page a finding's card leads with, under ``label``."""
 
-    return ActionLink("open", label, "read", url)
+    return read_link("open", label, url)
 
 
 def carried(rule: str) -> Callable[[FindingEstate], tuple[Finding, ...]]:

@@ -34,10 +34,10 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 
+from hq.platform.application.markup_testing import elements
 from hq.platform.application.references import ReferenceField
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableListMixin
-from hq.platform.application.tests.markup import elements
 from hq.platform.core import seeds
 from hq.platform.core.tests.test_browser_fixtures import render_pages
 

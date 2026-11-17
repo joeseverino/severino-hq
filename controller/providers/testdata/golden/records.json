@@ -683,7 +683,16 @@
       ],
       "node_key_signed": true,
       "record": "example",
-      "trusted_keys": 1
+      "signers": [
+        {
+          "key": "tlpub:0f4e1c9a2b7d3e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7",
+          "kind": "example",
+          "metadata": {
+            "example": "example"
+          },
+          "votes": 1
+        }
+      ]
     }
   ],
   "host.unit": [

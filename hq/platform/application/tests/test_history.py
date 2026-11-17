@@ -8,7 +8,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
-from hq.platform.application.tests.markup import text
+from hq.platform.application.markup_testing import text
 from hq.platform.core import append_only
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
@@ -16,7 +16,6 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, disti
 from ..conditions import held_since, stamped
 from ..history import moments, near
 from ..inventory import READING_AUDIT_TYPE, record_inventory
-from ..security import cli_principal
 from ..topology_facts import add_observed_facts
 
 
@@ -33,7 +32,7 @@ def dns(content="192.0.2.10", name="app.example.com"):
 
 
 def sweep(*records):
-    record_inventory({"cloudflare.dns_record": {"ok": True, "records": list(records)}}, principal=cli_principal())
+    record_inventory({"cloudflare.dns_record": {"ok": True, "records": list(records)}})
 
 
 def readings():
@@ -57,6 +56,23 @@ class ConditionTests(TestCase):
         self.assertGreater(held_since(back, "Drifted"), start)
         self.assertIsNone(held_since(ready, "Drifted"))
 
+    def test_a_reconcile_is_keyed_on_the_problems_that_hold(self):
+        from types import SimpleNamespace
+
+        from ..controller import _automatic_reconcile
+
+        def keyed(*conditions):
+            resource = SimpleNamespace(
+                kind="example", status={}, generation=1, observed_generation=1, conditions=list(conditions)
+            )
+            return _automatic_reconcile(resource)[2]
+
+        drifted = {"type": "Drifted", "status": True, "message": "Port is 8080."}
+        stopped = {"type": "Degraded", "status": False, "message": "It answered 503."}
+
+        self.assertEqual(keyed(drifted, stopped), keyed(drifted))
+        self.assertEqual(keyed(stopped), "")
+
 
 class ReadingChangeTests(TestCase):
     def test_a_record_that_changed_between_sweeps_is_a_moment(self):
@@ -75,9 +91,7 @@ class ReadingChangeTests(TestCase):
 
     def test_a_failed_read_is_not_a_change(self):
         sweep(dns())
-        record_inventory(
-            {"cloudflare.dns_record": {"ok": False, "records": [], "error": "refused"}}, principal=cli_principal()
-        )
+        record_inventory({"cloudflare.dns_record": {"ok": False, "records": [], "error": "refused"}})
 
         self.assertEqual(readings(), [])
 
@@ -126,6 +140,15 @@ class HistoryTests(TestCase):
         # A start leads to the container: its row on its machine's page.
         self.assertEqual(found[1].url, "/infrastructure/machines/example-box/#container-app")
         self.assertFalse(found[1].external)
+
+    def test_a_deploy_links_only_a_web_address_its_reading_gave(self):
+        inventory = ProviderInventory.objects.get(kind="github.repository")
+        inventory.records[0]["deployments"][0]["url"] = "javascript:alert(1)"
+        inventory.save()
+
+        (deploy,) = [item for item in moments(since=self.now - timedelta(days=1)) if item.source == "Deploy"]
+
+        self.assertEqual((deploy.url, deploy.page), ("", ""))
 
     def test_near_is_what_happened_closest_to_the_moment(self):
         (closest, *_rest) = near(self.now - timedelta(hours=2, minutes=5))

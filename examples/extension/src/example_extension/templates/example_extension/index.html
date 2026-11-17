@@ -7,7 +7,7 @@
       <tbody>
         {% for note in notes %}
         <tr>
-          <td><a href="{% url 'example_extension:note' note.slug %}">{{ note.title|breakable }}</a></td>
+          <td>{% entity note|record %}</td>
           <td><span class="row-less">{{ note.written_on|when_text:"day" }}</span><span class="row-more">Written {{ note.written_on|when_text:"day" }}, filed as {{ note.slug|breakable }}</span></td>
         </tr>
         {% endfor %}

@@ -6,14 +6,15 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.markup_testing import select, text
+from hq.platform.application.tests.worded import worded
 
-from ..action_links import command_url
 from ..attention import infrastructure
 from ..containers import containers
 from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE
 from ..findings import rule_of
-from .markup import select, text
+from ..pages import command_reach
 from .test_container_standard import KEPT, runtime
 from .test_containers import HIGH, estate, exposed, inventory
 
@@ -241,7 +242,7 @@ class PageTests(TestCase):
         self.assertTrue(select(page, "id", "hardening"))
         self.assertIn("/opt/example/web/docker-compose.yml", text(page))
         self.assertIn('user: "1000:1000"', text(page))
-        self.assertContains(page, command_url("infrastructure.resource.update", "example-box-web"))
+        self.assertContains(page, command_reach("infrastructure.resource.update", "example-box-web")[0])
 
     def test_a_container_meeting_every_check_has_no_block(self):
         estate()
@@ -257,8 +258,16 @@ class FindingHelpTests(TestCase):
     """Each container finding carries its help: a button, a read link, or the steps by hand."""
 
     def items(self):
+        """Each item by its rule and each container it names: its part, or
+        for an image's item every container that runs it."""
+
         with uncached():
-            return {(rule_of(item.key), item.part): item for item in infrastructure() if rule_of(item.key)}
+            return {
+                (rule_of(item.key), name): item
+                for item in worded(infrastructure())
+                if rule_of(item.key)
+                for name in [value for label, value in item.facts if label == "Container"] or [item.part]
+            }
 
     def remedies(self, item):
         return [action for step in item.workflow.steps for action in step.actions if action.name == "remedy"]
@@ -276,13 +285,13 @@ class FindingHelpTests(TestCase):
         items = self.items()
 
         (mark,) = self.remedies(items["container-hardening", "web"])
-        self.assertEqual(mark.url, command_url("infrastructure.resource.update", "example-box-web"))
+        self.assertEqual(mark.url, command_reach("infrastructure.resource.update", "example-box-web")[0])
         self.assertEqual((mark.capability, mark.target), ("infrastructure.resource.update", "example-box-web"))
         (adopt,) = self.remedies(items["container-hardening", "kuma"])
         self.assertEqual(adopt.method, "POST")
         self.assertIn("/adopt/record/portainer.container/", adopt.url)
 
-    def test_the_socket_button_opens_the_update_prefilled_with_its_declaration(self):
+    def test_the_socket_button_opens_the_update_of_its_own_declaration(self):
         self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
         estate()
         declare("web")
@@ -292,8 +301,7 @@ class FindingHelpTests(TestCase):
         page = self.client.get(mark.url)
 
         self.assertEqual(page.status_code, 200)
-        self.assertEqual(page.context["form"].initial["__target"], "example-box-web")
-        self.assertEqual(page.context["form"].initial["spec"]["name"], "web")
+        self.assertEqual(page.context["resource"].key, "example-box-web")
 
     def test_a_marked_container_leaves_the_item(self):
         estate()

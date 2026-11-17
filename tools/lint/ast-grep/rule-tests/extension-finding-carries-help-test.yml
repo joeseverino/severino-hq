@@ -1,0 +1,24 @@
+id: extension-finding-carries-help
+valid:
+  - |
+    from hq_sdk.plugin import Finding, opens
+    Finding(rule="example", subject="", severity="attention", title="Example", explanation="", primary=opens("Open", "/example/"))
+  - |
+    from hq_sdk.plugin import Finding
+    Finding(rule="example", subject="", severity="attention", title="Example", explanation="", no_help_reason="Example cannot be fixed from here.")
+  - |
+    from hq_sdk.plugin import Finding
+    Finding(rule="example", subject="", severity="attention", title="Example", **helped)
+  - |
+    from example_findings import Finding
+    Finding(rule="example", subject="", severity="attention", title="Example", explanation="")
+invalid:
+  - |
+    from hq_sdk.plugin import Finding
+    Finding(rule="example", subject="", severity="attention", title="Example", explanation="")
+  - |
+    from hq_sdk.plugin import (
+        Finding,
+        opens,
+    )
+    Finding(rule="example", subject="", severity="attention", title="Example", explanation="", why="Example reads late.")

@@ -3,7 +3,7 @@
 A view says what its page is (a title, a lede, the actions it offers) and
 ``templates/page.html`` draws it the same way on every page, host or extension.
 A page template fills only ``{% block page %}``, so it never writes its own head
-or a form for one button (a ``post_button``). Class-based views mix in
+or a form for one button (a posting ``button``). Class-based views mix in
 ``PageMixin``; function views pass ``page_context`` to ``render``.
 
 Every page also reads under one capability, checked before its view runs
@@ -16,21 +16,26 @@ from collections.abc import Callable, Iterable, Mapping
 from copy import copy
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 from weakref import WeakKeyDictionary
 
 from django.core.exceptions import ImproperlyConfigured
-from django.urls import Resolver404, get_resolver, get_script_prefix, get_urlconf, resolve
+from django.urls import NoReverseMatch, Resolver404, get_resolver, get_script_prefix, get_urlconf, resolve
 from django.utils.functional import Promise
 
 from .asks import Ask
 from .fragments import FragmentMixin
-from .ui import PageNavigation
+from .tone import Tone
+from .ui import PageNavigation, button_classes
+lazy from .action_links import COMMAND_ROUTE, command_url
+lazy from .capabilities import command_spec
+lazy from .contracts import Effect
+lazy from .outbound_work import refusal as outbound_refusal
 lazy from .page_reads import remedy
 lazy from .refusal_status import Refusal, refusal_of
 lazy from .request_context import current as current_request
 lazy from .request_identity import signed_in
-lazy from .routes import reverse
+lazy from .routes import reverse, routed
 lazy from .security import AuthorizationError, Capability, web_principal
 
 PAGE_DIALOG_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
@@ -61,41 +66,136 @@ class PageDialog:
 
 @dataclass(frozen=True, slots=True)
 class PageAction:
-    """One control in a page's head.
+    """One control in a page's head or a row's end.
 
-    A GET action is a link, and may open a dialog (``modal``) while still
-    pointing at a page that does the same job: a ``PageDialog`` the page draws,
-    or the id of one the host already draws on every page. A POST action is a
-    ``post_button``, so it needs no form of its own.
+    Built as it is, it is a link (GET) somewhere, and may open a dialog
+    (``modal``) while still pointing at a page that does the same job: a
+    ``PageDialog`` the page draws, or the id of one the host already draws on
+    every page. A control for a command is built by ``command`` alone, which
+    reads its words, address, method, danger and permission from the
+    declarations, so a hand-built one cannot post, look destructive or say
+    words of its own.
     """
 
     label: str
     url: str
-    method: str = "get"
     primary: bool = False
-    danger: bool = False
     modal: PageDialog | str = ""
-    value: str = ""
     title: str = ""
     # Shown but not usable, with ``title`` saying why.
     disabled: bool = False
-    # The field a POST action's ``value`` is sent as, for a view that reads
-    # its own ("status") rather than the button's default.
-    field: str = "action"
-    # What else a POST action sends, by name: what it acts on, when that is
-    # any string and so travels in the body, or the ``next`` it returns to.
-    # Such an action is a form of its own, so it never stands inside another.
-    fields: Mapping[str, str] = dataclasses.field(default_factory=dict, hash=False)
+    # The rest are a command's, set only by ``command``.
+    method: str = dataclasses.field(default="get", init=False)
+    danger: bool = dataclasses.field(default=False, init=False)
+    # What its button sends, as ``field``: one of the command's modes
+    # ("read"), for a view that reads its own field ("status").
+    value: str = dataclasses.field(default="", init=False)
+    field: str = dataclasses.field(default="action", init=False)
+    # What else it sends, by name: what it acts on, when that is any string
+    # and so travels in the body, or the ``next`` it returns to. Such an
+    # action is a form of its own, so it never stands inside another.
+    fields: Mapping[str, str] = dataclasses.field(default_factory=dict, init=False, hash=False)
 
-    def __post_init__(self):
-        if self.method not in {"get", "post"}:
-            raise ValueError(f"PageAction method must be get or post, not {self.method!r}.")
-        if self.fields and self.method != "post":
-            raise ValueError("Only a POST action sends fields.")
-        if self.field in self.fields:
-            raise ValueError(f"A POST action's button sends {self.field!r}; its fields cannot send it too.")
-        if self.modal and self.method != "get":
-            raise ValueError("Only a GET action can open a dialog.")
+    @classmethod
+    def command(
+        cls,
+        name: str,
+        target: str | int | Mapping[str, str] = "",
+        *,
+        variant: str = "",
+        primary: bool = False,
+        query: Mapping[str, str | tuple[str, ...]] | None = None,
+        refused: str = "",
+        field: str = "action",
+        value: str = "",
+        fields: Mapping[str, str] | None = None,
+        modal: PageDialog | str = "",
+    ) -> PageAction | None:
+        """The control that runs the command ``name`` on ``target``, or None
+        when the person the page is for may not run it.
+
+        Its words are the command's (``variant`` one of its declared modes),
+        it looks destructive when the command is, and it reaches the route
+        whose view declares it ``runs`` the command (``command_route``), else
+        the command's own page. A press that sends something (``value``,
+        ``fields``) posts it, as one to a view that answers only POST does;
+        any other opens the form or confirmation its view draws. ``target`` is the route's one argument, or its arguments
+        by name; ``query`` is added to the address (a ``next``, a form's
+        first values). One that opens its view's form may open it in a
+        dialog instead (``modal``). It is drawn unusable, saying why, while the command
+        would be refused for ``target`` (``refused``, else the work's own).
+        """
+
+        spec = command_spec(name)
+        request = current_request()
+        if request is not None and not offering_for(request).runs(spec):
+            return None
+        subject = "" if isinstance(target, Mapping) else str(target)
+        sends = dict(fields or {})
+        url, answers_get = command_reach(name, target, variant)
+        # A press that sends something posts it; one that sends nothing opens
+        # the page its view draws, or posts to a view that draws none.
+        posts = bool(value or sends) or not answers_get
+        if query:
+            url = f"{url}{'&' if '?' in url else '?'}{urlencode(query, doseq=True)}"
+        if field in sends:
+            raise ValueError(f"A POST action's button sends {field!r}; its fields cannot send it too.")
+        if modal and posts:
+            raise ValueError(f"{name} posts from its button, so it has no form for a dialog to open.")
+        reason = refused or outbound_refusal(name, subject)
+        return cls._built(
+            label=spec.words(variant),
+            url=url,
+            primary=primary,
+            title=reason,
+            disabled=bool(reason),
+            method="post" if posts else "get",
+            danger=spec.effect is Effect.DESTRUCTIVE,
+            field=field,
+            value=value,
+            fields=sends,
+            modal=modal,
+        )
+
+    @classmethod
+    def of(cls, link: Any) -> PageAction:
+        """An ``ActionLink`` as a page control, drawn unusable, saying why,
+        while its command would be refused."""
+
+        if isinstance(link, PageAction):
+            return link
+        values = dataclasses.asdict(link) if dataclasses.is_dataclass(link) else dict(link)
+        method = values.get("method", "GET").lower()
+        refusal = values.get("refusal", "")
+        return cls._built(
+            label=values["label"],
+            url=values["url"],
+            primary=values.get("recommended", False),
+            title=refusal or values.get("reason", ""),
+            disabled=bool(refusal),
+            method=method,
+            danger=values.get("effect") == Effect.DESTRUCTIVE,
+        )
+
+    @classmethod
+    def _built(cls, **values: Any) -> PageAction:
+        """One with the fields only ``command`` and ``of`` set, past the link's rule."""
+
+        action = object.__new__(cls)
+        for each in dataclasses.fields(cls):
+            if each.name in values:
+                given = values[each.name]
+            elif each.default_factory is not dataclasses.MISSING:
+                given = each.default_factory()
+            else:
+                given = each.default
+            object.__setattr__(action, each.name, given)
+        return action
+
+    def __post_init__(self) -> None:
+        # A link to a command's page would say words of its own for it.
+        if (name := runs_at(self.url)) is not None:
+            raise ImproperlyConfigured(f"{self.url} runs {name!r}: build its control with PageAction.command.")
 
     @property
     def dialog(self) -> PageDialog | None:
@@ -110,10 +210,11 @@ class PageAction:
         return self.modal.id if isinstance(self.modal, PageDialog) else self.modal
 
     @property
-    def css(self) -> str:
+    def look(self) -> str:
+        """How its button looks (``ui.BUTTON_LOOKS``)."""
+
         return " ".join(
             (
-                "btn",
                 *(("primary",) if self.primary else ()),
                 # Quiet: a head's destructive action is the rarest thing on the
                 # page and should not be its loudest. Its confirmation is loud.
@@ -121,13 +222,17 @@ class PageAction:
             )
         )
 
+    @property
+    def css(self) -> str:
+        return button_classes(self.look)
+
 
 @dataclass(frozen=True, slots=True)
 class PageBadge:
     """A short fact beside a page's title: its reach, that it is read-only."""
 
     label: str
-    tone: str = ""
+    tone: Tone | None = None
     title: str = ""
 
 
@@ -145,7 +250,8 @@ class PageVisit:
 class Page:
     title: str
     lede: str = ""
-    actions: tuple[PageAction | Ask, ...] = ()
+    # A command's control its reader may not run is None, and left out here.
+    actions: tuple[PageAction | Ask | None, ...] = ()
     navigation: PageNavigation | None = None
     # Where the page sits, as (label, url) pairs, when it is reached from a parent.
     trail: tuple[Crumb, ...] = field(default_factory=tuple)
@@ -155,7 +261,11 @@ class Page:
 
     def __post_init__(self) -> None:
         # The head offers only the links its reader may follow.
-        actions = tuple(each for each in self.actions if not isinstance(each, PageAction) or offered_now(each.url))
+        actions = tuple(
+            each
+            for each in self.actions
+            if each is not None and (not isinstance(each, PageAction) or offered_now(each.url))
+        )
         object.__setattr__(self, "actions", actions)
         object.__setattr__(self, "trail", tuple(crumb for crumb in self.trail if offered_now(crumb[1])))
 
@@ -299,14 +409,15 @@ class PageMixin(FragmentMixin):
         return context
 
 
-def page_capability(view: Callable[..., Any]) -> str:
-    """The one capability the routed ``view`` reads under: the ``required_capability`` it declares, else READ.
+def page_capabilities(view: Callable[..., Any]) -> tuple[str, ...]:
+    """What the routed ``view`` reads under: READ, and the one ``required_capability`` it declares.
 
-    A class declares it as an attribute, a function view through
-    ``hq_sdk.web.capability_required``. A page that declares nothing reads
-    under READ, never under nothing; one that declares the attribute and
-    leaves it empty (``hq_sdk.web.CapabilityRequiredMixin``'s default) is
-    refused, since it meant to name one.
+    Every page reads the estate HQ draws around it (its navigation, a
+    reference picker, the calendar's events), so READ is never replaced, only
+    added to. A class declares its own as an attribute, a function view
+    through ``hq_sdk.web.capability_required``. One that declares the
+    attribute and leaves it empty (``hq_sdk.web.CapabilityRequiredMixin``'s
+    default) is refused, since it meant to name one.
     """
 
     # A class view's attributes are its class's; a function view's are its own.
@@ -314,12 +425,12 @@ def page_capability(view: Callable[..., Any]) -> str:
     try:
         declared = owner.required_capability
     except AttributeError:
-        return str(Capability.READ)
+        return (str(Capability.READ),)
     if not isinstance(declared, str):
-        raise ImproperlyConfigured(f"A page reads under one capability, not {declared!r}.")
+        raise ImproperlyConfigured(f"A page declares one capability of its own, not {declared!r}.")
     if not declared:
         raise ImproperlyConfigured(f"{owner.__qualname__!r} must define required_capability.")
-    return str(declared)
+    return tuple(dict.fromkeys((str(Capability.READ), str(declared))))
 
 
 def authorizes_itself(view: Callable[..., Any]) -> bool:
@@ -337,7 +448,7 @@ def authorizes_itself(view: Callable[..., Any]) -> bool:
 def principal_opens(principal: Any, view: Callable[..., Any]) -> bool:
     """Whether ``principal`` may open the page ``view`` draws: the one place the page rule is written."""
 
-    return principal.permits(page_capability(view))
+    return principal.permits(*page_capabilities(view))
 
 
 def page_refusal(user: Any, view: Callable[..., Any]) -> Refusal | None:
@@ -349,7 +460,7 @@ def page_refusal(user: Any, view: Callable[..., Any]) -> Refusal | None:
     principal = web_principal(user)
     if principal_opens(principal, view):
         return None
-    capability = page_capability(view)
+    capability = next(each for each in page_capabilities(view) if not principal.permits(each))
     refused = AuthorizationError(f"{principal.actor!r} holds no {capability!r}, which this page reads under.")
     return refusal_of(refused, name=capability, principal=principal)
 
@@ -395,11 +506,21 @@ class Offering:
     def opens(self, view: Callable[..., Any]) -> bool:
         if authorizes_itself(view):
             return True
+        principal = self._reader()
+        return principal is not None and principal_opens(principal, view)
+
+    def runs(self, spec: Any) -> bool:
+        """Whether they may run the command ``spec`` declares."""
+
+        principal = self._reader()
+        return principal is not None and spec.permitted_to(principal)
+
+    def _reader(self) -> Any:
         if self.user is None:
-            return False
+            return None
         if self._principal is None:
             self._principal = web_principal(self.user)
-        return principal_opens(self._principal, view)
+        return self._principal
 
 
 def _routed(path: str) -> Callable[..., Any] | None:
@@ -428,6 +549,139 @@ def _route_in(views: dict[str, Callable[..., Any] | None], name: str) -> Callabl
     if name not in views:
         views[name] = _routed(urlsplit(str(reverse(name))).path)
     return views[name]
+
+
+@dataclass(frozen=True, slots=True)
+class CommandRoute:
+    """The route a command's control reaches: the one whose view declares it ``runs`` the command."""
+
+    name: str
+    # Whether its view draws a page (a form, a confirmation) or only takes a post.
+    answers_get: bool
+
+    def address(self, target: str | int | Mapping[str, str]) -> str:
+        """Its address for ``target``: the route's one argument, or its
+        arguments by name; a route that takes none leaves the target to what
+        the control sends."""
+
+        if isinstance(target, Mapping):
+            return str(reverse(self.name, kwargs=dict(target)))
+        if target == "":
+            return str(reverse(self.name))
+        try:
+            return str(reverse(self.name, args=[target]))
+        except NoReverseMatch:
+            return str(reverse(self.name))
+
+
+# What a view ``runs``: a command's name, or the name and one of its declared
+# variants (``capability_words``) where a route of its own runs only that mode
+# of it (linking a receipt to an expense beside editing it).
+type Runs = tuple[str | tuple[str, str], ...]
+
+
+def declared_runs(view: Callable[..., Any]) -> tuple[tuple[str, str], ...]:
+    """The commands the routed ``view`` declares it ``runs``, the one way a view
+    says it, each as its name and variant ("" for the command as a whole).
+
+    A class view's are read from it as its route builds it (``as_view``'s
+    arguments), so one class can run a command per route; a function view's
+    are its own attribute.
+    """
+
+    built = _built_view(view)
+    declared: Runs = getattr(view if built is None else built, "runs", ())
+    return tuple((each, "") if isinstance(each, str) else each for each in declared)
+
+
+def _built_view(view: Callable[..., Any]) -> Any:
+    """A class view as its route builds it, or None for a function view, or
+    for one that runs no command."""
+
+    owner = vars(view).get("view_class")
+    if owner is None or not hasattr(owner, "runs"):
+        return None
+    return owner(**getattr(view, "view_initkwargs", {}))
+
+
+def _answers_get(view: Callable[..., Any]) -> bool:
+    """Whether ``view`` draws a page by GET, by the methods it declares. A
+    function view answers every method."""
+
+    built = _built_view(view)
+    return built is None or ("get" in built.http_method_names and hasattr(built, "get"))
+
+
+# The route each command's control reaches, by the resolver that holds them:
+# Django makes a new resolver whenever its URL caches are cleared.
+_COMMAND_ROUTES: WeakKeyDictionary[Any, dict[tuple[str, str], CommandRoute]] = WeakKeyDictionary()
+
+
+def command_route(name: str, variant: str = "") -> CommandRoute | None:
+    """The route whose view runs the command ``name`` (in its mode
+    ``variant``, else as a whole), or None where none does, which leaves it to
+    the command's own page."""
+
+    resolver = get_resolver()
+    found = _COMMAND_ROUTES.get(resolver)
+    if found is None:
+        found = _COMMAND_ROUTES[resolver] = _commands_routed()
+    return found.get((name, variant)) or found.get((name, ""))
+
+
+def command_reach(name: str, target: str | int | Mapping[str, str] = "", variant: str = "") -> tuple[str, bool]:
+    """Where a control for the command ``name`` on ``target`` goes, and
+    whether it opens a page there by GET: the route whose view declares it
+    ``runs`` the command (``command_route``), else the command's own page, ""
+    where that is not mounted. Every control for a command, a page's and a
+    projection's, is addressed here."""
+
+    found = command_route(name, variant)
+    if found is not None and (address := _reached(found, target)):
+        return address, found.answers_get
+    return command_url(name, "" if isinstance(target, Mapping) else str(target)), True
+
+
+def _reached(route: CommandRoute, target: str | int | Mapping[str, str]) -> str:
+    """``route``'s address for ``target``, or "" where its route names the
+    record it runs on and none is given, which the command's own page asks for."""
+
+    try:
+        return route.address(target)
+    except NoReverseMatch:
+        return ""
+
+
+def _commands_routed() -> dict[tuple[str, str], CommandRoute]:
+    found: dict[tuple[str, str], CommandRoute] = {}
+    for each in routed():
+        if not each.name:
+            continue
+        route = CommandRoute(each.name, _answers_get(each.pattern.callback))
+        for command in declared_runs(each.pattern.callback):
+            kept = found.setdefault(command, route)
+            if kept.name != route.name:
+                raise ImproperlyConfigured(
+                    f"{command!r} is run at {kept.name!r} and at {route.name!r}; a command's control reaches one route."
+                )
+    return found
+
+
+def runs_at(url: str | Promise) -> str | None:
+    """The command the page at ``url`` runs, or None for a page that runs
+    none: the command's own page, or a route whose view declares it."""
+
+    parts = urlsplit(str(url))
+    if parts.scheme or parts.netloc:
+        return None
+    try:
+        match = resolve(parts.path)
+    except Resolver404:
+        return None
+    if match.view_name == COMMAND_ROUTE:
+        return str(match.kwargs["name"])
+    declared = declared_runs(match.func)
+    return declared[0][0] if declared else None
 
 
 def offered_now(url: str | Promise) -> bool:

@@ -1,18 +1,12 @@
 """The layout rules held over single components, drawn on probe pages and pages of the stress estate."""
 
 import base64
-import io
 import json
 import re
-import shutil
-import zipfile
-from contextlib import redirect_stdout
 from datetime import date, timedelta
 from decimal import Decimal
-from pathlib import Path
 from unittest import mock
 
-from django.conf import settings
 from django.template.loader import render_to_string
 
 from hq.platform.application import asks
@@ -20,9 +14,11 @@ from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.money import money
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, line_chart
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
-from hq.platform.core.tests.browser.gate import add_css, served_sheet, tab_key, unfold, with_script
+from hq.platform.core.test_runner import browser_engine
+from hq.platform.core.tests.browser.gate import add_css, tab_key, unfold, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import MAP, SIDEWAYS, SMALL_TARGETS
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
     DIALOGS_WITHOUT_OPENERS,
@@ -31,13 +27,20 @@ from hq.platform.core.tests.browser.probes.parts import (
     WRAPPED,
     reading_problems,
 )
-from hq.platform.core.tests.browser.probes.settle import KEPT_SELECTORS, PRESS_EVERY_SHOWN, SETTLE, UNSUPPORTED
+from hq.platform.core.tests.browser.probes.settle import (
+    FONTS_READY,
+    KEPT_SELECTORS,
+    PRESS_EVERY_SHOWN,
+    SETTLE,
+    UNSUPPORTED,
+)
 from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
     BLANK_TABLE,
     CELLS,
     COLUMNS_SHOWN,
     CUT_AND_CLOSED,
+    CUT_BESIDE_ROOM,
     CUT_TABLE,
     CUT_VALUES,
     CUT_WHEN_OPEN,
@@ -65,14 +68,16 @@ from hq.platform.core.tests.browser.probes.text import (
     BROKEN_WORDS_IN_TEXT,
     CHIPS_PAST_THEIR_PAINT,
     IDENTIFIER,
+    LINES_SHORT_OF_THEIR_ROOM,
     OVERLAPPING_TEXT,
+    STRAYS_OPENING_A_LINE,
     TOUCHING_TEXT,
 )
 from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.stress import ALL_PAGES
-from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS
+from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS, viewport
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
 
@@ -169,14 +174,18 @@ _MEASURE_A_COPY = """() => {
 
 # How the queue's table stands: whether it is in its narrow box, and the
 # width of every action cell shown.
-_QUEUE_COLUMNS = """([queue, act]) => {
+_QUEUE_COLUMNS = (
+    "([queue, act]) => {"
+    + DESCRIBE
+    + """
   const table = document.querySelector(queue);
   return {
-    narrow: getComputedStyle(table).getPropertyValue('--whole').trim() === '0',
+    narrow: narrowBox(table),
     acts: [...table.querySelectorAll(act)].filter((cell) => cell.checkVisibility())
       .map((cell) => Math.round(cell.getBoundingClientRect().width)),
   };
 }"""
+)
 
 # A change of content inside the queue's region, as a fragment or a probe
 # makes: a part put in a row's cell and taken away.
@@ -345,8 +354,17 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 opened = 0
                 for row in rows.all():
                     self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
-                    # One Dismiss is shown: at the row's end, or beneath its words in a narrow box.
-                    self.assertEqual(row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count(), 1)
+                    # One Dismiss is shown: at the row's end, or in a narrow box
+                    # on the row's open line, a press away (tables.css).
+                    shown = row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count()
+                    if width == PHONE_SCREEN[0]:
+                        self.assertEqual(shown, 0)
+                        line = row.locator("xpath=following-sibling::tr[1][@data-row-detail]")
+                        row.locator(SELECTORS["row_toggle"]).click()
+                        self.assertEqual(line.locator('.row-controls button[name="key"] >> visible=true').count(), 1)
+                        row.locator(SELECTORS["row_toggle"]).click()
+                    else:
+                        self.assertEqual(shown, 1)
                     # The row's steps are in its line beneath, drawn by the server.
                     if not row.evaluate(_HELD_BENEATH, SELECTORS["decision_steps"]):
                         continue
@@ -667,9 +685,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 '<td>{% include "partials/_ask.html" with ask=ask %}</td></tr></tbody></table>{% endtable_region %}'
                 "<div data-example-region><p>An example line.</p></div>"
                 '<form id="hq-post" method="post" hidden></form>'
-                '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
-                '{% include "partials/_notice_frames.html" %}'
-                '<script defer src="{{ static }}js/ask.js" nonce="{{ nonce }}"></script>',
+                '{% include "scripts/fragment.html" %}{% include "scripts/ask.html" %}',
                 ask=failed,
             ),
             "example/ask": json.dumps(Standing(asks.DONE).as_json()),
@@ -684,7 +700,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_an_ask_among_a_rows_actions_keeps_them_on_one_line(self):
         """An ask before another of a row's actions leaves that action on the
-        row's first line beside it, and what the ask says once pressed comes
+        row's first line beside it, or on its open line in a narrow box, and
+        in a wide one what the ask says once pressed comes
         on the line the cell keeps under them, so the row grows no taller."""
 
         self.pages = {
@@ -696,9 +713,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 '<a class="btn ghost compact" href="/example/remove/">Remove</a></td></tr></tbody></table>'
                 "{% endtable_region %}"
                 '<form id="hq-post" method="post" hidden></form>'
-                '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
-                '{% include "partials/_notice_frames.html" %}'
-                '<script defer src="{{ static }}js/ask.js" nonce="{{ nonce }}"></script>',
+                '{% include "scripts/fragment.html" %}{% include "scripts/ask.html" %}',
                 ask=Ask("Refresh", "/example/ask/", title="Read the example again.", compact=True),
             ),
             "example/ask": json.dumps(Standing(asks.FAILED, "The example could not be read.").as_json()),
@@ -706,10 +721,19 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in (PHONE_SCREEN[0], WIDE):
             with self.subTest(width=width):
                 self.open("ask-actions-probe", width)
-                button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
+                narrow = width == PHONE_SCREEN[0]
+                if narrow:
+                    # In a narrow box the row's actions stand side by side on
+                    # its open line (tables.css), which wraps as it must.
+                    self.page.locator(SELECTORS["row_toggle"]).click()
+                    button = self.page.locator(".row-detail .row-controls [data-ask-button]")
+                else:
+                    button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
                 remove = self.page.get_by_role("link", name="Remove")
                 middles = [box["y"] + box["height"] / 2 for box in (button.bounding_box(), remove.bounding_box())]
                 self.assertLessEqual(abs(middles[0] - middles[1]), 1.5)
+                if narrow:
+                    continue
                 row = button.evaluate_handle("(button) => button.closest('tr')").as_element()
                 tall = row.bounding_box()["height"]
                 button.press("Enter")
@@ -767,27 +791,23 @@ class ComponentLayoutTests(LayoutBrowserTests):
         """The hit area a small control hangs beside itself widens what it
         scrolls, never what it says; a word wider than its control spills."""
 
-        from hq.platform.core.tests.browser.catalog import CATALOG
-
-        self.pages = {**self.pages, "pin-probe": CATALOG["part/service-pin"].page("part/service-pin")}
-        self.open("pin-probe", WIDE)
-        star = SELECTORS["favorite_star"]
+        # The glyph is drawn smaller than a target, so its area hangs past it.
+        self.pages = {
+            **self.pages,
+            "hit-probe": probe(
+                '<button type="button" class="example-glyph" data-hit aria-label="Example favorite" '
+                'style="inline-size: 1rem; block-size: 1rem; padding: 0">★</button> '
+                '<button type="button" class="example-word" style="inline-size: 2rem; white-space: nowrap">'
+                "example label</button>"
+            ),
+        }
+        self.open("hit-probe", WIDE)
         widened = self.page.evaluate(
-            """(star) => {
-          const word = document.createElement('button');
-          word.className = 'example-word';
-          word.textContent = 'example label';
-          word.style.setProperty('width', '2rem');
-          word.style.setProperty('white-space', 'nowrap');
-          const main = document.querySelector('main');
-          main.append(word);
-          const drawn = main.querySelector(star);
-          return drawn.scrollWidth > drawn.clientWidth;
-        }""",
-            star,
+            "() => { const glyph = document.querySelector('main .example-glyph');"
+            " return glyph.scrollWidth > glyph.clientWidth; }"
         )
         self.assertTrue(widened)
-        found = self.page.evaluate(SPILLED_LABELS, f"main :is({star}, .example-word)")
+        found = self.page.evaluate(SPILLED_LABELS, "main :is(.example-glyph, .example-word)")
         self.assertEqual([spilled.split(" holds ")[0] for spilled in found], ["button.example-word"])
 
     def test_a_word_before_a_name_in_a_cell_shares_the_name_s_line(self):
@@ -815,11 +835,14 @@ class ComponentLayoutTests(LayoutBrowserTests):
             """() => [...document.querySelectorAll('main td')].map((cell) => {
               // The line under the row's name, and the cell of free text.
               const box = cell.querySelector('br')?.nextElementSibling ?? cell;
+              const first = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, {
+                acceptNode: (node) => node.data.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
+              }).nextNode();
               const words = document.createRange();
-              words.selectNodeContents(box.firstChild);
+              words.selectNodeContents(first);
               const word = [...words.getClientRects()].find((r) => r.width);
-              const name = [...(box.querySelector('[data-entity]') ?? box.firstElementChild).getClientRects()].find((r) => r.width);
-              return [box.firstChild.data.trim(), Math.abs(word.top - name.top) < word.height / 2];
+              const name = [...box.querySelector('[data-entity], .token').getClientRects()].find((r) => r.width);
+              return [first.data.trim(), Math.abs(word.top - name.top) < word.height / 2];
             })"""
         )
         self.assertEqual(lines, [["on", True], ["Created", True]])
@@ -881,6 +904,109 @@ class ComponentLayoutTests(LayoutBrowserTests):
         ]
         self.assertEqual(len(found), 1)
         self.assertIn("example", found[0])
+
+    def test_a_line_ending_in_a_links_mark_is_full_and_one_broken_short_is_found(self):
+        """A link's mark drawn after its words (``::after``) takes its line's
+        room, as a wrapping list's gap does between its items, so the word
+        that would not fit beside either starts the next line rightly; a line
+        a balanced rag ends short of its room is found."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        add_css(self.page, '.example-marked::after { content: "____"; }')
+        self.page.evaluate("""() => {
+          const table = document.createElement('table');
+          table.className = 'data-table';
+          const row = table.createTBody().insertRow();
+          const link = document.createElement('a');
+          link.className = 'example-marked';
+          link.href = '#';
+          link.textContent = 'aaaa';
+          const list = document.createElement('ul');
+          list.style.cssText = 'display: flex; flex-wrap: wrap; gap: 0 4ch; margin: 0; padding: 0; list-style: none';
+          for (const word of ['cccc', 'dddd']) {
+            const item = document.createElement('li');
+            item.textContent = word;
+            list.append(item);
+          }
+          const held = document.createElement('span');
+          held.style.setProperty('white-space', 'nowrap');
+          held.textContent = 'ff gggg';
+          for (const [words, css] of [
+            [[link, ' bb'], 'inline-size: 10ch'],
+            [[list], 'inline-size: 10ch'],
+            [['eeee ', held], 'inline-size: 10ch'],
+            [['example aaaa bbbb cccc dddd'], 'inline-size: 24ch; text-wrap: balance'],
+          ]) {
+            const dd = document.createElement('dd');
+            dd.append(...words);
+            dd.style.cssText = `margin: 0; padding: 0; font: 16px/1.5 monospace; ${css}`;
+            row.insertCell().append(dd);
+          }
+          document.querySelector('main').append(table);
+        }""")
+        found = [
+            line for line in self.page.evaluate(LINES_SHORT_OF_THEIR_ROOM, SELECTORS["unseen"]) if " short " in line
+        ]
+        planted = [line.split(" breaks before ")[1][:5] for line in found]
+        self.assertEqual([start for start in planted if start in {'"aaaa', '"cccc', '"eeee', '"exam'}], ['"exam'])
+
+    def test_a_slash_alone_opening_a_line_is_a_stray_and_a_path_is_not(self):
+        """A slash standing between two words reads as a separator when a
+        line opens on it; a path ("/api") opening a line is a value."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          for (const words of ['example aaaa / bbbb', 'example cccc /dddd']) {
+            const dd = document.createElement('dd');
+            dd.textContent = words;
+            dd.style.cssText = 'margin: 0; padding: 0; font: 16px/1.5 monospace; inline-size: 13ch; text-wrap: wrap';
+            document.querySelector('main').prepend(dd);
+          }
+        }""")
+        found = self.page.evaluate(STRAYS_OPENING_A_LINE, [SELECTORS["unseen"], IDENTIFIER])
+        planted = [line.split(": ", 1)[1] for line in found if '"/' in line]
+        self.assertEqual(planted, ['"/ bbbb"'])
+
+    def test_a_cut_beside_a_button_has_room_only_past_the_buttons_box(self):
+        """A button beside a cut name holds its whole box, so the padding past
+        its glyph is no room for the name; room past the button's edge is."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          for (const [name, wide] of [['examplefull', 20], ['examplegap', 26]]) {
+            const table = document.createElement('table');
+            table.style.cssText = `table-layout: fixed; inline-size: ${wide}ch; border-spacing: 0; font: 16px/1.5 monospace`;
+            const cell = table.createTBody().insertRow().insertCell();
+            cell.style.cssText = 'padding: 0';
+            const line = document.createElement('div');
+            line.style.cssText = 'display: grid; grid-auto-flow: column; justify-content: start; gap: 0';
+            const words = document.createElement('strong');
+            words.textContent = name.padEnd(15, 'a');
+            words.style.cssText = 'inline-size: 12ch; overflow: hidden; white-space: nowrap; text-overflow: ellipsis';
+            const button = document.createElement('button');
+            button.textContent = 'x';
+            button.style.cssText = 'all: unset; display: block; inline-size: 8ch; text-align: center; font: inherit';
+            line.append(words, button);
+            cell.append(line);
+            document.querySelector('main').prepend(table);
+          }
+        }""")
+        found = [line for line in self.page.evaluate(CUT_BESIDE_ROOM, SELECTORS["unseen"]) if '"example' in line]
+        self.assertEqual([line.split('"')[1] for line in found], ["examplegapaaaaa"])
+
+    def test_a_mark_inside_a_wrapping_identifier_is_part_of_the_value(self):
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          for (const [words, name] of [['a-b', 'token'], ['c-d', '']]) {
+            const part = document.createElement('span');
+            part.textContent = words;
+            part.className = name;
+            part.style.cssText = 'display: block; inline-size: 1ch; font: 16px/1.5 monospace; overflow-wrap: anywhere; white-space: normal';
+            document.querySelector('main').prepend(part);
+          }
+        }""")
+        found = self.page.evaluate(STRAYS_OPENING_A_LINE, [SELECTORS["unseen"], IDENTIFIER])
+        self.assertEqual(len([line for line in found if 'holds "-"' in line]), 1)
 
     def test_an_identifier_split_at_its_seams_is_one_run_and_a_plain_word_is_not(self):
         """An identifier wider than its line breaks at its seam and then
@@ -1028,30 +1154,12 @@ class ComponentLayoutTests(LayoutBrowserTests):
           const button = document.createElement('button');
           button.className = 'example-edged';
           button.textContent = 'Example';
-          button.style.setProperty('border-color', 'var(--field-line)');
+          button.style.setProperty('border', '1px solid var(--field-line)');
           document.querySelector('main').append(button);
         }""")
         self.assertEqual(
             self.page.evaluate(BUTTON_EDGES, SELECTORS["pressed"]), ["button.example-edged wears a field's edge"]
         )
-
-    def test_a_failure_keeps_a_trace_of_the_test_beside_its_screenshot(self):
-        """What a failure saves, CI keeps: the page as it stood, and the trace
-        of the steps that led there, each with the page as it stood then, in
-        the checkout's var/browser-failures/, which outlives the run and is
-        the folder CI uploads."""
-
-        self.open(next(iter(PAGES)), WIDE)
-        with redirect_stdout(io.StringIO()):
-            self.shoot("example-failure")
-        folder = self.failures
-        if folder is None:
-            self.fail("the shot made no folder")
-        self.addCleanup(lambda: shutil.rmtree(folder))
-        self.assertTrue(folder.is_relative_to(Path(settings.BASE_DIR, "var", "browser-failures")), folder)
-        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["example-failure.png", "example-failure.zip"])
-        with zipfile.ZipFile(folder / "example-failure.zip") as trace:
-            self.assertTrue(any(name.endswith(".trace") for name in trace.namelist()), trace.namelist())
 
     def test_a_small_target_under_an_open_menu_is_not_measured_and_one_in_view_is(self):
         """A target drawn under another element is out of a pointer's reach,
@@ -1410,8 +1518,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
         the cell that names it, and shows it only while the row holds
         something back: a column that left a table wider than its box, with
         something in it, a part of a list it folds, a run of parts with a rest
-        past the ones that size its column, or a value longer than a line of
-        its column, as the server marks it. A dash in a dropped column says
+        past the ones that size its column, or in a narrow box a value longer
+        than a line of its column, as the server marks it, which a wide box
+        shows whole in its cell's title (cuts.css). A dash in a dropped column says
         nothing, screen-reader text is clipped to a pixel by design and a
         decoration is hidden from assistive technology: none is content a row
         withholds. Nothing is measured: the server and the region decide.
@@ -1420,7 +1529,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.pages = {**self.pages, "row-toggle-probe": probe(ROW_TOGGLE_TABLES, **ROW_TOGGLE_VALUES)}
         shown_at = {
             PHONE_SCREEN[0]: {"dropped", "cut", "folded", "cut-in-a-kept-gutter", "line-cut"},
-            1280: {"cut", "folded", "cut-in-a-kept-gutter", "line-cut"},
+            1280: {"folded", "line-cut"},
         }
         for width, expected in shown_at.items():
             with self.subTest(width=width):
@@ -1508,7 +1617,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         """A table of four columns or more keeps the column that names each row
         and the ones marked key, and fits the screen; it does not stack into
         cards and is not swiped through. What left shows when a row is
-        opened, beneath that row's first line, each under its column's name.
+        opened, on its open line, each under its column's name.
         """
 
         for name in ("connections", "services", "containers", "projects"):
@@ -1528,9 +1637,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
     @with_script
     def test_opening_a_row_moves_no_column_and_no_other_row(self):
-        """A row's cells stand in its table's tracks, so what an open row
-        shows whole (a column that left, a cut value, a block it keeps beneath
-        itself) stands on lines of its own beneath its first and asks no
+        """What an open row shows whole (a column that left, a cut value, a
+        block it keeps beneath itself) stands on its open line and asks no
         column for width: every column keeps its edges and every other row
         its height, at every width, on each of the table's catalog entries and
         the wide tables of the estate, and a part shown whole keeps its box;
@@ -1567,11 +1675,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_a_table_keeps_its_promises_on_every_catalog_entry(self):
         """The table primitive, on each of its catalog entries at every width:
-        a grid that names its role and each cell's; its first lines under their headings, a group's heading across
+        laid out as a table with its headings drawn, a group's heading across
         its table and the heading row stuck; nothing past its region, and a
-        value it cuts whole in its cell's title; in a narrow box the row's
-        controls beneath its first line, in the row's order. Laid out by the
-        stylesheet alone, it draws every column where it does with no script."""
+        value it cuts whole in its cell's title. Laid out by the stylesheet
+        alone, it draws every column where it does with no script."""
 
         from hq.platform.core.tests.browser.catalog import CATALOG
 
@@ -1624,6 +1731,46 @@ class ComponentLayoutTests(LayoutBrowserTests):
                         self.settle()
                     self.assertTrue(self.page.locator(rows + '[aria-expanded="true"]').count())
                     self.assertEqual(self.page.evaluate(LAYOUT_SHIFTS, read), [])
+
+    @with_script
+    def test_the_face_arriving_late_is_the_gates_move_under_a_fixed_clock(self):
+        """The gates draw text in Inter once it arrives (`serving.in_the_face`),
+        where a reader's browser draws it from the first paint or never, so the
+        move its arrival makes is left out of the score however late it lands,
+        under the fixed clock `dev:look` reads every page by too."""
+
+        self.pages = {
+            **self.pages,
+            "late-face-probe": probe(
+                "<h1>"
+                + "An example heading that wraps in either face " * 3
+                + "</h1>"
+                + '<div class="card"><p>'
+                + "An example sentence below it. " * 30
+                + "</p></div>"
+            ),
+        }
+        if browser_engine() != "chromium":
+            self.skipTest("only Chromium keeps a record of layout shifts")
+        held = []
+
+        def hold(route):
+            # Playwright marks its handler, which a list's bound method refuses.
+            held.append(route)
+
+        self.page.route("**/*.woff2", hold)
+        self.page.clock.set_fixed_time(1_800_000_000)
+        self.page.set_viewport_size(viewport(NARROWEST))
+        self.page.goto(f"{ORIGIN}/late-face-probe/", wait_until="domcontentloaded")
+        # Drawn in the next face for well past the margin the face is given.
+        self.page.wait_for_function("() => document.timeline.currentTime > 300")
+        if not held:
+            self.skipTest("Inter is withheld (HQ_BROWSER_FACE=fallback)")
+        for route in held:
+            route.fallback()
+        self.page.evaluate(FONTS_READY)
+        self.settle()
+        self.assertEqual(self.page.evaluate(LAYOUT_SHIFTS, [SELECTORS["vendored"], 0]), [])
 
     @with_script
     def test_a_fragment_that_is_not_percent_encoding_breaks_no_table(self):
@@ -1765,40 +1912,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertFalse(found["scrolls"])
                 self.assertEqual(found["empty"], [])
 
-    def test_a_palette_only_the_systems_preference_reaches_is_caught(self):
-        """A rule written under `prefers-color-scheme` paints a page whose
-        operator chose the other palette as the system's, which the rule on
-        chosen themes names; without it the same page passes."""
-
-        name = next(iter(PAGES))
-        self.open(name, WIDE)
-        was = self.scheme()
-        self.a_chosen_theme_paints_as_the_systems(name)
-        # Linked, so the page loaded again from its own HTML keeps it.
-        self.page.evaluate(
-            "(href) => document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href }))",
-            served_sheet("@media (prefers-color-scheme: dark) { body { background: rgb(1, 2, 3) } }"),
-        )
-        with self.assertRaises(AssertionError) as caught:
-            self.a_chosen_theme_paints_as_the_systems(name)
-        for chosen in ("dark", "light"):
-            self.assertIn(f"{chosen} chosen paints body", str(caught.exception))
-        self.assertEqual(self.scheme(), was)
-
-    @with_script
-    def test_a_page_that_never_loads_again_fails_the_chosen_theme_naming_it(self):
-        """A reload that never reaches its load event fails the rule within
-        its bound, naming the page, rather than holding the gate."""
-
-        name = next(iter(PAGES))
-        self.open(name, WIDE)
-        # Every script asked for from here on waits unanswered, and the load
-        # event waits for them.
-        self.held, self.reload_within = [], 500
-        with self.assertRaises(AssertionError) as caught:
-            self.a_chosen_theme_paints_as_the_systems(name)
-        self.assertIn(f"{name} did not load again", str(caught.exception))
-
     @with_script
     def test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split(self):
         self.pages = {**self.pages, "blank-column-probe": probe(BLANK_TABLE)}
@@ -1832,6 +1945,40 @@ class ComponentLayoutTests(LayoutBrowserTests):
             self.assertEqual(self.page.evaluate(region, name), ["visible", None])
         self.assertEqual(self.page.evaluate(TABLE_PROMISES, SELECTORS["table_scroll"]), [])
         self.assertEqual(self.page.evaluate(SIDEWAYS, SELECTORS["sideways"]), [])
+
+    def test_a_short_name_is_broken_only_where_its_table_holds_it(self):
+        """A short name its table holds on its line (`nowrap`) and something
+        inside breaks anyway is found; one its table lets break at its seams,
+        in a box too narrow to hold it, is not."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          const table = document.createElement('table');
+          table.className = 'data-table';
+          table.style.cssText = 'table-layout: fixed; inline-size: 12ch';
+          const row = table.createTBody().insertRow();
+          for (const [name, hold] of [['example-held-name', 'nowrap'], ['example-free-name', 'normal']]) {
+            const token = document.createElement('span');
+            token.className = 'token';
+            token.style.whiteSpace = hold;
+            const inner = document.createElement('span');
+            inner.style.whiteSpace = 'normal';
+            inner.textContent = name;
+            token.append(inner);
+            const cell = row.insertCell();
+            cell.style.cssText = 'padding: 0; overflow-wrap: anywhere';
+            const box = document.createElement('div');
+            box.className = 'cell-short';
+            box.style.display = 'inline';
+            box.append(token);
+            cell.append(box);
+          }
+          document.querySelector('main').prepend(table);
+        }""")
+        found = self.page.evaluate(
+            BROKEN_TOKENS, ["table:not(.table-scroll *) td .token", SELECTORS["wraps_in_a_cell"]]
+        )
+        self.assertEqual([line.split(" breaks ")[1] for line in found], ['"example-held-name"'])
 
     @with_script
     def test_an_identifier_in_a_table_is_whole_while_a_column_can_leave(self):
@@ -1964,31 +2111,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertEqual(self.page.evaluate("() => window.exampleHeard"), 0)
         self.page.evaluate("() => document.querySelector('main').append(document.createElement('span'))")
         self.page.wait_for_function("() => window.exampleHeard > 0")
-
-    def test_a_palette_finding_names_the_token_that_paints_it(self):
-        """A fill or an ink one palette loses is named with the token that
-        paints it, in that palette, so the fix goes to the token every page
-        shares; a color written as a literal is said to be one."""
-
-        self.pages = {
-            **self.pages,
-            "token-probe": probe('<pre>example.com</pre><pre class="example-literal">example.net</pre>'),
-        }
-        self.open("token-probe", WIDE)
-        # Each token's dark half lost into what it sits on, and the same
-        # colors written as literals.
-        add_css(
-            self.page,
-            ":root { --code-bg: light-dark(#161922, var(--bg)); --code-ink: light-dark(#eaeef2, var(--code-bg)); }"
-            ".example-literal { background: light-dark(#161922, transparent); color: light-dark(#eaeef2, transparent); }",
-        )
-        fills = "\n".join(self.lost_fills())
-        self.assertRegex(fills, r"dark loses pre \([^\n]*; fill: --code-bg in dark")
-        self.assertRegex(fills, r"dark loses pre\.example-literal [^\n]*; fill: no token paints this")
-        self.in_scheme("dark")
-        text = "\n".join(self.palette()["contrast"])
-        self.assertRegex(text, r"pre \d[^\n]*; ink: --code-ink in dark; ground: --code-bg in dark")
-        self.assertRegex(text, r"pre\.example-literal \d[^\n]*; ink: no token paints this")
 
     def test_a_fill_is_judged_on_its_own_box_while_the_page_grows_between_palettes(self):
         """A live page changes between the two readings (a figure that samples

@@ -1,5 +1,7 @@
 """Probes that bring a page to a known state: loaded, drawn, still, and put back as it was."""
 
+from hq.platform.core.tests.browser.probes import Check
+
 STYLESHEETS = """() => {
   const links = [...document.querySelectorAll('link[rel="stylesheet"]')];
   const loaded = [...document.styleSheets].filter((sheet) => sheet.href);
@@ -117,3 +119,17 @@ def hushed(trip):
   try {{ return await ({trip})(args); }}
   finally {{ await null; globalThis[{_HUSH}] = false; }}
 }}"""
+
+
+def _unloaded(sheets):
+    """What kept a page from its styles: no sheet linked, a sheet that never
+    loaded, a sheet that loaded with no rules."""
+
+    found = [] if sheets["links"] else ["no stylesheet linked"]
+    if sheets["loaded"] != sheets["links"]:
+        found.append(f"{sheets['loaded']} of {sheets['links']} stylesheets loaded")
+    return found + [f"{href} loaded empty" for href in sheets["empty"]]
+
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {"stylesheets": Check(STYLESHEETS, findings=_unloaded, reader_sees="a page drawn without its styles")}

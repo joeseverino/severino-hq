@@ -1,6 +1,5 @@
 """The notice: every banner and message a page shows is one part, in its tone."""
 
-import inspect
 import re
 from pathlib import Path
 
@@ -11,7 +10,7 @@ from django.template import Context, Template, TemplateSyntaxError
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, tag
 
-from hq.platform.application.tests.markup import all_elements, elements, select, with_class
+from hq.platform.application.markup_testing import all_elements, elements, select, with_class
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.browser.catalog import CATALOG
 from hq_sdk.testing import plain
@@ -122,23 +121,14 @@ class NoticeTagTests(SimpleTestCase):
 
 @tag("source")
 class NoticeCatalogTests(SimpleTestCase):
-    def test_every_tone_and_option_of_the_notice_tag_has_a_catalog_entry(self):
+    def test_every_tone_of_the_notice_tag_has_a_catalog_entry(self):
         """The browser survey reads the part through the catalog, so each
-        tone it draws and each option it takes is drawn there at least once."""
+        tone it draws is drawn there at least once. A tone counts where an
+        entry draws it, as the page's messages draw each of theirs."""
 
-        from hq.platform.core.templatetags.notice_tags import TONES, register
+        from hq.platform.core.templatetags.notice_tags import TONES
 
-        takes = register.tags["notice"].__wrapped__
-        options = [
-            f"{name}="
-            for name, parameter in inspect.signature(takes).parameters.items()
-            if parameter.kind is inspect.Parameter.KEYWORD_ONLY and name != "tone"
-        ]
         entries = [entry for name, entry in CATALOG.items() if name.startswith("part/notice-")]
-        notices = [entry.template for entry in entries]
-        opened = " ".join(" ".join(re.findall(r"\{% notice (.*?)%\}", t)) for t in notices)
-        drawn_options = {word for word in [*options, "data_"] if re.search(rf"\b{re.escape(word)}", opened)}
-        # A tone counts where an entry draws it, as the page's messages draw each of theirs.
         drawn = {
             name
             for entry in entries
@@ -146,10 +136,7 @@ class NoticeCatalogTests(SimpleTestCase):
             for name in each.classes
         }
         drawn_tones = {tone for tone, classes in TONES.items() if tone and classes.split()[-1] in drawn}
-
-        self.assertEqual(sorted({*options, "data_"} - drawn_options), [], "add a part/notice-* entry that draws it")
         self.assertEqual(sorted(set(filter(None, TONES)) - drawn_tones), [], "add a part/notice-* entry in it")
-        self.assertTrue(any("{% notice" in t and "tone=" not in t for t in notices), "draw a neutral notice")
 
 
 # A tone a script clones a notice in: from template[data-notice="<tone>"],

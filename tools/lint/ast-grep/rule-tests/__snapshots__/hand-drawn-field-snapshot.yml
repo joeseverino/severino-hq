@@ -1,0 +1,90 @@
+id: hand-drawn-field
+snapshots:
+  "<div\n  class=\"compact field\">x</div>\n":
+    labels:
+    - source: |-
+        <div
+          class="compact field">x</div>
+      style: primary
+      start: 0
+      end: 36
+    - source: class="compact field"
+      style: secondary
+      start: 7
+      end: 28
+    - source: |-
+        <div
+          class="compact field">
+      style: secondary
+      start: 0
+      end: 29
+  <div class="field"><label for="x">X</label><input id="x"></div>:
+    labels:
+    - source: <div class="field"><label for="x">X</label><input id="x"></div>
+      style: primary
+      start: 0
+      end: 63
+    - source: class="field"
+      style: secondary
+      start: 5
+      end: 18
+    - source: <div class="field">
+      style: secondary
+      start: 0
+      end: 19
+  "<div class=\"field{% if field.errors %} has-errors{% endif %}\">x</div>":
+    labels:
+    - source: <div class="field{% if field.errors %} has-errors{% endif %}">x</div>
+      style: primary
+      start: 0
+      end: 69
+    - source: class="field{% if field.errors %} has-errors{% endif %}"
+      style: secondary
+      start: 5
+      end: 61
+    - source: <div class="field{% if field.errors %} has-errors{% endif %}">
+      style: secondary
+      start: 0
+      end: 62
+  <div class="form-actions save-bar">x</div>:
+    labels:
+    - source: <div class="form-actions save-bar">x</div>
+      style: primary
+      start: 0
+      end: 42
+    - source: class="form-actions save-bar"
+      style: secondary
+      start: 5
+      end: 34
+    - source: <div class="form-actions save-bar">
+      style: secondary
+      start: 0
+      end: 35
+  "<div class=\"wide {% if bar %}form-actions{% endif %}\">x</div>":
+    labels:
+    - source: <div class="wide {% if bar %}form-actions{% endif %}">x</div>
+      style: primary
+      start: 0
+      end: 61
+    - source: class="wide {% if bar %}form-actions{% endif %}"
+      style: secondary
+      start: 5
+      end: 53
+    - source: <div class="wide {% if bar %}form-actions{% endif %}">
+      style: secondary
+      start: 0
+      end: 54
+  <p class="form-actions"><a href="/">Back</a></p>:
+    labels:
+    - source: <p class="form-actions"><a href="/">Back</a></p>
+      style: primary
+      start: 0
+      end: 48
+    - source: class="form-actions"
+      style: secondary
+      start: 3
+      end: 23
+    - source: <p class="form-actions">
+      style: secondary
+      start: 0
+      end: 24

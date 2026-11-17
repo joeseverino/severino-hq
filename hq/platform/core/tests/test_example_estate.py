@@ -23,8 +23,8 @@ from hq.platform.application.automation_adoption import ADOPT
 from hq.platform.application.capability_policy import RULE_LABELS
 from hq.platform.application.findings import findings
 from hq.platform.application.linked_accounts import GITHUB, linked_login
+from hq.platform.application.markup_testing import all_elements, elements, select, within
 from hq.platform.application.security import WEB_INTERFACE, cli_principal, web_principal
-from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
 from hq.platform.application.topology import derive_topology
 from hq.platform.core import seeds
 from hq.platform.core.audit import ANONYMOUS, audited_labels
@@ -172,7 +172,7 @@ class ExampleEstateTests(TestCase):
         for option in chosen:
             (setting,) = [element for element in option.ancestors if element.tag == "select"]
             self.assertIn(f"toned-{RULE_TONES.get(option.attrs['value'], 'neutral')}", setting.classes)
-        self.assertTrue(with_class(page, "policy-unavailable"), "a cell past an agent's grant")
+        self.assertTrue(select(page, "data-unavailable"), "a cell past an agent's grant")
         # An agent a viewer signed in: what of its grant is in force, and what is beyond their role.
         row = " ".join(element.words for element in within(page, "data-client", "example-reader"))
         self.assertTrue(within(page, "data-role", "viewer"))
@@ -183,9 +183,18 @@ class ExampleEstateTests(TestCase):
         self.assertTrue(missing, "an agent missing a permission")
         self.assertIn(str(NOT_CARRIED), {element.words for element in missing if element.tag == "code"})
 
+    def test_dev_look_signs_in_as_a_viewer_the_estate_holds(self):
+        from hq.platform.application import roles
+        from hq.platform.core.example_estate.agents import example_viewer
+
+        viewer = example_viewer()
+
+        self.assertNotEqual(viewer, self.user)
+        self.assertEqual(roles.role_of(viewer), roles.Role.VIEWER)
+
     def test_the_agents_page_draws_every_standing_a_device_can_be_in(self):
         from hq.platform.application.agent_devices import DeviceStanding
-        from hq.platform.application.tests.markup import select
+        from hq.platform.application.markup_testing import select
 
         client = Client()
         sign_in(client, self.user)
@@ -230,7 +239,7 @@ class ExampleEstateTests(TestCase):
             with self.subTest(capability=held.capability):
                 page = client.get(reverse("core:approval_entry", args=[held.pk]), follow=True)
 
-                record = approval_review.review(held)["resource_url"]
+                record = approval_review.review(held, cli_principal())["resource_url"]
                 self.assertEqual(page.status_code, 200)
                 self.assertTrue(record, "every held request the estate seeds acts on a record")
                 self.assertTrue(
@@ -362,19 +371,19 @@ class WalkedStatesTests(TestCase):
         # The queue's row shows its first two buttons; the rest wait in its
         # opened line, a part the survey reaches only through a row with more.
         page = self.walked(reverse("action_items"))
-
         waiting = [
             control
-            for control in within(page, "class", "row-later")
-            if control.tag in {"a", "button"} and any("data-attention-item" in row.attrs for row in control.ancestors)
+            for control in all_elements(page)
+            if control.beneath
+            and control.tag in {"a", "button"}
+            and any("row-later" in part.classes for part in control.ancestors)
         ]
         self.assertTrue(waiting)
 
-    def test_the_reports_exports_follow_three_readings(self):
-        # Three readings fill a wide row, so the exports wrap onto one of their own.
+    def test_each_reports_reading_has_rows(self):
         page = self.walked(reverse("reports:dashboard"))
 
-        for reading in ("status_groups", "assets_by_category", "docs_needing_review"):
+        for reading in ("status_groups", "assets_by_category"):
             with self.subTest(reading=reading):
                 self.assertTrue(page.context[reading])
 
@@ -394,8 +403,7 @@ class WalkedStatesTests(TestCase):
         # The queue knows an item by its key; a source answering two under one
         # has given it one item it cannot tell apart, row or dismissal.
         from hq.domains.control_plane.models import ProviderInventory
-        from hq.platform.application.action_items import item_key
-        from hq.platform.application.domains import all_domains
+        from hq.platform.application.dashboard import work_queue
         from hq.platform.application.inventory_testing import store
         from hq.platform.application.projection import projection_scope
 
@@ -429,12 +437,8 @@ class WalkedStatesTests(TestCase):
         ]
         self.assertIn("expires in 5 days", item["label"])
         with projection_scope():
-            for domain in all_domains():
-                if domain.integration.attention is None:
-                    continue
-                keys = [item_key(domain.id, item) for item in domain.integration.attention()]
-                with self.subTest(source=domain.id):
-                    self.assertEqual(sorted({key for key in keys if keys.count(key) > 1}), [])
+            keys = [item["key"] for item in work_queue()]
+        self.assertEqual(sorted({key for key in keys if keys.count(key) > 1}), [])
 
 
 def in_days(days):

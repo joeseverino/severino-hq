@@ -10,7 +10,7 @@ the last one back.
 favorites, where the order is something the operator chose; among the rest,
 alphabetical is the order and there is nothing to move.
 {% endcomment %}
-{% table_region "Services" room="snug" empty=empty_message action_url=start_url action_label="Publish a service" %}
+{% table_region "Services" empty=empty_message action_url=start_url action_label="Publish a service" %}
   <table class="data-table">
     <thead>
       <tr>
@@ -48,13 +48,16 @@ alphabetical is the order and there is nothing to move.
                 {% endfor %}
                 {% if facet.id == certificate_facet %}
                   {% with certificate=service.path.certificate %}
-                    {% if certificate %}<span title="{{ certificate.statement }}">{{ certificate.role|breakable }}{% if certificate.issuer %}<span class="muted">{% dot %}{{ certificate.issuer|breakable }}</span>{% elif certificate.name and not facet.claims %}<span class="muted">{% dot %}{{ certificate.name|breakable }}</span>{% elif certificate.unread %}<span class="muted">{% dot %}not read</span>{% endif %}</span>{% elif not facet.claims %}{% empty_value %}{% endif %}
+                    {% if certificate %}<span title="{{ certificate.statement }}">{{ certificate.role|breakable }}{% if certificate.issuer %}{% muted %}{% dot %}{{ certificate.issuer|breakable }}{% endmuted %}{% elif certificate.name and not facet.claims %}{% muted %}{% dot %}{{ certificate.name|breakable }}{% endmuted %}{% elif certificate.unread %}{% muted %}{% dot %}not read{% endmuted %}{% endif %}</span>{% elif not facet.claims %}{% empty_value %}{% endif %}
                   {% endwith %}
                 {% else %}
                   {% for line in facet.reading_lines %}
-                    <span title="{{ line.hint }}">{{ line.label|breakable }}{% if line.detail %}<span class="muted">{% dot %}{{ line.detail|breakable }}</span>{% endif %}</span>{% if not forloop.last %}<br>{% endif %}
+                    <span title="{{ line.hint }}">{{ line.label|breakable }}{% if line.detail %}{% muted %}{% dot %}{{ line.detail|breakable }}{% endmuted %}{% endif %}</span>{% if not forloop.last %}<br>{% endif %}
                   {% endfor %}
-                  {% if not facet.claims and not facet.readings %}{% if service.is_observed and facet.id == dns_facet and service.path.gaps %}{% include "partials/_empty_state.html" with message="No record" inline=True only %}{% else %}{% empty_value %}{% endif %}{% endif %}
+                  {% if not facet.claims and not facet.readings %}{% comment %}
+                  a facet with nothing to show, said as No record where the DNS path has a gap
+                  <!-- ast-grep-ignore: hand-drawn-missing-value -->
+                  {% endcomment %}{% if service.is_observed and facet.id == dns_facet and service.path.gaps %}{% include "partials/_empty_state.html" with message="No record" inline=True only %}{% else %}{% empty_value %}{% endif %}{% endif %}
                 {% endif %}
               </td>
             {% endif %}
@@ -70,20 +73,18 @@ alphabetical is the order and there is nothing to move.
             {% elif service.path.redirects_to %}
               Redirects to {% entity "service"|entity_of:service.path.redirects_to %}
             {% elif service.path.ends_at.step == "origin" %}
-              {{ service.path.ends_at.label|breakable }}{% if service.path.ends_at.unread %}<span class="muted">{% dot %}redirect not read</span>{% endif %}
+              {{ service.path.ends_at.label|breakable }}{% if service.path.ends_at.unread %}{% muted %}{% dot %}redirect not read{% endmuted %}{% endif %}
             {% elif service.origin %}
               {% for facet in service.facets %}{% if facet.id == runtime_facet %}{% for claim in facet.claims %}{% if forloop.first %}{% cell_line service.origin.headline claim.url %}{% endif %}{% empty %}{% cell_line service.origin.headline %}{% endfor %}{% endif %}{% endfor %}
-              {% if service.origin.qualifier %}<span class="muted">{{ service.origin.qualifier|breakable }}</span>{% endif %}
+              {% if service.origin.qualifier %}{% muted %}{{ service.origin.qualifier|breakable }}{% endmuted %}{% endif %}
             {% elif service.served_by %}
               {% for name in service.served_by %}{% cell_line name %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
-            {% elif service.path.machine %}
-              {% entity "machine"|entity_of:service.path.machine %}
             {% else %}
-              {% empty_value %}
+              {% present service.path.machine %}{% entity "machine"|entity_of:service.path.machine %}{% endpresent %}
             {% endif %}
           </td>
-          {% if show_service_projects %}<td>{% if service.project %}{% entity "project"|entity_of:service.project.slug label=service.project.name %}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
-          <td>{% status service.status_label tone=service.status title=service.health.detail %}</td>
+          {% if show_service_projects %}<td>{% present service.project %}{% entity "project"|entity_of:service.project.slug label=service.project.name %}{% endpresent %}</td>{% endif %}
+          <td>{% status service.status_label tone=service.tone title=service.health.detail %}</td>
         </tr>
       {% endfor %}
     </tbody>

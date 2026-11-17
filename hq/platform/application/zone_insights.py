@@ -31,8 +31,7 @@ from .facts import Subject, inventory_about, inventory_records, readings as stor
 from .infrastructure import delivery_targets, enabled_resources, resolved_spec
 from .known_hosts import operator, registrable
 from .mail_policy import is_null_mx
-from .moments import expiry_words
-from .timestamps import moment
+from .moments import expiry_words, moment
 from .ui import counted, ended
 from .zones import ZONE_KIND, ZoneInsight
 lazy from . import zones

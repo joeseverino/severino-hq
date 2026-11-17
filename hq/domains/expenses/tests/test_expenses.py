@@ -10,7 +10,7 @@ from hq.domains.assets.models import Asset
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.platform.application.capabilities import capability_words
-from hq.platform.application.tests.markup import elements, links, select, text
+from hq.platform.application.markup_testing import elements, links, select, text
 
 
 class _Signed(TestCase):

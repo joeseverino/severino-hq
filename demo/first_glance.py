@@ -3,14 +3,13 @@ first glance promises; what it does and why is in ``demo/README.md``."""
 
 from datetime import timedelta
 
-from hq.domains.control_plane.bridge_actions import CONTROLLER
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest, ProviderInventory
 from hq.domains.control_plane.observations.host import EDGE_REBOOT_KIND, FILESYSTEM_KIND, REBOOT_KIND, UNIT_KIND
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.platform.application.action_items import SET_ASIDE
-from hq.platform.application.approvals import REJECT
+from hq.platform.application.approvals import REJECT, offers
 from hq.platform.application.attention import readable_by
 from hq.platform.application.automation_runs import capability_name, command_type, request_run
 from hq.platform.application.capabilities import run_capability
@@ -20,8 +19,8 @@ from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.receipts import UPDATE as RECEIPT_UPDATE, serialize_receipt
 from hq.platform.application.refused_reports import READINGS_ACTION
-from hq.platform.application.security import internal_principal, web_principal
-from hq.platform.application.sweep import record_sweep
+from hq.platform.application.report_testing import bridged
+from hq.platform.application.security import web_principal
 from hq.platform.core.example_estate import automation, doors, network
 from hq.platform.core.example_estate.names import iso, stamp
 from hq.platform.core.example_estate.sweep import CONTROLLER as CONTROLLER_ID
@@ -55,7 +54,8 @@ def settle(owner) -> list[str]:
 
 def _decide_held(person) -> None:
     for held in ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING).exclude(capability=_KEPT_REQUEST):
-        with doors.page("control_plane:approval_decision", approval_id=held.id):
+        (reject,) = (link for link in offers(person, [held])[held.pk].actions if link.name == REJECT)
+        with doors.request(reject.url):
             answer = run_capability(
                 REJECT,
                 {"approval_id": str(held.id), "note": "Not now."},
@@ -144,7 +144,7 @@ def _swept_since() -> None:
         kept = (settled(record) for record in records)
         payload[kind] = {"ok": True, "records": [{**record, "read_at": now} for record in kept if record]}
     with doors.controller(READINGS_ACTION):
-        record_sweep(payload, principal=internal_principal(CONTROLLER), controller_id=CONTROLLER_ID)
+        bridged(READINGS_ACTION, payload, controller_id=CONTROLLER_ID)
 
 
 def _file_dropped_receipts(person) -> None:

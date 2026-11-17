@@ -20,7 +20,7 @@ value under its name (`record.summary`), so the two still read as two.
             {% else %}
               <strong>{{ record.name|breakable }}</strong>
             {% endif %}
-            {% if record.summary %}<span class="narrow-only"><br><span class="muted cell-data">{{ record.summary|breakable }}</span></span>{% endif %}
+            {% if record.summary %}<span class="narrow-only"><br>{% muted css="cell-data" %}{{ record.summary|breakable }}{% endmuted %}</span>{% endif %}
           </td>
           <td><code>{{ record.record_type|breakable }}</code></td>
           <td>

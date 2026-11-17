@@ -4,6 +4,7 @@ valid:
   - 'Insight(status="attention", eyebrow="Example", title="Example", value="1", body="", actions=(remedy,))'
   - 'Insight(status="attention", title="Example", action="Fill in details", url="/assets/")'
   - 'Insight(status="attention", title="Example", **helped)'
+  - 'Insight(status="attention", title="Example", url="/approval/example/", held=True)'
   - 'ui.Insight(title="Example", workflow=cannot_help(key, reason))'
   - 'Insightful(title="Example")'
 invalid:
@@ -11,3 +12,4 @@ invalid:
   - 'Insight(status="attention", title="Example", action="Fill in details")'
   - 'Insight(status="attention", title="Example", url="/assets/")'
   - 'ui.Insight(title="Example", value=count)'
+  - 'Insight(status="attention", title="Example", url="/approval/example/", held=False)'

@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource, OperationRequest
 from hq.domains.projects.models import Project
+from hq.platform.application.contracts import Closed
 from hq.platform.core.models import AuditLog
 
 from ..approval_review import preview
@@ -15,8 +16,8 @@ from ..approvals import AUDIT_LABELS, ApprovalError, ApproveCommand, approve
 from ..capabilities import execute_capability, run_capability
 from ..domains import records_of
 from ..projects import DEPENDENCY_UPDATES
-from ..security import Capability, Principal, cli_principal, mcp_principal
-from ..sweep import record_sweep
+from ..report_testing import bridged
+from ..security import Capability, Principal, mcp_principal
 from .test_approvals import POLICY_KEY, an_operator, declare_policy, policy_document, reconcile_payload
 from .writers import keyed
 
@@ -55,7 +56,7 @@ class DeclarationStalenessTests(TestCase):
     def test_a_sweep_that_reads_the_record_again_leaves_the_removal_approvable(self):
         held = self.removal()
 
-        record_sweep({REWRITE: {"ok": True, "records": [{**RECORD, "enabled": True}]}}, principal=cli_principal())
+        bridged("inventory", {REWRITE: {"ok": True, "records": [{**RECORD, "enabled": True}]}})
 
         self.resource.refresh_from_db()
         self.assertNotEqual(self.resource.status, {**RECORD, "enabled": True}, "the sweep rewrote what it read")
@@ -231,15 +232,13 @@ class RunStalenessTests(TestCase):
 
         from typing import Annotated
 
-        from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+        from pydantic import AfterValidator, Field
 
         from .procedures import manifest, run_payload
 
         held = self.held(run_payload(service="Web"))
 
-        class ServiceRestart(BaseModel):
-            model_config = ConfigDict(extra="forbid")
-
+        class ServiceRestart(Closed):
             service: Annotated[
                 str,
                 Field(min_length=1, max_length=60, description="The service to restart."),

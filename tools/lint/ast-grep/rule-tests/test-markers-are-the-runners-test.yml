@@ -1,0 +1,19 @@
+id: test-markers-are-the-runners
+valid:
+  - 'cadence_testing.controller_arrived()'
+  - 'override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=7)'
+  - |
+    def test_the_doorbell_rings(self):
+        with override_settings(SEVERINO_CONTROLLER_DOORBELL=str(directory / "doorbell")):
+            ring()
+  - |
+    @override_settings(SEVERINO_CONTROLLER_DOORBELL="/proc/nonexistent/doorbell")
+    def test_a_doorbell_it_cannot_write_does_not_fail_the_write(self):
+        pass
+invalid:
+  - 'MARKERS = override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(DIRECTORY / "heartbeat"))'
+  - |
+    @override_settings(SEVERINO_CONTROLLER_DOORBELL=str(DIRECTORY / "doorbell"))
+    class KeptKeyTests(TestCase):
+        pass
+  - 'ARRIVED = override_settings(SEVERINO_ACTIVITY_MARKER=str(HEARTBEAT))'

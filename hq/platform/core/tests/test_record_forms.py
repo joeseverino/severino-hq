@@ -9,7 +9,7 @@ from django.urls import reverse
 from hq.domains.projects.models import Project
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.describe import meanings
-from hq.platform.application.tests.markup import select, within
+from hq.platform.application.markup_testing import select, within
 
 # Each page that makes a record from its form, and the command it makes it by.
 CREATES = (

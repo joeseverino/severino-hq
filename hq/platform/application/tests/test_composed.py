@@ -6,7 +6,7 @@ from datetime import date
 from django.test import TestCase
 
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, gather
-from hq.platform.application.card_items import Insight, Kpi
+from hq.platform.application.card_items import Kpi
 from hq.platform.application.dashboard import dashboard_highlights, work_queue
 from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.derivations import DERIVATIONS, counting
@@ -16,6 +16,7 @@ from hq.platform.application.domains import (
     domain_attention_items,
     domain_dashboard_sections,
 )
+from hq.platform.application.finding_model import Finding
 from hq.platform.application.plugin_testing import (
     ComposedPluginTestCase,
     installed,
@@ -36,7 +37,7 @@ from hq.platform.core.models import UpstreamReading
 from .test_derivations import MOMENT
 
 WINDOW = (date(2026, 1, 1), date(2026, 12, 31))
-ITEM = Insight("serious", "Alpha", "Something is wrong", "1", "Body.")
+ITEM = Finding(rule="alpha-wrong", subject="", severity="serious", title="Something is wrong", explanation="Body.")
 CARDS = (
     {"id": "alpha-open", "label": "Open", "value": 3, "url": "/alpha/"},
     {"id": "alpha-late", "label": "Late", "value": 1, "url": "/alpha/"},

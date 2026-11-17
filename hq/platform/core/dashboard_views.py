@@ -1,10 +1,9 @@
 """The dashboard: its glance panels, their settings, the contacts panel and the links an operator pins."""
 
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any, ClassVar, override
 
-from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -13,8 +12,7 @@ from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
 from hq.platform.application import action_items as queue_state, fragments, getting_started
-from hq.platform.application.asks import AskMixin, Took
-from hq.platform.application.attention import APPROVAL_KEY
+from hq.platform.application.asks import AskMixin
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
@@ -27,15 +25,15 @@ from hq.platform.application.glance import (
     DASHBOARD_REFRESH,
     DASHBOARD_REFRESH_STALE,
     DASHBOARD_SETTINGS,
-    asked_refresh,
     dashboard_configuration,
     glance_context,
 )
+from hq.platform.application.moments import moment, stamp_day
 from hq.platform.application.outward_links import link_choices, outward_links
 from hq.platform.application.pages import PageVisit, page_context
 from hq.platform.application.request_path import request_path
 from hq.platform.application.security import safe_next, web_principal
-from hq.platform.application.timestamps import moment
+from hq.platform.application.tone import Tone
 from hq.platform.application.visit_refresh import worth_asking
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
@@ -43,7 +41,8 @@ lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
 from .forms import DashboardLinksForm, DashboardSettingsForm
 
 # A queue of this many or fewer is read on the dashboard itself, each card
-# with its button; a longer one is a count and a link to its page.
+# with its button; a longer one is a count and a link to its page, beneath
+# the held requests, which are read there at any length.
 NEEDS_YOU_IN_PLACE = 3
 
 
@@ -135,21 +134,23 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         for collection in (snapshot["draft_content"], snapshot["recent_published"]):
             for item in collection:
                 item["updated_at"] = moment(item["updated_at"], naive="keep")
-                if item["published_at"]:
-                    item["published_at"] = date.fromisoformat(item["published_at"])
+                item["published_at"] = stamp_day(item["published_at"])
         # What waits on this person, counted as the header's count endpoint
         # counts it: everything open that they have not set aside.
         queue = queue_state.with_aside_state(snapshot["priority"], self.request.user)
         doing, told = queue_state.split_waiting(queue)
         action_queue_count = len(doing)
-        # Only what is serious, and what an agent waits on this person to
-        # decide, is shown in place, and only while it is short enough to read
-        # there. Everything else is the count above it and in the header.
-        serious = [
-            item
-            for item in doing
-            if item["status"] == "serious" or item["key"].partition(":")[2].startswith(APPROVAL_KEY)
-        ]
+        # What an agent waits on this person to decide is always shown in
+        # place, first: nothing is written until they do. What is serious
+        # joins it only while the whole stays short enough to read there.
+        # Everything else is the count above it and in the header.
+        held, serious = [], []
+        for item in doing:
+            if item.get("held"):
+                held.append(item)
+            elif item["status"] == Tone.SERIOUS:
+                serious.append(item)
+        needs_you = [*held, *serious] if len(held) + len(serious) <= NEEDS_YOU_IN_PLACE else held
         hour = timezone.localtime().hour
         greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
         if name := self.request.user.first_name:
@@ -216,7 +217,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             projects_needing_output=snapshot["kpis"]["projects_needing_output"],
             draft_content_count=snapshot["kpis"]["draft_content"],
             action_queue_count=action_queue_count,
-            needs_you=serious if len(serious) <= NEEDS_YOU_IN_PLACE else [],
+            needs_you=needs_you,
             # The setup steps a new HQ has left; empty once they are done.
             # Every step while any is left, the done ones marked, so the row
             # shows how far a new HQ has come.
@@ -271,10 +272,6 @@ class DashboardGlanceView(AskMixin, View):
         # Drawn after the ask, so each panel asked for shows its refresh.
         return render(request, self.template_name, glance_context(), status=202 if result["requested"] else 200)
 
-    @override
-    def asked(self, result, at) -> Took:
-        return asked_refresh(result)
-
 
 def _settings_of(configuration) -> dict[str, str]:
     return {name: getattr(configuration, name) for name in DashboardSettingsForm.base_fields}
@@ -297,6 +294,5 @@ class DashboardGlanceSettingsView(View):
             DASHBOARD_SETTINGS,
             {field: request.POST.get(field, "") for field in DashboardSettingsForm.base_fields},
         )
-        if not refused(request, result):
-            messages.success(request, "Dashboard settings saved.")
+        refused(request, result)
         return redirect("dashboard")

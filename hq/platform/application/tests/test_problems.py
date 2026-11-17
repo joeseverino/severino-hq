@@ -12,21 +12,22 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND as DELIVERY
+from hq.platform.application.markup_testing import select, text
+from hq.platform.application.tests.worded import worded
 
-from .. import first_seen
+from .. import first_seen, freshness
 from ..attention import infrastructure
 from ..delivery_progress import STALLED_AFTER
 from ..entity_links import entity_link
-from ..first_seen import KNOWN_WITHIN, LOOK_EVERY, note_open, recorded
+from ..first_seen import note_open, recorded
 from ..infrastructure import resource_health
 from ..problems import note_open_problems, problem_counts, problems_about
 from ..projection import projection_scope
+from ..report_testing import bridged
 from ..resource_context import record_status
 from ..security import cli_principal
-from ..sweep import record_sweep
 from .host_only import host_only
 from .inventory_records import kind_read
-from .markup import select, text
 
 REWRITE = "adguard.rewrite"
 
@@ -119,6 +120,7 @@ class FirstSeenTests(TestCase):
     def setUp(self):
         first_seen._looked.clear()
         self.now = timezone.now()
+        self.cadence = freshness.cadence(freshness.FIRST_SEEN)
 
     def test_what_is_open_at_the_first_look_has_no_date(self):
         note_open(["a"], now=self.now)
@@ -127,28 +129,28 @@ class FirstSeenTests(TestCase):
 
     def test_what_appears_between_two_close_looks_is_dated_by_the_second(self):
         note_open(["a"], now=self.now)
-        later = self.now + LOOK_EVERY
+        later = self.now + self.cadence.every
         note_open(["a", "b"], now=later)
 
         self.assertEqual(recorded(), {"b": later})
 
     def test_what_appears_after_a_gap_has_no_date(self):
         note_open(["a"], now=self.now)
-        note_open(["a", "b"], now=self.now + KNOWN_WITHIN + timedelta(minutes=1))
+        note_open(["a", "b"], now=self.now + self.cadence.stale_after + timedelta(minutes=1))
 
         self.assertEqual(recorded(), {})
 
     def test_a_date_is_kept_while_the_item_stays_open_and_forgotten_when_it_closes(self):
         note_open([], now=self.now)
-        seen = self.now + LOOK_EVERY
+        seen = self.now + self.cadence.every
         note_open(["a"], now=seen)
-        note_open(["a"], now=seen + LOOK_EVERY)
+        note_open(["a"], now=seen + self.cadence.every)
         self.assertEqual(recorded(), {"a": seen})
 
-        note_open([], now=seen + 2 * LOOK_EVERY)
-        note_open(["a"], now=seen + 3 * LOOK_EVERY)
+        note_open([], now=seen + 2 * self.cadence.every)
+        note_open(["a"], now=seen + 3 * self.cadence.every)
 
-        self.assertEqual(recorded(), {"a": seen + 3 * LOOK_EVERY})
+        self.assertEqual(recorded(), {"a": seen + 3 * self.cadence.every})
 
     def test_a_report_is_followed_by_a_look_only_when_one_is_due(self):
         with host_only():
@@ -164,13 +166,15 @@ class FirstSeenTests(TestCase):
 
     def test_a_problem_found_by_a_report_says_since_when_on_its_card(self):
         with host_only():
-            record_sweep({REWRITE: {"ok": True, "records": []}}, principal=cli_principal())
+            bridged("inventory", {REWRITE: {"ok": True, "records": []}})
             first_seen._looked.clear()
             broken()
-            with mock.patch.object(first_seen, "LOOK_EVERY", timedelta(0)):
-                record_sweep({REWRITE: {"ok": True, "records": []}}, principal=cli_principal())
+            # A look due at once, the one before it still current.
+            at_once = freshness.ReadCadence(timedelta(microseconds=1), self.cadence.stale_after)
+            with mock.patch.dict(freshness._NAMED, {freshness.FIRST_SEEN: lambda: at_once}):
+                bridged("inventory", {REWRITE: {"ok": True, "records": []}})
             with projection_scope():
-                (item,) = [item for item in infrastructure() if item.key.endswith(":resource:app")]
+                (item,) = [item for item in worded(infrastructure()) if item.key.endswith(":resource:app")]
                 card = one(problems_about(entity_link("resource", "app").url, cli_principal()))
 
         self.assertIsNotNone(item.since)
@@ -182,7 +186,7 @@ class FirstSeenTests(TestCase):
             mock.patch("hq.platform.application.problems.note_open_problems", side_effect=RuntimeError("no")),
             self.assertLogs("severino.sweep", level="ERROR"),
         ):
-            result = record_sweep({REWRITE: {"ok": True, "records": []}}, principal=cli_principal())
+            result = bridged("inventory", {REWRITE: {"ok": True, "records": []}})
 
         self.assertTrue(result["ok"])
 
@@ -220,10 +224,10 @@ class DeployInProgressTests(TestCase):
 
     def items(self):
         with host_only(), projection_scope():
-            return [item for item in infrastructure() if item.key.endswith("resource:delivery")]
+            return [item for item in worded(infrastructure()) if item.key.endswith("resource:delivery")]
 
     def item(self):
-        (found,) = [item for item in self.items() if item.key == "resource:delivery"]
+        (found,) = [item for item in self.items() if item.key.startswith("finding:deploy-")]
         return found
 
     def test_a_running_deploy_is_a_notice(self):
@@ -267,7 +271,7 @@ class DeployInProgressTests(TestCase):
         self.assertNotIn("serious", {item.status for item in self.items()})
         resource = ManagedResource.objects.get(key="delivery")
         self.assertEqual(resource_health(resource)["label"], "Deploy running")
-        self.assertEqual(record_status(resource).tone, "pending")
+        self.assertEqual(record_status(resource).tone, "attention")
 
     def test_a_run_waiting_for_approval_is_something_to_do(self):
         self.delivery("Deploy run 9 is waiting for approval")

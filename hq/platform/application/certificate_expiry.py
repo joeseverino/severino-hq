@@ -22,8 +22,8 @@ from .expiry import days_until
 from .facts import Joined, inventory_records
 from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingRemedy, FindingRule, fact_values, opens
 from .labels import lower_first
-from .moments import expiry_words
-from .timestamps import moment
+from .moments import expiry_words, moment
+from .tone import Tone
 from .ui import ended
 lazy from .estate import managed_certificates
 
@@ -240,7 +240,7 @@ def _finding(node, value: str, days: int, apart: tuple[str, str] = ("", "")) -> 
         part="|".join((kind, title, day, issuer, names)),
         # One that serves no name breaks nothing when it lapses: it is left
         # over, and the advice is to remove it, not renew it.
-        severity="serious" if names and days <= SERIOUS_DAYS else "attention",
+        severity=Tone.SERIOUS if names and days <= SERIOUS_DAYS else Tone.ATTENTION,
         explanation=_SERVING_EXPLANATION if names else _UNUSED_EXPLANATION,
         evidence=(
             ("Certificate", title),
@@ -283,7 +283,7 @@ def renewal_due(estate: FindingEstate) -> tuple[Finding, ...]:
                 Finding(
                     rule="certificate-expiring",
                     subject=node.id,
-                    severity="serious" if days <= SERIOUS_DAYS else "attention",
+                    severity=Tone.SERIOUS if days <= SERIOUS_DAYS else Tone.ATTENTION,
                     title=f"{name} {expiry_words(days)}",
                     explanation=f"Expires {ended(expiry_phrase(stamp))} Renewal has not run; renew it.",
                     primary=opens("Open certificate", url),
@@ -306,7 +306,7 @@ RULES: tuple[FindingRule, ...] = (
         "certificate-expiring",
         # Its family holds certificates still to expire and those already past.
         "Certificate near or past expiry",
-        "attention",
+        Tone.ATTENTION,
         expiring,
         operator_action=(
             "Renew the certificate from its page in HQ, or where it is held, or fix its automatic renewal. "
@@ -314,8 +314,8 @@ RULES: tuple[FindingRule, ...] = (
         ),
         no_help_reason="HQ cannot renew this certificate.",
         bars={
-            "serious": f"a certificate in use expires within {SERIOUS_DAYS} days",
-            "attention": f"a certificate expires within {WARN_DAYS} days",
+            Tone.SERIOUS: f"a certificate in use expires within {SERIOUS_DAYS} days",
+            Tone.ATTENTION: f"a certificate expires within {WARN_DAYS} days",
         },
         clears=f"the certificate runs more than {WARN_DAYS} days out",
     ),

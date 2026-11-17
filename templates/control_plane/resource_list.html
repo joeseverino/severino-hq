@@ -7,8 +7,7 @@ filter keeps rows by their own words and by one type; the type list always
 offers every type.
 {% endcomment %}
 {% url 'control_plane:list' as every_record %}
-{% filter_bar filtered=records.filtered clear=every_record shown=records.shown total=records.total %}
-  <input type="search" name="q" value="{{ records.query }}" placeholder="Filter by name" aria-label="Filter by name">
+{% filter_bar search="Filter by name" query=records.query filtered=records.filtered clear=every_record shown=records.shown total=records.total %}
   {% choices %}
   {% select "type" records.type_choices chosen=records.kind label="Type" every="type" %}
 {% summary %}{% if records.unsettled %}{{ records.unsettled|counted:"needs a look,need a look" }}.{% endif %}
@@ -16,7 +15,7 @@ offers every type.
 {% table_region "Records" empty="No records yet." filtered=records.filtered clear=every_record %}
   <table class="data-table">
     <thead>
-      <tr>{% table_heading "Name" "identifier" gutter=True local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}{% table_heading "Last read" "status" drop=1 local_sort=True %}</tr>
+      <tr>{% table_heading "Name" "identifier" gutter=True local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}{% table_heading "Reading" "status" drop=1 local_sort=True %}</tr>
     </thead>
     {% for group in records.groups %}
     <tbody>
@@ -25,19 +24,19 @@ offers every type.
         <tr>
           <td>
             <strong>{% entity "resource"|entity_of:resource.key label=resource.shown_name %}</strong>
-            {% if resource.summary %}<br><span class="muted cell-data">{{ resource.summary|breakable }}</span>{% endif %}
+            {% if resource.summary %}<br>{% muted css="cell-data" %}{{ resource.summary|breakable }}{% endmuted %}{% endif %}
             {% comment %}
             Whose address a proxy forwards to, when HQ knows the machine.
             {% endcomment %}
-            {% if resource.origin_machine %}<br><span class="muted">on {% entity resource.origin_machine.link %}</span>{% endif %}
+            {% if resource.origin_machine %}<br>{% muted %}on {% entity resource.origin_machine.link %}{% endmuted %}{% endif %}
           </td>
           <td>
             {% with status=resource.record_status %}
               {% status status.label tone=status.tone title=status.detail %}
-              {% if status.since %}<br><span class="muted">{{ status.since|when:"ago" }}</span>{% endif %}
+              {% if status.since %}<br>{% muted %}{{ status.since|when:"ago" }}{% endmuted %}{% endif %}
             {% endwith %}
           </td>
-          <td class="muted date-col">{% if resource.last_observed_at %}{{ resource.last_observed_at|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
+          <td class="date-col">{% muted %}{% include "partials/_reading_age.html" with at=resource.last_observed_at only %}{% endmuted %}</td>
         </tr>
       {% endfor %}
     </tbody>
@@ -61,7 +60,7 @@ is not a row, so an unchanged minute-by-minute result is one line.
           <td>{{ change.run.title|breakable }}</td>
           <td>{% status change.run.word tone=change.run.tone %} {{ change.run.note|truncatechars:120|breakable }}</td>
           <td>{{ change.run.by.words|or_empty }}</td>
-          <td class="muted date-col">{{ change.run.created_at|when }}</td>
+          <td class="date-col">{% muted %}{{ change.run.created_at|when }}{% endmuted %}</td>
         </tr>
       {% endfor %}
     </tbody>

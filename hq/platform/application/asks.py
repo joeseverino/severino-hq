@@ -7,10 +7,10 @@ how it stands. One shape says so (``Standing``) whichever mechanism does it, so
 one control (``partials/_ask.html``) and one script behavior follow all of it.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Annotated, Any, ClassVar, TypedDict
+from typing import Annotated, Any, ClassVar, Literal, TypedDict
 
 from django.contrib import messages
 from django.core import signing
@@ -27,14 +27,13 @@ from .describe import Describe, listed
 from .moments import duration
 from .record_errors import Sentence
 from .routes import reverse
-from .ui import ended
+from .ui import button_classes, ended
 lazy from . import cadence
 lazy from .cadence import every_sweep, read_request_lifetime
-lazy from .capabilities import command_spec
+lazy from .moments import moment
 lazy from .refusal_status import refusal_of
 lazy from .security import safe_next
-lazy from .timestamps import moment
-lazy from .web_writes import execute_posted
+lazy from .web_writes import execute_posted, run_posted
 lazy from .work_runs import standing_tone, standing_word
 
 IDLE = "idle"
@@ -171,18 +170,52 @@ class Ask:
     modal = ""
 
     @property
+    def look(self) -> str:
+        """How its button looks (``ui.BUTTON_LOOKS``)."""
+
+        return " ".join((*(("primary",) if self.primary else ()), *(("compact",) if self.compact else ())))
+
+    @property
     def css(self) -> str:
-        return " ".join(("btn", *(("primary",) if self.primary else ()), *(("compact",) if self.compact else ())))
+        return button_classes(self.look)
+
+
+# Each ask's answer extends AskedAnswer, so each field is described once here.
+type AskedStatusUrl = Annotated[str, Describe("Where to follow the work while it is under way; empty when nothing is.")]
+type AskedMessage = Annotated[
+    str, Describe("What asking did, in the sentence a page shows; empty where it says nothing.")
+]
+
+
+class AskedAnswer(TypedDict):
+    """What every ask answers, whichever worker does the work."""
+
+    ok: Literal[True]
+    standing: StandingAnswer
+    status_url: AskedStatusUrl
+    message: AskedMessage
 
 
 @dataclass(frozen=True, slots=True)
-class Took:
-    """What an ask that ran answers: how its work stands, where a page watches
-    it while it is live, and the sentence a page without script shows."""
+class Asked:
+    """What an ask answers: how its work stands, where a page watches it while
+    it is live, and the sentence a page without script shows. A capability
+    answers ``answer()``; a page reads it back with ``of``."""
 
     standing: Standing
     status_url: str = ""
     message: str = ""
+
+    @classmethod
+    def of(cls, said: Mapping[str, Any]) -> Asked:
+        """What a capability answered; one held for approval has no work
+        under way yet, and its message says so."""
+
+        standing = Standing.of(said["standing"]) if "standing" in said else Standing()
+        return cls(standing, str(said.get("status_url", "")), str(said.get("message", "")))
+
+    def answer(self) -> AskedAnswer:
+        return {"ok": True, "standing": self.standing.as_json(), "status_url": self.status_url, "message": self.message}
 
 
 class AskMixin:
@@ -193,7 +226,6 @@ class AskMixin:
     http_method_names: ClassVar[list[str]] = ["post"]
     capability: str
     back_to: str
-    reads: tuple[str, ...] = ()
 
     def back(self) -> str:
         return reverse(self.back_to)
@@ -209,35 +241,31 @@ class AskMixin:
 
         return ""
 
-    def asked(self, result: dict[str, Any], at: datetime) -> Took:
-        """How the work asked for at ``at`` stands, from the capability's answer."""
-
-        return Took(
-            read_standing(self.reads, at),
-            read_status_url(self.reads, at),
-            command_spec(self.capability).requested(),
-        )
-
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
         """To the page's script: how the work stands and where to watch it, 202
         while it is live (RFC 9110 15.3.3). To a plain form post: back to the
         page, which says the same from what is stored, and the ask's sentence."""
 
-        at = timezone.now()
+        # A script's ask is answered in JSON and draws no page, so its answer's
+        # sentence is said only to a plain post, and then in place of the ask's.
+        scripted = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        result: dict[str, Any] = {}
         if said := self.cannot():
-            took = Took(Standing(FAILED, said))
-        elif (result := execute_posted(request, self.capability, self.payload(), target=self.target())).get("ok"):
-            took = self.asked(result, at)
+            asked = Asked(Standing(FAILED, said))
         else:
-            took = Took(Standing(FAILED, refusal_of(result).message))
-        standing = took.standing
-        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            call = (request, self.capability, self.payload())
+            target = self.target()
+            result = run_posted(*call, target=target).answer if scripted else execute_posted(*call, target=target)
+            asked = Asked.of(result) if result.get("ok") else Asked(Standing(FAILED, refusal_of(result).message))
+        standing = asked.standing
+        if scripted:
             return JsonResponse(
-                {**standing.as_json(), "status": took.status_url if standing.live else ""},
+                {**standing.as_json(), "status": asked.status_url if standing.live else ""},
                 status=202 if standing.live else 200,
             )
-        if said := took.message or standing.note:
-            (messages.error if standing.state == FAILED else messages.success)(request, said)
+        failed = standing.state == FAILED
+        if (failed or not result.get("message")) and (said := asked.message or standing.note):
+            (messages.error if failed else messages.success)(request, said)
         return redirect(safe_next(request, fallback=self.back()))
 
 
@@ -280,6 +308,17 @@ def watched(token: str) -> dict[str, Any] | None:
 
 
 # ----- Reads the controller takes ---------------------------------------------
+
+
+def asked_read(kinds: Iterable[str], asked: datetime, *, connection_ref: str = "", message: str = "") -> Asked:
+    """What an ask for a read of ``kinds`` (none: every kind) at ``asked`` answers."""
+
+    wanted = tuple(kinds)
+    return Asked(
+        read_standing(wanted, asked, connection_ref=connection_ref),
+        read_status_url(wanted, asked, connection_ref=connection_ref),
+        message,
+    )
 
 
 def read_status_url(kinds: Iterable[str], asked: datetime, *, connection_ref: str = "") -> str:

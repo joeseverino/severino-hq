@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import override
 from urllib.parse import urlencode
 
-from django.contrib import messages
 from django.db.models import Count
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect
@@ -26,18 +25,14 @@ from django.views.generic import (
 )
 
 from hq.domains.expenses.models import Expense
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.labels import dotted, dotted_html, human_bytes
 from hq.platform.application.moments import when
 from hq.platform.application.money import money
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD, serialize_receipt
+from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD, file_taken, serialize_receipt
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
-from hq.platform.application.ui import ended
 from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.application.writes import CapabilityFormMixin, CommandFormPage, RecordDeleteMixin
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog
 from hq.platform.core.templatetags.value_tags import breakable
 
 from .forms import ReceiptUploadForm
@@ -76,7 +71,7 @@ class ReceiptListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_page_actions(self):
-        return (PageAction(capability_words(UPLOAD), reverse("receipts:create"), primary=True),)
+        return (PageAction.command(UPLOAD, primary=True),)
 
     @override
     def get_queryset(self):
@@ -119,17 +114,11 @@ class ReceiptDetailView(PageMixin, DetailView):
         receipt = self.object
         actions = []
         if not receipt.related_expense and not receipt.related_asset:
-            actions.append(
-                PageAction(
-                    "Link to expense",
-                    reverse("receipts:match", args=[receipt.pk]),
-                    primary=True,
-                )
-            )
+            actions.append(PageAction.command(UPDATE, receipt.pk, variant="expense", primary=True))
         actions += [
             *([PageAction("Download file", reverse("receipts:file", args=[receipt.pk]))] if self.stored else []),
-            PageAction(capability_words("receipt.update"), reverse("receipts:edit", args=[receipt.pk])),
-            PageAction("Delete", reverse("receipts:delete", args=[receipt.pk]), danger=True),
+            PageAction.command("receipt.update", receipt.pk),
+            PageAction.command("receipt.delete", receipt.pk),
         ]
         return tuple(actions)
 
@@ -151,6 +140,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
 
     template_name = "receipts/receipt_match.html"
     page_title = "Link receipt"
+    runs = ((UPDATE, "expense"), (UPDATE, "link"))
 
     @cached_property
     def receipt(self):
@@ -204,13 +194,8 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
                 (
                     expense,
                     (
-                        PageAction(
-                            "Link",
-                            self.request.path,
-                            method="post",
-                            primary=True,
-                            field="expense_id",
-                            value=str(expense.pk),
+                        PageAction.command(
+                            UPDATE, receipt.pk, variant="link", primary=True, field="expense_id", value=str(expense.pk)
                         ),
                     ),
                 )
@@ -232,8 +217,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
                 {field: details[field] for field in _DETAILS} | {"related_expense": expense.id},
                 target=receipt.id,
             )
-            if not refused(request, result):
-                messages.success(request, ended(f"Receipt linked to {expense.label}"))
+            refused(request, result)
 
         return redirect(receipt.get_absolute_url())
 
@@ -252,12 +236,9 @@ class ReceiptFormPage(CommandFormPage, ReceiptPage, CapabilityFormMixin):
     extra_context = FORM_PAGE
     model = Receipt
     form_class = ReceiptUploadForm
-    noun = "Receipt"
     result_key = "receipt"
     identity_attr = "pk"
     identity_result_key = "id"
-    created_message = "Receipt uploaded."
-    updated_message = "Receipt updated."
 
     @override
     def capability(self, form):
@@ -290,7 +271,6 @@ class ReceiptDeleteView(ReceiptPage, RecordDeleteMixin, DeleteView):
     template_name = "receipts/receipt_confirm_delete.html"
     success_url = reverse_lazy("receipts:list")
     context_object_name = "receipt"
-    deleted_message = "Receipt deleted."
 
 
 def stored_file(receipt: Receipt) -> Path | None:
@@ -336,12 +316,7 @@ class ReceiptFileView(View):
         if (path := stored_file(receipt)) is None:
             raise Http404("This receipt has no file HQ can open.")
 
-        record_event(
-            action=AuditLog.Action.VIEWED,
-            obj=receipt,
-            type_label="Receipt",
-            message=f"Receipt file viewed: {receipt.original_filename}",
-        )
+        file_taken(receipt)
 
         content_type = served_type(receipt)
         # Rendered in place only for the formats meant to be looked at.

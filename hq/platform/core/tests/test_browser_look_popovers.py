@@ -1,8 +1,5 @@
-"""dev:look's popovers: each kind is shown on its own, judged only for what it
-adds to the page, shot while shown, and evaluated when the look carries a script."""
-
-from pathlib import Path
-from unittest import mock
+"""dev:look's popovers: each kind is shown on its own and judged only for what
+it adds to the page."""
 
 from django.test import SimpleTestCase, tag
 
@@ -43,19 +40,15 @@ class _Lens:
     shots_into = "var/look"
 
     def __init__(self, page):
-        self.page, self.shots, self.shot_while_shown, self.evaluated = page, [], [], []
+        self.page = page
 
     def take_shot(self, _name, _width, take, state="", shows=""):
-        if self.script:
-            self.evaluated.append((state, shows, sorted(self.page.shown)))
         take()
 
     def settle(self):
         pass
 
-    def shoot_popover(self, name, width, popover, shows):
-        self.shot_while_shown.append(sorted(self.page.shown))
-        self.shots.append((f"{self.shots_into}/{name}-{width}.popover-{popover}.png", shows))
+    def shoot_popover(self, _name, _width, _popover, _shows):
         return []
 
     def judged(self, _name, _width, _rule):
@@ -80,19 +73,6 @@ class PopoverTests(SimpleTestCase):
         )
         self.assertEqual(page.shown, set())
 
-    def test_an_eval_runs_on_each_popover_while_it_alone_is_shown(self):
-        page = _Popovers(["origin-one", "origin-two"])
-        lens = _Lens(page)
-        lens.script = "() => document.title"
-        lens.with_each_popover("example/one", 820, "survey", [])
-        self.assertEqual(
-            lens.evaluated,
-            [
-                ("popover-origin-one", "with #origin-one shown", ["origin-one"]),
-                ("popover-origin-two", "with #origin-two shown", ["origin-two"]),
-            ],
-        )
-
     def test_against_a_base_a_finding_with_a_popover_shown_is_neither_new_nor_fixed_wherever_its_shot_lies(self):
         def found_shooting_into(folder):
             lens = _Lens(_Popovers(["origin-one", "origin-two"]))
@@ -103,22 +83,6 @@ class PopoverTests(SimpleTestCase):
         base = found_shooting_into("/var/folders/example/look/base")
         new, fixed = look_report.compare(base, found_shooting_into("var/look/example"))
         self.assertEqual((new, fixed), ({}, {}))
-
-    def test_each_popover_judged_is_shot_shown_on_its_own_and_the_shot_is_named_beside_it(self):
-        page = _Popovers(["origin-one", "origin-two"])
-        lens = _Lens(page)
-        lens.with_each_popover("example/one", 820, "survey", [])
-        self.assertEqual(lens.shot_while_shown, [["origin-one"], ["origin-two"]])
-        self.assertEqual(
-            lens.shots,
-            [
-                ("var/look/example/one-820.popover-origin-one.png", "with #origin-one shown"),
-                ("var/look/example/one-820.popover-origin-two.png", "with #origin-two shown"),
-            ],
-        )
-        with mock.patch.object(look, "this_run", lambda: Path("var", "look", "example")):
-            shot = look._shot("example/one", 820, "popover-origin-one")
-        self.assertEqual(shot.name, "example-one-820.popover-origin-one.png")
 
     def test_one_popover_stands_for_its_kind_and_the_next_stands_in_for_one_that_will_not_show(self):
         page = _Popovers(

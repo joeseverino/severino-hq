@@ -6,7 +6,7 @@
 #MISE output="prefix"
 #MISE depends=["fast:source {{ get_env(name='HQ_FAST_SOURCE', default='') }}"]
 #USAGE flag "--parallel <workers>" default="auto" help="Test workers per suite"
-#USAGE flag "--map <data>" help="Measure which test modules ran each file into this coverage data file, for fast's map (tools/gate/testmap.py)"
+#USAGE flag "--map <data>" help="Measure which test modules ran each line into this coverage data file, for fast's map (fast:map, tools/gate/testmap.py)"
 #USAGE arg "[labels]..." var=#true help="The test labels fast selected"
 
 # fast runs this beside the quick gates, in one run of mise (tools/gate/fast.py).

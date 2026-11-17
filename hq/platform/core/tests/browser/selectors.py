@@ -29,9 +29,6 @@ SELECTORS = {
     "question_button": ".form-actions > button",
     "section_frame": ".section",
     "choice": "select",
-    # A service's favorite star (control_plane/_service_pin.html), a control
-    # smaller than a finger that hangs its hit area beside it.
-    "favorite_star": ".pin-toggle",
     "calendar_period": "#calendar-month > .section-head h2",
     "calendar_next": '#calendar a[rel="next"]',
     "decisions": "[data-attention-item]",
@@ -86,7 +83,7 @@ SELECTORS = {
     "sort_link": "main a.table-sort-link",
     # The Filters control a filter bar folds its choices behind, where its
     # row has no room for them.
-    "filter_fold": "form.filter-bar .filter-bar-fold",
+    "filter_fold": "form.filter-bar [data-filter-bar-fold]",
     # The queue's own filter: a choice of urgency, applied by its button.
     "queue_urgency": "form.filter-bar select[name=status]",
     "queue_apply": "form.filter-bar button[type=submit]:not([inert] *)",
@@ -204,14 +201,18 @@ SELECTORS = {
     # cell marks with its role (the row's own name, what a row means, free
     # text, a context line), a preview, a chip that wraps, a control, a
     # value among the words of a phrase, which wraps at its seams as they
-    # do, a value set after words on its line, and a panel the cell shows,
+    # do, a name outside a short value's box (`cell-short`), a value set after
+    # words on its line, and a panel the cell shows,
     # which is laid out as a page.
     "cell_token": "main .data-table > tbody > tr > td .token",
     # An identifier as `breakable` draws it, one run however its seams split it.
     "identifier": ".token",
+    # What in a table's cell breaks anywhere its column lacks room, as an
+    # identifier does (cuts.css): a row's own name.
+    "breaks_anywhere": '[data-cell~="name"]',
     "wraps_in_a_cell": (
         "tr.row-detail, .row-gutter, [data-cell], .table-clamp, code.cell-whole, .btn,"
-        " .token:not([data-sole]), .token[data-in-line], [popover]"
+        " .token:not(.cell-short *), [popover]"
     ),
     # Words said to a reader and never drawn.
     "unseen": ".visually-hidden",

@@ -15,7 +15,7 @@ one situation it is ever seen in.
       {% fact zone.zone %}<a href="{{ zone.url }}">{{ zone.records|length|counted:"record" }}</a>{% detail %}
         {% if zone.adopt_token %}
           {% url 'zones:adopt' zone.zone as adopt_url %}
-          {% post_button "Manage domain" adopt_url name="token" value=zone.adopt_token css="btn primary" %}
+          {% button "Manage domain" adopt_url post=True name="token" value=zone.adopt_token look="primary" %}
         {% elif zone.observed_only %}
           <small>Read only</small>
         {% endif %}

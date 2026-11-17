@@ -1,0 +1,11 @@
+id: hand-drawn-chip
+valid:
+  - '{% status name chip=True %}'
+  - '<span class="row-chips"></span>'
+  - '<a class="link-chip" href="/"></a>'
+  - '<span class="tag">django</span>'
+invalid:
+  - '<span class="scope-chip">django</span>'
+  - '<span class="chip">django</span>'
+  - '<a class="scope-chip is-current" href="/">example.com</a>'
+  - '<li><span class="row {% if on %}scope-chip{% endif %}">x</span></li>'

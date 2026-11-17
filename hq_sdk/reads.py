@@ -3,7 +3,9 @@
 ``read_once`` shares one read among the functions assembling a page, and
 ``derivation`` keeps a fact of the extension's own across requests until a
 table it reads is written. The rules an answer keeps, the clock among them:
-docs/Plugins.md, Derived reads.
+docs/Plugins.md, Derived reads. ``freshness`` says whether a reading of a kind
+is current by the kind's one ``ReadCadence``, which an extension declares in
+``PluginIntegration.cadences``.
 """
 
 from collections.abc import Callable
@@ -21,6 +23,9 @@ from hq.platform.application.derivations import (
     today,
     whole,
 )
+
+# A reading's state (current, due, stale or never) and the cadence it is judged by.
+from hq.platform.application.freshness import Freshness, ReadCadence, freshness
 
 # A read_once key starts with the extension's own name and holds every argument
 # the answer depends on; outside a request it loads every time. day_span turns a
@@ -44,8 +49,11 @@ def derivation[**P, T](
 
 
 __all__ = [
+    "Freshness",
+    "ReadCadence",
     "day_span",
     "derivation",
+    "freshness",
     "passed",
     "present",
     "reached",

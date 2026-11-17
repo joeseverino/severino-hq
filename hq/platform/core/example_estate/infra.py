@@ -11,9 +11,8 @@ from hq.domains.control_plane.models import (
     ManagedResource,
 )
 from hq.platform.application import readings
-from hq.platform.application.labels import dotted
+from hq.platform.application.conditions import READY
 from hq.platform.application.report_testing import report_connections
-from hq.platform.application.security import cli_principal
 
 from . import doors, network, work
 from .names import (
@@ -116,7 +115,7 @@ def _observe_everything():
             generation=1,
             observed_generation=1,
             status={**record.spec, **issued.get(record.key, {})},
-            conditions=[{"type": "Ready", "status": True, "reason": "Reconciled", "message": ""}],
+            conditions=[{"type": READY, "status": True, "reason": "Reconciled", "message": ""}],
         )
 
 
@@ -158,7 +157,6 @@ def connections():
                 ),
                 answering("onepassword", "onepassword", "https://my.1password.com", "1 vault."),
             ],
-            principal=cli_principal(),
             controller_id=CONTROLLER,
         )
 
@@ -289,24 +287,28 @@ def host():
         },
     )
     DashboardMachine.objects.create(machine=ManagedResource.objects.get(key=MACHINE), position=0)
+    # The machine read through its Docker environment, as the controller
+    # reports it: what its running containers take of it.
     readings.record(
         readings.machine_telemetry(MACHINE),
         {
-            "status": "good",
-            "summary": "Host load 0.31",
-            "metrics": [
-                {"label": "Container CPU", "value": "12%", "detail": ""},
-                {"label": "Container memory", "value": "48%", "detail": ""},
-                {"label": "Docker storage", "value": "41%", "detail": ""},
-            ],
+            "key": MACHINE,
+            "docker": {
+                "containers": len(CONTAINERS),
+                "cpu_percent": 12.0,
+                "cores": 4,
+                "memory_used": 4_123_000_000,
+                "memory_total": 8_589_934_592,
+                "storage": 41_000_000_000,
+            },
         },
         observed_at=now(),
     )
     _weather()
 
 
-# The hours ahead, as the controller words them: a showery afternoon that
-# clears by evening, in the order the weather service lists its periods.
+# The hours ahead, as the weather service lists its periods: a showery
+# afternoon that clears by evening.
 _HOURS = (
     (58, 40, "Chance Light Rain Showers"),
     (59, 40, "Chance Light Rain Showers"),
@@ -323,10 +325,6 @@ _HOURS = (
 )
 
 
-def _hour(at):
-    return f"{at.hour % 12 or 12} {'AM' if at.hour < 12 else 'PM'}"
-
-
 def _weather():
     """The dashboard's forecast, in the shape the controller's weather
     reading reports one."""
@@ -339,31 +337,19 @@ def _weather():
     first = localtime(observed).replace(minute=0, second=0, microsecond=0)
     hours = [
         {
-            "time": _hour(first + timedelta(hours=index)),
-            "temperature": f"{degrees}°",
+            "start": (first + timedelta(hours=index)).isoformat(),
+            "temperature": degrees,
+            "temperature_unit": "F",
             "forecast": forecast,
-            "precipitation": f"{chance}%",
+            "chance": chance,
+            "wind_speed": "10 to 15 mph",
+            "wind_direction": "WSW",
         }
         for index, (degrees, chance, forecast) in enumerate(_HOURS)
     ]
-    temperatures = [degrees for degrees, _chance, _forecast in _HOURS]
+    hours[0]["name"] = "This Afternoon"
     readings.record(
         readings.weather(point),
-        {
-            "status": "good",
-            "summary": "Fairview, IL",
-            "metrics": [
-                {"label": "Now", "value": _HOURS[0][2], "detail": "This Afternoon"},
-                {"label": "Temperature", "value": f"{_HOURS[0][0]}°F", "detail": ""},
-                {
-                    "label": "Range",
-                    "value": f"{min(temperatures)}–{max(temperatures)}°",
-                    "detail": f"next {len(_HOURS)} hours",
-                },
-                {"label": "Rain", "value": dotted("Now", f"{_HOURS[0][1]}%"), "detail": _HOURS[0][2]},
-                {"label": "Wind", "value": "WSW 10 to 15 mph", "detail": "NWS hourly forecast"},
-            ],
-            "hours": hours,
-        },
+        {"point": point, "city": "Fairview", "state": "IL", "hours": hours},
         observed_at=observed,
     )

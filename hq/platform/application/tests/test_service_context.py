@@ -15,13 +15,13 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
+from hq.platform.application.markup_testing import all_elements, select, with_class, within
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..service_context import Cell, ServiceSection, sections_for
 from ..services import prospects
 from ..ui import MISSING
-from .markup import all_elements, select, with_class, within
 
 
 def a_service(hostname="probe.example.com"):
@@ -96,7 +96,7 @@ class ProjectTileTests(TestCase):
 
 
 class HealthDetailTests(SimpleTestCase):
-    def health(self, check: str, label: str, detail: str):
+    def health(self, check, label: str, detail: str):
         from types import SimpleNamespace
 
         from ..service_context import _health_detail
@@ -106,16 +106,20 @@ class HealthDetailTests(SimpleTestCase):
         )
 
     def test_each_part_is_a_line_of_its_own(self):
+        from ..container_state import HealthCheck
+
         self.assertEqual(
-            self.health("Restarting", "Down", "Nothing answers at the proxy."),
-            ("Restarting", "Nothing answers at the proxy."),
+            self.health(HealthCheck.UNHEALTHY, "Down", "Nothing answers at the proxy."),
+            ("health check failing", "Nothing answers at the proxy."),
         )
+        self.assertEqual(self.health(None, "Down", "Nothing answers at the proxy."), ("Nothing answers at the proxy.",))
 
     def test_a_check_its_sentence_already_says_is_said_once(self):
+        from ..container_state import HealthCheck
+
         detail = "Health check passing when last read."
 
-        self.assertEqual(self.health("health check passing", "Healthy", detail), (detail,))
-        self.assertEqual(self.health("Healthy", "Healthy", detail), (detail,))
+        self.assertEqual(self.health(HealthCheck.HEALTHY, "Healthy", detail), (detail,))
 
 
 class ActivityTests(TestCase):
@@ -305,10 +309,10 @@ class TopologyWindowTests(TestCase):
         from django.utils import timezone
 
         from hq.domains.analytics.models import AnalyticsSite, RumDaily
+        from hq.platform.application.markup_testing import text
 
         from ..security import web_principal
         from ..topology import derive_topology
-        from .markup import text
 
         user = get_user_model().objects.create_superuser("operator", password="x" * 20)
         self.client.force_login(user)
@@ -350,11 +354,11 @@ class PartRowTests(TestCase):
         broken = PartRow(
             claim=SimpleNamespace(health={"state": "degraded", "label": "Needs attention"}, kind="npm.proxy_host")
         )
-        read = PartRow(observed_health=("Online", "reachable"))
+        read = PartRow(observed_health=("Online", "good"))
 
-        self.assertEqual(declared.health, ("Healthy", "reachable"))
-        self.assertEqual(broken.health, ("Needs attention", "unreachable"))
-        self.assertEqual(read.health, ("Online", "reachable"))
+        self.assertEqual(declared.health, ("Healthy", "good"))
+        self.assertEqual(broken.health, ("Needs attention", "serious"))
+        self.assertEqual(read.health, ("Online", "good"))
 
 
 class StepsTests(SimpleTestCase):
@@ -405,7 +409,7 @@ class ObservedHealthTests(SimpleTestCase):
         return Machine(name="example-box", presence=Presence(online=online), containers=containers)
 
     def test_a_machine_shows_its_own_state(self):
-        self.assertEqual(self.health((("machine", "example-box"),), self.box(), "machine"), ("Online", "reachable"))
+        self.assertEqual(self.health((("machine", "example-box"),), self.box(), "machine"), ("Online", "good"))
 
     def test_a_machine_hq_does_not_know_shows_nothing(self):
         self.assertIsNone(self.health((("machine", "example-box"),), None, "machine"))
@@ -413,8 +417,8 @@ class ObservedHealthTests(SimpleTestCase):
     def test_the_link_to_a_machine_is_its_tailnet_presence(self):
         steps = (("network", "100.64.0.1"), ("machine", "example-box"))
 
-        self.assertEqual(self.health(steps, self.box(), "network"), ("Connected", "reachable"))
-        self.assertEqual(self.health(steps, self.box(online=False), "network"), ("Disconnected", "unreachable"))
+        self.assertEqual(self.health(steps, self.box(), "network"), ("Connected", "good"))
+        self.assertEqual(self.health(steps, self.box(online=False), "network"), ("Disconnected", "serious"))
 
     def test_a_link_with_no_presence_shows_nothing(self):
         from ..machines import Machine
@@ -427,12 +431,14 @@ class ObservedHealthTests(SimpleTestCase):
     def test_a_forward_and_its_container_read_the_running_container(self):
         from types import SimpleNamespace
 
-        app = SimpleNamespace(name="app", state="running", healthy=True)
-        sick = SimpleNamespace(name="app", state="restarting", healthy=False)
+        from ..container_state import ContainerState
+
+        app = SimpleNamespace(name="app", state=ContainerState.RUNNING)
+        sick = SimpleNamespace(name="app", state=ContainerState.RESTARTING)
         steps = (("machine", "example-box"), ("upstream", "app:80"), ("container", "app"))
 
-        self.assertEqual(self.health(steps, self.box(containers=(app,)), "upstream"), ("Running", "reachable"))
-        self.assertEqual(self.health(steps, self.box(containers=(sick,)), "container"), ("Restarting", "unreachable"))
+        self.assertEqual(self.health(steps, self.box(containers=(app,)), "upstream"), ("Running", "good"))
+        self.assertEqual(self.health(steps, self.box(containers=(sick,)), "container"), ("Restarting", "serious"))
 
     def test_a_container_the_machine_is_not_running_shows_nothing(self):
         steps = (("machine", "example-box"), ("container", "app"))

@@ -5,10 +5,11 @@ from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, tag
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import ActionItemRead, AuditLog
@@ -30,7 +31,6 @@ from ..action_items import (
 from ..capabilities import execute_capability
 from ..card_items import Insight
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, internal_principal
-from .markup import select
 
 ITEM = {
     "key": "example:widgets",
@@ -56,7 +56,7 @@ class IdentityTests(TestCase):
         first = self.insight(key="finding:rule:a", title="Expires in 5 days", body="x")
         later = self.insight(key="finding:rule:a", title="Expires in 4 days", body="y")
 
-        self.assertEqual(item_key("infra", first), item_key("infra", later))
+        self.assertEqual(item_key("infra", first.key), item_key("infra", later.key))
         self.assertEqual(item_revision(first), item_revision(later))
 
     def test_getting_worse_or_growing_is_a_new_revision(self):
@@ -87,30 +87,6 @@ class IdentityTests(TestCase):
             item_revision(told),
             item_revision(self.insight(key="k", notice=True, body="Rose 12 bpm on the Sep 28 run")),
         )
-
-    def test_without_a_key_the_eyebrow_and_title_stand_in(self):
-        self.assertEqual(item_key("ext", self.insight(title="Plan a run")), "ext:Finding:Plan a run")
-
-
-@tag("source")
-class HostItemsNameTheirSubjectTests(TestCase):
-    def test_every_host_attention_item_carries_a_key(self):
-        """Read state follows the key, so a host item without one would fall
-        back to its title, and several titles carry counts and days-left."""
-
-        import ast
-        from pathlib import Path
-
-        source = Path(__file__).parent.with_name("attention.py").read_text()
-        missing = [
-            node.lineno
-            for node in ast.walk(ast.parse(source))
-            if isinstance(node, ast.Call)
-            and getattr(node.func, "id", "") in {"Insight", "_backlog"}
-            and "key" not in {keyword.arg for keyword in node.keywords}
-        ]
-
-        self.assertEqual(missing, [], f"attention.py builds items without a key at lines {missing}")
 
 
 class AsideStateTests(TestCase):
@@ -152,6 +128,32 @@ class AsideStateTests(TestCase):
 
         self.assertEqual(list(ActionItemRead.objects.values_list("key", flat=True)), [OTHER["key"]])
 
+    def test_a_held_request_is_never_set_aside_and_anything_else_is(self):
+        held = {**OTHER, "held": True}
+
+        set_aside(self.user, [ITEM["key"], held["key"]], aside=True, current=[ITEM, held])
+
+        # Decided by its Approve or Reject, it waits until then: a mark,
+        # however it was made, does not hide it.
+        self.assertEqual(
+            [item["key"] for item in with_aside_state([ITEM, held], self.user) if not item["aside"]], [held["key"]]
+        )
+        self.assertEqual(waiting_count([ITEM, held], self.user), 1)
+
+    def test_an_item_raised_again_after_it_cleared_is_back_and_one_still_open_stays_dismissed(self):
+        now = timezone.now()
+        still_open = {**ITEM, "since": (now - timedelta(days=3)).isoformat()}
+        set_aside(self.user, [ITEM["key"], OTHER["key"]], aside=True, current=[still_open, OTHER])
+        ActionItemRead.objects.update(read_at=now - timedelta(days=2))
+
+        # OTHER cleared after it was dismissed and is raised again, as it was.
+        returned = {**OTHER, "since": (now - timedelta(days=1)).isoformat()}
+
+        self.assertEqual(
+            [(item["key"], item["aside"]) for item in with_aside_state([still_open, returned], self.user)],
+            [(ITEM["key"], True), (OTHER["key"], False)],
+        )
+
     def test_bringing_back_undoes_setting_aside(self):
         set_aside(self.user, [ITEM["key"]], aside=True, current=[ITEM])
         set_aside(self.user, [ITEM["key"]], aside=False, current=[ITEM])
@@ -186,11 +188,10 @@ class PageTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(self.user)
-        # The page asks for the queue; the header's count derives from it.
-        for name in ("hq.platform.core.action_item_views", "hq.platform.application.dashboard"):
-            patcher = mock.patch(f"{name}.work_queue", return_value=[ITEM, OTHER])
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        # The page and the header's count both read the queue through it.
+        patcher = mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, OTHER])
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def shown(self, page, name="action_groups"):
         return [item["label"] for group in page.context[name] for item in group["items"]]
@@ -231,8 +232,19 @@ class PageTests(TestCase):
         self.client.post(reverse("action_items_bring_back"), form_keyed({"key": row_value(ITEM)}))
         self.assertEqual(waiting_count([ITEM, OTHER], self.user), 2)
 
+    def test_a_held_requests_row_offers_no_dismiss_and_any_other_row_does(self):
+        held = {**OTHER, "held": True}
+        with mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, held]):
+            page = self.client.get(reverse("action_items"))
+
+        dismissed = [
+            button.attrs.get("value") for button in select(page, "formaction", reverse("action_items_set_aside"))
+        ]
+        self.assertIn(row_value(ITEM), dismissed)
+        self.assertNotIn(row_value(held), dismissed)
+
     def test_one_row_is_dismissed_without_composing_the_queue(self):
-        with mock.patch("hq.platform.core.action_item_views.work_queue", side_effect=AssertionError("composed")):
+        with mock.patch("hq.platform.application.dashboard.work_queue", side_effect=AssertionError("composed")):
             reply = self.client.post(
                 reverse("action_items_set_aside"),
                 form_keyed({"key": row_value(ITEM)}),
@@ -262,7 +274,6 @@ class PageTests(TestCase):
             for n in range(3)
         ]
         with (
-            mock.patch("hq.platform.core.action_item_views.work_queue", return_value=[*family, OTHER]),
             mock.patch("hq.platform.application.dashboard.work_queue", return_value=[*family, OTHER]),
         ):
             page = self.client.get(reverse("action_items"))
@@ -303,7 +314,6 @@ class PageTests(TestCase):
     def test_a_notice_is_kept_apart_from_what_needs_doing_and_out_of_that_count(self):
         told = {**ITEM, "key": "example:run", "label": "A run drifted", "notice": True}
         with (
-            mock.patch("hq.platform.core.action_item_views.work_queue", return_value=[ITEM, told]),
             mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, told]),
         ):
             page = self.client.get(reverse("action_items"))
@@ -350,7 +360,7 @@ class ActivityActorTests(TestCase):
         )
 
         self.assertEqual(
-            recent_activity(principal=cli_principal(), limit=1)["items"][0]["actor"],
+            recent_activity(limit=1)["items"][0]["actor"],
             "example-agent",
         )
 
@@ -358,14 +368,11 @@ class ActivityActorTests(TestCase):
         from hq.platform.core.models import AuditLog
 
         from ..dashboard import operating_snapshot
-        from ..read_models import recent_activity
-        from ..security import AuthorizationError, Capability, Principal
+        from ..security import Capability, Principal
 
         AuditLog.objects.create(action=AuditLog.Action.CREATED, object_type="Approval")
         reader = Principal("example-agent", "mcp", frozenset({Capability.READ}))
 
-        with self.assertRaises(AuthorizationError):
-            recent_activity(principal=reader)
         self.assertEqual(operating_snapshot(principal=reader)["recent_activity"], [])
         self.assertTrue(operating_snapshot(principal=cli_principal())["recent_activity"])
 
@@ -413,10 +420,9 @@ class AsideCapabilityTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(self.user)
-        for name in ("hq.platform.core.action_item_views", "hq.platform.application.dashboard"):
-            patcher = mock.patch(f"{name}.work_queue", return_value=[ITEM, OTHER])
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        patcher = mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, OTHER])
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_setting_aside_and_bringing_back_are_audited_as_the_person(self):
         self.client.post(reverse("action_items_set_aside"), form_keyed({"key": row_value(ITEM)}))

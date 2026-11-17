@@ -125,17 +125,16 @@ case "$step" in
             git diff --name-status "$sent" "$left"
             [ "$status" -ne 0 ] || status=1
         fi
-        # What the run wrote, and fast's pass and map of the tree, while the
+        # What the run wrote, and fast's pass of the tree, while the
         # worktree is still this run's.
         severino="$(git rev-parse --path-format=absolute --git-common-dir)/severino"
         rm -rf var/back
-        for kept in "fast-passes/$sent" "fast-maps/$sent.json"; do
-            if [ -n "$(find "$severino/$kept" -newer var/remote-stamp 2>/dev/null)" ]; then
-                mkdir -p "var/back/${kept%/*}"
-                cp "$severino/$kept" "var/back/$kept"
-            fi
-        done
-        find var/gate var/look var/back -type f -newer var/remote-stamp >var/remote-written 2>/dev/null || true
+        kept="fast-passes/$sent"
+        if [ -n "$(find "$severino/$kept" -newer var/remote-stamp 2>/dev/null)" ]; then
+            mkdir -p "var/back/${kept%/*}"
+            cp "$severino/$kept" "var/back/$kept"
+        fi
+        find var/gate var/look var/perf var/back -type f -newer var/remote-stamp >var/remote-written 2>/dev/null || true
         tar -cf "$gates/back/$id.tar" -T var/remote-written || status=$((status ? status : 1))
         exit "$status"
         ;;

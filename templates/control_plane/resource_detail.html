@@ -21,7 +21,7 @@ held request writes nothing and queues nothing by design.
 {% if awaiting_approval %}
   {% notice tone="warning" title=awaiting_approval|length|counted:"change waiting for your approval,changes waiting for your approval" %}
     <p>Requested by {% for who in awaiting_approval %}{% with mark=forloop.last|then:".|;" %}{{ who.words|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Nothing is written or queued yet.</p>
-    <p><a class="btn compact primary" href="{% url 'core:audit_list' %}?awaiting=1">Review and decide</a></p>
+    {% url 'core:audit_list' as audit_url %}<p>{% button "Review and decide" audit_url|add:"?awaiting=1" look="compact primary" %}</p>
   {% endnotice %}
 {% endif %}
 
@@ -33,9 +33,9 @@ declaration's machinery: the controller's actions are the buttons above, and
 "declared" says nothing a container page is opened to learn.
 {% endcomment %}
 {% if container.standing %}
-  {% include "control_plane/_container_band.html" with standing=container.standing running=container.running machine=container.machine edit_url=container.edit_url %}
-  {% if container.running.unit %}<p class="muted" data-run-by-unit="{{ container.running.unit }}">The systemd unit <code>{{ container.running.unit|breakable }}</code> runs it, and Start, Stop and Restart go through that unit.</p>{% endif %}
-  {% if container.item %}{% include "control_plane/_container_detail.html" with item=container.item plan=container.plan readiness=container.readiness edit_url=container.edit_url %}{% endif %}
+  {% include "control_plane/_container_band.html" with standing=container.standing running=container.running machine=container.machine edit=container.edit %}
+  {% if container.running.unit %}{% muted element="p" data_run_by_unit=container.running.unit %}The systemd unit <code>{{ container.running.unit|breakable }}</code> runs it, and Start, Stop and Restart go through that unit.{% endmuted %}{% endif %}
+  {% if container.item %}{% include "control_plane/_container_detail.html" with item=container.item plan=container.plan readiness=container.readiness edit=container.edit %}{% endif %}
 {% endif %}
 
 {% if resolved_spec or resolution_error %}
@@ -60,7 +60,7 @@ declaration's machinery: the controller's actions are the buttons above, and
             <tr>
               <td>
                 <strong>{% if consumer.url %}<a href="{{ consumer.url }}">{{ consumer.name|breakable }}</a>{% else %}{{ consumer.name|breakable }}{% endif %}</strong>
-                <br><span class="muted">through {% entity "connection"|entity_of:consumer.connection_ref %}</span>
+                <br>{% muted %}through {% entity "connection"|entity_of:consumer.connection_ref %}{% endmuted %}
               </td>
               <td>{% for domain in consumer.display_domains %}{% entity "service"|entity_of:domain mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</td>
             </tr>
@@ -78,11 +78,11 @@ declaration's machinery: the controller's actions are the buttons above, and
       {% endcomment %}
       {% if resource.status.unreachable_consumers %}
         {% section "Unchecked" count=resource.status.unreachable_consumers|length fold=True open=True %}
-          <ul>
+          {% prose_list %}
             {% for item in resource.status.unreachable_consumers %}
               <li>{% if item.domain %}<strong>{{ item.consumer|breakable }}</strong>{% dot %}{{ item.domain|breakable:":" }}{% else %}<strong>{{ item.consumer|breakable:":" }}</strong>{% endif %} {{ item.reason|breakable }}</li>
             {% endfor %}
-          </ul>
+          {% endprose_list %}
         {% endsection %}
       {% endif %}
     {% empty %}Not installed anywhere yet.
@@ -120,16 +120,16 @@ where it is saved and how it relates follow, short cards sharing rows.
     box over would carry the same two words for two different facts.
     {% endcomment %}
     {% if provider_machine %}
-      <p class="muted">Managed on {% entity provider_machine.link %}{% if managing_connections %} through {% for link in managing_connections %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</p>
+      {% muted element="p" %}Managed on {% entity provider_machine.link %}{% if managing_connections %} through {% for link in managing_connections %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% endmuted %}
     {% endif %}
     {% if origin_machine %}
-      <p class="muted">{{ origin_phrase|breakable }} {% entity origin_machine.link %}</p>
+      {% muted element="p" %}{{ origin_phrase|breakable }} {% entity origin_machine.link %}{% endmuted %}
     {% endif %}
     {% if service_links %}
-      <p class="muted">
+      {% muted element="p" %}
         For
         {% for hostname, url in service_links %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}
-      </p>
+      {% endmuted %}
     {% endif %}
     {% comment %}
     A container declares identity and nothing else, so on its own this page is
@@ -141,18 +141,18 @@ where it is saved and how it relates follow, short cards sharing rows.
     {% if container %}
       {% facts %}
         {% if container.machine and not container.standing %}
-          {% fact "Runs on" %}{% entity container.machine.link %}{% if container.machine.role %} <span class="muted">{{ container.machine.role|breakable }}</span>{% endif %}{% endfact %}
+          {% fact "Runs on" %}{% entity container.machine.link %}{% if container.machine.role %} {% muted %}{{ container.machine.role|breakable }}{% endmuted %}{% endif %}{% endfact %}
         {% endif %}
         {% if container.running and container.standing %}
           {% if container.running.published %}{% fact "Publishes" value=container.running.published %}{% endif %}
-          {% fact "Seen" %}{{ container.running.observed_at|when:"ago" }}{% endfact %}
+          {% fact "Reading" %}{% include "partials/_reading_age.html" with at=container.running.observed_at only %}{% endfact %}
         {% elif container.running %}
-          {% fact "State" %}{% status container.running.state|default:"unknown" tone=container.running.healthy|yesno:"reachable,unreachable" %}{% if container.running.status %} <span class="muted">{{ container.running.status|breakable }}</span>{% endif %}{% endfact %}
+          {% fact "State" %}{% status container.running.state %}{% if container.running.status %} {% muted %}{{ container.running.status|breakable }}{% endmuted %}{% endif %}{% endfact %}
           {% fact "Image" %}<code>{{ container.running.image_label|breakable }}</code>{% endfact %}
           {% if container.running.published %}{% fact "Publishes" value=container.running.published %}{% endif %}
-          {% fact "Seen" %}{{ container.running.observed_at|when:"ago" }}{% endfact %}
+          {% fact "Reading" %}{% include "partials/_reading_age.html" with at=container.running.observed_at only %}{% endfact %}
         {% else %}
-          {% fact "State" %}<span class="muted">Not read yet.</span>{% endfact %}
+          {% fact "State" %}{% muted %}Not read yet.{% endmuted %}{% endfact %}
         {% endif %}
         {% if container.running.unit %}
           {% fact "Run by" %}<code data-run-by-unit="{{ container.running.unit }}">{{ container.running.unit|breakable }}</code>{% detail %}Start, Stop and Restart go through this systemd unit.{% endfact %}
@@ -165,7 +165,7 @@ where it is saved and how it relates follow, short cards sharing rows.
     {% if readout_rows %}
       {% facts %}
         {% for row_label, desired, observed, links in readout_rows %}
-          {% fact row_label %}{% if links %}{% for link in links %}{% entity link code=True %}{% if not forloop.last %} {% endif %}{% endfor %}{% else %}{% with value=observed|default:desired %}{% if value is None or value == "" %}{% empty_value %}{% else %}{{ value|readout }}{% endif %}{% endwith %}{% endif %}{% if desired and observed and desired != observed %} {% status "HQ expects" desired tone="serious" %}{% endif %}{% endfact %}
+          {% fact row_label %}{% if links %}{% for link in links %}{% entity link code=True %}{% if not forloop.last %} {% endif %}{% endfor %}{% else %}{% with value=observed|default:desired %}{% present value %}{{ value|readout }}{% endpresent %}{% endwith %}{% endif %}{% if desired and observed and desired != observed %} {% status "HQ expects" desired tone="serious" %}{% endif %}{% endfact %}
         {% endfor %}
       {% endfacts %}
     {% endif %}
@@ -223,11 +223,11 @@ certificate, so the relation reads from both ends.
               <td>
                 {% if publication.detail %}
                   {% status "Not saved" tone="serious" %}
-                  <br><span class="muted">{{ publication.detail|breakable }}</span>
+                  <br>{% muted %}{{ publication.detail|breakable }}{% endmuted %}
                 {% elif publication.written %}
                   {% status "Saved" tone="good" %}
                   {% if publication.fields or publication.material == "written" %}
-                    <br><span class="muted">{% if publication.material == "written" %}certificate, key{% if publication.fields %}, {% endif %}{% endif %}{% for field in publication.fields %}{{ field|lower|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}</span>
+                    <br>{% muted %}{% if publication.material == "written" %}certificate, key{% if publication.fields %}, {% endif %}{% endif %}{% for field in publication.fields %}{{ field|lower|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}
                   {% endif %}
                 {% else %}
                   {% status "Already up to date" tone="good" %}
@@ -255,10 +255,10 @@ the same weight as Reconcile. Still offered while a removal is in flight: the
 one thing worth doing then is reading what it was. The certificate's link only when there is something to download. A link
 saying a thing cannot be done yet is a status report filed in the wrong place.
 {% endcomment %}
-<p class="muted">
+{% muted element="p" %}
   <a class="subtle-link" href="{% url 'core:audit_list' %}?about={{ resource.key|urlencode }}">Audit log</a>{% dot %}<a class="subtle-link" href="{% url 'control_plane:report_download' resource.key %}">Download JSON</a>{% if resource.status.certificate_pem %}{% dot %}<a class="subtle-link" href="{% url 'control_plane:certificate_download' resource.key %}">Download PEM</a>
   {% endif %}
-</p>
+{% endmuted %}
 
 {% comment %}
 Each operation that changed something, in the row every list of work draws

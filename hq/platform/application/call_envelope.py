@@ -29,8 +29,8 @@ from pydantic_core import PydanticKnownError
 
 from .integration_specs import CapabilitySpec
 from .json_schemas import json_schema
+from .moments import moment
 from .refusal_status import Refusal, refusal_of
-from .timestamps import moment
 
 # What an integer target may be sent as besides a number: its digits.
 INTEGER_TARGET = r"^-?[0-9]+$"

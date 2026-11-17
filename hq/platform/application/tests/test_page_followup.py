@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
+from hq.platform.application.markup_testing import elements, hrefs, select, text, texts
 
 from ..entity_links import entity_link
 from ..projection import projection_scope
@@ -19,7 +20,6 @@ from ..security import Capability, Principal
 from ..topology_model import RELATIONS
 from ..zone_insights import services as services_card
 from ..zones import find_zone
-from .markup import elements, hrefs, select, text, texts
 from .test_hq_self import SITE, declare, own
 
 READER = Principal("test", "reader", frozenset({Capability.READ}))

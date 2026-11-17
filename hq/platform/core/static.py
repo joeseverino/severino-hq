@@ -17,6 +17,8 @@ lazy from django.contrib.auth.decorators import login_not_required
 lazy from django.http import HttpResponsePermanentRedirect
 lazy from django.templatetags.static import static
 
+from hq.platform.application.lists import split_list
+
 lazy from .write_bounds import NOTHING, writes
 
 # A quoted string (kept whole, so a "/*" in one is not a comment) or a comment.
@@ -100,7 +102,7 @@ def acceptable_codings(scope) -> list[str]:
     """
 
     weights: dict[str, float] = {}
-    for offer in Headers(scope=scope).get("accept-encoding", "").lower().split(","):
+    for offer in split_list(Headers(scope=scope).get("accept-encoding", "").lower()):
         coding, _, weight = offer.partition(";")
         quality = weight.strip().removeprefix("q=")
         try:

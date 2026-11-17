@@ -9,12 +9,12 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
+from hq.platform.application.markup_testing import select, text
 from hq.platform.core.models import AuditLog
 
 from ..capabilities import run_capability
 from ..controller import claim_next_operation
 from ..security import Capability, Principal, web_principal
-from .markup import select, text
 from .procedures import APP, DB, EDGE, RESTART_RUN, Supply, approved_run, manifest, run_payload
 
 CANCEL = "automation.run.cancel"
@@ -233,9 +233,9 @@ class HeldRunApprovedWhileHeldTests(SignedInTestCase):
             "approval"
         ]
         holder = self.ask(DB, name=LOGS_RUN)["operation"]
-        decide = reverse("control_plane:approval_decision", kwargs={"approval_id": held["id"]})
+        decide = reverse("control_plane:approval_decide", kwargs={"approval_id": held["id"], "decision": "approve"})
 
-        refused = self.client.post(decide, {"decision": "approve", "__retry_key": "web:example-approve-1"}, follow=True)
+        refused = self.client.post(decide, {"__retry_key": "web:example-approve-1"}, follow=True)
 
         said = text(refused)
         self.assertIn(f"{DB} is busy with a run of", said)
@@ -244,6 +244,6 @@ class HeldRunApprovedWhileHeldTests(SignedInTestCase):
         self.assertEqual(ApprovalRequest.objects.get(pk=held["id"]).state, ApprovalRequest.State.PENDING)
 
         self.cancel(holder["id"])
-        self.client.post(decide, {"decision": "approve", "__retry_key": "web:example-approve-2"})
+        self.client.post(decide, {"__retry_key": "web:example-approve-2"})
 
         self.assertEqual(ApprovalRequest.objects.get(pk=held["id"]).state, ApprovalRequest.State.APPROVED)

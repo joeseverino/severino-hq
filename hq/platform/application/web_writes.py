@@ -9,16 +9,16 @@ new key once a post is answered, so a form that stays on the page asks afresh.
 
 A form view sends its form's values as the payload ``form_payload`` makes
 of them, and answers a resend from ``posted_answer`` before its form is
-validated again. Only a published form mixin whose write is no capability
-(``writes.outside_the_runner``) runs it through ``write_once`` instead.
+validated again.
 
-A refused answer reaches the person through ``refused``, said on the form or
+What a write that ran says reaches the person through ``said``, on the next
+page. A refused answer reaches them through ``refused``, said on the form or
 the next page, or as the whole response through ``refusal_response``.
 """
 
 import json
 import secrets
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import fields
 from typing import Any
 
@@ -38,13 +38,9 @@ from .capabilities import Ran, run_capability
 from .forms import file_as_sent
 from .idempotency import (
     KEY,
-    IdempotencyConflict,
-    InvalidIdempotencyKey,
     answered,
-    execute_form_once,
-    validate_key,
 )
-from .refusal_status import Refusal, refusal_of, refuse
+from .refusal_status import Refusal, refusal_of
 from .security import Principal, agent_subject, web_principal
 lazy from .automation_runs import held_words
 lazy from .records import records_for
@@ -88,9 +84,24 @@ def execute_posted(
     target: str | int | None = None,
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    """``run_posted``'s answer alone, as ``execute_capability`` is ``run_capability``'s."""
+    """``run_posted``'s answer alone, its ``message`` said on the next page.
 
-    return run_posted(request, name, payload, target=target, expected_updated_at=expected_updated_at).answer
+    A capability says what it did once, as its answer's ``message``, which
+    every door carries: an agent reads it in the answer, the audit log keeps it,
+    and here the person reads it among the page's messages. A refusal is
+    ``refused``'s to say.
+    """
+
+    answer = run_posted(request, name, payload, target=target, expected_updated_at=expected_updated_at).answer
+    said(request, answer)
+    return answer
+
+
+def said(request: HttpRequest, answer: dict[str, Any]) -> None:
+    """Put what a write that ran says (its answer's ``message``) on the next page."""
+
+    if answer.get("ok") and (message := str(answer.get("message") or "")):
+        messages.success(request, message)
 
 
 def refused(request: HttpRequest, answer: dict[str, Any], *, form: BaseForm | None = None) -> Refusal | None:
@@ -180,33 +191,6 @@ def _call_key(request: HttpRequest) -> str | None:
     return sent if calls == 1 else f"{sent}.{calls}"
 
 
-def write_once(request: HttpRequest, write: str, operation: Callable[[], dict[str, Any]]) -> Ran:
-    """Run a form view's own write, named ``write``, once under the key its form posted.
-
-    ``operation`` writes and answers what a resend is answered with: JSON
-    values naming what it wrote, never a model, since a replay has nothing of
-    the first request but its answer. It raises to refuse, which frees the key. A post
-    without a key is refused as a capability refuses the browser one.
-    """
-
-    key = _call_key(request)
-    if key is None:
-        return Ran(refuse("idempotency_key_required", "This form was sent without its retry key: reload the page."))
-    try:
-        answer, replayed = execute_form_once(
-            actor=agent_subject(web_principal(request.user)),
-            key=validate_key(key),
-            write=write,
-            form=_posted_form(request),
-            operation=lambda: {**operation(), "ok": True},
-        )
-    except InvalidIdempotencyKey as exc:
-        return Ran(refuse("invalid_idempotency_key", exc.reason))
-    except IdempotencyConflict as exc:
-        return Ran(refuse("idempotency_conflict", exc.reason))
-    return Ran(answer, replayed)
-
-
 def posted_answer(request: HttpRequest) -> dict[str, Any] | None:
     """What this same post was answered the first time it wrote, or None.
 
@@ -223,23 +207,6 @@ def posted_answer(request: HttpRequest) -> dict[str, Any] | None:
     if answer is not None:
         _call_key(request)
     return answer
-
-
-# What a post carries besides its form: the CSRF field changes with the
-# session, and the key is what names the request rather than part of it.
-_NOT_THE_REQUEST = frozenset({RETRY_KEY_FIELD, "csrfmiddlewaretoken"})
-
-
-def _posted_form(request: HttpRequest) -> dict[str, Any]:
-    """The request a form's key names: where it posted, every field, and each file by name and size."""
-
-    return {
-        "path": request.get_full_path(),
-        "fields": sorted((name, values) for name, values in request.POST.lists() if name not in _NOT_THE_REQUEST),
-        "files": sorted(
-            (name, [(upload.name, upload.size) for upload in uploads]) for name, uploads in request.FILES.lists()
-        ),
-    }
 
 
 def form_payload(form: BaseForm, command: type) -> dict[str, Any]:

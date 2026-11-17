@@ -19,6 +19,7 @@ from hq.domains.control_plane.observations.contract import READERS, READING_FACE
 from hq.domains.control_plane.provider_adapters.contracts import REFUSALS
 
 from .answer_fields import AsRead, ObservedAt, Since, UpdatedAt
+from .conditions import DEGRADED, DRIFTED, READY
 from .credential_sight import STATE_LABELS
 from .describe import Describe, listed
 from .documentation import (
@@ -37,9 +38,9 @@ from .entity_links import EntityLink
 from .json_schemas import Written
 from .plugins import ATTENTION_ORDER
 from .record_fields import Notes, PublishedAt
-from .service_health import ATTENTION, GOOD, SERIOUS, UNKNOWN
 from .services import HQ_MARK, OBSERVED_MARK
-from .topology_model import STANDINGS
+from .standards import Standing
+from .tone import Tone
 from .ui import ended
 from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE
 from .workflows import WrittenAction
@@ -56,7 +57,7 @@ WrittenLink = Annotated[dict[str, Any], Written(EntityLink)]
 class ConditionPart(TypedDict):
     type: Annotated[
         str,
-        Describe(ended(f"What the condition says of the record, such as {listed(('Ready', 'Drifted', 'Degraded'))}")),
+        Describe(ended(f"What the condition says of the record, such as {listed((READY, DRIFTED, DEGRADED))}")),
     ]
     status: Annotated[bool, Describe("Whether the condition holds now.")]
     reason: Annotated[str, Describe("Why, in the controller's one word for it; empty for none.")]
@@ -193,7 +194,7 @@ class ServiceRow(TypedDict):
     status: Annotated[
         str,
         Describe(
-            f"How the service stands by its health rule: {listed((GOOD, ATTENTION, SERIOUS, UNKNOWN))}, "
+            f"How the service stands by its health rule: {listed((Tone.GOOD, Tone.ATTENTION, Tone.SERIOUS, 'unknown'))}, "
             "the last when nothing reads its health."
         ),
     ]
@@ -210,7 +211,7 @@ class FacetPart(TypedDict):
     state: Annotated[
         str,
         Describe(
-            f"How the records behind it stand: {listed((GOOD, ATTENTION, SERIOUS))}; empty when none supplies it."
+            f"How the records behind it stand: {listed((Tone.GOOD, Tone.ATTENTION, Tone.SERIOUS))}; empty when none supplies it."
         ),
     ]
     resources: Annotated[list[str], Describe("The keys of HQ's records that supply it.")]
@@ -261,7 +262,15 @@ class OverlayPart(TypedDict):
 
 
 class HopCheckPart(TypedDict):
-    state: Annotated[str, Describe("Whether the request agrees with the readings at the hop, in one word.")]
+    state: Annotated[
+        str,
+        Describe(
+            ended(
+                f"Whether the request agrees with the readings at the hop: {listed(Standing)}, "
+                "the last when the request does not show it"
+            )
+        ),
+    ]
     label: Annotated[str, Describe("That, in the words the hop shows.")]
     detail: Annotated[str, Describe("What the request showed beside what was read.")]
     step: Annotated[str, Describe("What you do to settle a disagreement; empty for none.")]
@@ -277,18 +286,36 @@ class EvidencePart(TypedDict):
     ]
 
 
-class LayerPart(TypedDict):
-    id: Annotated[str, Describe("The layer's stable id, such as `edge` or `identity`.")]
-    label: Annotated[str, Describe("The layer, in words.")]
+class CheckPart(TypedDict):
+    id: Annotated[str, Describe("The check's stable id, such as `edge` or `identity`.")]
+    label: Annotated[str, Describe("The check, in words.")]
     state: Annotated[
         str,
-        Describe("`holds`, `does-not`, or `unknown` when what decides it did not answer."),
+        Describe(ended(f"Where it stands: {listed(Standing)}, the last when what decides it did not answer")),
     ]
     detail: Annotated[str, Describe("Why it was decided so, in a sentence.")]
     evidence: Annotated[str, Describe("The value it was decided from; empty for none.")]
     boundary: Annotated[str, Describe("The security boundary it belongs to; empty for none.")]
     mechanism: Annotated[str, Describe("What enforces it; empty for none.")]
     rules: Annotated[list[str], Describe("The rules behind it, where what decides it has rules.")]
+
+
+class StandardCheckPart(TypedDict):
+    id: Annotated[str, Describe("The check's stable id, such as `tailnet-lock`.")]
+    label: Annotated[str, Describe("What is true when it is met, in words.")]
+    met: Annotated[bool | None, Describe("Whether it is met; null when HQ could not read it.")]
+    evidence: Annotated[str, Describe("What it was judged from, or why HQ could not read it; empty for none.")]
+    qualified: Annotated[bool, Describe("Met, with a limit the reader should see.")]
+    stops: Annotated[str, Describe("What it stops, as a clause.")]
+    remedy: Annotated[str | None, Describe("What would let HQ read a check it could not; null for none.")]
+    remedy_url: Annotated[str | None, Describe("Where that is done; null for none.")]
+
+
+class StandardPart(TypedDict):
+    advanced: Annotated[bool, Describe("Whether Advanced HQ Posture raises each unmet check as a finding.")]
+    met: Annotated[int, Describe("How many checks are met.")]
+    unread: Annotated[int, Describe("How many checks HQ could not read.")]
+    checks: list[StandardCheckPart]
 
 
 class ObservedPart(TypedDict):
@@ -362,7 +389,9 @@ class HopRow(TypedDict):
         ]
     ]
     evidence: NotRequired[Annotated[list[EvidencePart], Describe(f"What the request carried at the hop. {_WALKED}")]]
-    layers: NotRequired[Annotated[list[LayerPart], Describe(f"The admission layers decided at the hop. {_WALKED}")]]
+    layers: NotRequired[
+        Annotated[list[CheckPart], Describe(f"The checks of the request standard decided at the hop. {_WALKED}")]
+    ]
 
 
 # ----- The estate -------------------------------------------------------------
@@ -669,7 +698,7 @@ class UpgradeRecord(UpgradeRow):
 
 class ZoneMemberPart(TypedDict):
     hostname: Annotated[str, Describe("The hostname of a service under the domain.")]
-    status: Annotated[str, Describe(ended(f"How that service stands: {listed(STANDINGS)}"))]
+    status: Annotated[str, Describe(ended(f"How that service stands: {listed(Tone)}"))]
 
 
 class Registration(TypedDict):

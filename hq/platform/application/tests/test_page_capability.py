@@ -97,27 +97,27 @@ class NoRoleTests(TestCase):
 
 class DeclarationTests(TestCase):
     def test_a_page_that_declares_nothing_reads_under_read(self):
-        from hq.platform.application.pages import page_capability
+        from hq.platform.application.pages import page_capabilities
 
-        self.assertEqual(page_capability(View.as_view()), Capability.READ)
+        self.assertEqual(page_capabilities(View.as_view()), (Capability.READ,))
 
     def test_a_function_view_declares_through_capability_required(self):
-        from hq.platform.application.pages import page_capability
+        from hq.platform.application.pages import page_capabilities
 
         @capability_required("example.read")
         def page(_request):
             return HttpResponse()
 
-        self.assertEqual(page_capability(page), "example.read")
+        self.assertEqual(set(page_capabilities(page)), {Capability.READ, "example.read"})
 
-    def test_a_page_reads_under_one_capability_never_several(self):
-        from hq.platform.application.pages import page_capability
+    def test_a_page_declares_one_capability_never_several(self):
+        from hq.platform.application.pages import page_capabilities
 
         class Several(View):
             required_capability = (Capability.READ, Capability.READ_AUDIT_LOG)
 
         with self.assertRaises(ImproperlyConfigured):
-            page_capability(Several.as_view())
+            page_capabilities(Several.as_view())
 
 
 class _AuditPage(CapabilityRequiredMixin, View):
@@ -170,7 +170,18 @@ class ExtensionViewTests(TestCase):
             _gate(_person("operator", roles.Role.OPERATOR), _Unnamed.as_view())
 
     def test_a_test_holding_capabilities_is_answered_by_the_real_gate(self):
-        with holding(Capability.READ_AUDIT_LOG):
+        with holding(Capability.READ, Capability.READ_AUDIT_LOG):
             self.assertIsNone(_gate(_person("viewer", roles.Role.VIEWER), _AuditPage.as_view()))
         with holding(), self.assertRaises(PermissionDenied):
             _gate(_person("operator", roles.Role.OPERATOR), _AuditPage.as_view())
+
+    def test_a_page_of_its_own_capability_still_needs_read(self):
+        operator = _person("operator", roles.Role.OPERATOR)
+
+        with holding(Capability.READ_AUDIT_LOG):
+            for view in (_AuditPage.as_view(), _audit_page):
+                with self.subTest(view=view.__name__), self.assertRaises(PermissionDenied):
+                    _gate(operator, view)
+
+        denials = AuditLog.objects.filter(action=AuditLog.Action.DENIED)
+        self.assertEqual({denial.metadata["capability"] for denial in denials}, {Capability.READ})

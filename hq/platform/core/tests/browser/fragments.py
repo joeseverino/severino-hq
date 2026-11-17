@@ -4,7 +4,6 @@ import re
 from typing import override
 from urllib.parse import parse_qsl, urlsplit
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.template import Context, Template
@@ -18,11 +17,10 @@ from hq.platform.core.tests.browser.probes.settle import SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 
-# fragment.js, with the empty notices it clones, which base.html draws on
-# every page HQ serves.
-_FRAGMENT_JS = f'<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>' + render_to_string(
-    "partials/_notice_frames.html"
-)
+# fragment.js and ask.js, each through the part that draws the frames it
+# clones, as base.html loads them.
+_FRAGMENT_JS = render_to_string("scripts/fragment.html", {"csp_nonce": NONCE})
+_ASK_JS = render_to_string("scripts/ask.html", {"csp_nonce": NONCE})
 
 # A region that polls and names its parts, a disclosure and a menu, a
 # placeholder behind a closed disclosure, and one whose address answers a
@@ -131,7 +129,7 @@ def _asking_dialog_probe():
     return (
         f"""<!doctype html><html><head><title>Probe</title>
 {_FRAGMENT_JS}
-<script defer src="{settings.STATIC_URL}js/ask.js" nonce="{NONCE}"></script>
+{_ASK_JS}
 </head><body><main>
 <button type="button" data-probe="open" command="show-modal" commandfor="modal-probe">Open</button>
 {dialog}
@@ -158,7 +156,7 @@ def _asking_head_probe():
     )
     scripts = f"""<!doctype html><html><head><title>Probe</title>
 {_FRAGMENT_JS}
-<script defer src="{settings.STATIC_URL}js/ask.js" nonce="{NONCE}"></script>
+{_ASK_JS}
 </head><body>"""
     return [
         scripts + _ASKING_HEAD.format(head=head, said=said, control=control) + "</body></html>"
@@ -187,7 +185,7 @@ _PROBE_STATE = """(failure) => ({
 
 
 # Rows a page lets the reader reorder and delete, each by its own
-# post_button, drawn in a real page's frame: base.html's content, its one post
+# posting button, drawn in a real page's frame: base.html's content, its one post
 # form and its scripts. Between enough lines that the rows are reached by
 # scrolling; beside them a region of its own with a press of its own, a press
 # answered with no page and one the server fails, and a link and a form of
@@ -197,16 +195,16 @@ _ROWS = """{% load action_tags %}{% if said %}<ul class="messages"><li class="ms
 {% for line in lines %}<p>An example line {{ line }}.</p>{% endfor %}
 <ul class="list-rows" data-probe="rows">{% for row in rows %}<li data-row="{{ row }}"><span>Example {{ row }}</span>
 {% with url="/probe-rows/"|add:row|add:"/" %}
-{% post_button "\u2191" url value="up" css="icon-link" title="Move up" disabled=forloop.first %}
-{% post_button "\u2193" url value="down" css="icon-link" title="Move down" disabled=forloop.last %}
-{% post_button "\u00d7" url value="delete" css="icon-link" title="Delete" %}
+{% button "\u2191" url post=True value="up" css="icon-link" title="Move up" disabled=forloop.first %}
+{% button "\u2193" url post=True value="down" css="icon-link" title="Move down" disabled=forloop.last %}
+{% button "\u00d7" url post=True value="delete" css="icon-link" title="Delete" %}
 {% endwith %}</li>{% endfor %}</ul>
 <div id="probe-aside" data-fragment><span data-probe="aside">{{ aside }}</span>
-{% post_button "Mark" "/probe-rows/aside/" value="mark" %}</div>
-{% post_button "Quiet" "/probe-rows/quiet/" value="quiet" %}
-{% post_button "Broken" "/probe-rows/broken/" value="broken" %}
-{% post_button "Refused" "/probe-rows/refused/" value="refused" %}
-{% post_button "Declined" "/probe-rows/declined/" value="declined" %}
+{% button "Mark" "/probe-rows/aside/" post=True value="mark" %}</div>
+{% button "Quiet" "/probe-rows/quiet/" post=True value="quiet" %}
+{% button "Broken" "/probe-rows/broken/" post=True value="broken" %}
+{% button "Refused" "/probe-rows/refused/" post=True value="refused" %}
+{% button "Declined" "/probe-rows/declined/" post=True value="declined" %}
 <a data-probe="link" href="/probe-rows/?again=1">Again</a>
 <form method="post" action="/probe-rows/plain/"><button data-probe="plain">Send</button></form>
 {% for line in lines %}<p>An example line after {{ line }}.</p>{% endfor %}"""
@@ -230,7 +228,7 @@ _PRESSED = {("ABC", "C", "up"): "ACB", ("ABC", "B", "up"): "BAC", ("ABC", "B", "
 _ROWS_SHOWN = "() => [...document.querySelectorAll('[data-row]')].map((row) => row.dataset.row).join('')"
 _SAID = "() => [...document.querySelectorAll('main > ul:first-child > li')].map((line) => line.textContent.trim())"
 
-# Where the keyboard is: which post_button, by where it posts and what it says.
+# Where the keyboard is: which posting button, by where it posts and what it says.
 _FOCUS = "() => [document.activeElement.getAttribute('formaction'), document.activeElement.value]"
 
 

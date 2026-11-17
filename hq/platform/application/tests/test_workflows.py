@@ -3,12 +3,13 @@
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
-from ..action_links import ActionLink
-from ..card_items import Insight
-from ..workflows import claim_identity, claim_resolution_plan, serialize_workflow
-from .markup import actions, hrefs
+from hq.platform.application.action_links import read_link
+from hq.platform.application.markup_testing import actions, hrefs
+from hq.platform.application.tests.links import example_command
 
-REMEDY = ActionLink(
+from ..workflows import claim_identity, claim_resolution_plan, serialize_workflow
+
+REMEDY = example_command(
     "remedy",
     "Request fresh sweep",
     "infrastructure_change",
@@ -16,15 +17,12 @@ REMEDY = ActionLink(
     capability="infrastructure.controller.refresh",
     recommended=True,
 )
-VERIFY = ActionLink("verify", "Recheck", "read", "/recheck/")
+VERIFY = read_link("verify", "Recheck", "/recheck/")
 
 
 def plan_of(remedies=(REMEDY,), verification=VERIFY):
     return claim_resolution_plan(
-        namespace="example.claim",
-        rule="controller-sweep-stale",
-        subject="controller:one",
-        scope="",
+        identity=claim_identity("example.claim", "controller-sweep-stale:controller:one"),
         remedies=remedies,
         verification=verification,
     )
@@ -41,7 +39,7 @@ class FindingResolutionWorkflowTests(SimpleTestCase):
         self.assertEqual(plan.outcome.kind, "claim_absent")
         self.assertEqual(
             plan.outcome.claim_id,
-            claim_identity("example.claim", "controller-sweep-stale", "controller:one"),
+            claim_identity("example.claim", "controller-sweep-stale:controller:one"),
         )
 
     def test_a_remedy_listed_twice_is_offered_once(self):
@@ -62,19 +60,21 @@ class FindingResolutionWorkflowTests(SimpleTestCase):
         self.assertEqual(payload["steps"][0]["actions"][0]["url"], REMEDY.url)
         self.assertEqual(payload["outcome"]["kind"], "claim_absent")
 
-    def test_any_domain_insight_can_render_the_shared_resolution_workflow(self):
-        insight = Insight(
-            "attention",
-            "Utility",
-            "A reading changed",
-            "$1",
-            "Synthetic plugin evidence.",
+    def test_any_domain_finding_can_render_the_shared_resolution_workflow(self):
+        from ..finding_model import Finding
+
+        finding = Finding(
+            rule="example-reading",
+            subject="",
+            severity="attention",
+            title="A reading changed",
+            explanation="Synthetic plugin evidence.",
             workflow=plan_of(),
         )
 
         html = render_to_string(
             "partials/_attention_list.html",
-            {"entries": ({"item": insight, "source": "Example"},)},
+            {"entries": ({"finding": finding, "source": "Example"},)},
         )
 
         offered = hrefs(html) + actions(html)

@@ -11,7 +11,10 @@ Install [mise](https://mise.jdx.dev) and a `python3`; `mise install` brings uv
 with the other tools `fast` and `check` run.
 
 A tool only a heavier gate needs (CodeQL, age) is `lazy` in `mise.toml`: its
-first use installs it, checked against `mise.lock` like the rest.
+first use installs it, checked against `mise.lock` like the rest. The audit
+sandbox refuses that install, so an `audit:` task names each lazy tool it runs
+to `setup:sandbox` (`depends = ["setup:sandbox ripgrep"]`), which installs it
+before the sandbox opens.
 
 Go is the one tool `mise.toml` does not pin itself. It reads the release from
 `controller/go.mod`'s `toolchain` line, which Renovate moves, so mise loads
@@ -84,6 +87,7 @@ and `audit:css-usage` write as they measure, so they run outside it. A `.venv` o
 | `audit:layers [importer] [imported]` | the imports between core, application and domains, counted per pair both ways, or one pair's listed by module (grimp) | `mise run audit:layers core domains` |
 | `audit:imports <path>` | the files that import one, string imports included | `mise run audit:imports hq/platform/core/static.py` |
 | `audit:churn <since>` | each tracked source file's commits since a date, most first, generated and vendored files left out (`.gitattributes`); reach for it before a refactor or split | `mise run audit:churn 2026-10-01` |
+| `audit:loc [--base <ref>]` | the working tree's lines per language and per area (host code, Python and Go tests, templates, CSS, scripts, Go controller, tools) as scc counts them, generated and vendored files and what git ignores left out; with `--base`, each row that moved since the ref, read through `git archive`, and the total; reach for it to state a landing's net lines | `mise run audit:loc --base origin/main` |
 | `audit:go [linters]` | golangci-lint's findings, counted per linter | `mise run audit:go nilerr,gocritic` |
 | `audit:go-dead` | the controller's functions no main reaches on Linux, as deadcode finds them (a test-support package's that nothing reaches at all) | `mise run audit:go-dead` |
 | `audit:memory` | each module's own share of Python memory at boot and after a pass over the navigation, extensions composed; `--after` adds the paths boot never takes, each with its import times (`python -X importtime`); it ends by naming the `var/perf` JSON that holds every row its tables leave out | `mise run audit:memory --host-alone --after oidc,mcp-call,outbound` |
@@ -274,8 +278,11 @@ failure to name every gate that failed.
 
 `fast`, `check`, `lint`, `test`, `browser`, the composed suite and an
 extension's check (`tools/pipeline/check-plugin.sh`) end on a verdict line
-(`tools/gate/verdict.py`). It names each failed leaf task and test and the one
-command that reruns just those. A gate whose steps queued for the
+(`tools/gate/verdict.py`). It names each failed task and test and the one
+command that reruns just those. The tasks, their times and each failed task's
+last lines are mise's own: the report of each run of mise a step starts
+(`mise run --report-file`) and the output mise logs of each task
+(`mise tasks log`), so a task is named as the run a step started names it. A gate whose steps queued for the
 [heavy turn](#heavy-gates-take-turns) says how long beside its total
 (`passed in 664.5s, 410s of it waiting for the turn`), so the rest reads as
 working time.
@@ -310,13 +317,6 @@ A `dev:look --rule survey` without `--css` is kept so too, per engine, in
 `var/gate/look-survey-<engine>.txt`, the pages and widths it judged beneath;
 one that found anything or judged nothing fails. A `--base` look is a survey
 too, so its verdict replaces the record and names only the pages it was asked.
-Landing a change to
-`templates/`, `static/css` or `static/js` reads both engines' records for the
-tip's tree. A host survey's record also names its `inputs:`, the git pathspecs
-of every path it can read (`SURVEY_INPUTS` in
-`hq/platform/core/tests/look.py`), so a passing survey holds for a tip that
-differs from the tree it judged only outside them, such as a commit to a shell
-test or a doc; landing names each input the tip changed when it does not.
 
 The suite runs one worker per core (per performance core on Apple silicon);
 `DJANGO_TEST_PROCESSES` overrides it. `mise run fast --parallel 1` rules
@@ -373,8 +373,13 @@ when it selects one of the tests the recording runs.
 
 The tests it selects are:
 
-- the test modules that import a changed file, directly or through one module
-  between;
+- the test modules that load a changed file: through the imports a module
+  runs as it loads (at its top level or in a class body, never in a function,
+  a `lazy` import or one under `TYPE_CHECKING`), as grimp, import-linter's
+  graph, reads them, all the way; and through any import, those in functions
+  and lazy ones too, directly or through one module between, since further
+  out those close a cycle through the shared layers that reaches most of the
+  suite;
 - every test that names a route whose view the change reaches, by its name
   (`reverse("control_plane:detail")`) or by a path it answers
   (`"/infrastructure/topology/"`, an f-string's field filling a converter),
@@ -426,31 +431,38 @@ The tests it selects are:
 
 A run runs its selection however wide it is. `--whole` runs the whole suite
 with every quick gate instead, whatever changed: the landing asks for it, and
-its pass records the tree and its map.
+its pass records the tree.
 
-A whole run also measures which test modules ran each Python file, as
-pytest-testmon does: coverage runs with its C tracer and a context per test
-module, switched before the module's fixtures
-(`hq/platform/core/coverage_contexts.py`), since `sys.monitoring`, coverage's
-default core, records a line once per process. Its pass keeps that map by
-its tree, under `$(git rev-parse --git-common-dir)/severino/fast-maps/`
-(`tools/gate/testmap.py`); a run that is not whole measures nothing. With a
-map on HEAD's first-parent history, fast also selects from the change since
-the map's tree, and runs whichever selection has fewer modules:
+CI's Map job records which test modules ran each line of each Python file,
+on every push to main and on a pull request's head: coverage runs the whole
+suite with its C tracer and a context per test module, switched before the
+module's fixtures (`hq/platform/core/coverage_contexts.py`), since
+`sys.monitoring`, coverage's default core, records a line once per process
+(`mise run fast:map`). The contexts make the run much slower, so no gate
+records; nothing waits on the job, and its failure never fails CI. It keeps
+the map, coverage's own `contexts_by_lineno`, as the artifact `fast-map` of
+the commit it checked out. fast fetches through gh the map of the nearest
+commit on HEAD's first-parent history, as far back as `MAP_REACH` in
+`tools/gate/chain.py`, into `$(git rev-parse --git-common-dir)/severino/fast-line-maps/`
+(`tools/gate/testmap.py`), and says where its map came from, or that none
+was in reach. It then also selects from the change since the map's own
+commit, whose lines the map numbers, and runs whichever selection has fewer
+modules:
 
 - a Python file the map holds, changed only inside function bodies (a
-  function's docstring aside), selects the test modules that ran it, and
-  not the tests of its routes: such a change does nothing at import, and a
-  test that ran none of the file runs what it ran before until it reaches
-  another changed file, which selects it;
-- a changed test module reaches no route either;
+  function's docstring aside), selects the test modules that ran each body
+  the change touches, as `git diff -U0` against that commit numbers its
+  lines, and no importer, route or app: such a change does nothing at
+  import, and a test that ran none of those bodies runs what it ran before
+  until it reaches another changed file, which selects it;
+- a changed test module reaches no route;
 - every other path (a module-level line, a template, a migration, a file
   the map does not hold) selects by the rules above, and so does a test
   module the recording did not run.
 
-The import, task and naming rules apply to every changed file either way,
-which keeps the tests that run a file in a subprocess, which coverage does
-not attribute.
+The task and naming rules apply to every changed file either way, which
+keeps the tests that run a file in a subprocess, which coverage does not
+attribute.
 
 Before the tests it runs each quick gate the change affects, as mise's
 `--affected` reads it from the base: a quick gate is a task tagged
@@ -600,21 +612,25 @@ beside it.
 
 ### Derived files
 
-`mise run fix` rewrites every file generated from a source, in the order each
-reads the last, then formats as the lint gates read:
+A file generated from a source is declared once, by the `lint:drift-*` gate
+that holds it, in `mise-tasks/lint.toml`: the gate is tagged `derived`, and its
+`vars.writes` names each file its fix mode writes whole (`vars.writes_part_of`,
+each hand-written file it writes a section of, as the SDK's table in
+`docs/Plugins.md`). `mise tasks -x --hidden --tag derived` lists them. Adding
+one is its writer and that gate; everything else reads the declaration:
 
-1. `hq_sdk/contract.json`, with the SDK's text examples and the table in
-   `docs/Plugins.md`;
-2. the machine API's OpenAPI document;
-3. the controller's contracts from the connection registry, and the Go types
-   generated from them;
-4. `docs/Connections.md`, from what the providers declare;
-5. the JSON Schema of a procedure's sidecar, from the model HQ validates one
-   with ([Declaring a playbook](Architecture.md#declaring-a-playbook));
-6. the served font, cut to the characters HQ prints.
+- `mise run fix` (`fix:derived`) runs every derived gate's fix mode, then
+  `go generate` for the Go types the controller's contracts feed, which
+  `lint:controller` holds and declares in its own `vars.writes`;
+- `.gitattributes` marks each declared file `linguist-generated`, written by
+  `lint:drift-gitattributes` (a hand-written attribute goes in a
+  `.gitattributes` in its own directory);
+- `tools/tests/test_drift_gates.py` deletes a gate's files, runs the command
+  its failure names and then its fix mode, and fails on a file the fix writes
+  that its declaration leaves out, or one it declares and does not write.
 
-It then lowers each count in `tools/lint/eslint-suppressions.json` that has
-fallen to what ESLint finds (`fix:suppressions`), so a change that removes a
+`mise run fix` then formats as the lint gates read. It also lowers each count
+in `tools/lint/eslint-suppressions.json` that has fallen to what ESLint finds (`fix:suppressions`), so a change that removes a
 suppressed problem leaves its count right. A count that rose is a new problem:
 `fix` leaves it, and `lint:js` refuses it.
 
@@ -653,10 +669,25 @@ HQ_LOCAL_PYTHONPATH=<worktree>/packages/<name>/src mise run test --composed
 HQ_LOCAL_PLUGINS=tests.fixtures.example_hq_plugin.plugin:plugin mise run dev:scratch
 ```
 
-Only the composed suite, the dev servers and `mise run dev:look --composed`
-load the set. The suite and the look load it through
-`tools/lib/extension-set.sh`, whose first line names the `src` each package is
-imported from, so a run says which tree it composed.
+Every step that composes the set (the composed suite, the dev servers and
+`manage --scratch`, perf and its base, `dev:look --composed` and its base,
+`image:compose`, `audit:mcp`, `audit:memory`, `audit:registry --composed` and
+`wire-pocket-id`) loads the set as one host tree can load it, picked in one
+place, `pick` in `tools/dev/extension_set.py`. A file task reaches it through
+`tools/lib/extension-set.sh`. Each package is asked the plugin API its
+manifest requires, beside the `PLUGIN_API_VERSION` of the host tree or commit
+the step runs:
+
+- every package requires it: the trees named are composed as they stand;
+- a repository's packages require another: its newest commit on HEAD whose
+  manifests all require the host's API, made before the host moved on from
+  the commit it stands on, is composed instead, unpacked once per commit
+  under `var/extensions/` (an extension's later commit at the same API may use
+  what the host added since);
+- no commit does: no extension is composed, and the step runs the host alone.
+
+The step's first line says which: the `src` each package is imported from, the
+commit picked and why, or why none is composed.
 
 `mise run test --composed` runs the suite as the image does: in a copy of only
 the files `Dockerfile.dockerignore` admits, less what the Dockerfile's
@@ -895,9 +926,10 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    a push to its forge, since these refs publish nothing. fast's default base is resolved here too, from this
    checkout's chain of passed trees, which is also synced there with its maps,
    so it selects what it would select here. A run that may compose (the
-   composed suite, fast) sends the extension checkout `HQ_LOCAL_PYTHONPATH`
-   names the same way, to the clone of the same name beside HQ's there, with
-   `HQ_LOCAL_PLUGINS`; one that cannot send it runs here.
+   composed suite, fast, perf, and a look that runs perf) sends the extension
+   checkout `HQ_LOCAL_PYTHONPATH` names the same way, to the clone of the same
+   name beside HQ's there, with `HQ_LOCAL_PLUGINS`, and the set is picked
+   there from what was sent; one that cannot send it runs here.
 2. There, the run takes the first free worktree of this checkout's under
    `~/.cache/hq-gates` (the checkout is keyed by its machine and path), held
    with `flock` until the run ends, so two runs at once never share one and
@@ -919,7 +951,8 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    naming each file it changed.
 4. What it wrote comes back, archived there as the run ends, while the
    worktree is still its own: each `var/gate/` verdict that names the tree
-   sent (any other is left there, and said so), the logs and `var/look/`.
+   sent (any other is left there, and said so), the logs, `var/look/` and
+   `var/perf/`.
    A pass fast recorded there is recorded here only then, its file naming the
    machine it ran on.
 
@@ -1272,7 +1305,8 @@ finds is written in the run's folder (`<page>-<width>.txt`) as the run goes, so 
 once the run ends; a run that fails prints each page's first finding, its
 check named first. Console errors, uncaught script errors and policy refusals
 are judged as findings are: without a base any fails the run, against one only
-a new one does. A file a page can read (one of `SURVEY_INPUTS`) that changes
+a new one does. A file a page or the look can read (`SURVEY_INPUTS` in
+`hq/platform/core/tests/look.py`, with the look's own code) that changes
 while the run draws is named in its last line with the tree it began on: what
 it found stands, and the gate keeps no pass of a tree that moved (`tree -`).
 
@@ -1399,11 +1433,14 @@ have been measured under a one-minute load average within 2 of the load the
 tip is measured under; a report that kept no load stands in for nothing. The
 closing line names both loads beside the run the base is kept from.
 
-A tree whose start fails where its HQ cannot load the extension set but loads
-the host alone (`manage.py check` run both ways), such as a base older than an
-extension's plugin API or an import it needs, makes the run measure the host
-alone on both sides, as `--host-alone` asks, so the extensions' cost is never
-counted as the change's. Its closing line names the error the set stopped at.
+Each side composes the extension set its own commit can load
+([The extension set](#the-extension-set)): a base at another plugin API
+composes the extensions' newest commit at that API. A base that can load no
+commit of them, or whose start fails where its HQ cannot load its set but
+loads the host alone (`manage.py check` run both ways), such as an import an
+extension needs that the base lacks, makes the run measure the host alone on
+both sides, as `--host-alone` asks, so the extensions' cost is never counted
+as the change's. Its closing line says why.
 
 With `--base`, one page takes about 40 s (under 30 with the base kept) and
 every page about two and a half minutes (two with the base kept).

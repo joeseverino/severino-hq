@@ -14,6 +14,7 @@ from hq.domains.control_plane.observations.adguard import (
 )
 
 from .finding_model import Finding, FindingEstate, FindingRule
+from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted
 
@@ -34,7 +35,7 @@ def _switched_off(estate: FindingEstate, fact: str, rule: str, setting: str, exp
             rule=rule,
             subject=node.id,
             title=f"AdGuard {setting.lower()} is off on {node.label}",
-            severity="attention",
+            severity=Tone.ATTENTION,
             explanation=explanation,
             evidence=((setting, "Off"),),
         )
@@ -72,7 +73,7 @@ def plain_upstream(estate: FindingEstate) -> tuple[Finding, ...]:
                     f"{', '.join(hosts) if len(hosts) <= 2 else counted(len(hosts), 'server')} "
                     "unencrypted"
                 ),
-                severity="neutral",
+                severity=Tone.NEUTRAL,
                 explanation=(
                     "Your internet provider, and anyone else on the way, can see every name your devices look up."
                 ),
@@ -95,7 +96,7 @@ def unused_names(estate: FindingEstate) -> tuple[Finding, ...]:
             rule="dns-name-unused",
             subject=services.get(name, node.id),
             title=f"No device looked up {name}",
-            severity="neutral",
+            severity=Tone.NEUTRAL,
             explanation=(
                 "AdGuard has a record for it, and no device asked for it in "
                 f"the time AdGuard's query log covers, {UNUSED_AFTER_HOURS} hours or more."
@@ -114,41 +115,41 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         name="dns-protection-off",
         title="DNS protection is off",
-        severity="attention",
+        severity=Tone.ATTENTION,
         detect=protection_off,
         operator_action="Turn protection back on in AdGuard.",
         no_help_reason=_CANNOT_SWITCH_ON,
-        bars={"attention": "AdGuard's protection is switched off"},
+        bars={Tone.ATTENTION: "AdGuard's protection is switched off"},
     ),
     FindingRule(
         name="dns-filtering-off",
         title="DNS filtering is off",
-        severity="attention",
+        severity=Tone.ATTENTION,
         detect=filtering_off,
         operator_action="Turn filtering on under Filters, DNS blocklists in AdGuard.",
         no_help_reason=_CANNOT_SWITCH_ON,
-        bars={"attention": "AdGuard's filtering is switched off"},
+        bars={Tone.ATTENTION: "AdGuard's filtering is switched off"},
     ),
     FindingRule(
         name="dns-plain-upstream",
         title="DNS lookups sent unencrypted",
-        severity="neutral",
+        severity=Tone.NEUTRAL,
         detect=plain_upstream,
         operator_action=(
             "Replace each one with its DNS-over-TLS or DNS-over-HTTPS address under Settings, DNS settings in AdGuard."
         ),
         no_help_reason="HQ cannot change AdGuard's upstream servers.",
-        bars={"neutral": "an upstream server takes lookups unencrypted"},
+        bars={Tone.NEUTRAL: "an upstream server takes lookups unencrypted"},
     ),
     FindingRule(
         name="dns-name-unused",
         title="A name nothing looks up",
-        severity="neutral",
+        severity=Tone.NEUTRAL,
         detect=unused_names,
         operator_action=(
             "If nothing uses it, remove the service. If something should, check that device uses AdGuard for DNS."
         ),
         no_help_reason="HQ cannot tell whether anything still needs it.",
-        bars={"neutral": "nothing has looked up a name AdGuard answers"},
+        bars={Tone.NEUTRAL: "nothing has looked up a name AdGuard answers"},
     ),
 )

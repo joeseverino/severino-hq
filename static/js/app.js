@@ -189,19 +189,7 @@ document.addEventListener("submit", (event) => {
   if (!form) return;
 
   form.setAttribute("aria-busy", "true");
-  // The form's data is gathered after this event, and a disabled button is
-  // left out of it, so the value of the one pressed (a switch's yes or no)
-  // goes along as a hidden field.
-  const pressed = event.submitter;
-  form.querySelectorAll("input[data-pressed]").forEach((earlier) => earlier.remove());
-  if (pressed?.name) {
-    const carried = document.createElement("input");
-    Object.assign(carried, { type: "hidden", name: pressed.name, value: pressed.value });
-    carried.dataset.pressed = "";
-    form.append(carried);
-  }
   form.querySelectorAll("button[type=submit], input[type=submit]").forEach((control) => {
-    control.disabled = true;
     if (control instanceof HTMLButtonElement && form.dataset.submitLabel) {
       control.textContent = form.dataset.submitLabel;
     }
@@ -209,6 +197,16 @@ document.addEventListener("submit", (event) => {
 
   const status = form.querySelector("[data-submit-status]");
   if (status) status.hidden = false;
+});
+// A disabled button is left out of the form's data, which is gathered after
+// the submit event, so the buttons are disabled once it is: the one pressed
+// (a switch's yes or no) goes along as a native submit sends it.
+document.addEventListener("formdata", (event) => {
+  const form = event.target;
+  if (!form.matches("form[data-submit-busy][aria-busy=true]")) return;
+  form.querySelectorAll("button[type=submit], input[type=submit]").forEach((control) => {
+    control.disabled = true;
+  });
 });
 
 // Choosing what a command acts on loads that record's current values into
@@ -392,9 +390,11 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
     const chosen = zone?.querySelector("[data-dropzone-files]");
     if (!chosen || !input.matches("input[type=file]")) return;
     const files = Array.from(input.files || []);
+    // Each a line the zone draws for it (_dropzone.html).
+    const line = zone.querySelector("template[data-dropzone-file]").content.firstElementChild;
     chosen.replaceChildren(
       ...files.map((file) => {
-        const row = document.createElement("li");
+        const row = line.cloneNode(true);
         row.textContent = `${file.name} · ${Math.max(1, Math.round(file.size / 1024))} KB`;
         return row;
       }),
@@ -415,10 +415,9 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
   // Touch already has the chart's data table, which is always rendered.
   if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
 
-  const tip = document.createElement("div");
-  tip.className = "chart-tip";
-  tip.hidden = true;
-  document.body.append(tip);
+  // eslint-disable-next-line no-restricted-syntax -- the frame's tip (base.html), which no fragment holds
+  const tip = document.querySelector("[data-tip-shown]");
+  if (!tip) return;
 
   const place = ({ clientX, clientY }) => {
     // Measured after the text is set, so a tooltip near an edge flips to the
@@ -519,12 +518,7 @@ document.addEventListener("click", (event) => {
     row.querySelector("input").value = "";
     // The spare row has nothing to remove; a row added here does.
     if (!row.querySelector("[data-name-list-remove]")) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "btn ghost";
-      button.dataset.nameListRemove = "";
-      button.textContent = "Remove";
-      row.append(button);
+      row.append(list.querySelector("template[data-name-list-remover]").content.firstElementChild.cloneNode(true));
     }
     last.after(row);
     row.querySelector("input").focus();
@@ -585,7 +579,7 @@ document.addEventListener("click", (event) => {
 
 // A long form's closing row is pinned to the screen once there is something
 // to save: the first edit marks the form, and a press that only posts
-// another form (a row's post_button) is no edit and marks nothing.
+// another form (a row's posting button) is no edit and marks nothing.
 document.addEventListener("input", (event) => {
   const form = event.target.form;
   if (form?.querySelector(".save-bar")) form.dataset.changed = "";
@@ -595,13 +589,15 @@ document.addEventListener("input", (event) => {
 // listener for the page, so a block drawn later (a fragment, an opened row)
 // copies the same way. The button (`data-copy`) copies the <pre> of the
 // nearest box around it that holds one, which is plain selectable text too.
+// A no-break space `|breakable` holds two words with is copied as the space
+// it stands for, as a selection copies it: a shell or a parser reads only that.
 document.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-copy]");
   if (!button) return;
   const source = button.closest(":has(> pre)")?.querySelector(":scope > pre");
   if (!source) return;
   try {
-    await navigator.clipboard.writeText(source.textContent.trim());
+    await navigator.clipboard.writeText(source.textContent.trim().replaceAll("\u00a0", " "));
     button.textContent = "Copied";
   } catch {
     button.textContent = "Select it to copy";

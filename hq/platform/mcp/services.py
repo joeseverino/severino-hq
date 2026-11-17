@@ -241,7 +241,7 @@ def audit_registry() -> RegistryAudit:
     `documentation_status` covers the docs that exist.
     """
 
-    return audit_application_registry(principal=current_principal())
+    return audit_application_registry()
 
 
 @tool("Export a year summary", requires=holding(Capability.READ), budget=Budget(4_700, frozendict({"year": 2026})))
@@ -277,7 +277,7 @@ def recent_activity(*, limit: int = 25) -> RecentActivity:
     It needs the `read_audit_log` permission. `dashboard_snapshot` reads
     what needs doing.
     """
-    return read_models.recent_activity(principal=current_principal(), limit=limit)
+    return read_models.recent_activity(limit=limit)
 
 
 @tool("HQ health check", requires=holding(Capability.READ), budget=Budget(200))
@@ -288,12 +288,12 @@ def system_health() -> SystemHealth:
     doing. The `status-brief` prompt returns health and open problems
     together.
     """
-    return read_models.system_health(principal=current_principal())
+    return read_models.system_health()
 
 
-@tool("HQ at a glance", requires=holding(Capability.READ), budget=Budget(7_600))
+@tool("HQ at a glance", requires=holding(Capability.READ), budget=Budget(8_200))
 def dashboard_snapshot() -> AgentSnapshot:
-    """What needs doing in HQ: its figures, the most urgent items in the queue and the docs due a review.
+    """What needs doing in HQ: its figures and the most urgent items in the queue.
 
     Call it first for what needs doing. `system_health` says whether HQ
     answers, and `get_findings` what is wrong. The `status-brief` prompt

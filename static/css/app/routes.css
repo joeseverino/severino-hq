@@ -3,7 +3,7 @@
 
 @layer components {
 
-/* A route (control_plane/_path_hops.html): one surface, each hop a stop on
+/* A route (partials/_path_hops.html): one surface, each hop a stop on
    one line, its icon on the line. Down the box, as the connection panel draws
    its route, unless every hop fits across it whole: then across, one row,
    never wrapped onto a second where the line would run off the page's edge.
@@ -11,7 +11,7 @@
    card and on a phone. */
 .route { container: route / inline-size; margin: 0 0 var(--stack-gap); padding: var(--surface-inset, var(--space-6) var(--space-8)); }
 .route:last-child { margin-bottom: 0; }
-.request-path { display: grid; margin: 0; padding: 0; list-style: none; }
+.request-path { display: grid; }
 .request-path li {
   position: relative;
   display: grid;
@@ -102,7 +102,7 @@ kbd {
 
 /* ── Messages ───────────────────────────────────────────────────── */
 
-.messages { list-style: none; padding: 0; margin: 0 0 var(--space-8); }
+.messages { margin: 0 0 var(--space-8); }
 /* Among the page's messages a notice is a toast: the same part, set close,
    one to a line. */
 .messages > li + li { margin-top: var(--space-3); }
@@ -143,11 +143,6 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 
 /* ── Responsive ─────────────────────────────────────────────────── */
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition: none !important; animation: none !important; }
-}
-
-
 /* Sections behind one control. Below this width the bar cannot hold every
    section beside the brand and the account chip, and a second row is not the
    answer: it spends chrome on every page before any of them begins. The
@@ -162,9 +157,9 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   /* Matches the collapsed search button and the account chip exactly, so it
      reads as the same kind of control as the ones beside it. */
   .nav-toggle { display: inline-flex; grid-area: toggle; align-items: center; justify-content: center;
-    inline-size: var(--control-size); block-size: var(--control-size); min-height: 0; padding: 0;
+    inline-size: var(--control-size); block-size: var(--control-size);
     border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm);
-    background: var(--bar-control-bg); color: var(--ink-2); box-shadow: none;
+    background: var(--bar-control-bg); color: var(--ink-2);
   }
   .nav-toggle > svg { width: 15px; height: 12px; }
   .nav-toggle:hover { border-color: var(--bar-control-line); background: var(--bar-control-bg-hover); }
@@ -189,22 +184,30 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   box-shadow: var(--shadow-pop);
 }
 .primary-nav:popover-open > a,
-.primary-nav:popover-open .nav-group > button {
+.primary-nav:popover-open .nav-group-button {
   min-height: 44px;
   padding: var(--space-4) var(--space-5);
   font-size: var(--text-md);
 }
-.primary-nav:popover-open .nav-group > button { display: flex; inline-size: 100%; }
-/* A section's own links fly out beside the list, from its row down: a
+.primary-nav:popover-open .nav-group-button { display: flex; inline-size: 100%; }
+/* A section's own links fly out beside the list, level with its row: a
    popover is drawn over the page, never in the list's flow. The list is
    anchored to the right edge, so the room is to its left; a screen with
-   none there takes them below the row. */
+   none there takes them below the row. They hang from the row down or up
+   from it, on the side with more height, and a section taller than that
+   side is held to it and scrolls, so every link of a long section low on a
+   short screen can be reached: the pattern of the spec's own example for
+   `position-try-order`. */
 .primary-nav:popover-open .nav-group-panel {
   position-area: inline-start span-block-end;
-  position-try-fallbacks: block-end span-inline-start;
+  position-try-fallbacks: --nav-panel-down-scrolling, inline-start span-block-start, --nav-panel-up-scrolling, block-end span-inline-start;
+  position-try-order: most-block-size;
+  overflow-y: auto;
   margin: 0 var(--space-3) 0 0;
   min-width: 168px;
 }
+@position-try --nav-panel-down-scrolling { position-area: inline-start span-block-end; max-block-size: 100%; }
+@position-try --nav-panel-up-scrolling { position-area: inline-start span-block-start; max-block-size: 100%; }
 .primary-nav:popover-open .nav-group-panel a {
   min-height: 44px;
   display: flex;

@@ -2,14 +2,14 @@
 
 An action item is open until its owner stops raising it. A person who will not
 act on one now sets it aside: it leaves their queue and their counts and waits
-below until the revision set aside (``item_revision``) moves. Setting one aside
-never touches another.
+below until the revision set aside (``item_revision``) moves or it is raised
+again after clearing. Setting one aside never touches another.
 """
 
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal, TypedDict
 
 from django.core.exceptions import ValidationError
@@ -20,17 +20,15 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import ActionItemRead, AuditLog
 
 from .command_fields import Describe
+from .moments import moment
 from .projection import projection_scope
 from .security import Principal, person
 lazy from . import dashboard
-lazy from .attention import readable_by
 lazy from .decisions import decision
 lazy from .domains import attention_urls
-lazy from .findings import rule_of
-lazy from .routes import reverse
 
-# How long a set-aside mark outlives its item. Long enough that a finding which
-# clears and returns within a sweep or two is still recognized as set aside.
+# How long a set-aside mark outlives its item before it is deleted. A mark
+# never hides an item raised again after it (``with_aside_state``).
 FORGET_AFTER = timedelta(days=30)
 
 # The capabilities a person sets items aside, and brings them back, through.
@@ -57,10 +55,9 @@ class RestoreCommand:
     keys: Annotated[list[str], Describe("The set-aside items to bring back into the queue.")]
 
 
-def item_key(source_id: str, item: Any) -> str:
-    # An item is identified by what it is about: its source and key.
-    about = item.key or f"{item.eyebrow}:{item.title}"
-    return f"{source_id}:{about}"[:200]
+def item_key(source_id: str, key: str) -> str:
+    # An item is identified by what it is about: its source and its finding's key (``findings.finding_key``).
+    return f"{source_id}:{key}"[:200]
 
 
 def item_revision(item: Any) -> str:
@@ -72,16 +69,41 @@ def item_revision(item: Any) -> str:
     """
 
     seen = ["notice", item.body] if item.notice else [item.status, item.magnitude or 1]
+    # A set-aside revision is stored as this digest of spaced JSON; on
+    # digest's form every item set aside would come back.
+    # ast-grep-ignore: json-digest-by-digests
     return hashlib.sha256(json.dumps(seen).encode()).hexdigest()[:16]
 
 
-def with_aside_state(items: list[dict[str, Any]], user) -> list[dict[str, Any]]:
-    """The items, each with whether ``user`` set this revision of it aside. One query."""
+def sortable(item: dict[str, Any]) -> bool:
+    """Whether a reader may set ``item`` aside: a held request is decided,
+    never set aside, so it waits until decided and no mark hides it."""
 
-    aside = dict(
-        ActionItemRead.objects.filter(user=user, key__in=[item["key"] for item in items]).values_list("key", "revision")
-    )
-    return [{**item, "aside": aside.get(item["key"]) == item["revision"]} for item in items]
+    return not item.get("held")
+
+
+def with_aside_state(items: list[dict[str, Any]], user) -> list[dict[str, Any]]:
+    """The items, each with whether ``user`` set it aside. One query.
+
+    A mark hides the revision it was made at, and only while the item stands
+    as it stood then: one raised anew since (its ``since`` after the mark,
+    which a cleared item's return moves) is back in the queue.
+    """
+
+    marks = {
+        key: (revision, read_at)
+        for key, revision, read_at in ActionItemRead.objects.filter(
+            user=user, key__in=[item["key"] for item in items]
+        ).values_list("key", "revision", "read_at")
+    }
+    return [{**item, "aside": sortable(item) and _hidden(item, marks.get(item["key"]))} for item in items]
+
+
+def _hidden(item: dict[str, Any], mark: tuple[str, datetime] | None) -> bool:
+    if mark is None or mark[0] != item["revision"]:
+        return False
+    since = moment(item.get("since") or "")
+    return since is None or since <= mark[1]
 
 
 def waiting_count(items: list[dict[str, Any]], user) -> int:
@@ -190,29 +212,12 @@ def _entry(entry: dict[str, Any]) -> dict[str, Any]:
 
 def _offered(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """What a family's row offers: the recommended action every item shares,
-    else, for the findings of one rule, the list of them."""
+    which acts on them all, or nothing beside the fold that opens them."""
 
     decided = [decision(item)["actions"] for item in items]
     common = set.intersection(*({(action["method"], action["url"]) for action in actions} for actions in decided))
-    shared = [action for action in decided[0] if action["recommended"] and (action["method"], action["url"]) in common]
-    if shared:
-        return shared[:1]
-    rules = {rule_of(str(item.get("key", ""))) for item in items}
-    if len(rules) != 1 or "" in rules:
-        return []
-    url = f"{reverse('control_plane:findings')}?rule={rules.pop()}"
-    return [
-        {
-            "name": "open",
-            "label": f"Open all {len(items)}",
-            "effect": "read",
-            "url": url,
-            "method": "GET",
-            "capability": "",
-            "target": "",
-            "reason": "",
-            "recommended": True,
-        }
+    return [action for action in decided[0] if action["recommended"] and (action["method"], action["url"]) in common][
+        :1
     ]
 
 
@@ -322,7 +327,7 @@ def set_items_aside(command: SetAsideCommand, *, principal: Principal) -> ItemsA
         dismiss_rows(user, command.rows)
         if command.keys:
             with projection_scope():
-                set_aside(user, command.keys, aside=True, current=readable_by(principal, dashboard.work_queue()))
+                set_aside(user, command.keys, aside=True, current=dashboard.readable_queue(principal))
         count = len(command.rows) + len(command.keys)
         _audit(user, "Set items aside.", count)
     return {"ok": True, "count": count}

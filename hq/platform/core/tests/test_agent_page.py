@@ -14,9 +14,9 @@ from django.utils import timezone
 
 from hq.platform.application import agent_access, agent_registry, denials, roles
 from hq.platform.application.linked_accounts import SIGN_IN
+from hq.platform.application.markup_testing import elements, select, text, within
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import Capability, Principal, agent_grant, agent_grantable, agent_principal
-from hq.platform.application.tests.markup import elements, select, text, within
 from hq.platform.application.tokens import DEVICE_SCOPE
 from hq.platform.core.audit import operation_context
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog, LinkedAccount, OwnDevice

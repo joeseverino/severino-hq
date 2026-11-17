@@ -14,9 +14,11 @@ from datetime import date
 from difflib import SequenceMatcher
 from typing import Any
 
+from hq.platform.core.digests import canonical
+
 from .labels import field_label, lower_first
+from .moments import moment
 from .printable import admitted
-from .timestamps import moment
 from .ui import counted
 lazy from .moments import when
 
@@ -81,14 +83,48 @@ def _record_words(record: Mapping[Any, Any]) -> str:
     )
 
 
+# How many records of a list are said by name before the rest are counted.
+NAMED = 3
+
+
 def _list_words(items: list[Any], schema: Mapping[str, Any] | None) -> str:
-    """A list of plain values said as those values, any other counted by what
-    its schema calls one item, when that is a single word."""
+    """A list of plain values said as those values, a list of records each
+    known by a name of its own (``entry_names``) as its first names and a count
+    of the rest, any other counted by what its schema calls one item, when that
+    is a single word."""
 
     if all(_scalar(item) for item in items):
         return ", ".join(value_words(item) for item in items)
+    names = entry_names(items)
+    if items and all(names):
+        said = ", ".join(names[:NAMED])
+        return said if len(names) <= NAMED else f"{said} and {counted(len(names) - NAMED, 'more', 'more')}"
     noun = lower_first(_items_title(schema))
     return counted(len(items), noun if noun and " " not in noun else "entry")
+
+
+def _entry_name(entry: Any) -> str:
+    """What a record in a list is known by: its first field that holds text
+    (a grant's sources, a location's path, a doc's id), or nothing."""
+
+    entry = document(entry)
+    if not isinstance(entry, Mapping):
+        return ""
+    for value in entry.values():
+        if isinstance(value, str) and value.strip():
+            return value_words(value)
+        if isinstance(value, (list, tuple)) and value and all(isinstance(item, str) for item in value):
+            return value_words(value)
+    return ""
+
+
+def entry_names(items: list[Any]) -> list[str]:
+    """Each entry's name (``_entry_name``) where no other entry of the list
+    shares it, so a name points at one entry; "" where it has none."""
+
+    names = [_entry_name(item) for item in items]
+    shared = {name for name in names if names.count(name) > 1}
+    return [name if name not in shared else "" for name in names]
 
 
 def _plain_words(value: Any) -> str:
@@ -137,6 +173,21 @@ STEP = " › "
 _ABSENT = sentinel("_ABSENT")
 
 
+@dataclass(frozen=True, slots=True)
+class Entry:
+    """A step into a list of records: the entry's position, and the name it is
+    known by in its list, when it has one of its own (``entry_names``)."""
+
+    index: int
+    name: str = ""
+
+    def __str__(self) -> str:
+        return self.name or f"Entry {self.index + 1}"
+
+
+type Path = tuple[str | Entry, ...]
+
+
 def document(value: Any) -> Any:
     """A string that is really a JSON document, read as one.
 
@@ -152,7 +203,7 @@ def document(value: Any) -> Any:
     return value
 
 
-def _leaves(value: Any, path: tuple[str | int, ...]) -> dict[tuple[str | int, ...], Any]:
+def _leaves(value: Any, path: Path) -> dict[Path, Any]:
     """Each value a document holds, by where it is: a record is opened by key,
     a list of records by position. A list of plain values is one value, said
     as its words.
@@ -160,28 +211,28 @@ def _leaves(value: Any, path: tuple[str | int, ...]) -> dict[tuple[str | int, ..
 
     value = document(value)
     if isinstance(value, Mapping) and value:
-        found: dict[tuple[str | int, ...], Any] = {}
+        found: dict[Path, Any] = {}
         for key, child in value.items():
             found.update(_leaves(child, (*path, str(key))))
         return found
     if isinstance(value, (list, tuple)) and not all(_scalar(item) for item in value):
         found = {}
-        for index, child in enumerate(value):
-            found.update(_leaves(child, (*path, index)))
+        for index, (child, name) in enumerate(zip(value, entry_names(list(value)), strict=True)):
+            found.update(_leaves(child, (*path, Entry(index, name))))
         return found
     return {path: value}
 
 
-def path_words(path: tuple[str | int, ...]) -> str:
+def path_words(path: Path) -> str:
     """Where a value is in a document, as a person names it: each key as a
-    field label, each list position as its entry ("Grants › Entry 1 › Src").
+    field label, each entry of a list by its name, else its position
+    ("Grants › group:admins › Dst", "Grants › Entry 1 › Src").
 
     A key that is not a name (a hostname, a tag) is said as it is written.
     """
 
     return STEP.join(
-        f"Entry {step + 1}" if isinstance(step, int) else field_label(step) if step.isidentifier() else step
-        for step in path
+        str(step) if isinstance(step, Entry) else field_label(step) if step.isidentifier() else step for step in path
     )
 
 
@@ -201,7 +252,12 @@ def _record_list(value: Any) -> bool:
     return isinstance(value, (list, tuple)) and not all(_scalar(item) for item in value)
 
 
-def _differences(before: Any, after: Any, path: tuple[str | int, ...]) -> list[ChangeRow]:
+# A row as it is found, beside its place: its path with each entry by its
+# position alone, so an entry removed where another is added shares it.
+type Found = list[tuple[tuple[str | int, ...], ChangeRow]]
+
+
+def _differences(before: Any, after: Any, path: Path) -> Found:
     before, after = document(before), document(after)
     if isinstance(before, Mapping) and before and isinstance(after, Mapping) and after:
         # In the document's own order, then what only the new one holds.
@@ -216,26 +272,33 @@ def _differences(before: Any, after: Any, path: tuple[str | int, ...]) -> list[C
     return _leaf_rows(before, after, path)
 
 
-def _leaf_rows(before: Any, after: Any, path: tuple[str | int, ...]) -> list[ChangeRow]:
+def _leaf_rows(before: Any, after: Any, path: Path) -> Found:
     """Each value two documents hold at the same place that differs, where
     their shapes give nothing to match: a record or list on one side only is
     opened by key and position (``_leaves``)."""
 
     was_all = {} if before is _ABSENT else _leaves(before, path)
     now_all = {} if after is _ABSENT else _leaves(after, path)
+    places = {_place(at): at for at in [*was_all, *now_all]}
+    was_at = {_place(at): value for at, value in was_all.items()}
+    now_at = {_place(at): value for at, value in now_all.items()}
     return [
-        row
-        for at in [*was_all, *(at for at in now_all if at not in was_all)]
-        if (row := _row(at, was_all.get(at, _ABSENT), now_all.get(at, _ABSENT))) is not None
+        found
+        for place, at in places.items()
+        if (found := _row(at, was_at.get(place, _ABSENT), now_at.get(place, _ABSENT))) is not None
     ]
 
 
-def _row(path: tuple[str | int, ...], was: Any, now: Any) -> ChangeRow | None:
+def _place(path: Path) -> tuple[str | int, ...]:
+    return tuple(step.index if isinstance(step, Entry) else step for step in path)
+
+
+def _row(path: Path, was: Any, now: Any) -> tuple[tuple[str | int, ...], ChangeRow] | None:
     was_words = "" if was is _ABSENT else value_words(was)
     now_words = "" if now is _ABSENT else value_words(now)
     if was_words == now_words:
         return None
-    return ChangeRow(
+    return _place(path), ChangeRow(
         label=path_words(path),
         before=was_words,
         after=now_words,
@@ -247,7 +310,7 @@ def _canonical(value: Any) -> str:
     """An entry as text that two equal entries share, to match it by."""
 
     try:
-        return json.dumps(document(value), sort_keys=True, default=str)
+        return canonical(document(value))
     except TypeError:
         return repr(value)
 
@@ -259,21 +322,24 @@ _ALIKE = 0.75
 _WINDOW = 10
 
 
-def _entries(before: list[Any], after: list[Any], path: tuple[str | int, ...]) -> list[ChangeRow]:
+def _entries(before: list[Any], after: list[Any], path: Path) -> Found:
     """Two lists of records compared as ``git diff`` compares lines: the
     longest runs of equal entries are matched (``difflib.SequenceMatcher``,
     without its heuristic that treats a common entry of a long list as junk),
     and in what lies between, an entry alike enough to one on the other side
-    is read as that entry changed, field by field, and named where it now
-    stands. Every other entry comes or goes whole, as one row."""
+    is read as that entry changed, field by field, at the place it now stands,
+    by the name it was known by, so the field that names it may move under
+    it. Every other entry comes or goes whole, as one row."""
 
     was, now = [_canonical(entry) for entry in before], [_canonical(entry) for entry in after]
-    rows: list[ChangeRow] = []
+    was_names, now_names = entry_names(before), entry_names(after)
+    rows: Found = []
 
     def whole(index: int, entry: Any, *, added: bool) -> None:
-        row = _row((*path, index), _ABSENT if added else entry, entry if added else _ABSENT)
-        if row is not None:
-            rows.append(row)
+        step = Entry(index, (now_names if added else was_names)[index])
+        found = _row((*path, step), _ABSENT if added else entry, entry if added else _ABSENT)
+        if found is not None:
+            rows.append(found)
 
     def unpaired(alo: int, ahi: int, blo: int, bhi: int) -> None:
         for index in range(alo, ahi):
@@ -301,22 +367,23 @@ def _entries(before: list[Any], after: list[Any], path: tuple[str | int, ...]) -
             if best is None:
                 continue
             unpaired(done_a, best, done_b, j)
-            rows.extend(_differences(before[best], after[j], (*path, j)))
+            rows.extend(_differences(before[best], after[j], (*path, Entry(j, was_names[best] or now_names[j]))))
             done_a, done_b = best + 1, j + 1
         unpaired(done_a, ahi, done_b, bhi)
     return rows
 
 
-def _coalesced(rows: list[ChangeRow]) -> tuple[ChangeRow, ...]:
+def _coalesced(rows: Found) -> tuple[ChangeRow, ...]:
     """One row per place: an entry removed where another is added, at the same
-    position, reads as that position changing from one to the other."""
+    position, reads as that position changing from one to the other, named as
+    the entry that now stands there."""
 
-    found: dict[str, ChangeRow] = {}
-    for row in rows:
-        was = found.get(row.label)
+    found: dict[tuple[str | int, ...], ChangeRow] = {}
+    for place, row in rows:
+        was = found.get(place)
         if was is None:
-            found[row.label] = row
+            found[place] = row
         else:
             gone, came = (was, row) if was.change == "removed" else (row, was)
-            found[row.label] = replace(gone, after=came.after, change="changed")
+            found[place] = replace(gone, label=came.label, after=came.after, change="changed")
     return tuple(found.values())

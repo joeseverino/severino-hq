@@ -5,29 +5,14 @@ import (
 	"bytes"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 )
 
 // MountChecker says whether a directory is backed by memory that never pages
 // to disk. Nil error is the only yes.
 type MountChecker func(dir string) error
-
-// unescape undoes mountinfo's octal escapes (\040 for a space).
-func unescape(field string) string {
-	var out strings.Builder
-	for i := 0; i < len(field); i++ {
-		if field[i] == '\\' && i+3 < len(field) {
-			if code, err := strconv.ParseUint(field[i+1:i+4], 8, 8); err == nil {
-				out.WriteByte(byte(code))
-				i += 3
-				continue
-			}
-		}
-		out.WriteByte(field[i])
-	}
-	return out.String()
-}
 
 // within reports whether dir is mount or lies under it.
 func within(dir, mount string) bool {
@@ -63,7 +48,7 @@ func CheckMountInfo(mountinfo []byte, dir string) error {
 		if separator < 6 || len(fields) < separator+4 {
 			continue
 		}
-		found := mount{point: unescape(fields[4]), fstype: fields[separator+1],
+		found := mount{point: hostcore.Unescape(fields[4]), fstype: fields[separator+1],
 			options: append(strings.Split(fields[5], ","), strings.Split(fields[separator+3], ",")...)}
 		if !within(dir, found.point) {
 			continue

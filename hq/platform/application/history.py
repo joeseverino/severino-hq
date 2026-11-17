@@ -40,11 +40,11 @@ lazy from hq.platform.core.audit_words import words_of
 lazy from hq.platform.core.models import AuditLog, object_type_label, object_type_plural
 
 from .doors import Attribution
-from .entity_links import container_link
+from .entity_links import container_link, web_url
 from .facts import inventory_records
 from .labels import lower_first, plural
+from .moments import moment
 from .routes import reverse
-from .timestamps import moment
 from .ui import counted
 lazy from .inventory import READING_AUDIT_TYPE
 
@@ -136,7 +136,7 @@ class Moment:
 
     @property
     def external(self) -> bool:
-        return self.url.startswith("https://")
+        return bool(web_url(self.url))
 
     @property
     def page(self) -> str:
@@ -352,8 +352,16 @@ class HistoryLine:
         return actions.pop() if len(actions) == 1 else self.events[0].action
 
     @property
+    def state(self) -> AuditLog.Action | str:
+        """Its action as the member its pill is drawn from; an action HQ no
+        longer names stays its word, drawn in no tone."""
+
+        return AuditLog.Action(self.action) if self.action in AuditLog.Action.values else self.action
+
+    @property
     def action_label(self) -> str:
-        return AuditLog.Action(self.action).label if self.action in AuditLog.Action.values else self.action
+        state = self.state
+        return state.label if isinstance(state, AuditLog.Action) else state
 
     @property
     def message(self) -> str:
@@ -582,6 +590,24 @@ def who_did_each(*asked: Acts) -> list[dict[str, Attribution]]:
     return found
 
 
+def asking(model: type, records: Iterable[Any], *, formerly: Iterable[str] = ()) -> Acts:
+    """The audit rows that created each of ``records``, of ``model``, under
+    its audit label or a label its older rows still carry (``formerly``),
+    read with others' by ``who_did_each``."""
+
+    labels = (audited_labels()[model], *formerly)
+    return Acts(labels, [record.pk for record in records], action=AuditLog.Action.CREATED)
+
+
+def asked_by(model: type, records: Iterable[Any], *, formerly: Iterable[str] = ()) -> dict[str, Attribution]:
+    """Who asked for each of ``records`` (a held change, a queued operation),
+    by id, from the audit row that created it; a record no row records is
+    left out."""
+
+    (found,) = who_did_each(asking(model, records, formerly=formerly))
+    return found
+
+
 def changes(since: datetime, until: datetime):
     """The audit rows that changed something, as the history counts them."""
 
@@ -628,7 +654,7 @@ def _deploys(since: datetime | None, until: datetime | None) -> list[Moment]:
                     "Deploy",
                     f"Deployed {sha} to {deployment.get('environment') or 'an environment'}".replace("  ", " "),
                     detail=str(record.get("repository") or ""),
-                    url=str(deployment.get("url") or ""),
+                    url=web_url(deployment.get("url")),
                     actor="GitHub",
                     like=(
                         "deploy",

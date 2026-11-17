@@ -1,23 +1,16 @@
-"""The files .gitattributes marks linguist-generated are the ones `mise run fix` writes.
+"""The files .gitattributes marks linguist-generated are the ones the tasks declare they write.
 
-audit:churn and GitHub's diff read the attribute, and the derived-file gates
-hold the writers, so a file one writes that the attribute misses is counted
-as hand-written change, and a marked file nothing writes is hidden from both.
+audit:churn and GitHub's diff read the attribute, so a declared file the
+attribute misses is counted as hand-written change, and a marked file nothing
+declares is hidden from both. lint:drift-gitattributes holds the file's text to
+the declarations; this holds what git reads in it.
 """
 
 import subprocess
 
 from django.test import SimpleTestCase, tag
 
-from hq.domains.control_plane import bridge_contract
-from hq.domains.control_plane.management.commands.connections_reference import reference_path
-from hq.platform.api.openapi import DOCUMENT_PATH, EXAMPLES_PATH
-from hq.platform.application.procedure_schema import SCHEMA_PATH
-from hq.platform.application.tests.reads import reads
-from hq_sdk.contract import CONTRACT_PATH
-from hq_sdk.text_contract import EXAMPLES_PATH as TEXT_EXAMPLES_PATH
-from tests.mise_tasks import ROOT
-from tools.fonts.subset import SERVED
+from tests.mise_tasks import ROOT, mise_tasks, writes
 
 
 def tracked(*pathspec: str) -> set[str]:
@@ -26,19 +19,11 @@ def tracked(*pathspec: str) -> set[str]:
 
 
 @tag("source", "tree")
-@reads(".gitattributes", "hq/domains/control_plane/bridge_base.json", lists=("**",))
 class GeneratedAttributeTests(SimpleTestCase):
-    def test_the_attribute_marks_exactly_what_the_writers_write(self) -> None:
-        written = {
-            CONTRACT_PATH,
-            TEXT_EXAMPLES_PATH,
-            DOCUMENT_PATH,
-            EXAMPLES_PATH,
-            reference_path(),
-            SCHEMA_PATH,
-            SERVED,
-            *bridge_contract.emitted(),
-        }
-        # go generate's outputs, which lint:controller holds to their specs.
-        expected = {str(path.relative_to(ROOT)) for path in written} | tracked("controller/*.gen.go")
-        self.assertEqual(tracked(":(attr:linguist-generated)"), expected)
+    def test_the_attribute_marks_exactly_what_the_tasks_declare(self) -> None:
+        declared = {path: tracked(f":(glob){path}") for task in mise_tasks().values() for path in writes(task)}
+        self.assertTrue(declared, "no task declares a file it writes")
+        for path, files in declared.items():
+            with self.subTest(path):
+                self.assertTrue(files, f"{path} is declared written, and git tracks no file it names")
+        self.assertEqual(tracked(":(attr:linguist-generated)"), set().union(*declared.values()))

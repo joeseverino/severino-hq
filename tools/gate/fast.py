@@ -22,8 +22,8 @@ from typing import Any
 
 from hq.platform.core.tests.task import Usage, changed_paths, usage
 from tests.mise_tasks import HEAVY_LOCK, body, locks, mise_tasks
-from tools.gate import chain, testmap, turn as gate_turn
-from tools.gate.chain import fast_base, maps, record_pass
+from tools.gate import chain, turn as gate_turn
+from tools.gate.chain import SENT, fast_base, record_pass
 from tools.gate.selection import (
     affected,
     group_tasks,
@@ -106,8 +106,6 @@ def _quick_tasks(root: Path) -> dict[str, dict[str, Any]]:
 # A quick gate whose tool fixes what it finds declares this flag, which writes
 # the fixes instead of checking (mise-tasks/lint.toml); fast runs it first.
 FIX = re.compile(r'^flag "--fix"', re.MULTILINE)
-# The tree a run on the second machine was sent, which tools/gate/remote-host.sh names to it.
-SENT = "HQ_GATE_SENT"
 # A file task declares its usage in its own header, which mise's listing leaves out.
 FILE_USAGE = re.compile(r"^#USAGE (.*)$", re.MULTILINE)
 
@@ -347,25 +345,21 @@ def stage_tokens(tasks: tuple[str, ...], source: list[str], labels: list[str], p
     return min(max(tests, ONE if source else 0) + ONE * len(tasks), gate_turn.CAPACITY)
 
 
-def run_command(
-    tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str, *, record: bool = False
-) -> list[str]:
+def run_command(tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str) -> list[str]:
     """The run of the tests beside the gates that run in the heavy turn
     (``tasks``), in one run of mise, in one share of the turn sized by
     ``stage_tokens``. The share tells each task under it that it holds the
     turn, as mise hands a lock down, so each gate that takes the lock itself
     and the tests' task go ahead at once and side by side, never queued on the
     share their own run holds. A test both selected and tagged tree runs once,
-    since Django's runner drops a repeated test. A recording run (``record``)
-    measures the tests for the map of the tests that ran each file
-    (``record_map``).
+    since Django's runner drops a repeated test.
 
     A task's own output setting outranks the config's but not ``--output``, so
     the summary is the environment's: the tests' task prints as it runs, beside
     each gate's line as it ends."""
 
     gates = [word for task in tasks for word in (task, ":::")]
-    tests = [TESTS, "--parallel", parallel, *(["--map", str(chain.ROOT / testmap.DATA)] if record else []), *labels]
+    tests = [TESTS, "--parallel", parallel, *labels]
     command = ["env", f"{SOURCE}={' '.join(source)}", *mise_run([*gates, *tests], parallel)]
     tokens = stage_tokens(tasks, source, labels, parallel)
     return [*in_share(tokens, TURN_BOUND), *command] if tokens else command
@@ -388,7 +382,6 @@ def gates_and_tests(
     files: list[Path],
     parallel: str,
     *,
-    record: bool = False,
     again: str = "",
 ) -> list[Step]:
     """The quick gates among ``tasks``, then, once they pass, the tests beside
@@ -405,7 +398,7 @@ def gates_and_tests(
     if source:
         print(f"[fast] first, the source checks that read the browser gate's modules: {' '.join(source)}")
     label = "tests and the gates in the heavy turn" if slow else "tests"
-    return [*steps, step(f"{label}{again}", run_command(slow, source, rest, parallel, record=record))]
+    return [*steps, step(f"{label}{again}", run_command(slow, source, rest, parallel))]
 
 
 def step(label: str, cmd: list[str]) -> Step:
@@ -424,30 +417,13 @@ def extension_suites(parallel: str) -> list[Step]:
     return [step("extension suites, composed (shared UI changed)", command)]
 
 
-def record_map(tree: str | None) -> None:
-    """Keep the map a whole run measured as ``tree``'s, when the run passed on
-    a tree that held still, and say what it holds. The data goes once read:
-    the map holds what it says."""
-
-    data = chain.ROOT / testmap.DATA
-    if not tree or not any(data.parent.glob(f"{data.name}.*")):
-        return
-    found = testmap.read(data, chain.ROOT)
-    data.unlink(missing_ok=True)
-    testmap.save(maps(), tree, found)
-    held = f"{len(found.files)} files, {len(found.ran)} test modules"
-    print(f"[fast] the map of the tests that ran each file is kept for tree {tree[:9]}: {held}", flush=True)
-
-
 def judge(gate: Gate, steps: list[Step], base: str, *, whole: bool) -> int:
-    """Close the run on ``steps``: a pass records its tree, and a whole run's its map too."""
+    """Close the run on ``steps``: a pass records its tree."""
 
     passed = all(s.ok for s in steps)
     if passed:
         judged = gate.judged()
         record_pass(judged, base, whole=whole)
-        if whole:
-            record_map(judged)
     gate.close(steps, " (full gate before push: `mise run check`)")
     return 0 if passed else 1
 
@@ -484,7 +460,7 @@ def main(asked: Usage) -> int:
     print(f"[fast] base {base[:9]}, {why}: {counts}")
     every_test = len(labels) == total > 0
     if gate and not every_test and whole_asked:
-        print("[fast] asked for: the whole suite and every quick gate run, so a pass records this tree and its map")
+        print("[fast] asked for: the whole suite and every quick gate run, so a pass records this tree")
         labels, every_test = whole_suite(files), True
 
     paths = [*changed, *deleted]
@@ -504,7 +480,7 @@ def main(asked: Usage) -> int:
     tasks = whole if every_test else (*kept, *group_tasks(files, reached, touched))
     whole_run = every_test and set(tasks) == set(whole)
     rest = tuple(task for task in tasks if task not in early)
-    steps = [*first, *gates_and_tests(rest, labels, files, parallel, record=whole_run)]
+    steps = [*first, *gates_and_tests(rest, labels, files, parallel)]
     steps = fixed_after(gate, steps, files, parallel, asked=asked.switch("fix"))
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))

@@ -10,25 +10,22 @@ the ones the worker's newest scan says it has a login to as the playbook's
 profile, which an ask is held to (``automation_runs.reached``).
 """
 
-from typing import Annotated, Any, TypedDict, get_args
+from typing import Annotated, Any, TypedDict
 
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
 from . import automation_adoption, automation_runs
-from .automation_manifest import OperationManifest
+from .automation_manifest import OperationManifest, PlaybookEffect
 from .automation_sources import PLAYBOOKS as PAGE, Reviewed, standing
-from .describe import Describe, listed
+from .describe import Describe
 from .integration_specs import CommandFact, ResourceSpec
 from .projection import complete, iso
 from .record_errors import RecordNotFound
 from .resources import EmptyQuery
 from .security import Capability, Principal
-from .ui import ended
 
 PLAYBOOKS = "playbooks"
 SCANS = "playbook_scans"
-
-_EFFECTS = get_args(OperationManifest.model_fields["effect"].annotation)
 
 
 class PlaybookRow(TypedDict):
@@ -38,11 +35,8 @@ class PlaybookRow(TypedDict):
         str, Describe("The command that runs it, by name. Its schema says what it takes, and its notes what it does.")
     ]
     effect: Annotated[
-        str,
-        Describe(
-            ended(f"What it does to a machine: {listed(_EFFECTS)}")
-            + " Anything but a read waits for an operator's approval when an agent asks."
-        ),
+        PlaybookEffect,
+        Describe("What it does to a machine. Anything but a read waits for an operator's approval when an agent asks."),
     ]
     reachable: Annotated[
         list[str],

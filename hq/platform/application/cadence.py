@@ -10,11 +10,13 @@ credential and a compromise of it reaches no provider and opens no shell.
 import os
 import tempfile
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Literal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -24,6 +26,7 @@ from django.utils import timezone
 from pydantic import Field
 
 from hq.domains.control_plane.models import (
+    OPERATION_LAPSE,
     DashboardRefreshRequest,
     ManagedResource,
     OperationRequest,
@@ -34,16 +37,20 @@ from hq.domains.control_plane.models import (
 )
 lazy from hq.domains.control_plane.bridge_contract import declared_names
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 lazy from hq.domains.control_plane.provider_adapters.github import KIND as GITHUB_KIND
 lazy from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions, registry_label
+lazy from hq.platform.core.doorbell import ask_soon
 
 from . import readings
+from .asks import Asked, AskedAnswer, Standing, asked_read
 from .command_fields import Describe, Names
 from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import requested
 from .moments import duration
 from .record_errors import Sentence
 from .security import Principal
+from .tone import Tone
 from .ui import ended
 lazy from .action_links import READ_NOW_CAPABILITY
 lazy from .adoption import manages_through, observes_only
@@ -178,8 +185,8 @@ class WorkerStanding:
         where it has never run, which is known to be neither."""
 
         if self.silent:
-            return "attention"
-        return "good" if self.known else "neutral"
+            return Tone.ATTENTION
+        return Tone.GOOD if self.known else Tone.NEUTRAL
 
     @property
     def takes_reads(self) -> bool:
@@ -613,7 +620,7 @@ def pass_due() -> str:
     now = timezone.now()
     if OperationRequest.objects.filter(state=OperationRequest.State.QUEUED).exists():
         return "Work is queued."
-    if OperationRequest.objects.filter(state=OperationRequest.State.CLAIMED, lease_expires_at__lte=now).exists():
+    if OperationRequest.objects.filter(OPERATION_LAPSE.q(now)).exists():
         return "Work a controller took did not finish in time."
     if DashboardRefreshRequest.objects.filter(
         completed_at__isnull=True, requested_at__gte=now - read_request_lifetime()
@@ -662,63 +669,98 @@ def unapplied() -> list[str]:
 
 
 def ring_when_due() -> bool:
-    """Ring if a pass is due; whether it rang. Asked by the doorbell, once a
-    minute and as a capability's write commits, so `pass_due` alone decides."""
+    """Ring the controller if a pass is due; whether it rang. Asked by the
+    doorbell, once a minute and as an ask commits, so `pass_due` alone decides."""
 
-    return bool(pass_due()) and ring_doorbell()
+    return bool(pass_due()) and _ring("controller")
 
 
-def ring_doorbell() -> bool:
-    """Tell the host something is queued, without telling it anything else.
+# Who is asked: the controller (its pass), the glance pass that reads only the
+# dashboard's panels, so a refresh never waits behind a sweep under way, and
+# HQ's playbook worker, which claims a run over the bridge.
+type Doorbell = Literal["controller", "glance", "automation"]
 
-    The doorbell is a file a unit on the host watches to start the controller,
-    which pulls the work its usual way: forged, deleted or replayed, the worst
-    it causes is a run that finds nothing.
+# Each doorbell's file beside the controller's, which is the one HQ is told of
+# (empty: that file itself); the unit on the host that starts each worker
+# waits for its file.
+DOORBELLS: dict[Doorbell, str] = {
+    "controller": "",
+    "glance": "glance-doorbell",
+    "automation": "automation-doorbell",
+}
+
+
+def _ring(doorbell: Doorbell) -> bool:
+    """Touch ``doorbell``'s file, telling the host there is work and nothing else.
+
+    The worker it starts pulls the work its usual way, so forged, deleted or
+    replayed, the worst a ring causes is a run that finds nothing. Best effort:
+    asking never depends on the host filesystem.
     """
 
-    return _ring(_controller_doorbell())
-
-
-def ring_glance_doorbell() -> bool:
-    """Ask the host for the dashboard readings HQ is waiting on, and nothing else.
-
-    Its own file beside the controller's doorbell starts a pass of its own that
-    reads only those panels, so a refresh never waits behind a sweep under way.
-    Forged or replayed, it causes a pass that finds nothing asked for.
-    """
-
-    return _ring(_controller_doorbell().with_name("glance-doorbell"))
-
-
-# The automation worker's doorbell, beside the controller's; the unit that
-# starts the worker waits for a file of this name.
-AUTOMATION_DOORBELL = "automation-doorbell"
-
-
-def ring_automation_doorbell() -> bool:
-    """Tell the host a procedure's run is queued, and nothing else.
-
-    Its own file beside the controller's doorbell starts the automation worker,
-    which claims the run over the bridge. Forged or replayed, it starts a
-    worker that finds nothing to claim.
-    """
-
-    return _ring(_controller_doorbell().with_name(AUTOMATION_DOORBELL))
-
-
-def _controller_doorbell() -> Path:
-    return _path("SEVERINO_CONTROLLER_DOORBELL", "controller-doorbell")
-
-
-def _ring(doorbell: Path) -> bool:
-    """Best effort, and rung only after what it announces is stored, so asking
-    never depends on the host filesystem."""
-
+    path = _path("SEVERINO_CONTROLLER_DOORBELL", "controller-doorbell")
     try:
-        _touch(doorbell)
+        _touch(path.with_name(DOORBELLS[doorbell]) if DOORBELLS[doorbell] else path)
     except OSError:
         return False
     return True
+
+
+def _ring_controller() -> None:
+    # On the doorbell's thread, so whether a pass is due is asked off the
+    # request, and asks that commit together are one ask.
+    ask_soon()
+
+
+def _ring_glance() -> None:
+    _ring("glance")
+
+
+def _ring_automation() -> None:
+    _ring("automation")
+
+
+_RINGS: dict[Doorbell, Callable[[], None]] = {
+    "controller": _ring_controller,
+    "glance": _ring_glance,
+    "automation": _ring_automation,
+}
+
+
+# The doorbells the capability running now has asked for, which the runner
+# rings once each as it returns (``ringing``); None outside one.
+_asked: ContextVar[set[Doorbell] | None] = ContextVar("asked_doorbells", default=None)
+
+
+@contextmanager
+def ringing() -> Iterator[set[Doorbell]]:
+    """Ring each doorbell the work inside asks for once, as it returns.
+
+    The runner's, around every capability, so a handler's asks and its own
+    ring for a write are one ring however many there are. A capability run
+    inside another's joins the outer one's. Each is rung once what it
+    announces commits, so the worker never arrives to find nothing; robust,
+    since a write that committed does not fail for a hint that could not be
+    given. Work that raised rang for nothing, and rings nothing.
+    """
+
+    if (asked := _asked.get()) is not None:
+        yield asked
+        return
+    asked = set()
+    with _asked.set(asked):
+        yield asked
+    for doorbell in sorted(asked):
+        transaction.on_commit(_RINGS[doorbell], robust=True)
+
+
+def _ring_on_commit(doorbell: Doorbell) -> None:
+    if (asked := _asked.get()) is not None:
+        asked.add(doorbell)
+    else:
+        # Outside a capability (the boot, the controller's report): rung as
+        # the caller's transaction commits, or at once outside one.
+        transaction.on_commit(_RINGS[doorbell], robust=True)
 
 
 # Where the boot keeps each reading kind's ``ObservationSpec.fingerprint`` as
@@ -731,8 +773,10 @@ def request_boot_reads() -> tuple[str, ...]:
 
     Delivery, wherever it is read: a deploy is when production changes which
     commit of each extension it runs, so each commit's check run and a comment
-    on its merged pull request have something to report. And each kind HQ
-    holds readings of whose fingerprint moved since the last boot: those
+    on its merged pull request have something to report. The repositories,
+    where they are read: their deployments say which commit production runs,
+    and the deploy that booted this image has just moved them. And each kind
+    HQ holds readings of whose fingerprint moved since the last boot: those
     records were let through under another contract, so serving them would
     pass the old shape off as current. A boot with no fingerprints stored
     knows nothing of what its records were held to, and asks every kind once.
@@ -748,47 +792,68 @@ def request_boot_reads() -> tuple[str, ...]:
     held = set(ProviderInventory.objects.values_list("kind", flat=True))
     delivery = GITHUB_KIND in held or ManagedResource.objects.filter(kind=GITHUB_KIND).exists()
     moved = sorted(kind for kind in held if kind in current and stored.get(kind) != current[kind] and swept(kind))
-    asked = ((GITHUB_KIND,) if delivery else ()) + tuple(moved)
+    deployed = (REPOSITORY_KIND,) if REPOSITORY_KIND in held else ()
+    asked = tuple(dict.fromkeys(((GITHUB_KIND,) if delivery else ()) + deployed + tuple(moved)))
     if asked:
-        request_readings(asked)
+        ask(reads=asked)
     readings.record(RECORD_CONTRACTS, current)
     return asked
 
 
-def request_reading(kind: str) -> bool:
-    """Ask for one kind to be read on the controller's next run, and start one;
-    whether the doorbell rang (``request_readings``)."""
+@transaction.atomic
+def ask(
+    *,
+    reads: Iterable[str] = (),
+    connection: str = "",
+    every: bool = False,
+    panels: Mapping[str, str] | None = None,
+    doorbell: Doorbell = "controller",
+    activity: bool = False,
+) -> datetime:
+    """Ask a worker outside this process for work, the one way HQ does: store
+    what is asked, in the caller's transaction, and ring ``doorbell`` once it
+    commits. When it was asked.
 
-    return request_readings((kind,))
+    ``reads`` are kinds the controller reads on its next pass, from
+    ``connection`` alone where one is named; ``connection`` alone forces every
+    kind its credential reads, and ``every`` the whole sweep. ``panels`` are the
+    dashboard panels the glance pass reads, each with what its audit row says.
+    Nothing asked, it only rings: the work is a row its writer already stored.
 
-
-def request_readings(kinds: Iterable[str]) -> bool:
-    """Ask for each kind to be read on the controller's next run, and start one.
-
-    For HQ and the host to ask on what they have just learned, not for a
-    person: nobody's activity is noted, so the idle cadence is untouched and
-    the sweep this causes reads only those kinds. The requests are stored
-    whether or not the doorbell could be rung; the controller's timer finds
-    them within its floor. The answer is whether it was rung.
+    ``activity`` notes that a person asked, so the active cadence decides the
+    sweep; HQ and the host asking on what they learned leave the idle cadence
+    alone. A kind HQ stores no reading of is refused, since nothing would
+    answer it and it would force sweeps until it expired.
     """
 
-    for kind in kinds:
-        ReadRequest.objects.update_or_create(connection_ref="", kind=kind, defaults={"requested_at": timezone.now()})
-    return ring_doorbell()
+    now = timezone.now()
+    kinds = tuple(dict.fromkeys(reads))
+    if unknown := [kind for kind in kinds if kind not in OBSERVATIONS and kind not in PROVIDERS]:
+        raise ValidationError({"kind": ValidationError(f"No such type: {', '.join(unknown)}.", code="invalid_choice")})
+    if activity:
+        note_activity()
+    for kind in kinds or (("",) if connection or every else ()):
+        ReadRequest.objects.update_or_create(connection_ref=connection, kind=kind, defaults={"requested_at": now})
+    if panels:
+        asked = DashboardRefreshRequest.objects.select_for_update().in_bulk(list(panels), field_name="panel_id")
+        for panel_id, said in panels.items():
+            request = asked.get(panel_id) or DashboardRefreshRequest(panel_id=panel_id)
+            request.requested_at, request.completed_at = now, None
+            request.audit_said = said
+            request.save()
+    _ring_on_commit(doorbell)
+    return now
 
 
-class ControllerSweepRequested(TypedDict):
+class ControllerSweepRequested(AskedAnswer):
     """The controller, woken to read the estate, and why a full read is due or not."""
 
-    ok: Literal[True]
-    requested: Annotated[Literal[True], Describe("That the controller was woken.")]
     due: Annotated[bool, Describe("Whether a read of every connection was due.")]
     reason: Annotated[str, Describe("Why a full read is due or not, in a sentence.")]
     read_now: Annotated[
         str,
         Describe("What the controller reads at once, by its connection or kind; empty when the call named nothing."),
     ]
-    message: Annotated[str, Describe("What asking did, in the sentence a page shows for it.")]
 
 
 def request_controller_sweep(
@@ -800,48 +865,24 @@ def request_controller_sweep(
 
     del principal
     subject = _read_subject(command)
-    # An operator asking for fresh state makes HQ active before policy is read,
-    # so the active cadence (not the twelve-hour idle economy) decides the sweep.
-    note_activity()
-    if subject is not None:
-        ref, kind = subject
-        ReadRequest.objects.update_or_create(connection_ref=ref, kind=kind, defaults={"requested_at": timezone.now()})
+    ref, kind = subject or ("", "")
+    # Noted before policy is read, so the active cadence (not the twelve-hour
+    # idle economy) decides the sweep.
+    at = ask(reads=(kind,) if kind else (), connection=ref, every=command.every_connection, activity=True)
     verdict = sweep_due()
-    if not ring_doorbell():
-        raise ValueError("HQ could not reach the controller to start it.")
+    said = _sweep_message(subject, due=bool(verdict["due"]))
+    # A bare wake-up names nothing to wait for.
+    asked = (
+        Asked(Standing(note=said), message=said)
+        if subject is None
+        else asked_read(forced_kinds(ref, kind) or (), at, connection_ref=ref, message=said)
+    )
     return {
-        "ok": True,
-        "requested": True,
+        **asked.answer(),
         "due": bool(verdict["due"]),
         "reason": str(verdict["reason"]),
         "read_now": _read_label(subject),
-        "message": _sweep_message(subject, due=bool(verdict["due"])),
     }
-
-
-@transaction.atomic
-def request_reads(kinds: Iterable[str]) -> tuple[str, ...]:
-    """Ask for several kinds to be read now, as one request: the kinds asked for.
-
-    Each is held to the same test a single read is, so nothing is asked for
-    that HQ does not store a kind for. Activity is noted once and the doorbell
-    rung once, after the requests are stored: rung before, the controller could
-    arrive to find nothing asked.
-    """
-
-    wanted = [
-        subject[1]
-        for kind in dict.fromkeys(kinds)
-        if (subject := _read_subject(ControllerSweepCommand(kind=kind))) is not None
-    ]
-    if not wanted:
-        return ()
-    note_activity()
-    now = timezone.now()
-    for kind in wanted:
-        ReadRequest.objects.update_or_create(connection_ref="", kind=kind, defaults={"requested_at": now})
-    transaction.on_commit(ring_doorbell)
-    return tuple(wanted)
 
 
 def _read_label(subject: tuple[str, str] | None) -> str:

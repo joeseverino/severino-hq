@@ -5,7 +5,7 @@ behind each ability. The API serializes the same view.
 """
 
 from dataclasses import KW_ONLY, asdict, dataclass, replace
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
@@ -30,15 +30,14 @@ from .connection_contracts import (
 )
 from .connection_lifecycle import WORKING, Lifecycle, standing
 from .contracts import SCOPE_NAME, endpoint_has_private_parts
-from .derivations import passed, present
-from .freshness import last_read
-from .integration_validation import safe_connection_url
+from .derivations import present
+from .freshness import freshness, last_read
 from .integrations import held_graph
 from .moments import ago
 from .projection import read_once
 from .security import Principal
-lazy from .entity_links import entity_link
-lazy from .ui import STATUS_VALUES
+from .tone import Tone
+lazy from .entity_links import entity_link, link_url
 
 # The family the controller observes on HQ's behalf. It leads every inventory
 # because it is the one the page is about; the gateways beside it are the
@@ -154,7 +153,6 @@ def connection_lifecycle(
     instance: ConnectionInstance,
     authority: str,
     *,
-    stale_after_hours: int,
     now: datetime,
 ) -> Lifecycle:
     """One state from the observation, its age, reachability and authority.
@@ -167,26 +165,25 @@ def connection_lifecycle(
     """
 
     return standing(
-        _observed_lifecycle(instance, authority, stale_after_hours=stale_after_hours, now=now),
+        _observed_lifecycle(instance, authority, now=now),
         refused=instance.credential_model == "rejected",
     )
 
 
-def _observed_lifecycle(
-    instance: ConnectionInstance, authority: str, *, stale_after_hours: int, now: datetime
-) -> Lifecycle:
+def _observed_lifecycle(instance: ConnectionInstance, authority: str, *, now: datetime) -> Lifecycle:
     observed = instance.observed_at
     if observed is None:
         return Lifecycle.CONFIGURED
     if timezone.is_naive(observed):
         observed = timezone.make_aware(observed)
-    if passed(observed + timedelta(hours=stale_after_hours), now=now):
+    # How old it may get is its kind's cadence, an extension's own included.
+    if freshness(instance.kind, observed, now).stale:
         return Lifecycle.STALE
     if authority == "missing":
         return Lifecycle.UNAUTHORIZED
-    if instance.status == "serious":
+    if instance.status == Tone.SERIOUS:
         return Lifecycle.UNREACHABLE
-    if instance.status == "neutral":
+    if instance.status == Tone.NEUTRAL:
         return Lifecycle.CONFIGURED
     return Lifecycle.READY if authority in {"proven", "whole_account"} else Lifecycle.REACHABLE
 
@@ -214,7 +211,7 @@ class ConnectionAbilityState:
 
     @property
     def evidence_tone(self) -> str:
-        return "serious" if self.evidence in FAILED_EVIDENCE else ""
+        return Tone.SERIOUS if self.evidence in FAILED_EVIDENCE else ""
 
 
 # Actions derived from the family's spec rather than from one connection.
@@ -332,8 +329,6 @@ def _validate_instance(spec: ConnectionSpec, instance: ConnectionInstance) -> Co
 def _check_reading(instance: ConnectionInstance) -> None:
     """The status a connection was read in, where it was read and by whom."""
 
-    if instance.status not in STATUS_VALUES:
-        raise ImproperlyConfigured(f"Connection {instance.id!r} has invalid status {instance.status!r}.")
     if not instance.status_label.strip():
         raise ImproperlyConfigured(f"Connection {instance.id!r} has no status label.")
     if instance.endpoint and endpoint_has_private_parts(instance.endpoint):
@@ -369,7 +364,7 @@ def _sound_link(link: ConnectionLink) -> bool:
 
     if not link.label.strip():
         return False
-    if link.url and not safe_connection_url(link.url):
+    if link.url and not link_url(link.url):
         return False
     return link.resource_key == link.resource_key.strip()
 
@@ -407,7 +402,7 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
 def _permitted(principal: Principal) -> tuple[ConnectionSpec, ...]:
     """The families ``principal`` may read, whose providers alone may run for it."""
 
-    return tuple(spec for spec in held_graph().connections.values() if principal.permits(*spec.required_capabilities))
+    return tuple(spec for spec in held_graph().connections.values() if spec.permitted_to(principal))
 
 
 def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...]:
@@ -469,7 +464,6 @@ def _connection_view(
     lifecycle = connection_lifecycle(
         instance,
         authority,
-        stale_after_hours=spec.stale_after_hours,
         now=present(),
     )
     return ConnectionView(
@@ -477,7 +471,7 @@ def _connection_view(
         states,
         recommend_connection_action(
             actions,
-            unhealthy=instance.status != "good" or lifecycle in (Lifecycle.STALE, Lifecycle.REVOKED),
+            unhealthy=instance.status != Tone.GOOD or lifecycle in (Lifecycle.STALE, Lifecycle.REVOKED),
             missing_scope_count=sum(len(state.missing_scopes) for state in states),
             unknown_scope_count=sum(state.available is None for state in states),
         ),

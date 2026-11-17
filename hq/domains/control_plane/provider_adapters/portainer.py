@@ -14,6 +14,7 @@ from hq.platform.application.ui import ended
 lazy from hq.platform.application.container_standard import CHECK_IDS
 
 from ..connection_shapes import API_TOKEN
+from ..observations import portainer as readings
 from ..provider_spec import (
     ConnectionKind,
     NameContext,
@@ -373,6 +374,7 @@ CONTAINER = ProviderSpec(
 
 
 DEFINITIONS = (STACK, CONTAINER)
+OBSERVATIONS = readings.OBSERVATIONS
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.

@@ -11,7 +11,7 @@ import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from functools import cached_property
-from typing import Annotated, Any, Literal, TypedDict
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 lazy from django.core.exceptions import ValidationError
@@ -24,9 +24,11 @@ from hq.domains.control_plane.provider_adapters.cloudflare import (
     ZONE_KIND,
 )
 lazy from hq.domains.control_plane.providers import PROVIDERS, read_record, record_spec
+lazy from hq.platform.application.pages import PageAction
 lazy from hq.platform.application.resource_capabilities import offered_changes
 
-from .adoption import AdoptCommand, unmanaged
+from .adoption import NOTHING_LIVE_CHANGED, AdoptCommand, unmanaged
+from .answer_fields import CallMessage
 from .card_items import ListRow
 from .command_fields import Describe
 from .entity_links import entity_link
@@ -34,10 +36,14 @@ from .infrastructure import enabled_resources, resource_health
 from .record_errors import PolicyError, RecordNotFound
 from .resource_records import ManagedResourceItem
 from .security import Principal
+from .ui import counted
 lazy from . import adoption, plugins
 lazy from .facts import snapshots_of, stored_snapshots
 lazy from .projection import read_once
 lazy from .resource_context import shared_names, value_summary
+
+if TYPE_CHECKING:
+    from hq.platform.application.resource_capabilities import Offered
 
 logger = logging.getLogger("severino.zones")
 
@@ -93,9 +99,14 @@ class ZoneRecord:
     # name and type, so a row that has lost its Value column still says
     # which one it is (``told_apart``).
     summary: str = ""
-    # Blank where its declaration does not offer them (``Offered``).
-    edit_url: str = ""
-    remove_url: str = ""
+    # What its declaration offers; None for a record HQ only watches.
+    offered: Offered | None = None
+
+    @property
+    def edit(self) -> PageAction | None:
+        """The control that edits its declaration, where that is offered."""
+
+        return self.offered.edit(self.resource_key) if self.offered else None
 
     @property
     def managed(self) -> bool:
@@ -457,8 +468,7 @@ def _records_by_zone(pending: list[Any]) -> dict[str, list[ZoneRecord]]:
                     resource.spec,
                     resource_key=resource.key,
                     health=resource_health(resource),
-                    edit_url=offered[resource.key].edit_url,
-                    remove_url=offered[resource.key].remove_url,
+                    offered=offered[resource.key],
                 )
             )
     for item in pending:
@@ -623,6 +633,7 @@ class ZoneAdopted(TypedDict):
     adopted: Annotated[
         list[str], Describe("The keys of the domain's records adopted with it; empty when none could be.")
     ]
+    message: CallMessage
 
 
 def adopt_zone(command: AdoptZoneCommand, *, principal: Principal) -> ZoneAdopted:
@@ -637,7 +648,12 @@ def adopt_zone(command: AdoptZoneCommand, *, principal: Principal) -> ZoneAdopte
         records = adopt_zone_records(command.zone, principal=principal)["adopted"]
     except RecordNotFound, PolicyError, ValidationError:
         records = []
-    return {"ok": True, "resource": declared["resource"], "adopted": records}
+    return {
+        "ok": True,
+        "resource": declared["resource"],
+        "adopted": records,
+        "message": f"HQ now manages {command.zone} and {counted(len(records), 'record')} in it. {NOTHING_LIVE_CHANGED}",
+    }
 
 
 def public_answers_for(hostname: str) -> tuple[str, ...]:

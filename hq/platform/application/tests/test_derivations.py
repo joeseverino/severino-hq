@@ -478,6 +478,7 @@ SAMPLES = {
     "attention.by_subject": lambda s: _of("problems", "_by_subject")(),
     "attention.work": lambda s: _of("dashboard", "work_queue")(),
     "attention.count": lambda s: _of("dashboard", "waiting")(web_principal(s.user), s.user.pk),
+    "attention.readable": lambda s: _of("dashboard", "readable_queue")(web_principal(s.user)),
     "dashboard.sections": lambda s: _of("domains", "domain_dashboard_sections")(web_principal(s.user)),
     "dashboard.highlights": lambda s: _of("dashboard", "dashboard_highlights")(web_principal(s.user)),
     "dashboard.snapshot": lambda s: _of("dashboard", "_operating_snapshot")(web_principal(s.user)),
@@ -647,11 +648,11 @@ class ActionItemCountTests(TestCase):
         self.assertEqual(self.client.get(self.url, headers={"if-none-match": '"anything"'}).status_code, 200)
 
     def test_a_queue_an_extension_reports_work_to_carries_a_validator(self):
-        from hq.platform.application.card_items import Insight
         from hq.platform.application.domains import Domain, all_domains
+        from hq.platform.application.finding_model import Finding
         from hq.platform.application.plugins import PluginIntegration, provided
 
-        item = Insight("attention", "Example", "Something waits", "1", "Body.")
+        item = Finding(rule="example", subject="", severity="attention", title="Something waits", explanation="Body.")
         extra = Domain(
             "example.extension",
             "Example",

@@ -88,9 +88,7 @@ def _read(method: str, path: str, content: bytes | None = None) -> Any:
     it is asked, and a query moved by a 302 would arrive as a GET without its
     body."""
 
-    headers = {"User-Agent": "Severino-HQ"}
-    if content is not None:
-        headers["Content-Type"] = "application/json"
+    headers = {} if content is None else {"Content-Type": "application/json"}
     try:
         response, body = fetch(
             method, f"{API}{path}", headers=headers, timeout=TIMEOUT_SECONDS, limit=MAX_RESPONSE_BYTES, content=content

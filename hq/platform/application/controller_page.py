@@ -24,7 +24,9 @@ from .cadence import (
     sweep_due,
 )
 from .entity_links import kind_label
+from .freshness import Freshness, freshness
 from .moments import duration
+from .tone import Tone
 lazy from .facts import every_snapshot
 
 
@@ -35,8 +37,8 @@ class KindReading:
     kind: str
     label: str
     attempted_at: datetime
-    # None when no read has answered.
-    observed_at: datetime | None
+    # When a read last answered, and whether that is still current.
+    reading: Freshness
     records: int
     # "read", "not connected", or why the last attempt stored nothing new.
     result: str
@@ -74,20 +76,20 @@ class ControllerPage:
         """Whether it is arriving, as a tone: none before it ever has."""
 
         if self.standing.silent:
-            return "serious"
-        return "good" if self.standing.known else ""
+            return Tone.SERIOUS
+        return Tone.GOOD if self.standing.known else ""
 
     @property
     def failing_tone(self) -> str:
-        return "attention" if self.failing else ""
+        return Tone.ATTENTION if self.failing else ""
 
     @property
     def overdue_tone(self) -> str:
-        return "serious" if self.overdue else ""
+        return Tone.SERIOUS if self.overdue else ""
 
     @property
     def queue_tone(self) -> str:
-        return "attention" if self.queue else ""
+        return Tone.ATTENTION if self.queue else ""
 
 
 def _reading(row: ProviderInventory) -> KindReading:
@@ -101,7 +103,7 @@ def _reading(row: ProviderInventory) -> KindReading:
         kind=row.kind,
         label=kind_label(row.kind),
         attempted_at=attempted_at(row.observed_at, row.updated_at),
-        observed_at=row.observed_at,
+        reading=freshness(row.kind, row.observed_at),
         records=len(row.records) if isinstance(row.records, list) else 0,
         result=result,
         ok=ok,

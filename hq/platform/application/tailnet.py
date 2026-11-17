@@ -11,18 +11,18 @@ import json
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from ipaddress import ip_address
 from typing import Any
 
+from hq.config.networks import is_loopback
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
-from hq.platform.application.labels import dotted
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations.host import TAILNET_LOCK_KIND
 lazy from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
 
 from .projection import projection_scope, read_once
-from .ui import counted, ended
+from .tone import Tone
+from .ui import ended
 lazy from . import connections
 lazy from .connections import connection_rows
 lazy from .facts import inventory_records
@@ -37,6 +37,10 @@ RESOLVES_THROUGH = "Resolves through"
 NEW_DEVICES = "New devices"
 # The setting row that says which nodes may publish to the internet.
 FUNNEL = "Funnel"
+# The setting row that says whether tailnet lock is on, and the one after it
+# naming the devices that can sign.
+TAILNET_LOCK = "Tailnet lock"
+SIGNING_DEVICES = "Signing devices"
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +132,12 @@ class Verdict:
         if not self.known:
             return "Cannot say"
         return "Allowed" if self.allowed else "Not allowed"
+
+    @property
+    def tone(self) -> Tone:
+        if not self.known:
+            return Tone.NEUTRAL
+        return Tone.GOOD if self.allowed else Tone.SERIOUS
 
 
 def devices() -> dict[str, Device]:
@@ -405,13 +415,7 @@ class Policy:
         # should say nothing here rather than report lock as off, which is a
         # claim about the tailnet rather than about the reading.
         if self.lock:
-            keys = self.lock.get("trusted_keys") or 0
-            rows.append(
-                (
-                    "Tailnet lock",
-                    (dotted("On", counted(keys, "signing key", "signing keys")) if self.lock.get("enabled") else "Off"),
-                )
-            )
+            rows.append((TAILNET_LOCK, "On" if self.lock.get("enabled") else "Off"))
         return tuple(rows)
 
     @property
@@ -693,15 +697,6 @@ def _service_ports() -> tuple[_ServicePort, ...]:
     return tuple(found)
 
 
-def _is_loopback(host: str) -> bool:
-    if host == "localhost":
-        return True
-    try:
-        return ip_address(host).is_loopback
-    except ValueError:
-        return False
-
-
 def _grant_machines(names, known, by_name) -> tuple:
     """The machines a grant's destinations name, through their tailnet devices."""
 
@@ -747,7 +742,7 @@ class _PortNamer:
         for item in self.service_ports:
             if item.port != port:
                 continue
-            here = _is_loopback(item.host) and item.controller.lower() in names
+            here = is_loopback(item.host) and item.controller.lower() in names
             if here or item.ref in refs or item.host in addresses:
                 return item.label
         return ""

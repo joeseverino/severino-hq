@@ -1,7 +1,7 @@
 from django.test import TestCase
 
 from ..containers import containers
-from ..standards import INTENDED, MET, UNAVAILABLE, UNMET
+from ..standards import INTENDED, Standing
 from .test_containers import HIGH, estate, inventory
 
 
@@ -121,7 +121,7 @@ class StandardTests(TestCase):
             },
         )
 
-        self.assertEqual(self.posture(**{**KEPT, "mounts": [socket]}).state_of("no-docker-socket"), MET)
+        self.assertEqual(self.posture(**{**KEPT, "mounts": [socket]}).state_of("no-docker-socket"), Standing.MET)
 
     def test_a_declared_socket_holder_may_write_dockers_own_data_but_nothing_else(self):
         from hq.domains.control_plane.models import ManagedResource
@@ -150,15 +150,20 @@ class StandardTests(TestCase):
             },
         )
 
-        self.assertEqual(self.posture(**{**KEPT, "mounts": [socket, volumes]}).state_of("no-system-path-writable"), MET)
         self.assertEqual(
-            self.posture(**{**KEPT, "mounts": [socket, volumes, etc]}).state_of("no-system-path-writable"), UNMET
+            self.posture(**{**KEPT, "mounts": [socket, volumes]}).state_of("no-system-path-writable"), Standing.MET
+        )
+        self.assertEqual(
+            self.posture(**{**KEPT, "mounts": [socket, volumes, etc]}).state_of("no-system-path-writable"),
+            Standing.UNMET,
         )
 
     def test_an_undeclared_container_writing_dockers_data_is_still_flagged(self):
         volumes = {"type": "bind", "source": "/var/lib/docker/volumes", "destination": "/v", "read_only": False}
 
-        self.assertEqual(self.posture(**{**KEPT, "mounts": [volumes]}).state_of("no-system-path-writable"), UNMET)
+        self.assertEqual(
+            self.posture(**{**KEPT, "mounts": [volumes]}).state_of("no-system-path-writable"), Standing.UNMET
+        )
 
     def test_a_container_not_declared_to_hold_the_socket_still_is(self):
         socket = {
@@ -168,7 +173,7 @@ class StandardTests(TestCase):
             "read_only": True,
         }
 
-        self.assertEqual(self.posture(**{**KEPT, "mounts": [socket]}).state_of("no-docker-socket"), UNMET)
+        self.assertEqual(self.posture(**{**KEPT, "mounts": [socket]}).state_of("no-docker-socket"), Standing.UNMET)
 
     def test_a_read_only_system_mount_and_a_data_bind_are_not_reach(self):
         found = self.posture(
@@ -181,7 +186,7 @@ class StandardTests(TestCase):
             }
         )
 
-        self.assertEqual(found.state_of("no-system-path-writable"), MET)
+        self.assertEqual(found.state_of("no-system-path-writable"), Standing.MET)
 
     def test_an_applications_own_runtime_directory_is_not_the_machines(self):
         found = self.posture(
@@ -201,8 +206,8 @@ class StandardTests(TestCase):
             }
         )
 
-        self.assertEqual(found.state_of("no-system-path-writable"), MET)
-        self.assertEqual(whole.state_of("no-system-path-writable"), UNMET)
+        self.assertEqual(found.state_of("no-system-path-writable"), Standing.MET)
+        self.assertEqual(whole.state_of("no-system-path-writable"), Standing.UNMET)
 
     def test_hardening_is_not_serious(self):
         found = self.posture(user="", network_mode="host", port_bindings=[{"host_ip": "0.0.0.0", "host_port": "80"}])
@@ -218,8 +223,8 @@ class StandardTests(TestCase):
 
         found = next(item.posture for item in containers() if item.running.name == "web")
 
-        self.assertEqual(found.state_of("not-privileged"), UNAVAILABLE)
-        self.assertEqual(found.state_of("no-docker-socket"), UNAVAILABLE)
+        self.assertEqual(found.state_of("not-privileged"), Standing.UNAVAILABLE)
+        self.assertEqual(found.state_of("no-docker-socket"), Standing.UNAVAILABLE)
 
 
 class ResourceTests(TestCase):
@@ -280,11 +285,11 @@ class HealthCheckedTests(TestCase):
 
         from ..container_standard import _health_checked
 
-        return _health_checked(Row(runtime=runtime, running=Row(check=check), serves=serves))
+        return _health_checked(Row(runtime=runtime, running=Row(check=check), serves=serves)).standing
 
     def test_its_own_health_check_or_a_name_hq_requests_says_whether_it_works(self):
-        self.assertTrue(self.check({"healthcheck": True}))
+        self.assertEqual(self.check({"healthcheck": True}), Standing.MET)
         # An image with no shell cannot run a check; a name HQ requests still says.
-        self.assertTrue(self.check({}, serves=("admin.example.com",)))
-        self.assertFalse(self.check({}))
-        self.assertIsNone(self.check(None))
+        self.assertEqual(self.check({}, serves=("admin.example.com",)), Standing.MET)
+        self.assertEqual(self.check({}), Standing.UNMET)
+        self.assertEqual(self.check(None), Standing.UNAVAILABLE)

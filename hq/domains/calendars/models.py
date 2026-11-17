@@ -14,6 +14,7 @@ from django.db.models.functions import Length, Trim
 from django.db.models.lookups import GreaterThan
 from django.urls import reverse
 
+from hq.platform.application.lists import split_list
 from hq.platform.application.references import ReferenceField
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule
@@ -146,7 +147,7 @@ class Entry(TimestampedModel):
 
     @property
     def weekday_numbers(self) -> tuple[int, ...]:
-        return tuple(sorted({int(day) for day in self.weekdays.split(",") if day.strip()}))
+        return tuple(sorted({int(day) for day in split_list(self.weekdays)}))
 
     @override
     def clean(self) -> None:

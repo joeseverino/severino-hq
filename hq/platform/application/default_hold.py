@@ -1,8 +1,8 @@
 """The default hold: which changes wait for a person before any operator rule.
 
-One rule under the capability runner's hold and the use cases' write floor
-(``consent_gap``), so the two cannot disagree, and read by the provider
-contract and the policy page to say it.
+One rule under the capability runner's hold and the consent every
+declaration write asks (``capabilities.Consented.admits``), so the two cannot
+disagree, and read by the provider contract and the policy page to say it.
 """
 
 from typing import Any
@@ -10,9 +10,8 @@ from typing import Any
 from hq.domains.control_plane.models import ManagedResource
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .approvals import DECLARATIONS, READ_EFFECT
-from .record_errors import Sentence
-from .security import Principal, is_agent, is_interactive
+from .approvals import DECLARATIONS
+from .security import Principal, is_agent
 lazy from .adoption import ADOPT, ADOPT_SERVICE
 lazy from .zones import ADOPT_ZONE
 
@@ -20,7 +19,7 @@ lazy from .zones import ADOPT_ZONE
 def may_be_held_by_default(spec) -> bool:
     """The capability-level half of held_by_default, for describing a default without a target."""
 
-    return spec.effect != READ_EFFECT and spec.subject_resource == DECLARATIONS
+    return spec.effect.changes and spec.subject_resource == DECLARATIONS
 
 
 def held_by_default(spec, command: Any, target: Any, *, principal: Principal) -> bool:
@@ -33,7 +32,7 @@ def held_by_default(spec, command: Any, target: Any, *, principal: Principal) ->
     else:
         kind = str(getattr(command, "kind", ""))
     provider = PROVIDERS.get(kind) if kind else None
-    return provider is not None and _waits(provider, principal, spec)
+    return provider is not None and kind_waits(provider, principal, spec)
 
 
 def needs_approval(provider, spec=None) -> bool:
@@ -52,8 +51,8 @@ def needs_approval(provider, spec=None) -> bool:
     return provider.public_effect and (spec is None or spec.name not in _copies_live())
 
 
-def _waits(provider, principal: Principal, spec=None) -> bool:
-    """The one rule under the hold and the write floor.
+def kind_waits(provider, principal: Principal, spec=None) -> bool:
+    """The one rule under the hold and the consent a declaration write asks.
 
     A kind that stands behind access waits for anybody without a person
     behind them. One the public sees waits for an agent, as its delete does,
@@ -67,21 +66,3 @@ def _waits(provider, principal: Principal, spec=None) -> bool:
 
 def _copies_live() -> frozenset[str]:
     return frozenset({ADOPT, ADOPT_SERVICE, ADOPT_ZONE})
-
-
-def consent_gap(kind: str, *, principal: Principal) -> Sentence:
-    """Why this act has no consent behind it, or "" when it has.
-
-    The hold's rule, asked again from inside the use cases that write, since
-    the hold sees only capabilities that declare they act on an infrastructure
-    resource and one that writes a declaration without saying so would pass it.
-    A string, so the caller raises its own domain error and this module imports
-    none of the use cases that call it.
-    """
-
-    provider = PROVIDERS.get(kind)
-    if provider is None or not _waits(provider, principal):
-        return ""
-    if is_interactive(principal) or principal.approved_by:
-        return ""
-    return "This change needs approval. Ask for it through the API or MCP, then approve it in HQ in the browser."

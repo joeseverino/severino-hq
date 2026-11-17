@@ -15,17 +15,19 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 
 from hq.domains.jobs.models import Job
-from hq.platform.application.action_links import command_action, command_url
+from hq.platform.application.action_links import command_action, command_url, read_link
 from hq.platform.application.connections import ConnectionAbility, ConnectionInstance, ConnectionSpec
+from hq.platform.application.effects import Effect
+from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed, offering
 from hq.platform.application.plugins import clear_plugin_composition_cache
+from hq.platform.application.tests.links import example_command
 from hq.platform.application.workflow_contracts import ActionLink
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from hq_sdk.testing import held_jobs
 from tests.fixtures.example_hq_plugin import outbound as example
 
 from ..entity_links import connection_anchor
-from .markup import select, within
 from .test_outbound_work import SCRIPT, ComposedExample
 
 CLOSED = "The registry is closed for the night."
@@ -159,14 +161,16 @@ class TheRendererDrawsARefusalTests(SimpleTestCase):
     def test_a_refused_link_is_neither_a_link_nor_a_form(self):
         for method in ("GET", "POST"):
             with self.subTest(method):
-                html = self.render(ActionLink("run", "Run", "remote_write", "/run/", method=method, refusal="Not now."))
+                html = self.render(
+                    example_command("run", "Run", Effect.REMOTE_WRITE, "/run/", method=method, refusal="Not now.")
+                )
 
                 (refused,) = select(html, "aria-disabled", "true")
                 self.assertEqual((refused.words, refused.attrs["title"]), ("Run", "Not now."))
                 self.assertEqual(select(html, "href") + select(html, "formaction"), [])
 
     def test_a_link_that_would_run_is_live(self):
-        html = self.render(ActionLink("run", "Run", "remote_write", "/run/"), ActionLink("go", "Go", "read", "/go/"))
+        html = self.render(example_command("run", "Run", Effect.REMOTE_WRITE, "/run/"), read_link("go", "Go", "/go/"))
 
         self.assertEqual(select(html, "aria-disabled"), [])
         self.assertEqual([element.attrs["href"] for element in select(html, "href")], ["/run/", "/go/"])

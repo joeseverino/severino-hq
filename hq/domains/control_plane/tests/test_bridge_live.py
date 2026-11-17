@@ -19,7 +19,7 @@ from unittest import skipUnless
 from unittest.mock import patch
 
 from django.conf import settings
-from django.test import TransactionTestCase, override_settings
+from django.test import TransactionTestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.bridge_application import application
@@ -36,6 +36,7 @@ from hq.platform.application.glance import DASHBOARD_REFRESH
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.resource_operations import OperationCommand, request_reconcile
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.consent import consented
 from hq.platform.core.tests.unix_serving import post, served, socket_directory
 
 from .certificate_cases import certificate_spec, declare_targets
@@ -51,7 +52,6 @@ class LiveBridge(TransactionTestCase):
         directory = manager.__enter__()
         self.socket = directory / "bridge.sock"
         self.addCleanup(manager.__exit__, None, None, None)
-        self.enterContext(override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(directory / "heartbeat")))
         serving = served(application, self.socket)
         serving.__enter__()
         self.addCleanup(serving.__exit__, None, None, None)
@@ -69,11 +69,11 @@ class ConcurrentCallTests(LiveBridge):
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         queued = request_reconcile(
-            OperationCommand(idempotency_key="live-once"),
-            principal=cli_principal(),
+            OperationCommand(),
+            consented=consented(cli_principal()),
             current_key=ManagedResource.objects.get(key="example-wildcard").key,
         )
         return str(queued["operation"]["id"])
@@ -186,12 +186,6 @@ class ControllerPassTests(TransactionTestCase):
         directory = manager.__enter__()
         self.socket = directory / "bridge.sock"
         self.addCleanup(manager.__exit__, None, None, None)
-        self.enterContext(
-            override_settings(
-                SEVERINO_CONTROLLER_HEARTBEAT=str(directory / "heartbeat"),
-                SEVERINO_CONTROLLER_DOORBELL=str(directory / "controller-doorbell"),
-            )
-        )
         self.bridge = Counted()
         serving = served(self.bridge, self.socket)
         serving.__enter__()

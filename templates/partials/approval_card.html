@@ -1,29 +1,30 @@
 {% comment %}
 Expects `entry` from approvals.review(). Its heading is what was asked, the
 aside when and how, and what it acts on. A warning no row of the change
-carries stands above it. Decisions only while pending.
+carries stands above it. Its buttons are the decisions its reader may take
+(`entry.offer`), and a decision withheld from them says why.
 {% endcomment %}
 {% section entry.asked|stringformat:"s" edge=entry.tone data_approval=entry.held.state more_label=entry.resource_label more_url=entry.resource_url %}
-  {% if entry.held.reason or entry.held.decision_note %}
+  {% if entry.held.reason or entry.held.decision_note or entry.offer.withheld %}
     {% facts %}
       {% if entry.held.reason %}{% fact "Reason" value=entry.held.reason|breakable %}{% endif %}
       {% if entry.held.decision_note %}{% fact "Decision note" value=entry.held.decision_note|breakable %}{% endif %}
+      {% if entry.offer.withheld %}{% fact "Decision" value=entry.offer.withheld|breakable %}{% endif %}
     {% endfacts %}
   {% endif %}
 
   {% if entry.warnings %}
     {% notice tone="warning" %}
-      {% if entry.warnings|length == 1 %}{{ entry.warnings.0|breakable }}{% else %}<ul>{% for warning in entry.warnings %}<li>{{ warning|breakable }}</li>{% endfor %}</ul>{% endif %}
+      {% if entry.warnings|length == 1 %}{{ entry.warnings.0|breakable }}{% else %}{% prose_list %}{% for warning in entry.warnings %}<li>{{ warning|breakable }}</li>{% endfor %}{% endprose_list %}{% endif %}
     {% endnotice %}
   {% endif %}
   {% change_table entry.preview %}
 
-  {% if entry.held.state == 'pending' %}
-    {% url 'control_plane:approval_decision' entry.held.id as decision_url %}
-    <p class="form-actions">
-      {% post_button "Approve" decision_url name="decision" value="approve" css="btn primary" %}
-      {% post_button "Reject" decision_url name="decision" value="reject" %}
-    </p>
+  {% if entry.offer.actions %}
+    {% remedies entry.offer.actions as shown %}
+    {% button_row %}
+      {% for action in shown %}{% include "partials/_page_action.html" with action=action only %}{% endfor %}
+    {% endbutton_row %}
   {% endif %}
 {% aside %}
   Asked {% if entry.who.door %}{{ entry.who.door|breakable }} {% endif %}{{ entry.held.created_at|when_text:"ago" }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when:"ahead" }}

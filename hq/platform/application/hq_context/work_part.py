@@ -12,11 +12,12 @@ from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_
 lazy from hq.domains.jobs.models import Job as JobRow
 
 from ..drawings import Dot, Dots
+from ..moments import moment
 from ..projection import read_once
-from ..timestamps import moment
+from ..tone import Tone
 from ..ui import counted
-from .tones import ATTENTION, GOOD, NEUTRAL, SERIOUS, iso
-lazy from .. import outbound_work, scheduled_work
+from .band import iso
+lazy from .. import outbound_work
 lazy from ..facts import stored_snapshots
 lazy from ..render_status_findings import FAILURE_CLASSES, UNKNOWN_FAILURE, UNREAD_REASONS, rendering
 lazy from ..routes import reverse
@@ -34,7 +35,7 @@ class WorkUnit:
     runs: str
     last_run: datetime | None
     result: str
-    tone: str
+    tone: Tone
     next_run: datetime | None = None
     # The unit's name as a person reads it: ``unit`` with its escapes decoded.
     name: str = ""
@@ -50,7 +51,7 @@ class Renderer:
 
     name: str
     result: str
-    tone: str
+    tone: Tone
     attempted: datetime | None = None
     succeeded: datetime | None = None
 
@@ -65,7 +66,7 @@ class Scheduled:
     every: str
     last_run: datetime | None
     result: str
-    tone: str
+    tone: Tone
     # When it is next due; None while it is due now.
     next_due: datetime | None
     # Its recent runs, oldest first: filled for each that succeeded.
@@ -111,7 +112,7 @@ def _work() -> Work:
         read_at=units.observed_at if units is not None and units.connected else None,
         unread=unread,
         renderers_unread=renderers_unread,
-        scheduled=_scheduled_work(),
+        scheduled=_on_a_cadence(),
     )
 
 
@@ -152,10 +153,10 @@ def _jobs(snapshot: Any) -> tuple[tuple[WorkUnit, ...], str]:
 
 
 def _scheduled_label(unit: str) -> str:
-    """The scheduled work an instance of the job template runs, or ""."""
+    """The host's work an instance of the job template runs, or ""."""
 
     instance = unit.partition("@")[2].rpartition(".")[0]
-    return next((work.label for work in scheduled_work.SCHEDULED if instance and work.name == instance), "")
+    return next((work.label for work in outbound_work.host_work() if instance and work.name == instance), "")
 
 
 def _runs(unit: str, title: str = "", shown: str = "") -> tuple[str, bool]:
@@ -206,27 +207,27 @@ def _standing(unit: Any) -> WorkUnit:
     )
 
 
-def _result(unit: Any) -> tuple[str, str]:
+def _result(unit: Any) -> tuple[str, Tone]:
     """How a unit's last run went, in words, and its tone."""
 
     if unit.absent:
-        return unit.absent, SERIOUS
+        return unit.absent, Tone.SERIOUS
     if unit.failed:
-        return f"Failed: {unit.result or 'unknown'}", SERIOUS
+        return f"Failed: {unit.result or 'unknown'}", Tone.SERIOUS
     if unit.active in ("activating", "reloading"):
-        return JobRow.State.RUNNING.label, NEUTRAL
+        return JobRow.State.RUNNING.label, Tone.NEUTRAL
     if unit.active == "active" and unit.sub == "running":
-        return JobRow.State.RUNNING.label, GOOD
+        return JobRow.State.RUNNING.label, Tone.GOOD
     if unit.active == "active" and unit.sub in ("listening", "mounted"):
         # A socket or a mount doing its work, in systemd's word for it.
-        return unit.sub.capitalize(), GOOD
+        return unit.sub.capitalize(), Tone.GOOD
     if unit.condition == "no":
-        return "Skipped", NEUTRAL
+        return "Skipped", Tone.NEUTRAL
     if unit.result == "success":
-        return JobRow.State.SUCCEEDED.label, GOOD
+        return JobRow.State.SUCCEEDED.label, Tone.GOOD
     if unit.result:
-        return JobRow.State.LOST.label, ATTENTION
-    return ("Waiting", GOOD) if unit.starter else ("Not run since the machine started", NEUTRAL)
+        return JobRow.State.LOST.label, Tone.ATTENTION
+    return ("Waiting", Tone.GOOD) if unit.starter else ("Not run since the machine started", Tone.NEUTRAL)
 
 
 def _renderers(snapshot: Any) -> tuple[tuple[Renderer, ...], str]:
@@ -239,11 +240,11 @@ def _renderers(snapshot: Any) -> tuple[tuple[Renderer, ...], str]:
             continue
         run = rendering(record, snapshot.observed_at)
         if run.reason:
-            result, tone = UNREAD_REASONS.get(run.reason, run.reason), ATTENTION
+            result, tone = UNREAD_REASONS.get(run.reason, run.reason), Tone.ATTENTION
         elif run.failed:
-            result, tone = f"Failed: {FAILURE_CLASSES.get(run.failure, UNKNOWN_FAILURE)}", SERIOUS
+            result, tone = f"Failed: {FAILURE_CLASSES.get(run.failure, UNKNOWN_FAILURE)}", Tone.SERIOUS
         else:
-            result, tone = ("Refreshed" if run.outcome == "rendered" else "Already current"), GOOD
+            result, tone = ("Refreshed" if run.outcome == "rendered" else "Already current"), Tone.GOOD
         found.append(Renderer(run.name, result, tone, moment(run.attempted_at), moment(run.confirmed_at)))
     return tuple(found), ""
 
@@ -279,12 +280,11 @@ def _run_dot(job: Any) -> Dot:
     )
 
 
-def _scheduled_work() -> tuple[Scheduled, ...]:
+def _on_a_cadence() -> tuple[Scheduled, ...]:
     """Every piece of work done on a cadence, with its recent runs and when it
     is next due. Three queries, however many jobs there are."""
 
-    declared = [(work.name, work.label, work.every) for work in scheduled_work.SCHEDULED if work.every is not None]
-    declared += [
+    declared = [
         (work.name, work.label, work.every) for work in outbound_work.declared_work().values() if work.every is not None
     ]
     if not declared:
@@ -314,7 +314,7 @@ def _scheduled_work() -> tuple[Scheduled, ...]:
             latest = job_run(runs[0])
             result, tone = latest.word, latest.tone
         else:
-            result, tone = ("Not run lately", ATTENTION) if name in last_seen else ("Not done yet", NEUTRAL)
+            result, tone = ("Not run lately", Tone.ATTENTION) if name in last_seen else ("Not done yet", Tone.NEUTRAL)
         last = succeeded.get(name)
         found.append(
             Scheduled(

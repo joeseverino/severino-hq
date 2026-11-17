@@ -16,8 +16,9 @@ from hq.domains.control_plane.observations.host import FILESYSTEM_KIND
 from .finding_model import FindingRule, OperatorStep, cannot_run_commands, machine_step
 from .labels import human_bytes
 from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller
+from .tone import Tone
 from .topology_model import TopologyNode
-from .ui import counted
+from .ui import counted, measured
 
 FILESYSTEM_SPACE = "filesystem-space"
 
@@ -61,9 +62,9 @@ class FilesystemSpace(FactRow):
         """``serious`` or ``attention`` when nearly full, else ""."""
 
         if self.under(SERIOUS_FREE, SERIOUS_SHARE):
-            return "serious"
+            return Tone.SERIOUS
         if self.under(ATTENTION_FREE, ATTENTION_SHARE):
-            return "attention"
+            return Tone.ATTENTION
         return ""
 
 
@@ -90,7 +91,7 @@ def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
 
 
 def _share(filesystem: FilesystemSpace) -> str:
-    return f"{filesystem.free / filesystem.total:.1%}"
+    return measured(filesystem.free * 100 / filesystem.total, "%", 1)
 
 
 def _steps(node: TopologyNode, row: FilesystemSpace) -> tuple[OperatorStep, ...]:
@@ -113,7 +114,7 @@ _nearly_full = OnEachMachine(
     rule="filesystem-nearly-full",
     row=FilesystemSpace,
     picked=lambda row: bool(row.mount and row.severity),
-    severity=lambda full: "serious" if any(row.severity == "serious" for row in full) else "attention",
+    severity=lambda full: Tone.SERIOUS if any(row.severity == Tone.SERIOUS for row in full) else Tone.ATTENTION,
     title=lambda node, full: (
         f"The filesystem at {full[0].mount} on {node.label} is nearly full"
         if len(full) == 1
@@ -135,14 +136,14 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "filesystem-nearly-full",
         "A filesystem is nearly full",
-        "serious",
+        Tone.SERIOUS,
         _nearly_full,
         operator_action="On the machine, free space on the mount, then check again.",
         no_help_reason=cannot_run_commands(),
         bars={
-            "serious": f"free space is under {human_bytes(SERIOUS_FREE)} and {SERIOUS_SHARE:.0%} of the disk",
-            "attention": f"free space is under {human_bytes(ATTENTION_FREE)} and {ATTENTION_SHARE:.0%} of the disk",
+            Tone.SERIOUS: f"free space is under {human_bytes(SERIOUS_FREE)} and {measured(SERIOUS_SHARE * 100, '%', 0)} of the disk",
+            Tone.ATTENTION: f"free space is under {human_bytes(ATTENTION_FREE)} and {measured(ATTENTION_SHARE * 100, '%', 0)} of the disk",
         },
-        clears=f"free space is back above {human_bytes(ATTENTION_FREE)} or {ATTENTION_SHARE:.0%} of the disk",
+        clears=f"free space is back above {human_bytes(ATTENTION_FREE)} or {measured(ATTENTION_SHARE * 100, '%', 0)} of the disk",
     ),
 )

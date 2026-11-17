@@ -22,6 +22,7 @@ import time
 from collections.abc import Callable
 from contextlib import ExitStack, redirect_stdout, suppress
 from dataclasses import dataclass
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any, NoReturn, override
 from unittest import mock
@@ -42,7 +43,7 @@ from hq.platform.core.stalls import stall_watch
 from hq.platform.core.tests import look_shares, task
 from hq.platform.core.tests.browser import probes
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, estate_pages, navigation
-from hq.platform.core.tests.browser.gate import BrowserGate, add_css
+from hq.platform.core.tests.browser.gate import LIFTED, BrowserGate, add_css
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.audit import AUDIT
 from hq.platform.core.tests.browser.reference import (
@@ -62,7 +63,6 @@ from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
 from hq.platform.core.tests.browser.survey import (
     BUSY,
-    CHECKS,
     CLOSE_OPENED,
     open_every_fold,
     palette_probes,
@@ -86,13 +86,21 @@ from hq.platform.core.tests.look_tables import COLUMNS, TABLES, columns_line
 from hq.platform.core.tests.task import PREFIX, TEMPLATE, Usage, estate_name, estate_path, is_estate, usage
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST
+lazy from hq.platform.core.example_estate.agents import example_viewer
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 
 # The catalog builds its entries from the shared parts' constructors as it is
 # imported, so a base whose constructors this tree's catalog does not fit still
 # looks at every other page: it is read only for a name nothing else is.
 lazy from hq.platform.core.tests.browser import catalog
-lazy from tools.perf.report import tokens as perf_tokens  # noqa: TID251 - dev:look runs perf in its share, and perf declares what it draws
+
+# A composed look's base composes the set its commit can load, picked there.
+# ast-grep-ignore: tools-imported-only-by-tools
+lazy from tools.dev import extension_set
+
+# dev:look runs perf in its share, and perf declares what it draws.
+# ast-grep-ignore: tools-imported-only-by-tools
+lazy from tools.perf.report import tokens as perf_tokens
 
 # Each run's shots go to a folder of their own under here, named for when the
 # run began, so a later run never overwrites what an earlier one printed: the
@@ -120,34 +128,47 @@ REPORT = "report.txt"
 # mise-tasks/dev/look runs a survey so, kept as `look-survey-<engine>`.
 GATE_DETAIL = "HQ_GATE_DETAIL"
 GATE_RERUN = "HQ_GATE_RERUN"
-# The checkout the gate judges when it is not this one, as an extension's
-# survey names its own (tools/gate/verdict.py's JUDGED_FOLDER).
-GATE_TREE = "HQ_GATE_TREE"
-# What a survey's verdict can read, as the git pathspecs of its record's
-# `inputs:` line: landing keeps a passing survey for a tree that differs from
-# the one it judged only outside them. It is the whole tree less what no page,
-# seed, probe or this look reads, since a path missed by an exclusion costs a
-# rerun while a path missed by an inclusion keeps a survey that should run
-# again. The Go controller is a separate program; its JSON contracts, which
-# pages read, stay in.
+# What a page or this look can read, as git pathspecs, so a run names a change
+# to one while it draws (`changed_since`): the whole tree less what neither
+# reads, with the look's own Python and shell added back (`look_reads`). It
+# excludes rather than lists, since pages read files all over the tree (the
+# controller's JSON contracts, a systemd timer, bridge_base.json): a path an
+# exclusion misses costs a needless line, while one a list misses hides a
+# change to what was drawn. Out are the tests and the tools, lint and type
+# config (pyproject.toml, since uv.lock holds what a request imports), the
+# committed OpenAPI document, which only its drift gate reads (the served one
+# is built from the routes and openapi-examples.json), and the Go controller,
+# a separate program.
 SURVEY_INPUTS = (
     ".",
     ":(exclude)docs",
-    ":(exclude)tests/shell",
-    ":(exclude)tests/fuzz",
+    ":(exclude,glob)**/tests/**",
+    ":(exclude)tools",
+    ":(exclude)mise-tasks",
+    ":(exclude)mise.fast.toml",
+    ":(exclude)pyproject.toml",
+    ":(exclude)hq/platform/api/hq-api.openapi.json",
     ":(exclude).github",
     ":(exclude,glob)controller/**/*.go",
-    ":(exclude,glob)*.md",
+    ":(exclude,glob)**/*.md",
     ":(exclude)LICENSE",
 )
+# The task a look runs in, whose sourced shell files it reads too.
+LOOK_TASK = "mise-tasks/dev/look"
+_LOOK = Path(__file__).resolve().relative_to(Path(settings.BASE_DIR).resolve()).as_posix()
+_SOURCED = re.compile(r"^\s*\.\s+\./(\S+)", re.MULTILINE)
 # A rule's verdict when it judged no page at any width: none matched, or none drew.
 JUDGED_NOTHING = "{} judged no page: none matched, or none drew"
+# Who the estate's pages are asked as, by --as: its owner by default, or the
+# viewer the estate holds, whose refusal (a 403, an offer withheld) is looked at.
+VIEWER = "viewer"
 # How many processes looked, each with a browser of its own (look_shares).
 LOOKED_IN = "Looked in {} {}"
 # The flags that change what a run draws or reads, named in what it says it judged.
 DRAWN_WITH = (
     "base",
     "seed",
+    "as",
     "widths",
     "dialog",
     "dark",
@@ -520,17 +541,63 @@ def _snapshot_env(root: Path, store: Path) -> dict[str, str]:
     }
 
 
+def look_reads(root: Path) -> list[str]:
+    """The files `SURVEY_INPUTS` leaves out that a page or this look still
+    runs: the Python this look and every kept module import, with each
+    package's ``__init__.py`` above them, as Ruff's import graph reads them,
+    and the shell files the look's task sources."""
+
+    listed = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *SURVEY_INPUTS],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split("\0")
+    graph = json.loads(
+        subprocess.run(
+            [sys.executable, "-m", "ruff", "analyze", "graph", "--quiet", "."],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )
+    reached: set[str] = set()
+    todo = [_LOOK, *(p for p in listed if p.endswith(".py"))]
+    while todo:
+        if (path := todo.pop()) in reached:
+            continue
+        reached.add(path)
+        packages = [f"{parent.as_posix()}/__init__.py" for parent in Path(path).parents if parent != Path()]
+        todo += [p for p in (*graph.get(path, ()), *packages) if (root / p).is_file()]
+    shell, task = set(), [LOOK_TASK]
+    while task:
+        if (path := task.pop()) not in shell and (root / path).is_file():
+            shell.add(path)
+            task += _SOURCED.findall((root / path).read_text(encoding="utf-8"))
+    return sorted((reached | shell) - set(listed))
+
+
 def tree_of(root: Path, store: Path | None = None) -> str:
-    """The files a look can read in the checkout at ``root`` (`SURVEY_INPUTS`)
-    as one git tree id, untracked ones too and none git ignores, so two
-    checkouts that differ in any of them name different trees. It is written
-    into ``store``, kept for `changed_since` to read, or a folder of its own."""
+    """The files a look can read in the checkout at ``root`` (`SURVEY_INPUTS`
+    and `look_reads`) as one git tree id, untracked ones too and none git
+    ignores, so two checkouts that differ in any of them name different trees.
+    It is written into ``store``, kept for `changed_since` to read, or a
+    folder of its own."""
 
     with ExitStack() as stack:
         folder = store or Path(stack.enter_context(tempfile.TemporaryDirectory()))
         env = _snapshot_env(root, folder)
         git = ["git", "-C", str(root)]
         subprocess.run([*git, "add", "--all", "--", *SURVEY_INPUTS], env=env, capture_output=True, check=True)
+        own = Path(folder, "look-reads")
+        own.write_text("".join(f":(literal){path}\0" for path in look_reads(root)), encoding="utf-8")
+        subprocess.run(
+            [*git, "add", "--all", f"--pathspec-from-file={own}", "--pathspec-file-nul"],
+            env=env,
+            capture_output=True,
+            check=True,
+        )
         return subprocess.run([*git, "write-tree"], env=env, capture_output=True, text=True, check=True).stdout.strip()
 
 
@@ -710,6 +777,10 @@ def look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Foun
             }
             if script := _asked().text("eval"):
                 env[f"{PREFIX}eval"] = str(Path(settings.BASE_DIR, script).resolve())
+            if _asked().switch("composed"):
+                picked = extension_set.at_commit(commit)
+                print(f"{ref}: {picked.said}", flush=True)
+                env |= picked.composed
             shell = ["uv", "run", "--group", "browser", "python", "manage.py", "shell", "--no-imports", "-v", "0"]
             if kept := kept_own(tree, commit, present, shell, env, taken=tuple(deleted)):
                 print(f"{ref}: {_its_own(kept)}", flush=True)
@@ -848,38 +919,15 @@ def _shown(path: Path) -> str:
     return str(path.relative_to(settings.BASE_DIR)) if path.is_relative_to(settings.BASE_DIR) else str(path)
 
 
-def _by_name() -> set[str]:
-    """Each check that takes a page's name alone."""
+def _rules() -> list[str]:
+    """What ``--rule`` may name: each check that takes a page's name alone."""
 
-    return {
+    return sorted(
         name
         for owner in (Look, LayoutBrowserTests)
         for name, member in vars(owner).items()
         if inspect.isfunction(member) and list(inspect.signature(member).parameters)[1:] in (["name"], ["_name"])
-    }
-
-
-def _rules() -> list[str]:
-    """What ``--rule`` may name: each check that takes a page's name alone,
-    and every rule the gate's sweep without script holds."""
-
-    return sorted(_by_name() | set(LayoutBrowserTests.unscripted_rules()))
-
-
-def held_without_script_only(rule: str) -> list[int]:
-    """The widths the gate holds ``rule`` at without script, when it holds it
-    only there: a rule of the sweep without script that reads a probe the
-    survey, which the gate holds once script has run, does not."""
-
-    widths = LayoutBrowserTests.unscripted_rules().get(rule, [])
-    if not widths or rule in _by_name():
-        return []
-    # A rule's probes are fixed as its class is defined, so none is a probe
-    # the survey reads only when it runs (axe's, from the lint tools, which
-    # the image lacks): naming a rule reads none of those.
-    fixed = (check.probe for check in CHECKS.values() if not callable(check.probe))
-    surveyed = {probe[0] if isinstance(probe, tuple) else probe for probe in fixed}
-    return widths if any(source not in surveyed for source, _arg in getattr(LayoutBrowserTests, rule).probes) else []
+    )
 
 
 def no_rule(rule: str) -> str:
@@ -927,7 +975,7 @@ def catalog_pages(asked) -> dict[str, str]:
 # says so, and its line goes. A look asked for one is not refused: its record
 # says it was undrawn, since the change owes no survey of a page that is not.
 DRAWN_BY_NOTHING = {
-    "403.html": "Django draws it for a refused request, and the look asks as the estate's owner",
+    "403.html": "Django draws it for a refused request, which the look asks only with --as viewer",
     "404.html": "Django draws it for an address no route answers, which no page of the estate is",
     "500.html": "Django draws it for a request that raised, which no page of the estate does",
     "auth/login.html": "drawn for a reader signed out, and the look signs in as the estate's owner",
@@ -1075,12 +1123,6 @@ def _checked(records: task.Records | None) -> Asked:
     pages = _served(rest, records) if rest or not undrawn else []
     if (rule := Look.rule_asked()) and rule not in _rules():
         raise AssertionError(no_rule(rule))
-    if rule and not given.switch("no_script") and (widths := held_without_script_only(rule)):
-        at = ",".join(map(str, widths))
-        raise AssertionError(
-            f"{rule} is held without script, at {at}: mise run dev:look --rule {rule} --no-script --widths {at}"
-            f" {' '.join(names)}"
-        )
     probe, probe_source = _probe(given.text("probe"))
     if given.text("arg") and not probe:
         raise AssertionError("--arg is what --probe's function takes: name the probe")
@@ -1327,8 +1369,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @classmethod
     def serve_estate(cls):
-        """A client signed in as the example estate's owner, answering as
-        production does, until the class is done.
+        """A client signed in as the example estate's owner, or its viewer
+        with ``--as viewer``, answering as production does, until the class
+        is done.
 
         The estate is committed to the run's own test database, which the
         runner destroys after it: `respond` runs in Playwright's event loop,
@@ -1349,7 +1392,13 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         stack.enter_context(mock.patch.dict(os.environ, {"DJANGO_ALLOW_ASYNC_UNSAFE": "1"}))
         stack.enter_context(as_production())
         client = Client()
-        sign_in(client, stack.enter_context(seeds.built(_asked().text("seed"))))
+        seed = _asked().text("seed")
+        owner = stack.enter_context(seeds.built(seed))
+        try:
+            person = example_viewer() if _asked().text("as") == VIEWER else owner
+        except LookupError:
+            cls.refuse(f"--as viewer: the {seed} set holds no viewer; --seed showcase does")
+        sign_in(client, person)
         cls.answered = {}
         return client
 
@@ -1376,7 +1425,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         another_region = _REGION in request.headers and parts.path != urlsplit(self.page.url).path
         if (
             self.estate_client is None
-            or parts.path.startswith(settings.STATIC_URL)
+            or parts.path.startswith((settings.STATIC_URL, LIFTED))
             or (not self.on_estate and parts.path.strip("/") in self.pages and not another_region)
         ):
             LayoutBrowserTests.respond(self, route)
@@ -1588,11 +1637,6 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             f"at: {', '.join(dict.fromkeys(str(width) for _, width in self.judged_at)) or 'none'}",
             f"with: {' '.join(drawn) or 'the defaults'}",
         ]
-        # The inputs name this checkout's paths, so another checkout's record
-        # holds only for the tree it judged.
-        judged = os.environ.get(GATE_TREE)
-        if not judged or Path(judged).resolve() == Path(settings.BASE_DIR).resolve():
-            lines.append(f"inputs: {' '.join(SURVEY_INPUTS)}")
         Path(into).write_text("\n".join(lines) + "\n", encoding="utf-8")
         pages = list(dict.fromkeys(blamed)) or list(asked.repeated(_ASKED))
         engine = asked.text("engine") or "webkit"
@@ -1864,10 +1908,15 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.open(name, width)
         except BrowserError as refused:
             return f"not a page ({str(refused).splitlines()[0]})"
-        # A named POST's page is its refusal, so it answers that refusal's status.
-        expected = posted(name).status if is_post(name) else 200
+        # A named POST's page is its refusal, so it answers that refusal's
+        # status; so does a page the viewer is refused.
+        # Only a served page has an answer recorded: a part draws without one.
         served = is_estate(name) or is_post(name)
-        if served and (said := self.answered.get(_address(self.page.url), (None, ""))) != (expected, ""):
+        said = self.answered.get(_address(self.page.url), (None, "")) if served else (None, "")
+        expected = posted(name).status if is_post(name) else 200
+        if _asked().text("as") == VIEWER and said == (HTTPStatus.FORBIDDEN, ""):
+            expected = HTTPStatus.FORBIDDEN
+        if served and said != (expected, ""):
             status, refusal = said
             if status != expected:
                 self.unanswered_pages[name] = status

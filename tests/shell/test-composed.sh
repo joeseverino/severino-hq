@@ -19,6 +19,11 @@ cp "${repo}/${task}" "${fixture}/${task}"
 copy_libraries "${repo}" "${fixture}" "${task}"
 cp "${repo}/tools/__init__.py" "${fixture}/tools/"
 cp "${repo}/tools/gate/__init__.py" "${repo}/tools/gate/tree.py" "${repo}/tools/gate/verdict.py" "${fixture}/tools/gate/"
+# The picker the extension set passes through, and the plugin API the host speaks.
+mkdir -p "${fixture}/tools/dev" "${fixture}/tools/pipeline" "${fixture}/hq/platform/application"
+cp "${repo}/tools/dev/__init__.py" "${repo}/tools/dev/extension_set.py" "${fixture}/tools/dev/"
+cp "${repo}/tools/pipeline/__init__.py" "${repo}/tools/pipeline/plugin_identity.py" "${fixture}/tools/pipeline/"
+echo 'PLUGIN_API_VERSION = 1' >"${fixture}/hq/platform/application/plugins.py"
 printf '*\n!built/\n!deploy/\n!manage.py\n' >"${fixture}/Dockerfile.dockerignore"
 printf 'FROM scratch\nCOPY --exclude=built . /app\n' >"${fixture}/Dockerfile"
 : >"${fixture}/manage.py"
@@ -43,7 +48,10 @@ while :; do
         *) break ;;
     esac
 done
-case "$*" in "python -m tools.gate.verdict "*) shift 3; exec python3 -m tools.gate.verdict "$@" ;; esac
+case "$*" in
+    "python -m tools.gate.verdict "*) shift 3; exec python3 -m tools.gate.verdict "$@" ;;
+    "python -c "*) shift; exec python3 "$@" ;;
+esac
 STUB
 { echo '#!/bin/sh'; cat "${work}/uv-run"; } >"${work}/bin/uv"
 cat >>"${work}/bin/uv" <<'STUB'
@@ -68,7 +76,7 @@ run() { # run <uv behavior> [NAME=value...]; prints the task's exit status
     # MISE_CONFIG_ROOT. No extension set unless a case names one.
     (cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" \
         TEST_UV="${behavior}" TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" \
-        MISE_TASK_LOCKS=heavy HQ_LOCAL_PLUGINS= REQUIRE_COMPOSED= HQ_EXTENSIONS_SAID= "$@" "./${task}") >/dev/null 2>&1 || status=$?
+        MISE_TASK_LOCKS=heavy HQ_LOCAL_PLUGINS= HQ_LOCAL_PYTHONPATH= REQUIRE_COMPOSED= HQ_EXTENSIONS_SAID= "$@" "./${task}") >/dev/null 2>&1 || status=$?
     echo "${status}"
 }
 
@@ -89,7 +97,7 @@ done
 # The run's verdict is its closing line, kept whole where the line above names.
 rm -f "${fixture}/var/gate/test-composed.txt"
 (cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" \
-    TEST_UV=3 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" MISE_TASK_LOCKS=heavy HQ_LOCAL_PLUGINS= REQUIRE_COMPOSED= \
+    TEST_UV=3 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" MISE_TASK_LOCKS=heavy HQ_LOCAL_PLUGINS= HQ_LOCAL_PYTHONPATH= REQUIRE_COMPOSED= \
     "./${task}") >"${work}/out" 2>&1 || true
 kept="$(cd "${fixture}" && pwd -P)/var/gate/test-composed.txt"
 [ -f "${kept}" ] || fail "the run kept no verdict in var/gate"
@@ -121,6 +129,66 @@ case "${first}" in *"${work}/alpha/src, ${work}/beta-worktree/src"*) ;; *) fail 
 [ "$(grep -c "composed from" "${work}/out")" = 1 ] || fail "the trees are named more than once"
 [ "$(cat "${work}/seen.set")" = "example_alpha.plugin:plugin,example_beta.plugin:plugin|${sources}" ] ||
     fail "the suite did not import the set named: $(cat "${work}/seen.set")"
+
+# A package of another plugin API than the host's is never composed as it
+# stands: the suite imports its repository's newest commit at the host's API
+# made before the host moved on from the commit it stands on (an extension's
+# later commit at that API may use what the host added since), else no
+# extension, which a required run refuses.
+extensions="${work}/extensions"
+mkdir -p "${extensions}/packages/alpha/src/example_alpha"
+printf '[project]\nname = "example-alpha"\n' >"${extensions}/packages/alpha/pyproject.toml"
+declares() { # declares <api> <unix time> <word>: the package's manifest requires <api>, committed then
+    printf '# %s\nplugin = PluginManifest(id="example.alpha", api_version=%s)\n' "$3" "$1" \
+        >"${extensions}/packages/alpha/src/example_alpha/plugin.py"
+    git -C "${extensions}" add -A
+    GIT_COMMITTER_DATE="@$2 +0000" git -C "${extensions}" -c user.name=test -c user.email=test@example.com \
+        -c commit.gpgsign=false commit -q --no-verify -m "API $1"
+}
+git -C "${extensions}" init -q
+declares 1 1700000000 first
+at_one="$(git -C "${extensions}" rev-parse HEAD)"
+declares 1 1700000200 later
+declares 2 1700000300 bumped
+composed() { # composed <host api> [NAME=value...]: the task's status; what the suite imported is in seen.set
+    echo "PLUGIN_API_VERSION = $1" >"${fixture}/hq/platform/application/plugins.py"
+    shift
+    rm -f "${work}/seen.set"
+    status=0
+    (cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" \
+        TEST_UV=0 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" MISE_TASK_LOCKS=heavy REQUIRE_COMPOSED= HQ_EXTENSIONS_SAID= \
+        HQ_LOCAL_PLUGINS=example_alpha.plugin:plugin HQ_LOCAL_PYTHONPATH="${extensions}/packages/alpha/src" "$@" \
+        "./${task}") >"${work}/out" 2>&1 || status=$?
+    echo "${status}"
+}
+[ "$(composed 2)" = 0 ] || fail "a package at the host's API did not compose"
+[ "$(cat "${work}/seen.set")" = "example_alpha.plugin:plugin|${extensions}/packages/alpha/src" ] ||
+    fail "a package at the host's API was not imported as it stands: $(cat "${work}/seen.set")"
+[ "$(composed 1)" = 0 ] || fail "a host behind the package did not compose"
+case "$(cat "${work}/seen.set")" in
+    "example_alpha.plugin:plugin|$(cd "${fixture}" && pwd -P)/var/extensions/"*"/packages/alpha/src") ;;
+    *) fail "a host behind the package did not import its commit at the host's API: $(cat "${work}/seen.set")" ;;
+esac
+picked="$(cat "${work}/seen.set")"
+picked="${picked#*|}"
+grep -q '^# later' "${picked}/example_alpha/plugin.py" || fail "the commit imported is not the newest at API 1"
+# Another line moves the host on from this commit between the extension's two
+# commits at API 1, so only the first was made against the host as it stands.
+moved_on="$(cd "${fixture}" && GIT_COMMITTER_DATE="@1700000100 +0000" git -c user.name=test -c user.email=test@example.com \
+    commit-tree -m "the host moves on" -p HEAD "HEAD^{tree}")"
+git -C "${fixture}" update-ref refs/heads/moved-on "${moved_on}"
+[ "$(composed 1)" = 0 ] || fail "a host the extension moved past did not compose"
+picked="$(cat "${work}/seen.set")"
+picked="${picked#*|}"
+grep -q '^# first' "${picked}/example_alpha/plugin.py" ||
+    fail "the commit imported is not the newest at API 1 made before the host moved on"
+grep -qF "${at_one%"${at_one#????????????}"}" "${work}/out" || fail "the run does not name the commit it composed"
+[ "$(composed 3)" = 0 ] || fail "a host ahead of every commit did not run alone"
+[ "$(cat "${work}/seen.set")" = "|" ] || fail "a host ahead of every commit composed $(cat "${work}/seen.set")"
+grep -q "No extension composed" "${work}/out" || fail "a run that composes no extension does not say why"
+[ "$(composed 3 REQUIRE_COMPOSED=1)" = 1 ] || fail "required, a host no commit matches did not refuse"
+[ ! -e "${work}/seen.set" ] || fail "required, a host no commit matches ran the suite anyway"
+echo 'PLUGIN_API_VERSION = 1' >"${fixture}/hq/platform/application/plugins.py"
 
 # The copy holds what the image admits and only that.
 rm -f "${work}/seen"

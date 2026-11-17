@@ -8,7 +8,7 @@ scheduled ``registry.refresh`` job; pages read what it stores through
 """
 
 from collections.abc import Callable, Iterable, Mapping
-from datetime import datetime, timedelta
+from datetime import datetime
 from ipaddress import ip_address
 from typing import Any
 from urllib.parse import urlsplit
@@ -35,14 +35,16 @@ lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND as P
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .facts import Subject, inventory_records, readings, record_read_at
+from .freshness import RETRY_AFTER, freshness
 from .locate import host_of
 from .lookup import HOSTNAME, allocation_of, entity_name
+from .moments import moment
 from .reach import is_public, public_label
 from .security import Capability, Principal
-from .timestamps import moment
 lazy from . import osv, services, zones
 lazy from .attestations import reduce
 lazy from .containers import containers
+lazy from .entity_links import https_url
 lazy from .github_public import GitHubReadError, get
 lazy from .images import ImageRef, newer, version
 lazy from .infrastructure import declared_machines
@@ -51,20 +53,8 @@ lazy from .oci_registry import RegistryPrivate, RegistryReadError, attestations,
 lazy from .osv import OSVReadError, finding
 lazy from .tailnet_presence import tailnet_presence
 
-REFRESH_AFTER = timedelta(days=1)
-# How long each reading stands, by how fast what it reads changes: who holds
-# an address or registers a domain moves in years; a tag, a release or a
-# vulnerability can land any day. A digest never changes (``None``).
-READ_EVERY: dict[str, timedelta | None] = {
-    ADDRESS_KIND: timedelta(days=7),
-    DOMAIN_KIND: timedelta(days=7),
-    IMAGE_KIND: REFRESH_AFTER,
-    UPSTREAM_KIND: REFRESH_AFTER,
-    DIGEST_KIND: None,
-    VULNERABILITY_KIND: REFRESH_AFTER,
-}
-# A subject that could not be read is asked again after this, not on every run.
-RETRY_AFTER = timedelta(hours=1)
+# What a digest carries never changes, so a record of one is never read again.
+_UNCHANGING = frozenset({DIGEST_KIND})
 LOOKUPS_PER_REFRESH = 16
 # GitHub allows 60 anonymous reads an hour, shared with Watching; each
 # repository costs two.
@@ -74,17 +64,8 @@ UPSTREAM_RELEASES = 10
 DETAILS_PER_REFRESH = 400
 
 
-def read_every(kind: str) -> timedelta:
-    """How long ``kind``'s reading stands; a digest's, as long as a day's check
-    that every running digest is held."""
-
-    return READ_EVERY.get(kind) or REFRESH_AFTER
-
-
 def _configured() -> bool:
-    endpoint = settings.SEVERINO_RDAP_ENDPOINT.strip()
-    parsed = urlsplit(endpoint)
-    return parsed.scheme == "https" and bool(parsed.hostname)
+    return bool(https_url(settings.SEVERINO_RDAP_ENDPOINT))
 
 
 def public_address(value: str) -> str:
@@ -367,8 +348,8 @@ def read_vulnerabilities(key: str) -> dict[str, Any]:
 def _github_link(value: Any) -> str:
     """A link GitHub gave, kept only when it is a GitHub page: it becomes an href."""
 
-    text = str(value or "")
-    return text if text.startswith("https://github.com/") else ""
+    url = https_url(value)
+    return url if urlsplit(url).hostname == "github.com" else ""
 
 
 def read_upstream(repository: str) -> dict[str, Any]:
@@ -424,18 +405,17 @@ def _advisory(item: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _due(record: Mapping[str, Any] | None, every: timedelta | None, now: datetime, *, force: bool) -> bool:
-    """Whether one subject's record is due to be read again."""
+def _due(record: Mapping[str, Any] | None, kind: str, now: datetime, *, force: bool) -> bool:
+    """Whether one subject's record of ``kind`` is due to be read again."""
 
     if record is None or record.get("unresolved"):
         return True
     read_at = record_read_at(record) or datetime.min.replace(tzinfo=now.tzinfo)
     if record.get("unread"):
         return read_at < now - RETRY_AFTER
-    if every is None:
-        # What a digest carries never changes.
+    if kind in _UNCHANGING:
         return False
-    return force or read_at < now - every
+    return force or freshness(kind, read_at, now).due
 
 
 def _report(
@@ -457,11 +437,10 @@ def _report(
     stored = ProviderInventory.objects.filter(kind=kind).first()
     kept = {str(record.get(key, "")): record for record in (stored.records if stored is not None else ())}
     wanted = tuple(dict.fromkeys(subjects))
-    every = READ_EVERY.get(kind, REFRESH_AFTER)
-    due = [subject for subject in wanted if _due(kept.get(subject), every, now, force=force)]
+    due = [subject for subject in wanted if _due(kept.get(subject), kind, now, force=force)]
     dropped = set(kept) - set(wanted)
     current = stored is not None and (
-        every is not None or (stored.observed_at is not None and stored.observed_at >= now - read_every(kind))
+        kind not in _UNCHANGING or (stored.observed_at is not None and not freshness(kind, stored.observed_at, now).due)
     )
     if not due and not dropped and stored is not None and stored.reachable and current:
         return None
@@ -527,7 +506,7 @@ def _held_findings() -> dict[tuple[str, str, str], Mapping[str, Any]]:
     }
 
 
-def _images(now: datetime, *, force: bool, principal: Principal) -> list[Any]:
+def _images(now: datetime, *, force: bool) -> list[Any]:
     """Every image reading, in the order each depends on the one before:
     tags name the digests, a digest's provenance can name the source, and
     its package list is what OSV is asked about. Each is stored before the
@@ -553,7 +532,7 @@ def _images(now: datetime, *, force: bool, principal: Principal) -> list[Any]:
     for kind, stage in zip((IMAGE_KIND, DIGEST_KIND, UPSTREAM_KIND, VULNERABILITY_KIND), stages, strict=False):
         report = stage()
         if report is not None:
-            recorded.extend(record_inventory({kind: report}, principal=principal).get("recorded") or ())
+            recorded.extend(record_inventory({kind: report}).get("recorded") or ())
     return recorded
 
 
@@ -573,7 +552,8 @@ def refresh(
     attestations, which cannot have changed.
     """
 
-    principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
+    # A lookup that stores what it read, so it writes inventory too.
+    principal.require(Capability.LOOK_UP_PUBLIC_RECORDS, Capability.MANAGE_INFRASTRUCTURE)
     now = timezone.now()
     kinds = (ADDRESS_KIND, DOMAIN_KIND)
     payload: dict[str, Any] = {}
@@ -581,10 +561,10 @@ def refresh(
         payload.update(_registries(addresses, domains, allocations, registrations, now, force))
     else:
         payload.update({kind: {"ok": True, "records": [], "connected": False} for kind in kinds})
-    recorded = _images(now, force=force, principal=principal)
+    recorded = _images(now, force=force)
     if not payload:
         return {"ok": True, "recorded": recorded}
-    result = record_inventory(payload, principal=principal)
+    result = record_inventory(payload)
     return {**result, "recorded": recorded + list(result.get("recorded") or ())}
 
 

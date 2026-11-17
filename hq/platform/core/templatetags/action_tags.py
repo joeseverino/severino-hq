@@ -1,26 +1,36 @@
-"""Buttons that post on their own, from anywhere on a page.
+"""Buttons: the one tag that draws every control that looks like one, and the posts it sends from anywhere on a page.
 
 A page never writes a form for one button. HQ renders one post form, once, at
-the end of base.html, and ``post_button`` names it in the button's ``form``
+the end of base.html, and ``button`` with ``post`` names it in the button's ``form``
 attribute with the button's own ``formaction``. The button therefore works
 inside another form without belonging to it: HTML has no nested forms, and a
 form written inside another silently detaches every control after it.
 """
 
+from urllib.parse import parse_qsl, urlsplit
 lazy from dataclasses import asdict, is_dataclass
 
 from django import template
 from django.middleware.csrf import get_token
-from django.urls import reverse
+from django.template.loader import render_to_string
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
+from hq.platform.application.tone import Tone
 lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capabilities import capability_words
-lazy from hq.platform.application.dashboard import queue_item
+lazy from hq.platform.application.dashboard import gathered_rows
+lazy from hq.platform.application.page_parts import html_attributes
 lazy from hq.platform.application.pages import PageAction, offered_now
-lazy from hq.platform.core.templatetags.value_tags import _request, button_words, is_this_page
+lazy from hq.platform.application.ui import button_classes
+lazy from hq.platform.core.templatetags.value_tags import (
+    _request,
+    arrow as onward_arrow,
+    breakable,
+    button_words,
+    is_this_page,
+)
 lazy from hq.platform.core.templatetags.write_tags import write_token
 
 register = template.Library()
@@ -39,17 +49,18 @@ def row_value(item):
 def triage(item=None, *, sorts=True, family="", url=""):
     """``{% triage item sorts=triage as away %}``: the reader's own way to sort
     a queue row, Dismiss, or Restore once it is dismissed, posting the row's
-    key; none where the queue is not the reader's to sort (``sorts``). With
+    key; none where the queue is not the reader's to sort (``sorts``) or the
+    row is not (``action_items.sortable``). With
     ``family`` and the part's dismiss ``url``, Dismiss of a whole family."""
 
-    if not sorts:
+    if not sorts or (item is not None and not action_items.sortable(item)):
         return None
     if family:
-        return PageAction("Dismiss", f"{url}&family={family}", method="post")
-    restore = bool(item.get("aside"))
-    route = "action_items_bring_back" if restore else "action_items_set_aside"
-    label = "Restore" if restore else "Dismiss"
-    return PageAction(label, reverse(route), method="post", field="key", value=action_items.row_value(item))
+        # ``url`` is the part's own, whose query says which rows it shows.
+        shown = dict(parse_qsl(urlsplit(url).query))
+        return PageAction.command(action_items.SET_ASIDE, query={**shown, "family": family})
+    command = action_items.RESTORE if item.get("aside") else action_items.SET_ASIDE
+    return PageAction.command(command, field="key", value=action_items.row_value(item))
 
 
 @register.filter
@@ -68,7 +79,7 @@ def decision(item):
 def urgency(status):
     """``{{ item.status|urgency }}``: how urgent, in the words every pill says."""
 
-    return decisions.urgency(status)
+    return Tone(status).urgency
 
 
 @register.filter
@@ -82,7 +93,7 @@ def workflow_parts(plan):
 def queue_entries(entries):
     """Keep the SDK attention include on the queue's single projection."""
 
-    return [queue_item(entry.get("source_id", ""), entry["source"], entry["item"]) for entry in entries]
+    return gathered_rows({"source_id": "", **entry} for entry in entries)
 
 
 @register.filter
@@ -90,19 +101,7 @@ def workflow_action(action):
     """An emitted ActionLink uses the same renderer as a page action, so one
     the command would refuse now is drawn unusable, saying why."""
 
-    if isinstance(action, PageAction):
-        return action
-    values = asdict(action) if is_dataclass(action) else action
-    refusal = values.get("refusal", "")
-    return PageAction(
-        values["label"],
-        values["url"],
-        method=values["method"].lower(),
-        primary=values.get("recommended", False),
-        danger=values.get("effect") == "destructive",
-        title=refusal or values.get("reason", ""),
-        disabled=bool(refusal),
-    )
+    return PageAction.of(action)
 
 
 @register.simple_tag(takes_context=True)
@@ -124,7 +123,7 @@ def remedies(context, actions):
 def post_button_markup(
     label, url, *, name="action", value="", css="btn", title="", disabled=False, pressed=None, hit=False, shared=True
 ):
-    """The button ``post_button`` draws, for Python that builds a page's
+    """The button ``button`` draws with ``post``, for Python that builds a page's
     markup: posting through the shared form, or the one form it stands in
     (``shared=False``)."""
 
@@ -148,41 +147,107 @@ def post_button_markup(
     )
 
 
+# What a button a script or the platform acts on may carry besides its
+# ``data_*`` hooks: the popover it opens, the dialog command it sends, and
+# hidden until a script shows it.
+BUTTON_ATTRIBUTES = frozenset({"popovertarget", "command", "commandfor", "aria_haspopup", "hidden"})
+
+
+def _button_words(label, icon="", count=None, onward=False):
+    words = button_words(label)
+    if onward:
+        words = format_html("{}{}", words, mark_safe(onward_arrow()))  # noqa: S308 - the arrow tag's own markup
+    if icon:
+        # Stripping the part's markup makes it a plain string again.
+        mark = mark_safe(render_to_string("partials/_icon.html", {"name": icon}).strip())  # noqa: S308 - the icon part's own markup
+        words = format_html("{}{}", mark, words)
+    if count not in (None, ""):
+        words = format_html('{} <span class="filter-count">{}</span>', words, breakable(count))
+    return words
+
+
 @register.simple_tag(takes_context=True)
-def post_button(
+def button(
     context,
     label,
-    url,
+    url="",
     *,
-    name="action",
-    value="",
-    css="btn",
+    post=False,
+    submit=False,
+    look="",
+    css="",
     title="",
     disabled=False,
+    current=False,
+    name="",
+    value="",
     pressed=None,
     hit=False,
     fields=None,
+    modal="",
+    icon="",
+    count=None,
+    arrow=False,
+    **attributes,
 ):
-    """One button that posts. ``fields``, what it sends besides its own
-    field, make it a form of its own, since the shared form carries only the
-    button's field; it then returns to the page it was pressed on unless they
-    name a ``next``. Its token is the request's, which an ``{% include ...
-    only %}`` keeps when it drops the context processors' values."""
+    """Every control that looks like a button, and the only thing that writes
+    one: a link to ``url``; with ``post``, one that posts to it; with
+    ``submit``, its form's own; with neither and no ``url``, one a script or
+    the platform acts on (``data_*``, ``BUTTON_ATTRIBUTES``). Its words may
+    open with an ``icon``, close with a ``count`` of what it holds, or end
+    with the ``arrow`` of a link onward. ``look`` is how
+    it looks (``ui.BUTTON_LOOKS``); ``css`` stands in for the button's look
+    on a control that is not drawn as one (an icon, a pin). Disabled or the
+    page it names (``current``), it is neither a link nor a form, and stays in
+    the tab order so its title is read where it stands. A posting one's
+    ``fields``, what it sends besides its own field, make it a form of its
+    own, since the shared form carries only the button's field; it then
+    returns to the page it was pressed on unless they name a ``next``. Its
+    token is the request's, which an ``{% include ... only %}`` keeps when it
+    drops the context processors' values."""
 
-    options = {"name": name, "value": value, "css": css, "title": title, "disabled": disabled, "pressed": pressed}
-    if not fields:
-        return post_button_markup(label, url, hit=hit, **options)
-    request = _request(context)
-    sent = {"next": request.get_full_path(), **fields}
-    with context.push(csrf_token=get_token(request)):
-        token = write_token(context)
-    return (
-        format_html('<form method="post" action="{}" class="post-form">', url)
-        + token
-        + format_html_join("", '<input type="hidden" name="{}" value="{}">', sent.items())
-        + post_button_markup(label, url, hit=hit, shared=False, **options)
-        + mark_safe("</form>")
+    if css and look:
+        raise template.TemplateSyntaxError("button takes look= or css=, not both")
+    if post + submit + bool(current) > 1 or (post and not url) or ((submit or current) and url):
+        raise template.TemplateSyntaxError(
+            "button posts to a url (post=True), sends its form (submit=True), names this page (current=True), "
+            "or links to a url"
+        )
+    # A posting button is drawn by `post_button_markup`, which carries no hooks.
+    unknown = sorted(
+        key for key in attributes if post or (not key.startswith("data_") and key not in BUTTON_ATTRIBUTES)
     )
+    if unknown:
+        raise template.TemplateSyntaxError(f"button takes no {', '.join(unknown)}")
+    try:
+        classes = css or button_classes(look)
+    except ValueError as error:
+        raise template.TemplateSyntaxError(str(error)) from error
+    if post:
+        options = {"name": name or "action", "value": value, "css": classes, "title": title}
+        options |= {"disabled": disabled, "pressed": pressed}
+        if not fields:
+            return post_button_markup(label, url, hit=hit, **options)
+        request = _request(context)
+        sent = {"next": request.get_full_path(), **fields}
+        with context.push(csrf_token=get_token(request)):
+            token = write_token(context)
+        return (
+            format_html('<form method="post" action="{}" class="post-form">', url)
+            + token
+            + format_html_join("", '<input type="hidden" name="{}" value="{}">', sent.items())
+            + post_button_markup(label, url, hit=hit, shared=False, **options)
+            + mark_safe("</form>")
+        )
+    words = _button_words(label, icon, count, arrow)
+    named = {"class": classes, "title": title} | {key.replace("_", "-"): val for key, val in attributes.items()}
+    if (disabled and not submit) or current:
+        state = {"role": "button", "aria-disabled": "true", "tabindex": "0"} if disabled else {"aria-current": "page"}
+        return format_html("<span{}>{}</span>", html_attributes(named | state), words)
+    if url:
+        return format_html("<a{}>{}</a>", html_attributes({"href": url, "data-modal-open": modal} | named), words)
+    kind = {"type": "submit" if submit else "button", "name": name, "value": value, "disabled": bool(disabled)}
+    return format_html("<button{}>{}</button>", html_attributes(kind | named), words)
 
 
 # How many controls a head draws beside its title; the rest wait in its
@@ -292,7 +357,7 @@ def show_newer():
 
 @register.simple_tag
 def ask_button(ask, extra=""):
-    """The button of an ``application.asks.Ask``: a ``post_button`` the page's
+    """The button of an ``application.asks.Ask``: a posting ``button`` the page's
     script may answer in place. Busy is ``aria-disabled``, which keeps focus."""
 
     attributes = {
@@ -309,7 +374,7 @@ def ask_button(ask, extra=""):
         '<button type="submit" form="{}" formaction="{}" class="{}" data-ask-button{}{}>{}</button>',
         POST_FORM_ID,
         ask.url,
-        " ".join(part for part in (ask.css, extra) if part),
+        button_classes(f"{ask.look} {extra}"),
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
         mark_safe(" disabled") if ask.disabled else "",
         button_words(ask.label),

@@ -1,37 +1,21 @@
 """When each open item of the queue was first seen.
 
 An item is derived from what holds now, so on its own it never says since
-when. A controller report is followed, at most every ``LOOK_EVERY``, by one
-look at what is open (``note_open``), and a page only reads what a look
-recorded. An item open at the first look ever, or appearing after a gap with
+when. A controller report is followed, at most once a cadence of
+``freshness.FIRST_SEEN``, by one look at what is open (``note_open``), and a
+page only reads what a look recorded. An item open at the first look ever, or appearing after a gap with
 no look, began at a time nobody recorded, so it keeps no date.
 """
 
-from collections.abc import Callable, Iterable
-from dataclasses import replace
-from datetime import datetime, timedelta
-from functools import wraps
-from typing import Any
+from collections.abc import Iterable
+from datetime import datetime
 
 from django.utils import timezone
 
+from .freshness import FIRST_SEEN as READING_KEY, freshness
+from .moments import moment
 from .projection import read_once
 from .readings import record, stored
-from .timestamps import moment
-
-READING_KEY = "attention.first-seen"
-# How often a report is followed by a look. A look derives the whole queue,
-# so it is not taken with every report.
-LOOK_EVERY = timedelta(minutes=15)
-# How long before a look the one before it may be for a new item to be dated
-# by this one. Past it the item began somewhere in a gap.
-KNOWN_WITHIN = timedelta(hours=1)
-
-
-def about(item: Any) -> str:
-    """What an item is about, for as long as it is the same matter."""
-
-    return item.key or f"{item.eyebrow}:{item.title}"
 
 
 def recorded() -> dict[str, datetime]:
@@ -46,30 +30,6 @@ def _recorded() -> dict[str, datetime]:
     return {key: at for key, at in ((key, moment(stamp)) for key, stamp in seen.items()) if at}
 
 
-def with_first_seen[Item](items: Iterable[Item]) -> tuple[Item, ...]:
-    """``items``, each saying since when where it does not already.
-
-    A notice reports an occurrence and carries its own date in its words.
-    """
-
-    items = tuple(items)
-    if not items:
-        return items
-    seen = recorded()
-    return tuple(
-        item
-        if item.since is not None or item.notice or about(item) not in seen
-        else replace(item, since=seen[about(item)])
-        for item in items
-    )
-
-
-def dated[Item](provider: Callable[[], Iterable[Item]]) -> Callable[[], tuple[Item, ...]]:
-    """A queue provider whose items say since when."""
-
-    return wraps(provider)(lambda: with_first_seen(provider()))
-
-
 # When this process last knew of a look, so a report that follows one closely
 # asks the database nothing. The stored reading stays the authority.
 _looked: list[datetime] = []
@@ -79,10 +39,10 @@ def look_due(now: datetime | None = None) -> bool:
     """Whether the last look is old enough for another. At most one read."""
 
     now = now or timezone.now()
-    if _looked and timedelta(0) <= now - _looked[0] < LOOK_EVERY:
+    if _looked and _looked[0] <= now and not freshness(READING_KEY, _looked[0], now).due:
         return False
     found = stored(READING_KEY)
-    if found is None or now - found.observed_at >= LOOK_EVERY:
+    if found is None or freshness(READING_KEY, found.observed_at, now).due:
         return True
     _looked[:] = [found.observed_at]
     return False
@@ -92,14 +52,14 @@ def note_open(keys: Iterable[str], *, now: datetime | None = None) -> None:
     """Record which items are open at this look.
 
     An item already recorded keeps what it has. A new one is dated now when
-    the look before this one was within ``KNOWN_WITHIN``. One that is no
-    longer open is forgotten, so it is dated again if it returns.
+    the look before this one is not yet out of date. One that is no longer
+    open is forgotten, so it is dated again if it returns.
     """
 
     now = now or timezone.now()
     found = stored(READING_KEY)
     known = dict(found.value) if found is not None and isinstance(found.value, dict) else {}
-    watched = found is not None and now - found.observed_at <= KNOWN_WITHIN
+    watched = found is not None and not freshness(READING_KEY, found.observed_at, now).stale
     stamp = now.isoformat() if watched else None
     record(READING_KEY, {key: known.get(key, stamp) for key in keys}, observed_at=now)
     _looked[:] = [now]

@@ -5,6 +5,7 @@ no handler expected would escape the application.
 """
 
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from django.test import SimpleTestCase, TestCase, tag
@@ -12,7 +13,6 @@ from django.test import SimpleTestCase, TestCase, tag
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests import audit_rows
-from hq_sdk.capabilities import StrictCommand
 
 from .. import refusal_status
 from ..approvals import _UNAPPLIED, TooManyPendingApprovals
@@ -182,7 +182,8 @@ class UnlistedCodeTests(SimpleTestCase):
         self.assertIn("example_unlisted", logged.output[0])
 
 
-class ExampleCommand(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class ExampleCommand:
     pass
 
 

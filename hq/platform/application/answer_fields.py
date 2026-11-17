@@ -35,6 +35,9 @@ type Outcome = Annotated[bool, Describe("Whether HQ did what was asked: true bes
 # None`` for null, a default of "" for empty.
 type ObservedAt = Annotated[str, Describe("When it was last read from its source, an ISO 8601 date-time.")]
 type UpdatedAt = Annotated[str, Describe("When it last changed in HQ, an ISO 8601 date-time.")]
+# The one sentence a write says of what it did: every door carries it, and a
+# page shows it once the write runs (``web_writes.said``).
+type CallMessage = Annotated[str, Describe("What the call did, in a sentence.")]
 type SchemaVersion = Annotated[
     int,
     Describe("Which version of this answer's shape it is; it moves when a client must read the shape differently."),

@@ -299,7 +299,7 @@ class DemoSiteTests(unittest.TestCase):
         items = _open_items((OUT / "action-items" / "index.html").read_text(encoding="utf-8"))
         self.assertEqual(sorted(items), sorted(on_purpose))
         connection = (OUT / "connection" / "index.html").read_text(encoding="utf-8")
-        self.assertEqual(re.findall(r'class="ladder-rung" data-state="(?!holds")([\w-]+)"', connection), [])
+        self.assertEqual(re.findall(r'class="ladder-rung" data-state="(?!met")([\w-]+)"', connection), [])
 
     def test_a_machine_s_page_shows_only_what_is_left_on_purpose(self):
         # Each finding a machine's page names, by the queue key it draws, is

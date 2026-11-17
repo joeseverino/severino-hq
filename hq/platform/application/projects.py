@@ -20,7 +20,7 @@ from django.db import transaction
 from hq.domains.content.content_sync import ContentSyncError, sync_content_index
 from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
 from hq.domains.projects.models import PROJECT_CATEGORY_CHOICES, Project
-from hq.platform.core.audit import audit_operation, record_event
+from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.projects.specs import ProjectRecord
 lazy from hq.platform.application.routes import reverse
@@ -36,7 +36,7 @@ from .record_links import linked
 from .record_saves import Held, held, linked_saver, saved_type
 from .refusal_status import RefusalEnvelope, refusal_of, refuse
 from .security import Principal
-from .standards import MET
+from .standards import Standing
 from .ui import counted
 from .upserts import upsert_by_slug
 lazy from . import capabilities
@@ -45,9 +45,9 @@ lazy from .dependency_updates import last_run
 lazy from .entity_links import EntityLink, entity_link
 lazy from .github_estate import Repository, repositories, repository_for
 lazy from .github_posture import STANDARD, posture_of
+lazy from .moments import moment
 lazy from .plugins import installed_plugins
 lazy from .record_answers import DependencyUpdatesSet
-lazy from .timestamps import moment
 
 # A project's fields as its command writes them and its row reads them back, each said once.
 type ProjectName = Annotated[str, Describe("What the project is called.")]
@@ -232,7 +232,6 @@ def refresh_project(
     public read of when it was last pushed.
     """
 
-    principal.require(records_of("projects").write)
     try:
         project = Project.objects.get(slug=slug)
     except Project.DoesNotExist as exc:
@@ -241,15 +240,14 @@ def refresh_project(
     result: dict[str, Any] = {"ok": True, "content": None, "github": None, "github_app": None}
     if slug == settings.CONTENT_INDEX_PROJECT_SLUG:
         try:
-            with audit_operation(operation="project.refresh_content", principal=principal):
-                stats = content_sync()
-                record_event(
-                    action=AuditLog.Action.UPDATED,
-                    obj=project,
-                    type_label="Project",
-                    message="Updated the site's content.",
-                    metadata=stats,
-                )
+            stats = content_sync()
+            record_event(
+                action=AuditLog.Action.UPDATED,
+                obj=project,
+                type_label="Project",
+                message="Updated the site's content.",
+                metadata=stats,
+            )
             result["content"] = {"ok": True, **stats}
         except ContentSyncError as exc:
             result["content"] = {"ok": False, "error": str(exc)}
@@ -300,7 +298,8 @@ def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, 
         principal=principal,
         idempotency_key=f"refresh:{secrets.token_urlsafe(18)}",
     ).answer
-    if answer.get("ok") and answer.get("requested"):
+    # One held for approval stands nowhere yet: nothing was asked.
+    if answer.get("ok") and answer.get("standing"):
         return {
             "ok": True,
             "connection_ref": connection_ref,
@@ -327,10 +326,7 @@ def _record_push(project: Project, pushed_at: datetime | None, principal: Princi
 
     if pushed_at is None:
         return {"ok": True, "last_push_at": iso(project.last_push_at) or None}
-    with (
-        transaction.atomic(),
-        audit_operation(operation="project.refresh", principal=principal),
-    ):
+    with transaction.atomic():
         project = held(Project, _PROJECT, {"pk": project.pk}, None)
         project.last_push_at = pushed_at
         # `updated_at` is left out on purpose: it is the "Updated" column, the
@@ -469,7 +465,7 @@ def _updates_refusal(project: Project, *, enabling: bool) -> str:
         return ""
     repository = repository_for(project.repository_url)
     posture = posture_of(repository) if repository is not None else None
-    if posture is not None and posture.state_of(UPDATES_NEED) == MET:
+    if posture is not None and posture.state_of(UPDATES_NEED) == Standing.MET:
         return ""
     check = next(check for check in STANDARD if check.id == UPDATES_NEED)
     return f'Dependency updates need the repository check "{check.label}" ({check.id}) to pass first. {check.fix}'

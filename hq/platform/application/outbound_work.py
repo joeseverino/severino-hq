@@ -13,31 +13,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
-from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
+from typing import Annotated, Any, NotRequired, cast
 
 from django.core.exceptions import ImproperlyConfigured
-from pydantic import BaseModel, ConfigDict
 lazy from django.utils import timezone
 
 lazy from hq.domains.jobs.models import Job
-lazy from hq.domains.jobs.runner import ALREADY_RUNNING, JobConflict, Progress, due as is_due, run, start
+lazy from hq.domains.jobs.runner import ALREADY_RUNNING, SCHEDULER, JobConflict, Progress, due as is_due, run, start
 
-from .asks import FAILED, Ask, Standing
-from .contracts import DOTTED_NAME
+from .asks import FAILED, Ask, Asked, AskedAnswer, Standing
+from .contracts import DOTTED_NAME, Effect
 from .describe import Describe
 from .integration_specs import CapabilitySpec, requested
 from .projection import read_once
 from .record_errors import RecordNotFound
 from .refusal_status import RefusalEnvelope, refuse
-from .security import WAITING_INTERFACES, Principal, person_of
+from .security import WAITING_INTERFACES, Principal, internal_principal, person_of
 from .ui import ended
 lazy from .domains import host_specs
 lazy from .plugins import plugin_outbound_work
 lazy from .routes import reverse
 lazy from .work_runs import job_run, standing_of
 
-# What outbound work may be: a change somewhere else, never a read of HQ.
-EFFECTS = frozenset({"remote_write", "destructive", "infrastructure_change"})
 # ``jobs.Job.kind`` holds the name.
 NAME_LIMIT = 64
 # The job's label, and the button's words.
@@ -53,7 +50,7 @@ class OutboundWork:
 
     Every control and answer for the work reads its words from here. Work about
     one record names it in ``subject_label``; work about none may declare
-    ``every`` so the host's ``due`` timer keeps an extension's data current.
+    ``every`` so the host's ``due`` timer keeps its data current.
     """
 
     # The job's kind, the capability's name and the last segment of the route.
@@ -74,13 +71,21 @@ class OutboundWork:
     # it can): the control is drawn unusable with it, and an ask is refused with
     # it before any job is recorded.
     refuse: Callable[[str], str] | None = None
-    effect: str = "remote_write"
+    # A change somewhere else, never a read of HQ; given as its value's string too.
+    effect: Effect = Effect.REMOTE_WRITE
     execution_notes: tuple[str, ...] = ()
     # For work about no one record: once this long has passed since it last
     # succeeded, the host's due timer does it.
     every: timedelta | None = None
     # What its button says where that is shorter than the label ("Refresh").
     verb: str = ""
+    # False for work only a timer or HQ itself asks for: no capability, control
+    # or route offers it, so it needs no effect or required capability. The
+    # host's own (``host_work``) is also what its units ask for by name.
+    offered: bool = True
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "effect", Effect(self.effect))
 
     @property
     def takes_subject(self) -> bool:
@@ -93,10 +98,9 @@ class OutboundWork:
         return self.verb or self.label
 
 
-class _NoArguments(BaseModel):
+@dataclass(frozen=True, slots=True)
+class _NoArguments:
     """What is acted on is the target; there is nothing else to say."""
-
-    model_config = ConfigDict(extra="forbid")
 
 
 def validate(work: object) -> OutboundWork:
@@ -108,8 +112,8 @@ def validate(work: object) -> OutboundWork:
         raise ImproperlyConfigured(f"Invalid outbound work name {work.name!r}.")
     if not work.label or any(text != text.strip() or len(text) > LABEL_LIMIT for text in (work.label, work.verb)):
         raise ImproperlyConfigured(f"Outbound work {work.name!r} needs a short label.")
-    if work.effect not in EFFECTS:
-        raise ImproperlyConfigured(f"Outbound work {work.name!r} has invalid effect {work.effect!r}.")
+    if work.offered and not work.effect.changes:
+        raise ImproperlyConfigured(f"Outbound work {work.name!r} reads only, so it is no outbound work.")
     if work.refuse is not None and not callable(work.refuse):
         raise ImproperlyConfigured(f"Outbound work {work.name!r} refuse is not callable.")
     # Checked as what was given: a declaration does not have to respect the annotation.
@@ -145,26 +149,47 @@ def _declared() -> dict[str, OutboundWork]:
     return declared
 
 
+@cache
+def _host() -> frozenset[str]:
+    return frozenset(work.name for work in host_specs("outbound") if not work.offered)
+
+
 def declared_work() -> dict[str, OutboundWork]:
     """Every piece of outbound work the composition declares, by name."""
 
     return _declared()
 
 
-def capability_specs() -> tuple[CapabilitySpec, ...]:
-    """The capability each piece of declared work is asked for through."""
+def host_work() -> tuple[OutboundWork, ...]:
+    """The host's own work, which nobody is offered: what its timer and units
+    ask for by name."""
 
-    return tuple(capability_for(work) for work in declared_work().values())
+    return tuple(work for name, work in declared_work().items() if name in _host())
+
+
+def job_names() -> dict[str, str]:
+    """Each declared job's name in words, by its kind."""
+
+    return {name: work.label for name, work in declared_work().items()}
+
+
+def capability_specs() -> tuple[CapabilitySpec, ...]:
+    """The capability each piece of offered work is asked for through."""
+
+    return tuple(capability_for(work) for work in declared_work().values() if work.offered)
 
 
 def clear_outbound_work_cache() -> None:
     _declared.cache_clear()
+    _host.cache_clear()
 
 
 def capability_for(work: OutboundWork) -> CapabilitySpec:
     """The capability an adapter asks for the work through."""
 
     validate(work)
+    if not work.offered:
+        raise ImproperlyConfigured(f"Outbound work {work.name!r} is offered to nobody, so no capability asks for it.")
 
     def about(_command: Any, *, principal: Principal, current_key: str = "") -> WorkRequested | RefusalEnvelope:
         return request_work(work, current_key, principal=principal)
@@ -221,19 +246,23 @@ def refusal(name: str, subject: str = "") -> str:
     return read_once(f"outbound_work.refusal:{name}:{subject}", answer)
 
 
-class WorkRequested(TypedDict):
+class WorkRequested(AskedAnswer):
     """Work asked of HQ, and the job doing it."""
 
-    ok: Literal[True]
     started: Annotated[bool, Describe("Whether this call started the work; false when it was already running.")]
     job: NotRequired[Annotated[str, Describe("The id of the job doing it; absent when another job holds the work.")]]
-    message: Annotated[str, Describe("What asking did, in a sentence.")]
     result: NotRequired[
         Annotated[
             dict[str, Any],
             Describe("What the work answered, where the call waited for it to end, as a command line does."),
         ]
     ]
+
+
+def _job_asked(job: Job, message: str) -> AskedAnswer:
+    """How the job doing asked-for work stands, and where a page follows it."""
+
+    return Asked(standing_of(job_run(job)), reverse("jobs:status", args=[job.pk]), message).answer()
 
 
 def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> WorkRequested | RefusalEnvelope:
@@ -248,37 +277,28 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> W
     reason = _refusal(work, subject)
     if reason:
         return cast(RefusalEnvelope, refuse("precondition", reason))
-
-    def job_work(progress: Progress) -> dict[str, Any]:
-        return work.run(progress, subject=subject, principal=principal) or {}
-
     waited = principal.interface in WAITING_INTERFACES
     try:
         job = (run if waited else start)(
             work.name,
             work.label,
-            job_work,
+            _job_work(work, subject, principal),
             actor=principal.actor,
             requested_by=person_of(principal),
             request={SUBJECT_FIELD: subject},
         )
     except JobConflict:
         live = Job.objects.filter(kind=work.name, state__in=("queued", "running")).first()
-        same = live is not None and live.request.get(SUBJECT_FIELD, "") == subject
-        conflict: WorkRequested = {
-            "ok": True,
-            "started": False,
-            "message": ALREADY_RUNNING if same else ANOTHER_RUNNING,
-        }
-        if live is not None and same:
-            conflict["job"] = str(live.pk)
-        return conflict
+        if live is not None and live.request.get(SUBJECT_FIELD, "") == subject:
+            return {**_job_asked(live, ALREADY_RUNNING), "started": False, "job": str(live.pk)}
+        # Another subject's run of the same work holds the one live slot.
+        return {**Asked(Standing(FAILED, ANOTHER_RUNNING), message=ANOTHER_RUNNING).answer(), "started": False}
     if not waited:
-        return {"ok": True, "started": True, "job": str(job.pk), "message": requested(work.words, subject)}
+        return {**_job_asked(job, requested(work.words, subject)), "started": True, "job": str(job.pk)}
     standing = standing_of(job_run(job))
     if standing.state == FAILED:
         return cast(RefusalEnvelope, refuse("work_failed", standing.note or ended(standing.label)))
-    return {"ok": True, "started": True, "job": str(job.pk), "message": standing.note, "result": job.result}
+    return {**_job_asked(job, standing.note), "started": True, "job": str(job.pk), "result": job.result}
 
 
 def run_now(name: str, subject: str = "", *, principal: Principal) -> Job:
@@ -289,21 +309,25 @@ def run_now(name: str, subject: str = "", *, principal: Principal) -> Job:
     """
 
     work = _named(name)
-    principal.require(work.required_capability)
+    if work.offered:
+        principal.require(work.required_capability)
     reason = _refusal(work, subject)
     if reason:
         raise ValueError(reason)
-
-    def job_work(progress: Any) -> dict[str, Any]:
-        return work.run(progress, subject=subject, principal=principal) or {}
-
     return run(
         work.name,
         work.label,
-        job_work,
+        _job_work(work, subject, principal),
         actor=principal.actor,
         request={SUBJECT_FIELD: subject},
     )
+
+
+def _job_work(work: OutboundWork, subject: str, principal: Principal) -> Callable[[Progress], dict[str, Any]]:
+    def job_work(progress: Progress) -> dict[str, Any]:
+        return work.run(progress, subject=subject, principal=principal) or {}
+
+    return job_work
 
 
 def _named(name: str) -> OutboundWork:
@@ -311,6 +335,54 @@ def _named(name: str) -> OutboundWork:
     if work is None:
         raise LookupError(f"No outbound work named {name!r} is declared.")
     return work
+
+
+def _host_named(name: str) -> OutboundWork:
+    """The host's own work by name. Nothing else is done for a unit or for HQ's
+    own start, so a caller naming work cannot reach an extension's or an
+    offered capability's."""
+
+    if name not in _host():
+        raise ValueError(f"No host work named {name!r} is declared.")
+    return _named(name)
+
+
+def _scheduler() -> Principal:
+    return internal_principal(SCHEDULER)
+
+
+def run_for_host(name: str) -> dict[str, Any]:
+    """Do the host's own work a unit asked for to its end, and say how it ended.
+
+    A live job of the same kind is the answer, not a failure: the work is
+    being done.
+    """
+
+    work = _host_named(name)
+    try:
+        job = run_now(work.name, principal=_scheduler())
+    except JobConflict:
+        return {"name": name, "state": "running", "note": ALREADY_RUNNING}
+    return {"name": name, "state": job.state, "note": job_run(job).note, "job": str(job.pk)}
+
+
+def start_for_host(name: str) -> bool:
+    """Start the host's own work on a thread of its own, for HQ that learned it
+    is due sooner than the timer would find it; False when it is already running."""
+
+    work = _host_named(name)
+    principal = _scheduler()
+    try:
+        start(
+            work.name,
+            work.label,
+            _job_work(work, "", principal),
+            actor=principal.actor,
+            request={SUBJECT_FIELD: ""},
+        )
+    except JobConflict:
+        return False
+    return True
 
 
 def due(now: datetime | None = None) -> tuple[OutboundWork, ...]:
@@ -348,6 +420,8 @@ def ask(
     """
 
     work = _named(name)
+    if not work.offered:
+        raise LookupError(f"Outbound work {name!r} is offered to nobody.")
     job = last_job(name, subject)
     standing = standing_of(job_run(job)) if job is not None else Standing()
     if job is not None and not standing.live and standing.state != FAILED:

@@ -13,7 +13,6 @@ which View diff opens.
 from functools import cached_property
 from typing import ClassVar, override
 
-from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 from django.utils import timezone
@@ -31,6 +30,7 @@ from hq.platform.application.automation_sources import (
     entry_url,
     playbook_rows,
     scan_standing,
+    scan_status_url,
     standing,
 )
 from hq.platform.application.pages import PageMixin
@@ -38,17 +38,11 @@ from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.domains.jobs.models import JobState
-lazy from hq.platform.application.asks import FAILED, Ask, AskMixin, Standing, Took, WatchView, watch_token
+lazy from hq.platform.application.asks import FAILED, Ask, AskMixin, Standing, WatchView
 lazy from hq.platform.application.cadence import automation_standing
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT, refusal_of
-lazy from hq.platform.application.work_runs import TONES, UNENDED
+lazy from hq.platform.application.work_runs import UNENDED
 lazy from hq.platform.core.templatetags.action_tags import MOST_BESIDE
-
-
-def scan_status_url(operation_id: str) -> str:
-    """Where a page follows one scan, signed so it reports on nothing else."""
-
-    return f"{reverse('control_plane:playbooks_status')}?watch={watch_token({'scan': operation_id})}"
 
 
 class PlaybooksView(PageMixin, TemplateView):
@@ -105,7 +99,7 @@ class PlaybooksView(PageMixin, TemplateView):
             # View diff, Adopt all and Reject all, then Refresh, side by side while a commit waits.
             page_beside=MOST_BESIDE if sources.pending else "",
             failed_tone=(
-                TONES[JobState(sources.reached.seen)]
+                JobState(sources.reached.seen).tone
                 if sources.reached is not None and sources.reach.state == FAILED
                 else ""
             ),
@@ -126,11 +120,6 @@ class RefreshView(AskMixin, View):
     capability = REFRESH
     back_to = "control_plane:playbooks"
 
-    @override
-    def asked(self, result, at) -> Took:
-        operation = str(result["operation"]["id"])
-        return Took(scan_standing(operation) or Standing(), scan_status_url(operation))
-
 
 class ScanStatusView(WatchView):
     """How a scan stands."""
@@ -148,10 +137,10 @@ class ProposalDecisionView(View):
 
     http_method_names: ClassVar[list[str]] = ["post"]
     capability: ClassVar[str]
-    # The answer's field that says it changed anything, and what the next
-    # page says when it did and when it did not.
-    result_field: ClassVar[str]
-    done: ClassVar[tuple[str, str]]
+
+    @property
+    def runs(self) -> tuple[str, ...]:
+        return (self.capability,)
 
     def post(self, request, pk: int):
         # One playbook's row sends its key, and the page it was pressed on to return to.
@@ -163,11 +152,6 @@ class ProposalDecisionView(View):
         if refused(request, result) is not None:
             scan = SourceProposal.objects.filter(pk=pk).first()
             return redirect(entry_url(scan) if scan else reverse("control_plane:playbooks"))
-        changed, unchanged = self.done
-        if result.get(self.result_field):
-            messages.success(request, changed)
-        else:
-            messages.info(request, unchanged)
         return redirect(safe_next(request, fallback=reverse("control_plane:playbooks")))
 
 
@@ -175,13 +159,9 @@ class ProposalAdoptView(ProposalDecisionView):
     """Adopt one scan result's changes, or one playbook's: each becomes what its command is built from."""
 
     capability = ADOPT
-    result_field = "adopted"
-    done = ("Adopted.", "Already adopted.")
 
 
 class ProposalRejectView(ProposalDecisionView):
     """Reject one scan result, or one playbook's change in it, so it waits no more."""
 
     capability = REJECT
-    result_field = "rejected"
-    done = ("Rejected.", "Already rejected.")

@@ -33,7 +33,8 @@ logger = logging.getLogger("severino.agents")
 # The operation an agent's sighting is written under where no door bound one.
 OBSERVE_OPERATION = "agents.observe"
 
-# last_seen is kept to this precision so routine traffic reads without writing.
+# last_seen is kept to this precision so routine traffic reads without
+# writing: an identity's, and a device's name, os and owner.
 TOUCH_INTERVAL = timedelta(minutes=10)
 
 # Sent once a change commits that alters which tools an agent is listed, with

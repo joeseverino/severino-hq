@@ -3,7 +3,7 @@
 from functools import cached_property
 from typing import override
 from urllib.parse import urlencode
-lazy from datetime import date, datetime, time, timedelta
+lazy from datetime import datetime, time, timedelta
 
 from django.core.exceptions import ValidationError
 from django.core.paginator import Page, Paginator
@@ -15,6 +15,7 @@ lazy from django.utils import timezone
 from hq.platform.application import approval_review, approvals, history
 from hq.platform.application.doors import door_words
 from hq.platform.application.labels import dotted
+from hq.platform.application.moments import stamp_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.payload_words import path_words, value_words
 from hq.platform.application.projection import day_span, projection_scope
@@ -65,7 +66,6 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     # Off until asked for: an ask for a fresh reading changes nothing.
     table_toggles = (TableToggle(READS, "Read requests"), TableToggle(ROUTINE, "Routine work"))
     # The Message column is prose, so what a row names gets what it leaves.
-    table_room = "shared"
     # The columns every table of history draws, each sorted here by its field.
     table_columns = tuple(
         TableColumn(label, field, ascending, descending, css=css)
@@ -151,10 +151,7 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     def _day(self):
         """``?on=YYYY-MM-DD``: one day's history, as the calendar opens it."""
 
-        try:
-            return date.fromisoformat(self.request.GET.get("on", ""))
-        except ValueError:
-            return None
+        return stamp_day(self.request.GET.get("on", ""))
 
     @override
     def get_context_data(self, **kwargs):
@@ -316,7 +313,7 @@ class AuditLogDetailView(PageMixin, DetailView):
         """The approval this event opened, reviewed, if it opened one."""
 
         held = approvals.for_audit_event(self.object)
-        return approval_review.review(held) if held is not None else None
+        return approval_review.review(held, web_principal(self.request.user)) if held is not None else None
 
     @cached_property
     def scan(self):

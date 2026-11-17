@@ -265,8 +265,8 @@
 .month-more:hover { color: var(--accent); }
 /* A source's color alone (partials/_calendar_sources.html#swatch). */
 .calendar-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--source); }
-.calendar-sources { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-/* A source is a toggle ({% post_button %} with `pressed`): the whole line is
+.calendar-sources { display: grid; gap: var(--space-1); }
+/* A source is a toggle ({% button %} with `post` and `pressed`): the whole line is
    the button, its box drawn before the name and filled in its color when
    checked, both at the line's start where a button would center them. What
    it shows and how it failed stand under the name, past the box. */
@@ -277,21 +277,15 @@
   justify-content: start;
   gap: var(--check-gap);
   width: 100%;
-  min-height: 0;
   padding: var(--space-1) var(--check-inset);
-  border: 0;
   border-radius: var(--radius-sm);
-  background: none;
-  box-shadow: none;
   color: var(--ink);
-  font: inherit;
   font-size: var(--text-sm);
   text-align: start;
-  cursor: pointer;
 }
 .calendar-source::before { content: ""; flex: none; width: var(--check); height: var(--check); border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--source); }
 .calendar-source[aria-pressed="true"]::before { background: var(--source); }
-.calendar-source:hover { background: var(--bg-tint); border: 0; }
+.calendar-source:hover { background: var(--bg-tint); }
 .calendar-source[aria-pressed="false"] { color: var(--muted); }
 :is(.calendar-source-note, .calendar-source-failure) { padding-inline-start: calc(var(--check-inset) + var(--check) + var(--check-gap)); color: var(--muted-2); font-size: var(--text-2xs); }
 .calendar-source-failure { color: var(--warn); font-variant-numeric: tabular-nums; }
@@ -325,9 +319,7 @@
 
 /* Week plan: the recurring shape of a week, in the calendar's own columns. */
 .week-plan {
-  list-style: none;
   margin: var(--space-2) 0 0;
-  padding: 0;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: var(--space-1);
@@ -342,13 +334,12 @@
   border-radius: 9px;
 }
 .week-plan-day.is-planned { background: var(--surface-2); border-color: var(--line-2); }
-/* stylelint-disable-next-line property-disallowed-list -- a kicker: the weekday over each day of a week plan */
-.week-plan-label { color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.week-plan-label { color: var(--muted-2); }
 .week-plan-day.is-planned .week-plan-label { color: var(--ink); }
 .week-plan-mark { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 8px; }
 .week-plan-mark i { width: 8px; height: 8px; border-radius: 50%; display: block; }
 .week-plan-note { color: var(--muted); font-size: var(--text-3xs); line-height: 1.2; text-align: center; }
-.week-plan-notes { list-style: none; margin: var(--space-6) 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-9); }
+.week-plan-notes { margin: var(--space-6) 0 0; display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-9); }
 .week-plan-notes li { display: flex; align-items: baseline; gap: var(--space-3); font-size: var(--text-sm); }
 
 .calendar-controls { display: flex; align-items: center; gap: var(--space-3); flex: 0 0 auto; }
@@ -404,11 +395,6 @@
 .calendar-weekday {
   padding: 0 0 var(--space-1);
   color: var(--muted-2);
-  font-size: var(--text-3xs);
-  font-weight: 700;
-  letter-spacing: .08em;
-  /* stylelint-disable-next-line property-disallowed-list -- a kicker: the weekday row over the activity calendar's days */
-  text-transform: uppercase;
   text-align: center;
 }
 .calendar-day {
@@ -433,7 +419,6 @@
 .calendar-day.is-filler { border-color: transparent; }
 .calendar-day[data-tip] { cursor: default; }
 
-.list-rows { list-style: none; padding: 0; margin: 0; }
 .list-rows li {
   padding: var(--space-4) var(--frame-inset, 0);
   border-bottom: 1px solid var(--line-2);
@@ -460,7 +445,9 @@
 /* A list of places to go: the whole row is its title's link, stretched over
    it, so the row is one target and its markup stays a link around a name. */
 .whole-rows li { position: relative; }
-.whole-rows .row-main > a::after { content: ""; position: absolute; inset: 0; }
+/* A link or a label stretched over the whole of its row, fact or card, so
+   the box is the target. */
+.whole-rows .row-main > a::after, .facts-inline .fact-value a::after, .choice-card > label::after { content: ""; position: absolute; inset: 0; }
 /* A title is ink however it links: its own address, or a thing it names. */
 .list-rows :is(a strong, strong > a) { color: var(--ink); font-weight: 600; }
 .list-rows :is(a:hover strong, strong > a:hover) { color: var(--accent); }
@@ -576,10 +563,14 @@ td .facts-list { font-size: var(--text-xs); gap: var(--space-1) var(--space-6); 
 :where(details:not(.section-fold), .section-body .section-fold, [popover], dialog, form) .facts-list:last-child { margin-bottom: 0; }
 /* Addresses, one to a line, each beside its network: the networks in one
    column and the addresses in the next. */
-.address-list { display: grid; grid-template-columns: max-content minmax(0, max-content); gap: var(--space-1) var(--space-3); align-items: baseline; margin: 0; padding: 0; list-style: none; }
+.address-list { display: grid; grid-template-columns: max-content minmax(0, max-content); gap: var(--space-1) var(--space-3); align-items: baseline; }
 .address-list li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
 .address-list span { color: var(--muted); }
-/* stylelint-disable-next-line property-disallowed-list -- the kicker primitive, over a heading or a group of facts */
-.eyebrow { display: block; margin-bottom: var(--space-1); color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+/* The kicker: over a heading or a group of facts (`.eyebrow`), a timeline's
+   month, a week plan's and the activity calendar's weekdays, and Command
+   Center's group heads. */
+/* stylelint-disable-next-line property-disallowed-list -- the kicker primitive */
+.eyebrow, .timeline-month, .week-plan-label, .calendar-weekday, .command-center-group-label { font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.eyebrow { display: block; margin-bottom: var(--space-1); color: var(--muted-2); }
 
 }

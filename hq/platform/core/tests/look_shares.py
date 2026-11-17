@@ -36,8 +36,10 @@ from hq.platform.core.file_clones import checkpoint
 from hq.platform.core.tests.browser.shards import VARIABLE, shard, share as dealt
 from hq.platform.core.tests.look_report import Found, Measured
 
-# dev:look is development code like the turn it runs in, and imports it only as it decides its processes.
-lazy from tools.gate import turn  # noqa: TID251 - the share a look holds is the heavy turn's, declared there
+# dev:look is development code like the turn it runs in, and imports it only
+# as it decides its processes: the share a look holds is the heavy turn's.
+# ast-grep-ignore: tools-imported-only-by-tools
+lazy from tools.gate import turn
 
 # The folder a share's process writes into: the one the run that started it shoots into.
 FOLDER = "HQ_LOOK_SHARES"

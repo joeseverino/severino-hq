@@ -1,12 +1,13 @@
 """An MCP write is as safe to retry as an API write: it carries a key, and a repeat acts once."""
 
+from dataclasses import dataclass
+
 from django.test import TestCase
 
 from hq.domains.projects.models import Project
 from hq.platform.application.capabilities import CapabilitySpec
 from hq.platform.application.integration_testing import commands_registered
 from hq.platform.application.security import Capability, Principal
-from hq_sdk.capabilities import StrictCommand
 
 from .. import services
 from ..identity import set_principal
@@ -14,6 +15,11 @@ from ..identity import set_principal
 WRITER = Principal("example-writer", "mcp", frozenset({"write_projects"}))
 READER = Principal("example-reader", "mcp", frozenset({"read"}))
 PROJECT = {"name": "Once", "slug": "once", "status": "active"}
+
+
+@dataclass(frozen=True, slots=True)
+class _Nothing:
+    pass
 
 
 class RetryKeyTests(TestCase):
@@ -56,7 +62,7 @@ class RetryKeyTests(TestCase):
             "Look at example records.",
             "read",
             Capability.READ,
-            StrictCommand,
+            _Nothing,
             lambda _command, **_bound: ran.append(True) or {"ok": True},
         )
         self.enterContext(commands_registered({spec.name: spec}))

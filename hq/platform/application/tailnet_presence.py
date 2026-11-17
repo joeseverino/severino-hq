@@ -13,9 +13,8 @@ from .tailnet import TAILNET_KIND, snapshots
 lazy from .arrivals import arrivals
 lazy from .expiry import days_until
 lazy from .locate import container_hosts, host_of
-lazy from .moments import elapsed, expiry_words
+lazy from .moments import elapsed, expiry_words, moment
 lazy from .reach import is_public, network_of
-lazy from .timestamps import moment
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +54,8 @@ class Presence:
     # acquires versions nobody chose.
     authorized: bool = True
     lock_error: str = ""
+    # Its tailnet lock public key, which signs for lock where the lock trusts it.
+    lock_key: str = ""
     update_available: bool = False
     client_version: str = ""
     # Tailscale SSH turns a device into something the policy can hand shells
@@ -225,6 +226,7 @@ def tailnet_presence() -> dict[str, Presence]:
                 enabled_routes=tuple(str(r) for r in record.get("enabled_routes") or ()),
                 authorized=bool(record.get("authorized", True)),
                 lock_error=str(record.get("lock_error", "")),
+                lock_key=str(record.get("lock_key", "")),
                 update_available=bool(record.get("update_available")),
                 client_version=str(record.get("client_version", "")),
                 ssh_enabled=bool(record.get("ssh_enabled")),

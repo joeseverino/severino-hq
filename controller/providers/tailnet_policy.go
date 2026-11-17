@@ -2,7 +2,6 @@ package providers
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -40,15 +39,7 @@ func policyDocument(raw []byte) (tailnetPolicyDocument, error) {
 	return tailnetPolicyDocument(raw), nil
 }
 
-type tailnetPolicyTest struct {
-	Src    string   `json:"src"`
-	Proto  string   `json:"proto"`
-	Accept []string `json:"accept"`
-	Deny   []string `json:"deny"`
-}
-
 type tailnetPolicyView struct {
-	Tests     []tailnetPolicyTest  `json:"tests"`
 	Groups    map[string][]string  `json:"groups"`
 	TagOwners map[string][]string  `json:"tagOwners"`
 	Hosts     map[string]string    `json:"hosts"`
@@ -150,77 +141,20 @@ func (c tailnetClient) tailnetPolicyVersion(ctx context.Context) (tailnetPolicyD
 	return document, etag, err
 }
 
-type testKey struct{ src, proto string }
-
-type testEntry struct {
-	accept map[string]bool
-	deny   map[string]bool
-}
-
-func policyTests(policy tailnetPolicyView) map[testKey]*testEntry {
-	found := map[testKey]*testEntry{}
-	for _, test := range policy.Tests {
-		key := testKey{src: test.Src, proto: test.Proto}
-		entry := found[key]
-		if entry == nil {
-			entry = &testEntry{accept: map[string]bool{}, deny: map[string]bool{}}
-			found[key] = entry
-		}
-		for _, dst := range test.Accept {
-			entry.accept[dst] = true
-		}
-		for _, dst := range test.Deny {
-			entry.deny[dst] = true
-		}
-	}
-	return found
-}
-
-func sortedTestKeys(tests map[testKey]*testEntry) []testKey {
-	keys := slices.AppendSeq([]testKey{}, maps.Keys(tests))
-	slices.SortFunc(keys, func(a, b testKey) int {
-		return cmp.Or(cmp.Compare(a.src, b.src), cmp.Compare(a.proto, b.proto))
-	})
-	return keys
-}
-
-func refuseWeakerTests(live, document tailnetPolicyView) error {
-	wanted := policyTests(document)
-	held := policyTests(live)
-	if len(wanted) == 0 {
-		return &ProviderError{Message: "the tailnet policy carries no tests, so tailscale's check would pass it whatever it grants; not applied"}
-	}
-	for _, pair := range sortedTestKeys(held) {
-		if _, ok := wanted[pair]; !ok {
-			overProto := ""
-			if pair.proto != "" {
-				overProto = " over " + pair.proto
-			}
-			return &ProviderError{Message: fmt.Sprintf("the tailnet policy drops the tests for %q%s, which removes the check they made; not applied", pair.src, overProto)}
-		}
-	}
-	for _, pair := range sortedTestKeys(held) {
-		dropped := []string{}
-		for dst := range held[pair].deny {
-			if !wanted[pair].deny[dst] {
-				dropped = append(dropped, dst)
-			}
-		}
-		if len(dropped) > 0 {
-			slices.Sort(dropped)
-			return &ProviderError{Message: fmt.Sprintf("the tailnet policy no longer tests that %q is denied %q; a live deny is kept, so not applied", pair.src, dropped[0])}
-		}
-	}
-	return nil
-}
-
-// policyPassesItsTests asks Tailscale to run the document's tests. An empty
-// answer passes; anything else is Tailscale's account of what failed.
+// policyPassesItsTests asks Tailscale to run the document's tests without
+// writing it, for a plan. An empty answer passes.
 func (c tailnetClient) policyPassesItsTests(ctx context.Context, document tailnetPolicyDocument) error {
 	raw, err := c.call(ctx, "POST", tailnet("acl/validate"), jsonBody, json.RawMessage(document))
 	if err != nil {
 		return fmt.Errorf("check the policy: %w", err)
 	}
+	return policyVerdict(raw)
+}
+
+// policyVerdict is Tailscale's account of a policy it would not take, from
+// the validate endpoint's answer or a refused write's body; nil when it says
+// nothing failed.
+func policyVerdict(raw []byte) error {
 	if len(raw) == 0 {
 		return nil
 	}
@@ -241,9 +175,10 @@ func (c tailnetClient) policyPassesItsTests(ctx context.Context, document tailne
 	return &ProviderError{Message: "the tailnet policy does not pass its own tests; not applied: " + runtime.Clip(strings.Join(said, "; "), runtime.VerdictLimit)}
 }
 
-// writeTailnetPolicy writes the policy, conditional on the version the checks
-// ran against: etag comes from that same read, so a change made in between
-// refuses the write (412). Without one nothing is written.
+// writeTailnetPolicy writes the policy, conditional on the version HQ read:
+// Tailscale refuses the write when the file changed since (412), and runs the
+// document's tests on it, refusing one that fails them (400). Without a
+// version nothing is written.
 func (c tailnetClient) writeTailnetPolicy(ctx context.Context, document tailnetPolicyDocument, etag string) error {
 	if etag == "" {
 		return errNoPolicyVersion
@@ -253,6 +188,12 @@ func (c tailnetClient) writeTailnetPolicy(ctx context.Context, document tailnetP
 	switch code := httpStatus(err); {
 	case code == 412:
 		return errPolicyChanged
+	case code == 400:
+		answered, _ := errors.AsType[*ProviderError](err)
+		if refused := policyVerdict(answered.Body); refused != nil {
+			return refused
+		}
+		return &ProviderError{Message: "tailscale refused the policy (400)", HTTPStatus: code}
 	case code != 0:
 		return &ProviderError{Message: fmt.Sprintf("tailscale refused the policy (%d)", code), Failure: runtime.StatusFailure(code), HTTPStatus: code}
 	case err != nil:
@@ -294,10 +235,6 @@ func (r *Registry) tailnetPolicyReconcile(ctx context.Context, spec TailnetPolic
 	if err != nil {
 		return Result{}, fmt.Errorf("the tailnet policy: %w", err)
 	}
-	declared, err := document.view()
-	if err != nil {
-		return Result{}, fmt.Errorf("the tailnet policy: %w", err)
-	}
 	client, err := r.tailnetClient(ctx, spec.ConnectionRef)
 	if err != nil {
 		return Result{}, err
@@ -309,17 +246,13 @@ func (r *Registry) tailnetPolicyReconcile(ctx context.Context, spec TailnetPolic
 	if samePolicy(live, document) {
 		return currentPolicy(document), nil
 	}
-	held, err := live.view()
-	if err != nil {
-		return Result{}, fmt.Errorf("live policy: %w", err)
-	}
-	if err := refuseWeakerTests(held, declared); err != nil {
-		return Result{}, err
-	}
-	if err := client.policyPassesItsTests(ctx, document); err != nil {
-		return Result{}, err
-	}
+	// What the document may open was decided by the person who approved it;
+	// whether it keeps its own tests is Tailscale's to check, here for a plan
+	// and on the write itself.
 	if !apply {
+		if err := client.policyPassesItsTests(ctx, document); err != nil {
+			return Result{}, err
+		}
 		return Result{Changed: true, Status: struct{}{}, Message: "The policy passes its own tests and would be applied."}, nil
 	}
 	if err := client.writeTailnetPolicy(ctx, document, etag); err != nil {

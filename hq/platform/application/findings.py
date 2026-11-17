@@ -34,16 +34,20 @@ from . import (
     contradiction_findings,
     controller_findings,
     credential_findings,
+    delivery_findings,
     dns_findings,
     docker_estate,
     filesystem_findings,
     github_findings,
+    machine_findings,
     perimeter_findings,
     posture_findings,
     reboot_findings,
+    record_findings,
     reference_findings,
     registration_findings,
     render_status_findings,
+    repository_findings,
     tailnet_device_findings,
     tailnet_findings,
     unit_findings,
@@ -52,13 +56,14 @@ from .action_links import (
     ActionLink,
     action_with_return,
     command_action,
+    read_link,
     read_now_link,
     topology_investigation_links,
 )
 from .answer_fields import Pinned, SchemaVersion
-from .contracts import route_url
+from .contracts import Effect, route_url
 from .derivations import derivation, present
-from .derived_inputs import ESTATE_READS, estate_variant
+from .derived_inputs import FINDINGS_READS, estate_variant
 from .describe import Describe, listed
 from .finding_model import (
     CHECK_AGAIN,
@@ -66,6 +71,7 @@ from .finding_model import (
     FindingEstate,
     FindingRemedy,
     FindingRule,
+    Gathered,
     OperatorStep,
     is_observable,
     parse_stamp,
@@ -75,11 +81,11 @@ from .integration_validation import required_capability_names
 from .integrations import IntegrationGraph, held_graph, integration_graph
 from .json_schemas import Written
 from .projection import QUERY
-from .security import Capability, Principal
+from .security import Principal
+from .tone import Tone
 from .topology import derive_topology
 from .topology_model import (
     JOINED_KINDS,
-    STANDINGS,
     Topology,
     TopologyNode,
 )
@@ -93,7 +99,9 @@ from .workflows import (
 )
 lazy from . import cadence
 lazy from .automation_runs import playbook_remedies
+lazy from .domains import resources_of
 lazy from .estate import estate_reading
+lazy from .gathered_findings import gather_findings
 lazy from .moments import ago
 lazy from .ui import counted
 
@@ -196,6 +204,10 @@ RULE_MODULES = (
     contradiction_findings,
     posture_findings,
     automation_findings,
+    delivery_findings,
+    machine_findings,
+    record_findings,
+    repository_findings,
 )
 RULES: tuple[FindingRule, ...] = tuple(rule for module in RULE_MODULES for rule in module.RULES)
 
@@ -286,15 +298,15 @@ def _declared_at(detect: Callable[..., Any]) -> tuple[Path, int]:
     )
 
 
-def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -> tuple[bool, str]:
+def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -> tuple[bool, Effect | None]:
     """Whether this principal may run it, and what the registry says it does."""
 
     spec = graph.capabilities.get(capability)
     if spec is not None:
-        return principal.permits(*spec.required_capabilities), spec.effect
+        return spec.permitted_to(principal), spec.effect
     # A rule naming a capability the registry does not hold is a contract error
     # the suite catches; at runtime the honest answer is to offer nothing.
-    return False, ""
+    return False, None
 
 
 def _playbooks(finding: Finding, subject: TopologyNode | None) -> tuple[FindingRemedy, ...]:
@@ -318,7 +330,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     kept = []
     for remedy in (*finding.remedies, *_playbooks(finding, subject)):
         allowed, effect = _permitted(remedy.capability, principal, graph)
-        if not allowed or effect == "destructive":
+        if not allowed or effect is None or effect is Effect.DESTRUCTIVE:
             continue
         action = next(
             (
@@ -328,21 +340,23 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
             ),
             None,
         )
+        reached = remedy.reach
         kept.append(
             FindingRemedy(
                 capability=remedy.capability,
                 target=remedy.target,
                 intent=remedy.intent,
                 variant=remedy.variant,
-                effect=effect,
-                url=(action_with_return(action, "control_plane:findings").url if action else remedy.url),
-                method=action.method if action else remedy.method,
+                url=(action_with_return(action, "control_plane:findings").url if action else reached[0]),
+                method=action.method if action else reached[1],
                 auto=False,
             )
         )
     resolved_remedies = tuple(kept)
     offers = finding.offers + tuple(
-        action for action in (subject.actions if subject else ()) if action.effect == "read" and action.method == "GET"
+        action
+        for action in (subject.actions if subject else ())
+        if action.effect == Effect.READ and action.method == "GET"
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
     remedy_actions = tuple(
@@ -361,10 +375,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     )
     verification, read_now = _verification(finding, principal, subject)
     workflow = claim_resolution_plan(
-        namespace=_CLAIM_NAMESPACE,
-        rule=finding.rule,
-        subject=finding.subject,
-        scope=finding.scope,
+        identity=finding_id(finding),
         remedies=remedy_actions,
         verification=verification,
     )
@@ -377,7 +388,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         workflow=workflow,
         steps=finding_steps(finding),
         no_help_reason=_no_help_reason(finding),
-        subject_link=ActionLink("subject", subject.label, "read", subject.url) if subject and subject.url else None,
+        subject_link=read_link("subject", subject.label, subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),
         read_now=read_now,
         # Where no one reading dates it, its subject's last read does.
@@ -399,16 +410,18 @@ _POSTURE_READ = "connections"
 def read_gate(finding: Finding, subject: TopologyNode | None) -> tuple[str, ...] | None:
     """What a reader must hold to be told ``finding``; None when it cannot be derived.
 
-    The union of its subject node's gate, each scope's and what its detector
-    carried for the evidence it names, which alone gates a claim about none
-    of them. A subject that names no node, a scope no resource reads, or a
-    claim about nothing that carries no gate leaves it underivable.
+    The union of its subject node's gate, each scope's, its rule's section's
+    and what its detector carried for the evidence it names. A subject that
+    names no node, a scope no resource reads, or a claim about nothing that
+    carries no gate leaves it underivable.
     """
 
     scopes = _finding_scopes(finding)
-    if (finding.subject and subject is None) or not (subject or scopes or finding.read_capabilities):
+    declared = _RULE_BY_NAME.get(finding.rule)
+    section = declared.domain if declared is not None else ""
+    if (finding.subject and subject is None) or not (subject or scopes or finding.read_capabilities or section):
         return None
-    gates = [finding.read_capabilities]
+    gates = [finding.read_capabilities, *(_resource_gate(name) for name in resources_of(section))]
     if subject is not None:
         gates += [_resource_gate(NODE_READ), subject.read_capabilities]
     for scope in scopes:
@@ -487,13 +500,7 @@ def _verification(
             reason="Reads it now, then checks again.",
         )
         return verify, wanted
-    verify = ActionLink(
-        "verify",
-        CHECK_AGAIN,
-        "read",
-        again,
-        reason="Runs this check against current data.",
-    )
+    verify = read_link("verify", CHECK_AGAIN, again, reason="Runs this check against current data.")
     return verify, None
 
 
@@ -556,8 +563,10 @@ def _is_suppressed(
     )
 
 
-def derive_findings(topology: Topology, *, principal: Principal, rule: str = "") -> tuple[Finding, ...]:
-    """Every claim the projection supports, most serious first.
+def derive_findings(
+    topology: Topology, *, principal: Principal, rule: str = "", gathered: Gathered | None = None
+) -> tuple[Finding, ...]:
+    """Every claim the projection and what was ``gathered`` support, most serious first.
 
     Pure: no query, no write. The projection was already narrowed to what this
     principal may see, so a finding cannot reveal a node the caller could not
@@ -567,8 +576,9 @@ def derive_findings(topology: Topology, *, principal: Principal, rule: str = "")
     estate = _estate(topology)
     wanted = _RULE_BY_NAME.get(rule) if rule else None
     raised: dict[str, tuple[Finding, ...]] = {}
+    found = gathered or {}
     for declared in RULES:
-        raised[declared.name] = declared.detect(estate)
+        raised[declared.name] = found.get(declared.name, ()) if declared.gathered else declared.detect(estate)
 
     # A rule that fired takes its subsumed rules off the same subject, and off
     # the whole kind when it speaks for one.
@@ -595,33 +605,30 @@ def derive_findings(topology: Topology, *, principal: Principal, rule: str = "")
                 continue
             findings.append(_resolved(finding, principal, node))
 
-    return tuple(sorted(findings, key=lambda f: (_rank(f.severity), f.rule, f.subject)))
-
-
-# Most severe first: the order findings are served in and a floor reads.
-SEVERITIES = STANDINGS
-
-
-def _rank(severity: str) -> int:
-    return SEVERITIES.index(severity) if severity in SEVERITIES else len(SEVERITIES)
+    return tuple(sorted(findings, key=lambda f: (f.severity.rank, f.rule, f.subject)))
 
 
 def estate_findings(*, principal: Principal, rule: str = "") -> tuple[Any, ...]:
     """Every finding the topology ``principal`` may see supports."""
 
-    principal.require(Capability.READ)
     return _estate_findings(principal, rule)
 
 
 @derivation(
     "estate.findings",
-    reads=ESTATE_READS,
+    reads=FINDINGS_READS,
     vary=lambda principal, rule: (estate_variant(principal), rule),
 )
 def _estate_findings(principal: Principal, rule: str) -> tuple[Any, ...]:
-    raised = derive_findings(derive_topology(principal=principal), principal=principal, rule=rule)
+    topology = derive_topology(principal=principal)
+    gathered = gather_findings(_estate(topology), principal=principal)
+    raised = derive_findings(topology, principal=principal, rule=rule, gathered=gathered)
     seen = recorded() if raised else {}
-    return tuple(replace(finding, since=seen.get(finding_key(finding))) for finding in raised)
+    # A notice says when in its own words; a detector may read when its condition began.
+    return tuple(
+        replace(finding, since=None if finding.notice else finding.since or seen.get(finding_key(finding)))
+        for finding in raised
+    )
 
 
 def finding_key(finding: Finding) -> str:
@@ -630,6 +637,12 @@ def finding_key(finding: Finding) -> str:
     about = f"finding:{finding.rule}:{finding.subject or finding.scope}"
     # Two containers on one machine are two matters, each keyed by its own.
     return f"{about}:{finding.part}" if finding.part else about
+
+
+def finding_id(finding: Finding) -> str:
+    """A finding's id where an answer names it, derived from its key alone."""
+
+    return claim_identity(_CLAIM_NAMESPACE, finding_key(finding))
 
 
 def rule_of(item_key: str) -> str:
@@ -689,7 +702,7 @@ class FindingFacts(TypedDict):
     ]
     affected_scopes: Annotated[list[str], Describe("Other record types or reading types it bears on.")]
     title: Annotated[str, Describe("The problem, in a line.")]
-    severity: Annotated[str, Describe(f"How serious it is: {listed(SEVERITIES)}, most severe first.")]
+    severity: Annotated[str, Describe(f"How serious it is: {listed(Tone)}, most severe first.")]
     explanation: Annotated[str, Describe("Why it matters and what it rests on, in sentences.")]
     evidence: Annotated[list[FindingEvidence], Describe("What it rests on, a labeled line each.")]
     operator_steps: Annotated[
@@ -726,7 +739,7 @@ class SerializedFinding(FindingFacts):
 
 def finding_facts(finding: Finding) -> FindingFacts:
     return {
-        "id": claim_identity(_CLAIM_NAMESPACE, finding.rule, finding.subject, finding.scope),
+        "id": finding_id(finding),
         "rule": finding.rule,
         "subject": finding.subject or None,
         "scope": finding.scope or None,
@@ -762,7 +775,7 @@ def serialize_finding(finding: Finding) -> SerializedFinding:
 
 # Built from the declarations, so a type checker reads each as a value.
 _RULE: Any = Literal[tuple(rule.name for rule in RULES)]
-_SEVERITY: Any = Literal[SEVERITIES]
+_SEVERITY: Any = Literal[tuple(tone.value for tone in Tone)]
 
 # The API's query and get_findings' arguments are both this model, so the two
 # doors publish one schema and refuse one input in one sentence.
@@ -852,14 +865,13 @@ def narrowed_findings(*, principal: Principal, **narrowing: object) -> NarrowedF
     limit held some back.
     """
 
-    principal.require(Capability.READ)
     query = FindingsQuery.model_validate(narrowing).model_dump()
     rule: str = query["rule"] or ""
     limit: int | None = query["limit"]
-    floor = SEVERITIES.index(query["severity"]) if query["severity"] else len(SEVERITIES)
+    floor = Tone(query["severity"]).rank if query["severity"] else len(Tone)
     raised = estate_findings(principal=principal, rule=rule)
     counts = Counter(finding.severity for finding in raised)
-    eligible = [finding for finding in raised if _rank(finding.severity) <= floor]
+    eligible = [finding for finding in raised if finding.severity.rank <= floor]
     kept = tuple(eligible[:limit])
     return NarrowedFindings(
         rule=rule or None,
@@ -959,7 +971,7 @@ def _unreachable_kinds(topology: Topology) -> frozenset[str]:
 
     status_of = {node.id: node.status for node in topology.nodes}
     live_abilities = {
-        edge.target for edge in topology.edges if edge.kind == "enables" and status_of.get(edge.source) != "serious"
+        edge.target for edge in topology.edges if edge.kind == "enables" and status_of.get(edge.source) != Tone.SERIOUS
     }
     governed_by: dict[str, set[str]] = {}
     kinds_of = {node.id: node.kind_key for node in topology.nodes}

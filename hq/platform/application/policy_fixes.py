@@ -15,8 +15,8 @@ lazy from hq.domains.control_plane.models import ManagedResource
 from .describe import Describe
 from .record_errors import PolicyError, RecordNotFound
 from .resource_operations import ResourceSaved
-from .security import Principal
 from .ui import counted
+lazy from .capabilities import Consented
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .resource_operations import refuse_while_drifted
 lazy from .tailnet import POLICY_KIND
@@ -122,7 +122,7 @@ class EmptyGroupsRemoved(ResourceSaved):
 def request_empty_groups_removal(
     command,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
     expected_updated_at: str | None = None,
 ) -> EmptyGroupsRemoved:
@@ -144,7 +144,7 @@ def request_empty_groups_removal(
             spec={**policy.spec, "document": document},
             enabled=policy.enabled,
         ),
-        principal=principal,
+        consented=consented,
         current_key=policy.key,
         expected_updated_at=expected_updated_at,
     )

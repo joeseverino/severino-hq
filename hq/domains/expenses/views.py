@@ -1,7 +1,7 @@
 from typing import override
 
 from django.db.models import Count
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -11,7 +11,6 @@ from django.views.generic import (
 )
 
 from hq.platform.application import related
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import document_link
 from hq.platform.application.expenses import costs_by_category
 from hq.platform.application.labels import dotted
@@ -50,7 +49,7 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_page_actions(self):
-        return (PageAction(capability_words("expense.create"), reverse("expenses:create"), primary=True),)
+        return (PageAction.command("expense.create", primary=True),)
 
     @override
     def get_table_filters(self):
@@ -132,8 +131,8 @@ class ExpenseDetailView(PageMixin, DetailView):
     def get_page_actions(self):
         pk = self.object.pk
         return (
-            PageAction(capability_words("expense.update"), reverse("expenses:edit", args=[pk])),
-            PageAction("Delete", reverse("expenses:delete", args=[pk]), danger=True),
+            PageAction.command("expense.update", pk),
+            PageAction.command("expense.delete", pk),
         )
 
 
@@ -145,7 +144,6 @@ class ExpenseCreateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, Crea
     page_title = "New expense"
     form_class = ExpenseForm
     extra_context = FORM_PAGE
-    created_message = "Expense saved: {target}"
 
     @override
     def get_initial(self):
@@ -163,7 +161,6 @@ class ExpenseUpdateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, Upda
     model = Expense
     form_class = ExpenseForm
     extra_context = FORM_PAGE
-    updated_message = "Expense saved: {target}"
 
 
 class ExpenseDeleteView(ExpensePage, RecordDeleteMixin, DeleteView):
@@ -172,4 +169,3 @@ class ExpenseDeleteView(ExpensePage, RecordDeleteMixin, DeleteView):
     template_name = "expenses/expense_confirm_delete.html"
     success_url = reverse_lazy("expenses:list")
     context_object_name = "expense"
-    deleted_message = "Expense deleted: {target}"

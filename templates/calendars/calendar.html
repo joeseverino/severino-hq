@@ -8,7 +8,7 @@ opening a day ask this page for the `calendar` part and take it in place.
 {% partialdef calendar inline %}
 <div class="split" id="calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace">
   {% section moment=calendar.month when="month" id="calendar-month" %}
-    {% include "calendars/_month_grid.html" %}
+    {% include "partials/_month_grid.html" %}
   {% aside %}
     <nav class="calendar-nav" aria-label="Change month">
       <a href="{{ previous_url }}" rel="prev" aria-label="Previous month" data-hotkey="ArrowLeft k p">&lsaquo;</a>
@@ -23,9 +23,9 @@ opening a day ask this page for the `calendar` part and take it in place.
         {% if entry %}
           {% section entry.object.title id="day-entry" %}
             <p>{{ entry.when|breakable }}</p>
-            {% if entry.object.location or entry.repeat %}<p class="muted">{% if entry.object.location %}{{ entry.object.location|breakable }}{% endif %}{% if entry.object.location and entry.repeat %}{% dot %}{% endif %}{{ entry.repeat|breakable }}</p>{% endif %}
-            {% if entry.about %}<p class="muted">About {{ entry.about.kind_label|lower|breakable }} {% entity entry.about %}</p>{% endif %}
-            {% if entry.next %}<p class="muted">Next {% for when, url in entry.next %}<a href="{{ url }}">{{ when|when:"day" }}</a>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</p>{% endif %}
+            {% if entry.object.location or entry.repeat %}{% muted element="p" %}{% if entry.object.location %}{{ entry.object.location|breakable }}{% endif %}{% if entry.object.location and entry.repeat %}{% dot %}{% endif %}{{ entry.repeat|breakable }}{% endmuted %}{% endif %}
+            {% if entry.about %}{% muted element="p" %}About {{ entry.about.kind_label|lower|breakable }} {% entity entry.about %}{% endmuted %}{% endif %}
+            {% if entry.next %}{% muted element="p" %}Next {% for when, url in entry.next %}<a href="{{ url }}">{{ when|when:"day" }}</a>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}{% endif %}
             {% if entry.object.notes %}<p>{{ entry.object.notes|breakable|linebreaksbr }}</p>{% endif %}
             <p class="page-actions">{% for action in entry.actions %}{% include "partials/_page_action.html" %}{% endfor %}</p>
           {% endsection %}

@@ -5,7 +5,7 @@ The answer to the policy test. The tailnet page answers it alone as its
 <div id="whatif-result" data-fragment="{% url 'control_plane:tailnet' %}" data-fragment-name="whatif">
 {% if verdict %}
   <p>
-    {% if not verdict.known %}{% status verdict.label tone="unprobed" %}{% else %}{% status verdict.label tone=verdict.allowed|yesno:"reachable,unreachable" %}{% endif %}
+    {% status verdict.label tone=verdict.tone %}
     {{ verdict.detail|breakable }}
   </p>
   {% if verdict.rules %}
@@ -20,7 +20,7 @@ The answer to the policy test. The tailnet page answers it alone as its
       <tbody>
         {% for rule in verdict.rules %}
           <tr>
-            <td>{% if rule.line %}line {{ rule.line|breakable }}{% else %}{% empty_value %}{% endif %}</td>
+            <td>{% present rule.line %}line {{ rule.line|breakable }}{% endpresent %}</td>
             <td>{% for who in rule.who %}<code>{{ who|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
             <td>{% for to in rule.to %}<code>{{ to|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
           </tr>
@@ -29,7 +29,7 @@ The answer to the policy test. The tailnet page answers it alone as its
     </table>
     {% endtable_region %}
   {% endif %}
-  {% if proposal and policy_edit_url %}
+  {% if proposal and policy_edit %}
     {% comment %}
     The refusal and the fix, together. Nobody reads "not allowed" and stops
     there: the next question is always what it would take, so the grant that
@@ -37,7 +37,7 @@ The answer to the policy test. The tailnet page answers it alone as its
     one click away. It is not applied here: changing the tailnet's access
     policy is a decision, not a side effect of asking a question.
     {% endcomment %}
-    <p class="muted">Grant needed to allow it:</p>
+    {% muted element="p" %}Grant needed to allow it:{% endmuted %}
     {% table_region "Grant needed" %}
     <table class="data-table compact-table">
       <thead><tr>{% table_heading "From" "identifier" %}{% table_heading "To" "identifier" %}{% table_heading "Ports" "identifier" %}</tr></thead>
@@ -50,7 +50,7 @@ The answer to the policy test. The tailnet page answers it alone as its
       </tbody>
     </table>
     {% endtable_region %}
-    <p><a class="btn" href="{{ policy_edit_url }}">Edit policy{% arrow %}</a></p>
+    <p>{% button "Edit policy" policy_edit.url arrow=True %}</p>
   {% endif %}
 {% endif %}
 </div>

@@ -1,0 +1,29 @@
+# When a job, an operation's lease or a held request lapses is its model's
+# Lapse (hq/platform/core/lapses.py), read in SQL and in Python alike. A
+# comparison of the moment by hand is a second rule beside it, and the two
+# drift: a page shows a lease as live that the claim already released.
+id: lapse-read-from-its-model
+language: python
+severity: error
+message: A record's lapse is compared by hand.
+note: >-
+  Read the model's Lapse: `OPERATION_LAPSE.q(now)` in a query,
+  `OPERATION_LAPSE.holds(row, now)` for one row (`jobs.models.LAPSE`,
+  `APPROVAL_LAPSE` alike).
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+rule:
+  any:
+    - kind: keyword_argument
+      regex: ^(lease_expires_at|heartbeat_at)__(lt|lte|gt|gte)\s*=
+    - kind: comparison_operator
+      has:
+        kind: attribute
+        regex: \.(lease_expires_at|heartbeat_at)$
+        stopBy: end

@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application import roles
-from hq.platform.application.tests.markup import all_elements, within
+from hq.platform.application.markup_testing import all_elements, within
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.automation import CACHE_FLUSH, CORRELATION
 from hq.platform.core.example_estate.names import MACHINE
@@ -70,7 +70,7 @@ class RunEvidencePageTests(TestCase):
         for page, drawn in (("machine", _evidence(machine, "runs")), ("jobs", _evidence(jobs))):
             with self.subTest(page=page):
                 self.assertIn(CORRELATION, " ".join(drawn.get("Correlation", ())))
-                self.assertTrue(drawn.get("Lease"))
+                self.assertTrue(drawn.get("Claimed by"))
                 for task in tasks:
                     self.assertTrue(any(task in said for said in drawn.get("Tasks", ())), task)
 

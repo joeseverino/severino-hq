@@ -25,14 +25,14 @@ from hq.domains.calendars.models import Entry
 from hq.domains.calendars.views import EntryCreateView
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.markup_testing import text
 from hq.platform.core.models import AuditLog
 
 from .. import writes
-from ..expenses import ExpenseCommand, save_expense
+from ..capabilities import Ran
 from ..plugin_testing import form_keyed
 from ..security import OPERATOR_CAPABILITIES, Principal
 from ..web_writes import RETRY_KEY_FIELD, run_posted
-from .markup import text
 from .writers import drawn_key
 
 # The delete page's one button posts the page's shared form.
@@ -70,7 +70,7 @@ def refused_once():
 
     def refusing(request, *args, **kwargs):
         calls.append(1)
-        return writes.Ran(REFUSED) if len(calls) == 1 else run_posted(request, *args, **kwargs)
+        return Ran(REFUSED) if len(calls) == 1 else run_posted(request, *args, **kwargs)
 
     return mock.patch.object(writes, "run_posted", refusing)
 
@@ -265,7 +265,7 @@ class RecordFormTests(FormWriteCase):
             "error": {"code": "invalid_input", "message": "Refused.", "details": [{"loc": ["vendor"], "msg": "No."}]},
         }
 
-        with mock.patch.object(writes, "run_posted", return_value=writes.Ran(beside)):
+        with mock.patch.object(writes, "run_posted", return_value=Ran(beside)):
             refused = self.client.post(reverse("expenses:create"), posted)
         landed = self.client.post(reverse("expenses:create"), posted)
 
@@ -320,14 +320,13 @@ class ExpenseCommandForm(forms.Form):
     item = forms.CharField()
 
 
-def _command_view(service=save_expense):
-    """A page whose submit is ``service``, as an extension's command form is."""
+def _command_view():
+    """A page whose submit is a command, as an extension's command form is."""
 
-    class ExpenseCommandView(writes.CommandFormMixin, FormView):
+    class ExpenseCommandView(writes.CapabilityCommandMixin, FormView):
         form_class = ExpenseCommandForm
-        command = ExpenseCommand
+        submits = "expense.create"
         success_url_name = "expenses:list"
-        success_message = "Expense saved."
 
         def render_to_response(self, context, **response_kwargs):
             page = Template(
@@ -335,13 +334,11 @@ def _command_view(service=save_expense):
             )
             return HttpResponse(page.render(RequestContext(self.request, context)), **response_kwargs)
 
-    ExpenseCommandView.service = staticmethod(service)
     return ExpenseCommandView
 
 
 class CommandFormTests(TestCase):
-    """The published ``CommandFormMixin``: its service's capability through the
-    runner, or a service that is none outside it."""
+    """The published ``CapabilityCommandMixin``: its command through the runner."""
 
     POSTED = {"date": "2026-07-25", "vendor": "Example Store", "item": "Cable"}
 
@@ -365,9 +362,11 @@ class CommandFormTests(TestCase):
         self.assertRedirects(first, reverse("expenses:list"), fetch_redirect_response=False)
         self.assertEqual(again["Location"], first["Location"])
         self.assertEqual(Expense.objects.count(), 1)
-        self.assertEqual([str(message) for message in get_messages(request)], ["Expense saved."])
+        said = [str(message) for message in get_messages(request)]
+        self.assertEqual(len(said), 1)
+        self.assertIn(str(Expense.objects.get()), said[0])
 
-    def test_a_registered_service_is_run_as_its_capability(self):
+    def test_the_command_runs_under_its_capability(self):
         with as_principal(Principal("operator", "web", OPERATOR_CAPABILITIES - {"write_expenses"})):
             refused, _ = self.post(form_keyed(self.POSTED))
 
@@ -384,25 +383,15 @@ class CommandFormTests(TestCase):
         self.assertNotEqual(drawn_key(changed, "class", "form"), posted[RETRY_KEY_FIELD])
         self.assertEqual(list(Expense.objects.values_list("item", flat=True)), ["Cable"])
 
-    def test_a_service_that_is_no_capability_writes_once_outside_the_runner(self):
-        calls = []
+    def test_the_record_a_command_runs_on_is_sent_as_its_target(self):
+        class OnOne(_command_view()):
+            def target(self):
+                return 7
 
-        def unregistered(command, *, principal):
-            calls.append(1)
-            if len(calls) == 1:
-                raise ValueError("Refused by the domain.")
-            return save_expense(command, principal=principal)
+        self.view = OnOne.as_view()
 
-        self.view = _command_view(unregistered).as_view()
-        posted = form_keyed(self.POSTED)
+        with mock.patch.object(writes, "run_posted", return_value=Ran({"ok": True})) as ran:
+            landed, _ = self.post(form_keyed(self.POSTED))
 
-        with mock.patch.object(writes, "outside_the_runner", wraps=writes.outside_the_runner) as outside:
-            refused, _ = self.post(posted)
-            landed, _ = self.post(posted)
-            again, _ = self.post(posted)
-
-        self.assertContains(refused, "Refused by the domain.")
         self.assertRedirects(landed, reverse("expenses:list"), fetch_redirect_response=False)
-        self.assertEqual(again["Location"], landed["Location"])
-        self.assertEqual((Expense.objects.count(), len(calls)), (1, 2))
-        self.assertTrue(outside.called)
+        self.assertEqual((ran.call_args.args[1], ran.call_args.kwargs["target"]), ("expense.create", 7))

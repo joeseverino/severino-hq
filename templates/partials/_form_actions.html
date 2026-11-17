@@ -12,20 +12,20 @@ primary. A form answered in place (`live`) says how it went in the line its
 fragment fills, and its Cancel closes it there, the region it stands in
 answering it when it is `in_place`; any other says Working… while
 it is sent (`data-submit-busy` on the form, app.js). `bar` pins the row to
-the bottom of the screen once the form has changed (pages.css).
+the bottom of the screen once the form has changed.
 {% endcomment %}
-<div class="form-actions{% if bar %} save-bar{% endif %}">
+{% button_row bar=bar|default:False %}
   {% if choices %}
-    {% for value, words in choices %}<button class="btn{% if forloop.length == 1 %} primary{% endif %}" type="submit" name="{{ choice_field }}" value="{{ value }}">{{ words|button_words }}</button>{% endfor %}
+    {% for value, words in choices %}{% if forloop.length == 1 %}{% button words submit=True name=choice_field value=value look="primary" %}{% else %}{% button words submit=True name=choice_field value=value %}{% endif %}{% endfor %}
   {% else %}
-    <button class="btn primary" type="submit"{% if gap %} disabled{% endif %}>{{ verb|button_words }}</button>
+    {% button verb submit=True look="primary" disabled=gap|default:False %}
   {% endif %}
   {% if gap %}{% include "partials/_write_gap.html" with gap=gap only %}{% endif %}
-  {% if cancel_url %}<a class="btn" href="{{ cancel_url }}"{% if live %} data-live-cancel{% endif %}{% if in_place is True %} data-fragment-target=""{% endif %}>Cancel</a>{% endif %}
-  {% if note %}<span class="muted form-actions-note">{{ note|breakable }}</span>{% endif %}
+  {% if cancel_url %}{% if in_place is True %}{% button "Cancel" cancel_url data_live_cancel=live|default:False data_fragment_target=True %}{% else %}{% button "Cancel" cancel_url data_live_cancel=live|default:False %}{% endif %}{% endif %}
+  {% if note %}{% muted css="form-actions-note" %}{{ note|breakable }}{% endmuted %}{% endif %}
   {% if live %}
-    <span class="muted form-actions-note" data-fragment-status role="status"></span>
+    {% muted css="form-actions-note" data_fragment_status=True role="status" %}{% endmuted %}
   {% else %}
-    <span class="muted form-actions-note" data-submit-status hidden role="status">Working…</span>
+    {% muted css="form-actions-note" data_submit_status=True hidden=True role="status" %}Working…{% endmuted %}
   {% endif %}
-</div>
+{% endbutton_row %}

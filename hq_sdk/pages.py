@@ -4,7 +4,9 @@ A page declares its head (PageMixin, or page_context for a function view) and
 extends ``page.html``, which draws its actions and their dialogs; a list extends
 ``list_page.html`` and writes only one row's cells (docs/Plugins.md, Shared UI
 contract). An action is a ``PageAction`` or an ``Ask``, what ``outbound.ask``
-returns. ``built_from`` links an extension's overview to its project.
+returns: a link built as it is, or a command's control built by
+``PageAction.command``, which reads its words, address and method from the
+command. ``built_from`` links an extension's overview to its project.
 """
 
 from hq.platform.application.asks import Ask

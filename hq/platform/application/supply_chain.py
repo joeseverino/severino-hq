@@ -9,42 +9,58 @@ than failing.
 
 from typing import Any
 
-from .standards import Check, Measurement, measure
+from .standards import Check, Measurement, Reading, measure
+
+IMAGE_UNREAD = "Its image has not been read"
 
 
 def _attested(test):
-    def check(container: Any) -> bool | None:
+    def check(container: Any) -> Reading:
         attested = container.standing.attested
-        return None if attested is None or attested.get("unread") else test(attested)
+        if attested is None or attested.get("unread"):
+            return Reading.unavailable("Its attestations have not been read")
+        return Reading.judged(test(attested))
 
     return check
 
 
-def _source_known(container: Any) -> bool | None:
+def _pinned(container: Any) -> Reading:
+    return Reading.judged(container.standing.pinned)
+
+
+def _source_known(container: Any) -> Reading:
     standing = container.standing
-    return True if standing.source else (None if standing.read_at is None else False)
+    if standing.source:
+        return Reading.met()
+    return Reading.unavailable(IMAGE_UNREAD) if standing.read_at is None else Reading.unmet()
 
 
-def _no_urgent(container: Any) -> bool | None:
+def _no_urgent(container: Any) -> Reading:
     standing = container.standing
-    return None if standing.checked is None else not standing.urgent
+    if standing.checked is None:
+        return Reading.unavailable("Its packages have not been checked for vulnerabilities")
+    return Reading.judged(not standing.urgent)
 
 
-def _no_advisory(container: Any) -> bool | None:
+def _no_advisory(container: Any) -> Reading:
     standing = container.standing
-    return None if not standing.source or standing.upstream_read_at is None else not standing.advisories
+    if not standing.source or standing.upstream_read_at is None:
+        return Reading.unavailable("Its project's advisories have not been read")
+    return Reading.judged(not standing.advisories)
 
 
-def _tag_current(container: Any) -> bool | None:
+def _tag_current(container: Any) -> Reading:
     standing = container.standing
-    return None if standing.read_at is None or not standing.tag else not standing.moved_to
+    if standing.read_at is None or not standing.tag:
+        return Reading.unavailable(IMAGE_UNREAD)
+    return Reading.judged(not standing.moved_to)
 
 
 STANDARD: tuple[Check, ...] = (
     Check(
         "pinned",
         "Pinned by digest",
-        lambda container: container.standing.pinned,
+        _pinned,
         "A tag can later point at a different image. A digest always names the same build.",
         "Pin the image by digest in the compose file.",
         unmet="Not pinned by digest",

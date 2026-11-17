@@ -1651,9 +1651,7 @@
       "GlanceObservations": {
         "type": "array",
         "items": {
-          "type": "object",
-          "additionalProperties": true,
-          "description": "One dashboard panel observation (record_dashboard_observations), carrying the as_of of the plan it answers."
+          "$ref": "#/components/schemas/GlanceObservation"
         }
       },
       "ForcedRead": {
@@ -2109,23 +2107,6 @@
           "cls_needs_improvement",
           "cls_poor"
         ]
-      },
-      "Verification": {
-        "type": "object",
-        "description": "How long the controller keeps checking that an applied change is actually served, declared by the action it belongs to.",
-        "properties": {
-          "timeout_seconds": {
-            "type": "integer"
-          },
-          "interval_seconds": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "timeout_seconds",
-          "interval_seconds"
-        ],
-        "additionalProperties": false
       },
       "PassMode": {
         "type": "string",

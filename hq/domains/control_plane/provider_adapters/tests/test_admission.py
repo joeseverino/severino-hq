@@ -4,13 +4,10 @@ Everything else HQ knows about a provider is gathered from what the admitted
 module declares, so these tests hold the gathering rather than a list.
 """
 
-from importlib import import_module
-from pkgutil import iter_modules
 from types import SimpleNamespace
 
 from django.test import SimpleTestCase
 
-from hq.domains.control_plane import observations
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.connection_shapes import API_TOKEN, LOGIN
 from hq.domains.control_plane.observations.contract import ObservationRecord, ObservationSpec, registry
@@ -57,25 +54,7 @@ class ConnectionAdmissionTests(SimpleTestCase):
         self.assertEqual(dict(CONNECTION_KINDS), CONNECTIONS)
 
 
-class ObservationDiscoveryTests(SimpleTestCase):
-    def test_every_readings_module_is_registered(self):
-        modules = [
-            import_module(f"hq.domains.control_plane.observations.{info.name}")
-            for info in iter_modules(observations.__path__)
-            if info.name != "contract" and not info.name.startswith(("_", "test"))
-        ]
-        declared = [spec.kind for module in modules for spec in module.OBSERVATIONS]
-
-        self.assertTrue(modules)
-        self.assertEqual(sorted(observations.OBSERVATIONS), sorted(declared))
-
-    def test_the_registry_order_is_the_module_names(self):
-        providers = [spec.provider for spec in observations.OBSERVATIONS.values()]
-        modules = [module.__name__.rsplit(".", 1)[1] for module in observations._SPEC_MODULES]
-
-        self.assertEqual(modules, sorted(modules))
-        self.assertEqual(len(providers), len(observations.OBSERVATIONS))
-
+class ObservationRegistryTests(SimpleTestCase):
     def test_a_reading_that_connects_must_name_what_it_connects(self):
         spec = ObservationSpec(
             "example.group",

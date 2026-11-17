@@ -8,8 +8,9 @@ language: python
 severity: error
 message: An ask is answered by hand.
 note: >-
-  Subclass asks.AskMixin and declare back_to, payload(), target() and asked();
-  its post runs the capability and answers the refusal and the standing.
+  Subclass asks.AskMixin and declare back_to, payload() and target(), with a
+  capability that answers asks.Asked; its post runs the capability and
+  answers the refusal and the standing.
 files:
   - "hq/**"
 ignores:

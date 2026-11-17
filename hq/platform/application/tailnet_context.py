@@ -15,22 +15,25 @@ from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, T
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .credential_sight import READABLE, Sight, credential_sight
-from .entity_links import EntityLink
+from .entity_links import EntityLink, entity_link
 from .finding_model import Finding
 from .findings import estate_findings, serialize_finding
 from .policy_links import PolicyName, PolicyNames, tagged
 from .projection import complete, projection_scope
 from .routes import reverse
-from .security import Capability, Principal
+from .security import Principal
 from .tailnet import (
     NEW_DEVICES,
     RESOLVES_THROUGH,
+    SIGNING_DEVICES,
+    TAILNET_LOCK,
     Policy,
     declaration,
     devices,
     grant_ports,
     policy,
 )
+from .tailnet_signers import Signer, signers
 from .topology import derive_topology
 
 TAILNET_KINDS = (TAILNET_KIND, TAILNET_POLICY_KIND)
@@ -79,6 +82,8 @@ class TailnetContext:
     ssh_rules: tuple[NamedRule, ...]
     tags: tuple[TagRow, ...]
     findings: tuple[Finding, ...]
+    # Each key tailnet lock trusts to sign, and the machine holding it.
+    signers: tuple[Signer, ...]
     # Tailnet readings the credential could not read, and why.
     unread: tuple[Sight, ...]
     credential_refusal: str
@@ -132,6 +137,9 @@ class TailnetContext:
             "funnel": list(found.funnel) if found.funnel is not None else None,
             "tests": [dict(test) for test in found.tests],
             "locked_out": list(found.locked_out),
+            "signers": [
+                {"key": signer.key, "votes": signer.votes, "machine": signer.machine or None} for signer in self.signers
+            ],
             "findings": [serialize_finding(finding) for finding in self.findings],
             "unread": [_unread(sight) for sight in self.unread],
             "credential_refusal": self.credential_refusal or None,
@@ -169,7 +177,8 @@ def _unread(sight: Sight) -> dict[str, Any]:
 
 
 def _findings(principal: Principal) -> tuple[Finding, ...]:
-    """Findings whose subject is a tailnet connection or declaration, or a tailnet kind."""
+    """Findings whose subject is a tailnet connection or declaration, or a
+    tailnet kind, and those a setting row is about."""
 
     topology = derive_topology(principal=principal)
     providers = tailnet_providers()
@@ -181,12 +190,30 @@ def _findings(principal: Principal) -> tuple[Finding, ...]:
     return tuple(
         finding
         for finding in estate_findings(principal=principal)
-        if finding.subject in subjects or finding.scope in TAILNET_KINDS
+        if finding.subject in subjects or finding.scope in TAILNET_KINDS or finding.rule in _SETTING_RULES
     )
 
 
 # The setting row each rule is about.
-_SETTING_RULES = {"devices-join-without-approval": NEW_DEVICES}
+_SETTING_RULES = {"devices-join-without-approval": NEW_DEVICES, "tailnet-lock-server-signs": SIGNING_DEVICES}
+
+
+def _settings(facts, names: PolicyNames, held: tuple[Signer, ...], problems: dict[str, str]):
+    """The setting rows, with the devices that can sign after tailnet lock's."""
+
+    for label, value in facts:
+        addresses = names.addresses(value.split(", ")) if label == RESOLVES_THROUGH else None
+        yield TailnetSetting(label, value, addresses, problems.get(label, ""))
+        if label == TAILNET_LOCK and held:
+            yield TailnetSetting(
+                SIGNING_DEVICES,
+                ", ".join(signer.label for signer in held),
+                tuple(
+                    PolicyName(signer.label, entity_link("machine", signer.machine) if signer.machine else None)
+                    for signer in held
+                ),
+                problems.get(SIGNING_DEVICES, ""),
+            )
 
 
 def _setting_problems(findings: tuple[Finding, ...]) -> dict[str, str]:
@@ -217,7 +244,6 @@ def _sight() -> tuple[tuple[Sight, ...], str]:
 def tailnet_context(*, principal: Principal) -> TailnetContext:
     """Every fact HQ derives about the tailnet, derived once."""
 
-    principal.require(Capability.READ)
     with projection_scope():
         found = policy()
         found = replace(found, grants=grant_ports(found.grants))
@@ -231,15 +257,8 @@ def tailnet_context(*, principal: Principal) -> TailnetContext:
         return TailnetContext(
             policy=found,
             declaration=declaration(),
-            settings=tuple(
-                TailnetSetting(
-                    label,
-                    value,
-                    names.addresses(value.split(", ")) if label == RESOLVES_THROUGH else None,
-                    problems.get(label, ""),
-                )
-                for label, value in found.facts
-            ),
+            settings=tuple(_settings(found.facts, names, signers(), problems)),
+            signers=signers(),
             grants=tuple(
                 NamedRule(rule, names.of(rule.get("src") or ()), names.of(rule.get("dst") or ()))
                 for rule in found.grants

@@ -14,9 +14,10 @@ from hq.domains.docs_index.importer import (
 )
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
-from hq.platform.core.audit import audit_operation, record_event
+from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
+from .answer_fields import CallMessage
 from .command_fields import Describe, Names
 from .entity_links import EntityLink, entity_link
 from .labels import plural
@@ -140,9 +141,7 @@ type DocSensitivity = Annotated[_SENSITIVITY, Describe("Who may read it; a restr
 type ObsidianPath = Annotated[str, Describe("Its path in the vault.", api="Empty for none.")]
 type GithubPath = Annotated[str, Describe("Its path in a repository.", api="Empty for none.")]
 type ExternalUrl = Annotated[str, Describe("Where it is published outside HQ.", api="Empty for none.")]
-type LastReviewed = Annotated[
-    date | None, Describe("When it was last checked against what it describes.", api="Null for never.")
-]
+type LastReviewed = Annotated[date | None, Describe("When the doc last changed in the vault.", api="Null for unknown.")]
 
 
 # The vault's manifest copies a doc's frontmatter as it is written, so any
@@ -275,6 +274,7 @@ class DocumentationSynced(DocumentationSync):
     """What syncing the vault's docs into HQ did, as the command answers it."""
 
     ok: Literal[True]
+    message: CallMessage
 
 
 def sync_documentation(
@@ -288,7 +288,6 @@ def sync_documentation(
 ) -> DocumentationSynced | RefusalEnvelope:
     """Validate and atomically synchronize vault metadata into HQ."""
 
-    principal.require(Capability.SYNC_DOCUMENTATION)
     if prune_orphans:
         principal.require(Capability.PRUNE_DOCUMENTATION)
     if len(manifest) > MAX_MANIFEST_ITEMS:
@@ -301,20 +300,20 @@ def sync_documentation(
     if prune_orphans and not confirm_prune:
         raise PolicyError("confirm_prune must be true when prune_orphans is true")
 
-    with audit_operation(operation=SYNC, principal=principal):
-        stats = import_manifest_data(
-            manifest,
-            update_existing=update_existing,
-            report_orphans=report_orphans or prune_orphans,
-            prune_orphans=prune_orphans,
-        )
-        record_event(
-            action=AuditLog.Action.IMPORTED,
-            type_label="DocumentationRecord",
-            message="Updated the list of docs.",
-            metadata={"stats": stats},
-        )
-    return {"ok": True, "stats": stats}
+    stats = import_manifest_data(
+        manifest,
+        update_existing=update_existing,
+        report_orphans=report_orphans or prune_orphans,
+        prune_orphans=prune_orphans,
+    )
+    record_event(
+        action=AuditLog.Action.IMPORTED,
+        type_label="DocumentationRecord",
+        message="Updated the list of docs.",
+        metadata={"stats": stats},
+    )
+    said = f"Manifest imported: {stats['created']} new, {stats['updated']} changed, {stats['skipped']} unchanged."
+    return {"ok": True, "stats": stats, "message": said}
 
 
 def execute_documentation_sync(

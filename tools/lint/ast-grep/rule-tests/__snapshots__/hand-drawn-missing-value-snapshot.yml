@@ -1,0 +1,73 @@
+id: hand-drawn-missing-value
+snapshots:
+  "<td>\n  {% if signal.evidence %}\n    {% status signal.label %}\n  {% else %}\n    {% empty_value %}\n  {% endif %}\n</td>":
+    labels:
+    - source: |-
+        {% if signal.evidence %}
+            {% status signal.label %}
+          {% else %}
+            {% empty_value %}
+          {% endif %}
+      style: primary
+      start: 7
+      end: 110
+  "<td>{% if hop.name %}{{ hop.name }}{% elif hop.detail %}{{ hop.detail }}{% else %}{% empty_value %}{% endif %}</td>":
+    labels:
+    - source: "{% if hop.name %}{{ hop.name }}{% elif hop.detail %}{{ hop.detail }}{% else %}{% empty_value %}{% endif %}"
+      style: primary
+      start: 4
+      end: 110
+  "<td>{% if job.last_run %}{{ job.last_run|when:\"ago\" }}{% else %}{% empty_value %}{% endif %}</td>":
+    labels:
+    - source: "{% if job.last_run %}{{ job.last_run|when:\"ago\" }}{% else %}{% empty_value %}{% endif %}"
+      style: primary
+      start: 4
+      end: 92
+  "<td>{% if not job.runs %}{% empty_value %}{% elif job.runs_unit %}<code>{{ job.runs }}</code>{% endif %}</td>":
+    labels:
+    - source: "{% if not job.runs %}{% empty_value %}{% elif job.runs_unit %}"
+      style: primary
+      start: 4
+      end: 66
+  "<td>{% if not job.runs %}{% empty_value %}{% else %}{{ job.runs }}{% endif %}</td>":
+    labels:
+    - source: "{% if not job.runs %}{% empty_value %}{% else %}{{ job.runs }}{% endif %}"
+      style: primary
+      start: 4
+      end: 77
+  "<td>{% if note.slug %}<code>{{ note.slug }}</code>{% else %}{% empty_value %}{% endif %}</td>":
+    labels:
+    - source: "{% else %}{% empty_value %}{% endif %}"
+      style: primary
+      start: 50
+      end: 88
+  "<td>{% if row.balance is None %}{% empty_value %}{% else %}{% status row.balance_text %}{% endif %}</td>":
+    labels:
+    - source: "{% if row.balance is None %}{% empty_value %}{% else %}{% status row.balance_text %}{% endif %}"
+      style: primary
+      start: 4
+      end: 99
+  "<td>{% if row.duration %}{{ row.duration|seconds }}{% else %}{% empty_value %}{% endif %}</td>":
+    labels:
+    - source: "{% if row.duration %}{{ row.duration|seconds }}{% else %}{% empty_value %}{% endif %}"
+      style: primary
+      start: 4
+      end: 89
+  "<td>{% if row.total_cost %}{{ row.total_cost|money }}{% else %}{% empty_value %}{% endif %}</td>":
+    labels:
+    - source: "{% if row.total_cost %}{{ row.total_cost|money }}{% else %}{% empty_value %}{% endif %}"
+      style: primary
+      start: 4
+      end: 91
+  "<td>{% if rule.line %}line {{ rule.line|breakable }}{% else %}{% empty_value %}{% endif %}</td>":
+    labels:
+    - source: "{% if rule.line %}line {{ rule.line|breakable }}{% else %}{% empty_value %}{% endif %}"
+      style: primary
+      start: 4
+      end: 90
+  "<td>{% if service.project %}{% entity service.project.link %}{% else %}{% empty_value %}{% endif %}</td>":
+    labels:
+    - source: "{% if service.project %}{% entity service.project.link %}{% else %}{% empty_value %}{% endif %}"
+      style: primary
+      start: 4
+      end: 99

@@ -205,7 +205,9 @@ class ReadingItemsCarryTheirAgeTests(SimpleTestCase):
         ``snapshots_of``. What the walk cannot follow is a reading handed in as
         an argument or reached through an attribute, which is why a module that
         reads one holds every item it builds. An item drawn from no single
-        reading says so with ``observed_at=None``."""
+        reading says so with ``observed_at=None``. A row about what is wrong
+        is a ``Finding`` (``dashboard.finding_rows``), so none may be held
+        here; the walk is still proven on ``container_findings.add``."""
 
         modules = _modules()
         readers = _readers(modules)
@@ -222,7 +224,6 @@ class ReadingItemsCarryTheirAgeTests(SimpleTestCase):
 
         missing = sorted(f"{module}:{line}" for (module, line), aged in held.items() if not aged)
 
-        self.assertTrue(held, "no item is built from a stored reading: the rule checks nothing")
         self.assertIn(("container_findings", "add"), readers, "the walk no longer follows an indirect reader")
         self.assertEqual(missing, [])
 

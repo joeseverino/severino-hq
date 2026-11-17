@@ -27,7 +27,8 @@ from .finding_model import (
     connections_carrying,
     fact_values,
 )
-from .timestamps import moment
+from .moments import moment
+from .tone import Tone
 from .ui import counted, ended
 lazy from .credential_mint import address_fields
 lazy from .moments import expiry_words
@@ -172,7 +173,7 @@ def missing_permissions(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="credential-missing-permissions",
                 subject=node.id,
                 title=f"{node.label}'s token is missing {counted(len(missing), 'permission')}",
-                severity="attention",
+                severity=Tone.ATTENTION,
                 explanation=(
                     f"The token works, but {_service(node)} will not let it read "
                     f"{ended(', '.join(unseen) or 'everything HQ asks for')} "
@@ -205,7 +206,7 @@ def expiring(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="credential-expiring",
                 subject=node.id,
                 title=f"{node.label}'s token {expiry_words(when)}",
-                severity="serious" if expired else "attention",
+                severity=Tone.SERIOUS if expired else Tone.ATTENTION,
                 explanation=(
                     f"HQ cannot read anything through {node.label} until it is replaced."
                     if expired
@@ -225,22 +226,22 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "credential-missing-permissions",
         "A token is missing permissions",
-        "attention",
+        Tone.ATTENTION,
         missing_permissions,
         operator_action=(f"Make a new token with the command on the connection's page. {THEN_REFRESH}"),
         no_help_reason=_CANNOT_ISSUE,
-        bars={"attention": "a token lacks a permission HQ uses"},
+        bars={Tone.ATTENTION: "a token lacks a permission HQ uses"},
     ),
     FindingRule(
         "credential-expiring",
         "A token is expiring",
-        "attention",
+        Tone.ATTENTION,
         expiring,
         operator_action=(f"Make a new token with the command on the connection's page. {THEN_REFRESH}"),
         no_help_reason=_CANNOT_ISSUE,
         bars={
-            "serious": "a token has expired",
-            "attention": "a token is inside its renewal window",
+            Tone.SERIOUS: "a token has expired",
+            Tone.ATTENTION: "a token is inside its renewal window",
         },
     ),
 )

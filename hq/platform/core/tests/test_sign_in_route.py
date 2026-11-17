@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from hq.platform.application.tests.markup import elements
+from hq.platform.application.markup_testing import elements
 
 
 class SignInRouteTests(TestCase):

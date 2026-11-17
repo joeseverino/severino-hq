@@ -7,6 +7,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.application.markup_testing import elements, text
+from hq.platform.application.tests.worded import worded
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 from hq_sdk.testing import plain
 
@@ -17,7 +19,6 @@ from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
 from ..findings import rule_of
 from ..github_estate import Repository
-from .markup import elements, text
 
 
 def exposed(level):
@@ -33,7 +34,7 @@ def queued(rule=""):
     """The containers' findings as the queue carries them, each keyed by its rule."""
 
     with uncached():
-        found = [item for item in infrastructure() if rule_of(item.key) in {ADVISORY, UPDATE}]
+        found = [item for item in worded(infrastructure()) if rule_of(item.key) in {ADVISORY, UPDATE}]
     return tuple(item for item in found if not rule or rule_of(item.key) == rule)
 
 
@@ -146,18 +147,24 @@ class StandingTests(TestCase):
 
         self.assertEqual(self.standings()["web"].state, UNKNOWN)
 
-    def test_an_advisory_and_an_update_are_each_one_item_about_their_container(self):
+    def test_an_advisory_and_an_update_are_each_one_item_about_their_image(self):
         estate(advisories=[HIGH])
 
         with exposed(OPEN):
             (advisory,) = queued(ADVISORY)
             (update,) = queued(UPDATE)
 
-        self.assertEqual((advisory.part, advisory.subject.label, advisory.status), ("app", "example-box", "serious"))
+        self.assertEqual(
+            (advisory.part, advisory.subject.label, advisory.status),
+            ("ghcr.io/example/app:v1.2.0", "example-box", "serious"),
+        )
+        self.assertIn(("Container", "app"), advisory.facts)
         self.assertIn("Fixed in 1.2.1", advisory.body)
         # The body is the images. What to do is a step, and why HQ does not
         # do it is one sentence that names no machine.
-        self.assertEqual((update.part, update.body), ("kuma", "example/kuma:1 to 2."))
+        self.assertEqual(update.part, "example/kuma:1")
+        self.assertIn("example/kuma:1 to 2.", update.body)
+        self.assertIn(("Container", "kuma"), update.facts)
         # A card says how old its reading is, and leads with the containers' page.
         self.assertIsNotNone(update.observed_at)
         self.assertEqual((update.action, update.url), ("Open containers", reverse("control_plane:containers")))
@@ -202,7 +209,7 @@ class StandingTests(TestCase):
             ],
         )
 
-        (item,) = [item for item in queued(UPDATE) if item.part == "kuma"]
+        (item,) = [item for item in queued(UPDATE) if item.part == "example/kuma:1"]
 
         (step,) = [step for step in item.workflow.steps if step.phase == "run"]
         self.assertEqual(
@@ -327,9 +334,26 @@ class ToneTests(TestCase):
     def test_a_container_is_good_running_and_serious_otherwise(self):
         record = running("web", "example/web:1.0.0")
 
-        tones = [Running.of({**record, "state": state}, None).state_tone for state in ("running", "exited")]
+        tones = [Running.of({**record, "state": state}, None).state.tone for state in ("running", "exited", "")]
 
-        self.assertEqual(tones, ["good", "serious"])
+        self.assertEqual(tones, ["good", "serious", "serious"])
+
+    def test_a_health_check_is_its_verdict_at_the_end_of_dockers_status(self):
+        from ..container_state import HealthCheck
+
+        record = running("web", "example/web:1.0.0")
+        said = {
+            "Up 11 hours (healthy)": ("health check passing", "good"),
+            "Up 2 minutes (unhealthy)": ("health check failing", "attention"),
+            "Up 3 seconds (health: starting)": ("health check starting", "attention"),
+        }
+
+        for status, (words, tone) in said.items():
+            with self.subTest(status):
+                check = Running.of({**record, "status": status}, None).check
+                self.assertIsInstance(check, HealthCheck)
+                self.assertEqual((check.said, check.tone), (words, tone))
+        self.assertIsNone(Running.of({**record, "status": "Up 11 hours"}, None).check)
 
     def test_a_tally_counts_each_container_and_says_its_tones(self):
         estate(advisories=[HIGH])
@@ -527,7 +551,9 @@ class PageTests(TestCase):
             response = self.client.get(reverse("control_plane:machine", args=["example-box"]))
 
         drawn = {part: [item["key"] for item in items] for part, items in response.context["problems_in"].items()}
-        (update,) = [key for keys in drawn.values() for key in keys if key.endswith(":kuma") and "update" in key]
+        (update,) = [
+            key for keys in drawn.values() for key in keys if key.endswith(":example/kuma:1") and "update" in key
+        ]
         self.assertIn(update, drawn["containers"])
 
     def test_a_container_running_an_image_by_id_stays_listed_and_says_why(self):

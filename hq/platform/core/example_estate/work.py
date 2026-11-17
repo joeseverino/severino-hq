@@ -13,7 +13,8 @@ from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_
 from hq.domains.control_plane.provider_adapters import github as delivery
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
-from hq.platform.application import scheduled_work
+from hq.platform.application import outbound_work
+from hq.platform.application.conditions import READY
 from hq.platform.application.images import ImageRef
 from hq.platform.core.audit import stamped
 
@@ -26,8 +27,7 @@ REPOSITORIES = ("hq", "homelab", "photo-library", "media-server", "git-server", 
 UPDATED = "photo-library"
 # The repository whose default branch fails a check, so the queue holds GitHub's item.
 FAILING = "homelab"
-# The scheduled work HQ declares that runs on a clock, and how many runs to show.
-SCHEDULED = tuple((work.name, work.every) for work in scheduled_work.SCHEDULED if work.every is not None)
+# How many runs of each piece of HQ's own work on a clock to show.
 RUNS = 3
 # The states the latest run of the first scheduled kinds is left in, one each.
 LIVE = (Job.State.RUNNING, Job.State.QUEUED)
@@ -154,7 +154,7 @@ def repositories():
         generation=1,
         observed_generation=1,
         last_observed_at=at,
-        conditions=[{"type": "Ready", "status": True, "reason": "Reconciled", "message": ""}],
+        conditions=[{"type": READY, "status": True, "reason": "Reconciled", "message": ""}],
     )
     store(delivery.KIND, {**deploys, "connection_ref": GITHUB, "extensions": []})
     store(
@@ -222,7 +222,8 @@ def _watched():
 
 
 def _updates(name):
-    """One update open with its checks passing, and an alert no update answers yet."""
+    """One update open with its checks passing, an alert no update answers
+    yet, and a serious one no version fixes yet, which the queue leaves out."""
 
     url = f"https://github.com/example/{name}"
     return {
@@ -284,7 +285,7 @@ def _updates(name):
                 "created_at": iso(timedelta(days=5)),
             },
         ],
-        "alerts": {"dependabot": {"medium": 1}},
+        "alerts": {"dependabot": {"high": 1, "medium": 1}},
         "dependabot_alerts": [
             {
                 "number": 7,
@@ -294,7 +295,16 @@ def _updates(name):
                 "severity": "medium",
                 "first_patched_version": "1.8.2",
                 "url": f"{url}/security/dependabot/7",
-            }
+            },
+            {
+                "number": 8,
+                "package": "example-tiff",
+                "ecosystem": "pip",
+                "manifest_path": "uv.lock",
+                "severity": "high",
+                "first_patched_version": None,
+                "url": f"{url}/security/dependabot/8",
+            },
         ],
     }
 
@@ -303,18 +313,20 @@ def jobs():
     """Each piece of scheduled work, done on time and done well, a few times over.
     The latest content sync found the site's index describing each writeup."""
 
-    for kind, every in SCHEDULED:
+    clocked = [work for work in outbound_work.host_work() if work.every is not None]
+    for declared in clocked:
         for run in range(RUNS, 0, -1):
-            work = _described if kind == CONTENT_SYNC and run == 1 else _nothing
-            _ran(kind, every * run - timedelta(minutes=7), work)
+            work = _described if declared.name == CONTENT_SYNC and run == 1 else _nothing
+            _ran(declared, declared.every * run - timedelta(minutes=7), work)
     # A timer's run under way and one waiting its turn, so a page draws work in both states.
     now = timezone.now()
-    for (kind, _every), state in zip(SCHEDULED, LIVE, strict=False):
+    for declared, state in zip(clocked, LIVE, strict=False):
         running = state == Job.State.RUNNING
         Job.objects.create(
-            kind=kind,
-            label=scheduled_work.named(kind).label,
+            kind=declared.name,
+            label=declared.label,
             actor=runner.SCHEDULER,
+            request={outbound_work.SUBJECT_FIELD: ""},
             state=state,
             started_at=now if running else None,
             heartbeat_at=now if running else None,
@@ -345,14 +357,20 @@ def _described(_progress):
     )
 
 
-def _ran(kind, ago, work):
+def _ran(declared, ago, work):
     """One run the scheduler asked for, ended through the runner so its row in
     the log is the one a real run writes, and every row its work wrote beneath
     it, dated to when it finished."""
 
     finished = timezone.now() - ago
     with stamped(lambda *_: {"created_at": finished}):
-        job = runner.run(kind, scheduled_work.named(kind).label, work, actor=runner.SCHEDULER)
+        job = runner.run(
+            declared.name,
+            declared.label,
+            work,
+            actor=runner.SCHEDULER,
+            request={outbound_work.SUBJECT_FIELD: ""},
+        )
     Job.objects.filter(pk=job.pk).update(
         created_at=finished - timedelta(seconds=5),
         started_at=finished - timedelta(seconds=4),

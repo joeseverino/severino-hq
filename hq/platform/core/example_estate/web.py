@@ -9,8 +9,7 @@ from django.utils import timezone
 
 from hq.domains.analytics.contracts import BACKFILL_DAYS, completed_window
 from hq.domains.control_plane.observations.cloudflare import CONTACT_SUBMISSION_KIND
-from hq.platform.application.analytics import record_analytics
-from hq.platform.application.security import cli_principal
+from hq.platform.application.report_testing import bridged
 lazy from hq.domains.content.models import ContentItem
 lazy from hq.domains.docs_index.models import DocumentationRecord
 
@@ -159,7 +158,8 @@ def analytics():
     start, end = completed_window(BACKFILL_DAYS)
     today = timezone.localdate()
     days = [start + timedelta(days=offset) for offset in range((end - start).days + 1)]
-    record_analytics(
+    bridged(
+        "analytics",
         {
             "sites": [
                 {
@@ -173,7 +173,6 @@ def analytics():
                 }
             ]
         },
-        principal=cli_principal(),
     )
 
 

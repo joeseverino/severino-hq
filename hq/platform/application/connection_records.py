@@ -22,7 +22,7 @@ from .credential_sight import STATE_LABELS
 from .describe import Describe, listed
 from .json_schemas import Written
 from .resource_records import WrittenLink
-from .topology_model import STANDINGS
+from .tone import Tone
 from .ui import ended
 from .workflows import WrittenAction
 
@@ -164,6 +164,12 @@ class UnreadPart(TypedDict):
     requires: Annotated[str | None, Describe("The permissions reading it needs; null for none.")]
 
 
+class SignerPart(TypedDict):
+    key: Annotated[str, Describe("The tailnet lock public key, as `tailscale lock remove` takes it.")]
+    votes: Annotated[int, Describe("The votes tailnet lock gives the key.")]
+    machine: Annotated[str | None, Describe("The machine whose tailnet device holds the key; null when none does.")]
+
+
 class Tailnet(TypedDict):
     """The tailnet's policy and what HQ makes of it."""
 
@@ -188,6 +194,9 @@ class Tailnet(TypedDict):
     ]
     tests: Annotated[list[AsRead], Describe("The policy's tests, as written.")]
     locked_out: Annotated[list[str], Describe("The machines tailnet lock keeps off the tailnet.")]
+    signers: Annotated[
+        list[SignerPart], Describe("Each key tailnet lock trusts to sign; empty while tailnet lock is off.")
+    ]
     findings: Annotated[
         list[findings.SerializedFinding], Describe("The open problems about the tailnet that the reader may see.")
     ]
@@ -211,7 +220,7 @@ class ConnectionStandingRow(TypedDict):
         str,
         Describe("The connection type's name, such as `infrastructure.controllers`; `family_label` says it in words."),
     ]
-    status: Annotated[str, Describe(ended(f"How the connection stands: {listed(STANDINGS)}"))]
+    status: Annotated[str, Describe(ended(f"How the connection stands: {listed(Tone)}"))]
     status_label: Annotated[str, Describe("How the connection stands, in the words its row shows.")]
     detail: Annotated[
         str, Describe("A line on what it last reported, such as how much it holds; empty when there is nothing to add.")

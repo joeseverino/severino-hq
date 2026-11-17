@@ -25,9 +25,9 @@ from .finding_model import (
     journal_step,
     machine_step,
 )
-from .moments import ago, duration
+from .moments import ago, duration, moment
 from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller, stated, unjudged
-from .timestamps import moment
+from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted, ended
 
@@ -260,7 +260,7 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                     if len(failed) == 1
                     else f"{counted(len(failed), 'background job', 'background jobs')} failed on {node.label}"
                 ),
-                severity="attention" if all(unit.unit in scheduled for unit in failed) else "serious",
+                severity=Tone.ATTENTION if all(unit.unit in scheduled for unit in failed) else Tone.SERIOUS,
                 explanation=_failed_since(node.label, failed, estate.now),
                 evidence=tuple(
                     item
@@ -311,7 +311,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                     if len(absent) == 1
                     else f"{counted(len(absent), 'background job', 'background jobs')} are not set up on {node.label}"
                 ),
-                severity="serious",
+                severity=Tone.SERIOUS,
                 explanation=(
                     "So its work is not happening. Deploying HQ sets it up."
                     if len(absent) == 1
@@ -394,7 +394,7 @@ def _stalled_finding(
             if len(timers) == 1
             else f"{counted(len(timers), 'timer')} on {node.label} are on but their jobs are not running"
         ),
-        severity="serious",
+        severity=Tone.SERIOUS,
         explanation=(
             ended(stalled[0][1])
             if len(stalled) == 1
@@ -438,7 +438,7 @@ _restarting = OnEachMachine(
     rule="unit-restarting",
     row=UnitState,
     picked=lambda unit: bool(unit.unit) and unit.looping,
-    severity=lambda _looping: "serious",
+    severity=lambda _looping: Tone.SERIOUS,
     title=lambda node, looping: (
         f"{looping[0].named} keeps restarting on {node.label}"
         if len(looping) == 1
@@ -484,7 +484,7 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=node.id,
                 scope=UNIT_KIND,
                 title=_cannot_check(node),
-                severity="attention",
+                severity=Tone.ATTENTION,
                 explanation="If one of them failed, HQ would not know.",
                 evidence=tuple(("Why", UNREAD_REASONS.get(reason, "Could not be read")) for reason in reasons),
                 steps=machine_step(
@@ -508,33 +508,33 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "unit-failed",
         "A background job failed",
-        "serious",
+        Tone.SERIOUS,
         _failed,
         operator_action=("On the machine, read the job's log for why it failed, fix that, then start it again."),
         no_help_reason=cannot_run_commands(),
         bars={
-            "serious": "a job nothing starts again on its own has failed",
-            "attention": "a scheduled job's last run failed, which its timer runs again",
+            Tone.SERIOUS: "a job nothing starts again on its own has failed",
+            Tone.ATTENTION: "a scheduled job's last run failed, which its timer runs again",
         },
     ),
     FindingRule(
         "unit-not-installed",
         "A background job is not set up",
-        "serious",
+        Tone.SERIOUS,
         _absent,
         operator_action=("Deploy HQ, which sets up every background job, or turn the job on on the machine."),
         no_help_reason=cannot_run_commands(),
-        bars={"serious": "a job HQ's machine needs is not installed or not turned on"},
+        bars={Tone.SERIOUS: "a job HQ's machine needs is not installed or not turned on"},
     ),
     FindingRule(
         "timer-stalled",
         "A scheduled job is not running",
-        "serious",
+        Tone.SERIOUS,
         _stalled,
         operator_action=("On the machine, see when the timer last ran and read its job's log, then start the job."),
         no_help_reason=cannot_run_commands(),
         bars={
-            "serious": (
+            Tone.SERIOUS: (
                 f"a timer is {duration(OVERDUE_AFTER)} past when it was due, "
                 f"or its job has been starting for {duration(STARTING_TOO_LONG)}"
             )
@@ -544,14 +544,14 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "unit-restarting",
         "A service keeps restarting",
-        "serious",
+        Tone.SERIOUS,
         _restarting,
         operator_action=(
             "On the machine, read the service's log for why it keeps stopping, fix that, then clear its restart count."
         ),
         no_help_reason=cannot_run_commands(),
         bars={
-            "serious": (
+            Tone.SERIOUS: (
                 f"systemd has restarted a service on its own {RESTARTING_FROM} times "
                 f"and it has not stayed up for {duration(SETTLED_AFTER)}"
             )
@@ -561,12 +561,12 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "unit-state-unread",
         "Cannot check background jobs",
-        "attention",
+        Tone.ATTENTION,
         _unread,
         operator_action=(
             "Check that systemd answers on the controller's machine. If it does and this stays, deploy HQ."
         ),
         no_help_reason=cannot_run_commands(),
-        bars={"attention": "HQ cannot read whether its background jobs run"},
+        bars={Tone.ATTENTION: "HQ cannot read whether its background jobs run"},
     ),
 )

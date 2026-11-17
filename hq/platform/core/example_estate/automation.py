@@ -16,7 +16,7 @@ are free to run.
 import hashlib
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import timedelta
 from itertools import count
 from typing import Any
@@ -35,17 +35,17 @@ from hq.domains.control_plane.models import (
 )
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
 from hq.platform.application.agent_registry import observe
-from hq.platform.application.approvals import is_held
-from hq.platform.application.automation_adoption import AdoptProposal, adopt, catch_up
+from hq.platform.application.approvals import APPROVE, is_held
+from hq.platform.application.automation_adoption import ADOPT, catch_up
 from hq.platform.application.automation_manifest import OperationManifest
-from hq.platform.application.automation_runs import capability_name, command_type, operation_registry, request_run
-from hq.platform.application.automation_sources import RefreshCommand, refresh
+from hq.platform.application.automation_runs import capability_name, operation_registry
+from hq.platform.application.automation_sources import REFRESH
 from hq.platform.application.cadence import AUTOMATION_HEARTBEAT, AUTOMATION_WORK, note_automation
 from hq.platform.application.capabilities import run_capability
 from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
-from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD
 from hq.platform.application.machines import machine_catalog
+from hq.platform.application.refusal_status import refused
 from hq.platform.application.security import MCP_INTERFACE, Principal, cli_principal, web_principal
 from hq.platform.application.tokens import token_principal
 from hq.platform.core.audit import stamped
@@ -268,7 +268,7 @@ def _scanned(
     note_automation()
     with stamped(lambda *_: {"created_at": at} if at is not None else None):
         with doors.page("command", name="automation.source.refresh"):
-            queued = refresh(RefreshCommand(idempotency_key=key), principal=person)["operation"]
+            queued = _ran(REFRESH, {}, principal=person, key=key)["operation"]
         with doors.controller("claim"):
             claimed = claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)["operation"]
         if claimed is None or claimed["id"] != queued["id"]:
@@ -293,7 +293,7 @@ def adopted(person: Principal) -> None:
 
     scan = _scanned(person, "example-refresh", catalog(), "Read the playbooks.", timedelta(days=20))
     with doors.page("command", name="automation.source.adopt"):
-        adopt(AdoptProposal(proposal=scan.result["proposal"]), principal=person)
+        _ran(ADOPT, {"proposal": scan.result["proposal"]}, principal=person, key=f"example-adopt-{scan.pk}")
     # Adopted the day it was read, as the scan was.
     adopted_at = scan.created_at + timedelta(hours=1)
     AdoptedCatalog.objects.filter(proposal_id=scan.result["proposal"]).update(
@@ -331,7 +331,7 @@ def scanning(owner) -> None:
 
     note_automation()
     with doors.page("command", name="automation.source.refresh"):
-        refresh(RefreshCommand(idempotency_key="example-refresh-scanning"), principal=web_principal(owner))
+        _ran(REFRESH, {}, principal=web_principal(owner), key="example-refresh-scanning")
     with doors.controller("claim"):
         claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)
 
@@ -429,15 +429,16 @@ def runs(
     owner = owner or get_user_model().objects.order_by("pk").first()
     person = web_principal(owner) if owner is not None else cli_principal()
     agent = token_principal(CLAIMS, MCP_INTERFACE)
+    # Only a person approves an agent's held ask; the shell may not.
+    approver = person if owner is not None else None
     adopted(person)
     proposed(person)
     supplied = procedures()
     first, *others = supplied
-    approved = replace(agent, approved_by=person.actor)
     endings: tuple[tuple[Principal, Callable[[OperationRequest], None], str], ...] = (
         (person, _reported(DONE), ""),
         (person, _reported(FAILED), ""),
-        (approved, _reported(DONE), ""),
+        (agent, _reported(DONE), ""),
         (agent, _reported(DONE), CORRELATION),
         (person, _called_off(person), ""),
         (person, _outlived, ""),
@@ -446,14 +447,14 @@ def runs(
     for index in range(count):
         asker, carried_out, correlation = endings[index % len(endings)]
         ago = timedelta(days=2 + 3 * (count - 1 - index))
-        _asked(first, server, asker, ago, carried_out, correlation=correlation)
+        _asked(first, server, asker, ago, carried_out, approver=approver, correlation=correlation)
     if others:
-        _asked(others[0], read_on, person, timedelta(hours=5), _reported(REPORTED))
+        _asked(others[0], read_on, person, timedelta(hours=5), _reported(REPORTED), approver=approver)
     # Now: one run working on the server, one waiting.
-    _asked(first, server, person, timedelta(minutes=3), _working)
+    _asked(first, server, person, timedelta(minutes=3), _working, approver=approver)
     if len(others) > 1:
-        _asked(others[1], waiting_on, agent, timedelta(minutes=1), lambda _run: None)
-    changes = [manifest for manifest in supplied if manifest.effect != "read"]
+        _asked(others[1], waiting_on, agent, timedelta(minutes=1), lambda _run: None, approver=approver)
+    changes = [manifest for manifest in supplied if manifest.effect.changes]
     if changes:
         _held(changes[-1], server, agent, owner)
     # Each procedure's record was written when it was first asked for.
@@ -480,28 +481,43 @@ def _held(manifest, host, agent, owner) -> None:
         raise RuntimeError(f"The agent's run was not held for a person: {answer}")
 
 
-def _asked(manifest, host, principal, ago, carried_out, *, correlation="") -> None:
-    """One run of ``manifest`` on ``host``, asked for ``ago``, then carried out,
-    with every audit row it writes dated to the moment it was asked."""
+def _asked(manifest, host, principal, ago, carried_out, *, approver: Principal | None, correlation="") -> None:
+    """One run of ``manifest`` on ``host``, asked for ``ago``, approved by
+    ``approver`` where the ask waits for a person (left waiting without
+    one), then carried out, with every audit row it writes dated to the
+    moment it was asked."""
 
     at = timezone.now() - ago
-    key = f"example-run-{manifest.id}-{int(ago.total_seconds())}"
-    command = command_type(manifest).model_validate(
-        {"hosts": [host], "correlation": correlation, **({IDEMPOTENCY_FIELD: key} if manifest.effect != "read" else {})}
-    )
+    name = capability_name(manifest.id)
     # Each ask through its asker's own door, as the command page or the MCP server binds one.
-    door = (
-        doors.mcp()
-        if principal.interface == MCP_INTERFACE
-        else doors.request(f"/commands/{capability_name(manifest.id)}/")
-    )
+    door = doors.mcp() if principal.interface == MCP_INTERFACE else doors.request(f"/commands/{name}/")
+    key = f"example-run-{manifest.id}-{host}-{int(ago.total_seconds())}"
     with stamped(lambda *_: {"created_at": at}):
         with door:
-            queued = request_run(manifest, command, principal=principal, idempotency_key=key)["operation"]
-        run = OperationRequest.objects.get(pk=queued["id"])
+            answer = _ran(name, {"hosts": [host], "correlation": correlation}, principal=principal, key=key)
+        if is_held(answer):
+            if approver is None:
+                # Nobody here may approve it, so it waits, as a real one would.
+                return
+            held = answer["approval"]["id"]
+            with doors.page("core:approval_entry", approval_id=held):
+                answer = _ran(APPROVE, {"approval_id": held}, principal=approver, key=f"{key}-approved")["result"]
+        run = OperationRequest.objects.get(pk=answer["operation"]["id"])
         OperationRequest.objects.filter(pk=run.pk).update(created_at=at, updated_at=at)
         carried_out(run)
     _dated(run.pk, at)
+
+
+def _ran(
+    name: str, payload: dict[str, Any], *, principal: Principal, key: str | None, target: str | None = None
+) -> dict[str, Any]:
+    """What ``principal`` pressing ``name`` answers, through the runner as its page asks it;
+    the estate stops where a step it builds on is refused."""
+
+    answer = run_capability(name, payload, principal=principal, target=target, idempotency_key=key).answer
+    if refused(answer):
+        raise RuntimeError(f"The estate's {name} was refused: {answer}")
+    return answer
 
 
 @contextmanager
@@ -555,9 +571,14 @@ def _called_off(person: Principal) -> Callable[[OperationRequest], None]:
     def carry_out(run: OperationRequest) -> None:
         resource = ManagedResource.objects.get(key=run.resource.key)
         for enabled in (False, True):
-            command = ManagedResourceCommand(key=resource.key, kind=resource.kind, spec=resource.spec, enabled=enabled)
             with doors.page("control_plane:detail", key=resource.key):
-                save_managed_resource(command, principal=person, current_key=resource.key)
+                _ran(
+                    "infrastructure.resource.update",
+                    {"enabled": enabled},
+                    principal=person,
+                    target=resource.key,
+                    key=f"example-switch-{run.pk}-{enabled}",
+                )
 
     return carry_out
 

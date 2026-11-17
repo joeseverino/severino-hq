@@ -12,8 +12,7 @@ from hq.platform.application.connection_context import connections_context
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
-lazy from hq.platform.application.asks import Ask, AskMixin, Standing, Took, WatchView, read_standing, read_status_url
-lazy from hq.platform.application.cadence import forced_kinds
+lazy from hq.platform.application.asks import Ask, AskMixin, WatchView
 
 
 class ConnectionListView(PageMixin, TemplateView):
@@ -70,21 +69,6 @@ class ReadNowView(AskMixin, View):
     @override
     def payload(self):
         return read_now_payload({**self.request.GET.dict(), **self.request.POST.dict()})
-
-    @override
-    def asked(self, result, at) -> Took:
-        said = str(result.get("message") or "")
-        if not result.get("read_now"):
-            # A bare wake-up names nothing to wait for.
-            return Took(Standing(note=said))
-        payload = self.payload()
-        ref = str(payload.get("connection_ref", ""))
-        kinds = forced_kinds(ref, str(payload.get("kind", ""))) or ()
-        return Took(
-            read_standing(kinds, at, connection_ref=ref),
-            read_status_url(kinds, at, connection_ref=ref),
-            said,
-        )
 
 
 class ReadStatusView(WatchView):

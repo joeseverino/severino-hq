@@ -1,10 +1,8 @@
 """The capability catalog lists only what its asker's interface could ever hold."""
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from django.test import SimpleTestCase
-
-from hq_sdk.capabilities import StrictCommand
 
 from ..capabilities import capability_registry, describe_capabilities
 from ..capability_policy import agents_may_hold
@@ -25,7 +23,8 @@ PERSON_ONLY = ("certificate.upload", "receipt.upload")
 PERSONAL = ("set_preferences", "pin_favorites", "set_aside_action_items")
 
 
-class _Nothing(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class _Nothing:
     pass
 
 
@@ -111,7 +110,7 @@ class CatalogTests(SimpleTestCase):
             listed = _listed(principal)
             for spec in capability_registry().values():
                 with self.subTest(interface=principal.interface, person=principal.person_key, capability=spec.name):
-                    self.assertEqual(spec.name in listed, principal.permits(*spec.required_capabilities))
+                    self.assertEqual(spec.name in listed, spec.permitted_to(principal))
 
 
 class OnePredicateTests(SimpleTestCase):

@@ -64,12 +64,8 @@
   // A note that says a word (`data-ask-word`, partials/_ask.html) says the
   // state's word and its sentence, of which a table cell shows the word: the
   // sentence is the button's title as well, which its reason is otherwise.
-  const part = (name, text) => {
-    const span = document.createElement("span");
-    span.className = name;
-    span.textContent = text;
-    return span;
-  };
+  // Each piece written here is one _ask.html draws empty on every page.
+  const frame = (selector) => document.querySelector(selector).content.cloneNode(true);
   // A note drawn apart from its control (a page's, _visit_refresh.html) is
   // found through the form it names, so a note drawn again finds it anew.
   const noteOf = (control) =>
@@ -95,7 +91,12 @@
     const said = worded && text && word ? `${word}${text}` : alone;
     if (note.textContent === said) return;
     if (said === alone) note.textContent = alone;
-    else note.replaceChildren(part("ask-word", word), part("ask-sentence", text));
+    else {
+      const parts = frame("template[data-ask-said]");
+      parts.querySelector(".ask-word").textContent = word;
+      parts.querySelector(".ask-sentence").textContent = text;
+      note.replaceChildren(parts);
+    }
     // A note its line may cut (`data-ask-cut`, a page's) holds the whole
     // sentence in its title.
     if ("askCut" in note.dataset) {
@@ -154,23 +155,19 @@
   // hover: the row's open line says the word and the sentence, under the
   // button's label. The server draws it there (`data-ask-why`, _ask.html,
   // through table_tags._detail_row) when the work already stood somewhere;
-  // otherwise it is drawn here as that line draws it, once, and the row is
-  // marked as holding a block there (`data-below`), which shows its toggle
-  // (tables.css).
+  // otherwise its entry, or the whole line, is cloned from the frame
+  // `{% open_line %}` draws (_ask.html), once, and the row is marked as
+  // holding a block there (`data-below`), which shows its toggle (tables.css).
   const sayBelow = (control, said) => {
     const row = control.closest(".data-table > tbody > tr:not(.row-detail)");
     const button = control.querySelector("[data-ask-button]");
     if (!row || !button) return;
     const key = button.getAttribute("formaction") || "";
-    let detail = row.nextElementSibling?.matches("[data-row-detail]") ? row.nextElementSibling : null;
+    const detail = row.nextElementSibling?.matches("[data-row-detail]") ? row.nextElementSibling : null;
     const copies = [control, detail].filter(Boolean)
       .flatMap((root) => [...root.querySelectorAll("[data-ask-why]")].filter((why) => why.dataset.askWhy === key));
     if (!said) {
-      copies.forEach((why) => {
-        const term = why.closest("dd")?.previousElementSibling;
-        if (term?.matches("dt")) term.remove();
-        (why.closest(".row-columns > dd") || why).remove();
-      });
+      copies.forEach((why) => (why.closest(".row-columns > *") || why).remove());
       row.toggleAttribute("data-below", Boolean(detail?.querySelector(".row-below")));
       return;
     }
@@ -178,31 +175,23 @@
       copies.forEach((why) => { why.textContent = said; });
       return;
     }
-    const why = part("ask-why row-below", said);
+    const line = frame("template[data-ask-below]").firstElementChild;
+    const why = line.querySelector("[data-ask-why]");
+    why.textContent = said;
     why.dataset.askWhy = key;
     why.dataset.label = button.textContent.trim();
+    const entry = why.closest(".row-columns > *");
+    entry.querySelector("dt").textContent = why.dataset.label;
     row.toggleAttribute("data-below", true);
     if (!detail) {
-      detail = document.createElement("tr");
-      detail.className = "row-detail";
-      detail.dataset.rowDetail = "";
-      detail.insertCell().colSpan = [...row.cells].reduce((width, cell) => width + cell.colSpan, 0);
-      row.after(detail);
+      line.cells[0].colSpan = [...row.cells].reduce((width, cell) => width + cell.colSpan, 0);
+      row.after(line);
+      return;
     }
     const cell = detail.cells[0];
-    let list = cell.querySelector(":scope > .row-columns");
-    if (!list) {
-      list = document.createElement("dl");
-      list.className = "row-columns";
-      cell.append(list);
-    }
-    const term = document.createElement("dt");
-    const value = document.createElement("dd");
-    term.dataset.label = "";
-    value.dataset.label = "";
-    term.textContent = why.dataset.label;
-    value.append(why);
-    list.append(term, value);
+    const list = cell.querySelector(":scope > .row-columns");
+    if (list) list.append(entry);
+    else cell.append(entry.parentElement);
   };
 
   // Draws one standing on a control. Everything a control shows comes through
@@ -257,13 +246,11 @@
     const offer = () => {
       const note = noteOf(control);
       if (!note) return;
-      const link = document.createElement("a");
-      link.href = window.location.href;
       // HQ writes the words (asks.NEWER_READING), so a page's note keeps
       // their room (_visit_refresh.html).
-      const { askNewer, askShow } = document.body.dataset;
-      link.textContent = askShow;
-      note.replaceChildren(part("ask-sentence", `${askNewer} `), link);
+      const offered = frame("template[data-ask-newer]");
+      offered.querySelector("a").href = window.location.href;
+      note.replaceChildren(offered);
       note.hidden = false;
       note.closest(".visually-hidden")?.classList.remove("visually-hidden");
       control.dataset.askState = "idle";

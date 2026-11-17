@@ -24,18 +24,37 @@ from .machine_aliases import same_machine
 from .services import CONTAINER_KIND
 from .tailnet import TAILNET_KIND
 from .tailnet_presence import Presence, tailnet_presence
+from .tone import Tone, Toned
 lazy from . import connections, readings
 lazy from .connections import connection_rows
 lazy from .entity_links import entity_link
-lazy from .facts import snapshots_of
+lazy from .facts import Subject, snapshots_of
 lazy from .infrastructure import declared_machines, enabled_resources
 lazy from .machine_roles import role_context, roles_of
-lazy from .moments import when_day
+lazy from .moments import moment, when_day
 lazy from .projection import read_once
 lazy from .reach import network_of
 lazy from .service_facets import connected_kinds
-lazy from .timestamps import moment
 lazy from .whereabouts import locate, whereabouts
+
+
+class MachineState(Toned):
+    """Whether a machine is there, as its one state pill says it."""
+
+    ONLINE = "online", Tone.GOOD
+    # A laptop or phone that is off is away, not down.
+    AWAY = "away", Tone.NEUTRAL
+    OFFLINE = "offline", Tone.SERIOUS
+    # A connection reaches it and did not answer: the credential may be what broke.
+    NOT_ANSWERING = "not answering", Tone.SERIOUS
+    UNMONITORED = "not monitored", Tone.NEUTRAL
+
+    @property
+    def watched(self) -> bool:
+        """Whether "online" is out of it: a machine nothing reaches (an offline
+        CA, a printer) and a personal device that is away are not missing."""
+
+        return self not in (MachineState.AWAY, MachineState.UNMONITORED)
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +138,25 @@ class Machine:
     presence: Presence | None = None
 
     @property
+    def subject(self) -> Subject:
+        """What a reading about this machine names it by: its names, its
+        addresses and the tailnet lock key its device holds."""
+
+        return Subject.of(
+            hostnames=(self.name, *self.aliases),
+            addresses=self.addresses,
+            keys=(self.presence.lock_key,) if self.presence is not None else (),
+        )
+
+    @property
+    def is_server(self) -> bool:
+        """Whether HQ runs here or manages it: HQ itself, a credential that
+        opens a shell or a Docker environment on it, or a declaration that
+        runs on it. A person's own device is none of these."""
+
+        return self.runs_hq or bool(self.opened_by) or bool(self.resources)
+
+    @property
     def url(self) -> str:
         return self.link.url
 
@@ -134,7 +172,7 @@ class Machine:
 
     @property
     def running(self) -> int:
-        return sum(1 for container in self.containers if container.healthy)
+        return sum(1 for container in self.containers if container.state.running)
 
     # Whether any credential that reaches this answered on the last sweep. A
     # machine nothing can reach is not necessarily down (the credential may be
@@ -148,8 +186,8 @@ class Machine:
     unanswered: tuple[str, ...] = ()
 
     @property
-    def state(self) -> tuple[str, str]:
-        """``(label, tone)`` for the one state pill a machine shows.
+    def state(self) -> MachineState:
+        """The one state pill a machine shows.
 
         Presence decides when the tailnet reports the machine: a device that is
         offline reads as offline whatever a credential says. Without presence, a
@@ -160,12 +198,11 @@ class Machine:
 
         if self.presence is not None:
             if self.presence.online:
-                return ("online", "reachable")
-            # A laptop or phone that is off is away, not down.
-            return ("away", "unprobed") if self.presence.personal else ("offline", "unreachable")
+                return MachineState.ONLINE
+            return MachineState.AWAY if self.presence.personal else MachineState.OFFLINE
         if self.reached_by:
-            return ("online", "reachable") if self.reachable else ("not answering", "unreachable")
-        return ("not monitored", "unprobed")
+            return MachineState.ONLINE if self.reachable else MachineState.NOT_ANSWERING
+        return MachineState.UNMONITORED
 
     @property
     def state_since(self) -> str:

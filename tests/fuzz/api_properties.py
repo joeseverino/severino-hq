@@ -1,5 +1,6 @@
 """Bounded schema generation through Django's real in-process WSGI stack."""
 
+from dataclasses import dataclass
 from unittest.mock import Mock, patch
 
 import schemathesis
@@ -24,7 +25,6 @@ from hq.platform.application.integrations import (
     compile_integration_graph,
 )
 from hq.platform.application.security import host_capabilities
-from hq_sdk.capabilities import StrictCommand
 
 # Bodies are read as the document describes them. This in-process client does
 # not decode gzip; compression is the transport's, tested end to end on its own.
@@ -130,7 +130,8 @@ class APIPropertyTests(TestCase):
             self.assertEqual(covered, expected)
 
     def test_generated_authorized_write_and_retry(self):
-        class ExampleCommand(StrictCommand):
+        @dataclass(frozen=True, slots=True)
+        class ExampleCommand:
             value: int = 0
 
         handler = Mock(return_value={"ok": True, "value": "example"})

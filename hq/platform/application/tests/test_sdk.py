@@ -1,21 +1,27 @@
 import inspect
 from annotationlib import Format
+from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, TestCase
-from pydantic import ValidationError
 
 from hq.platform.application.capabilities import CapabilitySpec
 from hq.platform.application.connections import ConnectionSpec
+from hq.platform.application.integration_testing import commands_registered
 from hq.platform.application.plugins import NavigationItem, PluginManifest
 from hq.platform.application.security import Principal
 from hq.platform.application.workflows import WorkflowPlan
 from hq.platform.core.models import AuditLog
-from hq_sdk.audit import audit_operation, record_operation
-from hq_sdk.capabilities import StrictCommand
+from hq_sdk.audit import record_operation
+from hq_sdk.capabilities import execute_capability
 from hq_sdk.plugin import NavigationItem as SdkNavigationItem, PluginManifest as SdkPluginManifest
+
+
+@dataclass(frozen=True, slots=True)
+class _Nothing:
+    pass
 
 
 def _routines(name, value):
@@ -82,21 +88,42 @@ class SdkContractTests(SimpleTestCase):
         self.assertIs(SdkNavigationItem, NavigationItem)
         self.assertIs(SdkPluginManifest, PluginManifest)
 
-    def test_strict_commands_reject_unknown_input(self):
-        class ExampleCommand(StrictCommand):
+    def test_a_command_with_a_pydantic_config_of_its_own_is_refused_where_it_is_declared(self):
+        """Such a config holds over the one HQ closes a command with, so even
+        one closed today is a command a later edit of its config opens."""
+
+        from typing import TypedDict
+
+        from pydantic import BaseModel, ConfigDict, with_config
+
+        class ExampleModel(BaseModel):
             value: int
 
-        with self.assertRaises(ValidationError):
-            ExampleCommand.model_validate({"value": 1, "typo": True})
+        class ExampleClosedModel(BaseModel):
+            model_config = ConfigDict(extra="forbid", frozen=True)
+            value: int
 
-    def test_a_strict_command_declares_its_fields_with_the_hosts_markers(self):
+        @with_config(ConfigDict(extra="allow"))
+        class ExampleOpen(TypedDict):
+            value: int
+
+        @with_config(ConfigDict(extra="forbid"))
+        class ExampleClosed(TypedDict):
+            value: int
+
+        for command in (ExampleModel, ExampleClosedModel, ExampleOpen, ExampleClosed):
+            with self.subTest(command.__name__), self.assertRaises(TypeError):
+                CapabilitySpec("example.open", "Open it.", "remote_write", "example.write", command, dict)
+
+    def test_a_command_declares_its_fields_with_the_hosts_markers(self):
         from typing import Annotated
 
         from hq.domains.calendars.models import Entry
         from hq.platform.application.integration_specs import command_schema
         from hq_sdk.capabilities import Choices, Describe, Names, Refers
 
-        class ExampleCommand(StrictCommand):
+        @dataclass(frozen=True, slots=True)
+        class ExampleCommand:
             note: Annotated[str, Describe("What to write down.")]
             project: Annotated[str, Names("example.projects", key="slug")]
             tone: Annotated[str, Choices((("plain", "Plain"),))]
@@ -132,25 +159,22 @@ class SdkContractTests(SimpleTestCase):
 
 
 class AuditSdkTests(TestCase):
-    def test_operation_attribution_is_shared(self):
-        principal = Principal("example-client", "api", frozenset())
-        with audit_operation(
-            operation="example.import",
-            principal=principal,
-            operation_id="operation-123",
-        ):
-            event = record_operation("example.import", "Imported records.", metadata={"changed": 2})
-        event.refresh_from_db()
+    def test_a_handler_s_bulk_row_is_its_capability_s_and_its_caller_s(self):
+        def handler(command, *, principal):
+            record_operation("example.rows", "Imported records.", metadata={"changed": 2})
+            return {"ok": True}
+
+        spec = CapabilitySpec("example.import", "Import examples.", "remote_write", "example.write", _Nothing, handler)
+        principal = Principal("example-client", "cli", frozenset({"example.write"}))
+
+        with commands_registered({spec.name: spec}):
+            self.assertTrue(execute_capability(spec.name, {}, principal=principal)["ok"])
+
+        event = AuditLog.objects.get(object_type="example.rows")
         self.assertEqual(event.action, AuditLog.Action.UPDATED)
-        self.assertEqual(event.operation_id, "operation-123")
         self.assertEqual(
             event.metadata,
-            {
-                "actor": "example-client",
-                "changed": 2,
-                "interface": "api",
-                "operation": "example.import",
-            },
+            {"actor": "example-client", "changed": 2, "interface": "cli", "operation": "example.import"},
         )
 
     def test_required_audit_event_fails_closed(self):

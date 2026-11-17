@@ -15,13 +15,14 @@ from pydantic import ValidationError
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.cloudflare import DNS_RECORD_TYPES, DNS_RECORD_TYPES_BY_ID
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
+from hq.platform.application.tests.consent import consented
 
 from ..adoption import AdoptCommand, adopt, unmanaged, unmanaged_services
 from ..adoption_testing import managing_everything
 from ..infrastructure import PolicyError, save_managed_resource, suggest_key
+from ..report_testing import bridged
 from ..security import cli_principal
 from ..services import prospects
-from ..sweep import record_sweep
 from ..zones import adopt_zone_records, find_zone, zone_catalog
 from .zone_records import APEX, DNS_CONNECTIONS, RECORD_KIND, ZONE_KIND, ZONES, record, sweep
 
@@ -227,7 +228,7 @@ class PublicDNSPolicyTests(TestCase):
 
         return save_managed_resource(
             ManagedResourceCommand(key=key, kind=kind, spec=spec, enabled=True),
-            principal=self.principal,
+            consented=consented(self.principal),
         )
 
     @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=False)
@@ -340,12 +341,12 @@ class UnrepresentableRecordTests(TestCase):
     def test_the_sweep_records_and_takes_on_what_it_can_express(self):
         """One record HQ cannot model must not cost it the whole zone."""
 
-        result = record_sweep(
+        result = bridged(
+            "inventory",
             {
                 ZONE_KIND: {"ok": True, "records": ZONES},
                 RECORD_KIND: {"ok": True, "records": self.records},
             },
-            principal=cli_principal(),
         )
 
         self.assertIn(RECORD_KIND, result["recorded"])
@@ -357,12 +358,12 @@ class UnrepresentableRecordTests(TestCase):
         """A record HQ cannot manage is still a record in the zone, and will
         never be adopted, so it is not work the page reports."""
 
-        record_sweep(
+        bridged(
+            "inventory",
             {
                 ZONE_KIND: {"ok": True, "records": ZONES},
                 RECORD_KIND: {"ok": True, "records": self.records},
             },
-            principal=cli_principal(),
         )
 
         listed = {(r.record_type, r.name) for r in find_zone("example.com").listed}

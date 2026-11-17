@@ -105,8 +105,8 @@ until a genuine shared contract appears.
 
 A provider is named once, in `ADMITTED`
 (`hq/domains/control_plane/provider_adapters/__init__.py`). Everything else
-derives from its adapter's `DEFINITIONS` and `CONNECTIONS` and its readings
-module, and `test_admission.py` there holds that to be enough. Its Go half in
+derives from its adapter's `DEFINITIONS`, `CONNECTIONS` and `OBSERVATIONS`
+(its readings module's), and `test_admission.py` there holds that to be enough. Its Go half in
 `controller/providers/` is handed its connection as a typed value
 (`r.Supplied.For`), never a setting by name
 ([Providers](docs/Architecture.md#providers)).
@@ -122,7 +122,8 @@ architecture test, a glob) fails when its path matches nothing.
   resource can do is derived from topology facts, never from a per-kind flag.
 - Never interpolate a newline-separated file list into `eval` or `bash -c`,
   where each line runs as a command: split it with `set --` and pass `"$@"`.
-- Reject unknown input; Pydantic plugin commands inherit `StrictCommand`.
+- Reject unknown input: a capability's command is a frozen dataclass, and
+  `CapabilitySpec` refuses one that is open.
 - Enforce authorization in the shared capability/view layer, not ad hoc in a
   template or handler.
 - A rule one row must keep on its own is a `Rule` in the model's

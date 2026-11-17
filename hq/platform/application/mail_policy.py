@@ -12,7 +12,9 @@ from typing import Any
 
 from .card_items import Insight
 from .entity_links import entity_link
-from .ui import counted, ended
+from .lists import split_list
+from .tone import Tone
+from .ui import counted, ended, measured
 
 DMARC_VERSION = "DMARC1"
 SPF_VERSION = "spf1"
@@ -83,7 +85,7 @@ def _reports_sentence(value: str) -> str:
 def _percent_sentence(value: str) -> str:
     if value in ("", "100"):
         return ""
-    return f"The policy is applied to {value}% of failing mail; the rest is only reported."
+    return f"The policy is applied to {measured(value, '%')} of failing mail; the rest is only reported."
 
 
 # Adding a tag is an entry here, not an edit to a parser, a form and a template
@@ -149,7 +151,7 @@ DMARC_BY_ID = {tag.id: tag for tag in DMARC_TAGS}
 
 
 def _addresses(value: str) -> tuple[str, ...]:
-    return tuple(part.strip() for part in str(value).split(",") if part.strip())
+    return tuple(split_list(str(value)))
 
 
 def unquote(value: str) -> str:
@@ -375,7 +377,7 @@ class MailOverview:
 
         return tuple(
             Insight(
-                "attention" if section.concern else "neutral",
+                Tone.ATTENTION if section.concern else Tone.NEUTRAL,
                 section.label,
                 section.question,
                 section.answer,

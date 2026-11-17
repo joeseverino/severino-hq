@@ -9,11 +9,12 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
+from hq.platform.application.markup_testing import within
+from hq.platform.application.tests.worded import worded
 
 from .. import estate, security
 from ..attention import infrastructure
 from ..services import alias_target, find_service, service_catalog, service_reading
-from .markup import within
 from .service_world import declare_world, facet, healthy
 
 
@@ -307,7 +308,7 @@ class ServiceSurfaceTests(TestCase):
         )
 
     def test_a_fault_reaches_the_composed_queue_with_its_own_link(self):
-        (item,) = (item for item in infrastructure() if "service-wiring-incomplete" in item.key)
+        (item,) = (item for item in worded(infrastructure()) if "service-wiring-incomplete" in item.key)
 
         self.assertEqual(item.subject.url, reverse("control_plane:service", kwargs={"hostname": "app.example.com"}))
         self.assertEqual(item.status, "attention")
@@ -465,3 +466,20 @@ class ServicePageLinkTests(SimpleTestCase):
             Service(hostname="www.example.com", facets=()).url,
             entity_link("service", "www.example.com").url,
         )
+
+
+class ServiceFaultRowTests(SimpleTestCase):
+    """A service's faults on its own page are the finding they raise on the queue."""
+
+    def test_its_faults_are_one_row_in_the_findings_words(self):
+        from ..services import Service
+
+        faults = ("No certificate covers it.", "The proxy points at a host HQ does not know.")
+
+        rows = Service(hostname="www.example.com", facets=(), faults=faults).fault_rows
+
+        # As the queue's finding of them is titled (``contradiction_findings``).
+        self.assertEqual(
+            [row["label"] for row in rows], ["www.example.com: No certificate covers it, and 1 more problem"]
+        )
+        self.assertEqual(rows[0]["detail"], " ".join(faults))

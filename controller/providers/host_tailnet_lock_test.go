@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,17 +10,16 @@ import (
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
-// lockStatus is `tailscale lock status --json` as the daemon answers it, with
-// invented keys and names.
+// lockStatus is the daemon's lock status as its local API answers it
+// (ipnstate.TailnetLockStatus at v1.104.7), with invented keys and names.
 const lockStatus = `{
   "Enabled": true,
-  "Head": "example-head",
-  "PublicKey": "example-public-key",
-  "NodeKey": "example-node-key",
+  "Head": null,
+  "PublicKey": "nlpub:0000000000000000000000000000000000000000000000000000000000000001",
   "NodeKeySigned": true,
   "TrustedKeys": [
-    {"Key": "example-trusted-key-one", "Metadata": null, "Votes": 1},
-    {"Key": "example-trusted-key-two", "Metadata": null, "Votes": 1}
+    {"Kind": "25519", "Key": "nlpub:0f4e1c9a2b7d3e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7", "Metadata": null, "Votes": 1},
+    {"Kind": "25519", "Key": "nlpub:AB00000000000000000000000000000000000000000000000000000000000003", "Metadata": {"added-by": "example"}, "Votes": 2}
   ],
   "VisiblePeers": [],
   "FilteredPeers": [
@@ -59,8 +59,26 @@ func TestTheLockIsReadFromTheDaemonsStatus(t *testing.T) {
 	if !ok {
 		t.Fatalf("record is %T", report.Records[0])
 	}
-	if !lock.Enabled || !lock.NodeKeySigned || lock.TrustedKeys != 2 {
+	if !lock.Enabled || !lock.NodeKeySigned {
 		t.Errorf("read %+v", lock)
+	}
+	// Each key in the form the lock commands take, which is the form the
+	// device reading carries too, so the two join by equality.
+	want := []runtime.HostTailnetLockTailnetLockSigner{
+		{Key: "tlpub:0f4e1c9a2b7d3e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7", Kind: "25519", Votes: 1},
+		{
+			Key: "tlpub:ab00000000000000000000000000000000000000000000000000000000000003", Kind: "25519", Votes: 2,
+			Metadata: map[string]string{"added-by": "example"},
+		},
+	}
+	if len(lock.Signers) != len(want) {
+		t.Fatalf("signers %+v", lock.Signers)
+	}
+	for i, signer := range lock.Signers {
+		if signer.Key != want[i].Key || signer.Kind != want[i].Kind || signer.Votes != want[i].Votes ||
+			!maps.Equal(signer.Metadata, want[i].Metadata) {
+			t.Errorf("signer %d is %+v, want %+v", i, signer, want[i])
+		}
 	}
 	if !slices.Equal(lock.LockedOut, []string{"nexample1", "phone.example.ts.net."}) {
 		t.Errorf("locked out %v", lock.LockedOut)

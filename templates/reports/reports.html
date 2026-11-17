@@ -1,12 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-{% filter_bar %}
-  <select name="year" aria-label="Year" data-submit-on-change>
-    {% for y in available_years %}
-      <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
-    {% endfor %}
-  </select>
-{% endfilter_bar %}
+{% filter_bar %}{% select "year" available_years chosen=year label="Year" submit_on_change=True %}{% endfilter_bar %}
 
 {% include "partials/_kpi_grid.html" with items=figures only %}
 
@@ -46,7 +40,7 @@ row after, their facts across it. A reading with nothing in it is not drawn.
   {% section "By status" %}
     {% facts %}
       {% for group in status_groups %}
-        {% fact group.label %}<ul class="dot-list">{% for status in group.counts %}<li><a href="{{ status.url }}">{{ status.label|breakable }} {{ status.count|breakable }}</a></li>{% endfor %}</ul>{% endfact %}
+        {% fact group.label %}{% dot_list %}{% for status in group.counts %}<li><a href="{{ status.url }}">{{ status.label|breakable }} {{ status.count|breakable }}</a></li>{% endfor %}{% enddot_list %}{% endfact %}
       {% endfor %}
     {% endfacts %}
   {% endsection %}
@@ -57,20 +51,14 @@ row after, their facts across it. A reading with nothing in it is not drawn.
     {% include "partials/_record_list.html" with rows=assets_by_category %}
   {% endsection %}
   {% endif %}
-
-  {% if docs_needing_review %}
-  {% section "Due for review" more_label="All" more_url=docs_needing_review_url %}
-    {% include "partials/_record_list.html" with rows=docs_needing_review %}
-  {% endsection %}
-  {% endif %}
 </div>
 
 {% comment %}Each export once, by what it holds, its files beside it: a list on a card, not a wall of buttons.{% endcomment %}
 {% section "Exports" lede="Leaves out secrets, sensitive text and receipts." %}
   {% facts %}
-    {% fact "Expenses" %}<ul class="dot-list"><li><a href="{% url 'reports:expenses_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></li><li><a href="{% url 'reports:expenses_csv' %}">All years CSV</a></li></ul>{% endfact %}
-    {% fact "Assets" %}<ul class="dot-list"><li><a href="{% url 'reports:assets_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></li><li><a href="{% url 'reports:assets_csv' %}">All years CSV</a></li></ul>{% endfact %}
-    {% fact "Year summary" %}<ul class="dot-list"><li><a href="{% url 'reports:year_summary_json' %}?year={{ year }}">{{ year|breakable }} JSON</a></li><li><a href="{% url 'reports:year_summary_md' %}?year={{ year }}">{{ year|breakable }} Markdown</a></li></ul>{% endfact %}
+    {% fact "Expenses" %}{% dot_list %}<li><a href="{% url 'reports:expenses_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></li><li><a href="{% url 'reports:expenses_csv' %}">All years CSV</a></li>{% enddot_list %}{% endfact %}
+    {% fact "Assets" %}{% dot_list %}<li><a href="{% url 'reports:assets_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></li><li><a href="{% url 'reports:assets_csv' %}">All years CSV</a></li>{% enddot_list %}{% endfact %}
+    {% fact "Year summary" %}{% dot_list %}<li><a href="{% url 'reports:year_summary_json' %}?year={{ year }}">{{ year|breakable }} JSON</a></li><li><a href="{% url 'reports:year_summary_md' %}?year={{ year }}">{{ year|breakable }} Markdown</a></li>{% enddot_list %}{% endfact %}
     {% fact "Writeups and pages" %}<a href="{% url 'reports:content_csv' %}">CSV</a>{% endfact %}
     {% fact "Projects" %}<a href="{% url 'reports:projects_csv' %}">CSV</a>{% endfact %}
     {% fact "Documents" %}<a href="{% url 'reports:documentation_csv' %}">CSV</a>{% endfact %}

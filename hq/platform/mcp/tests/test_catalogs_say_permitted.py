@@ -1,4 +1,5 @@
-"""MCP's catalogs say, for the caller, whether each entry is permitted, as the API's do."""
+"""MCP's catalogs say, for the caller, whether each entry is permitted, as the API's do; the capability
+index states only a refusal."""
 
 from asgiref.sync import async_to_sync
 from django.test import TestCase
@@ -37,8 +38,10 @@ class CatalogsSayPermittedTests(TestCase):
                 required = {entry["name"]: set(entry["required_capabilities"]) for entry in described}
 
                 self.assertTrue(entries)
+                # The index states a refusal; the full catalogs say `permitted`. Each leaves out false.
+                field, held = ("refused", False) if key == "capabilities" else ("permitted", True)
                 self.assertEqual(
-                    {entry["name"]: entry["permitted"] for entry in entries},
+                    {entry["name"]: entry.get(field, False) == held for entry in entries},
                     {entry["name"]: required[entry["name"]] <= {"read"} for entry in entries},
                 )
 

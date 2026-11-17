@@ -7,7 +7,8 @@ from unittest import mock
 from django.test import SimpleTestCase, TestCase
 
 from .. import plugins
-from ..card_items import Insight, Kpi
+from ..card_items import Kpi
+from ..finding_model import Finding
 from ..plugin_testing import installed, providers_derived_again, sibling
 from ..plugins import PLUGIN_API_VERSION, PluginIntegration, PluginManifest
 from ..ui import DomainOverview
@@ -15,7 +16,9 @@ from ..ui import DomainOverview
 LOGGER = "severino.composition"
 EVENT = "composition.source.unreadable"
 GOOD_CARD = {"id": "example-good-1", "label": "Good reading", "value": 1, "url": "/"}
-GOOD_ITEM = Insight("serious", "Example", "Good source item", "1", "Look into it.")
+GOOD_ITEM = Finding(
+    rule="example-good", subject="", severity="serious", title="Good source item", explanation="Look into it."
+)
 
 
 def broken():
@@ -53,7 +56,7 @@ class UnreadableSiblingTests(SimpleTestCase):
         with self.assertLogs(LOGGER, "ERROR") as logs:
             gathered = plugins.plugin_attention_items()
         self.assertLogsTheFailure(logs)
-        return {entry["source_id"]: entry["item"] for entry in gathered}
+        return {entry["source_id"]: entry["finding"] for entry in gathered}
 
     def cards(self, failing):
         self.installed(PluginIntegration(dashboard=lambda: (GOOD_CARD,)), PluginIntegration(dashboard=failing))
@@ -76,11 +79,21 @@ class UnreadableSiblingTests(SimpleTestCase):
         by_source = self.attention(broken)
 
         self.assertEqual(by_source["example.good"], GOOD_ITEM)
-        self.assertEqual(by_source["example.broken"].status, "attention")
+        self.assertEqual(by_source["example.broken"].severity, "attention")
         self.assertEqual(by_source["example.broken"].title, "Example broken could not be read")
 
     def test_an_item_with_a_status_outside_the_vocabulary_is_its_sources_failure(self):
         by_source = self.attention(lambda: (SimpleNamespace(status="urgent"),))
+
+        self.assertEqual(by_source["example.good"], GOOD_ITEM)
+        self.assertEqual(by_source["example.broken"].title, "Example broken could not be read")
+
+    def test_an_insight_in_place_of_a_finding_is_its_sources_failure(self):
+        # A queue row starts as a finding, so a card of the dashboard's shape
+        # is no answer to attention.
+        from ..card_items import Insight
+
+        by_source = self.attention(lambda: (Insight("serious", "Example", "Needs you", "1", "Body."),))
 
         self.assertEqual(by_source["example.good"], GOOD_ITEM)
         self.assertEqual(by_source["example.broken"].title, "Example broken could not be read")
@@ -93,25 +106,27 @@ class UnreadableSiblingTests(SimpleTestCase):
             mcp_read_capabilities=("example.broken.read",),
         )
         with self.assertLogs(LOGGER, "ERROR"):
-            by_source = {entry["source_id"]: entry["item"] for entry in plugins.plugin_attention_items()}
+            by_source = {entry["source_id"]: entry["finding"] for entry in plugins.plugin_attention_items()}
 
         self.assertEqual(by_source["example.broken"].read_capabilities, ("example.broken.read",))
 
     def test_two_items_under_one_key_are_one_the_worst_and_the_rest_of_the_source_stays(self):
         # Two certificates for one name, read under one key: the queue knows an
         # item by its key, so it keeps the worse and says why the other went.
-        later = Insight("attention", "Example", "Lapses in ten days", "10", "", key="certificate:example.com")
-        sooner = replace(later, status="serious", title="Lapsed")
-        other = Insight("attention", "Example", "Something else", "1", "", key="other")
+        later = Finding(
+            rule="certificate", subject="example.com", severity="attention", title="Lapses in ten days", explanation=""
+        )
+        sooner = replace(later, severity="serious", title="Lapsed")
+        other = Finding(rule="other", subject="", severity="attention", title="Something else", explanation="")
         self.installed(PluginIntegration(), PluginIntegration(attention=lambda: (later, other, sooner)))
 
         with self.assertLogs(LOGGER, "ERROR") as logs:
-            gathered = [entry["item"] for entry in plugins.plugin_attention_items()]
+            gathered = [entry["finding"] for entry in plugins.plugin_attention_items()]
 
         self.assertEqual(sorted(item.title for item in gathered), ["Lapsed", "Something else"])
         (record,) = logs.records
         self.assertIn("example.broken", record.getMessage())
-        self.assertIn("example.broken:certificate:example.com", record.getMessage())
+        self.assertIn("example.broken:finding:certificate:example.com", record.getMessage())
 
     def test_dashboard_sections_carry_an_unreadable_sibling_as_one_card(self):
         unreadable = self.cards(broken)
@@ -159,7 +174,9 @@ class KitNamesARefusedAnswerTests(TestCase):
 
     def test_the_kit_names_a_provider_giving_two_items_one_key(self):
         manifest, contribution = sibling(identifier="example.repeated", name="Repeated")
-        repeated = replace(contribution, attention=lambda: (GOOD_ITEM, replace(GOOD_ITEM, value="2")))
+        repeated = replace(
+            contribution, attention=lambda: (GOOD_ITEM, replace(GOOD_ITEM, title="Good source item again"))
+        )
 
         with installed((manifest, repeated)):
             found = providers_derived_again(manifest.id)

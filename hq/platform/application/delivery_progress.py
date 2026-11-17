@@ -14,7 +14,7 @@ from typing import Any
 
 from hq.domains.control_plane.provider_adapters.github import KIND as DELIVERY_KIND
 
-from .conditions import held_since
+from .conditions import DEGRADED, held_since
 from .derivations import reached
 from .entity_links import web_url
 
@@ -73,7 +73,7 @@ def delivery_progress(resource) -> DeliveryProgress | None:
         return None
     state = WAITING if WAITING in stages else RUNNING if RUNNING in stages else STARTING
     run_url = next((web_url(item.get("run_url")) for item in behind if _stage(item) == state), "")
-    return DeliveryProgress(state, held_since(resource.conditions, "Degraded"), run_url)
+    return DeliveryProgress(state, held_since(resource.conditions, DEGRADED), run_url)
 
 
 def on_its_way(progress: DeliveryProgress | None) -> bool:

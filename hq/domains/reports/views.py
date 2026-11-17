@@ -13,18 +13,16 @@ from django.views.generic import TemplateView, View
 
 from hq.domains.assets.models import ASSET_CATEGORY_CHOICES, Asset
 from hq.domains.content.models import ContentItem
-from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import EXPENSE_CATEGORY_CHOICES, Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.card_items import Kpi, ListRow
-from hq.platform.application.documentation import document_link
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.money import money
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import years_of
+from hq.platform.application.reports import exported
+from hq.platform.application.security import web_principal
 from hq.platform.application.ui import counted
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog
 
 from . import exports as exporters
 
@@ -79,11 +77,8 @@ class ReportsView(PageMixin, TemplateView):
         )
         asset_summary = assets.aggregate(n=Count("id"), total=Sum("total_cost"))
 
-        docs_needing_review = DocumentationRecord.objects.needing_review()
         expenses_count = expense_summary["n"] or 0
         expenses_url = f"{reverse('expenses:list')}?year={year}"
-        docs_count = docs_needing_review.count()
-        docs_url = f"{reverse('docs_index:list')}?needs_review=1"
 
         ctx.update(
             figures=(
@@ -99,7 +94,6 @@ class ReportsView(PageMixin, TemplateView):
                     asset_summary["n"] or 0,
                     f"{money(asset_summary['total'] or zero)} total",
                 ),
-                Kpi("Docs due for review", docs_count, url=docs_url if docs_count else "", is_zero=not docs_count),
             ),
             year=year,
             available_years=sorted(
@@ -149,15 +143,6 @@ class ReportsView(PageMixin, TemplateView):
                 )
                 if group["counts"]
             ],
-            docs_needing_review=[
-                ListRow(
-                    link=document_link(record),
-                    meta="" if record.last_reviewed else "Never reviewed",
-                    at=record.last_reviewed,
-                )
-                for record in docs_needing_review.order_by("last_reviewed")[:25]
-            ],
-            docs_needing_review_url=docs_url,
         )
         return ctx
 
@@ -245,12 +230,7 @@ class ExportView(View):
 
         body = spec.build() if spec.year == "none" else spec.build(year)
         filename = spec.filename(year)
-        record_event(
-            action=AuditLog.Action.EXPORTED,
-            type_label="Export",
-            message=f"Generated export: {filename}",
-            metadata={"filename": filename, "bytes": len(body.encode("utf-8"))},
-        )
+        exported(filename, body, principal=web_principal(request.user))
         response = HttpResponse(body, content_type=spec.content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         response["Cache-Control"] = "private, no-store"

@@ -14,7 +14,6 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.security import cli_principal
 
-from ..card_items import Insight
 from ..dashboard import work_queue
 from ..domains import (
     HOST_DOMAINS,
@@ -27,21 +26,21 @@ from ..domains import (
     domain_navigation,
     host_records,
 )
+from ..finding_model import Finding, opens
 from ..plugins import PluginIntegration
 
 
-def _pretend_extension_attention() -> tuple[Insight, ...]:
+def _pretend_extension_attention() -> tuple[Finding, ...]:
     """Stands in for a private extension, which this public repo cannot import."""
 
     return (
-        Insight(
-            status="serious",
-            eyebrow="Pretend",
+        Finding(
+            rule="pretend-fire",
+            subject="",
+            severity="serious",
             title="A domain is on fire",
-            value="3",
-            body="Something an extension believes needs a decision now.",
-            action="Look",
-            url="/pretend/",
+            explanation="Something an extension believes needs a decision now.",
+            primary=opens("Look", "/pretend/"),
         ),
     )
 

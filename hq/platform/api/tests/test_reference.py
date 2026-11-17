@@ -11,7 +11,7 @@ from django.templatetags.static import static
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
-from hq.platform.application.tests.markup import select
+from hq.platform.application.markup_testing import select
 
 from ..openapi import document
 

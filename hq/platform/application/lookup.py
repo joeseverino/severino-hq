@@ -233,14 +233,13 @@ def _unrouted(address: str) -> str:
     return _UNROUTED.get(network_of(address), "This address is not on the public internet, so nothing there knows it.")
 
 
-def _address_answer(command: AddressCommand, *, principal: Principal) -> tuple[Any, dict[str, Any] | None]:
+def _address_answer(command: AddressCommand) -> tuple[Any, dict[str, Any] | None]:
     """The parsed address and what HQ can say about it without asking anyone.
 
     A stored reading, or for a non-routable address the local answer; None
     when only the registries could say.
     """
 
-    principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
     try:
         parsed = ip_address(str(command.address or "").strip())
     except ValueError as exc:
@@ -262,7 +261,10 @@ def _address_answer(command: AddressCommand, *, principal: Principal) -> tuple[A
 def stored_address(command: AddressCommand, *, principal: Principal) -> dict[str, Any] | None:
     """What HQ already holds about an address. Asks no one and writes nothing."""
 
-    return _address_answer(command, principal=principal)[1]
+    # The address panel's GET reads this outside the runner, so it checks here
+    # what LOOK_UP_ADDRESS's spec checks for the capability.
+    principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
+    return _address_answer(command)[1]
 
 
 class AddressLookedUp(TypedDict):
@@ -298,10 +300,11 @@ def look_up_address(
     are reported rather than reconciled.
     """
 
+    del principal
     # A non-routable address is answered locally rather than asked about: the
     # resolver would find nothing and return a body that looks like an answer,
     # having been told an address from inside the estate to get there.
-    parsed, known = _address_answer(command, principal=principal)
+    parsed, known = _address_answer(command)
     # Resolved at execution time, as look_up_name's is.
     resolver = resolver or resolve
     allocations = allocations or registry

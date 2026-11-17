@@ -20,8 +20,9 @@ says when HQ may act on what it read.
 
 ## Readings
 
-A reading is registered once, in its provider's module under
-`hq/domains/control_plane/observations/`:
+A reading is declared once, in its source's module under
+`hq/domains/control_plane/observations/`, and registered through
+`provider_adapters.ADMITTED`, which admits that module:
 
 ```python
 class PagesProjectRecord(ObservationRecord):
@@ -198,9 +199,18 @@ over the last reading (`TestEveryHostReadingIsAHeldSource`).
 `host.firewall` is whether HQ's port must arrive on the tailnet interface, one
 distilled record (`SEVERINO_HOST_FIREWALL`).
 
-`host.tailnet_lock` is tailnet lock as the machine's own daemon states it,
-counted: whether it is on, whether this node is signed, how many keys sign and
-which machines it filters out (`SEVERINO_TAILNET_LOCK`). The launcher names the
+`host.tailnet_lock` is tailnet lock as the machine's own daemon states it:
+whether it is on, whether this node is signed, each key it trusts to sign
+(its key, kind, votes and labels) and which machines it filters out
+(`SEVERINO_TAILNET_LOCK`). A key is written as `tailscale lock remove` takes
+it, `tlpub:<hex>`, as each device's `lock_key` is, so a signer joins the
+machine whose device holds it by its key (`ObservationSpec.keys`).
+`tailnet_signers.signers()` names each signer's machine, or an unknown signer
+where no device holds the key, for the tailnet page's "Signing devices" and the
+machine page's tailnet card. `tailnet-lock-server-signs` is serious for a
+signer that is a server (`Machine.is_server`: HQ runs on it, a credential opens
+it, or a declaration runs on it), since whoever takes it over can add devices
+to the tailnet. The launcher names the
 file whether or not the daemon answered, so a status it could not take is a
 failed read that keeps the last one and says why.
 
@@ -242,10 +252,11 @@ the bridge contract is emitted from the model of that name
 (`hq/domains/control_plane/observations/host.py`): it holds no command line, environment or path, and a
 unit that is not installed is a record saying so. Each record carries when it
 was read, and a unit's state is judged as of then, never against the present
-moment. A reading older than the slowest the controller ever reads is judged by
-no rule: `unit-state-unread` says when it was read and, while the bridge
-refuses the controller's sweep, why (`reading_facts.unjudged`, held for every
-rule by `test_no_rule_measures_an_aged_reading_from_now`).
+moment. A reading out of date (`freshness`: two of the slowest sweeps the
+controller ever runs) is judged by no rule: `unit-state-unread` says when it
+was read and, while the bridge refuses the controller's sweep, why
+(`reading_facts.unjudged`, held for every rule by
+`test_no_rule_measures_an_aged_reading_from_now`).
 
 `hq/platform/application/unit_findings.py` raises, on the same node:
 
@@ -408,7 +419,8 @@ HQ's own names end at HQ, with the address and port the request reached it on.
 the request (`request_path.joined`): the address it came from, the proxy that
 forwarded it and its headers, the name it asked for, an Access assertion. Each
 hop is proven, contradicted (a finding with its fix) or not shown by the
-request, and carries the admission layers decided there.
+request, and carries the request standard's checks decided there (each placed by
+`standards.Check.hop`).
 `request_path.request_path(request)` is the connection page's projection and
 the `request.path` read. HQ also records which devices reached it
 (`hq.request_path`, read by `request`: per source device, how it arrived, last
@@ -527,8 +539,9 @@ answer as the machine page and the services list.
 Nothing in the topology names a provider to draw its edges. They follow from
 the declarations:
 
-- A reading joins its subject through the `hostnames`, `addresses` and
-  `containers` its spec declares. The edge comes from the connection that read
+- A reading joins its subject through the `hostnames`, `addresses`,
+  `containers` and `keys` its spec declares. A machine's keys are its tailnet
+  device's lock key (`Machine.subject`). The edge comes from the connection that read
   it, labeled with the reading's `relation` and carrying its kind, its age and
   each record as a linked entity; it exists only while the reading does. A
   tailnet device is a subject by its addresses too. A reading HQ takes itself
@@ -577,9 +590,18 @@ Findings from these readings:
 - `container-image-behind`: the machine's own tag now names a different image
   than the container runs; no registry is asked.
 - `container-image-untagged`.
-- `container-image-unpinned`: started by a tag alone when the machine holds the
-  registry digest it could be pinned to, which the finding names. An image built
-  on the machine has none and is not claimed.
+- `container-image-unpinned`: an image started by a tag alone, when the
+  machine holds its digest and the registry it names was read, so the pin the
+  finding names is one anyone can pull. An image built on the machine has a
+  digest in Docker's containerd store too, but no registry answers for it, so
+  it is not claimed.
+
+An image's findings (`container-image-advisory`, `container-image-update`,
+`container-image-unpinned`) are one per image version per machine, naming each
+container that runs it, with one step for each compose project
+(`hq/platform/application/container_findings.py`). A finding's id is the hash
+of its queue key (`findings.finding_id`), so two findings a page tells apart
+never share one.
 - `certificate-expiring`: any certificate-facet reading within 21 days of
   expiry, by `expiry.days_until`, on the connection that read it
   (`hq/platform/application/certificate_expiry.py`), and a certificate HQ
@@ -612,7 +634,7 @@ starts it at once when a sweep found an image or digest HQ has not read.
 
 It reads only subjects that are due, a bounded number at a time, through the
 same ingest as a sweep, so a run with nothing due makes no request. Each
-reading stands as long as what it reads is slow to change (`READ_EVERY`):
+reading stands as long as what it reads is slow to change (its `every`):
 
 | Reading | Stands for |
 | --- | --- |
@@ -950,6 +972,9 @@ Only a record read through a connection that manages is adopted, by a sweep or
 by an operator. A record that names its connection needs that connection to
 manage; one that names none needs every connection of its kind's providers to
 manage. Anything else shows everywhere as observed and is never declared.
+A sweep takes a kind that stands behind access (`requires_approval`) on
+switched off, until a person switches it on
+([Security](Security.md#what-hq-enforces)).
 
 "Stop managing" an adopted record stores a `NotManaged` row (kind, record
 token, who, when), and sweeps skip it. Managing it again ("Manage domain",

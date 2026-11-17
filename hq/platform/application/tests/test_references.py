@@ -17,6 +17,7 @@ from hq.domains.calendars.models import Entry
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.markup_testing import all_elements, elements, hrefs, links, select, text, texts
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from .. import references
@@ -25,7 +26,6 @@ from ..calendar_entries import EntryCommand, save_entry
 from ..plugin_testing import form_keyed
 from ..references import Referable, Reference, ReferenceField, Target
 from ..security import Principal, cli_principal, internal_principal
-from .markup import all_elements, elements, hrefs, links, select, text, texts
 
 
 def one(items):
@@ -527,8 +527,8 @@ class DanglingTests(TestCase):
         item = one(references.dangling(Asset))
 
         self.assertEqual(item.title, "A server links to lab-9, which HQ does not have")
-        self.assertEqual(item.url, asset.get_absolute_url())
-        self.assertEqual(item.key, f"reference:assets.asset:{asset.pk}:infrastructure")
+        self.assertEqual(item.primary.url, asset.get_absolute_url())
+        self.assertEqual(item.part, f"reference:assets.asset:{asset.pk}:infrastructure")
 
     def test_text_that_is_no_reference_is_reported_by_what_it_holds(self):
         Asset.objects.create(item_name="A server", slug="a-server", infrastructure="the old rack")
@@ -561,7 +561,7 @@ class DanglingTests(TestCase):
         self.assertEqual(len([query for query in queries if "assets_asset" in query["sql"]]), 3)
 
     def test_the_asset_and_expense_sections_report_their_own(self):
-        from ..attention import assets, expenses
+        from ..attention import raised
 
         Asset.objects.create(
             item_name="A server",
@@ -572,10 +572,10 @@ class DanglingTests(TestCase):
         )
         an_expense(about="machine:lab-9", about_name="lab-9")
 
-        self.assertIn("A server links to lab-9, which HQ does not have", [item.title for item in assets()])
+        self.assertIn("A server links to lab-9, which HQ does not have", [item.title for item in raised("hq.assets")])
         self.assertIn(
             "Example Registrar\xa0· Renewal links to lab-9, which HQ does not have",
-            [item.title for item in expenses()],
+            [item.title for item in raised("hq.expenses")],
         )
 
 

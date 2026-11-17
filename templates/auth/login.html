@@ -14,12 +14,12 @@
   would hand back the still-valid provider session and undo the sign-out.
   {% endcomment %}
   {% if OIDC_ENABLED %}
-    {% if request.GET.signed_out %}<p class="muted">You are signed out.</p>{% endif %}
+    {% if request.GET.signed_out %}{% muted element="p" %}You are signed out.{% endmuted %}{% endif %}
     {% if sso_failure %}{% notice tone="error" %}{{ sso_failure|breakable }}{% endnotice %}{% endif %}
-    <p><a class="btn primary" href="{% url 'oidc_authentication_init' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Use single sign-on</a></p>
+    {% url 'oidc_authentication_init' as sign_on %}{% if next %}{% with after=next|urlencode %}{% firstof sign_on|add:"?next="|add:after as sign_on %}{% endwith %}{% endif %}<p>{% button "Use single sign-on" sign_on look="primary" %}</p>
   {% else %}
     {% include "partials/_form.html" with verb="Sign in" next=next %}
   {% endif %}
-  <p><small class="muted">Unauthorized access is prohibited.</small></p>
+  <p><small>{% muted %}Unauthorized access is prohibited.{% endmuted %}</small></p>
 {% endcard %}
 {% endblock %}

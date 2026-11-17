@@ -14,6 +14,7 @@ BROKEN_WORDS = (
     "(identifier) => {"
     + DESCRIBE
     + TEXT_SHOWN
+    + f"const anywhere = '{SELECTORS['breaks_anywhere']}';"
     + """
   const found = [];
   const range = document.createRange();
@@ -53,6 +54,7 @@ BROKEN_WORDS = (
       const beneath = open && node.parentElement.closest('tr[data-row-detail] > td > *');
       const room = beneath && 2 * line < inside(beneath) ? inside(beneath) : line;
       const token = node.parentElement.closest(identifier);
+      const loose = !!node.parentElement.closest(anywhere);
       for (const run of node.textContent.matchAll(/\\S+/g)) {
         const [wide, length] = token
           ? [tokenWidth(token) > line, token.textContent.trim().length]
@@ -62,13 +64,13 @@ BROKEN_WORDS = (
           const rects = across(node, at, at + match[0].length);
           if (new Set(rects.map((r) => Math.round(r.top))).size < 2) continue;
           // A closed row's run wider than its line breaks wherever its column
-          // is. An open row shows a value whole, breaking it at its seams,
+          // is, and a name's lone word too, as an identifier's. An open row shows a value whole, breaking it at its seams,
           // spaces and hyphens: a word breaks there only when what it stands
           // in between two of them is wider than all the room the row has.
           const part = [...run[0].matchAll(/[^-]*-?/g)].find((p) => p.index <= match.index && match.index < p.index + p[0].length);
           const must = open
             ? widthOf(node, run.index + part.index, run.index + part.index + part[0].length) > room
-            : wide && match[0].length < length;
+            : wide && (loose || match[0].length < length);
           if (!must) found.push(`${describe(cell)} breaks "${match[0]}"`);
         }
       }
@@ -132,7 +134,8 @@ BROKEN_WORDS_IN_TEXT = (
 # the text, or one a part of a run draws before itself and nothing clips), a
 # line that holds only marks (an icon, an asterisk) apart from the words they
 # belong to, or one word alone that the line before cut from its number ("12"
-# above "days") or, in a cell, that a box set whole after it left behind
+# above "days"; a number holds a digit and no letter, so a name that ends in
+# one, "host-01", is none) or, in a cell, that a box set whole after it left behind
 # ("on" above a name), where the break between them is a wrap and not a `br`:
 # a cell cuts a name, so one never needs a line of its own. A value of a list
 # (a user's code before the next) is no running word, so a list wrapping
@@ -147,8 +150,9 @@ STRAYS_OPENING_A_LINE = (
     + PAINTED_PART
     + TEXT_SHOWN
     + r"""
-  // A middle dot, a bullet, a bar, a slash, an en or an em dash.
-  const SEPARATOR = /^[·•|\/\u2013\u2014]/;
+  // A middle dot, a bullet, a bar, an en or an em dash, or a slash standing
+  // alone: one a word follows ("/api") is a path.
+  const SEPARATOR = /^(?:[·•|\u2013\u2014]|\/(?!\S))/;
   const MARKS_ONLY = /^[^\p{L}\p{N}]*$/u;
   const TYPED = 'textarea, input:not([type=checkbox], [type=radio], [type=image], [type=range], [type=color], [type=file])';
   const range = document.createRange();
@@ -245,8 +249,8 @@ STRAYS_OPENING_A_LINE = (
       const text = line.text.trim();
       const opening = line.pieces.find((piece) => piece.ch.trim());
       if (index && SEPARATOR.test(text) && !(opening.opens ?? opening.el).closest(identifier)) found.push(`${name} opens a line with "${text[0]}": "${text.slice(0, 30)}"`);
-      else if (MARKS_ONLY.test(text)) found.push(`${name} holds "${text.slice(0, 30)}" on a line of its own (▪ is an icon or an image)`);
-      else if (index && !line.forced && /^\p{L}+[.,;:]?$/u.test(text) && /\p{N}%?$/u.test(lines[index - 1].text.trim())) {
+      else if (MARKS_ONLY.test(text) && !(opening.opens ?? opening.el).closest(identifier)) found.push(`${name} holds "${text.slice(0, 30)}" on a line of its own (▪ is an icon or an image)`);
+      else if (index && !line.forced && /^\p{L}+[.,;:]?$/u.test(text) && /(?:^|\s)[^\p{L}\s]*\p{N}[^\p{L}\s]*$/u.test(lines[index - 1].text.trim())) {
         found.push(`${name} cuts "${text}" from its number "${lines[index - 1].text.trim().split(/\s/).at(-1).slice(-30)}"`);
       } else if (inCell && (!index || line.forced) && !line.pieces.some((piece) => piece.whole || piece.el?.closest(identifier)) && /^\p{L}+$/u.test(text) && lines[index + 1] && !lines[index + 1].forced && lines[index + 1].pieces[0].whole) {
         found.push(`${name} cuts "${text}" from "${lines[index + 1].text.trim().slice(0, 30)}" after it`);
@@ -547,7 +551,10 @@ CUT_DECISIONS = (
 # (tables.css) rather than break the name. A table in a narrow box has none
 # left, a line past a clamp is not drawn, and what wraps by design (`wraps`,
 # figures.css: a row's own name, free text, a context line) and an opened row
-# are not counted.
+# are not counted. A name is held to its line where its table says so: by
+# `nowrap`, or in a short value's box (`cell-short`), as wide as the value
+# up to its share (`max-inline-size`, tables.css), which breaks at its seams
+# only once it is that wide.
 BROKEN_TOKENS = (
     "([tokens, wraps]) => {"
     + DESCRIBE
@@ -557,8 +564,12 @@ BROKEN_TOKENS = (
   const range = document.createRange();
   for (const token of document.querySelectorAll(tokens)) {
     const table = token.closest('table');
-    const narrow = table && getComputedStyle(table).getPropertyValue('--whole').trim() === '0';
+    const narrow = narrowBox(table);
     if (narrow || token.closest(wraps) || token.closest('tr:has(> * > [aria-expanded="true"])')) continue;
+    const style = getComputedStyle(token);
+    const box = token.closest('.cell-short');
+    const held = box && box.getBoundingClientRect().width < parseFloat(getComputedStyle(box).maxInlineSize) - 1;
+    if (!held && !style.whiteSpace.startsWith('nowrap') && style.textWrapMode !== 'nowrap') continue;
     const lines = [];
     const walker = document.createTreeWalker(token, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -584,14 +595,17 @@ IDENTIFIER = "code, kbd, samp, time, .token, [data-entity]"
 
 # A row's words fill each line the row gives them: a line of a row's title or
 # of what it says that ends with room for the next word was broken short. The
-# room is the row's, measured to the row's next control on that line (a
-# column of buttons sized by another row leaves a gap the words' own box never
-# sees), else to the words' own box's edge (WebKit's `pretty`, a balanced rag,
-# breaks inside it). A run with no space in it (a name, a path) is one word,
+# room is the words' own box, to its edge: a table's column is every row's,
+# so the room a later column leaves beside one row's words is not theirs
+# (WebKit's `pretty`, a balanced rag, breaks inside the box). A run with no space in it (a name, a path) is one word,
 # however its pieces are drawn, as is a run joined by a no-break space (a
-# count and its noun), and its width holds the edges of the inline
-# boxes it opens or closes (a `code`'s padding and border), which take the
-# line's room as its letters do; an inline block moves whole, one word. A line
+# count and its noun) or held whole by its box (`nowrap`), and its width
+# holds the edges of the inline
+# boxes it opens or closes (a `code`'s padding and border, and what a box
+# draws after its words, a link's mark), which take the line's room as its
+# letters do; an inline block moves whole, one word, and an item of a
+# wrapping flex line (a dot list's part) stands its line's gap from the one
+# before. A line
 # the markup ends (`<br>`) is no break.
 LINES_SHORT_OF_THEIR_ROOM = (
     "(unseen) => {"
@@ -599,7 +613,6 @@ LINES_SHORT_OF_THEIR_ROOM = (
     + """
   const found = [];
   const range = document.createRange();
-  const padding = (el, side) => parseFloat(getComputedStyle(el)[`padding${side}`]);
   for (const block of document.querySelectorAll('.data-table > tbody > tr > * :is(p, dd, .row-line > *)')) {
     if (!block.checkVisibility() || block.closest(unseen)) continue;
     const style = getComputedStyle(block);
@@ -607,23 +620,7 @@ LINES_SHORT_OF_THEIR_ROOM = (
     // open) keep the boxes they last had, which are no line of the page.
     if (style.contentVisibility === 'hidden') continue;
     if (style.whiteSpace.startsWith('nowrap') || style.textWrapMode === 'nowrap') continue;
-    const own = block.getBoundingClientRect().right - parseFloat(style.paddingRight);
-    const cell = block.closest('td, th');
-    const left = block.getBoundingClientRect().left;
-    // What the row draws after the words' cell: each later cell's controls and words.
-    const after = [];
-    for (let other = cell.nextElementSibling; other; other = other.nextElementSibling) {
-      if (!other.checkVisibility()) continue;
-      const gap = padding(other, 'Left') + padding(cell, 'Right');
-      for (const part of other.querySelectorAll(':scope > *')) {
-        if (!part.checkVisibility()) continue;
-        for (const rect of part.getClientRects()) if (rect.width > 0 && rect.left > left) after.push([rect, gap]);
-      }
-    }
-    const edgeOf = (line) => {
-      const beside = after.filter(([rect]) => rect.top < line.bottom && rect.bottom > line.top);
-      return beside.length ? Math.min(...beside.map(([rect, gap]) => rect.left - gap)) : own;
-    };
+    const edge = block.getBoundingClientRect().right - parseFloat(style.paddingRight);
     // The edges of the inline boxes a piece of a word opens and closes (a
     // `code`'s padding and border): those whose words start or end with it.
     const bare = document.createRange();
@@ -634,6 +631,7 @@ LINES_SHORT_OF_THEIR_ROOM = (
       let before = 0;
       let after = 0;
       let closes = 0;
+      let outer = null;
       for (let el = node.parentElement; el && el !== block; el = el.parentElement) {
         const css = getComputedStyle(el);
         if (css.display === 'contents') continue;
@@ -644,14 +642,59 @@ LINES_SHORT_OF_THEIR_ROOM = (
         if (!bare.toString().trim()) before += parseFloat(css.marginLeft) + parseFloat(css.borderLeftWidth) + parseFloat(css.paddingLeft);
         bare.setStart(node, end);
         bare.setEnd(el, el.childNodes.length);
-        if (!bare.toString().trim()) after += parseFloat(css.marginRight) + right;
-        else if ((css.boxDecorationBreak || css.webkitBoxDecorationBreak) === 'clone') closes += right;
+        if (!bare.toString().trim()) {
+          after += parseFloat(css.marginRight) + right;
+          outer = el;
+        } else if ((css.boxDecorationBreak || css.webkitBoxDecorationBreak) === 'clone') closes += right;
       }
-      return [before, after, closes];
+      return [before, after, closes, outer];
     };
-    // An inline block (a chip an open row sets whole) moves to the next line
-    // as one box, so it is one word, as wide as its box.
-    const atomic = (el) => /^inline-(block|flex|grid|table)$/.test(getComputedStyle(el).display);
+    // A word that closes a box ends where the box is drawn to, past anything
+    // the box draws after its words (`::after`), and its margin.
+    const reach = (outer, rect, after) => {
+      if (!outer) return after;
+      const drawn = [...outer.getClientRects()].at(-1);
+      return drawn ? Math.max(after, drawn.right + parseFloat(getComputedStyle(outer).marginRight) - rect.right) : after;
+    };
+    // An inline block (a chip an open row sets whole), or an item of a
+    // wrapping flex line (a dot list's part), moves to the next line as one
+    // box, so it is one word, as wide as its box. Its line is the nearest
+    // box around it, past any drawn as its contents.
+    const boxAround = (el) => {
+      let up = el.parentElement;
+      while (up && up !== block && getComputedStyle(up).display === 'contents') up = up.parentElement;
+      return up;
+    };
+    const atomic = (el) => {
+      const css = getComputedStyle(el);
+      if (/^inline-(block|flex|grid|table)$/.test(css.display)) return true;
+      const line = el !== block && css.display !== 'contents' ? boxAround(el) : null;
+      return !!line && /flex$/.test(getComputedStyle(line).display) && getComputedStyle(line).flexWrap === 'wrap';
+    };
+    // What stands between an item of a wrapping flex line and the one before
+    // it is the line's gap, never a word's space.
+    const gap = (el) => {
+      const line = boxAround(el);
+      if (!line || !/flex$/.test(getComputedStyle(line).display)) return null;
+      return parseFloat(getComputedStyle(line).columnGap) || 0;
+    };
+    // The block a word's line is laid in: a word in another block (a value
+    // that opens with a host on a line of its own) starts a line the markup
+    // ended, as a `<br>` ends one.
+    const home = (node) => {
+      let el = node.parentElement;
+      while (el !== block && /^(inline|contents)$/.test(getComputedStyle(el).display)) el = el.parentElement;
+      return el;
+    };
+    // The box that holds a word's line whole (`white-space: nowrap`, a count
+    // and its noun), inside the block: its words move as one.
+    const held = (node) => {
+      for (let el = node.parentElement; el && el !== block; el = el.parentElement) {
+        const css = getComputedStyle(el);
+        if (css.whiteSpace.startsWith('nowrap') || css.textWrapMode === 'nowrap') return el;
+      }
+      return null;
+    };
     // Each word's pieces, a word running on across the pieces it is drawn in.
     const words = [];
     let open = false;
@@ -666,7 +709,7 @@ LINES_SHORT_OF_THEIR_ROOM = (
         const rect = node.getBoundingClientRect();
         if (atomic(node) && node.checkVisibility() && rect.width > 0) {
           const css = getComputedStyle(node);
-          words.push([{ rect, before: parseFloat(css.marginLeft), after: parseFloat(css.marginRight) }]);
+          words.push(Object.assign([{ rect, before: parseFloat(css.marginLeft), after: parseFloat(css.marginRight) }], { home: home(node), gap: gap(node) }));
           inside = node;
           open = false;
         }
@@ -684,30 +727,30 @@ LINES_SHORT_OF_THEIR_ROOM = (
         range.setEnd(node, end);
         const rects = [...range.getClientRects()].filter((rect) => rect.width > 0);
         if (!rects.length) continue;
-        const [before, after, closes] = edges(node, match.index, end);
+        const [before, after, closes, outer] = edges(node, match.index, end);
         const pieces = rects.map((rect, index) => ({
           rect,
           before: index ? 0 : before,
-          after: index === rects.length - 1 ? after : 0,
+          after: index === rects.length - 1 ? reach(outer, rect, after) : 0,
           closes: index === rects.length - 1 ? closes : 0,
         }));
-        if (open && match.index === 0 && words.length) words.at(-1).push(...pieces);
-        else words.push(pieces);
+        const whole = held(node);
+        if ((open && match.index === 0 && words.length) || (whole && words.at(-1)?.held === whole)) words.at(-1).push(...pieces);
+        else words.push(Object.assign(pieces, { home: home(node), held: whole }));
         open = end === text.length;
       }
       if (/[ \\t\\n\\r\\f]$/.test(text) || text === '') open = false;
     }
     const space = parseFloat(style.fontSize) * 0.35;
     for (let at = 0; at + 1 < words.length; at += 1) {
-      if (words[at].ended) continue;
+      if (words[at].ended || words[at].home !== words[at + 1].home) continue;
       const lastPiece = words[at].at(-1);
       const last = lastPiece.rect;
       const next = words[at + 1];
       if (next[0].rect.top < last.bottom - 1) continue;
       const width = next.reduce((sum, piece) => sum + piece.before + piece.rect.width + piece.after, 0) + (next.at(-1).closes ?? 0);
-      const edge = edgeOf(last);
       const right = last.right + lastPiece.after;
-      if (right + space + width < edge - 1) {
+      if (right + (next.gap ?? space) + width < edge - 1) {
         found.push(`${describe(block)} breaks before "${block.textContent.trim().slice(0, 24)}…" ${Math.round(edge - right)}px short of its row's room`);
         break;
       }

@@ -1,6 +1,6 @@
 """The commands a page offers, as its Copy button gives them."""
 
-from .markup import with_class
+from hq.platform.application.markup_testing import with_class
 
 
 def commands_on(response) -> str:

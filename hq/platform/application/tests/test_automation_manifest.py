@@ -1,4 +1,4 @@
-from typing import Any, get_args
+from typing import Any
 
 from django.test import SimpleTestCase
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -9,20 +9,19 @@ from hq.platform.application.automation_manifest import (
     OperationRegistry,
     UnknownOperation,
 )
-from hq.platform.application.contracts import EFFECTS
-from hq_sdk.capabilities import StrictCommand
+from hq.platform.application.contracts import Closed
 
 
-class ServiceLogs(StrictCommand):
+class ServiceLogs(Closed):
     service: str
     lines: int = 200
 
 
-class Window(StrictCommand):
+class Window(Closed):
     hours: int
 
 
-class Nested(StrictCommand):
+class Nested(Closed):
     window: Window
 
 
@@ -73,11 +72,6 @@ class DeclarationTests(SimpleTestCase):
 
         with self.assertRaises(ValidationError):
             built.timeout_seconds = 9999  # type: ignore[misc]  # the assignment is the refusal under test
-
-    def test_its_effects_are_capability_effects(self) -> None:
-        effects = get_args(OperationManifest.model_fields["effect"].annotation)
-
-        self.assertLessEqual(set(effects), EFFECTS)
 
     def test_targets_and_hosts_read_in_one_order(self) -> None:
         first = manifest(target_kinds=("example.vm", "example.machine"), hosts=("b.example.com", "a.example.com"))
@@ -183,16 +177,16 @@ class InputTypeTests(SimpleTestCase):
             manifest(input_type=dict)
 
     def test_an_execution_field_however_it_is_spelled(self) -> None:
-        class PlaybookPath(StrictCommand):
+        class PlaybookPath(Closed):
             playbook_path: str
 
-        class Inventory(StrictCommand):
+        class Inventory(Closed):
             inventory: str
 
-        class ExtraVars(StrictCommand):
+        class ExtraVars(Closed):
             extra: str = Field(alias="extra-vars")
 
-        class Limit(StrictCommand):
+        class Limit(Closed):
             limit: str
 
         for model in (PlaybookPath, Inventory, ExtraVars, Limit):
@@ -200,10 +194,10 @@ class InputTypeTests(SimpleTestCase):
                 manifest(input_type=model)
 
     def test_an_execution_field_in_a_nested_input(self) -> None:
-        class Vars(StrictCommand):
+        class Vars(Closed):
             extravars: str
 
-        class Outer(StrictCommand):
+        class Outer(Closed):
             options: list[Vars]
 
         with self.assertRaises(ValidationError):
@@ -213,17 +207,17 @@ class InputTypeTests(SimpleTestCase):
         class Loose(BaseModel):
             model_config = ConfigDict(extra="allow")
 
-        class Outer(StrictCommand):
+        class Outer(Closed):
             options: Loose | None = None
 
         with self.assertRaises(ValidationError):
             manifest(input_type=Outer)
 
     def test_a_free_form_field(self) -> None:
-        class Bag(StrictCommand):
+        class Bag(Closed):
             values: dict[str, str]
 
-        class Anything(StrictCommand):
+        class Anything(Closed):
             value: Any
 
         for model in (Bag, Anything):

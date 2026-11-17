@@ -15,17 +15,18 @@ from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.contact_submissions import (
     DELETE,
     REVIEW,
-    ContactDeleteCommand,
     ContactReviewCommand,
     execute_contact_delete,
     execute_contact_review,
     list_contact_submissions,
 )
+from hq.platform.application.deletion import DeleteCommand
+from hq.platform.application.markup_testing import elements, select, with_class
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
+from hq.platform.application.tests.consent import consented
 from hq.platform.application.tests.facts import ROOT, STRING, scan, strings
-from hq.platform.application.tests.markup import elements, select, with_class
 from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
@@ -296,7 +297,8 @@ class ReadOnlyConnectionTests(TestCase):
                 for change in changes:
                     self.assertNotIn(f'formaction="{change}"', page)
                     self.assertNotIn(f'href="{change}"', page)
-                self.assertNotRegex(page, r'<button type="submit" class="primary">Save note')
+                offered = [button.words for button in elements(page, "button") if "disabled" not in button.attrs]
+                self.assertNotIn("Save note", offered)
                 self.assertIn(f'href="{self.setup}"', page)
                 self.assertIn(missing, page)
 
@@ -334,7 +336,7 @@ class QueuedChangeTests(TestCase):
 
     def test_a_review_is_queued_for_the_controller_and_shown_waiting(self):
         answer = execute_contact_review(
-            ContactReviewCommand(status="replied", admin_notes="answered"), principal=OPERATOR, current_id=2
+            ContactReviewCommand(status="replied", admin_notes="answered"), consented=consented(OPERATOR), current_id=2
         )
 
         self.assertTrue(answer["queued"])
@@ -349,27 +351,61 @@ class QueuedChangeTests(TestCase):
         self.assertEqual((row["status"], row["pending"]), ("replied", True))
         self.assertEqual(inbox.current().waiting, 1)
 
+    def test_a_review_the_consent_refuses_writes_nothing_before_it_is_refused(self):
+        from dataclasses import replace
+
+        from django.db.models.signals import post_save
+
+        from hq.domains.control_plane.providers import PROVIDERS
+        from hq.platform.application.record_errors import PolicyError
+        from hq.platform.application.security import mcp_principal
+        from hq.platform.application.tests.consent import another_command_writing
+
+        saved = []
+        refused = []
+
+        def write(given):
+            try:
+                execute_contact_review(ContactReviewCommand(status="replied"), consented=given, current_id=2)
+            except PolicyError:
+                refused.append(True)
+
+        def noted(sender, instance, **kwargs):
+            saved.append(instance.kind)
+
+        post_save.connect(noted, sender=ManagedResource, weak=False)
+        self.addCleanup(post_save.disconnect, noted, sender=ManagedResource)
+        # Were the inbox a kind that waits for a person, an agent's review is
+        # refused before its declaration is written, not rolled back after.
+        gated = replace(PROVIDERS[inbox.DECLARATION], requires_approval=True)
+        with patch.dict(PROVIDERS, {inbox.DECLARATION: gated}), another_command_writing(write) as name:
+            answer = execute_capability(name, {"idempotency_key": "review-once"}, principal=mcp_principal())
+
+        self.assertTrue(answer["ok"], answer)
+        self.assertEqual(refused, [True])
+        self.assertNotIn(inbox.DECLARATION, saved)
+
     def test_a_change_the_reading_shows_leaves_the_declaration(self):
-        execute_contact_review(ContactReviewCommand(status="replied"), principal=OPERATOR, current_id=2)
+        execute_contact_review(ContactReviewCommand(status="replied"), consented=consented(OPERATOR), current_id=2)
         _read(_row(2, status="replied"), _row(1, status="read"))
         self.assertFalse(inbox.current().rows[0]["pending"])
 
-        execute_contact_review(ContactReviewCommand(status="spam"), principal=OPERATOR, current_id=1)
+        execute_contact_review(ContactReviewCommand(status="spam"), consented=consented(OPERATOR), current_id=1)
 
         resource = ManagedResource.objects.get(kind=inbox.DECLARATION)
         self.assertEqual([review["id"] for review in resource.spec["reviews"]], [1])
         self.assertEqual(resource.generation, 2)
 
     def test_a_deletion_hides_the_row_until_it_is_gone(self):
-        execute_contact_delete(ContactDeleteCommand(confirm="2"), principal=OPERATOR, current_id=2)
+        execute_contact_delete(DeleteCommand(confirm="2"), consented=consented(OPERATOR), current_id=2)
 
         self.assertEqual([row["id"] for row in inbox.current().rows], [1])
         self.assertEqual(ManagedResource.objects.get(kind=inbox.DECLARATION).spec["deletions"], [2])
-        again = execute_contact_delete(ContactDeleteCommand(confirm="2"), principal=OPERATOR, current_id=2)
+        again = execute_contact_delete(DeleteCommand(confirm="2"), consented=consented(OPERATOR), current_id=2)
         self.assertTrue(again["deleted"]["already_absent"])
 
     def test_the_controllers_refusal_is_shown(self):
-        execute_contact_review(ContactReviewCommand(status="replied"), principal=OPERATOR, current_id=2)
+        execute_contact_review(ContactReviewCommand(status="replied"), consented=consented(OPERATOR), current_id=2)
         ManagedResource.objects.filter(kind=inbox.DECLARATION).update(
             generation=2,
             observed_generation=1,
@@ -390,7 +426,7 @@ class QueuedChangeTests(TestCase):
                 self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(ManagedResource.objects.exists())
         with self.assertRaises(RecordNotFound):
-            execute_contact_review(ContactReviewCommand(status="read"), principal=OPERATOR, current_id=99)
+            execute_contact_review(ContactReviewCommand(status="read"), consented=consented(OPERATOR), current_id=99)
 
 
 class NoCredentialTests(TestCase):
@@ -436,14 +472,14 @@ class WithheldSpecTests(TestCase):
         _manages()
         execute_contact_review(
             ContactReviewCommand(status="replied", assigned_to=ASSIGNEE, admin_notes=NOTE),
-            principal=OPERATOR,
+            consented=consented(OPERATOR),
             current_id=2,
         )
         execute_contact_review(
             # The same message again: the spec changes where an audit diff would
             # show it, so the redaction is what keeps the note out.
             ContactReviewCommand(status="spam", assigned_to=ASSIGNEE, admin_notes=NOTE + " again"),
-            principal=OPERATOR,
+            consented=consented(OPERATOR),
             current_id=2,
         )
 
@@ -518,7 +554,7 @@ class WithheldSpecTests(TestCase):
         with self.assertRaises(PolicyError):
             save_managed_resource(
                 ManagedResourceCommand(key=inbox.DECLARATION_KEY, kind=inbox.DECLARATION, spec={}),
-                principal=_principal(Capability.MANAGE_INFRASTRUCTURE),
+                consented=consented(_principal(Capability.MANAGE_INFRASTRUCTURE)),
                 current_key=inbox.DECLARATION_KEY,
             )
 

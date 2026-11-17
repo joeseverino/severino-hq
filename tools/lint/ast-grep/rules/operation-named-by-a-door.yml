@@ -1,0 +1,49 @@
+# An audit row names the operation the door that started it bound: the
+# capability runner binds each capability's own name around its handler, the
+# job runner its job's, and each door (a request, a token's call, the shell,
+# the controller's bridge) its own. A binding inside a handler or service
+# renames every row under it, so the log names an act by a word no command
+# declares. The modules that bind are the doors, the runner, and the audit
+# core that implements them; an extension has no binding to call (hq_sdk.audit
+# exports none). An export is a read the web and MCP serve outside the runner,
+# named the same at both; a sweep's adoption is HQ's own act inside
+# the controller's report; the example estate's doors bind as the real ones do.
+id: operation-named-by-a-door
+language: python
+severity: error
+message: An operation is bound outside the doors and the capability runner, renaming the rows the runner names.
+note: >-
+  Leave the binding to the runner (capabilities._run) or the job runner. A
+  handler's rows carry its capability's name; work outside both is a door.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/testing.py"
+  - "**/*_testing.py"
+  - "hq/platform/core/audit.py"
+  - "hq/platform/core/attribution.py"
+  - "hq/platform/core/middleware.py"
+  - "hq/platform/core/test_runner.py"
+  - "hq/platform/core/management/commands/hq_call.py"
+  - "hq/platform/core/example_estate/**"
+  - "hq/platform/application/capabilities.py"
+  - "hq/platform/application/agent_registry.py"
+  - "hq/platform/application/reports.py"
+  - "hq/platform/application/sweep.py"
+  - "hq/platform/mcp/security.py"
+  - "hq/domains/control_plane/bridge_application.py"
+rule:
+  kind: call
+  has:
+    field: function
+    any:
+      - kind: identifier
+        regex: ^(audit_operation|operation_context)$
+      - kind: attribute
+        has:
+          field: attribute
+          regex: ^(audit_operation|operation_context)$

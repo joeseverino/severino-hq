@@ -1,0 +1,20 @@
+id: address-checked-by-web-url
+valid:
+  - 'url = web_url(value)'
+  - 'base = https_url(settings.ENDPOINT)'
+  - 'name = source.removeprefix("https://github.com/")'
+  - 'ok = text.startswith("/")'
+  - 'dns = scheme == "sdns"'
+  - 'same = scheme == expected_scheme'
+invalid:
+  - 'external = url.startswith("https://")'
+  - 'safe = url.startswith(("http://", "https://"))'
+  - "safe = url.startswith(('http://', 'https://'))"
+  - 'page = text.startswith("https://github.com/")'
+  - 'safe = str.startswith(url, "http:")'
+  - 'safe = url.lower().startswith(f"https://{host}")'
+  - 'safe = parts.scheme in ("http", "https")'
+  - 'safe = parts.scheme in {"http", "https"}'
+  - 'refused = request.url.scheme != "https"'
+  - 'safe = urlsplit(text).scheme == "https"'
+  - 'refused = scheme not in ("http", "https")'

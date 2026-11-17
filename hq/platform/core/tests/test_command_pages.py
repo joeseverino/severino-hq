@@ -7,7 +7,7 @@ words that set it, or its checkbox and name where it declares none), no warning 
 agent may ask for, a held request said as what it wants done to its target.
 """
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -27,15 +27,14 @@ from hq.platform.application.glance import DASHBOARD_MACHINE
 from hq.platform.application.integration_specs import CapabilitySpec, command_schema, kept_by
 from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import integration_graph
+from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugins import plugin_capability_specs
 from hq.platform.application.projects import DEPENDENCY_UPDATES
 from hq.platform.application.security import Capability, could_hold
-from hq.platform.application.tests.markup import select, within
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
 from hq.platform.core.attribution import operation_context
 from hq.platform.core.models import AgentAccess
-from hq_sdk.capabilities import StrictCommand
 
 from .command_shapes import SWITCH_WORDS, optional_fields, sets_yes_or_no
 
@@ -163,7 +162,7 @@ class EveryHeldRequestTests(TestCase):
         page = self.client.get(reverse("core:approval_entry", kwargs={"approval_id": held.id}), follow=True)
         # The card's heading is what was asked.
         card = next(element.words for element in within(page, "data-approval") if element.tag in ("h2", "h3"))
-        (bell,) = [item.title for item in waiting_for_approval() if item.key == f"approval:{held.id}"]
+        (bell,) = [item.title for item in waiting_for_approval() if item.subject == str(held.id)]
         return card, bell
 
     def test_every_command_an_agent_may_ask_for_says_what_it_wants_done(self):
@@ -273,7 +272,8 @@ class DeclaredStateSwitchTests(TestCase):
                 self.assertEqual(buttons(page), [offered])
 
 
-class RemindersCommand(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class RemindersCommand:
     reminders: bool = False
 
 

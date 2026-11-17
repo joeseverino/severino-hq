@@ -1,18 +1,17 @@
 """Starting, stopping or restarting a container reads it back, and a stop that
 cuts HQ's own way to a machine says so before it is pressed."""
 
-import tempfile
 from datetime import timedelta
-from pathlib import Path
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import strip_tags
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory, ReadRequest
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.platform.application import cadence
 from hq.platform.application.adoption_testing import connection, managing_everything
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.controller import ControllerReport, report_operation
@@ -20,14 +19,6 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal
 
-DIRECTORY = Path(tempfile.mkdtemp())
-(DIRECTORY / "heartbeat").touch()
-# A controller that arrived a moment ago, and a doorbell nothing watches.
-MARKERS = override_settings(
-    SEVERINO_CONTROLLER_DOORBELL=str(DIRECTORY / "doorbell"),
-    SEVERINO_ACTIVITY_MARKER=str(DIRECTORY / "activity"),
-    SEVERINO_CONTROLLER_HEARTBEAT=str(DIRECTORY / "heartbeat"),
-)
 LIFECYCLE = (OperationRequest.Action.RESTART, OperationRequest.Action.START, OperationRequest.Action.STOP)
 HOST = "example-host"
 
@@ -69,10 +60,11 @@ class Estate(TestCase):
         self.client.force_login(get_user_model().objects.create_user(username="operator", password="x" * 20))
 
 
-@MARKERS
 class ReadBackTests(Estate):
     def setUp(self):
         super().setUp()
+        # A controller that arrived a moment ago, to take what is asked.
+        cadence.note_controller()
         containers(("example-web", "running", 8080))
         self.web = declare("example-web")
 
@@ -220,13 +212,14 @@ class LoopbackSelfDependencyTests(Estate):
         self.assertNotContains(response, "data-cuts-connection")
 
 
-@MARKERS
 class ReportReadBackTests(Estate):
     """A sweep already running when an operation was queued may answer its ask
     with what it read before the operation acted, so the report asks again."""
 
     def setUp(self):
         super().setUp()
+        # A controller that arrived a moment ago, to take what is asked.
+        cadence.note_controller()
         containers(("example-web", "running", 8080))
         self.web = declare("example-web")
 

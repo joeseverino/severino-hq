@@ -19,19 +19,19 @@ TAKEN = {"domain": "tool.example.com", "answer": "192.0.2.11", "enabled": True}
 class RefusedAdoptionTests(TestCase):
     def setUp(self):
         managing_everything()
-        record_inventory({KIND: {"ok": True, "records": [REFUSED, TAKEN]}}, principal=cli_principal())
+        record_inventory({KIND: {"ok": True, "records": [REFUSED, TAKEN]}})
 
     def test_a_record_that_cannot_be_adopted_is_logged_and_the_rest_are_adopted(self):
-        adopt = adoption.adopt
+        take_on = adoption._take_on
 
-        def refusing(command, *, principal):
+        def refusing(command, *, principal, enabled):
             item = next(item for item in adoption.unmanaged() if item.token == command.token)
             if item.hostnames == ("app.example.com",):
                 raise PolicyError("Public DNS is switched off here.")
-            return adopt(command, principal=principal)
+            return take_on(command, principal=principal, enabled=enabled)
 
         with (
-            mock.patch.object(adoption, "adopt", refusing),
+            mock.patch.object(adoption, "_take_on", refusing),
             self.assertLogs("severino.adoption", "WARNING") as logged,
         ):
             adoption.adopt_discovered(KIND, principal=cli_principal())

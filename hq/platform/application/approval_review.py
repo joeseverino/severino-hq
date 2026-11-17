@@ -11,16 +11,18 @@ from typing import Any
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 lazy from hq.domains.control_plane.providers import PROVIDERS
-lazy from hq.platform.core.models import AuditLog
 
-from .approvals import AUDIT_LABELS, COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT, WARNINGS, shown_by
-from .doors import NOBODY, Attribution
+from .approvals import AUDIT_LABELS, COMPARED, DECLARATIONS, NO_OFFER, WARNINGS, offers, shown_by
+from .contracts import Effect
+from .doors import NOBODY
 from .payload_words import STEP, ChangeRow, changed_words, document, field_words, value_words
+from .security import Principal
+from .tone import Tone
 lazy from . import capabilities
 lazy from .command_forms import switch_field
 lazy from .command_targets import item_name
 lazy from .entity_links import entity_link, kind_label, record_name
-lazy from .history import who_did
+lazy from .history import asked_by
 lazy from .integration_specs import TARGET, capability_fields
 lazy from .labels import human_label, lower_first
 lazy from .resource_capabilities import LIFECYCLE_VERBS
@@ -229,7 +231,7 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     declared = dict(held.baseline.get("spec") or {})
     requested = held.payload.get("spec")
     if isinstance(requested, dict):
-        return compare(declared, requested, label="Would change", amends=True)
+        return compare(declared, requested, label=_headed(held, declared, requested, "Would change"), amends=True)
     if held.capability.endswith(".remove"):
         return compare(declared, {}, label="Would be removed")
     if held.capability in _lifecycle_capabilities():
@@ -238,8 +240,17 @@ def preview(held: ApprovalRequest) -> ChangePreview:
         return ChangePreview(label="", rows=(), lines=())
     live = held.baseline.get("observed")
     if isinstance(live, Mapping) and live:
-        return compare(dict(live), declared, label="Live record changes")
+        return compare(dict(live), declared, label=_headed(held, live, declared, "Live record changes"))
     return compare({}, declared, label="Would be applied")
+
+
+def _headed(held: ApprovalRequest, before: Mapping[str, Any], after: Mapping[str, Any], label: str) -> str:
+    """What heads a change to a declaration: its kind's words for what it does
+    (``ProviderSpec.change_words``), else ``label``."""
+
+    provider = PROVIDERS.get(held.resource_kind)
+    said = provider.change_words(before, after) if provider is not None and provider.change_words else ""
+    return said or label
 
 
 def _lifecycle_capabilities() -> frozenset[str]:
@@ -261,7 +272,7 @@ def _record_preview(spec, held: ApprovalRequest) -> ChangePreview:
         if key not in _CONTROL_FIELDS and value not in ("", None, [], {})
     }
     schemas = capability_fields(spec)
-    if spec.effect == DESTRUCTIVE_EFFECT:
+    if spec.effect is Effect.DESTRUCTIVE:
         return _field_rows(held.baseline, {}, schemas, label="Would be deleted")
     if not held.target:
         # The sentence says what it wants; these are the values it sends.
@@ -389,18 +400,13 @@ def _one_move(shown: ChangePreview) -> ChangeRow | None:
     return row
 
 
-def asked_by(held_requests: Any) -> dict[str, Attribution]:
-    """Who asked for each held request, by id, from the audit row that opened it (``history.who_did``)."""
-
-    return who_did(AUDIT_LABELS, (held.pk for held in held_requests), action=AuditLog.Action.CREATED)
-
-
-def review(held: ApprovalRequest) -> dict[str, Any]:
-    """What the decision card shows: ``tone`` marks one still waiting for a
-    decision, and ``who`` who asked for it."""
+def review(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
+    """What the decision card shows ``principal``: ``tone`` marks one still
+    waiting for a decision, ``who`` who asked for it, and ``offer`` the
+    decisions it offers them (``approvals.offers``)."""
 
     shown, warnings = marked(preview(held), _warnings(held))
-    who = asked_by((held,)).get(str(held.pk), NOBODY)
+    who = asked_by(ApprovalRequest, (held,), formerly=AUDIT_LABELS).get(str(held.pk), NOBODY)
     # Its heading names whoever its audit row says asked.
     sentence = replace(asked(held, shown), actor=who.actor) if who else asked(held, shown)
     found = ManagedResource.objects.filter(key=held.resource_key).first() if held.resource_kind else None
@@ -409,7 +415,9 @@ def review(held: ApprovalRequest) -> dict[str, Any]:
     return {
         "held": held,
         "who": who,
-        "tone": "attention" if held.state == ApprovalRequest.State.PENDING else "",
+        "tone": Tone.ATTENTION if held.state == ApprovalRequest.State.PENDING else "",
+        # A settled request offers nothing, and its aside says how it ended.
+        "offer": offers(principal, (held,))[held.pk] if held.state == ApprovalRequest.State.PENDING else NO_OFFER,
         "asked": sentence,
         "preview": shown,
         "warnings": warnings,

@@ -105,6 +105,17 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 		log.Error(err.Error(), slog.String("event", "secrets.render.failed"), slog.String("class", class))
 		return exitCodes[class]
 	}
+	// A dry run makes the host reads a render begins with and nothing else:
+	// the rehearsal runs it in the unit's sandbox.
+	if len(args) == 1 && args[0] == hostcore.DryRun {
+		if _, err := portFloor(); err != nil {
+			return fail(err)
+		}
+		if err := install.SystemMounts(hostcore.SecretDir); err != nil {
+			return fail(err)
+		}
+		return 0
+	}
 	config, container, err := configure(args, getenv, stderr)
 	if err != nil {
 		return fail(err)

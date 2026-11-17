@@ -11,27 +11,20 @@ import hashlib
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
-lazy from .approvals import APPROVE, REJECT
+from .tone import Tone
 lazy from .entity_links import web_url
 lazy from .findings import rule_origin
 lazy from .freshness import cadence, freshness
-lazy from .moments import duration
+lazy from .moments import duration, moment
 lazy from .routes import reverse
-lazy from .timestamps import moment
 lazy from .ui import ended
 
-# How urgent, in the words a card's pill says.
-URGENCY = {"serious": "Urgent", "attention": "Needs attention", "neutral": "Note", "good": "Fine"}
 NOTICE = "Notice"
 # A step a person reads without scrolling: past either, the steps fold.
 _SHORT_STEP = 120
 _SHORT_STEPS = 2
 # A next step said as a label is a link; said as a sentence it is advice.
 _LABEL_LENGTH = 40
-
-
-def urgency(status: str) -> str:
-    return URGENCY.get(status, URGENCY["attention"])
 
 
 def _plain(value: Any) -> Any:
@@ -115,13 +108,6 @@ def _next_step(item: dict[str, Any], taken: set[tuple[str, str]]) -> tuple[list[
     return [link], ""
 
 
-def _decided_here(actions: list[dict[str, Any]]) -> bool:
-    """Whether the card's own buttons decide what its meaning describes, as an
-    approval's do: the page that shows it whole is then its request's own."""
-
-    return any(_plain(action).get("name") in (APPROVE, REJECT) for action in actions)
-
-
 def _late(item: dict[str, Any]) -> dict[str, Any] | None:
     """The reading a row is drawn from, said on the row only once it is out
     of date for its kind, with how often that kind is read."""
@@ -185,24 +171,55 @@ def _digest(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:12]
 
 
-def _own_page(item: dict[str, Any], subject: dict[str, Any], actions: list[dict[str, Any]], anchor: str) -> str:
+def _own_page(item: dict[str, Any], subject: dict[str, Any], anchor: str) -> str:
     """The page that shows an item's whole card: the thing it is about, the
-    request its buttons decide, or the queue with its card in view."""
+    held request it describes (``Insight.held``), or the queue with its card
+    in view."""
 
     if subject.get("url"):
         return subject["url"]
-    if item.get("url") and _decided_here(actions):
+    if item.get("url") and item.get("held"):
         return item["url"]
     return f"{reverse('action_items')}#{anchor}"
 
 
-def decision(item: dict[str, Any]) -> dict[str, Any]:
-    actions = list(item.get("actions", ()))
-    workflow = item.get("workflow")
-    parts = workflow_parts(workflow)
+def _buttons(item: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """An item's own actions and the plan's actions that stand beside them,
+    each once, with the plan as a card shows it."""
+
+    actions = [_plain(action) for action in item.get("actions", ())]
+    parts = workflow_parts(item.get("workflow"))
     for action in _promoted(parts["steps"], offered=bool(actions)):
         if _identity(action) not in {_identity(known) for known in actions}:
             actions.append(action)
+    return actions, parts
+
+
+def _arranged(actions: list[dict[str, Any]], links: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # A check again waits behind the owner's named page, so the two that
+    # stand on the row are the fix and where it is done.
+    return _one_primary(
+        [action for action in actions if action.get("name") != "verify"]
+        + links
+        + [action for action in actions if action.get("name") == "verify"],
+        links,
+    )
+
+
+def one_press(item: Any) -> bool:
+    """Whether HQ does what ``item`` asks in one press: the button its row
+    leads with runs an HQ command that fixes it (not a check again) and
+    would run now. Reads its ``actions`` and ``workflow``, each as a
+    dataclass or as written."""
+
+    actions, _ = _buttons(item)
+    lead = next((action for action in _arranged(actions, []) if action["recommended"]), None)
+    return bool(lead and lead.get("capability") and lead.get("name") != "verify" and not lead.get("refusal"))
+
+
+def decision(item: dict[str, Any]) -> dict[str, Any]:
+    actions, parts = _buttons(item)
+    workflow = item.get("workflow")
     identities = {_identity(action) for action in actions}
     steps = []
     for step in parts["steps"]:
@@ -216,16 +233,9 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
         **item,
         "href": subject.get("url") or item.get("url") or "",
         "anchor": anchor,
-        "page": _own_page(item, subject, actions, anchor),
-        "urgency": NOTICE if item.get("notice") else urgency(item.get("status", "")),
-        # A check again waits behind the owner's named page, so the two that
-        # stand on the row are the fix and where it is done.
-        "actions": _one_primary(
-            [action for action in actions if action.get("name") != "verify"]
-            + links
-            + [action for action in actions if action.get("name") == "verify"],
-            links,
-        ),
+        "page": _own_page(item, subject, anchor),
+        "urgency": NOTICE if item.get("notice") else Tone(item["status"]).urgency,
+        "actions": _arranged(actions, links),
         "late": _late(item),
         "facts": _facts(item.get("facts", ())),
         "origin": _origin(item),

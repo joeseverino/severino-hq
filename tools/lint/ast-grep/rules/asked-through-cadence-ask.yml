@@ -1,0 +1,27 @@
+# What HQ asks of a worker outside its process (a read for the controller, a
+# panel for the glance pass) is stored by cadence.ask, which also rings that
+# worker's doorbell once the transaction commits. A row written anywhere else
+# is an ask nobody rings for, or one rung twice.
+id: asked-through-cadence-ask
+language: python
+severity: error
+message: A read or panel request is written outside cadence.ask.
+note: Ask with cadence.ask(reads=..., connection=..., panels=..., doorbell=...).
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "**/platform/application/cadence.py"
+rule:
+  any:
+    - pattern: $MODEL.objects.$WRITE($$$)
+    - pattern: $MODEL($$$)
+constraints:
+  MODEL:
+    regex: ^(ReadRequest|DashboardRefreshRequest)$
+  WRITE:
+    regex: ^(create|get_or_create|update_or_create|bulk_create)$

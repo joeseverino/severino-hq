@@ -102,6 +102,19 @@ const disallowedProperties = (properties) => [
         : `Disallowed property "${property}"`,
   },
 ];
+// A reader who asks for less motion gets it from one rule in base.css, which
+// stops every transition and animation, so a part never writes its own. A
+// part that draws something else in place of a motion says so in a disable
+// comment.
+const mediaFeatures = (names) => [
+  names,
+  {
+    message: (name) =>
+      name === "prefers-reduced-motion"
+        ? `"${name}" is answered once, in base.css, for every element: delete what only stops a motion; a part that draws something else in its place says so in a disable comment`
+        : `"${name}" skips an operator's chosen theme: a palette is a light-dark() token picked by color-scheme`,
+  },
+];
 // How wide a box in a table is, its own or its tracks', is the table
 // primitive's: an open row holds every box in it to its cell (surfaces.css),
 // and a page that sizes one inside a table reopens what that closes. A
@@ -122,9 +135,9 @@ const primitives = [
     names: String.raw`(?:\.(?:data-table|row-detail|row-columns)(?![-\w])|(?<![-\w.#])(?:table|caption|thead|tbody|tfoot|tr|td|th)(?![-\w]))`,
     sheets: ["base", "cuts", "figures", "tables", "surfaces"],
     parts: [
-      "btn", "button-words", "cell-line", "cell-part", "cell-whole", "cut", "external-link", "icon-link", "is-expanded", "line-list", "line-rest", "line-run", "muted",
+      "btn", "button-words", "cell-clamp", "cell-line", "cell-part", "cell-short", "cell-whole", "cut", "external-link", "icon-link", "is-expanded", "line-list", "line-rest", "line-run", "muted",
       "name-line", "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
-      "row-editor", "row-later", "row-less", "row-more", "select-column", "strut", "table-clamp", "table-scroll", "token", "visually-hidden", "whole",
+      "row-controls", "row-editor", "row-expand", "row-fold", "row-later", "row-less", "row-more", "select-column", "strut", "table-clamp", "table-scroll", "tag", "token", "visually-hidden", "whole",
     ],
   },
   { name: "button", classes: "btn", sheets: ["page"] },
@@ -219,11 +232,17 @@ export default {
     // anywhere else stays a light-mode value on a dark page.
     "color-no-hex": true,
     "color-named": "never",
-    // A palette is a `light-dark()` token picked by `color-scheme`. A rule
-    // under the system's preference skips an operator's chosen theme, and the
-    // browser gate paints each palette through `color-scheme`, so it would
-    // never read that rule either.
-    "media-feature-name-disallowed-list": ["prefers-color-scheme"],
+    // A palette is a `light-dark()` token picked by `color-scheme`, so the
+    // system's preference and an operator's chosen theme paint one page. A
+    // rule under the system's preference skips the chosen theme, and one keyed
+    // on the choice (`data-theme`, which only the tokens read) skips the
+    // system's; the browser gate paints each palette through `color-scheme`,
+    // so it would read neither.
+    "media-feature-name-disallowed-list": mediaFeatures(["prefers-color-scheme", "prefers-reduced-motion"]),
+    "selector-attribute-name-disallowed-list": [
+      ["data-theme"],
+      { message: "A rule keyed on data-theme paints a chosen theme apart from the system's: write the color as a light-dark() token in tokens.css" },
+    ],
     "function-disallowed-list": [`/^(${colorFunctions})$/i`],
     "declaration-property-value-disallowed-list": disallowedValues({
       ...literalFontSize,
@@ -257,12 +276,19 @@ export default {
     },
     ...restyledBySheet,
     {
+      // The one sheet that answers a reader who asks for less motion.
+      files: [sheet("base")],
+      rules: { "media-feature-name-disallowed-list": mediaFeatures(["prefers-color-scheme"]) },
+    },
+    {
       // The tokens layer is where colors are written.
       files: [tokens],
       rules: {
         "color-no-hex": null,
         "color-named": null,
         "function-disallowed-list": null,
+        // The tokens set `color-scheme` from the operator's choice.
+        "selector-attribute-name-disallowed-list": null,
         "declaration-property-value-disallowed-list": disallowedValues({ ...literalFontSize, ...spacingLiteral, ...unspokenContent, ...cutText, ...readingMeasure }),
       },
     },

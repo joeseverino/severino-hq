@@ -16,6 +16,8 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.markup_testing import text
+from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
 
 from ..approval_review import compare, preview
@@ -32,7 +34,7 @@ from ..approvals import (
 )
 from ..capabilities import execute_capability
 from ..controller import claim_next_operation, schedule_automatic_operations
-from ..infrastructure import ManagedResourceCommand, save_managed_resource
+from ..infrastructure import ManagedResourceCommand, save_adopted, save_managed_resource
 from ..plugin_testing import form_keyed
 from ..security import (
     AuthorizationError,
@@ -42,14 +44,13 @@ from ..security import (
     mcp_principal,
     web_principal,
 )
-from .markup import text
 from .writers import keyed
 
 POLICY_KEY = "access-policy"
 GATED_KIND = "tailscale.policy"
 UNGATED_KIND = "adguard.rewrite"
 # Where the one grant's sources are in the policy, as a reader is shown it.
-GRANT_SOURCES = "Document › Grants › Entry 1 › Src"
+GRANT_SOURCES = "Document › Grants › group:example › Src"
 
 
 def policy_document(who: str = "group:example") -> str:
@@ -73,15 +74,15 @@ def declare_policy(document: str = "") -> ManagedResource:
     exactly that reason.
     """
 
-    save_managed_resource(
-        ManagedResourceCommand(
-            key=POLICY_KEY,
-            kind=GATED_KIND,
-            spec={"document": document or policy_document()},
-        ),
-        principal=cli_principal(),
-        copied_from_live=True,
-    )
+    from hq.platform.application.inventory_testing import store
+
+    from ..adoption import found_live
+
+    spec = {"document": document or policy_document()}
+    store(GATED_KIND, {"record": "policy", **spec})
+    live = found_live(GATED_KIND, spec)
+    assert live is not None
+    save_adopted(live, key=POLICY_KEY, principal=cli_principal())
     return ManagedResource.objects.get(key=POLICY_KEY)
 
 
@@ -492,7 +493,7 @@ class DecisionTests(TestCase):
                 kind=GATED_KIND,
                 spec={"document": policy_document("group:changed-underneath")},
             ),
-            principal=an_operator("editor"),
+            consented=consented(an_operator("editor")),
             current_key=POLICY_KEY,
         )
 
@@ -570,45 +571,11 @@ class ControllerTests(TestCase):
         self.assertEqual(operation.state, OperationRequest.State.QUEUED)
 
 
-class FloorTests(TestCase):
-    """The rule again, under the boundary that normally answers it.
-
-    The hold keys on a capability saying it acts on an infrastructure resource,
-    which every capability in the registry does say. What it cannot see is a
-    caller that reaches the use case without going through a capability at all,
-    a surface added later, or an extension. So the use cases refuse it too, and
-    these are the tests that this floor is really there.
-    """
+class AdoptionTests(TestCase):
+    """Writing down what is live asks no consent, since it changes nothing."""
 
     def setUp(self):
         self.resource = declare_policy()
-
-    def test_writing_a_gated_declaration_without_consent_is_refused(self):
-        from ..record_errors import PolicyError
-
-        with self.assertRaisesMessage(PolicyError, "This change needs approval."):
-            save_managed_resource(
-                ManagedResourceCommand(
-                    key=POLICY_KEY,
-                    kind=GATED_KIND,
-                    spec={"document": policy_document("group:elsewhere")},
-                ),
-                principal=Principal("a-token", "mcp", frozenset({Capability.MANAGE_INFRASTRUCTURE})),
-                current_key=POLICY_KEY,
-            )
-
-    def test_queueing_work_on_a_gated_declaration_without_consent_is_refused(self):
-        from ..record_errors import PolicyError
-        from ..resource_operations import OperationCommand, request_reconcile
-
-        with self.assertRaisesMessage(PolicyError, "This change needs approval."):
-            request_reconcile(
-                OperationCommand(idempotency_key="direct", reason=""),
-                principal=Principal("a-token", "mcp", frozenset({Capability.MANAGE_INFRASTRUCTURE})),
-                current_key=POLICY_KEY,
-            )
-
-        self.assertFalse(OperationRequest.objects.exists())
 
     def test_adopting_what_the_provider_already_holds_is_not_a_change(self):
         """The one exemption, and it changes nothing by construction.
@@ -618,16 +585,14 @@ class FloorTests(TestCase):
         control it most needs to show as unmanaged.
         """
 
-        save_managed_resource(
-            ManagedResourceCommand(
-                key=POLICY_KEY,
-                kind=GATED_KIND,
-                spec={"document": policy_document("group:live")},
-            ),
-            principal=cli_principal(),
-            current_key=POLICY_KEY,
-            copied_from_live=True,
-        )
+        from hq.platform.application.inventory_testing import store
+
+        from ..adoption import found_live
+
+        store(GATED_KIND, {"record": "policy", "document": policy_document("group:live")})
+        live = found_live(GATED_KIND, self.resource.spec)
+        assert live is not None
+        save_adopted(live, key=POLICY_KEY, principal=mcp_principal(), current_key=POLICY_KEY)
 
         self.assertEqual(
             ManagedResource.objects.get(key=POLICY_KEY).spec["document"],
@@ -659,9 +624,9 @@ class PreviewTests(TestCase):
 
         said = {row.label: (row.change, row.before, row.after) for row in shown.rows}
         self.assertEqual(
-            said["Document › Grants › Entry 1 › Dst"], ("changed", "tag:example", "tag:example, tag:other")
+            said["Document › Grants › group:example › Dst"], ("changed", "tag:example", "tag:example, tag:other")
         )
-        change, _, gained = said["Document › Grants › Entry 2"]
+        change, _, gained = said["Document › Grants › group:example, group:other"]
         self.assertEqual(change, "added")
         self.assertIn("group:example, group:other", gained)
         self.assertEqual(len(said), 2)
@@ -715,7 +680,7 @@ class PreviewTests(TestCase):
         shown = preview(ApprovalRequest.objects.get())
 
         said = {row.label: (row.before, row.after) for row in shown.rows}
-        self.assertEqual(said[GRANT_SOURCES], ("group:live", "group:example"))
+        self.assertEqual(said["Document › Grants › group:live › Src"], ("group:live", "group:example"))
 
 
 class SurfaceTests(TestCase):
@@ -820,8 +785,8 @@ class SurfaceTests(TestCase):
 
     def test_approving_from_the_page_applies_it(self):
         response = self.client.post(
-            reverse("control_plane:approval_decision", kwargs={"approval_id": self.held.id}),
-            form_keyed({"decision": "approve"}),
+            reverse("control_plane:approval_decide", kwargs={"approval_id": self.held.id, "decision": "approve"}),
+            form_keyed({}),
         )
 
         self.assertRedirects(response, f"{reverse('core:audit_list')}?awaiting=1")
@@ -834,8 +799,8 @@ class SurfaceTests(TestCase):
 
     def test_the_decision_is_audited_under_whoever_decided(self):
         self.client.post(
-            reverse("control_plane:approval_decision", kwargs={"approval_id": self.held.id}),
-            form_keyed({"decision": "approve"}),
+            reverse("control_plane:approval_decide", kwargs={"approval_id": self.held.id, "decision": "approve"}),
+            form_keyed({}),
         )
 
         decided = AuditLog.objects.get(object_type="Approval", object_id=str(self.held.id), metadata__operation=APPROVE)
@@ -846,12 +811,12 @@ class SurfaceTests(TestCase):
         reject(RejectCommand(str(self.held.id)), principal=web_principal(self.user))
 
         response = self.client.post(
-            reverse("control_plane:approval_decision", kwargs={"approval_id": self.held.id}),
-            form_keyed({"decision": "approve"}),
+            reverse("control_plane:approval_decide", kwargs={"approval_id": self.held.id, "decision": "approve"}),
+            form_keyed({}),
         )
 
         said = [str(message) for message in get_messages(response.wsgi_request)]
-        self.assertEqual(said, ["That request is already rejected."])
+        self.assertEqual(said, ["That request is already rejected, so nothing was written."])
 
     def test_a_token_is_refused_the_decision_whatever_it_holds_before_anything_moves(self):
         omnipotent = frozenset(Capability)
@@ -891,13 +856,13 @@ class SurfaceTests(TestCase):
     def test_each_request_is_an_action_item_that_opens_its_audit_entry(self):
         from ..domains import domain_attention_items
 
-        entries = [entry for entry in domain_attention_items() if entry["item"].eyebrow == "Approval"]
+        entries = [entry for entry in domain_attention_items() if entry["finding"].held]
 
         self.assertEqual(len(entries), 2)
         self.assertEqual({entry["source"] for entry in entries}, {"Waiting for approval"})
         self.assertIn(
             reverse("core:approval_entry", kwargs={"approval_id": self.held.id}),
-            {entry["item"].url for entry in entries},
+            {entry["finding"].primary.url for entry in entries},
         )
 
     def test_it_can_be_decided_from_the_action_items_page(self):

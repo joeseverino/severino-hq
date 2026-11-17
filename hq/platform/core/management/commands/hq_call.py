@@ -35,14 +35,15 @@ from django.core.management.base import BaseCommand, CommandError, CommandParser
 lazy from mcp import Client
 lazy from mcp.shared.exceptions import MCPError
 
+from hq.config.networks import is_loopback
 from hq.platform.application.capabilities import adapter_refusal
+from hq.platform.application.lists import split_list
 from hq.platform.application.refusal_status import refusal_of, refuse
 from hq.platform.application.security import Principal, cli_principal
 from hq.platform.core import strict_json
 from hq.platform.mcp.identity import set_principal
 from hq.platform.mcp.server import mcp
 lazy from hq.platform.application import agent_admission
-lazy from hq.platform.application.reach import network_of
 lazy from hq.platform.application.security import MCP_INTERFACE, agent_grantable, agent_principal
 lazy from hq.platform.core.attribution import outside_every_door
 lazy from hq.platform.core.audit import audit_operation
@@ -95,7 +96,7 @@ def agent_door(client: str, grant: Iterable[str]) -> Principal:
 
     if not settings.DEBUG:
         raise CommandError("hq_call --agent runs only with DEBUG on: it is for a development server.")
-    served = [host for host in settings.ALLOWED_HOSTS if not _loopback(host)]
+    served = [host for host in settings.ALLOWED_HOSTS if not is_loopback(host)]
     if served or not settings.ALLOWED_HOSTS:
         raise CommandError(
             "hq_call --agent runs only on a server loopback alone reaches, as dev:scratch's is; "
@@ -104,7 +105,7 @@ def agent_door(client: str, grant: Iterable[str]) -> Principal:
     client = client.strip()
     if not client:
         raise CommandError("--agent needs the agent's client id.")
-    names = frozenset(name.strip() for each in grant for name in each.split(",") if name.strip())
+    names = frozenset(name for each in grant for name in split_list(each))
     if not names:
         raise CommandError("--agent needs --grant, the permissions its token would carry.")
     unknown = names - agent_grantable()
@@ -114,11 +115,6 @@ def agent_door(client: str, grant: Iterable[str]) -> Principal:
             f"It may name: {', '.join(sorted(agent_grantable()))}."
         )
     return agent_principal(client, MCP_INTERFACE, names)
-
-
-def _loopback(host: str) -> bool:
-    name = host.strip().lower().removeprefix("[").removesuffix("]")
-    return name == "localhost" or network_of(name) == "loopback"
 
 
 def answered_as(text: str, principal: Principal) -> Any:

@@ -104,7 +104,8 @@ BUSY = "[data-fragment][aria-busy=true]:not([data-ask])"
 # fold inside a closed one is opened with it, so one round reaches every fold
 # the page holds; the next rounds reach those a region brings in. An exclusive
 # group's name is set aside, so every member stands open at once, each laid
-# out in its own place as it is when it alone is open.
+# out in its own place as it is when it alone is open. Every row of a table
+# that offers its toggle is opened by it, as a reader opens it.
 OPEN_ONCE = """(busy) => {
   // A region already waiting is not one this round brings in.
   document.querySelectorAll(busy).forEach((region) => { region.lookWaiting = true; });
@@ -115,17 +116,30 @@ OPEN_ONCE = """(busy) => {
     details.open = true;
     opened += 1;
   });
+  document.querySelectorAll('main table [data-row-toggle][aria-expanded="false"]').forEach((toggle) => {
+    if (!toggle.checkVisibility()) return;
+    toggle.lookOpened = true;
+    toggle.click();
+    opened += 1;
+  });
   return opened;
 }"""
 # No region a round of opening brought in is waiting on its answer.
 ANSWERED = "(busy) => [...document.querySelectorAll(busy)].every((region) => region.lookWaiting)"
 # Every fold the opener opened, closed again and its group's name given back.
-CLOSE_OPENED = """() => document.querySelectorAll('details').forEach((details) => {
-  if (!details.lookOpened) return;
-  if (details.lookOpened.name !== null) details.setAttribute('name', details.lookOpened.name);
-  details.open = false;
-  delete details.lookOpened;
-})"""
+CLOSE_OPENED = """() => {
+  document.querySelectorAll('main table [data-row-toggle]').forEach((toggle) => {
+    if (!toggle.lookOpened) return;
+    toggle.click();
+    delete toggle.lookOpened;
+  });
+  document.querySelectorAll('details').forEach((details) => {
+    if (!details.lookOpened) return;
+    if (details.lookOpened.name !== null) details.setAttribute('name', details.lookOpened.name);
+    details.open = false;
+    delete details.lookOpened;
+  });
+}"""
 # Rounds of opening, each after what the last one brought in has arrived.
 OPEN_ROUNDS = 10
 

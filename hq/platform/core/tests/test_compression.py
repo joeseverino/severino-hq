@@ -81,6 +81,6 @@ class CompressedTests(SimpleTestCase):
         self.assertEqual(response.headers["etag"], '"abc"')
 
     def test_a_short_answer_is_sent_as_it_is(self):
-        response, sent = _get(_answering(body=b"<p>short</p>"), "br")
+        response, sent = _get(_answering(body=b"short"), "br")
         self.assertNotIn("content-encoding", response.headers)
-        self.assertEqual(sent, b"<p>short</p>")
+        self.assertEqual(sent, b"short")

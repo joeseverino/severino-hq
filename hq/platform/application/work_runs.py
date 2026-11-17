@@ -22,44 +22,41 @@ from django.db.models.functions import Coalesce, Collate, Concat, NullIf
 from django.db.models.lookups import Exact
 from django.utils import timezone
 
-from hq.domains.control_plane.models import OperationHost, OperationRequest, OperationState
-from hq.domains.jobs.models import HEARTBEAT_GRACE, Job, JobState
+from hq.domains.control_plane.models import OPERATION_LAPSE, OperationHost, OperationRequest, OperationState
+from hq.domains.jobs.models import LAPSE as JOB_LAPSE, Job, JobState
 lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 
 from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
 from .automation_runs import capability_name, resource_key, run_title
+from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
-from .resource_operations import active_conditions, asked_by, asking, problem_condition
 from .routes import reverse
+from .tone import Tone, Toned
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
 lazy from .cadence import automation_standing
-lazy from .history import Acts, who_did_each
-lazy from .scheduled_work import job_names
+lazy from .history import Acts, asked_by, asking, who_did_each
+lazy from .outbound_work import job_names
 
 type Source = Literal["job", "run"]
 JOB: Source = "job"
 RUN: Source = "run"
 
-# Each state's tone, the same for a job and a run on every page that says
-# one: work waiting its turn is paused, work under way active.
-TONES = {
-    JobState.QUEUED: "paused",
-    JobState.RUNNING: "active",
-    JobState.SUCCEEDED: "good",
-    JobState.FAILED: "serious",
-    # Stopped early: a process or a worker that vanished, a restart to look at
-    # rather than a fault to read.
-    JobState.LOST: "attention",
-}
-# Each task outcome a run reports (the bridge's ``RunEvent``), in the same vocabulary.
-OUTCOME_TONES = {
-    "ok": "good",
-    "changed": "active",
-    "skipped": "paused",
-    "failed": "serious",
-    "unreachable": "serious",
-}
+
+class TaskOutcome(Toned):
+    """What a run's task did on one host (the bridge's ``RunEvent``), in the
+    tone a run's state takes for the same news."""
+
+    OK = "ok", Tone.GOOD
+    CHANGED = "changed", Tone.GOOD
+    SKIPPED = "skipped", Tone.NEUTRAL
+    FAILED = "failed", Tone.SERIOUS
+    UNREACHABLE = "unreachable", Tone.SERIOUS
+
+
+# The outcomes a run's audit trail records one row each: what changed a
+# machine or went wrong. Every outcome stays in the run's result.
+AUDITED_OUTCOMES = frozenset({TaskOutcome.CHANGED, TaskOutcome.FAILED, TaskOutcome.UNREACHABLE})
 # How work in each state stands for a control that follows it (``asks.Standing``).
 STANDS = {
     JobState.QUEUED: QUEUED,
@@ -71,13 +68,13 @@ STANDS = {
 # What an operation that ended and found something wrong (a ``Degraded`` or
 # ``Drifted`` condition) says, so it never reads as done.
 PROBLEM_FOUND = "Problem found"
-PROBLEM_TONE = "attention"
+PROBLEM_TONE = Tone.ATTENTION
 # What a claimed run whose lease ran out says until the next claim ends it.
 LAPSED = "The run stopped reporting, so HQ can't tell whether it finished."
 # What a run or scan that waits says while no worker will take it, in the
 # tone of something to look at: it is neither under way nor waiting its turn.
 NOT_STARTED = "Not started"
-NOT_STARTED_TONE = "attention"
+NOT_STARTED_TONE = Tone.ATTENTION
 # The states of a run that has no outcome to say yet.
 UNENDED = frozenset({OperationState.QUEUED, OperationState.CLAIMED})
 # A kind of work whose latest run ended so is one to look at.
@@ -160,7 +157,7 @@ class WorkRun:
     # Its state as seen (``JobState``'s value), in words and as a tone.
     state: str
     word: str
-    tone: str
+    tone: Tone
     # What it is doing or how it ended, in a sentence.
     note: str
     # Who asked for it, through which door, and who approved it, from its audit row.
@@ -199,13 +196,7 @@ class WorkKind:
 def job_seen_state(now: datetime) -> Case:
     """``Job.seen_state`` as SQL, so a list filters and orders by what it shows."""
 
-    stale = now - HEARTBEAT_GRACE
-    return Case(
-        When(Q(state=JobState.RUNNING, heartbeat_at__isnull=False, heartbeat_at__lt=stale), then=Value(JobState.LOST)),
-        When(Q(state=JobState.QUEUED, created_at__lt=stale), then=Value(JobState.LOST)),
-        default=F("state"),
-        output_field=CharField(),
-    )
+    return Case(When(JOB_LAPSE.q(now), then=Value(JobState.LOST)), default=F("state"), output_field=CharField())
 
 
 def run_seen_state(now: datetime) -> Case:
@@ -213,9 +204,8 @@ def run_seen_state(now: datetime) -> Case:
     claimed run whose lease has run out has stopped early whether or not the
     next claim has ended it yet, as a job nothing has heard from has."""
 
-    lapsed = Q(state=OperationState.CLAIMED) & (Q(lease_expires_at__isnull=True) | Q(lease_expires_at__lte=now))
     return Case(
-        When(lapsed, then=Value(JobState.LOST)),
+        When(OPERATION_LAPSE.q(now), then=Value(JobState.LOST)),
         *(When(state=state, then=Value(state.as_job.value)) for state in OperationState),
         output_field=CharField(),
     )
@@ -463,12 +453,18 @@ def run_rows(operations: Iterable[OperationRequest], now: datetime | None = None
     draws, who asked for each read in one query."""
 
     found = list(operations)
-    who = asked_by(found)
+    who = asked_by(OperationRequest, found)
     now = now or timezone.now()
-    said = _untaken_of(JobState(operation.seen) for operation in found)
+    # Only a run or a scan waits on the playbook worker; the controller takes the rest.
+    said = _untaken_of(JobState(operation.seen) for operation in found if operation.action in _LISTED)
     return [
         _run_row(
-            operation, JobState(operation.seen), operation.title, now, who.get(str(operation.pk), NOBODY), untaken=said
+            operation,
+            JobState(operation.seen),
+            operation.title,
+            now,
+            who.get(str(operation.pk), NOBODY),
+            untaken=said if operation.action in _LISTED else "",
         )
         for operation in found
     ]
@@ -483,7 +479,7 @@ def run_of(operation_id: str, now: datetime | None = None) -> tuple[WorkRun, Ope
     found = seen_as_runs(listed, now).first()
     if found is None:
         return None
-    who = asked_by((found,)).get(str(found.pk), NOBODY)
+    who = asked_by(OperationRequest, (found,)).get(str(found.pk), NOBODY)
     seen = JobState(found.seen)
     return _run_row(found, seen, found.title, now, who, untaken=_untaken_of((seen,))), found
 
@@ -510,7 +506,13 @@ def hydrated(rows: Iterable[Sequence[Any]]) -> list[WorkRun]:
     jobs = Job.objects.in_bulk(ids[JOB]) if ids[JOB] else {}
     runs = OperationRequest.objects.select_related("resource").in_bulk(ids[RUN]) if ids[RUN] else {}
     # Who started each, from the audit row each wrote first, both kinds in one read.
-    who = dict(zip((JOB, RUN), who_did_each(Acts((JOB_AUDIT_TYPE,), ids[JOB]), asking(runs.values())), strict=True))
+    who = dict(
+        zip(
+            (JOB, RUN),
+            who_did_each(Acts((JOB_AUDIT_TYPE,), ids[JOB]), asking(OperationRequest, runs.values())),
+            strict=True,
+        )
+    )
     now = timezone.now()
     said = _untaken_of(JobState(seen) for source, _pk, seen, *_rest in page if source == RUN)
     built: list[WorkRun] = []
@@ -535,7 +537,7 @@ def job_run(job: Job, title: str = "", by: Attribution = NOBODY) -> WorkRun:
         kind=job.kind,
         state=seen.value,
         word=seen.label,
-        tone=TONES[seen],
+        tone=seen.tone,
         note=job.seen_error if seen in ENDED_BADLY else job.note,
         by=by,
         created_at=job.created_at,
@@ -559,7 +561,13 @@ def standing_tone(state: str, word: str) -> str:
 
     seen = next((seen for seen in JobState if seen.label == word), None)
     seen = seen or next((seen for seen, stands in STANDS.items() if stands == state), None)
-    return TONES[seen] if seen else ""
+    return seen.tone if seen else ""
+
+
+def outcome_tone(outcome: str) -> str:
+    """A task outcome's tone; "" for one the bridge names that HQ does not."""
+
+    return next((each.tone for each in TaskOutcome if each == outcome), "")
 
 
 def standing_word(state: str) -> str:
@@ -580,13 +588,13 @@ def _run_row(
     claimed = operation.state == OperationState.CLAIMED
     lapsed = seen == JobState.LOST and claimed
     stuck = seen == JobState.QUEUED and bool(untaken)
-    problem = problem_condition(result) if seen == JobState.SUCCEEDED else None
+    problem = next(iter(holding(result.get("conditions"), *PROBLEMS)), None) if seen == JobState.SUCCEEDED else None
     word, tone = (
         (NOT_STARTED, NOT_STARTED_TONE)
         if stuck
         else (PROBLEM_FOUND, PROBLEM_TONE)
         if problem
-        else (seen.label, TONES[seen])
+        else (seen.label, seen.tone)
     )
     started, finished = operation.claimed_at, operation.completed_at
     return WorkRun(
@@ -619,8 +627,7 @@ def _run_row(
             lease_until=operation.lease_expires_at if claimed else None,
             attempts=operation.attempt_count,
             events=tuple(
-                {**event, "tone": OUTCOME_TONES.get(event.get("outcome", ""), "")}
-                for event in result.get("events") or ()
+                {**event, "tone": outcome_tone(event.get("outcome", ""))} for event in result.get("events") or ()
             ),
             stated=stated_kinds(result),
             expected=str(status.get("expected_fingerprint_sha256") or ""),
@@ -650,7 +657,7 @@ def _said(operation: OperationRequest, problem: dict[str, Any] | None) -> str:
     result = operation.result or {}
     said = result.get("message") or operation.reason
     if operation.state == OperationState.FAILED:
-        active = active_conditions(result)
+        active = holding(result.get("conditions"))
         return (active[0].get("message") if active else "") or said
     return (problem.get("message") if problem else "") or said
 

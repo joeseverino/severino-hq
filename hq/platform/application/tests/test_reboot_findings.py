@@ -8,13 +8,12 @@ from django.utils import timezone
 from hq.domains.control_plane.bridge_contract import contract
 from hq.domains.control_plane.observations import OBSERVATIONS
 
-from ..cadence import slowest_sweep_interval
 from ..derivation_testing import frozen, uncached
 from ..findings import derive_findings
+from ..freshness import stale_after
 from ..inventory_testing import store
-from ..moments import when
+from ..moments import moment, when
 from ..projection import projection_scope
-from ..timestamps import moment
 from ..topology import derive_topology
 from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
 
@@ -214,8 +213,8 @@ class WaitingTests(TestCase):
 
         self.assertEqual(raised(RULE), [])
 
-    def test_a_reading_older_than_the_slowest_sweep_is_withheld(self):
-        aged = slowest_sweep_interval() + timedelta(minutes=10)
+    def test_a_reading_out_of_date_is_withheld(self):
+        aged = stale_after(KIND) + timedelta(minutes=10)
         sweep(reading(read_at=stamp(aged)), age=aged)
 
         with frozen(timezone.now()), uncached():

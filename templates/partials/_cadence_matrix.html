@@ -26,7 +26,7 @@ since the whole history is on the page the row links to.
         <tr>
           <th scope="row">
             {% if row.url %}<a href="{{ row.url }}">{{ row.label|breakable }}</a>{% else %}{{ row.label|breakable }}{% endif %}
-            {% if row.detail %}<span class="muted cadence-detail wide-only">{{ row.detail|breakable }}</span>{% endif %}
+            {% if row.detail %}{% muted css="cadence-detail wide-only" %}{{ row.detail|breakable }}{% endmuted %}{% endif %}
           </th>
           {% for week in row.weeks %}
             <td class="cadence-cell{% if forloop.revcounter > 3 %} wide-only{% endif %}">

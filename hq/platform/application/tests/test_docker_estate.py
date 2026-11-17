@@ -5,6 +5,7 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.application.markup_testing import select, text
 
 from ..docker_estate import IMAGE_BEHIND, IMAGE_UNTAGGED, image_verdicts, reference_tag
 from ..findings import findings
@@ -14,7 +15,6 @@ from ..relationships import relationships_for
 from ..security import Capability, Principal
 from ..topology import relation_graph
 from ..topology_model import RELATIONS
-from .markup import select, text
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))
 ON_LAB = {"connection_ref": "example-portainer", "environment_id": 1, "host": "lab-1", "host_address": "192.0.2.10"}

@@ -185,7 +185,7 @@ func TestPlanDoesNotClaimReportScheduleOrLoadMaterial(t *testing.T) {
 type observing struct{ *fakeProviders }
 
 func (observing) Glance(context.Context, GlancePlan) (GlanceObservations, error) {
-	return GlanceObservations{{"panel_id": "infrastructure"}, {"panel_id": "weather"}}, nil
+	return GlanceObservations{{PanelID: GlancePanelIDInfrastructure}, {PanelID: GlancePanelIDWeather}}, nil
 }
 
 // Every observation is returned with the as_of of the plan it answers, which
@@ -206,7 +206,7 @@ func TestGlanceObservationsCarryTheirPlansMoment(t *testing.T) {
 		t.Fatalf("reported %v", reported)
 	}
 	for _, observation := range reported {
-		if observation["as_of"] != asOf {
+		if observation.AsOf != asOf {
 			t.Errorf("%v", observation)
 		}
 	}

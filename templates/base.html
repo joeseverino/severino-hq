@@ -35,17 +35,18 @@
   <script src="{% static 'js/transitions.js' %}" {% csp_nonce_attr %}></script>
   {% block head_extra %}{% endblock %}
 </head>
-<body data-sign-in="{% url 'login' %}" data-ask-refreshing="{% refreshing %}" data-ask-newer="{% newer_reading %}" data-ask-show="{% show_newer %}">
+<body data-sign-in="{% url 'login' %}" data-ask-refreshing="{% refreshing %}">
   {% include "partials/_site_header.html" %}
 
   {% page_main %}
     {% include "partials/_messages.html" %}
 
     {% block content %}{% endblock %}
+  {% print_footer %}{% block print_footer %}{% endblock %}
   {% endpage_main %}
   {# What the head's expect link waits for: the content above is parsed. #}
   <template id="parsed"></template>
-  {% include "partials/_notice_frames.html" %}
+  {% include "partials/_tip.html" %}
 
   {% block site_footer %}
     {% if saved_copy and user.is_authenticated %}{% include "partials/_demo_foot.html" %}{% endif %}
@@ -53,7 +54,7 @@
 
   {% if user.is_authenticated %}
     {% comment %}
-    The one form every post_button submits. Outside everything else on the
+    The one form every posting button submits. Outside everything else on the
     page, so a button inside another form still posts only what it names.
     {% endcomment %}
     {% comment %}
@@ -66,17 +67,18 @@
     fetches on first open rather than making every page pay for a panel almost
     nobody opens.
     {% endcomment %}
-    {% include "partials/_modal.html" with id="connection" title="Your connection" lede="How this browser reaches HQ, and each check on the way." body_template="core/_connection_loading.html" size="wide" %}
+    {% include "partials/_modal.html" with id="connection" title="Your connection" lede="How this browser reaches HQ, and each check on the way." body_template="partials/_connection_loading.html" size="wide" %}
     {% if saved_copy %}
       {% include "partials/_modal.html" with id="demo-about" title="About the demo" body_template="partials/_demo_about.html" %}
     {% endif %}
   {% endif %}
 
-  <script src="{% static 'js/fragment.js' %}" {% csp_nonce_attr %} defer></script>
+  {# A script that clones frames loads with them, through its part. #}
+  {% include "scripts/fragment.html" %}
   <script src="{% static 'js/tables.js' %}" {% csp_nonce_attr %} defer></script>
   <script src="{% static 'js/app.js' %}" {% csp_nonce_attr %} defer></script>
-  <script src="{% static 'js/ask.js' %}" {% csp_nonce_attr %} defer></script>
-  <script src="{% static 'js/connection.js' %}" {% csp_nonce_attr %} defer></script>
+  {% include "scripts/ask.html" %}
+  {% include "scripts/connection.html" %}
   {% block scripts_extra %}{% endblock %}
 </body>
 </html>

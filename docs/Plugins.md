@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=14,
+    api_version=16,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -122,15 +122,16 @@ holds the boundary with Ruff's `banned-api` over the package's source
 (`tools/pipeline/extension-imports.toml`), which also refuses
 `django.core.cache`: a cache the host cannot see serves a stale answer, so a
 derived read is kept with `hq_sdk.reads.derivation` ([Derived
-reads](#derived-reads)). The check refuses three habits, the first two by the
-host's `cell-read-by-its-text` and `absent-text-read-from-the-text` rules
-(`tools/lint/ast-grep/rules`) and the last by `python -m hq_sdk.validation
-src`:
+reads](#derived-reads)). The check refuses four habits, the first three by the
+host's `cell-read-by-its-text`, `absent-text-read-from-the-text` and
+`page-read-by-what-it-says` rules (`tools/lint/ast-grep/rules`) and the last
+by `python -m hq_sdk.validation src`:
 
 | Refused | Why | Instead |
 | --- | --- | --- |
 | A test whose `assertContains`, `assertNotContains`, `assertIn` or `assertNotIn` looks for text ending on `</td>` or `</th>` | the host may wrap what a cell says | read the cell's text |
 | A test whose `assertNotContains` or `assertNotIn` over a response's markup says a short word (one to seven letters, digits, `_` or `-`) is absent | a CSRF token, nonce or retry key on the page can hold it by chance | `assertNotContains(response, word, html=True)`, which reads the text between the tags |
+| A test that asserts on, or searches a page for, a literal holding a tag or a `class=` attribute | a shared part's markup changes though the page says the same thing | read the page through `hq_sdk.testing`'s reader (`text`, `texts`, `links`, `hrefs`, `elements`, `select`, `within`), or its `data-` hook |
 | A page sentence that closes on a value with a period written by hand (`f"Renews through {registrar}."`) | a value HQ did not write can end in its own period | close it through `hq_sdk.ui.ended(f"... {value}")`, which adds the full stop only when the text has none |
 
 The host's own code is held to the same rule, and an extension to the refusal
@@ -152,25 +153,27 @@ return with `assert_type`, and a call an extension must not make carries the
 `# type: ignore[code]` mypy must report for it. A new export gets a case
 there; an annotation that slides to `Any` fails it.
 
-Capability input models inherit `StrictCommand`, so unknown JSON keys fail at
-the boundary instead of being dropped. Class-based views inherit
+A capability's command is a frozen dataclass or a TypedDict, which HQ closes
+at every depth, so an unknown JSON key fails at the boundary instead of being
+dropped. `CapabilitySpec` refuses a command that carries a Pydantic config
+of its own (a `BaseModel`, or a type under `with_config`), which would hold
+over HQ's.
+Class-based views inherit
 `CapabilityRequiredMixin` and declare `required_capability`; function views use
-`@capability_required(...)`. Either only names the capability. The host's page
-gate refuses a person who does not hold it, and records the refusal, before the
-view runs. It also refuses to serve a mixin view that names none. Bulk work
-uses `audit_operation` with `record_operation`, so adapter and actor
-attribution match without a domain-owned wrapper. Every row it writes carries
-one operation id: the id it is given, else the one of the operation it runs
-inside, else a new one. Without a principal it is the operation of whoever its
-door bound (a request, a job, a command), and with nothing bound it is refused,
-as `record_event` is. Every door binds who acted where it starts, so a row
-nobody bound is a door's defect and fails where it runs. Once an actor is bound, a binding opened inside
-it that names another actor is refused. A job's work runs under its job's
-binding and a command under the shell's. A step that needs a principal is
-handed the requester's. The same actor may name another interface. A
-binding given an id of its own inside another operation records that
-operation as its row's `cause`, so a chain of operations is followed from
-either end. A model whose rows are about another record (an operation on a
+`@capability_required(...)`. Either only names the capability, which the page
+reads under beside the host's `read`. The host's page gate refuses a person who
+does not hold both, and records the refusal, before the view runs. It also refuses to serve a mixin view that names none. Bulk work
+records one summary with `record_operation`. Who acted and which operation a
+row belongs to are the door's: the capability runner names every row a
+handler writes by its capability and its caller, and the job runner every row
+a job writes by its job and its requester. An extension binds neither, and
+`hq_sdk.audit` exports no binding (`PLUGIN_API_VERSION` 15). A write a command
+line makes runs its capability through `execute_capability` with
+`cli_principal()`, so it is authorized, named and recorded as any door's is.
+A handler leaves its authority to the runner, which checks what the spec
+requires before it calls the handler. A row written with nothing bound is
+refused, as `record_event` is, so a row nobody bound is a door's defect and
+fails where it runs. A model whose rows are about another record (an operation on a
 declaration, a decision on one) passes `register_audit(..., subject=...)`, a
 function returning that record's key, so one indexed read of the log's
 `subject` is the record's whole story. A change to a row is written by its
@@ -491,7 +494,7 @@ stay in their package even when the host would be their only consumer.
 An integration provider returns one frozen `PluginIntegration` of lazy, typed
 callables for every runtime contribution: capabilities, resources,
 connections, dashboard cards, overview, attention, search, calendars, outbound
-work, health and [demo data](#demo-data). HQ calls only the one a surface needs. The manifest carries
+work, [read cadences](#how-old-a-reading-may-get), health and [demo data](#demo-data). HQ calls only the one a surface needs. The manifest carries
 static install, routing, navigation and authority metadata plus exactly one
 executable entry point; an extension never registers a surface on its own. How
 the host compiles these into one graph is in
@@ -504,7 +507,10 @@ not establish freshness. The host never infers dates from a card label or
 recalculates an extension's totals.
 
 An attention provider emits `serious` or `attention` only for a decision that
-needs the operator, and `neutral` or `good` for observations. The title states
+needs the operator, and `neutral` or `good` for observations. An item whose
+only remedy does not exist yet (an advisory no release fixes) sets
+`awaiting_fix=True`, read from the source's own field, and the queue leaves it
+out while its own page still shows it. The title states
 what is wrong, with its count where it stands for several; the body says what
 it means. A domain whose items are also decided together on one page of its
 own names it in `PluginIntegration.attention_url`, and the Needs you page's
@@ -552,10 +558,16 @@ is wrong and holds what fixes it"):
 | `Insight.clears` | what clears an item a threshold raises, worded from that same threshold as a clause after "Clears once" ("a balance newer than 3 days arrives"); the panel says it after the why. The plugin check's `threshold-says-what-clears-it` fails a why that names a constant without it |
 
 **Capabilities.** HQ validates every `CapabilitySpec` before describing or
-invoking the registry: name, effect, required permissions, target kind and
-label, command JSON Schema, duplicates and the handler's signature. MCP grants
+invoking the registry: name, required permissions, target kind and label,
+command JSON Schema, duplicates and the handler's signature. MCP grants
 must be a subset of the extension's operator grants. A typo fails the composition's
 checks instead of becoming a production-only failure or an authority gap.
+
+What running a command does is a `hq_sdk.capabilities.Effect` member
+(`Effect.READ`, `REMOTE_WRITE`, `INFRASTRUCTURE_CHANGE`, `DESTRUCTIVE`), which
+`CapabilitySpec`, `ConnectionAbility` and `OutboundWork` take as `effect`. A
+spec given the value's string holds the member, and a value no member has is
+refused where the spec is written.
 
 A handler is called as `handler(command, *, principal, <target keyword>)`,
 the keyword being the one its `target_kind` binds (`current_slug`,
@@ -603,7 +615,8 @@ A command's fields say what they are through markers in their `Annotated`
 type, the ones the host's commands use, all from `hq_sdk.capabilities`:
 
 ```python
-class NoteCommand(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class NoteCommand:
     note: Annotated[str, Describe("What to write down.")]
     project: Annotated[str, Names("example.projects"), Describe("The project it is for.")]
     tone: Annotated[str, Choices(Note.Tone.choices)]
@@ -672,6 +685,16 @@ exactly when the command takes one.
 HQ gives every capability that writes an `idempotency_key`
 ([API](API.md#safe-retries)); a command type declares the field only when its
 handler keeps the key itself.
+
+A command that changes the record it targets, with the command a create also
+takes, keeps every field it is not sent. Its handler takes `sent` and is
+declared `@keeps(Kept(read))`, where `read` answers the stored record by its
+target as a caller sends it (`as_sent(record, Command, {})`); HQ lays what was
+sent over that before it builds the command. The handler sets only
+`written(command, sent)` on the record, locked, so a field changed since the
+caller's read and not sent stands. Its summary ends with `KEPT`. All five
+come from `hq_sdk.capabilities`, and the host's composed suite refuses an
+update that would reset a field it was not sent.
 
 **Resources.** A `ResourceSpec` may expose a list handler with a
 `ResourceQuery` subclass, a detail handler with one stable identifier, a
@@ -743,7 +766,8 @@ HQ derives one evidence state per ability and instance:
 | `missing`, `revoked` | is closed; only these two close it |
 
 The same derivation gives each connection's lifecycle (configured, reachable,
-ready, unauthorized, stale, revoked) against the family's `stale_after_hours`.
+ready, unauthorized, stale, revoked), stale by the cadence of the instance's
+`kind` ([How old a reading may get](#how-old-a-reading-may-get)).
 
 An ability may set `subject_resource` to the resource it governs and list its
 provider kinds in `governs_kinds`. Command Center then offers the registered
@@ -808,6 +832,8 @@ its `value` as its `field`. One that must also send what it acts on, an
 identifier that may be any string, names it in `fields`
 (`fields={"client_id": client_id}`). It is then a form of its own, never
 drawn inside another.
+
+A page may fill `{% block print_footer %}` with the date and provenance its printed copy needs. The page frame shows it only on paper.
 
 Where the page sits is declared too. `page_trail` is every crumb above it, from
 the top, as (label, url) pairs, `(("Notes", reverse_lazy("notes:list")),)`. A
@@ -880,6 +906,16 @@ and `section-period`.
 parts are always `<li>` elements.
 `PLUGIN_API_VERSION` 14 retires `partials/_line_chart.html` and
 `partials/_stacked_bar_chart.html`: `partials/_chart.html` draws either chart.
+`PLUGIN_API_VERSION` 15 retires `hq_sdk.audit`'s `audit_operation` and
+`operation_context`: the runner that runs a capability or a job binds its rows.
+It also retires `hq_sdk.capabilities.StrictCommand`: a command is a frozen
+dataclass or a TypedDict, and a bound on a field (a length, a range) is an
+`Annotated[..., Field(...)]` HQ applies as it validates.
+`PLUGIN_API_VERSION` 16 retires `{% post_button %}` and the `btn` class:
+`{% button %}` draws every control that looks like a button.
+It also retires a region's `room=` and a list's `table_room`: the browser
+sizes every column. And it retires `Principal.require`'s `capability=`
+keyword: it takes any number of capabilities, by position.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
@@ -887,8 +923,7 @@ title the page composes as its `{% title %}` part after the body
 `hq plugin check` refuses one written by hand.
 
 A `TableListMixin` list declares the same through `TableColumn(kind=)`, its
-ranks derived from the columns unless one says `drop=`, and its region's
-`room=` as `table_room`.
+ranks derived from the columns unless one says `drop=`.
 
 A list whose rows come from a projection rather than a model's queryset
 overrides `get_table_rows(query)`. It is handed the address's filters,
@@ -913,7 +948,11 @@ A form that posts carries `{% write_token %}` where Django's own form carries
 `{% csrf_token %}`: the CSRF field and a retry key drawn for that drawing of
 the form. A view runs the write through `hq_sdk.capabilities.execute_posted(request, name, payload)`,
 which acts as the signed-in person under that key, so the form sent twice acts
-once; HQ refuses a change from the browser that posts no key. A refused
+once; HQ refuses a change from the browser that posts no key. What a write
+that ran says is its answer's `message`, which the handler words once and
+every door carries: `execute_posted` puts it on the next page's messages, so a
+view says nothing of its own (`PLUGIN_API_VERSION` 15 retires `WriteMessages`
+and `CommandFormMixin`'s `success_message`). A refused
 answer reaches the person through `hq_sdk.capabilities.refused(request,
 answer, form=form)`. It puts the answer on the form drawn again (each detail
 beside its field) or, without a form, on the next page's messages. It returns
@@ -941,17 +980,17 @@ A test that posts a form without opening its page first sends
 | `confirm_page.html` | `consequences` | A destructive action's confirmation: `consequences` says what will happen. |
 | `form_page.html` | nothing | A page that is one form, a record's: its card and `partials/_form.html`, closing with `form_verb` and `cancel_url`; `form_fields` names a template for fields beyond the form's own loop and `form_note` says what saving does, each from the view, so the page fills no block. |
 | `list_page.html` | `foot`, `row` (given `forloop`, `row`), `summary` | A `TableListMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or filter changes, `foot` is its `<tfoot>`. |
-| `page.html` | `page` | Any page: the head, actions, dialogs and section navigation, drawn from `page`. |
+| `page.html` | `page`, `print_footer` | Any page: the head, actions, dialogs and section navigation, drawn from `page`. |
 
 | Partial | Required | Optional | What it is |
 | --- | --- | --- | --- |
 | `partials/_activity_calendar.html` | `calendar` | `calendar_id` | One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`. |
 | `partials/_allocation.html` | `allocation` | `legend`, `stacked` | Parts of one whole as one bar, from `hq_sdk.ui.AllocationBar`. |
 | `partials/_ask.html` | `ask` | `extra`, `heard` | A do-this-now control and how its work stands, from `hq_sdk.outbound.ask`. |
-| `partials/_attention_list.html` | `empty`, `entries` | nothing | Decisions waiting on the operator, from `hq_sdk.ui.Insight` entries. |
+| `partials/_attention_list.html` | `empty`, `entries` | nothing | Decisions waiting on the operator, from the entries `hq_sdk.plugin.plugin_attention_items` gathers. |
 | `partials/_cadence.html` | `cadence` | nothing | Whether a thing happened, period by period, from `hq_sdk.ui.Cadence`. |
 | `partials/_cadence_matrix.html` | `matrix` | `compact`, `label` | Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`. |
-| `partials/_chart.html` | `chart` | nothing | A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`. |
+| `partials/_chart.html` | `chart` | nothing | A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`. |
 | `partials/_chart_tabs.html` | `charts`, `group` | nothing | Up to four charts of one thing in the space of one. |
 | `partials/_dropzone.html` | `field` | `hint`, `title` | A file field that also accepts a drop. |
 | `partials/_empty_state.html` | `message` | `action_label`, `action_url`, `inline`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
@@ -962,33 +1001,40 @@ A test that posts a form without opening its page first sends
 | `partials/_insight_grid.html` | `items` | `label`, `level` | Readings that need interpreting, each with its next step. |
 | `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
 | `partials/_kpi_grid.html` | `items` | `featured`, `label` | Responsive linked or static figures. |
+| `partials/_reading_age.html` | nothing | `at`, `reading`, `unread` | When a reading was taken, `at` the moment, in the one wording every page uses; `unread` why there is none. |
 | `partials/_record_list.html` | `rows` | `empty`, `label`, `whole_rows` | A compact list of records, from `hq_sdk.ui.ListRow`. |
 | `partials/_row_field.html` | `field` | nothing | One field of a form whose fields stand one to a row of a table, in its row. |
 | `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 
-Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% filter_bar %}`, `{% notice %}`, `{% outside_link %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
+Host tags: `{% arrow %}`, `{% button %}`, `{% button_row %}`, `{% card %}`, `{% dot %}`, `{% dot_list %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% filter_bar %}`, `{% muted %}`, `{% notice %}`, `{% outside_link %}`, `{% present %}`, `{% prose_list %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `btn`, `cell-data`, `cell-part`, `cell-whole`, `chart-axis`, `chart-legend`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `field`, `finding`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `list-rows`, `muted`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
+Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `list-rows`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
 
 Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
 
 | Rule | Drawn by hand | Write instead |
 | --- | --- | --- |
 | `hand-drawn-change-table` | A before-and-after table drawn by hand, where the change table part draws it. | Build an approval_review.ChangePreview and write `{% change_table preview %}`. |
+| `hand-drawn-chip` | A chip drawn by hand, where the status part draws a name as a chip and the switch part a choice. | Write `{% status name chip=True %}`, or `{% switch %}``{% choice url=... %}`name`{% endchoice %}``{% endswitch %}` for a choice of the view. |
 | `hand-drawn-control-label` | A control's label drawn by hand, where the control label part draws it. | Write `{% control_label "From" control="the-control-id" %}`. |
+| `hand-drawn-dot-list` | A dot list drawn by hand, where the dot list part draws it. | Write `{% dot_list %}``<li>`...`</li>``{% enddot_list %}`, with muted=True for one said quietly. |
 | `hand-drawn-empty-line` | An empty line drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`. |
+| `hand-drawn-empty-said-quietly` | An empty line drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`. |
 | `hand-drawn-empty-state` | An empty state drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`. |
 | `hand-drawn-facts` | Label and value facts drawn by hand, where the facts part draws them. | Write `{% facts %}` around each `{% fact "Label" value=... %}`, or `{% facts layout="band" %}` for a band. |
+| `hand-drawn-field` | A form's field or its row of buttons drawn by hand, where the field template and the button row tag draw them. | Declare the field on the view's Django form and draw it with {{ form }} or {{ field.as_field_group }}; write a row of buttons as `{% button_row %}`...`{% endbutton_row %}`. |
 | `hand-drawn-figure` | A figure drawn by hand, where the figure part draws it. | Write `{% include "partials/_kpi_grid.html" %}` from hq_sdk.ui.Kpi. |
-| `hand-drawn-filter-bar` | A filter bar drawn by hand, where the filter bar part draws it. | Write `{% filter_bar filtered=... clear=... %}`search`{% choices %}`controls`{% summary %}`count`{% endfilter_bar %}`. |
-| `hand-drawn-findings` | A list of findings drawn by hand, where the work queue part draws it. | Write `{% include "partials/_work_queue.html" with items=... %}` from the queue's items (hq_sdk.ui.Insight), with dense=True for problems inside a section. |
+| `hand-drawn-filter-bar` | A filter bar, search field or select drawn by hand, where the filter bar and select parts draw it. | Write `{% filter_bar search="..." query=q filtered=... clear=... %}``{% choices %}``{% select ... %}``{% summary %}`count`{% endfilter_bar %}`. |
 | `hand-drawn-fold` | A fold drawn by hand, where the section part draws it. | Write `{% section "Heading" fold=True %}`body`{% endsection %}`. |
-| `hand-drawn-form` | A form that writes drawn by hand, where the form part draws it. | Write `{% include "partials/_form.html" %}`, or `{% post_button %}` for a single verb. |
+| `hand-drawn-form` | A form that writes drawn by hand, where the form part draws it. | Write `{% include "partials/_form.html" %}`, or `{% button ... post=True %}` for a single verb. |
 | `hand-drawn-heading` | A heading drawn by hand, where the section part or the page frame draws it. | Write the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it (it heads itself a level down); the page's own title is the frame's, from page. |
 | `hand-drawn-icon` | An icon drawn by hand, where the icon part draws it. | Write `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img". |
 | `hand-drawn-list-rows` | A list of rows drawn by hand, where the record list part draws it. | Write `{% include "partials/_record_list.html" %}` from hq_sdk.ui.ListRow. |
+| `hand-drawn-missing-value` | A missing value's mark drawn by an if, where the value's own tag or filter draws it. | Write {{ x\|or_empty }} for a plain value, {{ x\|money }} (or measured, seconds, bytes, when) alone for a figure or a moment, and `{% present x %}`...`{% endpresent %}` for a value shown in markup. |
 | `hand-drawn-notice` | A notice drawn by hand, where the notice part draws it. | Write `{% notice %}`body`{% endnotice %}`, with tone= and a `{% title %}` part where it has them. |
+| `hand-drawn-prose-list` | A list of sentences drawn by hand, where the prose list part draws it. | Write `{% prose_list %}``<li>`...`</li>``{% endprose_list %}`, with numbered=True for items read in order. |
+| `hand-drawn-record-link` | A link to a record's page drawn by hand, where the entity tag names the record by the page its model declares. | Write `{% entity row\|record label=row.name %}`, or row\|record:"section" for a part of its page. |
 | `hand-drawn-row-actions` | A row's actions drawn by hand, where the row actions part draws them. | Write `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell. |
 | `hand-drawn-row-group` | A group of rows headed by hand, where the row group tag heads it. | Write `{% row_group label count %}`. |
 | `hand-drawn-run-state` | How work stands is drawn by hand, where the ask or the status part draws it. | Draw the work as an Ask (`partials/_ask.html`), or its state with `{% status run.word tone=run.tone data_ask_label=True %}` from job\|job_run. |
@@ -996,6 +1042,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `hand-drawn-split-count` | A count split from its words, where the counted filter writes them as one. | Write {{ n\|counted:"thing" }}, the figure and its words as one, or `{% fact "Label" value=n %}`. |
 | `hand-drawn-split-figure` | A figure apart from its word, where a value filter writes them as one. | Write {{ n\|counted:"thing" }} for a count, or {{ x\|measured:"mi" }} for a unit or a word the count leaves alone ("more"), the figure and its word as one value. |
 | `hand-drawn-stack-list` | A stack list drawn by hand, where the stack list part draws it. | Write `{% stack_list %}``<li>`...`</li>``{% endstack_list %}`, with below="Label" for a list the open row shows. |
+| `hand-drawn-steps` | A list of steps drawn by hand, where the steps part draws it. | Write `{% steps numbered=True %}``{% step %}``<strong>`Install it`</strong>`...`{% endstep %}``{% endsteps %}`. |
 | `hand-drawn-stretched-shape` | A round shape or text inside a stretched drawing, which distorts it. | Draw a dot as a zero-length line of class chart-dot, and a label in the unscaled svg.chart-labels layer. |
 | `hand-drawn-table` | A table drawn outside its region. | Write `{% table_region "Label" %}` around its `<table class="data-table">`. |
 | `hand-drawn-title-meta` | A title's line of facts drawn by hand, where the title meta part draws it. | Write `{% title_meta %}`parts`{% endtitle_meta %}`, each part an `<li>`. |
@@ -1010,14 +1057,17 @@ or markup into an extension is a contract failure. The rules the classes follow 
 in [Design](Design.md).
 
 What the host writes for a value is pinned by example in
-`hq_sdk/text_examples.json`: `span`, `when`, `when_day`, `counted`, `money`,
-`signed_number`, `ended` and `ago`, regenerated and reviewed like the
+`hq_sdk/text_examples.json`: `span`, `when`, `when_day`, `counted`,
+`measured`, `money`, `signed_number`, `ended` and `ago`, regenerated and reviewed like the
 contract.
 
 An extension's test asserts what it composed from them
 (`f"Due in {span(days)}"`), or reads a page through `hq_sdk.testing.plain`,
 which reads the host's no-break spaces as spaces. It never writes the host's
-words or markup out itself. Text that names the deployment reads
+words or markup out itself: what a page says and links to is read through the
+host's markup reader in `hq_sdk.testing` (`text`, `texts`, `links`, `hrefs`,
+`elements`, `select`, `within`, `with_class`, `all_elements`, and the
+`Element` each returns), which reads a page as a browser does. Text that names the deployment reads
 `hq_sdk.site.host()`, never a setting.
 
 An amount is written by `{{ amount|money }}` in a template and
@@ -1032,11 +1082,19 @@ An amount is written by `{{ amount|money }}` in a template and
 A debt is a negative value. No extension writes a sign of its own, since the
 host holds the sign to its figure so a line never ends between them.
 
-Any other figure takes its sign through
-`hq_sdk.money.signed_number(value, figure, plus=...)`. `figure` writes the
-magnitude in its own units (`lambda drop: f"{drop} bpm"`), and the host puts
-the sign before it by the rule an amount follows. So a value that writes as
-zero is never negative.
+A figure with its unit is written by `{{ miles|measured:"mi,2" }}` in a
+template and `hq_sdk.ui.measured(miles, "mi", 2)` in Python: "4.25 mi",
+"1,250 ft", "12%". The count after the comma is how many decimals, rounded
+half away from zero; a negative count gives them only to a figure that is not
+whole. Left out, the figure is written as it came. Zero is a figure, and only
+None and the empty string are the missing mark. The sign is the host's, so
+`plus=True` signs a change and a figure that rounds to zero is never negative.
+
+A figure whose magnitude is not a number and a unit (a pace, "1:15/mi") takes
+its sign through `hq_sdk.money.signed_number(value, figure, plus=...)`.
+`figure` writes the magnitude in its own units, and the host puts the sign
+before it by the rule an amount follows. So a value that writes as zero is
+never negative.
 
 An overview says what it is built from by putting
 `hq_sdk.pages.built_from(plugin.id)`, a link to the project that names the
@@ -1159,6 +1217,11 @@ since it last succeeded. The hourly `due` timer asks for each piece whose
 cadence has come round, as its own job, recorded against the timer. A failed
 attempt is not a success, so it is asked again on the next hour.
 
+Work only the timer does is declared with `offered=False`: no capability,
+control or route offers it, so its `effect` and `required_capability` go
+unread. The host declares its own background work this way, and only that
+work is what a host unit may ask for by name.
+
 An extension ships no systemd unit for this, and the host removes any
 `severino-hq-*` unit it did not ship.
 
@@ -1258,6 +1321,34 @@ extension check refuses `django.core.cache` in its source.
 
 A test of an answer that turns on the day holds the clock those reads ask with
 `with hq_sdk.testing.frozen(moment):`. Patching `timezone.now` misses it.
+
+### How old a reading may get
+
+A kind of reading has one `ReadCadence`: how often it is read (`every`) and
+how old it may get before it is out of date (`stale_after`). The host declares
+its own kinds; an extension declares its kinds in `PluginIntegration.cadences`,
+each kind with the function that answers its cadence, and keeps no staleness
+constant of its own. Every surface judges a
+reading with `hq_sdk.reads.freshness(kind, observed_at)`: current, due once
+`every` has passed, stale once `stale_after` has, or never read. A connection
+instance's `kind` is judged the same way on the Connections page.
+
+```python
+def readings() -> ReadCadence:
+    return ReadCadence(timedelta(days=1), timedelta(days=4))
+
+
+def cadences():
+    return {"example.readings": readings}
+
+
+reading = freshness("example.readings", latest)
+```
+
+A kind's function is called only as that kind is judged, so a cadence may
+follow a setting a person changes, and no other kind's judgment reads it.
+Composition refuses a kind the host declares, a kind two extensions declare,
+and an answer that is not a `ReadCadence`.
 
 ## References
 

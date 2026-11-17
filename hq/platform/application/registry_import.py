@@ -11,11 +11,11 @@ from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from pydantic import ConfigDict, TypeAdapter, ValidationError as PydanticValidationError, with_config
+from pydantic import ValidationError as PydanticValidationError
 
 from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
-from hq.platform.core.audit import audit_operation, record_event
+from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
 from .answer_fields import BusinessUseShare, RecordSlug
@@ -36,6 +36,7 @@ from .assets import (
 from .command_fields import Describe
 from .describe import listed
 from .domains import records_of
+from .integration_specs import command_adapter
 from .projects import (
     DeploymentNotes,
     ProjectCategory,
@@ -51,7 +52,7 @@ from .projects import (
 from .record_errors import RecordConflict, RecordNotFound
 from .record_fields import Notes, PublishedUrl, TotalCost
 from .refusal_status import RefusalEnvelope, refuse
-from .security import Principal, require_all
+from .security import Principal
 from .ui import counted, ended
 
 MAX_IMPORT_RECORDS = 1000
@@ -67,9 +68,7 @@ REQUIRED_CAPABILITIES = (records_of("projects").write, records_of("assets").writ
 
 
 # A record of the document is laid over the one stored under its slug, so
-# every field but the slug may be left out. Closed: a field the command does
-# not have is refused rather than dropped.
-@with_config(ConfigDict(extra="forbid"))
+# every field but the slug may be left out.
 class ImportedProject(TypedDict):
     """A project to import: its slug, and the fields to lay over the project stored under it."""
 
@@ -86,7 +85,6 @@ class ImportedProject(TypedDict):
     notes: NotRequired[Notes]
 
 
-@with_config(ConfigDict(extra="forbid"))
 class ImportedAsset(TypedDict):
     """An asset to import: its slug, and the fields to lay over the asset stored under it."""
 
@@ -214,7 +212,7 @@ def _keep_derived(
 
 def _command(kind: _Kind, values: dict[str, Any]) -> tuple[Any, list[str]]:
     try:
-        return TypeAdapter(kind.command).validate_python(values), []
+        return command_adapter(kind.command).validate_python(values), []
     except PydanticValidationError as exc:
         return None, [
             f"{'.'.join(str(part) for part in error['loc']) or 'record'}: {error['msg']}" for error in exc.errors()
@@ -364,7 +362,6 @@ class HqImported(TypedDict):
 def import_registry(command: HQImportCommand, *, principal: Principal) -> HqImported | RefusalEnvelope:
     """Validate the whole document, then upsert every record or none."""
 
-    require_all(principal, REQUIRED_CAPABILITIES)
     total = len(command.projects) + len(command.assets)
     if total > MAX_IMPORT_RECORDS:
         limit = f"The document holds {counted(total, 'record')}; the limit is {MAX_IMPORT_RECORDS}."
@@ -387,10 +384,7 @@ def import_registry(command: HQImportCommand, *, principal: Principal) -> HqImpo
         "summary": summary,
     }
     try:
-        with (
-            transaction.atomic(),
-            audit_operation(operation="hq.import", principal=principal),
-        ):
+        with transaction.atomic():
             for planned in (*projects, *assets):
                 _apply(planned, principal)
             record_event(

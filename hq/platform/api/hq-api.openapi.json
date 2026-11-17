@@ -28,7 +28,8 @@
               "vendor": "",
               "warranty_date": null
             },
-            "created": false
+            "created": false,
+            "message": "Asset \u201cExample box\u201d updated."
           },
           "ok": true
         },
@@ -280,63 +281,55 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
+      "findingsV2Forbidden": {
+        "dataValue": {
+          "error": {
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "read"
+            },
+            "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
+          },
+          "ok": false
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
       "findingsV2OK": {
         "dataValue": {
           "data": {
             "findings": [
               {
                 "affected_scopes": [],
-                "evidence": [],
-                "explanation": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal has not run; renew it.",
-                "id": "claim:008164bedbed1fcb",
-                "investigations": [
+                "evidence": [
                   {
-                    "capability": "",
-                    "effect": "read",
-                    "label": "Map neighborhood",
-                    "method": "GET",
-                    "name": "topology",
-                    "reason": "What this is connected to.",
-                    "recommended": false,
-                    "refusal": "",
-                    "target": "",
-                    "url": "/infrastructure/topology/?focus=resource%3Awildcard-example-com#trace"
+                    "label": "Failing",
+                    "value": "1"
                   }
                 ],
+                "explanation": "Failing job: Scan",
+                "id": "claim:48255c337ca54ade",
+                "investigations": [],
                 "no_help_reason": null,
-                "offers": [
-                  {
-                    "capability": "",
-                    "effect": "read",
-                    "label": "Open",
-                    "method": "GET",
-                    "name": "open",
-                    "reason": "",
-                    "recommended": false,
-                    "refusal": "",
-                    "target": "",
-                    "url": "/infrastructure/wildcard-example-com/"
-                  }
-                ],
+                "offers": [],
                 "operator_steps": [
                   {
-                    "command": "",
-                    "label": "Renew the certificate from its page in HQ, or where it is held, or fix its automatic renewal. Then press Check again.",
+                    "command": "gh run list -R example/homelab --commit ca56003cb3b8e468cee70371d7325a539718262b --status failure",
+                    "label": "See the failing runs",
                     "notes": []
                   }
                 ],
                 "remedies": [],
-                "rule": "certificate-expiring",
+                "rule": "github-failing",
                 "scope": null,
-                "severity": "attention",
+                "severity": "serious",
                 "since": null,
-                "subject": "resource:wildcard-example-com",
-                "title": "wildcard-example-com expires in 24 days",
+                "subject": null,
+                "title": "homelab is failing on main",
                 "workflow": {
-                  "id": "resolve:claim:008164bedbed1fcb",
+                  "id": "resolve:claim:48255c337ca54ade",
                   "label": "Next steps",
                   "outcome": {
-                    "claim_id": "claim:008164bedbed1fcb",
+                    "claim_id": "claim:48255c337ca54ade",
                     "kind": "claim_absent",
                     "label": ""
                   },
@@ -353,7 +346,7 @@
                           "recommended": false,
                           "refusal": "",
                           "target": "",
-                          "url": "/infrastructure/findings/?rule=certificate-expiring"
+                          "url": "/infrastructure/findings/?rule=github-failing"
                         }
                       ],
                       "label": "Check again",
@@ -368,12 +361,12 @@
             "rule": null,
             "schema_version": 2,
             "summary": {
-              "findings": 9,
-              "returned": 9,
+              "findings": 14,
+              "returned": 14,
               "severities": {
-                "attention": 6,
+                "attention": 10,
                 "neutral": 1,
-                "serious": 2
+                "serious": 3
               },
               "truncated": false
             }
@@ -414,7 +407,7 @@
             "answer": {},
             "asks": "example-automation wants to carry out the playbook example.service_restart",
             "capability": "automation.example.service_restart.run",
-            "content_fingerprint": "b6a89f32118450a586acc5756910731655bd71fb60990a8193ebb9b5bc27baac",
+            "content_fingerprint": "8d4be752f42b7f4be76cbf3ecf9d4dd69f11b985c8e9987abaeb138de7d04c53",
             "done": false,
             "expires_at": "2026-01-16T09:30:00+00:00",
             "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
@@ -1237,46 +1230,65 @@
         "dataValue": {
           "data": {
             "error": "",
-            "facet": "",
+            "facet": "certificate",
             "items": [
               {
-                "addresses": [
-                  "100.101.102.104"
+                "connection_ref": "npm",
+                "domains": [
+                  "*.example.com"
                 ],
-                "connection_ref": "adguard",
-                "filtering_enabled": true,
-                "ids": [
-                  "100.101.102.104"
-                ],
-                "name": "macbook-pro-16",
-                "source": "persistent",
-                "use_global_settings": true
+                "expires_on": "2026-02-08T09:30:00+00:00",
+                "id": 1,
+                "name": "wildcard-example-com",
+                "provider": "other",
+                "serves": [
+                  "hq.example.com",
+                  "photos.example.com",
+                  "streaming.example.com",
+                  "git.example.com",
+                  "home-automation-dashboard.example.com"
+                ]
               },
               {
-                "addresses": [
-                  "100.101.102.105"
+                "connection_ref": "npm",
+                "domains": [
+                  "media.example.com"
                 ],
-                "connection_ref": "adguard",
-                "filtering_enabled": true,
-                "ids": [
-                  "100.101.102.105"
+                "expires_on": "2026-01-03T09:30:00+00:00",
+                "id": 2,
+                "name": "media.example.com",
+                "provider": "letsencrypt",
+                "serves": []
+              },
+              {
+                "connection_ref": "npm",
+                "domains": [
+                  "media.example.com"
                 ],
-                "name": "iphone-16-pro",
-                "source": "persistent",
-                "use_global_settings": true
+                "expires_on": "2026-01-03T09:30:00+00:00",
+                "id": 3,
+                "name": "media.example.com",
+                "provider": "other",
+                "serves": []
               }
             ],
-            "kind": "adguard.client",
-            "label": "DNS client",
+            "kind": "npm.certificate",
+            "label": "NPM certificate",
             "observed_at": "2026-01-15T09:30:00+00:00",
-            "provider": "adguard",
-            "provider_label": "AdGuard Home",
+            "provider": "npm",
+            "provider_label": "Nginx Proxy Manager",
             "read_by": "controller",
-            "records": 2,
+            "records": 3,
             "refusal": "",
-            "relation": "Name in AdGuard",
+            "relation": "Served with certificate",
             "remedy": "",
-            "requires": [],
+            "requires": [
+              "Certificates: View Only",
+              "Proxy Hosts: View Only",
+              "Redirection Hosts: View Only",
+              "404 Hosts: View Only (API: dead_hosts)",
+              "Streams: View Only"
+            ],
             "state": "readable"
           },
           "ok": true
@@ -1299,8 +1311,8 @@
       "getRunsV2OK": {
         "dataValue": {
           "data": {
-            "approved_by": "",
-            "by": "example-agent, over MCP",
+            "approved_by": "joe",
+            "by": "example-agent, over MCP\u00a0\u00b7 approved by joe",
             "capability": "automation.example.package_upgrade.run",
             "correlation": "",
             "created_at": "2026-01-15T09:29:00+00:00",
@@ -1520,20 +1532,20 @@
       "listActionItemsV2OK": {
         "dataValue": {
           "data": {
-            "count": 13,
+            "count": 12,
             "items": [
               {
-                "action": "Review docs",
+                "action": "Attach receipts",
                 "detail": "",
-                "label": "1 doc is past its review date",
+                "label": "1 expense has no receipt",
                 "since": "",
-                "source": "Docs",
+                "source": "Expenses",
                 "status": "attention",
-                "url": "/docs/?needs_review=1"
+                "url": "/expenses/?no_receipts=1"
               }
             ],
             "next": null,
-            "total": 13,
+            "total": 12,
             "truncated": false
           },
           "ok": true
@@ -1766,13 +1778,16 @@
             ],
             "posture": {
               "abilities": 50,
-              "controls": [
+              "checks": [
                 {
-                  "detail": "HQ has no reading of an access list for this name.",
-                  "evidence": "Not read",
-                  "id": "edge",
-                  "label": "The proxy lets in tailnet addresses only",
-                  "state": "neutral"
+                  "boundary": "",
+                  "detail": "This page shows the last reading of each connection.",
+                  "evidence": "Oldest reading just now",
+                  "id": "freshness",
+                  "label": "Connections have been read",
+                  "mechanism": "",
+                  "rules": [],
+                  "state": "met"
                 }
               ],
               "dependencies": 33,
@@ -1797,8 +1812,8 @@
                   "stops": "a device added to your tailnet without your key"
                 }
               ],
-              "met": 4,
-              "unread": 2
+              "met": 3,
+              "unread": 3
             },
             "summary": {
               "all_custodied": false,
@@ -2145,12 +2160,12 @@
             "count": 6,
             "items": [
               {
-                "detail": "of 3",
+                "detail": "of 2",
                 "id": "hq.estate.machines",
                 "label": "Machines online",
                 "status": "",
                 "url": "/infrastructure/machines/",
-                "value": "3"
+                "value": "2"
               },
               {
                 "detail": "",
@@ -2470,7 +2485,7 @@
                 "role": "",
                 "roles": [],
                 "runs_hq": false,
-                "state": "online",
+                "state": "away",
                 "url": "/infrastructure/machines/iphone-16-pro/"
               },
               {
@@ -2752,7 +2767,7 @@
               "identity_agrees": false,
               "measured_by": "Another tailnet machine (docker-host-01)",
               "path": "",
-              "summary": "6 failed\u00a0\u00b7 4 not confirmed",
+              "summary": "5 failed\u00a0\u00b7 4 not confirmed",
               "tailnet_observed_at": "2026-01-15T09:30:00+00:00",
               "transport": "Encryption not confirmed",
               "untrusted_forwarding": false
@@ -2774,7 +2789,7 @@
                 "check": {
                   "detail": "No reading names the device at 127.0.0.1.",
                   "label": "Not confirmed",
-                  "state": "unproven",
+                  "state": "unavailable",
                   "step": ""
                 },
                 "detail": "127.0.0.1",
@@ -2796,7 +2811,7 @@
                     "label": "The tailnet knows this device",
                     "mechanism": "The tailnet device list",
                     "rules": [],
-                    "state": "does-not"
+                    "state": "unmet"
                   }
                 ],
                 "link": null,
@@ -2824,21 +2839,21 @@
             "items": [
               {
                 "approved_by": "",
-                "by": "example-agent, over MCP",
-                "capability": "automation.example.package_upgrade.run",
+                "by": "joe, on the web",
+                "capability": "automation.example.cache_flush.run",
                 "correlation": "",
-                "created_at": "2026-01-15T09:29:00+00:00",
+                "created_at": "2026-01-15T09:27:00+00:00",
                 "duration_seconds": null,
                 "finished_at": null,
                 "headline": "",
                 "hosts": [
-                  "macbook-pro-16"
+                  "docker-host-01"
                 ],
-                "operation_id": "330b177e-3075-5811-9fba-835493beb091",
-                "playbook": "example.package_upgrade",
-                "started_at": null,
-                "state": "queued",
-                "state_label": "Waiting",
+                "operation_id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
+                "playbook": "example.cache_flush",
+                "started_at": "2026-01-15T09:27:20+00:00",
+                "state": "running",
+                "state_label": "Running",
                 "stated": []
               }
             ],
@@ -2998,7 +3013,7 @@
                       }
                     ],
                     "explanation": "HQ accepts requests from every address in the range. You can narrow the trusted networks in HQ's settings to the addresses the tailnet uses.",
-                    "id": "claim:d3cadf1809bee399",
+                    "id": "claim:31be84447cd15b63",
                     "investigations": [
                       {
                         "capability": "",
@@ -3045,10 +3060,10 @@
                     "subject": "connection:infrastructure.controllers:docker-host-01:tailscale",
                     "title": "HQ trusts all of 100.64.0.0/10, fd7a:115c:a1e0::/48, and the tailnet uses 6 device addresses and 1 subnet route",
                     "workflow": {
-                      "id": "resolve:claim:d3cadf1809bee399",
+                      "id": "resolve:claim:31be84447cd15b63",
                       "label": "Next steps",
                       "outcome": {
-                        "claim_id": "claim:d3cadf1809bee399",
+                        "claim_id": "claim:31be84447cd15b63",
                         "kind": "claim_absent",
                         "label": ""
                       },
@@ -3125,6 +3140,13 @@
                     "label": "MagicDNS",
                     "machines": null,
                     "value": "On"
+                  }
+                ],
+                "signers": [
+                  {
+                    "key": "tlpub:52fcca2c6f26b632eaee45dd9337eb0b3770ac760ea4ba2b075ab400fd603df8",
+                    "machine": "iphone-16-pro",
+                    "votes": 1
                   }
                 ],
                 "ssh_rules": [],
@@ -3249,14 +3271,14 @@
               "capability": "project.create",
               "content_fingerprint": "6c9ba16f74000dd99ad2ac8841847ddd5d8537ac700937d8cae8327f35afbcfd",
               "expires_at": "2026-01-16T09:30:00+00:00",
-              "id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
+              "id": "7b4ba536-2791-576a-bd31-b1b2e598a61c",
               "reason": "",
               "requested_actor": "example-automation",
               "requested_at": "2026-01-15T09:30:00+00:00",
               "requested_interface": "api",
               "resource_key": "",
               "resource_kind": "projects",
-              "review_url": "https://hq.example.com/audit/approval/69f54f70-cd66-5001-b486-bb8dbb36e914/",
+              "review_url": "https://hq.example.com/audit/approval/7b4ba536-2791-576a-bd31-b1b2e598a61c/",
               "state": "pending",
               "target": ""
             },
@@ -3316,6 +3338,7 @@
         "dataValue": {
           "data": {
             "created": true,
+            "message": "Project \u201cGranted\u201d created.",
             "project": {
               "category": "other",
               "dependency_updates": false,
@@ -3436,6 +3459,7 @@
         "dataValue": {
           "data": {
             "created": false,
+            "message": "Project \u201cRenamed\u201d updated.",
             "project": {
               "category": "other",
               "dependency_updates": false,
@@ -3672,7 +3696,7 @@
             ],
             "schema_version": 2,
             "summary": {
-              "edges": 307,
+              "edges": 309,
               "kinds": {
                 "ability": 61,
                 "connection": 10,
@@ -4069,6 +4093,30 @@
               "properties": {
                 "data": {
                   "$ref": "#/components/schemas/ApprovalWithdrawn"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "AskedAnswerSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/AskedAnswer"
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -4775,7 +4823,7 @@
         },
         "description": "Success."
       },
-      "OperationQueuedDeclarationForgottenSuccess": {
+      "OperationAskedDeclarationForgottenSuccess": {
         "content": {
           "application/json": {
             "schema": {
@@ -4784,8 +4832,8 @@
                 "data": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/OperationQueued",
-                      "title": "Operation queued"
+                      "$ref": "#/components/schemas/OperationAsked",
+                      "title": "Operation asked"
                     },
                     {
                       "$ref": "#/components/schemas/DeclarationForgotten",
@@ -4808,14 +4856,14 @@
         },
         "description": "Success."
       },
-      "OperationQueuedSuccess": {
+      "OperationAskedSuccess": {
         "content": {
           "application/json": {
             "schema": {
               "additionalProperties": false,
               "properties": {
                 "data": {
-                  "$ref": "#/components/schemas/OperationQueued"
+                  "$ref": "#/components/schemas/OperationAsked"
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -5073,30 +5121,6 @@
         },
         "description": "Success."
       },
-      "RenewalQueuedSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/RenewalQueued"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
       "RequestTooLarge": {
         "content": {
           "application/json": {
@@ -5183,30 +5207,6 @@
               "properties": {
                 "data": {
                   "$ref": "#/components/schemas/ResourceSaved"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "RunRequestedSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/RunRequested"
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -5475,8 +5475,7 @@
             "description": "The command that uses it, by name; null for none."
           },
           "effect": {
-            "description": "What using it does: `read`, `remote_write`, `infrastructure_change` or `destructive`.",
-            "type": "string"
+            "$ref": "#/components/schemas/Effect"
           },
           "governs_kinds": {
             "description": "The types of record it lets HQ manage; empty for none.",
@@ -5742,8 +5741,7 @@
             "type": "string"
           },
           "effect": {
-            "description": "What following it does: `read` for a link that only opens a page, else its command's effect, `remote_write`, `infrastructure_change` or `destructive`.",
-            "type": "string"
+            "$ref": "#/components/schemas/Effect"
           },
           "label": {
             "description": "The words on the link or button: its command's own, where it runs one.",
@@ -6141,8 +6139,37 @@
         "description": "An object in its source's own shape, passed on as HQ read it: its keys are the source's.",
         "type": "object"
       },
+      "AskedAnswer": {
+        "additionalProperties": false,
+        "description": "What every ask answers, whichever worker does the work.",
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/AskedMessage"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
+          }
+        },
+        "required": [
+          "standing",
+          "status_url",
+          "message"
+        ],
+        "type": "object"
+      },
       "AskedAt": {
         "description": "When it was asked for, an ISO 8601 date-time.",
+        "type": "string"
+      },
+      "AskedMessage": {
+        "description": "What asking did, in the sentence a page shows; empty where it says nothing.",
+        "type": "string"
+      },
+      "AskedStatusUrl": {
+        "description": "Where to follow the work while it is under way; empty when nothing is.",
         "type": "string"
       },
       "AssetCategory": {
@@ -6493,11 +6520,15 @@
           },
           "created": {
             "$ref": "#/components/schemas/Created"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
           "created",
-          "asset"
+          "asset",
+          "message"
         ],
         "type": "object"
       },
@@ -6701,7 +6732,7 @@
           },
           "payload": {
             "additionalProperties": false,
-            "description": "A Refresh takes nothing but why it was asked and its retry key: the\nrepository is the host's configuration.",
+            "description": "A Refresh takes nothing but why it was asked: the repository is the\nhost's configuration.",
             "properties": {
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
@@ -7119,6 +7150,10 @@
         ],
         "type": "object"
       },
+      "CallMessage": {
+        "description": "What the call did, in a sentence.",
+        "type": "string"
+      },
       "CapabilityDescription": {
         "additionalProperties": false,
         "description": "One registry entry as every adapter describes it.",
@@ -7144,7 +7179,7 @@
             "$ref": "#/components/schemas/CapabilitySummary/properties/name"
           },
           "permitted": {
-            "$ref": "#/components/schemas/CapabilitySummary/properties/permitted"
+            "$ref": "#/components/schemas/Permitted"
           },
           "required_capabilities": {
             "$ref": "#/components/schemas/RequiredPermissions"
@@ -7257,7 +7292,7 @@
             "$ref": "#/components/schemas/CapabilitySummary/properties/name"
           },
           "permitted": {
-            "$ref": "#/components/schemas/CapabilitySummary/properties/permitted"
+            "$ref": "#/components/schemas/CapabilityDescription/properties/permitted"
           },
           "request_schema": {
             "description": "The JSON Schema of the request body that runs it.",
@@ -7340,11 +7375,10 @@
       },
       "CapabilitySummary": {
         "additionalProperties": false,
-        "description": "One command as the index lists it: what it does and whether you may run it, without its schema.",
+        "description": "One command as an index names it: what it does, without its schema.",
         "properties": {
           "effect": {
-            "description": "What running it does: `read`, `remote_write`, `infrastructure_change` or `destructive`.",
-            "type": "string"
+            "$ref": "#/components/schemas/Effect"
           },
           "label": {
             "description": "The command's name, as HQ's pages show it.",
@@ -7353,9 +7387,6 @@
           "name": {
             "description": "The command's dotted name, which you run it by.",
             "type": "string"
-          },
-          "permitted": {
-            "$ref": "#/components/schemas/Permitted"
           },
           "resource": {
             "anyOf": [
@@ -7378,8 +7409,7 @@
           "label",
           "summary",
           "effect",
-          "resource",
-          "permitted"
+          "resource"
         ],
         "type": "object"
       },
@@ -7615,6 +7645,47 @@
         ],
         "type": "object"
       },
+      "CheckPart": {
+        "additionalProperties": false,
+        "properties": {
+          "boundary": {
+            "description": "The security boundary it belongs to; empty for none.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Why it was decided so, in a sentence.",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "The value it was decided from; empty for none.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The check's stable id, such as `edge` or `identity`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The check, in words.",
+            "type": "string"
+          },
+          "mechanism": {
+            "description": "What enforces it; empty for none.",
+            "type": "string"
+          },
+          "rules": {
+            "description": "The rules behind it, where what decides it has rules.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "state": {
+            "description": "Where it stands: `met`, `unmet` or `unavailable`, the last when what decides it did not answer.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "CommandAnswer": {
         "description": "What the command answers, in the shape its capability's own route in this document gives.",
         "type": "object"
@@ -7660,6 +7731,10 @@
           }
         },
         "type": "object"
+      },
+      "Confirm": {
+        "description": "The identifier of what it deletes, again, to confirm the delete.",
+        "type": "string"
       },
       "ConfirmPrune": {
         "description": "Confirms the delete that prune_orphans asks for.",
@@ -8096,6 +8171,9 @@
           "deleted": {
             "$ref": "#/components/schemas/ContactDeletedPart"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "queued": {
             "const": true,
             "description": "That the delete was handed to the inbox; absent when nothing was asked.",
@@ -8103,7 +8181,8 @@
           }
         },
         "required": [
-          "deleted"
+          "deleted",
+          "message"
         ],
         "type": "object"
       },
@@ -8134,6 +8213,9 @@
             "description": "The id of the message reviewed.",
             "type": "integer"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "queued": {
             "const": true,
             "description": "That the review was handed to the inbox.",
@@ -8147,7 +8229,8 @@
         "required": [
           "id",
           "status",
-          "queued"
+          "queued",
+          "message"
         ],
         "type": "object"
       },
@@ -8159,21 +8242,7 @@
             "$ref": "#/components/schemas/ExpectedUpdatedAt"
           },
           "payload": {
-            "additionalProperties": false,
-            "description": "The command: the fields its input schema names.",
-            "properties": {
-              "confirm": {
-                "description": "The submission's ID again, to confirm the delete.",
-                "type": "string"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              }
-            },
-            "required": [
-              "confirm"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/DeleteCommand"
           },
           "target": {
             "description": "The message to delete: its id.",
@@ -8701,11 +8770,15 @@
           },
           "created": {
             "$ref": "#/components/schemas/Created"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
           "created",
-          "content"
+          "content",
+          "message"
         ],
         "type": "object"
       },
@@ -8885,8 +8958,7 @@
             "type": "boolean"
           },
           "message": {
-            "description": "What asking did, in the sentence a page shows for it.",
-            "type": "string"
+            "$ref": "#/components/schemas/AskedMessage"
           },
           "read_now": {
             "description": "What the controller reads at once, by its connection or kind; empty when the call named nothing.",
@@ -8896,18 +8968,20 @@
             "description": "Why a full read is due or not, in a sentence.",
             "type": "string"
           },
-          "requested": {
-            "const": true,
-            "description": "That the controller was woken.",
-            "type": "boolean"
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
-          "requested",
+          "standing",
+          "status_url",
+          "message",
           "due",
           "reason",
-          "read_now",
-          "message"
+          "read_now"
         ],
         "type": "object"
       },
@@ -9155,7 +9229,14 @@
       "DashboardSettingsSaved": {
         "additionalProperties": false,
         "description": "The dashboard's settings, saved.",
-        "properties": {},
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          }
+        },
+        "required": [
+          "message"
+        ],
         "type": "object"
       },
       "DashboardSettingsUpdateRequest": {
@@ -9202,6 +9283,9 @@
             "description": "The key of the record HQ stopped managing.",
             "type": "string"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "queued": {
             "const": false,
             "description": "That nothing was queued, since the service holding it is left as it is.",
@@ -9222,7 +9306,8 @@
           "queued",
           "forgotten",
           "released",
-          "reason"
+          "reason",
+          "message"
         ],
         "type": "object"
       },
@@ -9235,8 +9320,7 @@
         "description": "The command: the fields its input schema names.",
         "properties": {
           "confirm": {
-            "description": "The record's identifier again, to confirm the delete.",
-            "type": "string"
+            "$ref": "#/components/schemas/Confirm"
           },
           "idempotency_key": {
             "$ref": "#/components/schemas/IdempotencyKey"
@@ -9646,11 +9730,15 @@
           },
           "documentation": {
             "$ref": "#/components/schemas/DocumentationRow"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
           "created",
-          "documentation"
+          "documentation",
+          "message"
         ],
         "type": "object"
       },
@@ -9725,12 +9813,16 @@
         "additionalProperties": false,
         "description": "What syncing the vault's docs into HQ did, as the command answers it.",
         "properties": {
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "stats": {
             "$ref": "#/components/schemas/SyncStats"
           }
         },
         "required": [
-          "stats"
+          "stats",
+          "message"
         ],
         "type": "object"
       },
@@ -10007,6 +10099,16 @@
         },
         "type": "object"
       },
+      "Effect": {
+        "description": "What running a command does, least consequential first.",
+        "enum": [
+          "read",
+          "remote_write",
+          "infrastructure_change",
+          "destructive"
+        ],
+        "type": "string"
+      },
       "EmptyGroupsRemoved": {
         "additionalProperties": false,
         "description": "The tailnet policy as saved without its empty groups, and what that changes.",
@@ -10021,6 +10123,9 @@
           "created": {
             "$ref": "#/components/schemas/Created"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "resource": {
             "$ref": "#/components/schemas/ManagedResourceItem"
           }
@@ -10029,6 +10134,7 @@
           "created",
           "resource",
           "applying",
+          "message",
           "change"
         ],
         "type": "object"
@@ -10179,11 +10285,15 @@
           },
           "entry": {
             "$ref": "#/components/schemas/EntryRecord"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
           "created",
-          "entry"
+          "entry",
+          "message"
         ],
         "type": "object"
       },
@@ -10603,11 +10713,15 @@
           },
           "expense": {
             "$ref": "#/components/schemas/ExpenseRow"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
           "created",
-          "expense"
+          "expense",
+          "message"
         ],
         "type": "object"
       },
@@ -11316,7 +11430,7 @@
             "type": "string"
           },
           "state": {
-            "description": "Whether the request agrees with the readings at the hop, in one word.",
+            "description": "Whether the request agrees with the readings at the hop: `met`, `unmet` or `unavailable`, the last when the request does not show it.",
             "type": "string"
           },
           "step": {
@@ -11362,9 +11476,9 @@
             "type": "string"
           },
           "layers": {
-            "description": "The admission layers decided at the hop. Present only on a hop the calling request walked.",
+            "description": "The checks of the request standard decided at the hop. Present only on a hop the calling request walked.",
             "items": {
-              "$ref": "#/components/schemas/LayerPart"
+              "$ref": "#/components/schemas/CheckPart"
             },
             "type": "array"
           },
@@ -12306,49 +12420,8 @@
             "type": "null"
           }
         ],
-        "description": "When it was last checked against what it describes. Null for never.",
+        "description": "When the doc last changed in the vault. Null for unknown.",
         "title": "Last reviewed"
-      },
-      "LayerPart": {
-        "additionalProperties": false,
-        "properties": {
-          "boundary": {
-            "description": "The security boundary it belongs to; empty for none.",
-            "type": "string"
-          },
-          "detail": {
-            "description": "Why it was decided so, in a sentence.",
-            "type": "string"
-          },
-          "evidence": {
-            "description": "The value it was decided from; empty for none.",
-            "type": "string"
-          },
-          "id": {
-            "description": "The layer's stable id, such as `edge` or `identity`.",
-            "type": "string"
-          },
-          "label": {
-            "description": "The layer, in words.",
-            "type": "string"
-          },
-          "mechanism": {
-            "description": "What enforces it; empty for none.",
-            "type": "string"
-          },
-          "rules": {
-            "description": "The rules behind it, where what decides it has rules.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "state": {
-            "description": "`holds`, `does-not`, or `unknown` when what decides it did not answer.",
-            "type": "string"
-          }
-        },
-        "type": "object"
       },
       "LensEntry": {
         "additionalProperties": false,
@@ -13350,6 +13423,9 @@
           "created": {
             "$ref": "#/components/schemas/Created"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "reason": {
             "$ref": "#/components/schemas/OperationReason"
           },
@@ -13361,6 +13437,7 @@
           "created",
           "resource",
           "applying",
+          "message",
           "reason"
         ],
         "type": "object"
@@ -13417,6 +13494,35 @@
       "OperationAction": {
         "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `approve-routes`, `run` or `scan`.",
         "type": "string"
+      },
+      "OperationAsked": {
+        "additionalProperties": false,
+        "description": "An operation asked of a worker, as every ask answers: how it stands,\nand the operation, and whether this call queued it.",
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/AskedMessage"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/OperationItem"
+          },
+          "queued": {
+            "$ref": "#/components/schemas/Queued"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
+          }
+        },
+        "required": [
+          "standing",
+          "status_url",
+          "message",
+          "queued",
+          "operation"
+        ],
+        "type": "object"
       },
       "OperationCommand": {
         "additionalProperties": false,
@@ -13511,23 +13617,6 @@
           "attempt_count",
           "result",
           "correlation"
-        ],
-        "type": "object"
-      },
-      "OperationQueued": {
-        "additionalProperties": false,
-        "description": "An operation asked of the controller, and whether this call queued it.",
-        "properties": {
-          "operation": {
-            "$ref": "#/components/schemas/OperationItem"
-          },
-          "queued": {
-            "$ref": "#/components/schemas/Queued"
-          }
-        },
-        "required": [
-          "queued",
-          "operation"
         ],
         "type": "object"
       },
@@ -13763,6 +13852,9 @@
         "additionalProperties": false,
         "description": "The dashboard panels asked to be read again.",
         "properties": {
+          "message": {
+            "$ref": "#/components/schemas/AskedMessage"
+          },
           "requested": {
             "description": "The panels asked to be read again, by id.",
             "items": {
@@ -13770,14 +13862,18 @@
             },
             "type": "array"
           },
-          "requested_at": {
-            "description": "When they were asked for, an ISO 8601 date-time.",
-            "type": "string"
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
-          "requested",
-          "requested_at"
+          "standing",
+          "status_url",
+          "message",
+          "requested"
         ],
         "type": "object"
       },
@@ -14115,7 +14211,12 @@
             "type": "string"
           },
           "effect": {
-            "description": "What it does to a machine: `read`, `infrastructure_change` or `destructive`. Anything but a read waits for an operator's approval when an agent asks.",
+            "description": "What it does to a machine. Anything but a read waits for an operator's approval when an agent asks.",
+            "enum": [
+              "read",
+              "infrastructure_change",
+              "destructive"
+            ],
             "type": "string"
           },
           "playbook": {
@@ -14394,18 +14495,25 @@
         "additionalProperties": false,
         "description": "A read of a GitHub profile, asked for now.",
         "properties": {
-          "asked_at": {
-            "description": "When the read was asked for, an ISO 8601 date-time.",
-            "type": "string"
-          },
           "login": {
             "description": "The GitHub account to read, by its login.",
             "type": "string"
+          },
+          "message": {
+            "$ref": "#/components/schemas/AskedMessage"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
-          "login",
-          "asked_at"
+          "standing",
+          "status_url",
+          "message",
+          "login"
         ],
         "type": "object"
       },
@@ -14819,13 +14927,17 @@
           "created": {
             "$ref": "#/components/schemas/Created"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "project": {
             "$ref": "#/components/schemas/ProjectRecord"
           }
         },
         "required": [
           "created",
-          "project"
+          "project",
+          "message"
         ],
         "type": "object"
       },
@@ -15585,13 +15697,17 @@
           "created": {
             "$ref": "#/components/schemas/Created"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "receipt": {
             "$ref": "#/components/schemas/ReceiptRow"
           }
         },
         "required": [
           "created",
-          "receipt"
+          "receipt",
+          "message"
         ],
         "type": "object"
       },
@@ -15676,10 +15792,14 @@
         "properties": {
           "deleted": {
             "$ref": "#/components/schemas/DeletedPart"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
-          "deleted"
+          "deleted",
+          "message"
         ],
         "type": "object"
       },
@@ -15837,47 +15957,6 @@
       "RemedyEffect": {
         "description": "What running it does, in its command's own terms: `read`, `remote_write` or `infrastructure_change`. A `destructive` one is never suggested.",
         "type": "string"
-      },
-      "RenewalAllowed": {
-        "additionalProperties": false,
-        "description": "That the renewal is allowed, and why.",
-        "properties": {
-          "allowed": {
-            "const": true,
-            "description": "That renewing it is allowed.",
-            "type": "boolean"
-          },
-          "explanation": {
-            "description": "Why renewing it is allowed, in a sentence.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "allowed",
-          "explanation"
-        ],
-        "type": "object"
-      },
-      "RenewalQueued": {
-        "additionalProperties": false,
-        "description": "A certificate renewal asked of the controller, and why it is allowed.",
-        "properties": {
-          "operation": {
-            "$ref": "#/components/schemas/OperationItem"
-          },
-          "policy": {
-            "$ref": "#/components/schemas/RenewalAllowed"
-          },
-          "queued": {
-            "$ref": "#/components/schemas/Queued"
-          }
-        },
-        "required": [
-          "queued",
-          "operation",
-          "policy"
-        ],
-        "type": "object"
       },
       "RepositoryPart": {
         "additionalProperties": false,
@@ -16207,6 +16286,9 @@
           "created": {
             "$ref": "#/components/schemas/Created"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "resource": {
             "$ref": "#/components/schemas/ManagedResourceItem"
           }
@@ -16214,7 +16296,8 @@
         "required": [
           "created",
           "resource",
-          "applying"
+          "applying",
+          "message"
         ],
         "type": "object"
       },
@@ -16439,26 +16522,6 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "RunRequested": {
-        "additionalProperties": false,
-        "description": "A dependency update run, asked for now.",
-        "properties": {
-          "asked_at": {
-            "description": "When the run was asked for, an ISO 8601 date-time.",
-            "type": "string"
-          },
-          "requested": {
-            "const": true,
-            "description": "That a run was asked for.",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "requested",
-          "asked_at"
-        ],
         "type": "object"
       },
       "RunRow": {
@@ -16832,11 +16895,15 @@
           "hostname": {
             "description": "The name whose records were adopted.",
             "type": "string"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
           }
         },
         "required": [
           "hostname",
-          "adopted"
+          "adopted",
+          "message"
         ],
         "type": "object"
       },
@@ -17072,6 +17139,31 @@
         },
         "type": "object"
       },
+      "SignerPart": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "description": "The tailnet lock public key, as `tailscale lock remove` takes it.",
+            "type": "string"
+          },
+          "machine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine whose tailnet device holds the key; null when none does."
+          },
+          "votes": {
+            "description": "The votes tailnet lock gives the key.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "Since": {
         "description": "When the matter began, an ISO 8601 date-time, where its source knows; empty when it does not.",
         "type": "string"
@@ -17094,6 +17186,57 @@
         },
         "required": [
           "choices"
+        ],
+        "type": "object"
+      },
+      "StandingAnswer": {
+        "additionalProperties": false,
+        "description": "How one piece of asked-for work stands.",
+        "properties": {
+          "label": {
+            "description": "Where it stands, in the words a page shows.",
+            "type": "string"
+          },
+          "live": {
+            "description": "Whether the work is still under way.",
+            "type": "boolean"
+          },
+          "note": {
+            "description": "What the work is doing, or how it ended, in a sentence.",
+            "type": "string"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How far along the work is, where it knows; null where it does not."
+          },
+          "seconds": {
+            "description": "How long ago the work was asked for, in whole seconds; 0 when it was not.",
+            "type": "integer"
+          },
+          "state": {
+            "description": "Where the work stands: `idle`, `queued`, `running`, `done` or `failed`.",
+            "type": "string"
+          },
+          "tone": {
+            "description": "The tone a page colors that label in; empty while nothing was asked.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "label",
+          "tone",
+          "live",
+          "note",
+          "seconds",
+          "percent"
         ],
         "type": "object"
       },
@@ -17276,6 +17419,13 @@
             "description": "The tailnet's settings.",
             "items": {
               "$ref": "#/components/schemas/SettingPart"
+            },
+            "type": "array"
+          },
+          "signers": {
+            "description": "Each key tailnet lock trusts to sign; empty while tailnet lock is off.",
+            "items": {
+              "$ref": "#/components/schemas/SignerPart"
             },
             "type": "array"
           },
@@ -18498,30 +18648,10 @@
       },
       "VisitRefreshed": {
         "additionalProperties": false,
-        "description": "How the readings behind a page stand, as the command answers it.",
+        "description": "How the readings behind a page stand, and where to follow them while one is read.",
         "properties": {
-          "label": {
-            "description": "Where it stands, in the words a page shows.",
-            "type": "string"
-          },
-          "live": {
-            "description": "Whether the work is still under way.",
-            "type": "boolean"
-          },
-          "note": {
-            "description": "What the work is doing, or how it ended, in a sentence.",
-            "type": "string"
-          },
-          "percent": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "How far along the work is, where it knows; null where it does not."
+          "message": {
+            "$ref": "#/components/schemas/AskedMessage"
           },
           "requested": {
             "description": "The readings this call asked for, by type; empty when none was due or no controller is near.",
@@ -18530,33 +18660,18 @@
             },
             "type": "array"
           },
-          "seconds": {
-            "description": "How long ago the work was asked for, in whole seconds; 0 when it was not.",
-            "type": "integer"
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
           },
-          "state": {
-            "description": "Where the work stands: `idle`, `queued`, `running`, `done` or `failed`.",
-            "type": "string"
-          },
-          "status": {
-            "description": "Where to follow the readings while one is under way; empty when none is.",
-            "type": "string"
-          },
-          "tone": {
-            "description": "The tone a page colors that label in; empty while nothing was asked.",
-            "type": "string"
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
-          "state",
-          "label",
-          "tone",
-          "live",
-          "note",
-          "seconds",
-          "percent",
-          "requested",
-          "status"
+          "standing",
+          "status_url",
+          "message",
+          "requested"
         ],
         "type": "object"
       },
@@ -18594,21 +18709,28 @@
             "type": "string"
           },
           "message": {
-            "description": "What asking did, in a sentence.",
-            "type": "string"
+            "$ref": "#/components/schemas/AskedMessage"
           },
           "result": {
             "description": "What the work answered, where the call waited for it to end, as a command line does.",
             "type": "object"
           },
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
           "started": {
             "description": "Whether this call started the work; false when it was already running.",
             "type": "boolean"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
-          "started",
-          "message"
+          "standing",
+          "status_url",
+          "message",
+          "started"
         ],
         "type": "object"
       },
@@ -18692,13 +18814,17 @@
             },
             "type": "array"
           },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
           "resource": {
             "$ref": "#/components/schemas/ManagedResourceItem"
           }
         },
         "required": [
           "resource",
-          "adopted"
+          "adopted",
+          "message"
         ],
         "type": "object"
       },
@@ -19558,7 +19684,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -19629,7 +19755,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -19984,7 +20110,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/RenewalQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -21743,7 +21869,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -21826,7 +21952,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedDeclarationForgottenSuccess"
+            "$ref": "#/components/responses/OperationAskedDeclarationForgottenSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -21897,7 +22023,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -21968,7 +22094,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -22039,7 +22165,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -22957,7 +23083,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/RunRequestedSuccess"
+            "$ref": "#/components/responses/AskedAnswerSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -23693,7 +23819,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationQueuedSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -24091,9 +24217,9 @@
                 "unrecognized-container",
                 "container-image-behind",
                 "container-image-untagged",
-                "container-image-unpinned",
                 "container-image-advisory",
                 "container-image-update",
+                "container-image-unpinned",
                 "container-hardening",
                 "perimeter-open",
                 "perimeter-unchecked",
@@ -24140,6 +24266,7 @@
                 "tailnet-device-locked-out",
                 "tailnet-device-unapproved",
                 "tailnet-lock-unsigned",
+                "tailnet-lock-server-signs",
                 "tailnet-client-update",
                 "tailnet-routes-unapproved",
                 "dns-protection-off",
@@ -24154,7 +24281,25 @@
                 "published-port-unfronted",
                 "service-wiring-incomplete",
                 "posture-unmet",
-                "automation-worker-absent"
+                "automation-worker-absent",
+                "deploy-waiting",
+                "deploy-running",
+                "machine-offline",
+                "content-drafts",
+                "content-undocumented",
+                "contacts-unread",
+                "expenses-without-receipts",
+                "expense-links-to-nothing",
+                "receipts-unlinked",
+                "assets-missing-purchase",
+                "asset-links-to-nothing",
+                "event-links-to-nothing",
+                "github-waiting",
+                "github-failing",
+                "github-unverified",
+                "github-alerts",
+                "github-artifact",
+                "github-posture"
               ],
               "type": "string"
             }
@@ -24234,7 +24379,24 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/findingsV2Forbidden"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenRefusal"
+                }
+              }
+            },
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
@@ -24478,7 +24640,6 @@
                     "hq.calendar",
                     "hq.contacts",
                     "hq.content",
-                    "hq.docs",
                     "hq.estate",
                     "hq.expenses",
                     "hq.infrastructure",
@@ -27893,7 +28054,7 @@
     },
     "/api/v2/resources/request.path/": {
       "get": {
-        "description": "How the calling request reached HQ, hop by hop, each checked against the request, with the admission layers decided there.",
+        "description": "How the calling request reached HQ, hop by hop, and the request standard's checks decided at each.",
         "operationId": "listRequestPathV2",
         "parameters": [
           {

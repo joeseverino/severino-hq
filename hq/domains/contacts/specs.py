@@ -7,13 +7,15 @@ from pydantic import Field
 from hq.domains.control_plane.provider_adapters.cloudflare import ContactStatus
 from hq.platform.application import contact_submissions
 from hq.platform.application.contact_submissions import (
-    ContactDeleteCommand,
     ContactReviewCommand,
     execute_contact_delete,
     execute_contact_review,
 )
+from hq.platform.application.contracts import Effect
+from hq.platform.application.deletion import DeleteCommand
 from hq.platform.application.describe import Describe
 from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
+from hq.platform.application.records import DELETE
 from hq.platform.application.resources import STATUS_FILTER, TEXT_FILTER, BoundedQuery
 from hq.platform.application.security import Capability
 
@@ -75,7 +77,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             # Its last sentence is records.KEPT, which test_record_updates_told holds it to.
             "Mark one message read, replied, archived or spam, and keep a note on it. "
             "A field left out keeps its value.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.MANAGE_CONTACTS,
             ContactReviewCommand,
             execute_contact_review,
@@ -89,13 +91,15 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
                 "Record the attributed change in HQ's audit log.",
             ),
             label="Review a message",
+            # A message's page and row mark it as one review state in one press.
+            variants=(("read", "Mark read"), ("replied", "Mark replied"), ("archived", "Archive"), ("spam", "Spam")),
         ),
         CapabilitySpec(
             contact_submissions.DELETE,
             "Delete one message sent through the contact form.",
-            "destructive",
+            Effect.DESTRUCTIVE,
             Capability.MANAGE_CONTACTS,
-            ContactDeleteCommand,
+            DeleteCommand,
             execute_contact_delete,
             "integer",
             "contact.submissions",
@@ -107,6 +111,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
                 "Treat an already-absent or already-queued record as a successful retry and audit the change.",
             ),
             label="Delete a message",
+            verb=DELETE,
         ),
     )
 

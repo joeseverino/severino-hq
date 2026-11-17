@@ -9,26 +9,14 @@ start as that machine, which is the question most often being asked.
 {% url 'control_plane:tailnet' as tailnet_url %}
 {% filter_bar verb="Check" action=tailnet_url data_fragment_target="whatif-result" %}
   {% control_label "From" control="whatif-source" %}
-  <select id="whatif-source" name="source">
-    {% for name in device_names %}
-      <option value="{{ name }}" {% if name == asked.source %}selected{% endif %}>{{ name }}</option>
-    {% endfor %}
-  </select>
+  {% select "source" device_names chosen=asked.source id="whatif-source" %}
   {% control_label "To" control="whatif-target" %}
-  <select id="whatif-target" name="target">
-    {% for name in device_names %}
-      <option value="{{ name }}" {% if name == asked.target %}selected{% endif %}>{{ name }}</option>
-    {% endfor %}
-  </select>
+  {% select "target" device_names chosen=asked.target id="whatif-target" %}
   {% control_label "Port" control="whatif-port" %}
-  <select id="whatif-port" name="port">
-    {% for port in ports %}
-      <option value="{{ port }}" {% if port|stringformat:"s" == asked.port %}selected{% endif %}>{{ port }}</option>
-    {% endfor %}
-  </select>
+  {% select "port" ports chosen=asked.port id="whatif-port" %}
 {% endfilter_bar %}
 
 {% include "control_plane/_whatif_result.html" %}
-<p class="muted">
+{% muted element="p" %}
   Checks the policy only, not whether anything is listening.
-</p>
+{% endmuted %}

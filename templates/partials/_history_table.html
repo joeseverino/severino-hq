@@ -7,7 +7,7 @@ that starts folded away (`folds`) marks each of its rows as folded under its
 heading. Its headings are history.COLUMNS, without who did each where
 `hide_who` is set.
 {% endcomment %}
-{% table_region label room="shared" %}
+{% table_region label %}
   <table class="data-table compact-table">
     <thead><tr>{% for column in columns %}{% table_heading column.label css=column.css drop=column.drop gutter=forloop.first local_sort=True %}{% endfor %}</tr></thead>
     {% for group in groups %}

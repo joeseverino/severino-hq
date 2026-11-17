@@ -1,8 +1,8 @@
 from django.test import SimpleTestCase
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import elements
 from hq.platform.application.tables import ranked
-from hq.platform.application.tests.markup import elements
 from hq.platform.core.audit_views import AuditLogListView
 from hq.platform.core.models import AuditLog
 from hq_sdk.testing import plain
@@ -61,6 +61,22 @@ class AuditWhatTests(_AuthedTestCase):
 
         _words, narrow = self.what("and 2 more")
         self.assertIn(AuditLog.Action.LOGIN.label, narrow)
+
+    def test_an_operation_named_by_what_it_changed_counts_it_in_words_alone(self):
+        for index in range(4):
+            AuditLog.objects.create(
+                action=AuditLog.Action.UPDATED,
+                object_type="auth.user",
+                object_repr=f"example-{index}",
+                operation_id="example-operation",
+            )
+
+        page = self.client.get(reverse("core:audit_list")).content.decode()
+        (row,) = [row for row in elements(page, "tr") if "and 3 more" in plain(row.text)]
+        self.assertEqual(
+            [element for element in elements(page, "span") if "count" in element.classes and row in element.ancestors],
+            [],
+        )
 
     def test_an_operation_named_by_what_it_changed_draws_that_name_as_a_key_a_cell_can_cut(self):
         key = "oidc:" + "0123456789abcdef" * 4

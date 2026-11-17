@@ -1,13 +1,10 @@
-"""The stack list: a plain list read down is one part."""
-
-import inspect
-import re
+"""The stack list and the dot list: a plain list read down, and a run read
+across, are each one part."""
 
 from django.template import Context, Template, TemplateSyntaxError
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
-from hq.platform.application.tests.markup import elements, with_class
-from hq.platform.core.tests.test_part_tags import _catalog_templates
+from hq.platform.application.markup_testing import elements, with_class
 
 
 def _render(source: str, **context) -> str:
@@ -40,21 +37,34 @@ class StackListTagTests(SimpleTestCase):
             Template('{% stack_list css="example" %}{% endstack_list %}')
 
 
-@tag("source")
-class StackListCatalogTests(SimpleTestCase):
-    def test_every_option_of_the_stack_list_has_a_catalog_entry(self):
-        """The browser survey reads the part through the catalog, so each
-        option it takes is drawn there at least once."""
+class DotListTagTests(SimpleTestCase):
+    def test_its_items_are_the_pages_in_one_run_with_no_separator_written(self):
+        html = _render(
+            '{% dot_list data_example="example" %}<li>An example link</li><li>{{ note }}</li>{% enddot_list %}',
+            note="<b>escaped</b>",
+        )
 
-        from hq.platform.core.templatetags.stack_tags import register
+        (run,) = with_class(html, "dot-list")
+        self.assertEqual(run.tag, "ul")
+        self.assertEqual(run.attrs["data-example"], "example")
+        self.assertNotIn("muted", run.classes)
+        self.assertEqual([item.words for item in elements(html, "li")], ["An example link", "<b>escaped</b>"])
+        self.assertTrue(all(run in item.ancestors for item in elements(html, "li")))
+        self.assertNotIn("·", run.words)
 
-        takes = register.tags["stack_list"].__wrapped__
-        options = [
-            option
-            for option, parameter in inspect.signature(takes).parameters.items()
-            if parameter.kind is inspect.Parameter.KEYWORD_ONLY
-        ]
-        entries = " ".join(t for name, t in _catalog_templates().items() if name.startswith("part/stack-list"))
-        opened = " ".join(re.findall(r"\{% stack_list (.*?)%\}", entries))
-        self.assertEqual([o for o in options if f"{o}=" not in opened], [], "add a part/stack-list-* entry")
-        self.assertIn("data_", opened)
+    def test_muted_says_the_run_quietly(self):
+        html = _render("{% dot_list muted=True %}<li>example.com</li>{% enddot_list %}")
+
+        (run,) = with_class(html, "dot-list")
+        self.assertIn("muted", run.classes)
+
+    def test_muted_is_true_or_false_and_an_unknown_option_is_refused(self):
+        with self.assertRaises(TemplateSyntaxError):
+            _render('{% dot_list muted="yes" %}<li>a</li>{% enddot_list %}')
+        with self.assertRaises(TemplateSyntaxError):
+            Template('{% dot_list css="example" %}{% enddot_list %}')
+
+    def test_an_extension_may_write_it(self):
+        from hq_sdk.template_contract import TAGS
+
+        self.assertIn("dot_list", TAGS)

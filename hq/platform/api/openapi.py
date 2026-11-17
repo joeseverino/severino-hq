@@ -584,7 +584,13 @@ class _Builder:
                 targets.setdefault(json.dumps(request["properties"]["target"], sort_keys=True), []).append(name)
         for said, takers in targets.items():
             if len(takers) > 1:
-                shared = {"$ref": self.components.add(f"{_pascal(takers[0])}Target", json.loads(said))}
+                target = json.loads(said)
+                # An id target is a choice between a number and its digits, and
+                # a viewer offering the two says what they are, never the name
+                # the component is filed under.
+                if "oneOf" in target:
+                    target["title"] = "An id"
+                shared = {"$ref": self.components.add(f"{_pascal(takers[0])}Target", target)}
                 for name in takers:
                     requests[name] = {
                         **requests[name],
@@ -617,7 +623,7 @@ class _Builder:
                 self.tags.of_capability(name),
                 summary=spec["label"],
                 description=spec["summary"],
-                parameters=([{"$ref": "#/components/parameters/IdempotencyKey"}] if spec["effect"] != "read" else []),
+                parameters=([{"$ref": "#/components/parameters/IdempotencyKey"}] if spec["effect"].changes else []),
                 requestBody=_body(body),
                 codes=views.execute_codes(registry[name]),
                 answer=self.answer_of(registry[name]),

@@ -319,9 +319,19 @@ WRAPPED = (
 )
 
 
-EVIDENCE_READ = (STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
+# A pill is one box: drawn in pieces, one a line, a sentence it holds reads
+# as two pills, each a state of its own.
+PILLS_IN_PIECES = (
+    "() => {"
+    + DESCRIBE
+    + """
+  return [...document.querySelectorAll('main .pill')]
+    .map((pill) => [pill, [...pill.getClientRects()].filter((r) => r.width >= 1 && r.height >= 1)])
+    .filter(([pill, pieces]) => pieces.length > 1 && pill.checkVisibility())
+    .map(([pill, pieces]) => `${describe(pill)} "${pill.textContent.trim().replace(/\\s+/g, ' ').slice(0, 32)}" is drawn as ${pieces.length} pills`);
+}"""
+)
 
-SUMMARIES_READ = (HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"])
 
 _READINGS_OF = f"(selector) => ({READINGS})([...document.querySelectorAll(selector)])"
 
@@ -346,9 +356,19 @@ CHECKS = {
         findings=reading_problems,
         reader_sees="a reading's line cut short or pushed under its mark",
     ),
+    "pills in pieces": Check(
+        PILLS_IN_PIECES, table=True, reader_sees="one pill's words drawn as two pills, a line each"
+    ),
     "headings parted": Check(HEADINGS_PARTED, reader_sees="a heading at a column's foot, what it heads in the next"),
     "asks outside their rows": Check(
         ASKS_OUTSIDE_THEIR_ROWS, reader_sees="a row's button drawn again beside its table, owned by no row"
+    ),
+    "evidence apart": Check(
+        (STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]]),
+        reader_sees="a check's evidence drawn away from its statement",
+    ),
+    "summaries hiding": Check(
+        (HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"]), reader_sees="what a fold's handle names, hidden"
     ),
     "row actions behind the toggle": Check(
         (

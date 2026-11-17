@@ -30,9 +30,10 @@ from .finding_model import (
     journal_step,
     machine_step,
 )
-from .moments import ago, duration, when
-from .reading_facts import FactRow, rows_of, state_on_controller, stated, taken_at, too_old, unjudged
-from .timestamps import moment
+from .freshness import freshness, missed
+from .moments import ago, duration, moment, when
+from .reading_facts import FactRow, rows_of, state_on_controller, stated, taken_at, unjudged
+from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import ended
 
@@ -67,13 +68,10 @@ def _timer_span(key: str) -> timedelta:
 RENDER_EVERY = _timer_span("OnUnitActiveSec")
 RENDER_DELAY = _timer_span("RandomizedDelaySec")
 FULL_READ_EVERY = timedelta(hours=24)
-# How many runs may pass without a success before the secrets are stale. Three,
-# as for a kind no sweep reaches: one missed run is a restart or a held lock,
-# two is a slow Connect.
-MISSED_RUNS = 3
 # The installed files are stale once nothing has confirmed them current for
-# this long: three runs at their latest.
-CONFIRMED_WITHIN = MISSED_RUNS * (RENDER_EVERY + RENDER_DELAY)
+# three runs at their latest: one missed run is a restart or a held lock, two
+# is a slow Connect.
+CONFIRMED_WITHIN = missed(RENDER_EVERY + RENDER_DELAY, 3).stale_after
 # A full read is overdue once the daily one and that same allowance have both
 # passed. Never sooner than ``CONFIRMED_WITHIN`` after a
 # full read falls due, so a renderer two runs behind raises one claim, not two.
@@ -232,7 +230,7 @@ def failed_units(estate: FindingEstate, node: TopologyNode) -> frozenset[str]:
     unit state leaves these to it, unless the reading is too old for it to.
     """
 
-    if too_old(estate, taken_at(node, RENDER_STATUS_KIND)):
+    if freshness(RENDER_STATUS_KIND, taken_at(node, RENDER_STATUS_KIND), estate.now).stale:
         return frozenset()
     return frozenset(
         unit for rendering in stated_on(node) if rendering.failed and (unit := RENDERER_UNITS.get(rendering.renderer))
@@ -311,7 +309,7 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=node.id,
                 scope=RENDER_STATUS_KIND,
                 title=f"{node.label} could not refresh its credentials from 1Password: {reasons}",
-                severity="serious" if stale else "attention",
+                severity=Tone.SERIOUS if stale else Tone.ATTENTION,
                 explanation=(
                     (
                         f"It is still using the ones it got {ago(failed[0].confirmed_at, estate.now)}."
@@ -389,7 +387,7 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=node.id,
                 scope=RENDER_STATUS_KIND,
                 title=_stale_title(node.label, stale),
-                severity="serious",
+                severity=Tone.SERIOUS,
                 explanation=(
                     f"It should refresh them every {duration(RENDER_EVERY)} and read "
                     f"1Password in full every {duration(FULL_READ_EVERY)}. The job is "
@@ -436,7 +434,7 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=node.id,
                 scope=RENDER_STATUS_KIND,
                 title=f"1Password Connect on {node.label} has stopped syncing",
-                severity="attention",
+                severity=Tone.ATTENTION,
                 explanation=(
                     "It is serving an old copy of the vault, so changes made in "
                     f"1Password are not reaching {ended(node.label)}"
@@ -485,7 +483,7 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=node.id,
                 scope=RENDER_STATUS_KIND,
                 title=_cannot_tell(node),
-                severity="attention",
+                severity=Tone.ATTENTION,
                 explanation=(
                     "The job that refreshes them has not reported. It may not have "
                     f"run since {node.label} started, or HQ and the job are "
@@ -518,27 +516,27 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "render-failing",
         "Credentials could not be refreshed",
-        "serious",
+        Tone.SERIOUS,
         _failing,
         operator_action=(
             "On the machine, read the refresh job's log for why it failed, fix that, then start the job again."
         ),
         no_help_reason=cannot_run_commands(),
         bars={
-            "serious": f"a refresh fails and nothing has confirmed credentials current for {duration(CONFIRMED_WITHIN)}",
-            "attention": "the last refresh of credentials failed",
+            Tone.SERIOUS: f"a refresh fails and nothing has confirmed credentials current for {duration(CONFIRMED_WITHIN)}",
+            Tone.ATTENTION: "the last refresh of credentials failed",
         },
         clears="a refresh of credentials succeeds",
     ),
     FindingRule(
         "render-stale",
         "Credentials not refreshed lately",
-        "serious",
+        Tone.SERIOUS,
         _stale,
         operator_action=("On the machine, check that the refresh job's timer is on, then start the job."),
         no_help_reason=cannot_run_commands(),
         bars={
-            "serious": (
+            Tone.SERIOUS: (
                 f"nothing has confirmed credentials current for {duration(CONFIRMED_WITHIN)}, "
                 f"or read 1Password in full for {duration(RENDERED_WITHIN)}"
             )
@@ -548,19 +546,19 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "connect-sync-stalled",
         "1Password Connect has stopped syncing",
-        "attention",
+        Tone.ATTENTION,
         _sync_stalled,
         operator_action=("Restart 1Password Connect on the machine, then start the refresh job."),
         no_help_reason=cannot_run_commands(),
-        bars={"attention": "1Password Connect no longer reports its sync as active"},
+        bars={Tone.ATTENTION: "1Password Connect no longer reports its sync as active"},
     ),
     FindingRule(
         "render-status-unread",
         "Cannot tell whether credentials are fresh",
-        "attention",
+        Tone.ATTENTION,
         _unread,
         operator_action=("Start the refresh job on the machine. If this stays, deploy HQ."),
         no_help_reason=cannot_run_commands(),
-        bars={"attention": "HQ cannot read when credentials were last refreshed"},
+        bars={Tone.ATTENTION: "HQ cannot read when credentials were last refreshed"},
     ),
 )

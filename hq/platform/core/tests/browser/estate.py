@@ -700,6 +700,46 @@ class ExampleEstateControlTests(BrowserGate):
         self.page.keyboard.press("Escape")
         self.assertFalse(drawer.is_visible())
 
+    def test_each_category_in_the_phone_drawer_starts_where_a_plain_section_does(self):
+        """A category's button is a row of the list, so its name starts at
+        the list's edge as a plain section's link does, never centered."""
+
+        self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
+        self.page.locator(SELECTORS["nav_toggle"]).click()
+        starts = self.page.evaluate(
+            "(drawer) => [...document.querySelector(drawer).querySelectorAll(':scope > a, .nav-group-label')]"
+            ".map((entry) => { const range = document.createRange(); range.selectNodeContents(entry);"
+            " return Math.round(range.getClientRects()[0].left); })",
+            SELECTORS["nav_drawer"],
+        )
+        self.assertEqual(len(set(starts)), 1, starts)
+
+    def test_every_link_of_every_category_in_the_phone_drawer_can_be_reached(self):
+        """However low a category sits in the drawer and however short the
+        screen, each of its links can be scrolled to and pressed once it is
+        open."""
+
+        for height in (PHONE_SCREEN[1], 500):
+            with self.subTest(height=height):
+                self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
+                self.page.set_viewport_size({"width": PHONE_SCREEN[0], "height": height})
+                self.page.locator(SELECTORS["nav_toggle"]).click()
+                handles = self.page.locator(SELECTORS["nav_menu"])
+                for place in range(handles.count()):
+                    handle = handles.nth(place)
+                    handle.click()
+                    # Each link scrolled to as a reader scrolls, then whole on
+                    # the screen and the one thing a press at its center hits.
+                    unreached = handle.evaluate(
+                        "(handle) => [...handle.popoverTargetElement.querySelectorAll('a')].filter((link) => {"
+                        " link.scrollIntoView({ block: 'nearest' }); const box = link.getBoundingClientRect();"
+                        " const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);"
+                        " return box.top < 0 || box.bottom > innerHeight || !link.contains(hit);"
+                        " }).map((link) => link.textContent.trim())"
+                    )
+                    self.assertEqual(unreached, [], handle.text_content().strip())
+                    self.page.keyboard.press("Escape")
+
     def test_a_hovered_section_opens_a_press_keeps_it_and_leaving_closes_it(self):
         """Where the pointer hovers, a section group opens under it; a press
         then keeps it open after the pointer leaves, and one only hovered

@@ -1,0 +1,54 @@
+# Whether text is a web address is answered in hq/platform/application/
+# entity_links.py: web_url for an href from data HQ did not write, link_url
+# for a page in HQ or a web address, https_url for an address HQ sends a
+# request or a credential to. A scheme checked by hand forgets what a browser
+# does with a control character, a backslash or a missing host, so the link
+# it lets through can name somewhere else. Settings load before HQ's modules
+# can be imported, so its one origin check stays there.
+id: address-checked-by-web-url
+language: python
+severity: error
+message: A web address's scheme is checked by hand.
+note: Ask web_url, link_url or https_url from hq.platform.application.entity_links.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "hq/platform/application/entity_links.py"
+  - "hq/config/settings.py"
+rule:
+  any:
+    # url.startswith("https://"), url.startswith(("http://", "https://"))
+    - all:
+        - kind: call
+        - has:
+            field: function
+            kind: attribute
+            has:
+              field: attribute
+              regex: ^startswith$
+        - has:
+            field: arguments
+            has:
+              stopBy: end
+              kind: string
+              regex: ^[a-zA-Z]*["']https?[:"']
+    # parts.scheme in ("http", "https"), request.url.scheme != "https"
+    - all:
+        - kind: comparison_operator
+        - has:
+            any:
+              - kind: attribute
+                has:
+                  field: attribute
+                  regex: ^scheme$
+              - kind: identifier
+                regex: ^scheme$
+        - has:
+            stopBy: end
+            kind: string
+            regex: ^[a-zA-Z]*["']https?(://)?["']$

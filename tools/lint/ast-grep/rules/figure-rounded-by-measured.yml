@@ -1,0 +1,25 @@
+# A figure a host page shows is written by the measured filter
+# (value_tags.measured, application.ui.measured): it rounds the figure, signs
+# it with a true minus sign, groups its thousands and holds its unit to it.
+# floatformat rounds without the rest, and a percent sign typed after a value
+# is a unit measured would have held. Extensions are held to it once their
+# own figures have moved, so the rule reads the host's templates alone.
+id: figure-rounded-by-measured
+language: html
+severity: error
+message: A figure rounded or given its unit by hand, where measured writes it.
+note: Write {{ x|measured:"mi,1" }}, or {{ share|measured:"%,-1" }} for a percentage; the count after the comma is its decimals.
+files:
+  - "templates/**/*.html"
+utils:
+  # A note to the template's reader, which no page shows.
+  in-a-comment:
+    regex: '\{%\s*(?:end)?comment\b|\{#|#\}'
+rule:
+  any:
+    - kind: attribute_value
+      regex: '\|\s*floatformat\b'
+    - kind: text
+      regex: '\|\s*floatformat\b|\}\}%'
+      not:
+        matches: in-a-comment

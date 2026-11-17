@@ -52,7 +52,10 @@ A view reaches a domain write only through `run_posted` or `execute_posted`
 (`hq/platform/application/web_writes.py`), which run `execute_capability`.
 `test_view_writes` follows every call made from the module of each view the
 URL configuration routes, and of its bases. An audit row, a refusal or an
-agent's identity observation is not a domain write.
+agent's identity observation is not a domain write. What a write that ran
+says is its answer's `message`, worded once by its handler: the API and MCP
+answer carry it, the audit log keeps it for a write with no row of its own,
+and `execute_posted` puts it on the next page's messages.
 
 A job whose process stopped and an approval nobody answered in time are
 computed by the read that shows them, and marked by the hourly `due` work.
@@ -137,11 +140,13 @@ grouping is presentation.
 
 ### Priority work
 
-Every domain's `Insight` provider is composed by `domain_attention_items()`.
+Every domain's attention provider returns `Finding`s, composed by
+`domain_attention_items()`, and each row is worded from its finding by
+`attention.finding_insight`, the one wording.
 The dashboard preview, `/action-items/` and the machine snapshot project that
 one queue. Each flattened item keeps its `action` and JSON-safe `workflow` (or
 `null`) beside its label, evidence, severity, count and URL. Neutral and good
-insights stay out of the queue; the contributing domain decides whether a
+findings stay out of the queue; the contributing domain decides whether a
 reading needs a decision.
 
 The dashboard and the full queue share one row partial and one resolution
@@ -156,16 +161,16 @@ or HQ's reason it can offer neither. A finding rule declares two fields:
 | `operator_action` | `steps`, each an `OperatorStep`: a label, a command HQ never runs, notes; the API and MCP's `get_findings` both return `operator_steps` beside the remedies, which MCP writes as tool calls | the operator has a command to run |
 | `no_help_reason` | the reason | there is no remedy and no command |
 
-A queue `Insight` keeps the SDK's shape. A remedy is one of its `actions`; a
-command or reason is a `run` or `cannot` step of its `workflow`
-(`hq/platform/application/item_help.py`).
+A row's remedy is one of its `actions`; a command or reason is a `run` or
+`cannot` step of its `workflow`, which `finding_plan` derives from the
+finding (`hq/platform/application/item_help.py`).
 The ast-grep rule `attention-item-carries-help` (lint:ast-grep) fails on host
 source that builds an item without help, and
 `hq/platform/application/tests/test_item_help.py` reads the composed queue
 through the `item_help` gauge defined there.
 
 Every item also says why it is as urgent as it is, in one sentence on what HQ
-read and what makes that this urgent (`Insight.why`). The panel behind a card's
+read and what makes that this urgent. The panel behind a card's
 urgency leads with it, then lists in view what raised it (the domain, a
 finding's rule, and the key), and closes on when its reading was taken and
 since when, in the modal's quiet foot line
@@ -175,13 +180,13 @@ the bar its rule declares for its severity (`FindingRule.bars`, worded from the
 detector's own constants and refused at import when the rule's own severity
 has none), as in "Free on /: 400 MB of 30 GB (1.3%); urgent once free space is
 under 512 MB and 3% of the disk." The ast-grep rule `attention-item-says-why`
-fails on an `Insight` built without one, and `attention-why-restates-rating`
+fails on an `Insight`, or an extension's `Finding`, built without one, and `attention-why-restates-rating`
 on a why that closes on its rating or names its rule, in host source and,
 through the plugin check, in an extension's. `test_item_help.py` holds every
 finding the example estate raises to a bar for its severity.
 
-An item a threshold raises also says what clears it (`Insight.clears`, a
-finding's from `FindingRule.clears`), worded from the same constant as its
+An item a threshold raises also says what clears it (`FindingRule.clears`,
+or `Finding.clears` for one no host rule words), worded from the same constant as its
 bar; `decisions._origin` adds it after the why, "Clears once free space is
 back above 2 GB or 10% of the disk." The ast-grep rule
 `threshold-says-what-clears-it` fails a why or a rule's bars that name a
@@ -194,6 +199,17 @@ findings (`perimeter_findings`, `controller_findings`, `docker_estate`,
 `hq/platform/application/finding_model.py`. `hq.platform.application.findings.RULES`
 is derived from the closed `RULE_MODULES` tuple; that module keeps only the
 pipeline: estate, derivation, suppression, resolution, serialization.
+
+A host section puts an item on "Needs you" only as a finding of a rule that
+names it (`FindingRule.domain`, as `record_findings` and `repository_findings`
+do for their records), or, under Approvals, as a held request. A rule with no
+section raises under Infrastructure. Its findings are gated by what the
+section's resources need to be read, and `attention.raised(domain)` is what
+the queue reads for each section. A host `DomainDescriptor` with an attention
+provider is refused at import, so there is no second way onto the queue.
+A rule that reads HQ's own records rather than the projection is
+`gathered`: it runs before derivation (`gathered_findings`), only for a reader
+of its section, so deriving stays pure.
 
 Findings group downstream symptoms under a shared controller when the topology
 proves one, while each exact resource and kind fact stays addressable. The
@@ -499,9 +515,12 @@ work that reaches a network, starts a process or sleeps runs where waiting
 costs nobody:
 
 - **A reading of the outside world is the controller's.** It holds the
-  credentials and the egress, and reads concurrently. The web side stores a
-  read request (`hq.platform.application.cadence.request_reads`), rings the
-  doorbell and answers; the reading arrives through the sweep's ingest. A
+  credentials and the egress, and reads concurrently. The web side asks
+  through `hq.platform.application.cadence.ask`, the one way HQ asks a worker
+  outside its process: it stores the read request and rings the doorbell
+  once the write commits, and the capability runner rings each doorbell its
+  handler asked for once (`cadence.ringing`). The reading arrives through the
+  sweep's ingest. A
   reading whose provider rations calls keeps its own clock
   (`ObservationSpec.every`): HQ tells the controller when it is due.
   `github.profile` is the example (`hq/domains/control_plane/observations/github.py`); a reading's
@@ -875,8 +894,12 @@ A kind naming a connection provider no admitted module declares fails at
 import.
 
 A provider's readings are a module in
-`hq/domains/control_plane/observations/`, registered by discovery in name
-order ([Derived Facts](Derived-Facts.md#readings)). The edges its declarations
+`hq/domains/control_plane/observations/`, which its adapter brings as
+`OBSERVATIONS`; a source HQ reads with no connection a person makes (the
+controller's own machine, HQ's own requests, the keyless public registries) has
+no adapter, so its readings module is admitted alone. Only an admitted module's
+readings are registered, in admission order
+([Derived Facts](Derived-Facts.md#readings)). The edges its declarations
 produce are in [Derived Facts](Derived-Facts.md#topology).
 
 Adding a provider is writing its modules and adding one name to `ADMITTED`.
@@ -1173,10 +1196,12 @@ each fails if a call comes to cost a process again.
   or nothing listening. The pass fails with that reason and the next one runs;
   nothing weaker is tried.
 - **Scheduled work is one more action.** What the host asks HQ for by name is
-  declared once, in `hq/platform/application/scheduled_work.py`. That is
-  pruning routine audit events, deleting expired sessions, reading the contact
-  inbox, pulling the content index, reading the public registries, and reading
-  unit state after a failure.
+  declared once, as outbound work offered to nobody, in
+  `hq/platform/application/host_work.py`. That is pruning routine audit
+  events, deleting expired sessions, pulling the content index, reading the
+  public registries, doing the work that is due, and reading unit state after
+  a failure. The bridge does only that work by name, never an extension's or
+  a capability's.
 - **A unit runs it as a job.** A unit runs `hq-controller job NAME` inside the
   web container. The running process does the work as a job and answers how it
   ended, so a failed job is a failed unit and every run has a row. No unit
@@ -1197,6 +1222,14 @@ through one kind-and-action map.
 | NPM | reconciles. One managed certificate is uploaded once, and every enabled proxy host its SANs cover is found, rebound, reloaded and live-verified |
 | TLS reconciliation | reuses the existing lineage without contacting ACME |
 | TLS renewal | issues through DNS-01 only when needed, snapshots the rollback artifact, deploys to every consumer, and verifies one fingerprint everywhere before reporting success |
+| Tailnet policy | writes the approved document over the version it read (`If-Match`); Tailscale runs the document's own tests on that write and refuses one that fails them, and a plan asks its validate endpoint |
+
+The tailnet policy's security property is consent: every change to its
+document waits for a person (`requires_approval`), or is that person's own act
+in the browser, and the apply writes only that change (`controller.over_live`).
+What the document opens, or which of its tests it drops, is judged by that
+person, from the approval's own words for it. HQ keeps no rule of its own on
+top of the document's tests.
 
 Issuance is the controller's Go ACME client
 (`controller/providers/tls_acme.go`). It signs in with one account key per
@@ -1322,7 +1355,7 @@ or one out of range is refused when it is built. What it holds, and why:
 | `id` | A dotted name, `example.service_logs` | A run, an approval and a grant name the procedure by it. |
 | `revision` | The adopted commit, 40 lowercase hex | What was reviewed is what runs. A new commit is a new procedure, and an approval of the old one no longer holds. |
 | `playbook` | The playbook's path inside the project at that commit, `playbooks/service_logs.yml`: relative, each part starting with a letter, digit or underscore, ending `.yml` | The manifest names what runs, and only one spelling of it, so an approval pins it. The repository and the project's directory come from the host's root configuration, never from a manifest or a claim. |
-| `input_type` | A `StrictCommand` subclass | A run's parameters are validated the way every capability's are. |
+| `input_type` | A `Closed` subclass | A run's parameters refuse a field they do not name, as every capability's command does. |
 | `target_kinds` | The resource kinds it may act on, at least one | A run's target is held to what the procedure was written for. |
 | `hosts` | The hosts it may act on, empty for any of those kinds | A procedure written for one machine says so. |
 | `privilege` | `None`, or the reviewed profile it escalates through | Escalation is reviewed per procedure, since Ansible's `become` bounds nothing. |
@@ -1438,7 +1471,7 @@ machines, the inputs by their form's labels, what it does, its access and the
 adopted commit, so a person approves what applying it runs.
 
 A queued run is stored, then announced: once its transaction commits, HQ
-rings the automation worker's doorbell (`cadence.ring_automation_doorbell`),
+rings the automation worker's doorbell (`cadence.ask(doorbell="automation")`),
 a file named `automation-doorbell` beside the controller's, which starts the
 worker on the host. It says only that a run waits; the worker claims it over
 the bridge, so a forged or replayed ring starts a worker that finds nothing.
@@ -1666,10 +1699,10 @@ whatever its commit. `plan()` refuses with every reason at once, in
 Each change is compared file by file, and each way it lets a run do more is
 a widening. A widening is a playbook that may run on more machines or kinds
 of record, a raised effect, a new privilege, or a playbook whose files
-change, a changed file every playbook may read or one that names the
-collections a run may use among them. So is a new playbook that does more
-than read. A playbook HQ can't adopt is a row of the comparison of its own,
-its problems in it, lined up by its id with the playbook it would replace.
+change, or a changed file every playbook may read. So is a new playbook
+that does more than read. A playbook HQ can't adopt is a row of the
+comparison of its own, its problems in it, lined up by its id with the
+playbook it would replace.
 
 Adopting is a person's act. Adopt and `automation.source.reject` (Reject)
 take `adopt_playbooks`, which `security.HELD_ONLY_AT` keeps at the operator's

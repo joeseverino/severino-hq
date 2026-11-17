@@ -28,7 +28,8 @@ from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 from hq.platform.core.tests.task import RefError, Usage, commit_of, git
-from tools.gate import chain, room, testmap
+from tools.dev import extension_set
+from tools.gate import chain, room
 from tools.gate.room import GATE, LOCK, lock_file
 from tools.gate.tree import working_tree
 from tools.gate.turn import ALL, held_locks, inside
@@ -43,8 +44,8 @@ HERE = 75
 STAYS = {"open", "docs", "linux", "image", "fix"}
 # Arguments that name a commit: resolved here, since a branch there is not this one, and sent with the tree.
 REFS = {"base", "at"}
-# Tasks that run the composed suite themselves when their change calls for it (fast's extension suites).
-COMPOSING = {"fast"}
+# Tasks that compose the extension set: fast, whose change may call for the composed suite, and perf.
+COMPOSING = {"fast", "perf"}
 # What this run sets that changes what a gate does, handed to the run there.
 CARRIED = (
     *("HQ_BROWSER_CHANNEL", "HQ_BROWSER_ENGINE", "HQ_BROWSER_FACE", "HQ_BROWSER_SHARD", "HQ_GATE_OUTPUT"),
@@ -144,8 +145,8 @@ def host_half(host: str, step: str, *args: str) -> list[str]:
 
 
 def bring_back(archive: bytes, sent: Sent, there: Where, host: str, task: str) -> None:
-    """Keep what the run there wrote: each verdict that names the tree sent, the logs and looks, and the pass
-    it recorded, the verdicts and logs naming this checkout where they named the worktree there."""
+    """Keep what the run there wrote: each verdict that names the tree sent, the logs, looks and perf runs, and
+    the pass it recorded, the verdicts and logs naming this checkout where they named the worktree there."""
 
     tree = sent.tree
     with tempfile.TemporaryDirectory() as folder:
@@ -160,15 +161,12 @@ def bring_back(archive: bytes, sent: Sent, there: Where, host: str, task: str) -
                 verdict.unlink()
             elif (mine := ROOT / "var/gate" / verdict.name).is_file():
                 mine.replace(mine.with_suffix(".prev.txt"))
-        for part in ("var/gate", "var/look"):
+        for part in ("var/gate", "var/look", "var/perf"):
             if (back / part).is_dir():
                 shutil.copytree(back / part, ROOT / part, dirs_exist_ok=True)
         fast = back / "var/gate/fast.txt"
         if (back / "var/back" / chain.PASSES[1] / tree).is_file() and fast.is_file():
             chain.record_elsewhere(tree, fast.read_text(), host)
-        if (found := back / "var/back" / testmap.MAPS / f"{tree}.json").is_file():
-            chain.maps().mkdir(parents=True, exist_ok=True)
-            shutil.copy2(found, chain.maps() / found.name)
 
 
 def here(text: bytes, where: str, home: str) -> bytes:
@@ -218,10 +216,12 @@ def sender() -> str:
 
 
 def composes(task: str, values: dict[str, str]) -> bool:
-    """Whether the run may compose the extension set: the composed suite, and fast, which runs it when a change
-    reaches the extensions."""
+    """Whether the run may compose the extension set: the composed suite, a composed look, fast, which runs the
+    suite when a change reaches the extensions, perf, and a look that runs perf after it (--perf, or --base
+    unless --no-perf)."""
 
-    return task in COMPOSING or values.get("composed") == "true"
+    measures = values.get("perf") == "true" or (bool(values.get("base")) and values.get("perf") != "false")
+    return task in COMPOSING or values.get("composed") == "true" or (task == "dev:look" and measures)
 
 
 def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
@@ -241,14 +241,17 @@ def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
     remote = f"{host}:{checkout}"
     push(ROOT, remote, [f"{sha}:{ref}" for ref, sha in refs.items()])
     # A run that composes composes this machine's extension checkout, sent as the tree is, from its clone beside
-    # HQ's there; one that cannot be sent leaves the run here, never composing that machine's own.
+    # HQ's there; one that cannot be sent leaves the run here, never composing that machine's own. Where the
+    # set this tree can load is a commit of the checkout's history (tools/dev/extension_set.py), that commit
+    # is sent, so the run there composes it as it stands.
     extension, packages = None, ""
     if composes(task, values) and (paths := os.environ.get("HQ_LOCAL_PYTHONPATH", "")):
         top = Path(git("rev-parse", "--show-toplevel", root=Path(paths.split(":")[0]))[0])
-        packages = ":".join(str(Path(path).relative_to(top)) for path in paths.split(":"))
+        packages = ":".join(str(Path(path).resolve().relative_to(top)) for path in paths.split(":"))
         # The clone there is named as the repository is, which a worktree of it here is not.
         common = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir", root=top)[0])
-        extension = (str(PurePosixPath(checkout).parent / common.parent.name), gate_commit(top, working_tree(top)))
+        picked = dict(extension_set.for_tree(ROOT).at).get(str(top)) or gate_commit(top, working_tree(top))
+        extension = (str(PurePosixPath(checkout).parent / common.parent.name), picked)
         push(top, f"{host}:{extension[0]}", [f"{extension[1]}:refs/gate/{run}"])
     argv = words(json.loads(done(["mise", "tasks", "info", "--json", task]))["usage_spec"]["cmd"], values)
     # A file the run reads that no commit holds (a probe under var/) goes with the tree.
@@ -258,7 +261,10 @@ def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
             for path in extras:
                 archive.add(ROOT / path, arcname=path)
         done(host_half(host, "stage", run), input=staged.getvalue())
-    # fast's chain: the trees passed here and the maps of what their tests ran, so it selects as it would here.
+    # fast's chain: the trees passed here and CI's maps of the tests that ran each line, fetched here where gh
+    # is signed in, so it selects as it would here.
+    if task == "fast":
+        print(f"[{task}] {chain.fetch_map()}", file=sys.stderr, flush=True)
     if folders := [str(folder) for folder in (chain.passes(), chain.maps()) if folder.is_dir()]:
         done(["rsync", "-a", "-e", shlex.join(SSH), *folders, f"{remote}/.git/severino/"])
     return Sent(tree, commit, argv, run, extension, packages)

@@ -5,10 +5,10 @@ against it. HQ's own image answers the last two from the GitHub App's reading
 of its repository instead: the production deploy, and the repository's alerts.
 {% endcomment %}
 {% facts layout="band" %}
-  {% fact running.state|capfirst|default:"Unknown" icon="activity" tone=running.state_tone %}
+  {% fact running.state.label|capfirst icon="activity" tone=running.state.tone %}
     {{ container.item.uptime|default:running.uptime|default:running.status|default:"No status"|breakable }}
   {% detail %}
-    <small>{% if running.check %}{{ running.check|capfirst|breakable:"·" }}{% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
+    <small>{% if running.check %}{{ running.check.said|capfirst|breakable:"·" }}{% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
   {% endfact %}
   {% fact "Version" icon="layers" %}
     {% if standing.tag %}<code>{{ standing.tag|breakable }}</code>{% else %}No version tag{% endif %}
@@ -22,7 +22,7 @@ of its repository instead: the production deploy, and the repository's alerts.
     {% fact "Production deploy" icon="deploy" tone=standing.repository.verified_tone %}
       {% if standing.repository.production_verified %}Verified{% elif standing.repository.production_verified is False %}Failed its checks{% elif deploy %}Deployed{% else %}No deploy found{% endif %}
     {% detail %}
-      {% if deploy %}<ul class="dot-list"><li>{% entity standing.repository.url|add:"/commit/"|add:deploy.sha|outside code=True label=deploy.sha|slice:":7" %}</li>{% if deploy.created_at %}<li>{{ deploy.created_at|when_text:"ago" }}</li>{% endif %}</ul>{% endif %}
+      {% if deploy %}{% dot_list %}<li>{% entity standing.repository.url|add:"/commit/"|add:deploy.sha|outside code=True label=deploy.sha|slice:":7" %}</li>{% if deploy.created_at %}<li>{{ deploy.created_at|when_text:"ago" }}</li>{% endif %}{% enddot_list %}{% endif %}
       <small>{% if standing.repository.production_verified %}Passed its checks before deploying.{% else %}From {{ standing.repository.name|breakable:"." }}{% endif %}</small>
     {% endfact %}
     {% fact "Security" icon="shield" tone=standing.alerts_tone %}
@@ -52,7 +52,7 @@ of its repository instead: the production deploy, and the repository's alerts.
       {% elif standing.checked or standing.source %}
         <small>{% if standing.findings %}{{ standing.findings|length|measured:"lower" }}, in {% endif %}{% if standing.checked %}{{ standing.checked.checked|counted:"package,packages" }}{% endif %}{% if standing.checked and standing.source %} and {% endif %}{% if standing.source %}<span class="nowrap">{% entity standing.source|add:"/security/advisories"|outside label="the repository" %}</span>{% endif %}</small>
       {% else %}
-        <small>The image does not say where its source is.{% if edit_url %} <a href="{{ edit_url }}">Name the source</a>{% endif %}</small>
+        <small>The image does not say where its source is.{% if edit %} <a href="{{ edit.url }}">Name the source</a>{% endif %}</small>
       {% endif %}
     {% endfact %}
   {% endif %}

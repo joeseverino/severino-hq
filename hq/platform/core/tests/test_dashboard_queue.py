@@ -1,22 +1,23 @@
 """An insight must keep its next step when it reaches a human or machine queue."""
 
 import json
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
-from hq.platform.application.card_items import Insight
+from hq.platform.application import cadence
+from hq.platform.application.action_links import read_link
+from hq.platform.application.contracts import Effect
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
+from hq.platform.application.finding_model import Finding, OperatorStep, opens
+from hq.platform.application.markup_testing import hrefs, select, with_class, within
 from hq.platform.application.plugins import gather_attention
-from hq.platform.application.tests.markup import hrefs, select, with_class, within
+from hq.platform.application.tests.links import example_command
 from hq.platform.application.tests.test_decisions import row_hrefs
 from hq.platform.application.ui import DomainOverview
-from hq.platform.application.workflow_contracts import ActionLink
-from hq.platform.application.workflows import claim_resolution_plan
+from hq.platform.application.workflows import claim_identity, claim_resolution_plan
 from hq_sdk.testing import plain
 
 
@@ -28,37 +29,41 @@ class DashboardQueueTests(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
         plan = claim_resolution_plan(
-            namespace="example.utility",
-            rule="changed",
-            subject="account:one",
-            scope="",
-            remedies=(ActionLink("remedy", "Inspect evidence", "read", "/example/evidence/", recommended=True),),
-            verification=ActionLink("verify", "Recheck facts", "write", "/dashboard/glance/", method="POST"),
+            identity=claim_identity("example.utility", "changed:account:one"),
+            remedies=(read_link("remedy", "Inspect evidence", "/example/evidence/", recommended=True),),
+            verification=example_command(
+                "verify",
+                "Recheck facts",
+                Effect.REMOTE_WRITE,
+                "/dashboard/glance/",
+                method="POST",
+                capability="dashboard.panels.refresh",
+            ),
         )
         insights = (
-            Insight(
-                "attention",
-                "Review",
-                "Check the reading",
-                "1",
-                "Supporting facts.",
-                action="Reconcile the bill",
+            Finding(
+                rule="example-reading",
+                subject="one",
+                severity="attention",
+                title="Check the reading",
+                explanation="Supporting facts.",
+                primary=opens("Reconcile the bill", ""),
                 workflow=plan,
             ),
-            Insight(
-                "serious",
-                "Review",
-                "A service needs you",
-                "1",
-                "Inspect the dependency.",
-                url="/infrastructure/services/",
+            Finding(
+                rule="example-service",
+                subject="",
+                severity="serious",
+                title="A service needs you",
+                explanation="Inspect the dependency.",
+                primary=opens("", "/infrastructure/services/"),
             ),
-            Insight(
-                "neutral",
-                "Context",
-                "An interesting observation",
-                "1",
-                "No decision needed.",
+            Finding(
+                rule="example-context",
+                subject="",
+                severity="neutral",
+                title="An interesting observation",
+                explanation="No decision needed.",
             ),
         )
         entries = gather_attention((("example.utility", "Example", lambda: insights, ()),))
@@ -70,7 +75,7 @@ class DashboardQueueTests(TestCase):
         queue = work_queue()
         json.dumps(queue)
         self.assertEqual([item["status"] for item in queue], ["serious", "attention"])
-        self.assertIsNone(queue[0]["workflow"])
+        self.assertEqual(list(queue[0]["workflow"]["steps"]), [])
         self.assertEqual(queue[1]["action"], "Reconcile the bill")
         self.assertEqual(queue[1]["workflow"]["steps"][-1]["actions"][0]["method"], "POST")
 
@@ -138,16 +143,13 @@ class DashboardQueueTests(TestCase):
 
         from django.utils import timezone
 
-        from hq.platform.application.item_help import commands
-
-        urgent = Insight(
-            "serious",
-            "Review",
-            "A run is failing",
-            "1",
-            "Two checks fail.",
-            key="example-failing",
-            workflow=commands("example-failing", (("See the failing runs", "example-tool runs --failing"),)),
+        urgent = Finding(
+            rule="example-failing",
+            subject="",
+            severity="serious",
+            title="A run is failing",
+            explanation="Two checks fail.",
+            steps=(OperatorStep("See the failing runs", command="example-tool runs --failing"),),
             observed_at=timezone.now() - timedelta(days=30),
             reads="github.repository",
         )
@@ -175,9 +177,7 @@ class DashboardQueueTests(TestCase):
 
         ask = f'action="{reverse("control_plane:visit")}"'
         # A controller that reached this HQ a moment ago, to take what is asked.
-        heartbeat = Path(tempfile.mkdtemp()) / "heartbeat"
-        heartbeat.touch()
-        self.enterContext(override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(heartbeat)))
+        cadence.note_controller()
         for age, asks in ((timedelta(0), False), (timedelta(hours=3), True)):
             with self.subTest(age=age):
                 ProviderInventory.objects.update_or_create(
@@ -195,6 +195,68 @@ class DashboardQueueTests(TestCase):
 
         self.assertNotContains(response, "data-attention-item")
         self.assertEqual(response.context["action_queue_count"], 4)
+
+    def test_a_held_request_is_read_in_place_whatever_else_is_open(self):
+        from django.urls import reverse
+
+        from hq.domains.control_plane.models import CapabilityRule
+        from hq.platform.application.attention import waiting_for_approval
+        from hq.platform.application.capabilities import execute_capability
+        from hq.platform.application.security import Capability, Principal
+        from hq.platform.application.tests.writers import keyed
+
+        CapabilityRule.objects.create(subject="example-agent", capability="documentation.sync", rule="approve")
+        agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION}))
+        held = execute_capability(
+            "documentation.sync", keyed({"manifest": [{"doc_id": "rb-example", "title": "Example"}]}), principal=agent
+        )["approval"]["id"]
+        approve = reverse("control_plane:approval_decide", kwargs={"approval_id": held, "decision": "approve"})
+
+        def dashboard(findings, reader=None):
+            serious = tuple(
+                Finding(
+                    rule="example",
+                    subject=str(n),
+                    severity="serious",
+                    title=f"Example finding {n}",
+                    explanation="Inspect it.",
+                )
+                for n in range(findings)
+            )
+            entries = gather_attention(
+                (
+                    ("example.utility", "Example", lambda: serious, ()),
+                    ("example.approvals", "Waiting for approval", waiting_for_approval, ()),
+                )
+            )
+            # The queue is replaced, not written: derive with the store bypassed.
+            with patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries), uncached():
+                if reader is None:
+                    return self.client.get("/")
+                with patch("hq.platform.core.dashboard_views.web_principal", return_value=reader):
+                    return self.client.get("/")
+
+        # Beside more findings than fit, the held request is read in place with its buttons;
+        # the findings stay behind the count.
+        crowded = dashboard(5)
+        self.assertEqual(len(select(crowded, "data-attention-item")), 1)
+        self.assertTrue(select(crowded, "formaction", approve))
+        self.assertNotContains(crowded, "Example finding")
+        self.assertIn("/action-items/", hrefs(crowded))
+
+        # A reader who may not see another caller's held request is not shown it in place.
+        stranger = Principal("example-other", "mcp", frozenset({Capability.READ}))
+        hidden = dashboard(5, reader=stranger)
+        self.assertFalse(select(hidden, "formaction", approve))
+        self.assertNotContains(hidden, "data-attention-item")
+
+        # A short queue is read whole, the held request first.
+        short = dashboard(2)
+        rows = select(short, "data-attention-item")
+        self.assertEqual(len(rows), 3)
+        (button,) = select(short, "formaction", approve)
+        self.assertTrue(button.inside(rows[0]))
+        self.assertContains(short, "Example finding 1")
 
     def test_search_includes_the_recommended_action(self):
         response = self.client.get("/action-items/", {"q": "Reconcile the bill"})

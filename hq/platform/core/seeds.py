@@ -158,6 +158,15 @@ def _unattended(owner) -> None:
     example_estate.automation.unattended()
 
 
+def _policy_change(owner) -> None:
+    """The example estate with an agent's change to the tailnet policy held,
+    one that opens a port and drops the test that kept it shut, so the
+    approval says so first."""
+
+    _estate(owner)
+    example_estate.agents.asks_to_open_the_policy()
+
+
 @contextmanager
 def seeded_by_hand(path: str, *, at: datetime) -> Iterator[None]:
     """Each audit event the block records, written as the set's owner made it
@@ -194,6 +203,7 @@ SEEDS: dict[str, Seed] = {
     "rescanned": Seed(_rescanned, _SET_UP),
     "scanning": Seed(_scanning, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),
+    "policy-change": Seed(_policy_change, _SET_UP),
     # A fresh install: its one signed-up user, and nothing else.
     "empty": Seed(lambda _owner: None),
     # Years of records, to measure pages at the size they grow to.

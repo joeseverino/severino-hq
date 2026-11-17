@@ -7,8 +7,9 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import elements, links
+
 from ..action_items import by_source
-from .markup import elements, links
 
 HELD = {
     "key": "hq.approvals:approval:example",
@@ -44,7 +45,6 @@ class PageTests(TestCase):
 
     def page(self, *items):
         with (
-            mock.patch("hq.platform.core.action_item_views.work_queue", return_value=list(items)),
             mock.patch("hq.platform.application.dashboard.work_queue", return_value=list(items)),
         ):
             return self.client.get(reverse("action_items"))

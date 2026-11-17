@@ -6,6 +6,7 @@ index, the service catalog and the zone inventory, never a match on labels
 alone, so what an extension reaches that is none of these stays a target.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from itertools import combinations
@@ -18,7 +19,7 @@ from hq.domains.control_plane.providers import PROVIDERS, record_spec
 lazy from hq.domains.control_plane.observations.contract import container_key
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-from .action_links import ActionLink as TopologyAction
+from .action_links import ActionLink as TopologyAction, read_link
 from .connection_lifecycle import UNREPORTED_NODE, Lifecycle
 from .connections import machines_once
 from .entity_links import entity_link
@@ -26,6 +27,7 @@ from .facts import Joined, Subject, inventory_records, readings
 from .inventory import record_identity
 from .locate import Machines, index_of
 from .paths import path_to
+from .tone import Tone
 from .topology_model import (
     RELATIONS,
     TopologyEdge,
@@ -60,8 +62,6 @@ lazy from .zones import ZONE_KIND, zone_reads
 _FOLDS_INTO_MACHINE = {"controller": "Runs the controller", "target": RELATIONS["stands_for"].inverse}
 # How one kept apart by its gate joins the node it names instead.
 _JOINS_WHEN_KEPT = {"controller": "runs_on", "target": "stands_for"}
-
-_SERVICE_STATUS = {"good": "good", "attention": "attention", "serious": "serious"}
 
 
 @dataclass
@@ -129,7 +129,7 @@ def _observed(nodes, edges, estate: _Estate) -> None:
 
 
 def _open(url: str) -> tuple[TopologyAction, ...]:
-    return (TopologyAction("open", "Open", "read", url),) if url else ()
+    return (read_link("open", "Open", url),) if url else ()
 
 
 def _declared_by(edges, node_id: str, resource_id: str, nodes) -> None:
@@ -153,7 +153,7 @@ def _machines(nodes, edges) -> _Estate:
             kind="machine",
             label=machine.name,
             subtitle=machine.role or "Machine",
-            status="good" if machine.reachable else "neutral",
+            status=Tone.GOOD if machine.reachable else Tone.NEUTRAL,
             status_label="Reachable" if machine.reachable else "",
             url=machine.url,
             kind_key="machine",
@@ -169,7 +169,7 @@ def _machines(nodes, edges) -> _Estate:
             for connection_id in connections.get(ref, ()):
                 relation = edge_between(connection_id, node_id, "reaches")
                 edges[relation.id] = relation
-        subjects[node_id] = Subject.of(hostnames=(machine.name, *machine.aliases), addresses=machine.addresses)
+        subjects[node_id] = machine.subject
     index = index_of(declared=[{"name": item.name, "addresses": item.addresses} for item in catalog])
     estate = _Estate(subjects=subjects, machine_ids=machine_ids, index=index)
     # Its device reading, its telemetry and its containers.
@@ -225,7 +225,7 @@ def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
             subtitle=(
                 own.label if service.is_hq and own is not None else _SERVICE_SUBTITLES.get(service.mark, "Service")
             ),
-            status=_SERVICE_STATUS.get(service.base_health.state, "neutral"),
+            status=service.base_health.tone,
             status_label=service.base_health.label,
             detail=service.faults[0] if service.faults else "",
             url=service.url,
@@ -518,7 +518,7 @@ def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
     by_ref, by_provider = _reader_index(nodes)
     certificate_expiry.add(
         nodes,
-        lambda joined: _readers(joined, by_ref, by_provider, nodes),
+        lambda joined: _readers(joined, by_ref, by_provider, nodes, estate.machine),
         lambda provider, record: _holding(provider, record, by_ref, by_provider, nodes),
     )
 
@@ -531,7 +531,7 @@ def _reading_edges(nodes, edges, estate: _Estate) -> None:
     grouped: dict[tuple[str, str, str], list[Joined]] = {}
     for node_id, subject in estate.subjects.items():
         for joined in index.about(subject):
-            for source in _readers(joined, by_ref, by_provider, nodes):
+            for source in _readers(joined, by_ref, by_provider, nodes, estate.machine):
                 grouped.setdefault((source, node_id, joined.kind), []).append(joined)
     for (source, target, kind), items in grouped.items():
         moments = [item.observed_at for item in items if item.observed_at]
@@ -552,7 +552,7 @@ def _reading_edges(nodes, edges, estate: _Estate) -> None:
             target=target,
             kind="reading",
             label=items[0].relation,
-            status="attention" if any(item.stale for item in items) else "neutral",
+            status=Tone.ATTENTION if any(item.stale for item in items) else Tone.NEUTRAL,
             source_kind=kind,
             detail=", ".join(titles),
             observed_at=oldest.isoformat() if oldest else "",
@@ -579,13 +579,15 @@ def _named(joined: Joined, about: str) -> str:
     return f"{name}: {title}" if name and title else ""
 
 
-def _readers(joined: Joined, by_ref, by_provider, nodes) -> tuple[str, ...]:
+def _readers(joined: Joined, by_ref, by_provider, nodes, machine: Callable[[Any], str]) -> tuple[str, ...]:
     """The nodes that took this reading.
 
     A reading HQ takes itself comes from its public registry's node. Otherwise
     the record's ``connection_ref`` where it names one; otherwise the
     connections of the reading's provider, narrowed to the controller that
-    stored it.
+    stored it; otherwise, for a reading no connection takes (the controller's
+    own machine's), the controller that stored it, or the machine it folded
+    into.
     """
 
     if joined.spec.read_by == "hq":
@@ -609,6 +611,11 @@ def _readers(joined: Joined, by_ref, by_provider, nodes) -> tuple[str, ...]:
         found = narrowed or found
     if found:
         return tuple(found)
+    if not joined.connection_ref and joined.controller_id:
+        controller = derived_id("controller", joined.controller_id)
+        own = controller if controller in nodes else machine(joined.controller_id)
+        if own:
+            return (own,)
     return _unreported(nodes, by_ref, joined.connection_ref or joined.spec.provider, joined.spec.provider)
 
 

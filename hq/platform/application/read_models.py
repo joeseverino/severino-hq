@@ -18,7 +18,7 @@ from .resource_records import DocumentationRow
 from .routes import reverse
 from .sensitivity import safe_records
 lazy from .resources import list_resource
-lazy from .security import Capability, Principal
+lazy from .security import Principal
 
 
 def list_expenses(*, year: int | None = None, category: str | None = None, limit: int = 50) -> dict[str, Any]:
@@ -54,7 +54,6 @@ def documentation_status(*, principal: Principal) -> DocumentationStatus:
     """Counts of the AI-safe documentation pointers, and the first page of them
     as the documentation list reads it, whose ``next`` it is read on by."""
 
-    principal.require(Capability.READ)
     safe = safe_records().fetch_mode(FETCH_RAISE)
     page = list_resource("documentation", {}, principal=principal)
     return {
@@ -130,7 +129,7 @@ def _activity_row(event: AuditLog) -> ActivityRow:
     }
 
 
-def recent_activity(*, principal: Principal, limit: int = 25) -> RecentActivity:
+def recent_activity(*, limit: int = 25) -> RecentActivity:
     """The newest events, as the audit log page reads them: one per operation,
     named, attributed to whoever started it, its outcome as its action, and
     the newest rows it changed beneath it, the rest counted in ``more`` and
@@ -139,7 +138,6 @@ def recent_activity(*, principal: Principal, limit: int = 25) -> RecentActivity:
     The audit trail is gated apart from baseline reads (``READ_AUDIT_LOG``).
     """
 
-    principal.require(Capability.READ_AUDIT_LOG)
     items: list[ActivityEvent] = [
         {
             "id": line.pk,
@@ -169,10 +167,9 @@ class SystemHealth(TypedDict):
     counts: dict[str, int]
 
 
-def system_health(*, principal: Principal) -> SystemHealth:
+def system_health() -> SystemHealth:
     """Prove database access and return only non-sensitive record counts."""
 
-    principal.require(Capability.READ)
     return {
         "status": "ok",
         "checked_at": timezone.now().isoformat(),

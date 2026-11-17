@@ -13,7 +13,6 @@ from hq.platform.core.tests.browser.shards import sweep
 from hq.platform.core.tests.browser.widths import (
     NARROWEST,
     PALETTE_AT,
-    WIDE,
     WIDE_TABLES,
     WIDTHS,
     viewport,
@@ -24,7 +23,8 @@ from hq.platform.core.tests.test_browser_fixtures import PAGES
 
 
 class UnscriptedLayoutTests(LayoutBrowserTests):
-    """Every page without script: the page as the server drew it.
+    """Every page without script, under the whole survey: the page as the
+    server drew it, where layout must hold before progressive enhancement.
 
     Without script nothing on a page reads the width it was loaded at, so a
     page is loaded once, at its narrowest width, and resized for the rest
@@ -34,14 +34,22 @@ class UnscriptedLayoutTests(LayoutBrowserTests):
     def sweep(self, names):
         for name in self.mine(names):
             for width in self.across(name, WIDTHS):
-                self.hold(name, width, self.unscripted_reads(name, width))
+                self.hold(
+                    name,
+                    width,
+                    [
+                        self.no_block_breaks_a_paragraph,
+                        self.a_heads_note_costs_its_head_no_room,
+                        self.every_layout_check_holds,
+                    ],
+                )
                 if width in PALETTE_AT:
                     was = self.in_scheme("dark")
                     self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
                     self.in_scheme(was)
-                if width == WIDE:
-                    self.hold(name, width, [self.a_chosen_theme_paints_as_the_systems])
-                self.hold(name, width, self.unscripted_openings(name, width))
+                # Each popover shown is a survey of its own, so they are read
+                # at the phone, where one has the least room.
+                self.hold_opened(name, width, popovers=width == WIDTHS[0])
 
     def across(self, name, widths):
         """``name`` at each of ``widths``, narrowest first, from one load; a

@@ -15,16 +15,16 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% include "partials/_connection_peering.html" with connection=connection posture=posture only %}
 
   {% comment %}Each posture check HQ could not judge, with why: folded, since the line above already counts them.{% endcomment %}
-  {% if posture.unread_count %}
-    {% section "Not read" count=posture.unread_count fold=True lede="Checks HQ could not read, and why" %}
+  {% if posture.unread %}
+    {% section "Not read" count=posture.unread fold=True lede="Checks HQ could not read, and why" %}
         {% table_region "Not read" %}
           <table class="data-table">
             <thead><tr>{% table_heading "Check" %}{% table_heading "Reason" %}</tr></thead>
             <tbody>
-              {% for standing in posture.standings %}{% if standing.reading.met is None %}
-                <tr data-posture-unread="{{ standing.check.id }}">
-                  <td><strong>{{ standing.check.label|breakable }}</strong></td>
-                  <td><span class="cell-prose prose">{% if standing.reading.remedy %}{{ standing.reading.evidence|breakable:":" }} {% if standing.reading.remedy_url %}<a href="{{ standing.reading.remedy_url }}">{{ standing.reading.remedy|breakable:"." }}</a>{% else %}{{ standing.reading.remedy|breakable:"." }}{% endif %}{% else %}{{ standing.reading.evidence|breakable:"." }}{% endif %}</span></td>
+              {% for result in posture.results %}{% if result.state == "unavailable" %}
+                <tr data-posture-unread="{{ result.check.id }}">
+                  <td><strong>{{ result.check.label|breakable }}</strong></td>
+                  <td><span class="cell-prose prose">{% if result.reading.fix %}{{ result.reading.evidence|breakable:":" }} {% if result.reading.fix_url %}<a href="{{ result.reading.fix_url }}">{{ result.reading.fix|breakable:"." }}</a>{% else %}{{ result.reading.fix|breakable:"." }}{% endif %}{% else %}{{ result.reading.evidence|breakable:"." }}{% endif %}</span></td>
                 </tr>
               {% endif %}{% endfor %}
             </tbody>
@@ -41,7 +41,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       {% comment %}A row is drawn only when it has a value: the strip above already says why there is no device.{% endcomment %}
       {% if connection.identity.tailnet_user %}{% fact "Tailnet account" %}<code>{{ connection.identity.tailnet_user|breakable }}</code>{% endfact %}{% endif %}
       {% if connection.caller_device %}
-        {% fact "Device" %}<strong>{{ connection.caller_device.label|breakable }}</strong>{% if connection.caller_device.os %} <span class="conn-row-note">{{ connection.caller_device.os|breakable }}</span>{% endif %}{% if connection.untrusted_forwarding and connection.reported_device %} <span class="conn-row-note">From the proxy's header</span>{% endif %}{% endfact %}
+        {% fact "Device" %}<strong>{{ connection.caller_device.label|breakable }}</strong>{% if connection.caller_device.os %} {% muted %}{{ connection.caller_device.os|breakable }}{% endmuted %}{% endif %}{% if connection.untrusted_forwarding and connection.reported_device %} {% muted %}From the proxy's header{% endmuted %}{% endif %}{% endfact %}
       {% endif %}
       {% if connection.caller_device.dns_name %}{% fact "MagicDNS" %}<code>{{ connection.caller_device.dns_name|breakable }}</code>{% endfact %}{% endif %}
       {% if connection.caller_device.tags %}
@@ -71,7 +71,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% section "The link" %}
     {% comment %}A reading older than the panel asks again for is what HQ last saw: the rows below are as of then.{% endcomment %}
     {% if connection.tailnet_observed_at and not connection.tailnet_current %}
-      <p class="muted" data-last-seen>Tailnet read {{ connection.tailnet_observed_at|when }}.</p>
+      {% muted element="p" data_last_seen=True %}Tailnet read {{ connection.tailnet_observed_at|when }}.{% endmuted %}
     {% endif %}
     {% facts %}
       {% if connection.path_label %}{% fact "Path" %}<strong>{{ connection.path_label|breakable }}</strong>{% endfact %}{% endif %}
@@ -105,20 +105,20 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% section "Path to HQ" data_connection_layers=True %}
     {% check_ladder route=True %}
       {% for hop in request_path.hops %}
-        {% check_rung state=hop.check.layer_state kind=hop.label open=hop.check.contradicted data_connection_hop=hop.step %}
-          {% if hop.link and hop.link.url %}{{ hop.link.label|breakable }}{% elif hop.name %}{{ hop.name|breakable }}{% elif hop.detail %}{{ hop.detail|breakable }}{% else %}{% empty_value %}{% endif %}
+        {% check_rung state=hop.check.state kind=hop.label open=hop.check.contradicted data_connection_hop=hop.step %}
+          {% if hop.link and hop.link.url %}{{ hop.link.label|breakable }}{% elif hop.name %}{{ hop.name|breakable }}{% else %}{{ hop.detail|or_empty }}{% endif %}
         {% detail %}
           {% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}{{ hop.detail|breakable }}{% elif hop.link.url and hop.name and hop.name != hop.link.label %}{{ hop.name|breakable }}{% endif %}
         {% more %}
-          {% if hop.layers %}{{ hop.layers|length|counted:"check,checks" }}{% else %}Details{% endif %}
+          {% if hop.checks %}{{ hop.checks|length|counted:"check,checks" }}{% else %}Details{% endif %}
         {% page %}
           {% if hop.link and hop.link.url %}{% entity hop.link %}{% endif %}
         {% body %}
-          {% if hop.check or hop.source %}<p class="muted">{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}</p>{% endif %}
+          {% if hop.check.label or hop.check.detail or hop.source %}{% muted element="p" %}{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}{% endmuted %}{% endif %}
           {% if hop.check.step %}{% notice tone="warning" %}{{ hop.check.step|breakable }}{% endnotice %}{% endif %}
-          {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.statement|breakable }}</p>{% endif %}
-          {% if hop.unread %}<p class="conn-row-note">{{ hop.unread|capfirst|breakable }}</p>{% endif %}
-          {% for relation, link in hop.overlays %}<p class="conn-row-note">{{ relation|breakable }} {% entity link %}</p>{% endfor %}
+          {% if hop.certificate %}{% muted element="p" %}{{ hop.certificate.statement|breakable }}{% endmuted %}{% endif %}
+          {% if hop.unread %}{% muted element="p" %}{{ hop.unread|capfirst|breakable }}{% endmuted %}{% endif %}
+          {% for relation, link in hop.overlays %}{% muted element="p" %}{{ relation|breakable }} {% entity link %}{% endmuted %}{% endfor %}
           {% if hop.evidence %}
             {% table_region "Evidence" %}
               <table class="data-table">
@@ -135,15 +135,15 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
               </table>
             {% endtable_region %}
           {% endif %}
-          {% if hop.layers %}
+          {% if hop.checks %}
             {% check_ladder %}
-              {% for layer in hop.layers %}
-                {% check_rung state=layer.state evidence=layer.evidence data_connection_layer=layer.id %}
-                  {{ layer.label|breakable }}
+              {% for result in hop.checks %}
+                {% check_rung state=result.reading.standing evidence=result.reading.evidence data_connection_layer=result.check.id %}
+                  {{ result.check.label|breakable }}
                 {% body %}
-                  <p class="muted">{{ layer.detail|breakable }}</p>
-                  {% if layer.rules %}
-                    {% stack_list %}{% for rule in layer.rules %}<li><code>{{ rule|breakable }}</code></li>{% endfor %}{% endstack_list %}
+                  {% if result.reading.detail %}{% muted element="p" %}{{ result.reading.detail|breakable }}{% endmuted %}{% endif %}
+                  {% if result.reading.rules %}
+                    {% stack_list %}{% for rule in result.reading.rules %}<li><code>{{ rule|breakable }}</code></li>{% endfor %}{% endstack_list %}
                   {% endif %}
                 {% endcheck_rung %}
               {% endfor %}
@@ -252,7 +252,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
             </tbody>
           </table>
         {% endtable_region %}
-        <p class="muted" data-response-failure hidden>The response could not be read back.</p>
+        {% muted element="p" data_response_failure=True hidden=True %}The response could not be read back.{% endmuted %}
       {% endsection %}
   {% aside %}<span class="count">Yours {{ request_path.headers|length }}</span>
   {% endsection %}

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from django.test import SimpleTestCase
 
 from hq.platform.application import refusal_status
+from hq.platform.application.contracts import Effect
 from hq.platform.application.refusal_status import (
     CODES,
     Code,
@@ -34,7 +35,7 @@ def _checking_handler(command, *, principal, expected_updated_at=None):
 class _Spec:
     """What ``capability_doors`` reads of a capability: the facts it already declares."""
 
-    effect: str = "write"
+    effect: Effect = Effect.REMOTE_WRITE
     target_kind: str | None = None
     handler: object = _handler
 
@@ -55,7 +56,7 @@ class DerivedSetTests(SimpleTestCase):
             with self.subTest(door=door):
                 self.assertIn(EXAMPLE, answered_by(door, table=table))
         self.assertIn(EXAMPLE, _codes(None, table))
-        self.assertIn(EXAMPLE, _codes(_Spec(effect="read"), table))
+        self.assertIn(EXAMPLE, _codes(_Spec(effect=Effect.READ), table))
 
     def test_each_published_set_is_the_table_s(self):
         self.assertEqual(refusal_status.REFUSAL_STATUS, statuses())
@@ -74,8 +75,8 @@ class CapabilityCodeTests(SimpleTestCase):
     def test_a_read_is_never_answered_for_a_retry_key_or_a_hold(self):
         changes = answered_by(Door.RETRY_KEY, Door.HOLD, Door.DECISION)
 
-        self.assertFalse(_codes(_Spec(effect="read")) & changes)
-        self.assertLessEqual(changes, _codes(_Spec(effect="write")))
+        self.assertFalse(_codes(_Spec(effect=Effect.READ)) & changes)
+        self.assertLessEqual(changes, _codes(_Spec(effect=Effect.REMOTE_WRITE)))
 
     def test_a_target_is_required_only_of_a_capability_that_acts_on_one(self):
         targeted = _codes(_Spec(target_kind="integer"))
@@ -97,12 +98,12 @@ class CapabilityCodeTests(SimpleTestCase):
         self.assertNotIn("unknown_capability", _codes(_Spec()))
 
     def test_what_a_handler_raises_on_its_own_reaches_every_capability(self):
-        for spec in (_Spec(effect="read"), _Spec(target_kind="integer"), _Spec(handler=_checking_handler)):
+        for spec in (_Spec(effect=Effect.READ), _Spec(target_kind="integer"), _Spec(handler=_checking_handler)):
             with self.subTest(spec=spec):
                 self.assertLessEqual(answered_by(Door.CAPABILITY), _codes(spec))
 
     def test_a_call_by_name_lists_every_code_any_capability_does(self):
         everyone = _codes(None)
-        for spec in (_Spec(effect="read"), _Spec(target_kind="integer"), _Spec(handler=_checking_handler)):
+        for spec in (_Spec(effect=Effect.READ), _Spec(target_kind="integer"), _Spec(handler=_checking_handler)):
             with self.subTest(spec=spec):
                 self.assertLessEqual(_codes(spec), everyone)

@@ -9,8 +9,7 @@ instead. A reading that could not be taken is a row too, so what went quiet
 is said and not dropped.
 
 A reading says how things stood when it was taken, so a rule judges its rows
-as of then. Once it is older than the slowest the controller ever reads,
-``stated`` withholds its rows from every rule, and ``unjudged`` hands the
+as of then. Once it is out of date (``freshness``), ``stated`` withholds its rows from every rule, and ``unjudged`` hands the
 reading's own "not read" rule when it was taken and, where the bridge refused
 the report that would have replaced it, why.
 """
@@ -21,9 +20,7 @@ from dataclasses import dataclass, fields, replace
 from datetime import datetime
 from typing import Any, ClassVar, Self
 
-from .cadence import slowest_sweep_interval
 from .core_capabilities import CONTROLLER_REFRESH
-from .derivations import passed
 from .finding_model import (
     Finding,
     FindingEstate,
@@ -32,9 +29,9 @@ from .finding_model import (
     cannot_run_commands,
     fact_values,
 )
-from .freshness import LAST_READ
-from .moments import when
-from .timestamps import moment
+from .freshness import LAST_READ, freshness
+from .moments import moment, when
+from .tone import Tone
 from .topology_model import TopologyNode, derived_id
 from .ui import ended
 lazy from .facts import snapshots_of
@@ -171,21 +168,13 @@ def taken_at(node: TopologyNode, kind: str) -> datetime | None:
     return max((at for at in times if at is not None), default=None)
 
 
-def too_old(estate: FindingEstate, taken: datetime | None) -> bool:
-    """Whether a reading taken then is past the slowest the controller ever
-    reads, so what it says no longer tells how things stand. A reading with
-    no time is judged."""
-
-    return taken is not None and passed(taken + slowest_sweep_interval(), now=estate.now)
-
-
 def stated[R: FactRow](estate: FindingEstate, row: type[R]) -> Iterator[tuple[TopologyNode, tuple[R, ...]]]:
     """Each node that carries rows of one kind, with the rows, while its
     reading is young enough to judge."""
 
     for node in estate.nodes():
         values = fact_values(node, row.KEY)
-        if values and not too_old(estate, taken_at(node, row.KIND)):
+        if values and not freshness(row.KIND, taken_at(node, row.KIND), estate.now).stale:
             yield node, tuple(row.of(value) for value in values)
 
 
@@ -260,7 +249,7 @@ class Unjudged:
             subject=self.node.id,
             scope=scope,
             title=title,
-            severity="attention",
+            severity=Tone.ATTENTION,
             explanation=self.explanation,
             evidence=self.evidence,
             remedies=() if self.refusal else (FindingRemedy(capability=CONTROLLER_REFRESH.name, target=""),),
@@ -274,6 +263,6 @@ def unjudged(estate: FindingEstate, row: type[FactRow]) -> Iterator[Unjudged]:
         if not fact_values(node, row.KEY):
             continue
         taken = taken_at(node, row.KIND)
-        if taken is not None and too_old(estate, taken):
+        if taken is not None and freshness(row.KIND, taken, estate.now).stale:
             refusal = next((item for item in refusals_on(node) if item.action == READINGS_ACTION), None)
             yield Unjudged(node, taken, refusal)

@@ -1,0 +1,20 @@
+id: hand-drawn-empty-said-quietly
+snapshots:
+  "<td>{% muted %}None composed into this build{% endmuted %}</td>":
+    labels:
+    - source: "{% muted %}None composed into this build{% endmuted %}"
+      style: primary
+      start: 4
+      end: 58
+  "{% muted css=\"row-more\" %}There are no rules.{% endmuted %}":
+    labels:
+    - source: "{% muted css=\"row-more\" %}There are no rules.{% endmuted %}"
+      style: primary
+      start: 0
+      end: 59
+  "{% muted element=\"p\" %}No notes yet.{% endmuted %}":
+    labels:
+    - source: "{% muted element=\"p\" %}No notes yet.{% endmuted %}"
+      style: primary
+      start: 0
+      end: 50

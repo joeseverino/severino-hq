@@ -225,4 +225,4 @@ scopes:
         (decorated_definition
           (decorator [(call function: (identifier) @_b) (identifier) @_b])
           definition: (function_definition body: (block . (expression_statement (string (string_content) @prose)))))]
-       (#match? @_b "^(TypedDict|BaseModel|StrictCommand|tool|_endpoint)$"))
+       (#match? @_b "^(TypedDict|BaseModel|tool|_endpoint)$"))

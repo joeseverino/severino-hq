@@ -5,63 +5,49 @@
 @layer components {
 
 /* ── Tone assignment ─────────────────────────────────────────────────
-   The one place a status name maps to a tone, for every component that has
-   statuses. Grouped by tone rather than by component, so `published`,
-   `reachable` and `success` cannot become three different greens.
+   The one place a tone maps to its colors, for every component that draws
+   one. A pill takes one of the four tones (`Tone`), never a word of its
+   own: a subject's states declare theirs (`Toned`), so `published`, `done`
+   and `success` cannot become three different greens.
 
    A component decides which fill level it reads (`--tone-bg` for a chip,
    `--tone-wash` for a banner);
-   this section decides only what the tone *is*. Adding a status means adding
-   its class to one of these lists. Adding a component means reading the
-   contract, not restating the colors. */
+   this section decides only what the tone *is*. A notice keeps the four
+   levels Django's messages carry. */
 
-.pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public, .pill-done,
-.pill-replied, .pill-reachable, .pill-good, .notice-success, .tone-good {
+.pill-good, .notice-success, .tone-good {
   --tone-bg: var(--tone-positive-bg);
   --tone-wash: var(--tone-positive-wash);
   --tone-ink: var(--tone-positive-ink);
   --tone-line: var(--tone-positive-line);
 }
-.pill-paused, .pill-internal, .pill-attention, .notice-warning, .tone-attention {
+.pill-attention, .notice-warning, .tone-attention {
   --tone-bg: var(--tone-caution-bg);
   --tone-wash: var(--tone-caution-wash);
   --tone-ink: var(--tone-caution-ink);
   --tone-line: var(--tone-caution-line);
 }
-.pill-archived, .pill-deprecated, .pill-retired, .pill-sold, .pill-returned,
-.pill-replaced, .pill-deleted, .pill-login_failed, .pill-denied, .pill-spam,
-.pill-unreachable, .notice-error {
+.notice-error {
   --tone-bg: var(--tone-critical-bg);
   --tone-wash: var(--tone-critical-wash);
   --tone-ink: var(--tone-critical-ink);
   --tone-line: var(--tone-critical-line);
 }
-.pill-idea, .pill-draft, .pill-viewed, .notice-info {
+.notice-info {
   --tone-bg: var(--tone-info-bg);
   --tone-wash: var(--tone-info-wash);
   --tone-ink: var(--tone-info-ink);
   --tone-line: var(--tone-info-line);
 }
-.pill-completed, .pill-unread {
-  --tone-bg: var(--tone-notable-bg);
-  --tone-ink: var(--tone-notable-ink);
-  --tone-line: var(--tone-notable-line);
-}
-.pill-sensitive, .pill-restricted, .pill-serious, .tone-serious {
+.pill-serious, .tone-serious {
   --tone-bg: var(--tone-severe-bg);
   --tone-ink: var(--tone-severe-ink);
   --tone-line: var(--tone-severe-line);
 }
-.pill-imported, .pill-exported {
-  --tone-bg: var(--tone-special-bg);
-  --tone-ink: var(--tone-special-ink);
-  --tone-line: var(--tone-special-line);
-}
-/* Neutral is already every component's fallback, so these assign nothing.
-   They are still named: a status with no rule and a status deliberately
-   neutral look identical and are not the same claim, and the class has to
-   exist for the template check to find it. */
-.pill-read, .pill-unprobed, .pill-neutral {
+/* Neutral is already every component's fallback, so this assigns nothing.
+   It is still named: a pill with no tone and a pill deliberately neutral
+   look identical and are not the same claim. */
+.pill-neutral {
   --tone-bg: var(--tone-neutral-bg);
   --tone-ink: var(--tone-neutral-ink);
   --tone-line: var(--tone-neutral-line);
@@ -98,6 +84,8 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 
 .page-lede { color: var(--muted); font-size: var(--text-sm); margin: 0 0 var(--space-12); }
 .muted { color: var(--muted); }
+/* A link's muted words take the link's color when it is pressed, as a muted link would. */
+a:is(:hover, :focus-visible) > .muted { color: inherit; }
 
 /* One head at every width. The copy steps aside (`display: contents`) so its
    parts can be ordered: the trail on its own row, the title and the controls
@@ -227,15 +215,9 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
   inline-size: 100%;
   min-block-size: calc(2 * var(--space-3) + var(--reading-lead) + 3 * var(--quiet-line));
   padding: var(--space-3);
-  border: 0;
   border-radius: var(--radius);
-  background: none;
-  box-shadow: none;
-  color: inherit;
-  font: inherit;
   text-align: start;
   white-space: normal;
-  cursor: pointer;
 }
 /* Under 12rem its subject and its parts may each take a second line, so a reading there holds the room of four quiet lines, and one that lands saying more still moves nothing. */
 @container reading (width < 12rem) {
@@ -269,15 +251,12 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
    the target size (`--target-min`) is each one's box. */
 .reading-panel-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line-2); font-size: var(--text-xs); line-height: var(--target-min); }
 .reading-panel-foot > span { display: flex; gap: var(--space-5); margin-left: auto; }
-/* A button in the foot is a link in look: the panel's one action besides going somewhere. */
-.reading-panel-foot button { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--accent); font: inherit; cursor: pointer; }
-.reading-panel-foot button:hover { border: 0; background: none; text-decoration: underline; }
 @media (max-width: 640px) {
   .reading-head { column-gap: var(--space-3); }
 }
 /* A run of short things on one line (links, values, figures): one separator
    for all of them, drawn here, so no list writes its own commas or gaps. */
-.dot-list { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--dot-gap); margin: 0; padding: 0; list-style: none; }
+.dot-list { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--dot-gap); }
 /* A run of links wraps onto lines a target tall (`--target-min`), so a link is never pressed for the one above it; in a table the row keeps its height, and a cell spaces its own links (figures.css). */
 .dot-list:has(a):not(td *) { line-height: var(--target-min); }
 /* The dot stands in the gap before its part, so where the run wraps, the dot
@@ -290,6 +269,21 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 }
 :is(.dot-list > li, .reading-lines > *) + *::before {
   content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
+  text-align: center; color: var(--muted-2); text-decoration: none;
+}
+/* The same run set at its box's end (a section aside's words, then its link
+   to the rest): each dot stands in the gap after its part, so where the run
+   wraps, the dot that would end a line lies past the box's end and is not
+   drawn, and a line never ends with a separator. Only its paint is cut
+   there, so nothing it holds is clipped out of its box; a focus ring is
+   drawn inside its control. */
+.end-run {
+  --dot-gap: calc(2 * var(--space-3) + .4em);
+  display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: baseline; column-gap: var(--dot-gap);
+  clip-path: inset(-100vh 0 -100vh -100vw);
+}
+.end-run > :not(:last-child)::after {
+  content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-end: calc(-1 * var(--dot-gap));
   text-align: center; color: var(--muted-2); text-decoration: none;
 }
 
@@ -315,13 +309,11 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
   align-items: center;
   gap: var(--space-2);
   min-inline-size: 0;
-  margin: 0;
   padding: 0 var(--space-1);
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the nav scrolls sideways; a vertical scroll is clipped, not text */
   overflow: auto clip;
   overscroll-behavior-inline: contain;
   scrollbar-width: none;
-  list-style: none;
 }
 .page-nav-list::-webkit-scrollbar { display: none; }
 .page-nav-list li { flex: none; }
@@ -355,14 +347,6 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
    margin on the next. */
 .page-head > .btn, .page-head > form { margin-left: auto; }
 .page-head > .btn + .btn, .page-head > form + form { margin-left: 0; }
-/* A head's control in its overflow menu (connection.css draws the panel): a
-   row like the others, whatever kind of button it was beside the title.
-   Destructive keeps only its color. */
-.overflow-menu-panel :is(a, button, span).btn {
-  display: flex; width: 100%; justify-content: flex-start; min-height: 0;
-  border: 0; background: none; box-shadow: none;
-}
-.overflow-menu-panel .btn.danger { color: var(--danger); }
 
 /* ── Sections menu ──────────────────────────────────────────────── */
 /* The button belongs to the narrow layout only; a wide screen sets the
@@ -371,7 +355,10 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 
 /* ── Buttons ────────────────────────────────────────────────────── */
 
-.btn, button {
+/* The push button is `.btn`, and a `<button>` with no class of its own. A
+   button with a class (a menu row, a toggle, a close mark) is drawn by its
+   own rule from the reset in base.css, so nothing here is taken back off. */
+.btn, :where(button:not([class])) {
   /* A button its box stretches (a line of a row's buttons on a phone) keeps
      its label at its center. */
   display: inline-flex; align-items: center; justify-content: center; gap: var(--space-3);
@@ -403,10 +390,10 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 /* A button tints under a pointer that hovers: a touch screen keeps the
    last button touched hovered, so it would stay tinted beside its
    neighbors after a tap. */
-@media (hover: hover) { .btn:hover, button:hover { border-color: var(--line-strong); background: var(--surface-2); text-decoration: none; } }
-.btn.primary, button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: none; }
-@media (hover: hover) { .btn.primary:hover, button.primary:hover { background: var(--accent-2); border-color: var(--accent-2); } }
-.btn.danger, button.danger { background: var(--danger); color: var(--accent-ink); border-color: var(--danger); }
+@media (hover: hover) { .btn:hover, :where(button:not([class])):hover { border-color: var(--line-strong); background: var(--surface-2); text-decoration: none; } }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: none; }
+@media (hover: hover) { .btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); } }
+.btn.danger { background: var(--danger); color: var(--accent-ink); border-color: var(--danger); }
 /* A quiet control: words only until hovered. */
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
 @media (hover: hover) { .btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; } }
@@ -417,6 +404,15 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 /* A control in a row or a head among words, a line's height rather than a
    form's. */
 .btn.compact { min-height: var(--control-compact); padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }
+/* A control among words, drawn as a link: the words alone, in their type. */
+.btn.link { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--accent); font: inherit; }
+.btn.link:hover { text-decoration: underline; }
+/* A row of a menu (connection.css draws the panel and its rows' type): a row
+   like the others, whichever look it has beside the title. Written after
+   every look, so it is the one that holds. Destructive keeps only its color. */
+.btn.menu { display: flex; width: 100%; justify-content: flex-start; min-height: 0; border: 0; background: none; box-shadow: none; color: var(--muted); }
+@media (hover: hover) { .btn.menu:hover { color: var(--ink); background: var(--bg-tint); } }
+.btn.menu.danger { color: var(--danger); }
 /* A control that would be refused stands as a span, focusable for its reason
    (partials/_page_action.html), and looks as a disabled button does. */
 .btn:disabled, button:disabled, span.btn[aria-disabled="true"] { cursor: not-allowed; opacity: .52; }
@@ -427,21 +423,21 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
    that size (WCAG 2.5.8) without moving anything: the area is the control's
    own, hung over the space beside it, where no other control is. A control
    asks for one in its own partial with `data-hit`; the quiet link
-   (`.subtle-link`) is small wherever it is written, so it always has one. The
-   browser gate measures every control (docs/Design.md, "A control is big
-   enough to hit"). A finger is not a cursor: where the pointer is coarse the
+   (`.subtle-link`) and a pill's link are small wherever they are written,
+   so each always has one. The browser gate measures every control
+   (docs/Design.md, "A control is big enough to hit"). A finger is not a cursor: where the pointer is coarse the
    area grows, and a control packed too close to its neighbors for one under
    a mouse (a calendar's marks and bars) asks for one there only, with
    `data-hit="coarse"`. A control positioned in its own sheet keeps that
    position, which holds its area as well. */
-:is([data-hit]:not([data-hit=coarse]), .subtle-link) { position: relative; }
-:is([data-hit]:not([data-hit=coarse]), .subtle-link)::after {
+:is([data-hit]:not([data-hit=coarse]), .subtle-link, .pill[href]) { position: relative; }
+:is([data-hit]:not([data-hit=coarse]), .subtle-link, .pill[href])::after {
   content: ""; position: absolute; inset: min(0px, calc(50% - var(--target-min) / 2));
 }
 @media (pointer: coarse) {
   [data-hit=coarse],
   main summary { position: relative; }
-  :is([data-hit], .subtle-link)::after {
+  :is([data-hit], .subtle-link, .pill[href])::after {
     content: ""; position: absolute;
     inset: min(calc(-1 * var(--space-5)), calc(50% - var(--target-min) / 2)) min(calc(-1 * var(--space-3)), calc(50% - var(--target-min) / 2));
   }
@@ -475,20 +471,20 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
    controls as sections are added, instead of overflowing behind a hidden
    scrollbar where the tail becomes unreachable. A group's button reads as
    the bar's links do, and its panel hangs from its left edge. */
-.nav-group > button {
-  min-height: 0;
+.nav-group-button {
+  display: inline-flex;
+  align-items: center;
   padding: var(--space-2) var(--space-5);
-  border: 0;
   border-radius: 6px;
-  background: none;
-  box-shadow: none;
   color: var(--muted);
-  line-height: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
   -webkit-user-select: none;
   user-select: none;
   transition: background .12s ease, color .12s ease;
 }
-.nav-group > button:is(:hover, [aria-current], :has(+ :popover-open)) { color: var(--ink); background: var(--bg-tint); }
+.nav-group-button:is(:hover, [aria-current], :has(+ :popover-open)) { color: var(--ink); background: var(--bg-tint); }
 .nav-group > .nav-group-panel {
   position-area: block-end span-inline-end;
   min-width: 176px; display: flex; flex-direction: column; gap: 1px;
@@ -554,24 +550,15 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 .menu-item {
   display: flex;
   width: 100%;
-  min-height: 0;
   align-items: center;
-  margin: 0;
   padding: var(--space-3) var(--space-5);
-  border: 0;
   border-radius: 4px;
-  background: none;
-  box-shadow: none;
   color: var(--ink);
-  cursor: pointer;
-  font: inherit;
   font-size: var(--text-sm);
   font-weight: 500;
-  line-height: inherit;
   text-align: left;
 }
 .menu-item:hover {
-  border: 0;
   background: var(--bg-tint);
   color: var(--ink);
   text-decoration: none;
@@ -609,9 +596,6 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 }
 [aria-checked="true"] .switch-track { background: var(--accent); border-color: var(--accent); }
 [aria-checked="true"] .switch-knob { transform: translateX(11px); }
-@media (prefers-reduced-motion: reduce) {
-  .switch-track, .switch-knob { transition: none; }
-}
 /* The theme choice: a label in the row's own inset, then three buttons that
    share one track. The pressed one is the choice in force. */
 .menu-theme { display: grid; grid-template-columns: 1fr 1fr; align-items: center; padding: 0 var(--space-5); }
@@ -621,11 +605,10 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
    a menu row a paragraph. */
 .menu-theme-options { justify-self: start; margin-left: var(--space-5); display: inline-flex; gap: var(--space-1); padding: var(--space-1); border-radius: 999px; background: var(--bg-tint); }
 .menu-item.menu-theme-option {
-  display: grid; place-items: center; width: 26px; height: 26px; min-height: 0; padding: 0;
-  border: 0; border-radius: 999px; background: none; box-shadow: none;
-  color: var(--muted); font-size: var(--text-md); cursor: pointer;
+  display: grid; place-items: center; width: 26px; height: 26px; padding: 0;
+  border-radius: 999px; color: var(--muted); font-size: var(--text-md);
 }
-.menu-item.menu-theme-option:hover { background: var(--surface); color: var(--ink); border: 0; }
+.menu-item.menu-theme-option:hover { background: var(--surface); color: var(--ink); }
 .menu-item.menu-theme-option[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
 
 }

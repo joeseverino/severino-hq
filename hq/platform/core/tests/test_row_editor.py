@@ -6,7 +6,7 @@ from django import forms
 from django.template import RequestContext, Template, TemplateSyntaxError
 from django.test import RequestFactory, SimpleTestCase
 
-from hq.platform.application.tests.markup import all_elements
+from hq.platform.application.markup_testing import all_elements
 
 EDITED = (
     '{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
@@ -45,7 +45,8 @@ class RowEditorTests(SimpleTestCase):
         html = draw("/example/runs/?q=run")
 
         self.assertEqual(tagged(html, "form"), [])
-        ways_in = [each for each in tagged(html, "a") if "data-row-edit" in each.attrs]
+        # The copy of a row's controls on its open line is the row's own link.
+        ways_in = [each for each in tagged(html, "a") if "data-row-edit" in each.attrs and not each.beneath]
         self.assertEqual(
             [(each.attrs["href"], each.attrs["aria-expanded"], each.words) for each in ways_in],
             [

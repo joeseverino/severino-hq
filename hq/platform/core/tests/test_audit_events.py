@@ -12,9 +12,9 @@ from hq.domains.control_plane.models import CapabilityRule
 from hq.domains.jobs.runner import run
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.domains import domain_attention_items
+from hq.platform.application.markup_testing import select, within
 from hq.platform.application.read_models import recent_activity
 from hq.platform.application.security import Capability, Principal, cli_principal
-from hq.platform.application.tests.markup import select, within
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core import append_only
 from hq.platform.core.audit import audit_operation, record_event
@@ -173,7 +173,7 @@ class RecentActivityTests(TestCase):
         run("example.sweep", "Sweep the examples", _changes_two, actor=SCHEDULER)
         run("example.check", "Check the examples", lambda progress: {}, actor=SCHEDULER)
 
-        (event,) = recent_activity(principal=cli_principal())["items"]
+        (event,) = recent_activity()["items"]
 
         self.assertEqual((event["title"], event["actor"], event["action"]), ("Sweep the examples", SCHEDULER, "done"))
         self.assertEqual(sorted(item["message"] for item in event["items"]), ["Changed example-a", "Changed example-b"])
@@ -187,9 +187,7 @@ class HeldChangeGroupTests(TestCase):
             "documentation.sync", keyed({"manifest": [{"doc_id": "rb-example", "title": "Example"}]}), principal=agent
         )
 
-        (item,) = [
-            item for item in domain_attention_items() if item["item"].key == f"approval:{held['approval']['id']}"
-        ]
+        (item,) = [item for item in domain_attention_items() if item["finding"].subject == str(held["approval"]["id"])]
 
         self.assertIn("approval", item["source"].lower())
         self.assertNotEqual(item["source"], "Audit")

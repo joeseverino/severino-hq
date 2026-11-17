@@ -151,8 +151,7 @@ def _token(word: str, *, sole: bool) -> str:
     """A word with a seam or a hyphen inside it, or too long to be a word, as
     a token. Any other word reads as a word, and stays plain text. A token
     that is the whole value (a name, never a word of a sentence) is marked
-    ``data-sole``, so a table cell may cut it rather than break it. A figure
-    among words reads as one of them."""
+    ``data-sole``. A figure among words reads as one of them."""
 
     if not (_INNER_SEAM.search(word) or _kept(word)) or (sole and _QUANTITY.fullmatch(unescape(word))):
         return word
@@ -172,29 +171,7 @@ def _token(word: str, *, sole: bool) -> str:
         # A word of a phrase: each part is cut on its own, at its cell's edge.
         return f'<span class="token">{_SEAM.join(_whole(part, boxed=True) for part in parts)}</span>'
     inside = _SEAM.join(_whole(part) for part in parts)
-    # The name again, unseen and with nothing to copy, broken only where the
-    # name breaks once a row opens it, beside the box that draws the name
-    # (`.cut`): a table cell's grid sizes its track by the strut's one run of
-    # text and the box asks nothing, so the box is never narrower than the
-    # name however an engine measures the box (cuts.css).
-    strut = f'<span class="strut" data-strut="{"&#8203;".join(parts)}" aria-hidden="true"></span>'
-    return f'<span class="token" data-sole{_short(word)}>{strut}<span class="cut">{inside}</span></span>'
-
-
-# The characters a value a cell cuts holds out for (`--cut-floor`,
-# tables.css) in a narrow box and in any other, counted generously: a
-# proportional face sets most letters narrower than `ch`.
-_FLOORS = (6, 16)
-
-
-def _short(word: str) -> str:
-    """``data-short``, naming the least floor a name is no longer than: such a
-    name holds out for all of it, and no more, since a box padded to the floor
-    leaves a gulf before the words after it on its line."""
-
-    length = len(unescape(word))
-    floor = next((floor for floor in _FLOORS if length <= floor), None)
-    return f' data-short="{floor}"' if floor else ""
+    return f'<span class="token" data-sole><span class="cut">{inside}</span></span>'
 
 
 # The tags that close a word's boxes, after its last letter.
@@ -329,9 +306,10 @@ def _held_back(words: list[str], at: int) -> bool:
 
 def _held_places(words: list[str]) -> list[int]:
     """Where in ``words`` (split by ``_WORDS``, so every second piece is the
-    whitespace between two) a word stays on the line of the one before it."""
+    whitespace between two) a word stays on the line of the one before it.
+    A line the text itself breaks (a block of code) is never joined back."""
 
-    return [at for at in range(2, len(words), 2) if _held_back(words, at)]
+    return [at for at in range(2, len(words), 2) if "\n" not in words[at - 1] and _held_back(words, at)]
 
 
 def held(text: str) -> str:

@@ -11,33 +11,41 @@ import re
 import time
 import weakref
 from collections import Counter
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass, fields, is_dataclass, replace
 from functools import cache, lru_cache, partial
 from importlib import import_module
 from types import CodeType
-from typing import Any, get_args, get_origin
+from typing import TYPE_CHECKING, Any, get_args, get_origin
 
 from django.core.exceptions import ImproperlyConfigured
 
 from hq.platform.application.routes import reverse
 
-from .card_items import Insight
 from .demo import showing_demo
 from .derivations import derivation, forget, holds_until, present
-from .ui import STATUS_VALUES, DomainOverview
+from .lists import split_list
+from .tone import Tone
+from .ui import DomainOverview
+lazy from . import finding_model, freshness
 lazy from .action_items import item_key
 lazy from .automation_runs import clear_operation_registry_cache
+lazy from .decisions import one_press
 lazy from .domains import NAVIGATION_GROUPS
+lazy from .findings import finding_key
 lazy from .integrations import clear_integration_graph_cache
-lazy from .item_help import instructions
+lazy from .item_help import finding_plan
 lazy from .outbound_work import clear_outbound_work_cache
 lazy from .plugin_admission import enforce_plugin_admission
 lazy from .security import host_capabilities
 
+if TYPE_CHECKING:
+    from .finding_model import Finding
+    from .freshness import ReadCadence
+
 logger = logging.getLogger("severino.composition")
 
-PLUGIN_API_VERSION = 14
+PLUGIN_API_VERSION = 16
 
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -169,7 +177,8 @@ class PluginIntegration:
     connections: Callable[[], Iterable[Any]] | None = None
     dashboard: Callable[[], Iterable[dict[str, Any]]] | None = None
     overview: Callable[[], DomainOverview] | None = None
-    attention: Callable[[], Iterable[Any]] | None = None
+    # What needs a person, each a finding the host words as its queue row.
+    attention: Callable[[], Iterable[Finding]] | None = None
     # The page where ``attention``'s items are decided together, when there
     # is one: the queue's heading for the domain links there.
     attention_url: Callable[[], str] | None = None
@@ -183,6 +192,11 @@ class PluginIntegration:
     # Work that reaches outside the process: each an ``OutboundWork``. HQ
     # derives its job, capability, route, control and audit entries.
     outbound: Callable[[], Iterable[Any]] | None = None
+    # How old a reading of each of the extension's kinds may get, by kind:
+    # ``hq_sdk.reads.freshness`` and the Connections page judge it by this.
+    # Each kind's is asked only as that kind is judged, so it may follow a
+    # setting without the host reading it for any other kind.
+    cadences: Callable[[], Mapping[str, Callable[[], ReadCadence]]] | None = None
     # The extension's demo records, written for the user it is given into a
     # database the example estate was just written to, by the showcase and
     # standard data sets alone (``hq.platform.core.seeds``). Its dates sit
@@ -305,7 +319,7 @@ def _load_manifest(reference: str) -> PluginManifest:
 
 def _references() -> tuple[str, ...]:
     raw = os.environ.get("SEVERINO_HQ_PLUGINS", "")
-    return tuple(part.strip() for part in raw.split(",") if part.strip())
+    return tuple(split_list(raw))
 
 
 def _claims_no_host_capability(manifest: PluginManifest) -> None:
@@ -378,6 +392,7 @@ def clear_plugin_composition_cache() -> None:
     """Forget plugin identity and every graph derived from that identity."""
 
     _installed_plugins.cache_clear()
+    freshness.forget_extension_cadences()
     # A question asked of the composition that was is not asked of this one.
     forget()
 
@@ -603,6 +618,10 @@ def read_source[T](source_id: str, ask: Callable[[], T], unreadable: Callable[[]
         return unreadable()
 
 
+# What a source that could not be read is raised under, keyed by the source.
+UNREADABLE = "unreadable"
+
+
 def source_attention(
     source_id: str, label: str, provider: Callable[[], Iterable[Any]], read_capabilities: tuple[str, ...] = ()
 ) -> tuple[Any, ...]:
@@ -616,18 +635,18 @@ def source_attention(
         source_id,
         lambda: distinct_attention(source_id, checked_attention(source_id, tuple(provider()))),
         lambda: (
-            Insight(
-                status="attention",
-                eyebrow="HQ",
+            finding_model.Finding(
+                rule=UNREADABLE,
+                subject=source_id,
+                severity=Tone.ATTENTION,
                 title=f"{label} could not be read",
-                value="",
-                body="What it reports is missing from this queue until it reads again. The failure is logged.",
+                explanation="What it reports is missing from this queue until it reads again. The failure is logged.",
                 why="Asking this source for its items raised an error, so anything it would report is missing.",
-                key=f"unreadable:{source_id}",
-                workflow=instructions(
-                    f"unreadable:{source_id}",
-                    "Find the line in HQ's log whose event is composition.source.unreadable and whose message "
-                    f"names {source_id}; the traceback under it says what failed.",
+                steps=(
+                    finding_model.OperatorStep(
+                        "Find the line in HQ's log whose event is composition.source.unreadable and whose message "
+                        f"names {source_id}; the traceback under it says what failed."
+                    ),
                 ),
                 read_capabilities=read_capabilities,
             ),
@@ -650,7 +669,7 @@ def source_cards(
                 "value": "Unreadable",
                 "url": url,
                 "detail": "Could not be read",
-                "status": "attention",
+                "status": Tone.ATTENTION,
             },
         ),
     )
@@ -666,25 +685,21 @@ def source_overview(source_id: str, provider: Callable[[], Any]) -> DomainOvervi
 # What one source's answer must be, by the provider that gives it: a source
 # whose answer is not is that source's failure (``read_source``), and the
 # extension kit names it (``plugin_testing.providers_derived_again``).
-def checked_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]:
+def checked_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Finding, ...]:
     for item in items:
-        status = getattr(item, "status", None)
-        if status not in STATUS_VALUES:
-            raise ImproperlyConfigured(
-                f"{source_id!r} produced an attention item with status "
-                f"{status!r}; expected one of {', '.join(sorted(STATUS_VALUES))}."
-            )
+        if not isinstance(item, finding_model.Finding):
+            raise ImproperlyConfigured(f"{source_id!r} produced an attention item that is not a Finding: {item!r}.")
     return items
 
 
-def repeated_keys(source_id: str, items: tuple[Any, ...]) -> tuple[str, ...]:
+def repeated_keys(source_id: str, items: tuple[Finding, ...]) -> tuple[str, ...]:
     """Each queue key (``action_items.item_key``) more than one of a source's items share."""
 
-    counts = Counter(item_key(source_id, item) for item in items)
+    counts = Counter(item_key(source_id, finding_key(item)) for item in items)
     return tuple(key for key, count in counts.items() if count > 1)
 
 
-def distinct_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]:
+def distinct_attention(source_id: str, items: tuple[Finding, ...]) -> tuple[Finding, ...]:
     """A source's items, one per queue key: the worst of each, where it stood.
 
     A key is what the queue knows an item by (its row, its dismissal), so two
@@ -693,9 +708,9 @@ def distinct_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...
     of a key's items are dropped and logged as the source's defect.
     """
 
-    worst: dict[str, Any] = {}
+    worst: dict[str, Finding] = {}
     for item in items:
-        key = item_key(source_id, item)
+        key = item_key(source_id, finding_key(item))
         held = worst.get(key)
         if held is None or _urgency(item) < _urgency(held):
             worst[key] = item
@@ -710,9 +725,8 @@ def distinct_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...
     return tuple(item for item in items if id(item) in kept)
 
 
-def _urgency(item: Insight) -> tuple[int, bool]:
-    rank = ATTENTION_ORDER.index(item.status) if item.status in ATTENTION_ORDER else len(ATTENTION_ORDER)
-    return rank, item.notice
+def _urgency(item: Finding) -> tuple[int, bool]:
+    return item.severity.rank, item.notice
 
 
 def _refused_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]:
@@ -750,9 +764,6 @@ SOURCE_CHECKS: dict[str, Callable[[str, Any], Any]] = {
 # once, so a card must be cheap to produce and safe to show beside any other.
 CARD_REQUIRED_KEYS = frozenset({"id", "label", "value", "url"})
 CARD_OPTIONAL_KEYS = frozenset({"detail", "status", "trend"})
-# Imported, not restated: one status vocabulary serves every surface that shows
-# state, so a card and an insight cannot drift apart on what "attention" means.
-CARD_STATUS_VALUES = STATUS_VALUES
 # Direction of travel, not a judgment: whether "up" is good is the domain's
 # business, which is what `status` is for.
 CARD_TREND_VALUES = frozenset({"up", "down", "flat"})
@@ -815,10 +826,8 @@ def _validate_dashboard_cards(cards: Iterable[object]) -> None:
         if unknown:
             raise ImproperlyConfigured(f"Unknown dashboard card keys: {', '.join(sorted(unknown))}.")
         status = card.get("status")
-        if status is not None and status not in CARD_STATUS_VALUES:
-            raise ImproperlyConfigured(
-                f"Dashboard card status must be one of {', '.join(sorted(CARD_STATUS_VALUES))}; got {status!r}."
-            )
+        if status is not None and status not in Tone:
+            raise ImproperlyConfigured(f"Dashboard card status must be one of {', '.join(Tone)}; got {status!r}.")
         trend = card.get("trend")
         if trend is not None and trend not in CARD_TREND_VALUES:
             raise ImproperlyConfigured(
@@ -826,10 +835,9 @@ def _validate_dashboard_cards(cards: Iterable[object]) -> None:
             )
 
 
-# Most urgent first. An operator scanning this list top-down should hit the
-# thing that will hurt soonest; "neutral" is context, not a call to action, and
-# is excluded from attention entirely.
-ATTENTION_ORDER = ("serious", "attention")
+# The tones someone has to act on, most urgent first: a neutral item is
+# context, never a call to action, and is left out of attention entirely.
+ATTENTION_ORDER = tuple(tone for tone in Tone if tone.acted_on)
 
 
 def gather_attention(
@@ -851,23 +859,27 @@ def gather_attention(
         if provider is None:
             continue
         for item in source_attention(source_id, label, provider, read_capabilities):
-            if item.status not in ATTENTION_ORDER:
+            # Only what someone can act on now: never context, and never what
+            # waits on a fix that does not exist yet.
+            if not item.severity.acted_on or item.awaiting_fix:
                 continue
-            gathered.append({"item": item, "source": label, "source_id": source_id})
+            gathered.append({"finding": item, "source": label, "source_id": source_id})
     return ordered_attention(gathered)
 
 
 def ordered_attention(entries: Iterable[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
     """Gathered entries in the one order every surface shows them: by
-    severity, what needs doing before what only reports, the longest-standing
-    first, then by source and title."""
+    severity, what needs doing before what only reports, what HQ does in one
+    press (``decisions.one_press``) before what a person does elsewhere, the
+    longest-standing first, then by source and title."""
 
     def order(entry: dict[str, Any]) -> tuple[Any, ...]:
-        item = entry["item"]
+        item = entry["finding"]
         since = item.since
         return (
-            ATTENTION_ORDER.index(item.status),
+            item.severity.rank,
             item.notice,
+            not one_press({"workflow": finding_plan(item, finding_key(item))}),
             since is None,
             since.timestamp() if since is not None else 0.0,
             entry["source"],
@@ -895,7 +907,7 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
             (plugin.id, plugin.name, integration.attention, plugin.mcp_read_capabilities)
             for plugin, integration in installed_integrations()
         )
-        if not entry["item"].notice
+        if not entry["finding"].notice
     )
 
 

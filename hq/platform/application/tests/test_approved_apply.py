@@ -8,13 +8,15 @@ since the approval as the copy the change replaced.
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
+from hq.platform.application.tests.consent import consented
 
 from ..approvals import ApproveCommand, RejectCommand, approve, reject
 from ..capabilities import execute_capability
+from ..conditions import DRIFTED, holding
 from ..controller import ControllerReport, claim_next_operation, report_operation
-from ..infrastructure import ManagedResourceCommand, is_drifted, save_managed_resource
-from ..security import cli_principal, mcp_principal
-from ..sweep import record_sweep
+from ..infrastructure import ManagedResourceCommand, save_managed_resource
+from ..report_testing import bridged
+from ..security import mcp_principal
 from .test_approvals import (
     GATED_KIND,
     POLICY_KEY,
@@ -40,10 +42,7 @@ class ApprovedChangeAppliesTests(TestCase):
     def live(self, document):
         """A sweep that reads ``document`` as the tailnet's policy."""
 
-        record_sweep(
-            {GATED_KIND: {"ok": True, "records": [{"record": "policy", "document": document}]}},
-            principal=cli_principal(),
-        )
+        bridged("inventory", {GATED_KIND: {"ok": True, "records": [{"record": "policy", "document": document}]}})
 
     def ask(self, document):
         answer = execute_capability(
@@ -94,7 +93,7 @@ class ApprovedChangeAppliesTests(TestCase):
 
         self.resource.refresh_from_db()
         self.assertEqual(self.resource.spec["document"], wanted)
-        self.assertFalse(is_drifted(self.resource))
+        self.assertFalse(holding(self.resource.conditions, DRIFTED))
         operation.refresh_from_db()
         self.assertEqual(operation.state, OperationRequest.State.SUCCEEDED)
 
@@ -140,7 +139,7 @@ class ApprovedChangeAppliesTests(TestCase):
                 kind=UNGATED_KIND,
                 spec={"domain": "example.test", "answer": "192.0.2.11"},
             ),
-            principal=an_operator(),
+            consented=consented(an_operator()),
             current_key="example-rewrite",
         )
 

@@ -13,6 +13,7 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.derivation_testing import uncached
+from hq.platform.application.markup_testing import all_elements, elements, links, select, text, with_class
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.attribution import operation_context
@@ -38,7 +39,6 @@ from ..ui import (
     line_chart,
     stacked_bar_chart,
 )
-from .markup import all_elements, elements, links, select, text, with_class
 
 
 class UiProjectionTests(TestCase):
@@ -400,7 +400,8 @@ class ChartDataTableTests(TestCase):
 
         table = self.table("partials/_chart.html", chart)
 
-        self.assertIn("52.2", table)
+        # Half away from zero, as measured rounds every figure.
+        self.assertIn("52.3", table)
         self.assertIn("1,250", table)
         self.assertNotIn("52.25", table)
         self.assertIn("Resting heart rate (bpm)", table)

@@ -6,7 +6,7 @@ and where each fact came from.
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING
 
 from django.utils.text import capfirst
 
@@ -17,6 +17,10 @@ from .entity_links import EntityLink, entity_link, kind_label
 from .labels import dotted, lower_first
 lazy from .freshness import Freshness, freshness as reading_freshness
 lazy from .moments import ago
+
+if TYPE_CHECKING:
+    from .request_path import Evidence, HopCheck
+    from .standards import CheckResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,10 +156,11 @@ class Hop:
     overlays: tuple[tuple[str, EntityLink], ...] = ()
     # On a path walked for a request (``hq_path(request)``): what the request
     # itself carried here, whether it agrees with the readings, and the
-    # admission layers decided at this hop. See ``application.request_path``.
-    evidence: tuple[Any, ...] = ()
-    check: Any = None
-    layers: tuple[Any, ...] = ()
+    # checks of the request standard decided at this hop (each its
+    # ``Check.hop``). See ``application.request_path``.
+    evidence: tuple[Evidence, ...] = ()
+    check: HopCheck | None = None
+    checks: tuple[CheckResult, ...] = ()
     # ``(text, url)`` lines under the name: what a container is running.
     facts: tuple[tuple[str, str], ...] = ()
     # On a proxy's hop: the network its access list admits requests from

@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal, TypedDict
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.application.routes import reverse
 
+from .answer_fields import CallMessage
 from .command_fields import Describe
 from .describe import listed
 from .hq_self import site_url
@@ -70,6 +71,7 @@ class ApprovalApplied(TypedDict):
     ok: Literal[True]
     approved: Annotated[str, Describe("The id of the request approved.")]
     result: Annotated[dict[str, Any], Describe("What the held call answered when it ran, in its own command's shape.")]
+    message: CallMessage
 
 
 class ApprovalRejected(TypedDict):
@@ -77,6 +79,7 @@ class ApprovalRejected(TypedDict):
 
     ok: Literal[True]
     rejected: Annotated[str, Describe("The id of the request rejected.")]
+    message: CallMessage
 
 
 class ApprovalWithdrawn(TypedDict):
@@ -104,7 +107,7 @@ def serialize_approval(held: ApprovalRequest) -> HeldRequest:
     }
 
 
-# The fields of an answer that carry the operation it queued: ``OperationQueued``'s
+# The fields of an answer that carry the operation it queued: ``OperationAsked``'s
 # ``operation``, and ``ResourceSaved``'s ``applying``, null where nothing was queued.
 _OPERATION_FIELDS = ("operation", "applying")
 

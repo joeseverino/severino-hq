@@ -6,7 +6,7 @@ page.html draws it; a host template may include this directly.
 The trigger must be a real link to a page that does the same job, so the surface
 still works when the dialog does not open:
 
-  <a class="btn primary" href="{% url 'app:import' %}" data-modal-open="import">Import</a>
+  {% url 'app:import' as import_url %}{% button "Import" import_url look="primary" modal="import" %}
   {% include "partials/_modal.html" with id="import" title="Import records"
      lede="Known files are skipped." body_template="app/_import_form.html" %}
 

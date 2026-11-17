@@ -29,6 +29,7 @@ lazy from django.test import override_settings
 
 from hq.platform.core.attribution import from_the_shell
 from hq.platform.core.tests.task import usage
+from tools.dev import extension_set
 from tools.perf import parse, runs
 from tools.perf.memory_probe import AFTER, BOOT, MARK, PASS, READY
 from tools.perf.report import commit_of
@@ -243,15 +244,10 @@ def main() -> int:
     if unknown := [path for path in paths if path not in AFTER]:
         print(f"audit:memory: no path {', '.join(unknown)}. Paths: {', '.join(AFTER)}", file=sys.stderr)
         return 2
-    alone = asked.switch("host_alone")
-    plugins = "" if alone else os.environ.get("HQ_LOCAL_PLUGINS", "")
-    env = os.environ | {
-        "DJANGO_SETTINGS_MODULE": "hq.config.settings",
-        "SEVERINO_HQ_PLUGINS": plugins,
-        "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
-        "PYTHONPATH": "" if alone else os.environ.get("HQ_LOCAL_PYTHONPATH", ""),
-        "MEMORY_SEED": seed,
-    }
+    picked = extension_set.Pick((), (), "") if asked.switch("host_alone") else extension_set.for_tree(ROOT)
+    if picked.said:
+        print(f"audit:memory: {picked.said}", file=sys.stderr, flush=True)
+    env = os.environ | {"DJANGO_SETTINGS_MODULE": "hq.config.settings", "MEMORY_SEED": seed} | picked.composed
     started = time.monotonic()
     result, timed = measure(env, seed, paths)
     commit = commit_of(ROOT)
@@ -260,7 +256,7 @@ def main() -> int:
         f"memory-{commit}-{datetime.now(UTC):%Y%m%dT%H%M%SZ}",
         commit=commit,
         seed=seed,
-        extensions=[spec for spec in plugins.split(",") if spec],
+        extensions=list(picked.plugins),
         measured=MEASURED,
         seconds=round(time.monotonic() - started, 1),
         totals=totals(result),

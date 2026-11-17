@@ -1,14 +1,10 @@
 """The web shell's pages: search, lists, the dashboard and the navigation."""
 
-import os
-import tempfile
-import time
 from datetime import timedelta
-from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -25,12 +21,12 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.platform.application import readings
 from hq.platform.application.action_links import command_url
-from hq.platform.application.dashboard import operating_snapshot
+from hq.platform.application.cadence_testing import controller_arrived
 from hq.platform.application.labels import DOT
+from hq.platform.application.markup_testing import elements, hrefs, select, text, with_class
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.glance_readings import HOST, reported_machine
 from hq.platform.application.tests.host_only import host_only
-from hq.platform.application.tests.markup import elements, hrefs, select, text
 from hq_sdk.testing import plain
 
 from .signed_in_case import _AuthedTestCase
@@ -73,6 +69,14 @@ class SearchPageTests(_AuthedTestCase):
         self.assertIn("An example machine", shown)
         self.assertIn("Running", shown)
         self.assertNotIn("What the example page lists", shown)
+
+    def test_a_machine_found_carries_its_state_as_a_chip(self):
+        ManagedResource.objects.create(key="example-host", kind="machine", spec={"name": "example-host"})
+
+        response = self.client.get("/search/", {"q": "example-host"})
+
+        self.assertIn("/infrastructure/machines/example-host/", hrefs(response))
+        self.assertIn("not monitored", [chip.words for chip in with_class(response, "tag")])
 
     def test_query_filters_commands_as_well_as_records(self):
         response = self.client.get("/search/", {"q": "certificate.renew"})
@@ -242,11 +246,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         )
         readings.record(
             readings.machine_telemetry("example-host"),
-            {
-                "status": "good",
-                "summary": "Host load 0.30",
-                "metrics": [{"label": "CPU", "value": "9%", "detail": "8 cores"}],
-            },
+            reported_machine("example-host", host=HOST),
             observed_at=observed,
         )
         DashboardMachine.objects.create(machine=machine)
@@ -275,8 +275,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
         )
 
         with (
+            patch("hq.platform.application.cadence._ring") as ring,
             self.captureOnCommitCallbacks(execute=True),
-            patch("hq.platform.application.glance.ring_glance_doorbell") as ring,
         ):
             response = self.client.post(
                 "/dashboard/glance/", form_keyed(), headers={"X-Requested-With": "XMLHttpRequest"}
@@ -288,7 +288,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
             list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
             [f"machine-{machine.pk}"],
         )
-        ring.assert_called_once_with()
+        self.assertEqual(ring.call_args_list.count(call("glance")), 1)
 
     def test_dashboard_weather_settings_are_managed_in_the_ui(self):
         response = self.client.post(
@@ -342,14 +342,11 @@ class DashboardWorkflowTests(_AuthedTestCase):
         """Green while it is arriving, the attention color once it has gone
         quiet, and neither where it has never run."""
 
-        marker = Path(tempfile.mkdtemp()) / "controller-heartbeat"
-        with self.settings(SEVERINO_CONTROLLER_HEARTBEAT=str(marker)):
-            never = self.client.get("/")
-            marker.touch()
-            arriving = self.client.get("/")
-            long_ago = time.time() - 3600
-            os.utime(marker, (long_ago, long_ago))
-            silent = self.client.get("/")
+        never = self.client.get("/")
+        controller_arrived()
+        arriving = self.client.get("/")
+        controller_arrived(ago=timedelta(hours=1))
+        silent = self.client.get("/")
 
         states = {
             name: (page.context["controller"].known, page.context["controller"].silent)
@@ -436,16 +433,6 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertIn("1 has no writeup or doc", text(response))
         queue = self.client.get(reverse("action_items"))
         self.assertNotIn(f"{reverse('projects:list')}?needs_output=1", hrefs(queue))
-
-    def test_dashboard_excludes_site_pages_from_docs_review(self):
-        DocumentationRecord.objects.create(
-            doc_id="page-about",
-            title="About page",
-            doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
-            status=DocumentationRecord.Status.ACTIVE,
-        )
-
-        self.assertEqual(operating_snapshot(principal=cli_principal())["kpis"]["docs_needing_review"], 0)
 
     def test_projects_can_filter_for_missing_output(self):
         project = Project.objects.create(name="No output yet", status=Project.Status.ACTIVE)
@@ -537,61 +524,6 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context["object_list"]), [matching])
-
-    @override_settings(SEVERINO_DOC_REVIEW_INTERVAL_DAYS=30)
-    def test_docs_review_filter_uses_configured_interval(self):
-        current = DocumentationRecord.objects.create(
-            doc_id="rb-current-001",
-            title="Current runbook",
-            status=DocumentationRecord.Status.ACTIVE,
-            last_reviewed=timezone.localdate() - timedelta(days=20),
-        )
-        stale = DocumentationRecord.objects.create(
-            doc_id="rb-stale-001",
-            title="Stale runbook",
-            status=DocumentationRecord.Status.ACTIVE,
-            last_reviewed=timezone.localdate() - timedelta(days=31),
-        )
-        site_page = DocumentationRecord.objects.create(
-            doc_id="page-stale-001",
-            title="Stale site page",
-            doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
-            status=DocumentationRecord.Status.ACTIVE,
-            last_reviewed=timezone.localdate() - timedelta(days=31),
-        )
-
-        response = self.client.get("/docs/?needs_review=1")
-
-        listed = list(response.context["object_list"])
-        self.assertIn(stale, listed)
-        self.assertNotIn(current, listed)
-        self.assertNotIn(site_page, listed)
-
-    @override_settings(SEVERINO_DOC_REVIEW_INTERVAL_DAYS=30)
-    def test_reports_docs_review_uses_shared_definition(self):
-        stale = DocumentationRecord.objects.create(
-            doc_id="rb-stale-002",
-            title="Stale runbook",
-            status=DocumentationRecord.Status.ACTIVE,
-            last_reviewed=timezone.localdate() - timedelta(days=31),
-        )
-        DocumentationRecord.objects.create(
-            doc_id="page-stale-002",
-            title="Stale site page",
-            doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
-            status=DocumentationRecord.Status.ACTIVE,
-            last_reviewed=timezone.localdate() - timedelta(days=31),
-        )
-
-        response = self.client.get("/reports/")
-
-        self.assertEqual(response.status_code, 200)
-        figures = {figure.label: figure for figure in response.context["figures"]}
-        self.assertEqual(figures["Docs due for review"].value, 1)
-        self.assertEqual(
-            [row.link.title for row in response.context["docs_needing_review"]],
-            [stale.doc_id],
-        )
 
 
 class NavigationTests(TestCase):

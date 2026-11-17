@@ -10,6 +10,7 @@ from .finding_model import (
     connections_carrying,
     per_connection,
 )
+from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import ended
 
@@ -44,7 +45,7 @@ def _reached_but_unmeasured(estate: FindingEstate) -> tuple[Finding, ...]:
             rule="reached-but-unmeasured",
             subject=node.id,
             title=f"{node.label} has no visitor counts",
-            severity="attention",
+            severity=Tone.ATTENTION,
             explanation=("Other names read through the same connection have them. Turn on analytics for this one."),
             evidence=(
                 (
@@ -75,7 +76,7 @@ def _perimeter_open(estate: FindingEstate) -> tuple[Finding, ...]:
     """
 
     return per_connection(
-        estate, "answers-publicly", rule="perimeter-open", severity="serious", shown_as="Open port", says=_open_ports
+        estate, "answers-publicly", rule="perimeter-open", severity=Tone.SERIOUS, shown_as="Open port", says=_open_ports
     )
 
 
@@ -97,7 +98,7 @@ def _perimeter_unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="perimeter-unchecked",
                 subject=node.id,
                 title=f"HQ could not test whether {node.label} is open to the internet",
-                severity="attention",
+                severity=Tone.ATTENTION,
                 explanation=(
                     ended(
                         "The test did not run because "
@@ -133,7 +134,7 @@ def _firewall_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="firewall-stopped",
                 subject=node.id,
                 title=f"{node.label}'s firewall is not running",
-                severity="serious",
+                severity=Tone.SERIOUS,
                 explanation="Its firewall rules are not being applied.",
                 evidence=(("Firewall", _FIREWALL_STATES.get(state, state)),),
             )
@@ -154,37 +155,37 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "perimeter-open",
         "Ports open to the internet",
-        "serious",
+        Tone.SERIOUS,
         _perimeter_open,
         operator_action=(f"Close them in the machine's firewall. {THEN_CHECK_AGAIN}"),
         no_help_reason=("HQ cannot change the firewall."),
-        bars={"serious": "a port answers from the internet"},
+        bars={Tone.SERIOUS: "a port answers from the internet"},
     ),
     FindingRule(
         "perimeter-unchecked",
         "Could not test for ports open to the internet",
-        "attention",
+        Tone.ATTENTION,
         _perimeter_unchecked,
         operator_action=(f"Make the machine report its public addresses and published ports. {THEN_CHECK_AGAIN}"),
         no_help_reason=("HQ cannot change what the machine reports."),
-        bars={"attention": "HQ cannot test a machine for ports open to the internet"},
+        bars={Tone.ATTENTION: "HQ cannot test a machine for ports open to the internet"},
     ),
     FindingRule(
         "firewall-stopped",
         "A firewall is not running",
-        "serious",
+        Tone.SERIOUS,
         _firewall_stopped,
         operator_action=("Start the firewall on the machine and check it stays running."),
         no_help_reason=cannot_run_commands(),
-        bars={"serious": "a machine's firewall is not running"},
+        bars={Tone.SERIOUS: "a machine's firewall is not running"},
     ),
     FindingRule(
         "reached-but-unmeasured",
         "A name has no visitor counts",
-        "attention",
+        Tone.ATTENTION,
         _reached_but_unmeasured,
         operator_action=("Turn on analytics for the name where the other names on its domain are measured."),
         no_help_reason=("HQ cannot turn analytics on."),
-        bars={"attention": "a name visitors reach has no visitor counts"},
+        bars={Tone.ATTENTION: "a name visitors reach has no visitor counts"},
     ),
 )

@@ -13,14 +13,15 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
+from hq.platform.application.markup_testing import select, text, texts, within
 from hq.platform.core.tests.forwarding import arrived
 
 from ..moments import when
 from ..request_channel import channel_for_request, channel_of
 from ..request_connection import connection
+from ..standards import Standing
 from ..ui import MISSING
 from .connection_requests import A_LAN_ADDRESS, A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
-from .markup import select, text, texts, within
 from .people import someone
 
 
@@ -74,7 +75,7 @@ class LayerTests(TestCase):
         )
 
     def layer(self, found, layer_id):
-        return next(layer for layer in found.layers if layer.id == layer_id)
+        return next(layer for layer in found.checks.results if layer.check.id == layer_id)
 
     def test_a_tailnet_request_satisfies_every_layer(self):
         # Every input this asserts on is pinned rather than inherited: the
@@ -92,15 +93,15 @@ class LayerTests(TestCase):
         ):
             found = connection(a_request())
 
-        self.assertTrue(found.holds, [layer.id for layer in found.failing])
-        self.assertTrue(all(layer.boundary for layer in found.layers))
-        self.assertTrue(all(layer.mechanism for layer in found.layers))
+        self.assertTrue(found.holds, [result.check.id for result in found.failing])
+        self.assertTrue(all(layer.check.boundary for layer in found.checks.results))
+        self.assertTrue(all(layer.check.mechanism for layer in found.checks.results))
 
     def test_a_request_off_the_tailnet_says_so(self):
         with override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True):
             found = connection(a_request(A_LAN_ADDRESS))
 
-        self.assertFalse(self.layer(found, "channel").holds)
+        self.assertFalse(self.layer(found, "channel").met)
 
     def test_an_undeclared_forwarding_peer_is_not_labeled_as_the_caller(self):
         request = a_request(A_LAN_ADDRESS, HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS)
@@ -119,9 +120,8 @@ class LayerTests(TestCase):
         self.assertEqual(found.channel.id, "network")
         self.assertEqual(found.identity.tailnet_user, "")
         forwarder = self.layer(found, "forwarder")
-        self.assertFalse(forwarder.holds)
-        self.assertTrue(forwarder.conclusive)
-        self.assertEqual(forwarder.evidence, A_LAN_ADDRESS)
+        self.assertEqual(forwarder.state, Standing.UNMET)
+        self.assertEqual(forwarder.reading.evidence, A_LAN_ADDRESS)
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_a_trusted_forwarder_remains_a_hop_not_the_caller(self):
@@ -134,9 +134,8 @@ class LayerTests(TestCase):
         self.assertEqual(found.peer_label, "a-laptop")
         self.assertEqual(found.address, A_TAILNET_ADDRESS)
         forwarder = self.layer(found, "forwarder")
-        self.assertTrue(forwarder.holds)
-        self.assertTrue(forwarder.conclusive)
-        self.assertEqual(forwarder.evidence, A_LAN_ADDRESS)
+        self.assertTrue(forwarder.met)
+        self.assertEqual(forwarder.reading.evidence, A_LAN_ADDRESS)
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_npm_redundant_headers_corroborate_the_canonical_inputs(self):
@@ -149,8 +148,7 @@ class LayerTests(TestCase):
 
         layer = self.layer(connection(request), "proxy-evidence")
 
-        self.assertTrue(layer.holds)
-        self.assertTrue(layer.conclusive)
+        self.assertTrue(layer.met)
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_disagreeing_npm_headers_are_a_visible_proxy_failure(self):
@@ -163,8 +161,7 @@ class LayerTests(TestCase):
 
         layer = self.layer(connection(request), "proxy-evidence")
 
-        self.assertFalse(layer.holds)
-        self.assertTrue(layer.conclusive)
+        self.assertEqual(layer.state, Standing.UNMET)
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_the_corroborating_headers_are_the_ones_a_proxy_kind_declares(self):
@@ -182,26 +179,26 @@ class LayerTests(TestCase):
         with mock.patch.dict(PROVIDERS, {"npm.proxy_host": declared}):
             layer = self.layer(connection(request), "proxy-evidence")
 
-        self.assertTrue(layer.holds)
-        self.assertIn("X-Client=", layer.evidence)
+        self.assertTrue(layer.met)
+        self.assertIn("X-Client=", layer.reading.evidence)
 
     def test_a_tls_request_off_the_tailnet_does_not_claim_wireguard(self):
         found = connection(a_request(A_LAN_ADDRESS, secure=True))
 
         layer = self.layer(found, "transport")
-        self.assertTrue(layer.holds)
-        self.assertEqual(found.transport, layer.evidence)
-        self.assertIn("TLS", layer.evidence)
-        self.assertNotIn("WireGuard", layer.evidence)
+        self.assertTrue(layer.met)
+        self.assertEqual(found.transport, layer.reading.evidence)
+        self.assertIn("TLS", layer.reading.evidence)
+        self.assertNotIn("WireGuard", layer.reading.evidence)
 
     def test_a_plain_tailnet_request_names_wireguard_as_its_transport(self):
         found = connection(a_request(secure=False))
 
         layer = self.layer(found, "transport")
-        self.assertTrue(layer.holds)
-        self.assertEqual(found.transport, layer.evidence)
-        self.assertIn("WireGuard", layer.evidence)
-        self.assertNotIn("TLS", layer.evidence)
+        self.assertTrue(layer.met)
+        self.assertEqual(found.transport, layer.reading.evidence)
+        self.assertIn("WireGuard", layer.reading.evidence)
+        self.assertNotIn("TLS", layer.reading.evidence)
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_a_proxied_tailnet_request_names_each_encrypted_segment(self):
@@ -216,10 +213,10 @@ class LayerTests(TestCase):
         found = connection(a_request(A_LAN_ADDRESS, secure=False))
 
         layer = self.layer(found, "transport")
-        self.assertFalse(layer.holds)
-        self.assertEqual(found.transport, layer.evidence)
-        self.assertNotIn("TLS", layer.evidence)
-        self.assertNotIn("WireGuard", layer.evidence)
+        self.assertFalse(layer.met)
+        self.assertEqual(found.transport, layer.reading.evidence)
+        self.assertNotIn("TLS", layer.reading.evidence)
+        self.assertNotIn("WireGuard", layer.reading.evidence)
 
     def test_the_gate_reports_when_it_is_not_being_enforced(self):
         """The check that would otherwise be a sentence rather than a fact."""
@@ -227,21 +224,49 @@ class LayerTests(TestCase):
         with override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=False):
             found = connection(a_request())
 
-        self.assertFalse(self.layer(found, "gate").holds)
+        self.assertFalse(self.layer(found, "gate").met)
 
-    @override_settings(AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.ModelBackend"])
-    def test_an_installed_password_backend_is_reported(self):
+    @override_settings(AUTHENTICATION_BACKENDS=["hq.platform.core.oidc.HQOIDCAuthenticationBackend"])
+    def test_single_sign_on_alone_meets_the_sign_in_check(self):
+        self.assertTrue(self.layer(connection(a_request()), "sign-in").met)
+
+    @override_settings(
+        AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.ModelBackend"], SEVERINO_POSTURE="standard"
+    )
+    def test_password_sign_in_is_unmet_and_left_open_quietly_by_hqs_standard(self):
+        """Not every homelab runs an identity provider (docs/Posture.md)."""
+
         found = connection(a_request())
 
-        self.assertFalse(self.layer(found, "sign-in").holds)
+        sign_in = self.layer(found, "sign-in")
+        self.assertEqual(sign_in.state, Standing.UNMET)
+        self.assertEqual(sign_in.reading.evidence, "Password sign-in installed")
+        self.assertNotIn(sign_in, found.failing)
+
+    @override_settings(
+        AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.ModelBackend"], SEVERINO_POSTURE="advanced"
+    )
+    def test_advanced_posture_counts_password_sign_in_as_a_failed_check(self):
+        found = connection(a_request())
+
+        self.assertIn(self.layer(found, "sign-in"), found.failing)
+        self.assertEqual(found.verdict, "failing")
+
+    def test_the_request_and_hqs_standard_state_sign_in_once(self):
+        from ..posture import SIGN_IN, STANDARD
+        from ..request_standard import REQUEST_STANDARD
+
+        self.assertIn(SIGN_IN, STANDARD)
+        self.assertIs(self.layer(connection(a_request()), "sign-in").check, SIGN_IN)
+        self.assertEqual([check.id for check in REQUEST_STANDARD].count("sign-in"), 1)
 
     @override_settings(SESSION_COOKIE_SECURE=False)
     def test_a_session_cookie_missing_a_flag_is_reported(self):
         found = connection(a_request())
 
         layer = self.layer(found, "session")
-        self.assertFalse(layer.holds)
-        self.assertIn("Secure=off", layer.evidence)
+        self.assertFalse(layer.met)
+        self.assertIn("Secure=off", layer.reading.evidence)
 
     def test_a_published_name_is_not_treated_as_a_defense(self):
         ProviderInventory.objects.update_or_create(
@@ -254,10 +279,10 @@ class LayerTests(TestCase):
 
         found = connection(a_request())
 
-        self.assertFalse(self.layer(found, "name").holds)
+        self.assertFalse(self.layer(found, "name").met)
 
     def test_an_unpublished_name_holds(self):
-        self.assertTrue(self.layer(connection(a_request()), "name").holds)
+        self.assertTrue(self.layer(connection(a_request()), "name").met)
 
     def test_the_policy_layer_reports_a_device_the_policy_refuses(self):
         a_tailnet(
@@ -267,16 +292,13 @@ class LayerTests(TestCase):
 
         found = connection(a_request())
 
-        self.assertFalse(self.layer(found, "policy").holds)
-        self.assertTrue(self.layer(found, "policy").conclusive)
+        self.assertEqual(self.layer(found, "policy").state, Standing.UNMET)
 
     def test_a_policy_question_the_sweep_did_not_ask_is_unverified_not_denied(self):
         found = connection(a_request(host="hq.example.test:8443"))
 
         layer = self.layer(found, "policy")
-        self.assertFalse(layer.holds)
-        self.assertFalse(layer.conclusive)
-        self.assertEqual(layer.state, "unknown")
+        self.assertEqual(layer.state, Standing.UNAVAILABLE)
         self.assertNotEqual(found.verdict, "confirmed")
 
     def test_a_device_awaiting_approval_is_not_a_known_node(self):
@@ -288,8 +310,8 @@ class LayerTests(TestCase):
         found = connection(a_request("100.64.0.77"))
 
         layer = self.layer(found, "device")
-        self.assertFalse(layer.holds)
-        self.assertIn("approved", layer.detail)
+        self.assertFalse(layer.met)
+        self.assertIn("approved", layer.reading.detail)
 
     def test_a_device_lock_has_not_signed_is_not_a_known_node(self):
         """Under tailnet lock an unsigned node is filtered out by every peer
@@ -306,14 +328,13 @@ class LayerTests(TestCase):
         found = connection(a_request("100.64.0.77"))
 
         layer = self.layer(found, "device")
-        self.assertFalse(layer.holds)
-        self.assertIn("tailnet lock", layer.detail)
+        self.assertFalse(layer.met)
+        self.assertIn("tailnet lock", layer.reading.detail)
 
     def test_a_device_nothing_swept_is_not_reported_as_a_known_node(self):
         found = connection(a_request("100.64.0.77"))
 
-        self.assertFalse(self.layer(found, "device").holds)
-        self.assertTrue(self.layer(found, "device").conclusive)
+        self.assertEqual(self.layer(found, "device").state, Standing.UNMET)
 
     def test_with_no_tailnet_read_a_device_is_unconfirmed_not_missing(self):
         """A fresh install has read no tailnet: that is not a device missing from one."""
@@ -322,8 +343,7 @@ class LayerTests(TestCase):
 
         layer = self.layer(connection(a_request(A_TAILNET_ADDRESS)), "device")
 
-        self.assertFalse(layer.conclusive)
-        self.assertEqual(layer.state, "unknown")
+        self.assertEqual(layer.state, Standing.UNAVAILABLE)
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
@@ -348,8 +368,8 @@ class IdentityTests(TestCase):
 
         self.assertFalse(identity.corroborated)
         self.assertTrue(identity.conflicted)
-        layer = next(layer for layer in connection(request).layers if layer.id == "identity-agreement")
-        self.assertFalse(layer.holds)
+        layer = next(layer for layer in connection(request).checks.results if layer.check.id == "identity-agreement")
+        self.assertFalse(layer.met)
 
     def test_an_sso_signed_link_correlates_different_identity_namespaces(self):
         a_tailnet(
@@ -503,7 +523,7 @@ class ConnectionPageTests(TestCase):
         self.assertContains(
             response,
             "data-connection-layer=",
-            count=len(response.context["connection"].layers),
+            count=len(response.context["connection"].checks.results),
         )
         self.assertContains(response, f'href="{reverse("control_plane:connections")}"')
         self.assertContains(response, f'href="{reverse("control_plane:topology")}"')
@@ -569,10 +589,10 @@ class ConnectionPageTests(TestCase):
 
         response = self.client.get(reverse("connection"))
 
-        edge = next(layer for layer in response.context["connection"].layers if layer.id == "edge")
-        self.assertTrue(edge.holds)
-        self.assertTrue(edge.evidence)
-        self.assertIn(" ".join(edge.evidence.split()), text(response))
+        edge = next(layer for layer in response.context["connection"].checks.results if layer.check.id == "edge")
+        self.assertTrue(edge.met)
+        self.assertTrue(edge.reading.evidence)
+        self.assertIn(" ".join(edge.reading.evidence.split()), text(response))
 
 
 class DashboardConnectionTileTests(SimpleTestCase):
@@ -600,24 +620,54 @@ class DashboardConnectionTileTests(SimpleTestCase):
         self.assertIn("is-attention", self.tile(failing=("a layer",)))
 
 
+class RequestFactsTests(SimpleTestCase):
+    """The request standard's subject takes each fact by name, once."""
+
+    def test_it_refuses_a_fact_by_position_one_it_does_not_name_and_a_change(self):
+        from dataclasses import FrozenInstanceError
+
+        from ..request_channel import TAILNET_CHANNEL
+        from ..request_identity import Identity
+        from ..request_standard import RequestFacts
+
+        with self.assertRaises(TypeError):
+            RequestFacts(None, "192.0.2.10", TAILNET_CHANNEL, Identity())
+        with self.assertRaises(TypeError):
+            RequestFacts(request=None, address="192.0.2.10", channel=TAILNET_CHANNEL, identity=Identity(), layers=())
+        facts = RequestFacts(request=None, address="192.0.2.10", channel=TAILNET_CHANNEL, identity=Identity())
+        with self.assertRaises(FrozenInstanceError):
+            facts.address = "192.0.2.11"
+
+
 class VerdictTests(SimpleTestCase):
     """Green only when every check on the way in is confirmed."""
 
-    def connection(self, *layers, channel=None):
-        from types import SimpleNamespace
+    def connection(self, *layers, channel=None, quiet=()):
+        """``layers`` as (holds, conclusive) pairs; each index in ``quiet`` a
+        check of HQ's standard, left open quietly."""
 
         from ..request_channel import TAILNET_CHANNEL
         from ..request_connection import Connection
+        from ..request_identity import Identity
+        from ..request_standard import RequestFacts
+        from ..standards import Check, Reading, measure
 
-        return Connection(
-            address="100.64.0.20",
-            channel=channel or TAILNET_CHANNEL,
-            device=None,
-            serves=None,
-            observer=None,
-            identity=None,
-            layers=tuple(SimpleNamespace(holds=held, conclusive=sure) for held, sure in layers),
+        def check(index, held, sure):
+            reading = Reading.judged(held) if sure else Reading.unavailable("")
+            return Check(f"example-{index}", "Example check", lambda _facts: reading, "", "", unmet="")
+
+        standard = tuple(check(index, held, sure) for index, (held, sure) in enumerate(layers))
+        facts = RequestFacts(
+            request=None, address="100.64.0.20", channel=channel or TAILNET_CHANNEL, identity=Identity()
         )
+        return Connection(facts, measure(facts, standard, quiet=tuple(standard[index] for index in quiet)))
+
+    def test_a_check_left_open_quietly_neither_fails_nor_passes(self):
+        found = self.connection((False, True), (True, True), quiet=(0,))
+
+        self.assertEqual(found.verdict, "confirmed")
+        self.assertEqual(found.summary, "1 of 2 checks passed")
+        self.assertEqual(self.connection((False, True), (True, True)).verdict, "failing")
 
     def verdict(self, *layers):
         return self.connection(*layers).verdict

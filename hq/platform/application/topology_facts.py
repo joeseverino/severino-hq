@@ -13,7 +13,7 @@ lazy from hq.platform.core.network import parse_ip
 
 from .topology_model import TopologyNode
 lazy from . import tailnet
-lazy from .conditions import held_since
+lazy from .conditions import DRIFTED, held_since
 lazy from .connections import connection_rows, unfinished_work
 lazy from .credential_findings import ENDPOINT, FAILURE, UNREPORTED, credential_facts
 lazy from .credential_mint import credential_fixes
@@ -23,6 +23,12 @@ lazy from .history import near
 lazy from .moments import ago
 lazy from .tailnet import device_at, may_reach, observer, posture_facts
 lazy from .zones import ZONE_KIND
+
+# The facts a node carries for a path a sweep could not take, which
+# ``connection_findings`` reads back: a consumer it could not reach, and the
+# tailnet policy refusing the way there.
+UNREACHABLE = "unreachable"
+PATH_DENIED = "path-denied"
 
 
 def _inventory_of(kind: str) -> tuple[Any, ...]:
@@ -142,7 +148,7 @@ def _policy_verdicts(
             continue
         found[node_id] = (
             *found.get(node_id, ()),
-            ("path-denied", f"{watcher.name} to {target.name} on {port}"),
+            (PATH_DENIED, f"{watcher.name} to {target.name} on {port}"),
         )
     return found
 
@@ -208,7 +214,7 @@ def unreachable_consumers(resource) -> tuple[tuple[tuple[str, str], ...], tuple[
         return (), ()
     consumers = [item for item in unreachable if isinstance(item, dict)]
     entries = tuple(
-        ("unreachable", name)
+        (UNREACHABLE, name)
         for name in (str(item.get("domain") or item.get("consumer") or "").strip() for item in consumers)
         if name
     )
@@ -240,7 +246,7 @@ def _add_to(found: dict[str, tuple[tuple[str, str], ...]], resource, entries: tu
 
 
 def _drift_facts(resource) -> tuple[tuple[str, str], ...]:
-    since = held_since(resource.conditions, "Drifted")
+    since = held_since(resource.conditions, DRIFTED)
     if since is None:
         return ()
     # What a person or another system did. HQ's own record of reading and

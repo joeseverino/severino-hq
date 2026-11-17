@@ -32,7 +32,8 @@
             "vendor": "",
             "warranty_date": null
           },
-          "created": false
+          "created": false,
+          "message": "Asset \u201cExample box\u201d updated."
         },
         "ok": true
       }
@@ -256,57 +257,36 @@
           "findings": [
             {
               "affected_scopes": [],
-              "evidence": [],
-              "explanation": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal has not run; renew it.",
-              "id": "claim:008164bedbed1fcb",
-              "investigations": [
+              "evidence": [
                 {
-                  "capability": "",
-                  "effect": "read",
-                  "label": "Map neighborhood",
-                  "method": "GET",
-                  "name": "topology",
-                  "reason": "What this is connected to.",
-                  "recommended": false,
-                  "refusal": "",
-                  "target": "",
-                  "url": "/infrastructure/topology/?focus=resource%3Awildcard-example-com#trace"
+                  "label": "Failing",
+                  "value": "1"
                 }
               ],
+              "explanation": "Failing job: Scan",
+              "id": "claim:48255c337ca54ade",
+              "investigations": [],
               "no_help_reason": null,
-              "offers": [
-                {
-                  "capability": "",
-                  "effect": "read",
-                  "label": "Open",
-                  "method": "GET",
-                  "name": "open",
-                  "reason": "",
-                  "recommended": false,
-                  "refusal": "",
-                  "target": "",
-                  "url": "/infrastructure/wildcard-example-com/"
-                }
-              ],
+              "offers": [],
               "operator_steps": [
                 {
-                  "command": "",
-                  "label": "Renew the certificate from its page in HQ, or where it is held, or fix its automatic renewal. Then press Check again.",
+                  "command": "gh run list -R example/homelab --commit ca56003cb3b8e468cee70371d7325a539718262b --status failure",
+                  "label": "See the failing runs",
                   "notes": []
                 }
               ],
               "remedies": [],
-              "rule": "certificate-expiring",
+              "rule": "github-failing",
               "scope": null,
-              "severity": "attention",
+              "severity": "serious",
               "since": null,
-              "subject": "resource:wildcard-example-com",
-              "title": "wildcard-example-com expires in 24 days",
+              "subject": null,
+              "title": "homelab is failing on main",
               "workflow": {
-                "id": "resolve:claim:008164bedbed1fcb",
+                "id": "resolve:claim:48255c337ca54ade",
                 "label": "Next steps",
                 "outcome": {
-                  "claim_id": "claim:008164bedbed1fcb",
+                  "claim_id": "claim:48255c337ca54ade",
                   "kind": "claim_absent",
                   "label": ""
                 },
@@ -323,7 +303,7 @@
                         "recommended": false,
                         "refusal": "",
                         "target": "",
-                        "url": "/infrastructure/findings/?rule=certificate-expiring"
+                        "url": "/infrastructure/findings/?rule=github-failing"
                       }
                     ],
                     "label": "Check again",
@@ -338,12 +318,12 @@
           "rule": null,
           "schema_version": 2,
           "summary": {
-            "findings": 9,
-            "returned": 9,
+            "findings": 14,
+            "returned": 14,
             "severities": {
-              "attention": 6,
+              "attention": 10,
               "neutral": 1,
-              "serious": 2
+              "serious": 3
             },
             "truncated": false
           }
@@ -365,6 +345,16 @@
           "message": "get_findings: limit must be greater than or equal to 1."
         },
         "ok": false
+      },
+      "403": {
+        "error": {
+          "code": "insufficient_scope",
+          "details": {
+            "scope": "read"
+          },
+          "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
+        },
+        "ok": false
       }
     }
   },
@@ -375,7 +365,7 @@
           "answer": {},
           "asks": "example-automation wants to carry out the playbook example.service_restart",
           "capability": "automation.example.service_restart.run",
-          "content_fingerprint": "b6a89f32118450a586acc5756910731655bd71fb60990a8193ebb9b5bc27baac",
+          "content_fingerprint": "8d4be752f42b7f4be76cbf3ecf9d4dd69f11b985c8e9987abaeb138de7d04c53",
           "done": false,
           "expires_at": "2026-01-16T09:30:00+00:00",
           "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
@@ -1217,46 +1207,65 @@
       "200": {
         "data": {
           "error": "",
-          "facet": "",
+          "facet": "certificate",
           "items": [
             {
-              "addresses": [
-                "100.101.102.104"
+              "connection_ref": "npm",
+              "domains": [
+                "*.example.com"
               ],
-              "connection_ref": "adguard",
-              "filtering_enabled": true,
-              "ids": [
-                "100.101.102.104"
-              ],
-              "name": "macbook-pro-16",
-              "source": "persistent",
-              "use_global_settings": true
+              "expires_on": "2026-02-08T09:30:00+00:00",
+              "id": 1,
+              "name": "wildcard-example-com",
+              "provider": "other",
+              "serves": [
+                "hq.example.com",
+                "photos.example.com",
+                "streaming.example.com",
+                "git.example.com",
+                "home-automation-dashboard.example.com"
+              ]
             },
             {
-              "addresses": [
-                "100.101.102.105"
+              "connection_ref": "npm",
+              "domains": [
+                "media.example.com"
               ],
-              "connection_ref": "adguard",
-              "filtering_enabled": true,
-              "ids": [
-                "100.101.102.105"
+              "expires_on": "2026-01-03T09:30:00+00:00",
+              "id": 2,
+              "name": "media.example.com",
+              "provider": "letsencrypt",
+              "serves": []
+            },
+            {
+              "connection_ref": "npm",
+              "domains": [
+                "media.example.com"
               ],
-              "name": "iphone-16-pro",
-              "source": "persistent",
-              "use_global_settings": true
+              "expires_on": "2026-01-03T09:30:00+00:00",
+              "id": 3,
+              "name": "media.example.com",
+              "provider": "other",
+              "serves": []
             }
           ],
-          "kind": "adguard.client",
-          "label": "DNS client",
+          "kind": "npm.certificate",
+          "label": "NPM certificate",
           "observed_at": "2026-01-15T09:30:00+00:00",
-          "provider": "adguard",
-          "provider_label": "AdGuard Home",
+          "provider": "npm",
+          "provider_label": "Nginx Proxy Manager",
           "read_by": "controller",
-          "records": 2,
+          "records": 3,
           "refusal": "",
-          "relation": "Name in AdGuard",
+          "relation": "Served with certificate",
           "remedy": "",
-          "requires": [],
+          "requires": [
+            "Certificates: View Only",
+            "Proxy Hosts: View Only",
+            "Redirection Hosts: View Only",
+            "404 Hosts: View Only (API: dead_hosts)",
+            "Streams: View Only"
+          ],
           "state": "readable"
         },
         "ok": true
@@ -1267,8 +1276,8 @@
     "responses": {
       "200": {
         "data": {
-          "approved_by": "",
-          "by": "example-agent, over MCP",
+          "approved_by": "joe",
+          "by": "example-agent, over MCP\u00a0\u00b7 approved by joe",
           "capability": "automation.example.package_upgrade.run",
           "correlation": "",
           "created_at": "2026-01-15T09:29:00+00:00",
@@ -1503,20 +1512,20 @@
     "responses": {
       "200": {
         "data": {
-          "count": 13,
+          "count": 12,
           "items": [
             {
-              "action": "Review docs",
+              "action": "Attach receipts",
               "detail": "",
-              "label": "1 doc is past its review date",
+              "label": "1 expense has no receipt",
               "since": "",
-              "source": "Docs",
+              "source": "Expenses",
               "status": "attention",
-              "url": "/docs/?needs_review=1"
+              "url": "/expenses/?no_receipts=1"
             }
           ],
           "next": null,
-          "total": 13,
+          "total": 12,
           "truncated": false
         },
         "ok": true
@@ -1740,13 +1749,16 @@
           ],
           "posture": {
             "abilities": 50,
-            "controls": [
+            "checks": [
               {
-                "detail": "HQ has no reading of an access list for this name.",
-                "evidence": "Not read",
-                "id": "edge",
-                "label": "The proxy lets in tailnet addresses only",
-                "state": "neutral"
+                "boundary": "",
+                "detail": "This page shows the last reading of each connection.",
+                "evidence": "Oldest reading just now",
+                "id": "freshness",
+                "label": "Connections have been read",
+                "mechanism": "",
+                "rules": [],
+                "state": "met"
               }
             ],
             "dependencies": 33,
@@ -1771,8 +1783,8 @@
                 "stops": "a device added to your tailnet without your key"
               }
             ],
-            "met": 4,
-            "unread": 2
+            "met": 3,
+            "unread": 3
           },
           "summary": {
             "all_custodied": false,
@@ -2136,12 +2148,12 @@
           "count": 6,
           "items": [
             {
-              "detail": "of 3",
+              "detail": "of 2",
               "id": "hq.estate.machines",
               "label": "Machines online",
               "status": "",
               "url": "/infrastructure/machines/",
-              "value": "3"
+              "value": "2"
             },
             {
               "detail": "",
@@ -2459,7 +2471,7 @@
               "role": "",
               "roles": [],
               "runs_hq": false,
-              "state": "online",
+              "state": "away",
               "url": "/infrastructure/machines/iphone-16-pro/"
             },
             {
@@ -2738,7 +2750,7 @@
             "identity_agrees": false,
             "measured_by": "Another tailnet machine (docker-host-01)",
             "path": "",
-            "summary": "6 failed\u00a0\u00b7 4 not confirmed",
+            "summary": "5 failed\u00a0\u00b7 4 not confirmed",
             "tailnet_observed_at": "2026-01-15T09:30:00+00:00",
             "transport": "Encryption not confirmed",
             "untrusted_forwarding": false
@@ -2760,7 +2772,7 @@
               "check": {
                 "detail": "No reading names the device at 127.0.0.1.",
                 "label": "Not confirmed",
-                "state": "unproven",
+                "state": "unavailable",
                 "step": ""
               },
               "detail": "127.0.0.1",
@@ -2782,7 +2794,7 @@
                   "label": "The tailnet knows this device",
                   "mechanism": "The tailnet device list",
                   "rules": [],
-                  "state": "does-not"
+                  "state": "unmet"
                 }
               ],
               "link": null,
@@ -2811,21 +2823,21 @@
           "items": [
             {
               "approved_by": "",
-              "by": "example-agent, over MCP",
-              "capability": "automation.example.package_upgrade.run",
+              "by": "joe, on the web",
+              "capability": "automation.example.cache_flush.run",
               "correlation": "",
-              "created_at": "2026-01-15T09:29:00+00:00",
+              "created_at": "2026-01-15T09:27:00+00:00",
               "duration_seconds": null,
               "finished_at": null,
               "headline": "",
               "hosts": [
-                "macbook-pro-16"
+                "docker-host-01"
               ],
-              "operation_id": "330b177e-3075-5811-9fba-835493beb091",
-              "playbook": "example.package_upgrade",
-              "started_at": null,
-              "state": "queued",
-              "state_label": "Waiting",
+              "operation_id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
+              "playbook": "example.cache_flush",
+              "started_at": "2026-01-15T09:27:20+00:00",
+              "state": "running",
+              "state_label": "Running",
               "stated": []
             }
           ],
@@ -2988,7 +3000,7 @@
                     }
                   ],
                   "explanation": "HQ accepts requests from every address in the range. You can narrow the trusted networks in HQ's settings to the addresses the tailnet uses.",
-                  "id": "claim:d3cadf1809bee399",
+                  "id": "claim:31be84447cd15b63",
                   "investigations": [
                     {
                       "capability": "",
@@ -3035,10 +3047,10 @@
                   "subject": "connection:infrastructure.controllers:docker-host-01:tailscale",
                   "title": "HQ trusts all of 100.64.0.0/10, fd7a:115c:a1e0::/48, and the tailnet uses 6 device addresses and 1 subnet route",
                   "workflow": {
-                    "id": "resolve:claim:d3cadf1809bee399",
+                    "id": "resolve:claim:31be84447cd15b63",
                     "label": "Next steps",
                     "outcome": {
-                      "claim_id": "claim:d3cadf1809bee399",
+                      "claim_id": "claim:31be84447cd15b63",
                       "kind": "claim_absent",
                       "label": ""
                     },
@@ -3115,6 +3127,13 @@
                   "label": "MagicDNS",
                   "machines": null,
                   "value": "On"
+                }
+              ],
+              "signers": [
+                {
+                  "key": "tlpub:52fcca2c6f26b632eaee45dd9337eb0b3770ac760ea4ba2b075ab400fd603df8",
+                  "machine": "iphone-16-pro",
+                  "votes": 1
                 }
               ],
               "ssh_rules": [],
@@ -3240,6 +3259,7 @@
       "200": {
         "data": {
           "created": true,
+          "message": "Project \u201cGranted\u201d created.",
           "project": {
             "category": "other",
             "dependency_updates": false,
@@ -3269,14 +3289,14 @@
             "capability": "project.create",
             "content_fingerprint": "6c9ba16f74000dd99ad2ac8841847ddd5d8537ac700937d8cae8327f35afbcfd",
             "expires_at": "2026-01-16T09:30:00+00:00",
-            "id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
+            "id": "7b4ba536-2791-576a-bd31-b1b2e598a61c",
             "reason": "",
             "requested_actor": "example-automation",
             "requested_at": "2026-01-15T09:30:00+00:00",
             "requested_interface": "api",
             "resource_key": "",
             "resource_kind": "projects",
-            "review_url": "https://hq.example.com/audit/approval/69f54f70-cd66-5001-b486-bb8dbb36e914/",
+            "review_url": "https://hq.example.com/audit/approval/7b4ba536-2791-576a-bd31-b1b2e598a61c/",
             "state": "pending",
             "target": ""
           },
@@ -3357,6 +3377,7 @@
       "200": {
         "data": {
           "created": false,
+          "message": "Project \u201cRenamed\u201d updated.",
           "project": {
             "category": "other",
             "dependency_updates": false,
@@ -3580,7 +3601,7 @@
           ],
           "schema_version": 2,
           "summary": {
-            "edges": 307,
+            "edges": 309,
             "kinds": {
               "ability": 61,
               "connection": 10,

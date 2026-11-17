@@ -1,5 +1,5 @@
 """A coverage context for each test module, which fast's map of the tests
-that ran each file is read from (``tools/gate/testmap.py``).
+that ran each line is read from (``tools/gate/testmap.py``).
 
 Switched before a module's fixtures, so what its class fixtures and its tests
 run is its own, in a worker as in a serial run: Django gives each worker one

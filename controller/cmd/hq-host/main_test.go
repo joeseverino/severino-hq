@@ -45,6 +45,16 @@ func TestAUnitRequestIsAnsweredInJSONAsAnyAccount(t *testing.T) {
 	}
 }
 
+// An administrator hands the edge receiver over from their own account, so
+// edge-receiver is parsed before the root check, and takes no arguments.
+func TestEdgeReceiverIsParsedAsAnyAccount(t *testing.T) {
+	var stderr strings.Builder
+	code := run(context.Background(), []string{"edge-receiver", "extra"}, func(string) string { return "" }, 1000, strings.NewReader(""), io.Discard, &stderr)
+	if code != 2 || strings.Contains(stderr.String(), "must run as root") {
+		t.Errorf("exited %d with %q", code, stderr.String())
+	}
+}
+
 type ended struct {
 	error
 	outcome host.DeployOutcome

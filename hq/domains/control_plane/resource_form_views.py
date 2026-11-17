@@ -4,7 +4,6 @@ import logging
 from typing import get_origin
 from urllib.parse import urlencode
 
-from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
@@ -25,12 +24,14 @@ from hq.platform.application.provider_forms import (
     ResourceIdentityForm,
     spec_form_class,
 )
+from hq.platform.application.resource_capabilities import CREATE_CAPABILITY
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next
-from hq.platform.application.ui import ended
+from hq.platform.application.tone import Tone
 from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.core import secrets
 
+from .forms import MachineIdentityForm
 from .models import ManagedResource, OperationRequest
 from .names import normalized_hostname
 from .provider_adapters.declarations import MACHINE_KIND
@@ -56,6 +57,9 @@ class ResourceFormView(View):
     """
 
     template_name = "control_plane/resource_form.html"
+    # The one its route runs (``urls``): the create on a new record's, the
+    # update on an existing one's.
+    runs: tuple[str] = (CREATE_CAPABILITY,)
 
     def _existing(self, key):
         resource = get_object_or_404(ManagedResource, key=key) if key else None
@@ -88,7 +92,7 @@ class ResourceFormView(View):
                             title=provider["label"],
                             detail=provider["summary"],
                             url=f"{reverse('control_plane:create')}?{urlencode({'kind': provider['kind']})}",
-                            status="attention" if provider["public_effect"] else "",
+                            status=Tone.ATTENTION if provider["public_effect"] else "",
                             badge="Visible on the internet" if provider["public_effect"] else "",
                         )
                         for provider in describe_providers()["providers"]
@@ -120,7 +124,7 @@ class ResourceFormView(View):
                 # Only when editing. Creating something asks what HQ cannot
                 # know and nothing else: a name it can derive, and a pause
                 # switch for a thing that does not exist yet, are not questions.
-                "identity": (ResourceIdentityForm(initial={"enabled": resource.enabled}) if resource else None),
+                "identity": _identity(kind, resource),
                 # The form is built knowing which name it is about, so its
                 # menus can offer what suits that name rather than everything
                 # that exists. A certificate menu with one entry is right by
@@ -136,9 +140,6 @@ class ResourceFormView(View):
                 # nothing about the names it covers or where it is installed,
                 # which is the whole of what a person comes to check.
                 "facts": _form_facts(resource, spec) if resource else (),
-                "show_on_dashboard": bool(
-                    resource and kind == MACHINE_KIND and dashboard_machine_selected(resource.key)
-                ),
                 **_form_page(request, kind, resource),
             },
         )
@@ -148,7 +149,7 @@ class ResourceFormView(View):
         kind = self._kind(request, resource)
         if kind not in PROVIDERS:
             raise Http404("Unknown type of record.")
-        identity = ResourceIdentityForm(request.POST) if resource else None
+        identity = _identity(kind, resource, request.POST)
         spec = spec_form_class(
             kind,
             lock_identity=bool(resource),
@@ -173,9 +174,6 @@ class ResourceFormView(View):
                 "identity": identity,
                 "spec": spec,
                 "material": material,
-                "show_on_dashboard": bool(
-                    resource and kind == MACHINE_KIND and dashboard_machine_selected(resource.key)
-                ),
                 **_form_page(request, kind, resource),
             },
         )
@@ -185,7 +183,7 @@ class ResourceFormView(View):
 
         result = execute_posted(
             request,
-            "infrastructure.resource.update" if resource else "infrastructure.resource.create",
+            self.runs[0],
             {
                 # The identifier is never asked for again once a resource
                 # exists, so an edit keeps the one it has.
@@ -202,7 +200,7 @@ class ResourceFormView(View):
         saved = result["resource"]["key"]
         if resource and kind == MACHINE_KIND:
             shown = execute_posted(
-                request, DASHBOARD_MACHINE, {"selected": "show_on_dashboard" in request.POST}, target=saved
+                request, DASHBOARD_MACHINE, {"selected": identity.cleaned_data["show_on_dashboard"]}, target=saved
             )
             refused(request, shown)
         if material is not None:
@@ -213,15 +211,25 @@ class ResourceFormView(View):
             # say which half landed rather than reporting success.
             if refused(request, stored):
                 return redirect("control_plane:upload_certificate", key=saved)
-        messages.success(
-            request,
-            f"{'Added' if result['created'] else 'Updated'} “{saved}”. {APPLIES_SHORTLY}",
-        )
         # Back where the operator was working. Publishing a service
         # takes two or three declarations, and landing on each one's
         # own page after saving would make the next step a navigation
         # problem: the service page is the thing being built.
         return redirect(_after_save(request, kind, resource, saved))
+
+
+def _identity(kind: str, resource, data=None) -> ResourceIdentityForm | None:
+    """What HQ calls an existing resource and whether it reconciles, with a
+    machine's place on the dashboard; None while creating one."""
+
+    if not resource:
+        return None
+    if kind == MACHINE_KIND:
+        return MachineIdentityForm(
+            data,
+            initial={"enabled": resource.enabled, "show_on_dashboard": dashboard_machine_selected(resource.key)},
+        )
+    return ResourceIdentityForm(data, initial={"enabled": resource.enabled})
 
 
 def _form_page(request, kind: str, resource) -> dict:
@@ -418,15 +426,12 @@ class AdoptView(View):
     the operator to confirm every field first.
     """
 
+    runs = (ADOPT_SERVICE,)
+
     def post(self, request, hostname):
         result = execute_posted(request, ADOPT_SERVICE, {"hostname": hostname})
         if refused(request, result):
             return redirect("control_plane:services")
-        adopted = ", ".join(result["adopted"])
-        messages.success(
-            request,
-            f"HQ now manages {hostname} as {ended(adopted)} Nothing live was changed.",
-        )
         return redirect("control_plane:service", hostname=result["hostname"])
 
 
@@ -434,6 +439,7 @@ class CertificateUploadView(View):
     """Take a certificate generated elsewhere and hold it for installation."""
 
     template_name = "control_plane/certificate_upload.html"
+    runs = (UPLOAD,)
 
     @staticmethod
     def _page(resource) -> dict:
@@ -463,10 +469,6 @@ class CertificateUploadView(View):
         if form.is_valid():
             stored = execute_posted(request, UPLOAD, dict(form.cleaned_data), target=resource.key)
             if not refused(request, stored, form=form):
-                messages.success(
-                    request,
-                    f"Stored a certificate for {ended(', '.join(stored['domains']))} {APPLIES_SHORTLY}",
-                )
                 return redirect("control_plane:detail", key=resource.key)
         return render(
             request,
@@ -489,11 +491,8 @@ class AdoptRecordView(View):
     back out of the sweep, not posted, so the first reconciliation changes nothing.
     """
 
+    runs = (ADOPT,)
+
     def post(self, request, kind, token):
-        result = execute_posted(request, ADOPT, {"kind": kind, "token": token})
-        if not refused(request, result):
-            messages.success(
-                request,
-                f"HQ now manages “{result['resource']['key']}”. Nothing live was changed.",
-            )
+        refused(request, execute_posted(request, ADOPT, {"kind": kind, "token": token}))
         return redirect(safe_next(request, fallback=reverse("control_plane:list")))

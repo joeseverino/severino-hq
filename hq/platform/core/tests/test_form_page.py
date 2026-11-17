@@ -9,8 +9,8 @@ from django.template.loader_tags import ExtendsNode
 from django.test import SimpleTestCase, tag
 from django.views.generic.edit import DeletionMixin, ModelFormMixin
 
+from hq.platform.application.markup_testing import elements, select, with_class
 from hq.platform.application.routes import routed
-from hq.platform.application.tests.markup import elements, select, with_class
 from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.tree import ROOT
 from hq.platform.core.tests.test_part_tags import _catalog_templates

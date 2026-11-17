@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .container_standard import POWERFUL_CAPABILITIES, holds_socket, writable_system_binds
-from .standards import UNMET
+from .standards import Standing
 from .ui import ended
 lazy from .container_findings import socket_holder_link
 lazy from .upgrades import data_of
@@ -110,7 +110,7 @@ class Hardening:
 def hardening_of(container: Any) -> Hardening:
     """The compose change for every unmet check of ``container`` that one meets."""
 
-    unmet = {result.check.id for result in container.posture.results if result.state == UNMET}
+    unmet = {result.check.id for result in container.posture.results if result.state == Standing.UNMET}
     runtime = container.runtime or {}
     service = str(runtime.get("service", "") or "") or container.running.name
     changes: list[Change] = []

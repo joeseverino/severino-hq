@@ -1,6 +1,8 @@
 """Every audit row written inside one operation carries that operation's id,
 so the log reads as events: one operation, with the items it changed."""
 
+from dataclasses import dataclass
+
 from django.test import TestCase
 from django.utils import timezone
 
@@ -8,10 +10,10 @@ from hq.domains.control_plane.models import ApprovalRequest
 from hq.domains.jobs.runner import run
 from hq.platform.core.audit import audit_operation, operation_context, record_event
 from hq.platform.core.models import AuditLog
-from hq_sdk.capabilities import StrictCommand
 
+from ..adoption_testing import connection
 from ..approvals import APPROVE, ApprovalError, ApproveCommand, RejectCommand, approve, lapse_expired, reject
-from ..capabilities import CapabilitySpec, execute_capability, run_capability
+from ..capabilities import CapabilitySpec, Consented, execute_capability, run_capability
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
 from ..integration_testing import commands_registered
 from ..security import Capability, cli_principal, mcp_principal
@@ -22,11 +24,12 @@ UNGATED_KIND = "adguard.rewrite"
 NAME = "example.rewrites.pair"
 
 
-class _Pair(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class _Pair:
     prefix: str
 
 
-def _declare_pair(command: _Pair, *, principal) -> dict:
+def _declare_pair(command: _Pair, *, consented: Consented) -> dict:
     """A capability whose service writes several rows, each through a binding of its own."""
 
     for key in (f"{command.prefix}-one", f"{command.prefix}-two"):
@@ -34,8 +37,7 @@ def _declare_pair(command: _Pair, *, principal) -> dict:
             ManagedResourceCommand(
                 key=key, kind=UNGATED_KIND, spec={"domain": f"{key}.example", "answer": "192.0.2.10"}
             ),
-            principal=principal,
-            copied_from_live=True,
+            consented=consented,
         )
     return {"ok": True}
 
@@ -59,6 +61,9 @@ def last_row() -> int:
 
 
 class CapabilityRunTests(TestCase):
+    def setUp(self):
+        connection("adguard")
+
     def run_pair(self, prefix: str) -> list[AuditLog]:
         mark = last_row()
         with commands_registered({NAME: PAIR}):
@@ -72,8 +77,7 @@ class CapabilityRunTests(TestCase):
 
         for rows in (first, second):
             self.assertGreaterEqual(len(rows), 2)
-            # Written by the service's own binding, nested in the run.
-            self.assertEqual({row.metadata["operation"] for row in rows}, {"infrastructure.resource.create"})
+            self.assertEqual({row.metadata["operation"] for row in rows}, {NAME})
         first_ids = {row.operation_id for row in first}
         second_ids = {row.operation_id for row in second}
         self.assertEqual(len(first_ids), 1)
@@ -204,6 +208,9 @@ class ApprovalLifeTests(TestCase):
 
 
 class JobTests(TestCase):
+    def setUp(self):
+        connection("adguard")
+
     def test_a_capability_run_inside_a_job_writes_under_the_jobs_id(self):
         def work(progress):
             with commands_registered({NAME: PAIR}):

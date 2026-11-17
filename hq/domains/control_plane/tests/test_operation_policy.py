@@ -22,6 +22,7 @@ from hq.platform.application.resource_operations import (
     request_removal,
 )
 from hq.platform.application.security import MCP_INTERFACE, agent_principal, cli_principal
+from hq.platform.application.tests.consent import consented
 
 from ..models import ManagedResource, OperationRequest
 from ..providers import PROVIDERS
@@ -35,10 +36,15 @@ class OperationPolicyTests(TestCase):
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         OperationRequest.objects.all().delete()  # applied, so the reconcile its save queued is done
         self.resource = ManagedResource.objects.get(key="example-wildcard")
+
+    def reconcile(self, key: str, retry: str) -> dict:
+        return execute_capability(
+            "infrastructure.resource.reconcile", {"idempotency_key": retry}, principal=cli_principal(), target=key
+        )
 
     def test_a_verb_returns_to_the_page_that_offered_it(self):
         """These forms sit on pages that show the fact the verb answers, and
@@ -123,8 +129,8 @@ class OperationPolicyTests(TestCase):
 
     def test_active_controller_capability_queues_renewal_work(self):
         result = request_certificate_renewal(
-            OperationCommand(idempotency_key="renew-active"),
-            principal=cli_principal(),
+            OperationCommand(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
 
@@ -147,13 +153,13 @@ class OperationPolicyTests(TestCase):
                 kind="cloudflare.zone",
                 spec={"zone": "example.com", "connection_ref": "cf-example"},
             ),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
 
         with self.assertRaisesMessage(PolicyError, PROVIDERS["cloudflare.zone"].actions["reconcile"].reason):
             request_reconcile(
-                OperationCommand(idempotency_key="zone-locked"),
-                principal=cli_principal(),
+                OperationCommand(),
+                consented=consented(cli_principal()),
                 current_key="a-domain",
             )
         self.assertFalse(OperationRequest.objects.exists())
@@ -167,8 +173,8 @@ class OperationPolicyTests(TestCase):
         self.resource.save()
         with self.assertRaisesRegex(PolicyError, "Renews automatically from"):
             request_certificate_renewal(
-                OperationCommand(idempotency_key="renew-too-early"),
-                principal=cli_principal(),
+                OperationCommand(),
+                consented=consented(cli_principal()),
                 current_key=self.resource.key,
             )
 
@@ -181,13 +187,13 @@ class OperationPolicyTests(TestCase):
         self.resource.conditions = [{"type": "Drifted", "status": True, "reason": "NPMStale"}]
         self.resource.save()
         first = request_certificate_renewal(
-            OperationCommand(idempotency_key="renew-drift"),
-            principal=cli_principal(),
+            OperationCommand(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
         second = request_certificate_renewal(
-            OperationCommand(idempotency_key="renew-drift"),
-            principal=cli_principal(),
+            OperationCommand(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
         self.assertTrue(first["queued"])
@@ -199,30 +205,54 @@ class OperationPolicyTests(TestCase):
         return_value=(True, "active"),
     )
     def test_a_finished_operations_key_replays_it_and_refuses_another_resource(self, _policy):
-        first = request_reconcile(
-            OperationCommand(idempotency_key="finished-once"), principal=cli_principal(), current_key=self.resource.key
-        )
+        first = self.reconcile(self.resource.key, "finished-once")
         OperationRequest.objects.filter(pk=first["operation"]["id"]).update(
             state=OperationRequest.State.SUCCEEDED, completed_at=timezone.now()
         )
 
-        again = request_reconcile(
-            OperationCommand(idempotency_key="finished-once"), principal=cli_principal(), current_key=self.resource.key
-        )
-        self.assertFalse(again["queued"])
+        again = self.reconcile(self.resource.key, "finished-once")
         self.assertEqual(again["operation"]["id"], first["operation"]["id"])
 
         save_managed_resource(
             ManagedResourceCommand(key="other-wildcard", kind="tls.certificate", spec=certificate_spec()),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         OperationRequest.objects.filter(resource__key="other-wildcard").delete()  # applied, as above
-        with self.assertRaisesMessage(PolicyError, "already used by another operation"):
-            request_reconcile(
-                OperationCommand(idempotency_key="finished-once"),
-                principal=cli_principal(),
-                current_key="other-wildcard",
-            )
+
+        other = self.reconcile("other-wildcard", "finished-once")
+        self.assertEqual(other["error"]["code"], "idempotency_conflict")
+        self.assertEqual(OperationRequest.objects.count(), 1)
+
+    @patch(
+        "hq.platform.application.resource_operations.controller_action_policy",
+        return_value=(True, "active"),
+    )
+    def test_an_operation_answers_how_it_stands_as_every_ask_does(self, _policy):
+        from hq.platform.application.asks import Asked
+
+        answer = request_reconcile(
+            OperationCommand(), consented=consented(cli_principal()), current_key=self.resource.key
+        )
+
+        asked = Asked.of(answer)
+        self.assertTrue(asked.standing.live)
+        self.assertEqual(answer["operation"]["state"], OperationRequest.State.QUEUED)
+        self.assertTrue(asked.message)
+
+    @patch(
+        "hq.platform.application.resource_operations.controller_action_policy",
+        return_value=(True, "active"),
+    )
+    def test_a_retry_answers_what_its_first_call_queued_however_the_record_stands_now(self, _policy):
+        """A client that lost the first answer learns what it did, and nothing is asked twice."""
+
+        first = self.reconcile(self.resource.key, "asked-once")
+        ManagedResource.objects.filter(pk=self.resource.pk).update(enabled=False)
+
+        again = self.reconcile(self.resource.key, "asked-once")
+
+        self.assertTrue(first["queued"])
+        self.assertEqual(again, first)
         self.assertEqual(OperationRequest.objects.count(), 1)
 
     def test_an_agent_not_granted_infrastructure_is_refused_a_renewal(self):
@@ -241,8 +271,8 @@ class OperationPolicyTests(TestCase):
     )
     def test_controller_claim_and_report_updates_observed_state(self, _policy):
         queued = request_reconcile(
-            OperationCommand(idempotency_key="reconcile-once"),
-            principal=cli_principal(),
+            OperationCommand(),
+            consented=consented(cli_principal()),
             current_key=self.resource.key,
         )
         claim_payload = bridge_client.call(
@@ -344,8 +374,8 @@ class QueueHeadTests(TestCase):
         self.certificate.save()
 
         request_removal(
-            OperationCommand(idempotency_key="forget-it"),
-            principal=cli_principal(),
+            OperationCommand(),
+            consented=consented(cli_principal()),
             current_key="edge-certificate-target",
         )
 

@@ -12,6 +12,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
 from hq.domains.jobs.models import Job
+from hq.platform.application.markup_testing import all_elements, links, select, text
 from hq.platform.application.security import cli_principal
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
@@ -19,8 +20,8 @@ from ..container_words import UP_TO_DATE, UPDATE_AVAILABLE
 from ..drawings import Dot, Dots
 from ..hq_context import hq_context
 from ..inventory_testing import store
+from ..moments import moment
 from .host_only import host_only
-from .markup import all_elements, links, select, text
 
 # The package exports a function named work, so the module is named by its path.
 work_module = importlib.import_module("hq.platform.application.hq_context.work_part")
@@ -397,6 +398,47 @@ class PageTests(TestCase):
         for row in rows:
             self.assertTrue(any(ancestor.attrs.get("id") == "problems-here" for ancestor in row.ancestors))
 
+    def fact(self, response, label: str):
+        """The fact the Release section labels ``label``, and what it holds."""
+
+        page = all_elements(response)
+        (found,) = (element for element in page if "fact" in element.classes and element.words.startswith(f"{label} "))
+        return found, [element for element in page if element.inside(found)]
+
+    def test_the_age_beside_production_is_the_age_of_its_deployments(self):
+        """A repository the sweep carried from an older read holds what that
+        read found: the sweep's own moment says nothing of its deployments."""
+
+        estate()
+        read_at = timezone.now() - timedelta(hours=13)
+        store(
+            "github.repository",
+            repository(
+                deployments=[{"environment": "production", "sha": HEAD}],
+                read_at=read_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            ),
+        )
+
+        response = self.client.get(reverse("hq_self"))
+
+        branch, held = self.fact(response, "Main")
+        self.assertIn("In production", branch.words)
+        (age,) = (element for element in held if element.tag == "time")
+        shown = moment(age.attrs["datetime"])
+        assert shown is not None
+        self.assertLess(abs(shown - read_at), timedelta(seconds=1))
+
+    def test_an_unread_signature_says_why(self):
+        refused = "the registry refused an anonymous read (HTTP 401); the image may be private."
+        estate()
+        store("registry.image", {"image": "ghcr.io/example/hq/composition", "unread": refused, "read_at": stamp()})
+
+        response = self.client.get(reverse("hq_self"))
+
+        _signature, held = self.fact(response, "Signature")
+        (why,) = (element for element in held if element.attrs.get("data-reading-age") == "never")
+        self.assertIn("registry refused an anonymous read", why.words)
+
     def test_unreadable_units_render_as_a_sentence(self):
         estate()
         store(UNIT_KIND, reachable=False, error="")
@@ -484,7 +526,7 @@ class ResourceTests(TestCase):
             list_resource("hq", {"limit": 1}, principal=cli_principal())
 
 
-class ScheduledWorkTests(TestCase):
+class CadencedWorkTests(TestCase):
     """The page's scheduled work: derived from the declarations and their jobs."""
 
     def setUp(self):
@@ -497,7 +539,7 @@ class ScheduledWorkTests(TestCase):
         return job
 
     def rows(self):
-        return {item.name: item for item in work_module._scheduled_work()}
+        return {item.name: item for item in work_module._on_a_cadence()}
 
     def test_a_piece_of_work_shows_its_recent_runs_oldest_first_and_when_it_is_due(self):
         oldest = self.ran("audit.prune", timedelta(days=2))

@@ -1,25 +1,27 @@
 import json
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db import connection
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.markup_testing import hrefs, select, text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog, LinkedAccount
 
 from .. import github_profile
 from ..asks import REFRESHING
 from ..cadence import asked_at
+from ..cadence_testing import controller_arrived
 from ..capabilities import capability_registry, execute_capability
+from ..freshness import RETRY_AFTER, cadence
 from ..security import Capability, Principal
-from .markup import hrefs, select, text
 from .sentinel import SENTINEL
+
+PROFILE_EVERY = cadence(github_profile.KIND).every
 
 
 def tips(response):
@@ -79,23 +81,18 @@ def hold(profile=PROFILE, *, at=None, **fields):
     return snapshot
 
 
-# A controller that reached this HQ a moment ago, so a read asked of it is waiting on it.
-HEARTBEAT = Path(tempfile.mkdtemp()) / "heartbeat"
-HEARTBEAT.touch()
-ARRIVED = override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(HEARTBEAT))
-
-
 def operator():
     from ..security import cli_principal
 
     return cli_principal()
 
 
-@ARRIVED
 class PlanTests(TestCase):
     """HQ holds the profile's clock: the controller reads when the plan says."""
 
     def setUp(self):
+        # A controller that reached this HQ a moment ago, so a read asked of it is waiting on it.
+        controller_arrived()
         self.user = get_user_model().objects.create_user("operator")
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
 
@@ -113,22 +110,22 @@ class PlanTests(TestCase):
         self.assertEqual(github_profile.plan(), {"accounts": ["example-user"], "due": False})
 
     def test_a_reading_past_its_clock_is_due(self):
-        hold(at=timezone.now() - github_profile.PROFILE_EVERY)
+        hold(at=timezone.now() - PROFILE_EVERY)
 
         self.assertTrue(github_profile.plan()["due"])
 
     def test_a_read_that_just_failed_is_not_tried_on_every_sweep(self):
-        old = timezone.now() - github_profile.PROFILE_EVERY
+        old = timezone.now() - PROFILE_EVERY
         hold(at=old, updated_at=timezone.now(), reachable=False, error="GitHub API returned HTTP 502.")
 
         self.assertFalse(github_profile.plan()["due"])
-        self.assertTrue(github_profile.plan(timezone.now() + github_profile.RETRY_AFTER)["due"])
+        self.assertTrue(github_profile.plan(timezone.now() + RETRY_AFTER)["due"])
 
     def test_a_first_read_that_failed_is_retried_on_its_own_clock(self):
         hold(None, observed_at=None, reachable=False, error="GitHub API returned HTTP 502.")
 
         self.assertFalse(github_profile.plan()["due"])
-        self.assertTrue(github_profile.plan(timezone.now() + github_profile.RETRY_AFTER)["due"])
+        self.assertTrue(github_profile.plan(timezone.now() + RETRY_AFTER)["due"])
 
     def test_asking_makes_it_due_whatever_its_age(self):
         hold()
@@ -136,8 +133,8 @@ class PlanTests(TestCase):
         asked = github_profile.request_read(github_profile.ProfileReadCommand("example-user"), principal=operator())
 
         self.assertTrue(github_profile.plan()["due"])
-        self.assertEqual(asked_at(github_profile.KIND).isoformat(), asked["asked_at"])
-        self.assertEqual(github_profile.standing().state, "queued")
+        self.assertIsNotNone(asked_at(github_profile.KIND))
+        self.assertEqual((asked["standing"]["state"], github_profile.standing().state), ("queued", "queued"))
 
     def test_the_controller_registry_carries_the_plan(self):
         from ..controller import controller_registry
@@ -161,7 +158,7 @@ class PlanTests(TestCase):
         from ..cadence import sweep_due
 
         ProviderInventory.objects.create(kind="adguard.rewrite", observed_at=timezone.now())
-        hold(at=timezone.now() - github_profile.PROFILE_EVERY * 2)
+        hold(at=timezone.now() - PROFILE_EVERY * 2)
 
         self.assertFalse(sweep_due()["due"])
 
@@ -172,20 +169,20 @@ class IngestTests(TestCase):
     def record(self, report):
         from ..inventory import record_inventory
 
-        return record_inventory({github_profile.KIND: report}, principal=operator())
+        return record_inventory({github_profile.KIND: report})
 
     def test_a_carried_kind_keeps_its_records_and_its_moment(self):
-        before = hold(at=timezone.now() - github_profile.RETRY_AFTER)
+        before = hold(at=timezone.now() - RETRY_AFTER)
 
         result = self.record({"ok": True, "records": [], "carried": True})
 
         before.refresh_from_db()
         self.assertEqual(result["recorded"], [])
         self.assertEqual(before.records, [PROFILE])
-        self.assertLess(before.updated_at, timezone.now() - github_profile.RETRY_AFTER / 2)
+        self.assertLess(before.updated_at, timezone.now() - RETRY_AFTER / 2)
 
     def test_a_read_the_allowance_refused_is_an_attempt_that_keeps_the_reading(self):
-        before = hold(at=timezone.now() - github_profile.RETRY_AFTER)
+        before = hold(at=timezone.now() - RETRY_AFTER)
         refusal = {
             "part": "",
             "refusal": "",
@@ -202,7 +199,7 @@ class IngestTests(TestCase):
         self.assertGreater(before.updated_at, before.observed_at)
 
     def test_a_read_replaces_the_reading(self):
-        hold(at=timezone.now() - github_profile.PROFILE_EVERY)
+        hold(at=timezone.now() - PROFILE_EVERY)
 
         self.record({"ok": True, "records": [{**PROFILE, "followers": 9, "token": SENTINEL}]})
 
@@ -223,9 +220,10 @@ class NoOutboundReadTests(TestCase):
         self.assertFalse(hasattr(github_profile, "refresh"))
 
 
-@ARRIVED
 class PageTests(TestCase):
     def setUp(self):
+        # A controller that reached this HQ a moment ago, so a read asked of it is waiting on it.
+        controller_arrived()
         self.user = get_user_model().objects.create_user("operator", is_staff=True)
         self.client.force_login(self.user)
 

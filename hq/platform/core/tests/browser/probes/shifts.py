@@ -41,6 +41,17 @@ LAYOUT_SHIFTS = (
   const [vendored, limit] = given ?? [{json.dumps(SELECTORS["vendored"])}, null];"""
     + """
   if (!PerformanceObserver.supportedEntryTypes.includes('layout-shift')) return [];
+  // What the browser kept of one entry type. A buffered observe() puts it in
+  // the observer's buffer as it returns (Performance Timeline, observe()); only
+  // the callback waits for a task. Read through an observer, never
+  // performance.getEntriesByType, which the gates' fixed clock answers empty.
+  const kept = (type) => {
+    const observer = new PerformanceObserver(() => {});
+    observer.observe({type, buffered: true});
+    const seen = observer.takeRecords();
+    observer.disconnect();
+    return seen;
+  };
   const boxes = [...document.querySelectorAll(vendored)].map((el) => {
     const r = el.getBoundingClientRect();
     return [el, r.left + scrollX, r.top + scrollY, r.right + scrollX, r.bottom + scrollY];
@@ -62,7 +73,7 @@ LAYOUT_SHIFTS = (
   const whose = (shift) => `${when(shift)}${shift.hadRecentInput ? ' after input' : ''}: `
     + shift.sources.map((part) => `${moved(part)} (${theScripts(part) ? "the script's" : "HQ's"})`).join('; ');
   const sum = (shifts) => shifts.reduce((total, shift) => total + shift.value, 0);
-  const faceArrived = Math.max(0, ...performance.getEntriesByType('resource')
+  const faceArrived = Math.max(0, ...kept('resource')
     .filter((entry) => entry.name.endsWith('.woff2')).map((entry) => entry.responseEnd)) + 50;
   const worst = (entries) => {
     let found = [], session = [];
@@ -80,14 +91,7 @@ LAYOUT_SHIFTS = (
     if (limit === null) return [...entries.map(whose), `HQ's score ${score.toFixed(4)}`];
     return score > limit ? [`layout shift ${score.toFixed(4)} past ${limit}: ${session.map(said).join(' | ')}`] : [];
   };
-  // A buffered observe() puts what the browser kept in the observer's buffer
-  // as it returns (Performance Timeline, observe()); only the callback waits
-  // for a task.
-  const observer = new PerformanceObserver(() => {});
-  observer.observe({type: 'layout-shift', buffered: true});
-  const seen = observer.takeRecords();
-  observer.disconnect();
-  return report(seen);
+  return report(kept('layout-shift'));
 }"""
 )
 

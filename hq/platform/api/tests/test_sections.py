@@ -1,7 +1,7 @@
 """Each operation of the API document stands in the section of the domain that serves it."""
 
 import re
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from django.test import SimpleTestCase
 
@@ -11,12 +11,12 @@ from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.plugins import NavigationGroup, NavigationItem
 from hq.platform.application.resources import TopQuery
 from hq.platform.application.security import Capability
-from hq_sdk.capabilities import StrictCommand
 
 from .. import openapi, urls
 
 
-class _Nothing(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class _Nothing:
     pass
 
 

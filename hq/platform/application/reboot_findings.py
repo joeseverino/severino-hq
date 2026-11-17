@@ -16,9 +16,9 @@ from typing import Any
 from hq.domains.control_plane.observations.host import EDGE_REBOOT_KIND, REBOOT_KIND
 
 from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, cannot_run_commands, machine_step
-from .moments import when
+from .moments import moment, when
 from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller, taken_at
-from .timestamps import moment
+from .tone import Tone
 from .topology_model import TopologyNode
 
 REBOOT_STATE = "reboot-state"
@@ -172,7 +172,7 @@ _waiting = OnEachMachine(
     rule="reboot-pending",
     row=RebootState,
     picked=lambda row: row.waiting or bool(row.scheduled),
-    severity=lambda _rows: "attention",
+    severity=lambda _rows: Tone.ATTENTION,
     title=_title,
     explanation=_explanation,
     evidence=_evidence,
@@ -210,10 +210,10 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "reboot-pending",
         "Waiting on a restart",
-        "attention",
+        Tone.ATTENTION,
         _restarts,
         operator_action="On the machine, read what waits on the restart, then schedule it for a time that suits.",
         no_help_reason=cannot_run_commands(),
-        bars={"attention": "an update waits on a restart to take effect"},
+        bars={Tone.ATTENTION: "an update waits on a restart to take effect"},
     ),
 )

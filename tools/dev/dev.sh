@@ -9,6 +9,10 @@ unset CDPATH
 
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
+# The extension set this tree can load, said first.
+# shellcheck source=tools/lib/extension-set.sh
+. ./tools/lib/extension-set.sh
+compose_extensions
 
 die() {
     echo "$*" >&2

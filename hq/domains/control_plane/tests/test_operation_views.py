@@ -9,9 +9,11 @@ from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, Man
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.approval_review import asked, preview
-from hq.platform.application.approvals import DESTRUCTIVE_EFFECT, ApproveCommand, approve
+from hq.platform.application.approvals import ApproveCommand, approve
 from hq.platform.application.capabilities import capability_registry, execute_capability
 from hq.platform.application.capability_policy import Rule
+from hq.platform.application.contracts import Effect
+from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal, web_principal
@@ -104,6 +106,16 @@ class RemovalVerbTests(TestCase):
             AuditLog.objects.filter(object_id=str(operation.pk), metadata__actor="operator").exists(),
         )
 
+    def test_the_reason_is_a_field_posted_with_the_confirmation_and_described_by_its_help(self):
+        page = self.client.get(reverse("control_plane:remove", kwargs={"key": "example-dns"}))
+
+        (reason,) = select(page, "name", "reason")
+        self.assertEqual(reason.attrs["form"], "hq-post")
+        (label,) = select(page, "for", reason.attrs["id"])
+        self.assertIn("Why", label.text)
+        (help_,) = select(page, "id", reason.attrs["aria-describedby"])
+        self.assertIn("audit log", help_.text)
+
 
 class AgentStopTests(TestCase):
     """A stop takes a container away from whoever uses it, so a credential's
@@ -176,7 +188,7 @@ class ConfirmedVerbTests(TestCase):
                 self.assertIn(response.status_code, (200, 405))
             if response.status_code == 200:
                 confirmed.add(action)
-        destructive = {action for action in pages if registry[ACTION_CAPABILITY[action]].effect == DESTRUCTIVE_EFFECT}
+        destructive = {action for action in pages if registry[ACTION_CAPABILITY[action]].effect is Effect.DESTRUCTIVE}
 
         self.assertIn(OperationRequest.Action.STOP, confirmed)
         self.assertEqual(confirmed, destructive)

@@ -1,7 +1,7 @@
 from typing import override
 
 from django.db.models import Count
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse_lazy
 from django.utils.functional import cached_property
 from django.views.generic import (
     CreateView,
@@ -13,7 +13,6 @@ from django.views.generic import (
 
 from hq.platform.application import related
 from hq.platform.application.analytics import CONTENT_TRAFFIC_DAYS, attach_traffic, item_traffic
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.content import published_on
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.labels import adding, dotted_html
@@ -43,7 +42,8 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     heading = ""
     # What the head's button and the empty list call a new item here, and
     # the type its form opens on.
-    new_label = adding("writeup or page")
+    # The words its new-item button says, a variant of content.create.
+    new_variant = "writeup_or_page"
     new_type = ""
     table_empty = "No writeups or pages yet."
     table_filters = (TableFilter("status", "Status", "status", ContentItem.Status.choices),)
@@ -56,16 +56,11 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     def get_page_title(self):
         return self.heading
 
-    @cached_property
-    def new_url(self) -> str:
-        """The new-item form, opened on this section's type when it has one."""
-
-        query = f"?content_type={self.new_type}" if self.new_type else ""
-        return f"{reverse('content:create')}{query}"
-
     @override
     def get_page_actions(self):
-        return (PageAction(self.new_label, self.new_url, primary=True),)
+        # The new-item form, opened on this section's type when it has one.
+        opened = {"content_type": self.new_type} if self.new_type else None
+        return (PageAction.command("content.create", primary=True, variant=self.new_variant, query=opened),)
 
     @cached_property
     def _held(self) -> tuple[tuple[str, str], ...]:
@@ -132,8 +127,6 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
             # Where the section is published, said once when it is all one site.
             site=published_on(url for _type, url in self._held),
             show_type=len(self.types_held) > 1,
-            new_label=self.new_label,
-            new_url=self.new_url,
         )
         return context
 
@@ -141,7 +134,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
 class WriteupListView(_ContentSectionView):
     content_types = WRITEUP_TYPES
     heading = "Writeups"
-    new_label = adding("writeup")
+    new_variant = "writeup"
     new_type = ContentItem.Type.ARTICLE.value
     table_empty = "No writeups yet."
 
@@ -149,7 +142,7 @@ class WriteupListView(_ContentSectionView):
 class PageListView(_ContentSectionView):
     content_types = PAGE_TYPES
     heading = "Pages"
-    new_label = adding("page")
+    new_variant = "page"
     new_type = ContentItem.Type.PAGE.value
     table_empty = "No pages yet."
 
@@ -219,7 +212,7 @@ class ContentDetailView(PageMixin, DetailView):
     def get_page_lede(self):
         return dotted_html(
             self.object.get_content_type_display(),
-            status_pill(self.object.get_status_display(), tone=self.object.status),
+            status_pill(self.object.state),
         )
 
     @override
@@ -229,8 +222,8 @@ class ContentDetailView(PageMixin, DetailView):
         if item.published_url:
             actions.append(PageAction("Open live page", item.published_url))
         actions += [
-            PageAction(capability_words("content.update"), reverse("content:edit", args=[item.slug])),
-            PageAction("Delete", reverse("content:delete", args=[item.slug]), danger=True),
+            PageAction.command("content.update", item.slug),
+            PageAction.command("content.delete", item.slug),
         ]
         return tuple(actions)
 

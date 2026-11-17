@@ -8,9 +8,10 @@ operator stops managing leaves, are docs/Derived-Facts.md#adoption.
 
 import logging
 from collections.abc import Callable, Iterable
+from copy import deepcopy
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Annotated, Any, Literal, NoReturn, TypedDict
+from typing import Annotated, Any, Literal, NoReturn, TypedDict, final
 
 from django.db import transaction
 from pydantic import Field
@@ -23,19 +24,21 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS, record_spec, registry_label, service_facets
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS, connection_credential
 
+from .answer_fields import CallMessage
 from .command_fields import Describe, Names
-from .conditions import stamped
-from .inventory import record_identity, record_token, service_hostnames
+from .conditions import READY, stamped
+from .inventory import live_spec, record_identity, record_token, service_hostnames
 from .record_errors import PolicyError, RecordNotFound, Sentence
+from .sealing import Sealed, sealer
 from .security import Principal
+from .tone import Tone
 lazy from .connection_catalog import EVIDENCE_DETAILS, PROVEN_EVIDENCE, grant_evidence
 lazy from .connection_contracts import ConnectionAbility, ConnectionInstance
 lazy from .connection_setup import MANAGES_FIELD
 lazy from .connections import connection_rows
 lazy from .facts import every_snapshot
 lazy from .infrastructure import (
-    ManagedResourceCommand,
-    save_managed_resource,
+    save_adopted,
     suggest_key,
 )
 lazy from .page_reads import setup_url
@@ -48,6 +51,8 @@ logger = logging.getLogger("severino.adoption")
 ADOPT = "infrastructure.resource.adopt"
 ADOPT_SERVICE = "infrastructure.service.adopt"
 
+# What every adoption says of the live record, which it only reads.
+NOTHING_LIVE_CHANGED: Sentence = "Nothing live was changed."
 
 NO_CONNECTION: Sentence = (
     "No connection for this change has reported, so HQ cannot make it. The Connections page says how to set one up."
@@ -183,7 +188,7 @@ def _write_evidence(kind: str, provider: str, permissions: tuple[str, ...], conn
         id=connection_ref or provider,
         label=connection_ref or provider,
         kind=provider,
-        status="neutral",
+        status=Tone.NEUTRAL,
         status_label="",
         credential_model=connection_credential(provider),
     )
@@ -255,6 +260,68 @@ def let_in(kind: str, token: str) -> None:
         row.delete()
 
 
+@final
+class Live(Sealed):
+    """A record's spec as HQ's last read of its provider found it: the only
+    thing ``infrastructure.save_adopted`` writes down (``sealing``).
+
+    Writing one down asks no consent, since HQ's copy then equals what is
+    live and nothing anybody would agree to has changed. Its security
+    properties:
+
+    - Two reads make one, both in this module and both of the stored sweep:
+      ``unmanaged`` (each record no declaration claims, which adopting and
+      the sweep's own adoption take) and ``found_live`` (the record a
+      declaration names, which keeping the live version takes). Only this
+      module holds its seal, so a spec a caller wrote cannot be written down
+      as adopted.
+    - It is read only through ``live_read``, which refuses anything this
+      module did not seal.
+    - The one thing added to a read is ``keeping``: the fields its provider
+      declares no sweep can observe, taken from the declaration it replaces.
+    """
+
+    __slots__ = ()
+
+
+@dataclass(frozen=True, slots=True)
+class LiveRead:
+    """What a ``Live`` carries. ``spec`` is a copy, so changing what a caller
+    is handed changes nothing it writes down."""
+
+    kind: str
+    found: dict[str, Any]
+
+    @property
+    def spec(self) -> dict[str, Any]:
+        """What the read found."""
+
+        return deepcopy(self.found)
+
+
+_seal, live_read = sealer(Live, LiveRead)
+
+
+def _live(kind: str, spec: dict[str, Any]) -> Live:
+    return _seal(LiveRead(kind, deepcopy(spec)))
+
+
+def keeping(live: Live, declared: dict[str, Any]) -> Live:
+    """``live``, with each field no sweep can observe as ``declared`` has it."""
+
+    read = live_read(live)
+    unobservable = PROVIDERS[read.kind].unobservable_fields
+    kept = {field: declared[field] for field in unobservable if field in declared}
+    return _live(read.kind, {**read.spec, **kept})
+
+
+def found_live(kind: str, declared: dict[str, Any]) -> Live | None:
+    """What the last sweep found for the record ``declared`` describes, or None."""
+
+    found = live_spec(kind, declared)
+    return None if found is None else _live(kind, found)
+
+
 @dataclass(frozen=True, slots=True)
 class Unmanaged:
     """One record a provider holds that no HQ declaration accounts for.
@@ -268,7 +335,7 @@ class Unmanaged:
     kind: str
     identity: tuple[str, ...]
     hostnames: tuple[str, ...]
-    spec: dict[str, Any]
+    live: Live
     observed_at: Any
     # False when the provider will not take this record on unasked: it stays
     # here, and a finding says so, until a person adopts or removes it.
@@ -279,6 +346,10 @@ class Unmanaged:
     # takes found records on. An observed record is shown and never adopted.
     # See ``application.adoption``.
     observed_only: bool = True
+
+    @property
+    def spec(self) -> dict[str, Any]:
+        return live_read(self.live).spec
 
     @property
     def label(self) -> str:
@@ -353,7 +424,7 @@ def unmanaged() -> tuple[Unmanaged, ...]:
                     kind=snapshot.kind,
                     identity=identity,
                     hostnames=service_hostnames(snapshot.kind, spec),
-                    spec=spec,
+                    live=_live(snapshot.kind, spec),
                     observed_at=snapshot.observed_at,
                     adoptable=not provider.adoption_gap and (provider.adopts is None or provider.adopts(record)),
                     connection_ref=connection_ref,
@@ -454,6 +525,7 @@ class ServiceAdopted(TypedDict):
     ok: Literal[True]
     hostname: Annotated[str, Describe("The name whose records were adopted.")]
     adopted: Annotated[list[str], Describe("The keys of the records adopted.")]
+    message: CallMessage
 
 
 @transaction.atomic
@@ -491,7 +563,12 @@ def adopt_service(
         )["resource"]["key"]
         for item in writable
     ]
-    return {"ok": True, "hostname": found.hostname, "adopted": adopted}
+    return {
+        "ok": True,
+        "hostname": found.hostname,
+        "adopted": adopted,
+        "message": f"HQ now manages {found.hostname} as {ended(', '.join(adopted))} {NOTHING_LIVE_CHANGED}",
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -517,6 +594,12 @@ def adopt(
     the resource is born in sync and its first reconciliation is a no-op.
     """
 
+    return _take_on(command, principal=principal, enabled=True)
+
+
+def _take_on(command: AdoptCommand, *, principal: Principal, enabled: bool) -> ResourceSaved:
+    """Write down the record ``command`` names as found live, switched on or off."""
+
     found = find_unmanaged(command.kind, command.hostname, token=command.token)
     if found is None:
         raise RecordNotFound("HQ found no new record of that type to manage. It may be managed already, or gone.")
@@ -530,20 +613,12 @@ def adopt(
         )
     # Every other write's capability check, spec validation, fingerprint and
     # audit record, rather than a row created here.
-    result = save_managed_resource(
-        ManagedResourceCommand(
-            key=command.key or suggested_key(found),
-            kind=found.kind,
-            spec=found.spec,
-            enabled=True,
-        ),
-        principal=principal,
-        copied_from_live=True,
-    )
-    _record_as_observed(result.get("resource", {}).get("key", ""), found)
+    result = save_adopted(found.live, key=command.key or suggested_key(found), enabled=enabled, principal=principal)
+    key = result.get("resource", {}).get("key", "")
+    _record_as_observed(key, found)
     # Adopting is the operator managing it again.
     let_in(found.kind, found.token)
-    return result
+    return {**result, "message": f"HQ now manages “{key}”. {NOTHING_LIVE_CHANGED}"}
 
 
 def _record_as_observed(key: str, found: Unmanaged) -> None:
@@ -566,7 +641,7 @@ def _record_as_observed(key: str, found: Unmanaged) -> None:
         resource.conditions,
         [
             {
-                "type": "Ready",
+                "type": READY,
                 "status": True,
                 "reason": "Adopted",
                 "message": "Added to HQ from what was live.",
@@ -594,7 +669,10 @@ def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:
 
     Only records read through a connection that manages, and none an operator
     said HQ does not manage. The connection's ``manages`` is the decision; a
-    connection that only observes adopts nothing.
+    connection that only observes adopts nothing. A kind that stands behind
+    access (``requires_approval``) is taken on switched off: the controller's
+    report says what exists, never that anybody agreed to HQ acting on it, so
+    it stays inert until a person switches it on.
     """
 
     excluded = kept_out()
@@ -605,7 +683,11 @@ def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:
         if (item.kind, item.token) in excluded:
             continue
         try:
-            result = adopt(AdoptCommand(kind=item.kind, token=item.token), principal=principal)
+            result = _take_on(
+                AdoptCommand(kind=item.kind, token=item.token),
+                principal=principal,
+                enabled=not PROVIDERS[item.kind].requires_approval,
+            )
         except (RecordNotFound, PolicyError, ValidationError, ValueError) as error:
             # One record that cannot be adopted must not stop the rest, and the
             # next sweep tries again. A record that never can is said each time.

@@ -117,12 +117,13 @@ textarea.code {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: .35; transform: scale(.72); }
 }
-@media (prefers-reduced-motion: reduce) { .conn-pulse { animation: none; } }
 .conn-samples { display: inline-flex; align-items: flex-end; gap: var(--space-1); height: 13px; }
 .conn-samples i {
   width: 3px; background: var(--accent-2); border-radius: 1px;
   height: calc(var(--at) * 1%); min-height: 2px;
 }
+/* A bar the server drew for a sample not yet taken holds its room. */
+.conn-samples i:not([style*="--at"]) { visibility: hidden; }
 
 /* The two ends and the link between them. Its frame is the box its narrow
    layout asks of, so it stacks wherever it is drawn. */
@@ -188,7 +189,7 @@ textarea.code {
 
 /* Checks read down, each a rung in a frame of its own: its tick, then what
    it says, opening to why. */
-.check-ladder { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.check-ladder { display: grid; gap: var(--space-2); }
 .ladder-rung { border: 1px solid var(--line); border-radius: var(--radius); }
 .ladder-rung > details > summary {
   display: grid; grid-template-columns: auto minmax(0, 1fr);
@@ -200,9 +201,9 @@ textarea.code {
   display: grid; place-items: center; font-size: var(--text-2xs); line-height: 1;
   background: var(--tone-positive-tint); color: var(--ok);
 }
-.ladder-rung[data-state="does-not"] .ladder-mark { background: var(--tone-critical-tint); color: var(--danger); }
-.ladder-rung[data-state="unknown"] { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); }
-.ladder-rung[data-state="unknown"] .ladder-mark { background: var(--tone-caution-tint); color: var(--warn); }
+.ladder-rung[data-state="unmet"] .ladder-mark { background: var(--tone-critical-tint); color: var(--danger); }
+.ladder-rung[data-state="unavailable"] { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); }
+.ladder-rung[data-state="unavailable"] .ladder-mark { background: var(--tone-caution-tint); color: var(--warn); }
 .ladder-kind { color: var(--muted); font-size: var(--text-3xs); font-weight: 700; }
 /* A check's statement, then what it was read from: on the same line while
    both fit, under the statement when they do not. */
@@ -220,7 +221,6 @@ textarea.code {
 /* The fold's own mark, turned when it opens, as every other disclosure's is (surfaces.css). */
 .ladder-more::after { content: "\203A" / ""; display: inline-block; margin-inline-start: .3em; transition: transform .12s ease; }
 details[open] > summary .ladder-more::after { transform: rotate(90deg); }
-@media (prefers-reduced-motion: reduce) { .ladder-more::after { transition: none; } }
 .ladder-body {
   display: grid; gap: var(--space-3);
   margin: 0 var(--space-6) var(--space-4) calc(var(--space-6) + 17px + var(--space-5));
@@ -270,8 +270,8 @@ details[open] > summary .ladder-more::after { transform: rotate(90deg); }
   background: color-mix(in srgb, var(--ok) 40%, transparent);
 }
 .check-ladder.is-route > .ladder-rung:last-child::before { display: none; }
-.check-ladder.is-route > .ladder-rung[data-state="does-not"]::before { background: color-mix(in srgb, var(--danger) 45%, transparent); }
-.check-ladder.is-route > .ladder-rung[data-state="unknown"]::before { background: color-mix(in srgb, var(--warn) 45%, transparent); }
+.check-ladder.is-route > .ladder-rung[data-state="unmet"]::before { background: color-mix(in srgb, var(--danger) 45%, transparent); }
+.check-ladder.is-route > .ladder-rung[data-state="unavailable"]::before { background: color-mix(in srgb, var(--warn) 45%, transparent); }
 /* An opened stop's evidence sits in a frame of its own under the stop's
    name, so it reads as that stop's and the route plainly continues after
    it. It is on the card's own surface, where the rows inside keep their
@@ -286,26 +286,6 @@ details[open] > summary .ladder-more::after { transform: rotate(90deg); }
   .check-ladder.is-route > .ladder-rung > details > summary > :not(.ladder-mark) { grid-column: 2; }
   .check-ladder.is-route > .ladder-rung > details > summary > .ladder-mark { grid-row: span 3; }
 }
-
-/* ----- Favorites (control_plane/_service_pin.html) ---------------------- */
-
-/* The star keeps a full touch target but hangs into the cell's padding, so
-   the name starts on the line every other cell in the row starts on. */
-.name-line > .pin-toggle { margin-block: -7px; }
-.pin-toggle {
-  background: none; border: 0; box-shadow: none; padding: 0 var(--space-1); cursor: pointer;
-  font-size: var(--text-lg); line-height: 1; color: var(--muted);
-}
-.pin-toggle:hover { color: var(--ink-2); }
-.pin-toggle.pinned { color: var(--warn); }
-/* Each arrow hangs its hit area beside it (page.css), so a pair sits far
-   enough apart that the two areas never share a pixel, at either pointer. */
-.pin-move { display: inline-flex; gap: var(--space-6); margin-left: auto; }
-.pin-move button {
-  background: none; border: 0; box-shadow: none; padding: 0 var(--space-1); cursor: pointer;
-  font-size: var(--text-xs); line-height: 1; color: var(--muted-2);
-}
-.pin-move button:hover { color: var(--ink); }
 
 /* An empty table has nothing to head: the headings wait until there is. */
 .data-table:not(:has(tbody td:not([colspan]))) thead { display: none; }

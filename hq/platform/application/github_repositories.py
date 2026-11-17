@@ -17,7 +17,7 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.github import FULL_READ_EVERY, REPOSITORY_KIND
 
-lazy from .timestamps import moment
+lazy from .moments import moment
 
 
 def _phase(repository: str, period: int) -> int:

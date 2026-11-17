@@ -23,6 +23,7 @@ from .entity_links import entity_link, kind_label
 from .projection import projection_scope
 from .security import Principal
 from .service_context import Cell, ServiceSection, recent_changes, recent_work
+from .tone import Tone
 from .ui import MISSING
 lazy from . import connections, services
 lazy from .cadence import connection_providers
@@ -38,6 +39,7 @@ lazy from .public_registry import public_endpoints
 lazy from .reach import network_of
 lazy from .routes import reverse
 lazy from .tailnet import TAILNET_KIND
+lazy from .tailnet_signers import signer_of
 lazy from .topology_model import RELATIONS
 lazy from .work_runs import runs_on
 
@@ -243,6 +245,7 @@ def machine_links(machine: Machine, relationships) -> dict[str, object]:
         "device_link": None,
         "magic_dns_link": None,
         "opening_links": (),
+        "tailnet_signer": None,
     }
     if presence is None:
         return links
@@ -257,6 +260,7 @@ def machine_links(machine: Machine, relationships) -> dict[str, object]:
     )
     if presence.dns_name:
         links["magic_dns_link"] = entity_link(TAILNET_KIND, presence.dns_name, record=record)
+    links["tailnet_signer"] = signer_of(machine.name)
     names = PolicyNames()
     links["opening_links"] = tuple((port, names.of(who)) for port, who in presence.openings)
     return links
@@ -272,7 +276,7 @@ def problems_by_part(machine: Machine, principal: Principal) -> dict[str, tuple[
     found: dict[str, list[dict]] = {"page": [], CONTAINERS_CARD: [], TAILNET_CARD: []}
     for item in problems_about(machine.url, principal):
         rule = rule_for(rule_of(item["key"]))
-        card = rule.card if rule is not None and item.get("status") != "serious" else ""
+        card = rule.card if rule is not None and item.get("status") != Tone.SERIOUS else ""
         found[card if drawn.get(card) else "page"].append(item)
     return {part: tuple(items) for part, items in found.items()}
 

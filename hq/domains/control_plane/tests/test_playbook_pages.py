@@ -8,11 +8,13 @@ import json
 from urllib.parse import urlsplit
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.domains.control_plane.models import AdoptedCatalog, ApprovalRequest, OperationRequest, SourceProposal
-from hq.platform.application.tests.markup import elements, select, text, with_class, within
+from hq.platform.application.markup_testing import elements, select, text, with_class, within
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.models import AuditLog
@@ -136,13 +138,23 @@ class PlaybooksPageTests(TestCase):
         self.assertFalse(headings, "no section heads the table, and no scan result has a box")
         self.assertFalse(select(html, "data-approval"), "no request waits on this page")
 
+    def test_the_page_reads_the_adopted_catalog_once_within_its_query_budget(self):
+        self.page()
+        with CaptureQueriesContext(connection) as queries:
+            self.page()
+
+        # The catalog's digest alone is how the request catches up (``served``).
+        whole = [query for query in queries if f'"{AdoptedCatalog._meta.db_table}"."procedures"' in query["sql"]]
+        self.assertEqual(len(whole), 1, "every part of the page names the one catalog it read")
+        self.assertLessEqual(len(queries), 18)
+
     def test_the_title_line_names_the_commit_adopted_in_the_place_of_when_the_repository_was_read(self):
         adopted = AdoptedCatalog.objects.order_by("-pk").first()
         html = self.page()
         (line,) = select(html, "data-adopted-commit")
         for said in (adopted.revision[:12], adopted.branch, f"from {adopted.committer}", "adopted"):
             self.assertIn(said, line.words)
-        self.assertFalse(select(html, "data-reading-age"))
+        self.assertFalse(any("data-reading-age" in shown.attrs for shown in within(html, "data-adopted-commit")))
 
     def test_the_title_says_in_one_line_why_the_newest_scan_failed_and_when_one_last_reached_it(self):
         newest = OperationRequest.objects.filter(action=OperationRequest.Action.SCAN).order_by("-created_at").first()
@@ -150,7 +162,7 @@ class PlaybooksPageTests(TestCase):
         html = self.page()
         (failed,) = select(html, "data-scan-failed")
         self.assertIn(newest.result["message"], failed.words)
-        self.assertIn("Last reached", failed.words)
+        self.assertTrue(any("data-reading-age" in shown.attrs for shown in within(html, "data-scan-failed")))
         # A Refresh still waiting leaves the failure said.
         self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR)
         (still,) = select(self.page(), "data-scan-failed")
@@ -341,7 +353,7 @@ class PlaybooksPageTests(TestCase):
 
         playbooks = reverse("control_plane:playbooks")
         self.assertRedirects(self.client.get(reverse("control_plane:detail", kwargs={"key": SOURCE_KEY})), playbooks)
-        self.assertEqual(resource_capabilities(ManagedResource.objects.get(key=SOURCE_KEY)).offered, ("", ""))
+        self.assertEqual(resource_capabilities(ManagedResource.objects.get(key=SOURCE_KEY)).offered, (False, False))
         changes = {reverse(f"control_plane:{route}", kwargs={"key": SOURCE_KEY}) for route in ("edit", "remove")}
         links = {urlsplit(element.attrs["href"]).path for element in select(self.page(), "href")}
         self.assertFalse(changes & links)

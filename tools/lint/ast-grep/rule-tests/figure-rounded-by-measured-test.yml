@@ -1,0 +1,11 @@
+id: figure-rounded-by-measured
+valid:
+  - '<p>{{ miles|measured:"mi,2" }}</p>'
+  - '<p>{{ share|measured:"%,-1" }}</p>'
+  - '<rect x="{{ part.at }}%" width="{{ part.size }}%"></rect>'
+  - '<p>{{ count }} of {{ total }}</p>'
+invalid:
+  - '<p>{{ miles|floatformat:2 }} mi</p>'
+  - '<p>{{ miles|floatformat:"-2"|measured:"mi" }}</p>'
+  - '<p>{{ share|breakable }}%</p>'
+  - '<span title="{{ load|floatformat:1 }}">load</span>'

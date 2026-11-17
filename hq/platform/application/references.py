@@ -24,10 +24,12 @@ from django.utils.text import capfirst
 
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
+from .tone import Tone
 lazy from . import entity_links, security
-lazy from .card_items import Insight, ListRow
+lazy from .card_items import ListRow
 lazy from .demo import showing_demo
 lazy from .entity_links import NODE_KINDS, entity_link, kind_label, node_name
+lazy from .finding_model import Finding, opens
 lazy from .labels import plural
 lazy from .projection import read_once
 lazy from .security import Principal, cli_principal
@@ -721,12 +723,26 @@ def referenced_by_row(row: models.Model, *, principal: Principal) -> tuple[Menti
 # ----- A reference that names nothing ---------------------------------------------
 
 
-def dangling(
+@dataclass(frozen=True, slots=True)
+class Dangling:
+    """One row whose reference names nothing: what it says, and its page."""
+
+    title: str
+    url: str
+    # What it is about, for as long as it is the same matter: the row and its column.
+    key: str
+
+
+# What to do about a row whose reference names nothing.
+UNLINK = "Choose something else for it, or clear the link."
+
+
+def naming_nothing(
     *models_: type[models.Model],
     principal: Principal | None = None,
     source: Callable[[models.Model], str] = str,
-) -> tuple[Insight, ...]:
-    """One item for the queue per row whose reference names nothing.
+) -> tuple[Dangling, ...]:
+    """Each row whose reference names nothing.
 
     Three statements whatever the number of rows: every distinct reference
     the models hold, the records those name, then the rows holding one that
@@ -752,10 +768,18 @@ def dangling(
         for field, values in gone
     ]
     return tuple(
-        _dangling_item(field, row, source)
-        for (field, _values), rows in zip(gone, _rows(parts), strict=True)
-        for row in rows
+        _dangling(field, row, source) for (field, _values), rows in zip(gone, _rows(parts), strict=True) for row in rows
     )
+
+
+def dangling(
+    *models_: type[models.Model],
+    principal: Principal | None = None,
+    source: Callable[[models.Model], str] = str,
+) -> tuple[Finding, ...]:
+    """``naming_nothing`` as an extension's queue items, one per row."""
+
+    return tuple(_dangling_item(found) for found in naming_nothing(*models_, principal=principal, source=source))
 
 
 def _naming_nothing(held: list[set[str]], principal: Principal) -> list[set[str]]:
@@ -778,23 +802,32 @@ def _names_nothing(reference: Reference | None, named: Mapping[Reference, Entity
     return reference not in named and not hidden
 
 
-def _dangling_item(field: ReferenceField, row: models.Model, source: Callable[[models.Model], str]) -> Insight:
-    """The queue's item for one row whose reference names nothing."""
-
+def _dangling(field: ReferenceField, row: models.Model, source: Callable[[models.Model], str]) -> Dangling:
     name = getattr(row, field.name_attname) or getattr(row, field.attname)
-    return Insight(
-        status="attention",
-        eyebrow="Records",
+    return Dangling(
         title=f"{source(row)} links to {name}, which HQ does not have",
-        value="",
-        body="Choose something else for it, or clear the link.",
-        why="HQ's records hold a link to something it no longer has, so the record points nowhere.",
-        action="Open record",
         url=row.get_absolute_url(),
         key=f"reference:{field.model._meta.label_lower}:{row.pk}:{field.attname}",
+    )
+
+
+# What an extension's row that links to nothing is raised under.
+LINKS_TO_NOTHING = "links-to-nothing"
+
+
+def _dangling_item(found: Dangling) -> Finding:
+    """The queue's item for one row whose reference names nothing."""
+
+    return Finding(
+        rule=LINKS_TO_NOTHING,
+        subject="",
+        part=found.key,
+        severity=Tone.ATTENTION,
+        title=found.title,
+        explanation=UNLINK,
+        why="HQ's records hold a link to something it no longer has, so the record points nowhere.",
+        primary=opens("Open record", found.url),
         family="Links to nothing",
-        # A row's own link, checked against every record and reading at once.
-        observed_at=None,
     )
 
 

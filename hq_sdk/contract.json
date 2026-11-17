@@ -1,5 +1,5 @@
 {
-  "api_version": 14,
+  "api_version": 16,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -125,25 +125,6 @@
       "audit_events": {
         "kind": "function",
         "parameters": []
-      },
-      "audit_operation": {
-        "kind": "function",
-        "parameters": [
-          "*",
-          "operation",
-          "principal=",
-          "operation_id="
-        ]
-      },
-      "operation_context": {
-        "kind": "function",
-        "parameters": [
-          "*",
-          "interface",
-          "actor",
-          "operation",
-          "operation_id="
-        ]
       },
       "record_event": {
         "kind": "function",
@@ -293,7 +274,8 @@
           "SET_PREFERENCES",
           "PIN_FAVORITES",
           "SET_ASIDE_ACTION_ITEMS",
-          "END_SESSIONS"
+          "END_SESSIONS",
+          "SHOW_DEMO"
         ]
       },
       "CapabilitySpec": {
@@ -396,6 +378,15 @@
         "kind": "dataclass",
         "members": {}
       },
+      "Effect": {
+        "kind": "enum",
+        "members": [
+          "READ",
+          "REMOTE_WRITE",
+          "INFRASTRUCTURE_CHANGE",
+          "DESTRUCTIVE"
+        ]
+      },
       "InputError": {
         "bases": [
           "HostRefusal",
@@ -413,6 +404,20 @@
             "type": "str"
           }
         }
+      },
+      "KEPT": {
+        "kind": "value",
+        "type": "str"
+      },
+      "Kept": {
+        "bases": [],
+        "constructor": [
+          "read",
+          "always_sent="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
       },
       "Names": {
         "bases": [],
@@ -454,7 +459,7 @@
             "kind": "method",
             "parameters": [
               "self",
-              "capability"
+              "*capabilities"
             ]
           }
         }
@@ -469,14 +474,13 @@
         "kind": "dataclass",
         "members": {}
       },
-      "StrictCommand": {
-        "bases": [
-          "BaseModel"
-        ],
-        "constructor": [],
-        "fields": {},
-        "kind": "model",
-        "members": {}
+      "as_sent": {
+        "kind": "function",
+        "parameters": [
+          "record",
+          "command",
+          "keys"
+        ]
       },
       "capability_registry": {
         "kind": "function",
@@ -517,6 +521,12 @@
           "expected_updated_at="
         ]
       },
+      "keeps": {
+        "kind": "function",
+        "parameters": [
+          "kept"
+        ]
+      },
       "mcp_principal": {
         "kind": "function",
         "parameters": []
@@ -540,6 +550,13 @@
         "kind": "function",
         "parameters": [
           "user"
+        ]
+      },
+      "written": {
+        "kind": "function",
+        "parameters": [
+          "command",
+          "sent"
         ]
       }
     },
@@ -628,7 +645,6 @@
           "setup_route=",
           "documentation_url=",
           "secret_store=",
-          "stale_after_hours=",
           "empty_message="
         ],
         "fields": [],
@@ -852,7 +868,8 @@
           "effect=",
           "execution_notes=",
           "every=",
-          "verb="
+          "verb=",
+          "offered="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -918,6 +935,9 @@
             "kind": "attribute",
             "type": "bool"
           },
+          "look": {
+            "kind": "property"
+          },
           "method": {
             "kind": "attribute",
             "type": "str"
@@ -961,27 +981,53 @@
         "constructor": [
           "label",
           "url",
-          "method=",
           "primary=",
-          "danger=",
           "modal=",
-          "value=",
           "title=",
-          "disabled=",
-          "field=",
-          "fields="
+          "disabled="
         ],
-        "fields": [],
+        "fields": [
+          "danger",
+          "field",
+          "fields",
+          "method",
+          "value"
+        ],
         "kind": "dataclass",
         "members": {
+          "command": {
+            "kind": "classmethod",
+            "parameters": [
+              "name",
+              "target=",
+              "*",
+              "variant=",
+              "primary=",
+              "query=",
+              "refused=",
+              "field=",
+              "value=",
+              "fields=",
+              "modal="
+            ]
+          },
           "css": {
             "kind": "property"
           },
           "dialog": {
             "kind": "property"
           },
+          "look": {
+            "kind": "property"
+          },
           "modal_id": {
             "kind": "property"
+          },
+          "of": {
+            "kind": "classmethod",
+            "parameters": [
+              "link"
+            ]
           }
         }
       },
@@ -1092,6 +1138,43 @@
       }
     },
     "plugin": {
+      "Finding": {
+        "bases": [],
+        "constructor": [
+          "rule",
+          "subject",
+          "title",
+          "severity",
+          "explanation",
+          "evidence=",
+          "remedies=",
+          "offers=",
+          "investigations=",
+          "scope=",
+          "affected_scopes=",
+          "workflow=",
+          "steps=",
+          "no_help_reason=",
+          "since=",
+          "subject_link=",
+          "read_capabilities=",
+          "part=",
+          "read_now=",
+          "observed_at=",
+          "reads=",
+          "primary=",
+          "count=",
+          "notice=",
+          "awaiting_fix=",
+          "held=",
+          "why=",
+          "clears=",
+          "family="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
       "NavigationGroup": {
         "bases": [],
         "constructor": [
@@ -1133,6 +1216,7 @@
           "health=",
           "calendars=",
           "outbound=",
+          "cadences=",
           "demo_seed=",
           "demo_pages="
         ],
@@ -1168,6 +1252,13 @@
         "kind": "function",
         "parameters": []
       },
+      "opens": {
+        "kind": "function",
+        "parameters": [
+          "label",
+          "url"
+        ]
+      },
       "plugin_attention_items": {
         "kind": "function",
         "parameters": []
@@ -1182,6 +1273,37 @@
       }
     },
     "reads": {
+      "Freshness": {
+        "bases": [],
+        "constructor": [
+          "state",
+          "observed_at",
+          "stale_after"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "due": {
+            "kind": "property"
+          },
+          "label": {
+            "kind": "property"
+          },
+          "stale": {
+            "kind": "property"
+          }
+        }
+      },
+      "ReadCadence": {
+        "bases": [],
+        "constructor": [
+          "every",
+          "stale_after"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
       "day_span": {
         "kind": "function",
         "parameters": [
@@ -1196,6 +1318,14 @@
           "*",
           "reads",
           "vary="
+        ]
+      },
+      "freshness": {
+        "kind": "function",
+        "parameters": [
+          "kind",
+          "observed_at",
+          "now="
         ]
       },
       "passed": {
@@ -1415,7 +1545,7 @@
     "resources": {
       "ResourceQuery": {
         "bases": [
-          "BaseModel"
+          "Closed"
         ],
         "constructor": [],
         "fields": {},
@@ -1738,10 +1868,6 @@
               "self"
             ]
           },
-          "table_room": {
-            "kind": "attribute",
-            "type": "str"
-          },
           "table_search_fields": {
             "kind": "attribute",
             "type": "tuple"
@@ -1855,6 +1981,37 @@
           }
         }
       },
+      "Element": {
+        "bases": [],
+        "constructor": [
+          "tag",
+          "attrs",
+          "text=",
+          "ancestors=",
+          "chunks=",
+          "beneath=",
+          "inert=",
+          "shadowed=",
+          "opens="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "classes": {
+            "kind": "property"
+          },
+          "inside": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "row"
+            ]
+          },
+          "words": {
+            "kind": "property"
+          }
+        }
+      },
       "OutboundInRequest": {
         "bases": [
           "RuntimeError"
@@ -1862,6 +2019,12 @@
         "constructor": null,
         "kind": "class",
         "members": {}
+      },
+      "all_elements": {
+        "kind": "function",
+        "parameters": [
+          "html"
+        ]
       },
       "audit_writer": {
         "kind": "function",
@@ -1871,6 +2034,13 @@
         "kind": "function",
         "parameters": [
           "showing"
+        ]
+      },
+      "elements": {
+        "kind": "function",
+        "parameters": [
+          "html",
+          "tag"
         ]
       },
       "form_keyed": {
@@ -1895,6 +2065,18 @@
           "*capabilities"
         ]
       },
+      "hrefs": {
+        "kind": "function",
+        "parameters": [
+          "html"
+        ]
+      },
+      "links": {
+        "kind": "function",
+        "parameters": [
+          "html"
+        ]
+      },
       "plain": {
         "kind": "function",
         "parameters": [
@@ -1913,6 +2095,14 @@
         "kind": "function",
         "parameters": []
       },
+      "select": {
+        "kind": "function",
+        "parameters": [
+          "html",
+          "attribute",
+          "value="
+        ]
+      },
       "sibling": {
         "kind": "function",
         "parameters": [
@@ -1925,6 +2115,19 @@
           "**manifest_fields"
         ]
       },
+      "text": {
+        "kind": "function",
+        "parameters": [
+          "html"
+        ]
+      },
+      "texts": {
+        "kind": "function",
+        "parameters": [
+          "html",
+          "tag"
+        ]
+      },
       "unclosed_template_comments": {
         "kind": "function",
         "parameters": [
@@ -1935,6 +2138,21 @@
         "kind": "function",
         "parameters": [
           "template_root"
+        ]
+      },
+      "with_class": {
+        "kind": "function",
+        "parameters": [
+          "html",
+          "name"
+        ]
+      },
+      "within": {
+        "kind": "function",
+        "parameters": [
+          "html",
+          "attribute",
+          "value="
         ]
       }
     },
@@ -2176,6 +2394,8 @@
           "subject=",
           "part=",
           "notice=",
+          "held=",
+          "awaiting_fix=",
           "family=",
           "since=",
           "observed_at=",
@@ -2273,6 +2493,73 @@
             "kind": "property"
           }
         }
+      },
+      "PathChart": {
+        "bases": [],
+        "constructor": [
+          "*",
+          "title",
+          "description",
+          "segments",
+          "width",
+          "height",
+          "markers=",
+          "scale=",
+          "legend=",
+          "note="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "empty": {
+            "kind": "property"
+          },
+          "spatial": {
+            "kind": "attribute",
+            "type": "bool"
+          }
+        }
+      },
+      "PathMarker": {
+        "bases": [],
+        "constructor": [
+          "x",
+          "y",
+          "label"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "PathScale": {
+        "bases": [],
+        "constructor": [
+          "x",
+          "y",
+          "length",
+          "label"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "end": {
+            "kind": "property"
+          },
+          "label_y": {
+            "kind": "property"
+          }
+        }
+      },
+      "PathSegment": {
+        "bases": [],
+        "constructor": [
+          "path",
+          "band",
+          "tooltip="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
       },
       "PlanNote": {
         "bases": [],
@@ -2418,6 +2705,15 @@
         "kind": "dataclass",
         "members": {}
       },
+      "Tone": {
+        "kind": "enum",
+        "members": [
+          "SERIOUS",
+          "ATTENTION",
+          "NEUTRAL",
+          "GOOD"
+        ]
+      },
       "Trend": {
         "bases": [],
         "constructor": [
@@ -2506,6 +2802,16 @@
           "trend=",
           "minimum=",
           "maximum="
+        ]
+      },
+      "measured": {
+        "kind": "function",
+        "parameters": [
+          "value",
+          "unit",
+          "places=",
+          "*",
+          "plus="
         ]
       },
       "span": {
@@ -2613,16 +2919,7 @@
       "ActionLink": {
         "bases": [],
         "constructor": [
-          "name",
-          "label",
-          "effect",
-          "url",
-          "method=",
-          "capability=",
-          "target=",
-          "reason=",
-          "recommended=",
-          "refusal="
+          "_factory"
         ],
         "fields": [],
         "kind": "dataclass",
@@ -2663,43 +2960,39 @@
         "fields": [],
         "kind": "dataclass",
         "members": {}
+      },
+      "read_link": {
+        "kind": "function",
+        "parameters": [
+          "name",
+          "label",
+          "url",
+          "*",
+          "reason=",
+          "recommended="
+        ]
       }
     },
     "writes": {
-      "CommandFormMixin": {
+      "CapabilityCommandMixin": {
         "bases": [
           "PostedOnce"
         ],
         "constructor": [],
         "kind": "class",
         "members": {
-          "build_command": {
+          "capability": {
             "kind": "method",
             "parameters": [
               "self",
               "form"
             ]
-          },
-          "command": {
-            "kind": "attribute",
-            "type": "NoneType"
-          },
-          "domain_errors": {
-            "kind": "attribute",
-            "type": "tuple"
           },
           "form_valid": {
             "kind": "method",
             "parameters": [
               "self",
               "form"
-            ]
-          },
-          "get_success_message": {
-            "kind": "method",
-            "parameters": [
-              "self",
-              "result"
             ]
           },
           "get_success_url": {
@@ -2708,50 +3001,43 @@
               "self"
             ]
           },
-          "run": {
+          "payload": {
             "kind": "method",
             "parameters": [
               "self",
-              "command"
+              "form"
             ]
           },
-          "service": {
-            "kind": "attribute",
-            "type": "NoneType"
+          "runs": {
+            "kind": "property"
           },
-          "success_message": {
+          "submits": {
             "kind": "attribute",
             "type": "str"
           },
           "success_url_name": {
             "kind": "attribute",
             "type": "str"
-          }
-        }
-      },
-      "ServiceCreateMixin": {
-        "bases": [
-          "ServiceWriteMixin"
-        ],
-        "constructor": [],
-        "kind": "class",
-        "members": {
-          "form_valid": {
+          },
+          "target": {
             "kind": "method",
             "parameters": [
-              "self",
-              "form"
+              "self"
             ]
           }
         }
       },
-      "ServiceDeleteMixin": {
+      "CapabilityDeleteMixin": {
         "bases": [
-          "ServiceWriteMixin"
+          "_RecordWrite"
         ],
         "constructor": [],
         "kind": "class",
         "members": {
+          "deletes": {
+            "kind": "attribute",
+            "type": "str"
+          },
           "form_valid": {
             "kind": "method",
             "parameters": [
@@ -2765,84 +3051,44 @@
               "self",
               "**kwargs"
             ]
+          },
+          "runs": {
+            "kind": "property"
           }
         }
       },
-      "ServiceUpdateMixin": {
+      "CapabilityFormMixin": {
         "bases": [
-          "ServiceWriteMixin"
+          "_RecordWrite"
         ],
         "constructor": [],
         "kind": "class",
         "members": {
+          "adding": {
+            "kind": "property"
+          },
+          "capability": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "form"
+            ]
+          },
+          "creates": {
+            "kind": "attribute",
+            "type": "str"
+          },
           "form_valid": {
             "kind": "method",
             "parameters": [
               "self",
               "form"
             ]
-          }
-        }
-      },
-      "ServiceWriteMixin": {
-        "bases": [
-          "PostedOnce",
-          "WriteMessages"
-        ],
-        "constructor": [],
-        "kind": "class",
-        "members": {
-          "REQUIRED": {
-            "kind": "attribute",
-            "type": "tuple"
           },
-          "announce": {
-            "kind": "method",
-            "parameters": [
-              "self",
-              "template",
-              "target"
-            ]
+          "runs": {
+            "kind": "property"
           },
-          "current_identity": {
-            "kind": "method",
-            "parameters": [
-              "self"
-            ]
-          },
-          "identity_result_key": {
-            "kind": "attribute",
-            "type": "str"
-          },
-          "reload": {
-            "kind": "method",
-            "parameters": [
-              "self",
-              "result"
-            ]
-          },
-          "write_principal": {
-            "kind": "method",
-            "parameters": [
-              "self"
-            ]
-          }
-        }
-      },
-      "WriteMessages": {
-        "bases": [],
-        "constructor": [],
-        "kind": "class",
-        "members": {
-          "created_message": {
-            "kind": "attribute",
-            "type": "str"
-          },
-          "deleted_message": {
-            "kind": "attribute",
-            "type": "str"
-          },
-          "updated_message": {
+          "updates": {
             "kind": "attribute",
             "type": "str"
           }
@@ -2856,12 +3102,9 @@
       "address-list",
       "allocation",
       "allocation-legend",
-      "btn",
       "cell-data",
       "cell-part",
       "cell-whole",
-      "chart-axis",
-      "chart-legend",
       "code-list",
       "compact",
       "compact-table",
@@ -2872,10 +3115,8 @@
       "domain-charts",
       "errors",
       "eyebrow",
-      "field",
       "finding",
       "form",
-      "form-actions",
       "ghost",
       "help",
       "icon-link",
@@ -2883,7 +3124,6 @@
       "key-col",
       "keyboard-only",
       "list-rows",
-      "muted",
       "name-line",
       "narrow-more",
       "narrow-only",
@@ -2892,20 +3132,6 @@
       "optional-col",
       "page-lede",
       "primary",
-      "print-footer",
-      "print-only",
-      "prose-list",
-      "route-band-1",
-      "route-band-2",
-      "route-band-3",
-      "route-band-4",
-      "route-band-5",
-      "route-frame",
-      "route-line",
-      "route-map",
-      "route-marker",
-      "route-scale",
-      "route-swatch",
       "row-actions",
       "row-below",
       "row-empty",
@@ -3043,6 +3269,9 @@
       "readout": {
         "argument": "none"
       },
+      "record": {
+        "argument": "optional"
+      },
       "span": {
         "argument": "none"
       },
@@ -3105,6 +3334,9 @@
         "blocks": {
           "page": {
             "given": []
+          },
+          "print_footer": {
+            "given": []
           }
         },
         "reads": [
@@ -3152,7 +3384,7 @@
         ]
       },
       "partials/_attention_list.html": {
-        "about": "Decisions waiting on the operator, from `hq_sdk.ui.Insight` entries.",
+        "about": "Decisions waiting on the operator, from the entries `hq_sdk.plugin.plugin_attention_items` gathers.",
         "optional": [],
         "required": [
           "empty",
@@ -3177,7 +3409,7 @@
         ]
       },
       "partials/_chart.html": {
-        "about": "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`.",
+        "about": "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`.",
         "optional": [],
         "required": [
           "chart"
@@ -3293,6 +3525,15 @@
           "items"
         ]
       },
+      "partials/_reading_age.html": {
+        "about": "When a reading was taken, `at` the moment, in the one wording every page uses; `unread` why there is none.",
+        "optional": [
+          "at",
+          "reading",
+          "unread"
+        ],
+        "required": []
+      },
       "partials/_record_list.html": {
         "about": "A compact list of records, from `hq_sdk.ui.ListRow`.",
         "optional": [
@@ -3335,6 +3576,42 @@
         "parameters": [],
         "parts": []
       },
+      "button": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "label",
+          "url=",
+          "*",
+          "post=",
+          "submit=",
+          "look=",
+          "css=",
+          "title=",
+          "disabled=",
+          "current=",
+          "name=",
+          "value=",
+          "pressed=",
+          "hit=",
+          "fields=",
+          "modal=",
+          "icon=",
+          "count=",
+          "arrow=",
+          "**attributes"
+        ],
+        "parts": []
+      },
+      "button_row": {
+        "classes": [],
+        "parameters": [
+          "*",
+          "bar="
+        ],
+        "parts": []
+      },
       "card": {
         "classes": [
           "css"
@@ -3356,6 +3633,15 @@
       "dot": {
         "classes": [],
         "parameters": [],
+        "parts": []
+      },
+      "dot_list": {
+        "classes": [],
+        "parameters": [
+          "*",
+          "muted=",
+          "**data"
+        ],
         "parts": []
       },
       "empty_value": {
@@ -3405,12 +3691,16 @@
         "parameters": [
           "*",
           "action=",
+          "autofocus=",
           "clear=",
           "css=",
           "filtered=",
           "held=",
           "id=",
+          "keep=",
           "more=",
+          "query=",
+          "search=",
           "shown=",
           "total=",
           "verb=",
@@ -3420,6 +3710,23 @@
           "choices",
           "summary"
         ]
+      },
+      "muted": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "*",
+          "css=",
+          "element=",
+          "hidden=",
+          "id=",
+          "role=",
+          "tip=",
+          "title=",
+          "**data"
+        ],
+        "parts": []
       },
       "notice": {
         "classes": [
@@ -3453,22 +3760,18 @@
         ],
         "parts": []
       },
-      "post_button": {
-        "classes": [
-          "css"
-        ],
+      "present": {
+        "classes": [],
         "parameters": [
-          "label",
-          "url",
+          "value"
+        ],
+        "parts": []
+      },
+      "prose_list": {
+        "classes": [],
+        "parameters": [
           "*",
-          "name=",
-          "value=",
-          "css=",
-          "title=",
-          "disabled=",
-          "pressed=",
-          "hit=",
-          "fields="
+          "numbered="
         ],
         "parts": []
       },
@@ -3611,7 +3914,6 @@
           "chart=",
           "pane=",
           "compare=",
-          "room=",
           "empty=",
           "remedy=",
           "action_url=",

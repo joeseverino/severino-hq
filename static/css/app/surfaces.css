@@ -197,7 +197,6 @@
     transition: transform .12s ease;
   }
   :is(main, dialog) details:not(.ladder-rung > details)[open] > summary::before { transform: rotate(90deg); }
-  @media (prefers-reduced-motion: reduce) { :is(main, dialog) details:not(.ladder-rung > details) > summary::before { transition: none; } }
 
   /* A section that folds: its heading is the toggle. */
   .section-fold > summary { display: flex; align-items: baseline; }
@@ -230,16 +229,11 @@
   /* A row's toggle, drawn by the server where a row holds something back or heads rows folded under it: the one disclosure a row has, sized to be hit, turned when open. */
   :is(.row-expand, .row-fold) {
     display: inline-grid; place-items: center;
-    width: 1.5rem; height: 1.5rem; min-height: 0; padding: 0; margin: 0;
-    border: 0; border-radius: var(--radius-sm); background: none; box-shadow: none;
-    color: var(--muted); font-size: var(--text-sm); line-height: 1; cursor: pointer;
+    width: 1.5rem; height: 1.5rem; padding: 0; border-radius: var(--radius-sm);
+    color: var(--muted); font-size: var(--text-sm); line-height: 1;
     vertical-align: middle;
   }
-  :is(.row-expand, .row-fold):hover { border: 0; background: var(--line-2); color: var(--ink); }
-  /* What a row holds back until it is expanded, and the hint it replaces. A
-     cell moved to the line beneath an open row is open too. */
-  .data-table tr:not(.is-expanded, .row-detail) .row-more,
-  .data-table tr:is(.is-expanded, .row-detail) .row-less { display: none; }
+  :is(.row-expand, .row-fold):hover { background: var(--line-2); color: var(--ink); }
   /* Its chevron is its own border, pointing at what it holds back and turned down when open, so a row carries no drawing for it. */
   :is(.row-expand, .row-fold)::before {
     content: ""; box-sizing: border-box; width: 6px; height: 6px; margin-inline-end: var(--space-1);
@@ -247,12 +241,8 @@
     transform: rotate(45deg); transition: transform .12s ease;
   }
   :is(.row-expand, .row-fold)[aria-expanded="true"]::before { transform: rotate(135deg); margin-inline-end: 0; margin-block-end: var(--space-1); }
-  @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold)::before { transition: none; } }
   /* With no script a fold cannot open or close, and every row it would fold shows (tables.css), so it is not drawn. */
   @media (scripting: none) { .row-fold { display: none; } }
-  /* An open row shows each value it cut whole, wrapping inside its column wherever it must, so nothing in it runs past its cell; a panel a cell shows is no part of the column. A column that holds its content (a state, a figure, controls) cuts nothing and takes its track from that content, so it wraps the same open and closed and opening moves no column. */
-  .data-table > tbody > tr.is-expanded > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]),
-  .data-table > tbody > tr.is-expanded > :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) { white-space: normal; overflow-wrap: anywhere; }
 
   /* A band too narrow for two cells is a list, like every other summary:
      each fact one row, its label and its value at the right edge, the detail

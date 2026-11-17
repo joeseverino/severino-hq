@@ -84,6 +84,11 @@ POSTS = {
     "agent-policy-retired-action": Posted(
         "agent_policy", (), lambda: {field_name("example-agent", "example.retired"): "deny"}
     ),
+    # A save of the agents' rules answered: the command's own sentence said
+    # over the page, as every write that ran says what it did.
+    "agent-policy-saved": Posted(
+        "agent_policy", (), lambda: {field_name("example-agent", "infrastructure.resource.stop"): "approve"}, status=200
+    ),
     # The read run on the machine the estate's working run holds: the run in
     # the way said in words, with a link to it on Jobs.
     "run-held-machine": Posted(

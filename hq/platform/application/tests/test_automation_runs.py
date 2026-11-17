@@ -10,13 +10,14 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest
-from hq.platform.core.models import AgentIdentity, IdempotencyRecord
+from hq.platform.application.markup_testing import links, text
+from hq.platform.core.models import AgentIdentity
 
+from ..automation_runs import CANCEL
 from ..capabilities import capability_registry, run_capability
 from ..capability_policy import Rule, matrix, set_rule
 from ..controller import claim_next_operation
 from ..security import Capability, Principal, cli_principal
-from .markup import links, text
 from .procedures import APP, DB, EDGE, RESTART, RESTART_KEY, RESTART_RUN, REVISION, Supply, manifest, run_payload
 
 # A person's own click in the browser, which is their consent.
@@ -64,6 +65,17 @@ class QueuedRunTests(RunTestCase):
         )
         self.assertEqual(answer["operation"]["correlation"], "example-investigation-7")
         self.assertEqual(operation.resource.spec["revision"], REVISION)
+
+    def test_a_run_and_its_cancel_answer_how_each_stands_as_every_ask_does(self):
+        from ..asks import Asked
+
+        asked = self.ask(run_payload())
+        cancelled = self.ask({"operation_id": asked["operation"]["id"]}, key="example-cancel-1", name=CANCEL)
+
+        self.assertTrue(Asked.of(asked).standing.live, asked)
+        ended = Asked.of(cancelled).standing
+        self.assertFalse(ended.live, cancelled)
+        self.assertTrue(ended.label, cancelled)
 
     def test_the_claim_names_the_playbook_the_manifest_declares(self):
         self.supply(manifest(playbook="playbooks/linux/service_restart.yml"))
@@ -201,8 +213,6 @@ class DoorbellTests(RunTestCase):
         with self.captureOnCommitCallbacks(execute=True):
             self.ask(run_payload())
         self.marker.unlink()
-        # Past the replay record, so the run's own key is what answers.
-        IdempotencyRecord.objects.all().delete()
 
         with self.captureOnCommitCallbacks(execute=True):
             self.ask(run_payload())
@@ -425,16 +435,6 @@ class RetriedRunTests(RunTestCase):
 
         self.refused(run_payload(service="db"), "idempotency_conflict")
         self.assertEqual(OperationRequest.objects.count(), 1)
-
-    def test_a_key_outliving_its_replay_still_names_its_run(self):
-        """The operation's own key holds after the replay record expires."""
-
-        first = self.ask(run_payload())
-        IdempotencyRecord.objects.all().delete()
-
-        self.assertEqual(self.ask(run_payload())["operation"]["id"], first["operation"]["id"])
-        IdempotencyRecord.objects.all().delete()
-        self.refused(run_payload(service="db"), "idempotency_conflict")
 
     def test_the_shell_queues_without_a_key(self):
         answer = run_capability(RESTART_RUN, run_payload(), principal=cli_principal()).answer

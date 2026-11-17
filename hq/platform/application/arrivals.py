@@ -20,17 +20,15 @@ from django.utils import timezone
 from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
 from hq.platform.core.write_bounds import Bound
 lazy from hq.domains.control_plane.models import ProviderInventory
-lazy from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer
+lazy from hq.platform.core.network import client_ip
 
 from .derivations import passed, present
 from .reach import NETWORKS, network_of
 lazy from . import tailnet
 lazy from .inventory import record_inventory
-lazy from .moments import ago
-lazy from .request_channel import channel_for_request, forwarded_chain
-lazy from .security import internal_principal
+lazy from .moments import ago, moment
+lazy from .request_channel import forwarding_of
 lazy from .tailnet_presence import tailnet_presence
-lazy from .timestamps import moment
 
 logger = logging.getLogger(__name__)
 
@@ -160,10 +158,7 @@ def _write(due: list[tuple[dict[str, Any], int]]) -> None:
             "count": count + (0 if restart else int(previous.get("count") or 0)),
         }
     newest = sorted(kept.values(), key=lambda item: item["last_seen"], reverse=True)
-    record_inventory(
-        {ARRIVAL_KIND: {"ok": True, "records": newest[:MAX_SOURCES]}},
-        principal=internal_principal("hq.request-path"),
-    )
+    record_inventory({ARRIVAL_KIND: {"ok": True, "records": newest[:MAX_SOURCES]}})
 
 
 def _arrival(request, address: str) -> dict[str, Any]:
@@ -171,14 +166,13 @@ def _arrival(request, address: str) -> dict[str, Any]:
 
     device = tailnet.device_at(address)
     presence = tailnet_presence().get(device.name) if device is not None else None
-    peer = socket_peer(request)
-    forwarded = bool(forwarded_chain(request)) and is_trusted_proxy(peer)
+    forwarding = forwarding_of(request)
     return {
         "address": address,
         "device": device.name if device is not None else "",
-        "channel": channel_for_request(request).id,
+        "channel": forwarding.channel.id,
         "carried": presence.peer_path if presence is not None else "",
-        "forwarded_by": peer if forwarded else "",
+        "forwarded_by": forwarding.peer if forwarding.trusted else "",
     }
 
 

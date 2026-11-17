@@ -15,7 +15,7 @@ from django.utils.text import Truncator
 from hq.domains.content.models import ContentItem
 from hq.domains.projects.models import Project
 from hq.platform.application.http_read import UNREACHABLE, fetch, redirect_target
-from hq.platform.application.timestamps import moment
+from hq.platform.application.moments import moment
 
 
 class ContentSyncError(RuntimeError):
@@ -51,13 +51,7 @@ def fetch_content_index(url: str | None = None, timeout: int = 10) -> object:
     url = url or settings.CONTENT_INDEX_URL
     if not url:
         raise ContentSyncError("CONTENT_INDEX_URL is not set.")
-    headers = {
-        "Accept": "application/json",
-        # Cloudflare's browser-integrity check rejects an HTTP library's default
-        # signature with Error 1010. Identify this machine client explicitly,
-        # as every well-behaved HTTP adapter should.
-        "User-Agent": "Severino-HQ/1.0 (+https://github.com/joeseverino/severino-hq)",
-    }
+    headers = {"Accept": "application/json"}
     client_id = settings.CF_ACCESS_CLIENT_ID
     client_secret = settings.CF_ACCESS_CLIENT_SECRET
     if client_id and client_secret:

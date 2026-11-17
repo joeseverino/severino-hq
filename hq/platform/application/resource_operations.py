@@ -5,10 +5,11 @@ each is checked against the provider's policy, queued atomically and audited
 before the controller runs it.
 """
 
-from collections.abc import Iterable
+import secrets
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict, cast
 
 from django.db import transaction
 from django.db.models import QuerySet
@@ -17,19 +18,26 @@ from hq.domains.control_plane.desired_state import advance_dependents
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
-from hq.platform.core.audit import audit_operation, audited_labels
-lazy from hq.platform.core.models import AuditLog
 
-from .adoption import keep_out_declaration, observes_only, require_writable
-from .cadence import request_reading, ring_doorbell, swept
+from .adoption import (
+    NOTHING_LIVE_CHANGED,
+    found_live,
+    keep_out_declaration,
+    keeping,
+    observes_only,
+    require_writable,
+)
+from .answer_fields import CallMessage
+from .asks import Asked, AskedAnswer, Standing
+from .cadence import ask, swept
 from .command_fields import Describe
-from .default_hold import consent_gap
-from .doors import NOBODY, Attribution
+from .conditions import DRIFTED, PROBLEMS, holding
+from .doors import NOBODY
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .infrastructure import (
     ManagedResourceCommand,
     delivery_targets,
-    is_drifted,
+    save_adopted,
     save_managed_resource,
 )
 from .record_errors import PolicyError, RecordNotFound, Sentence
@@ -49,21 +57,21 @@ from .resource_records import (
     RequestedInterface,
 )
 from .security import CONTROLLER_INTERFACE, Principal
-from .ui import counted
+from .ui import counted, ended
 lazy from . import tailnet
+lazy from .capabilities import Consented, capability_words, consent
 lazy from .containers import Running
-lazy from .history import Acts, who_did_each
-lazy from .inventory import live_spec
+lazy from .history import asked_by
+lazy from .integration_specs import requested
 lazy from .machines import Machine, container_context
 lazy from .moments import when_day
 lazy from .resource_capabilities import public_dns_enabled
 lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_allowing
-lazy from .work_runs import WorkRun, run_rows, seen_as_runs, shown_result
+lazy from .work_runs import WorkRun, run_rows, seen_as_runs, shown_result, standing_of
 
 
 @dataclass(frozen=True, slots=True)
 class OperationCommand:
-    idempotency_key: str
     reason: Annotated[str, Describe("Why it is done, kept with the operation it queues.")] = ""
 
 
@@ -102,30 +110,37 @@ class ResourceSaved(TypedDict):
     created: Created
     resource: ManagedResourceItem
     applying: Applying
+    message: CallMessage
 
 
 type Queued = Annotated[bool, Describe("Whether this call queued it; false when the same one was already waiting.")]
 
 
-class OperationQueued(TypedDict):
-    """An operation asked of the controller, and whether this call queued it."""
+class OperationAsked(AskedAnswer):
+    """An operation asked of a worker, as every ask answers: how it stands,
+    and the operation, and whether this call queued it."""
 
-    ok: Literal[True]
     queued: Queued
     operation: OperationItem
 
 
-class RenewalAllowed(TypedDict):
-    """That the renewal is allowed, and why."""
+def operation_asked(
+    operation: OperationRequest,
+    *,
+    queued: bool,
+    message: str = "",
+    standing: Standing | None = None,
+    status_url: str = "",
+) -> OperationAsked:
+    """What asking for ``operation`` answers: how it stands as a list of work
+    says it (``work_runs.standing_of``) unless the caller words it, and
+    ``status_url`` where a page can follow it."""
 
-    allowed: Annotated[Literal[True], Describe("That renewing it is allowed.")]
-    explanation: Annotated[str, Describe("Why renewing it is allowed, in a sentence.")]
-
-
-class RenewalQueued(OperationQueued):
-    """A certificate renewal asked of the controller, and why it is allowed."""
-
-    policy: RenewalAllowed
+    if standing is None:
+        seen = seen_as_runs(OperationRequest.objects.filter(pk=operation.pk).select_related("resource")).get()
+        standing = standing_of(run_rows((seen,))[0])
+    asked = Asked(standing, status_url, message).answer()
+    return {**asked, "queued": queued, "operation": serialize_operation(operation)}
 
 
 class DeclarationForgotten(TypedDict):
@@ -138,6 +153,7 @@ class DeclarationForgotten(TypedDict):
     forgotten: Annotated[str, Describe("The key of the record HQ stopped managing.")]
     released: Annotated[list[str], Describe("The keys of the records inside it that HQ stopped managing too.")]
     reason: OperationReason
+    message: CallMessage
 
 
 class ObservedAccepted(ResourceSaved):
@@ -147,7 +163,7 @@ class ObservedAccepted(ResourceSaved):
 
 
 def serialize_operation(operation: OperationRequest) -> OperationItem:
-    who = asked_by((operation,)).get(str(operation.pk), NOBODY)
+    who = asked_by(OperationRequest, (operation,)).get(str(operation.pk), NOBODY)
     return {
         "id": str(operation.id),
         "resource": operation.resource.key,
@@ -166,41 +182,10 @@ def serialize_operation(operation: OperationRequest) -> OperationItem:
     }
 
 
-# Conditions that say something is wrong, whatever the operation's own state.
-_PROBLEM_CONDITIONS = ("Degraded", "Drifted")
 # How many past operations are read to find the ones that changed something,
 # and how many of those a record's history shows.
 HISTORY_WINDOW = 200
 HISTORY_ROWS = 20
-
-
-def active_conditions(result: dict[str, Any]) -> list[ConditionPart]:
-    return [item for item in result.get("conditions") or [] if item.get("status") is True]
-
-
-def problem_condition(result: dict[str, Any]) -> dict[str, Any] | None:
-    """The condition saying something is wrong, which a result can carry while succeeding."""
-
-    return next((item for item in active_conditions(result) if item.get("type") in _PROBLEM_CONDITIONS), None)
-
-
-def asked_by(operations: Iterable[OperationRequest]) -> dict[str, Attribution]:
-    """Who asked for each of ``operations``, by id, from the audit row that
-    queued it (``history.who_did``); nobody for one no row records."""
-
-    (found,) = who_did_each(asking(operations))
-    return found
-
-
-def asking(operations: Iterable[OperationRequest]) -> Acts:
-    """The audit rows that say who asked for each of ``operations``, read
-    with others' by ``history.who_did_each``."""
-
-    return Acts(
-        (audited_labels()[OperationRequest],),
-        [operation.pk for operation in operations],
-        action=AuditLog.Action.CREATED,
-    )
 
 
 def operation_summary(run: WorkRun, operation: OperationRequest) -> OperationSummary:
@@ -228,7 +213,8 @@ def operation_summary(run: WorkRun, operation: OperationRequest) -> OperationSum
         "completed_at": (run.finished.isoformat() if run.finished else None),
         "attempt_count": operation.attempt_count,
         "reason": operation.reason,
-        "condition": next(iter(active_conditions(operation.result or {})), None),
+        # A condition the controller reported is the part's shape.
+        "condition": cast(ConditionPart | None, next(iter(holding((operation.result or {}).get("conditions"))), None)),
         "affected": list(run.evidence.affected),
         "evidence": list(run.evidence.consumers),
         "matched": run.evidence.matched,
@@ -260,7 +246,10 @@ def changes(operations: QuerySet[OperationRequest], limit: int) -> list[Operatio
         return (
             operation.state,
             result.get("message", ""),
-            tuple((item.get("type"), item.get("reason"), item.get("message")) for item in active_conditions(result)),
+            tuple(
+                (item.get("type"), item.get("reason"), item.get("message"))
+                for item in holding(result.get("conditions"))
+            ),
         )
 
     last: dict[tuple[Any, str], tuple[Any, ...]] = {}
@@ -295,7 +284,7 @@ def refuse_while_drifted(resource: ManagedResource) -> None:
     decides first: keep the live version, or restore HQ's.
     """
 
-    if is_drifted(resource):
+    if holding(resource.conditions, DRIFTED):
         raise PolicyError("This record differs from what is live. Keep the live version or restore HQ's first.")
 
 
@@ -311,16 +300,33 @@ def _resource_for_operation(key: str) -> ManagedResource:
 REPLACES = "replaces"
 
 
-def enqueue(
-    resource: ManagedResource, action: str, *, idempotency_key: str, **fields: Any
-) -> tuple[OperationRequest, bool]:
-    """Queue an operation once per key, and once per resource and action while one waits.
+type Prepared = tuple[ManagedResource, dict[str, Any]]
 
-    Returns the operation and whether this call created it. The key's unique
-    column decides between two writers on one key: ``get_or_create`` catches
-    the second one's ``IntegrityError`` and hands it the first one's row.
+
+def enqueue(
+    action: str,
+    prepare: Callable[[], Prepared],
+    *,
+    once: str = "",
+) -> tuple[OperationRequest, bool]:
+    """The one way an operation enters the queue: once per record and action
+    while one waits, and once for ``once``. Returns it and whether this call
+    queued it.
+
+    ``once`` is what HQ's own work is queued once for (a generation, a
+    finding's evidence, a day's renewal), so the operation it already queued
+    answers before ``prepare`` checks anything. A caller's retry key is the
+    capability runner's (``execute_once``), never the row's. Otherwise
+    ``prepare`` checks the request and returns the record and the row's
+    fields. The key's unique column decides between two writers on one key:
+    ``get_or_create`` hands the second one the first one's row.
     """
 
+    key = once or f"{action}:{secrets.token_urlsafe(18)}"
+    found = OperationRequest.objects.filter(idempotency_key=key).first()
+    if found is not None:
+        return found, False
+    resource, fields = prepare()
     active = OperationRequest.objects.filter(
         resource=resource,
         action=action,
@@ -328,69 +334,74 @@ def enqueue(
     ).first()
     if active is not None:
         return active, False
-    return OperationRequest.objects.get_or_create(
-        idempotency_key=idempotency_key, defaults={"resource": resource, "action": action, **fields}
+    operation, created = OperationRequest.objects.get_or_create(
+        idempotency_key=key, defaults={"resource": resource, "action": action, **fields}
     )
+    return operation, created
+
+
+def asked_fields(principal: Principal, *, reason: str, **asked: Any) -> dict[str, Any]:
+    """A queued operation's fields: who asked, why, and its ``input``.
+
+    Who asked stays who asked. Where a person had to agree before it could be
+    queued, that is recorded beside the request rather than in place of it:
+    an operation applied on somebody's say-so and one a credential queued
+    alone must not read the same afterwards.
+    """
+
+    return {
+        "requested_actor": principal.actor,
+        "requested_interface": principal.interface,
+        "requested_device": principal.device,
+        "requested_person_key": principal.person_key,
+        "reason": reason,
+        "input": {**asked, **({"approved_by": principal.approved_by} if principal.approved_by else {})},
+    }
 
 
 def _queue_operation(
     resource: ManagedResource,
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     action: str,
     require_enabled: bool = True,
     replaces: dict[str, Any] | None = None,
-) -> OperationQueued:
-    if require_enabled and not resource.enabled:
-        raise PolicyError("This record is switched off in HQ.")
-    require_writable(resource.kind, resource.spec)
-    # Nothing enters the queue for a gated kind without a person behind it. The
-    # controller's own automatic work does not pass through here (it writes its
-    # rows directly, as itself, converging toward a declaration somebody has
-    # already agreed to) so this refuses exactly the case it is about: a
-    # credential asking for the world to be changed.
-    gap = consent_gap(resource.kind, principal=principal)
-    if gap:
-        raise PolicyError(gap)
-    allowed, explanation = controller_action_policy(resource.kind, action)
-    if not allowed:
-        raise PolicyError(explanation)
-    operation, queued = enqueue(
-        resource,
-        action,
-        idempotency_key=command.idempotency_key,
-        requested_actor=principal.actor,
-        requested_interface=principal.interface,
-        requested_device=principal.device,
-        requested_person_key=principal.person_key,
-        reason=command.reason,
-        # Who asked stays who asked. Where a person had to agree before this
-        # could be queued, that is recorded beside the request rather than in
-        # place of it: an operation applied on somebody's say-so and one a
-        # credential queued alone must not read the same afterwards.
-        input={
-            "generation": resource.generation,
-            **({"approved_by": principal.approved_by} if principal.approved_by else {}),
-            # The copy an apply by hand may only replace (``controller.over_live``).
-            **({REPLACES: replaces} if replaces is not None else {}),
-        },
-    )
-    if operation.resource_id != resource.id or operation.action != action:
-        raise PolicyError("Idempotency key is already used by another operation.")
+    once: str = "",
+) -> OperationAsked:
+    def prepare() -> Prepared:
+        if require_enabled and not resource.enabled:
+            raise PolicyError("This record is switched off in HQ.")
+        require_writable(resource.kind, resource.spec)
+        # Nothing enters the queue for a gated kind without a person behind
+        # it. The controller's own automatic work does not pass through here
+        # (it queues as itself, converging toward a declaration somebody has
+        # already agreed to) so this refuses exactly the case it is about: a
+        # credential asking for the world to be changed.
+        consent(consented).require(resource.kind)
+        allowed, explanation = controller_action_policy(resource.kind, action)
+        if not allowed:
+            raise PolicyError(explanation)
+        # The copy an apply by hand may only replace (``controller.over_live``).
+        replaced = {REPLACES: replaces} if replaces is not None else {}
+        return resource, asked_fields(
+            consent(consented).principal, reason=command.reason, generation=resource.generation, **replaced
+        )
+
+    operation, queued = enqueue(action, prepare, once=once)
+    said = requested(capability_words(ACTION_CAPABILITY[action]), resource.key, again=not queued)
     if not queued:
-        return {"ok": True, "queued": False, "operation": serialize_operation(operation)}
-    # Every operation a person or credential asks for is created here, so this
-    # is the one place that has to ring. The controller still pulls the work;
-    # this only says there is some, which is what removes the wait between
-    # pressing Save and anything happening.
-    transaction.on_commit(ring_doorbell)
-    return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
+        return operation_asked(operation, queued=False, message=said)
+    # Every operation a person or credential asks for is created here, a
+    # capability's or not, so this rings for all of them; with the runner's
+    # ring in the same commit it is one ring.
+    ask()
+    return operation_asked(operation, queued=True, message=said)
 
 
 def queue_reconcile(
-    resource: ManagedResource, *, principal: Principal, reason: str, replaces: dict[str, Any] | None = None
-) -> OperationQueued:
+    resource: ManagedResource, *, consented: Consented, reason: str, replaces: dict[str, Any] | None = None
+) -> OperationAsked:
     """Queue a reconcile of a declaration just written, as the write's own act.
 
     For a service that writes a declaration under its own capability (the
@@ -400,9 +411,13 @@ def queue_reconcile(
     which the claim holds the live record to.
     """
 
-    command = OperationCommand(idempotency_key=f"reconcile:{resource.pk}:g{resource.generation}", reason=reason)
     return _queue_operation(
-        resource, command, principal=principal, action=OperationRequest.Action.RECONCILE, replaces=replaces
+        resource,
+        OperationCommand(reason=reason),
+        consented=consented,
+        action=OperationRequest.Action.RECONCILE,
+        replaces=replaces,
+        once=f"reconcile:{resource.pk}:g{resource.generation}",
     )
 
 
@@ -410,20 +425,19 @@ def queue_reconcile(
 def request_reconcile(
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
-) -> OperationQueued:
+) -> OperationAsked:
     resource = _resource_for_operation(current_key)
 
     if PROVIDERS[resource.kind].public_effect and not public_dns_enabled():
         raise PolicyError("Public DNS changes are off on this server.")
-    with audit_operation(operation="infrastructure.reconcile.request", principal=principal):
-        return _queue_operation(
-            resource,
-            command,
-            principal=principal,
-            action=OperationRequest.Action.RECONCILE,
-        )
+    return _queue_operation(
+        resource,
+        command,
+        consented=consented,
+        action=OperationRequest.Action.RECONCILE,
+    )
 
 
 @transaction.atomic
@@ -459,41 +473,42 @@ def _forget_declaration(
     only observes. Nothing is queued and nothing is deleted at the provider.
     """
 
-    with audit_operation(operation="infrastructure.resource.forget", principal=principal):
-        # The declarations inside it go too. Left behind, HQ would keep
-        # reconciling records in a domain it is no longer responsible for. They
-        # are forgotten rather than deleted: the records stay exactly as they
-        # are at the provider, which is what stepping back means.
-        contained = _contained_keys(resource)
-        ManagedResource.objects.filter(key__in=contained).delete()
-        key = resource.key
-        kind = resource.kind
-        # The next sweep would adopt it again. The operator's choice is kept
-        # until they manage it again.
-        keep_out_declaration(kind, resource.spec, principal=principal)
-        resource.delete()
-        # Removing one changes what others resolve to as much as editing one,
-        # so dependents advance here too.
-        provider = PROVIDERS.get(kind)
-        if provider is not None and provider.resolution_input:
-            advance_dependents(delivery_targets())
-        return {
-            "ok": True,
-            "queued": False,
-            "forgotten": key,
-            "released": contained,
-            "reason": command.reason,
-        }
+    # The declarations inside it go too. Left behind, HQ would keep
+    # reconciling records in a domain it is no longer responsible for. They
+    # are forgotten rather than deleted: the records stay exactly as they
+    # are at the provider, which is what stepping back means.
+    contained = _contained_keys(resource)
+    ManagedResource.objects.filter(key__in=contained).delete()
+    key = resource.key
+    kind = resource.kind
+    # The next sweep would adopt it again. The operator's choice is kept
+    # until they manage it again.
+    keep_out_declaration(kind, resource.spec, principal=principal)
+    resource.delete()
+    # Removing one changes what others resolve to as much as editing one,
+    # so dependents advance here too.
+    provider = PROVIDERS.get(kind)
+    if provider is not None and provider.resolution_input:
+        advance_dependents(delivery_targets())
+    inside = f" and {counted(len(contained), 'record')} in it" if contained else ""
+    return {
+        "ok": True,
+        "queued": False,
+        "forgotten": key,
+        "released": contained,
+        "reason": command.reason,
+        "message": f"{ended(f'Stopped tracking “{key}”{inside}')} {NOTHING_LIVE_CHANGED}",
+    }
 
 
 @transaction.atomic
 def _request_lifecycle(
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
     action: str,
-) -> OperationQueued:
+) -> OperationAsked:
     """Ask the controller to start, stop or restart what a declaration names.
 
     Not reconciliation: cycling a container is asked for once, about something
@@ -505,18 +520,16 @@ def _request_lifecycle(
     gap = unit_gap(resource)
     if gap:
         raise PolicyError(gap)
-    with audit_operation(operation=f"infrastructure.{action}.request", principal=principal):
-        # Which verbs exist is the capability registry's to say, so a verb the
-        # controller does not implement is refused here rather than queued for
-        # work nothing will claim.
-        result = _queue_operation(resource, command, principal=principal, action=action)
+    # Which verbs exist is the capability registry's to say, so a verb the
+    # controller does not implement is refused here rather than queued for
+    # work nothing will claim.
+    result = _queue_operation(resource, command, consented=consented, action=action)
     # The page that asked shows the state the sweep last read, so the run that
     # applies this reads the kind again after it, rather than leaving the old
     # state up until the cadence comes round. Only a kind the sweep reads:
     # nothing would answer a request for any other.
     if result["queued"] and swept(resource.kind):
-        kind = resource.kind
-        transaction.on_commit(lambda: request_reading(kind))
+        ask(reads=(resource.kind,))
     return result
 
 
@@ -553,23 +566,26 @@ def unit_gap(resource: ManagedResource) -> Sentence:
     return UNIT_OUT_OF_REACH if found is not None and not found.reachable else ""
 
 
-def request_restart(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationQueued:
+def request_restart(command: OperationCommand, *, consented: Consented, current_key: str) -> OperationAsked:
     return _request_lifecycle(
-        command, principal=principal, current_key=current_key, action=OperationRequest.Action.RESTART
+        command, consented=consented, current_key=current_key, action=OperationRequest.Action.RESTART
     )
 
 
-def request_start(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationQueued:
+def request_start(command: OperationCommand, *, consented: Consented, current_key: str) -> OperationAsked:
     return _request_lifecycle(
-        command, principal=principal, current_key=current_key, action=OperationRequest.Action.START
+        command, consented=consented, current_key=current_key, action=OperationRequest.Action.START
     )
 
 
-def request_stop(command: OperationCommand, *, principal: Principal, current_key: str) -> OperationQueued:
+def request_stop(command: OperationCommand, *, consented: Consented, current_key: str) -> OperationAsked:
     return _request_lifecycle(
-        command, principal=principal, current_key=current_key, action=OperationRequest.Action.STOP
+        command, consented=consented, current_key=current_key, action=OperationRequest.Action.STOP
     )
 
+
+# The variant of reconcile that a record only reporting on itself offers: reading it again.
+READS_AGAIN = "reads_again"
 
 # The capability that asks for each verb, so a page asks for one by its verb
 # and runs it through the capability runner like every other caller. A run is
@@ -589,44 +605,42 @@ ACTION_CAPABILITY = {
 def accept_observed(
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
 ) -> ObservedAccepted:
     """Make the declaration say what the provider holds.
 
     For a change made at the provider on purpose (a policy a connector edited,
     a setting changed in its own console), which reconciling would undo.
-    Nothing is written to the provider.
+    Nothing is written to the provider. The controller's report is evidence
+    of what exists, never consent to keep it, so a kind that waits for a
+    person is accepted only under one's consent.
     """
 
     resource = _resource_for_operation(current_key)
+    consent(consented).require(resource.kind)
     # Copied from the live record, the same way adopting does, so the next
     # sweep finds the two agreeing.
-    found = live_spec(resource.kind, resource.spec)
+    found = found_live(resource.kind, resource.spec)
     if found is None:
         raise RecordNotFound("No live record was last seen for this one, so there is nothing to accept.")
     # A field no sweep can observe (hidden, on demand) stays as it was declared.
-    kept = {
-        field: resource.spec[field] for field in PROVIDERS[resource.kind].unobservable_fields if field in resource.spec
-    }
-    with audit_operation(operation="infrastructure.resource.accept_observed", principal=principal):
-        result = save_managed_resource(
-            ManagedResourceCommand(
-                key=resource.key, kind=resource.kind, spec={**found, **kept}, enabled=resource.enabled
-            ),
-            principal=principal,
-            current_key=resource.key,
-            copied_from_live=True,
-        )
+    result = save_adopted(
+        keeping(found, resource.spec),
+        key=resource.key,
+        enabled=resource.enabled,
+        principal=consent(consented).principal,
+        current_key=resource.key,
+    )
     return {**result, "reason": command.reason}
 
 
 def request_removal(
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
-) -> OperationQueued | DeclarationForgotten:
+) -> OperationAsked | DeclarationForgotten:
     """Queue removal of the thing this declaration describes.
 
     Not a plain row delete: the record lives at a provider, so forgetting the
@@ -637,22 +651,21 @@ def request_removal(
     resource = _resource_for_operation(current_key)
     # HQ deletes at the provider only through a connection that manages.
     if PROVIDERS[resource.kind].declaration_only or observes_only(resource.kind, resource.spec):
-        return _forget_declaration(resource, command, principal=principal)
+        return _forget_declaration(resource, command, principal=consent(consented).principal)
     allowed, explanation = controller_action_policy(resource.kind, OperationRequest.Action.DELETE)
     if not allowed:
         raise PolicyError(explanation)
-    with audit_operation(operation="infrastructure.resource.remove", principal=principal):
-        # Bypasses the enabled check in _queue_operation on purpose: that guard
-        # exists to stop HQ converging a paused declaration, and removal is the
-        # opposite of converging it. A switched-off record is exactly what is
-        # left just before an operator decides to be rid of it.
-        return _queue_operation(
-            resource,
-            command,
-            principal=principal,
-            action=OperationRequest.Action.DELETE,
-            require_enabled=False,
-        )
+    # Bypasses the enabled check in _queue_operation on purpose: that guard
+    # exists to stop HQ converging a paused declaration, and removal is the
+    # opposite of converging it. A switched-off record is exactly what is
+    # left just before an operator decides to be rid of it.
+    return _queue_operation(
+        resource,
+        command,
+        consented=consented,
+        action=OperationRequest.Action.DELETE,
+        require_enabled=False,
+    )
 
 
 def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, Sentence]:
@@ -663,10 +676,7 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, Senten
     allowed, explanation = controller_action_policy(resource.kind, OperationRequest.Action.RENEW)
     if not allowed:
         return False, explanation
-    if any(
-        condition.get("status") is True and condition.get("type") in {"Drifted", "Degraded"}
-        for condition in resource.conditions
-    ):
+    if holding(resource.conditions, *PROBLEMS):
         return True, "A place it is installed is serving a different certificate or has a problem."
 
     if not resource.status.get("not_after"):
@@ -692,9 +702,9 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, Senten
 def request_route_approval(
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
-) -> OperationQueued:
+) -> OperationAsked:
     """Approve the routes a tailnet device is already advertising.
 
     The remedy the "advertises routes nothing approved" finding names. HQ does
@@ -705,19 +715,18 @@ def request_route_approval(
     """
 
     resource = _resource_for_operation(current_key)
-    with audit_operation(operation="tailnet.routes.approve.request", principal=principal):
-        return _queue_operation(
-            resource,
-            command,
-            principal=principal,
-            action=OperationRequest.Action.APPROVE_ROUTES,
-        )
+    return _queue_operation(
+        resource,
+        command,
+        consented=consented,
+        action=OperationRequest.Action.APPROVE_ROUTES,
+    )
 
 
 def request_reach_allow(
     _command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
 ) -> ResourceSaved:
     """Open the path a reading proved is shut, where the tailnet is what shut it.
@@ -780,7 +789,7 @@ def request_reach_allow(
             spec={**policy.spec, "document": document},
             enabled=policy.enabled,
         ),
-        principal=principal,
+        consented=consented,
         current_key=policy.key,
     )
 
@@ -788,18 +797,11 @@ def request_reach_allow(
 def request_certificate_renewal(
     command: OperationCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_key: str,
-) -> RenewalQueued:
+) -> OperationAsked:
     resource = _resource_for_operation(current_key)
     allowed, explanation = certificate_renewal_allowed(resource)
     if not allowed:
         raise PolicyError(explanation)
-    with audit_operation(operation="certificate.renew.request", principal=principal):
-        result = _queue_operation(
-            resource,
-            command,
-            principal=principal,
-            action=OperationRequest.Action.RENEW,
-        )
-    return {**result, "policy": {"allowed": True, "explanation": explanation}}
+    return _queue_operation(resource, command, consented=consented, action=OperationRequest.Action.RENEW)

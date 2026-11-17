@@ -80,7 +80,7 @@ class ServiceHealthTests(TestCase):
     def test_a_name_with_only_a_dns_record_is_not_called_healthy(self):
         health = self.health()
 
-        self.assertEqual((health.state, health.label), ("unknown", "DNS record only"))
+        self.assertEqual((health.state, health.label), (None, "DNS record only"))
 
     def test_records_in_place_say_what_was_checked(self):
         self.proxy()
@@ -88,7 +88,7 @@ class ServiceHealthTests(TestCase):
         health = self.health()
 
         # Configured is not healthy: nothing behind the proxy was read running.
-        self.assertEqual((health.state, health.label), ("unknown", "In place"))
+        self.assertEqual((health.state, health.label), (None, "In place"))
         self.assertIn("DNS record and proxy are in place", health.detail)
         self.assertIn("HQ does not read what runs there", health.detail)
 
@@ -135,7 +135,7 @@ class ServiceHealthTests(TestCase):
 
         self.assertEqual((health.state, health.label), ("attention", "Out of date"))
         self.assertTrue(health.detail.startswith("Health check passing when last read"), health.detail)
-        self.assertEqual(steps["Container"], ("Running when last read", "unprobed"))
+        self.assertEqual(steps["Container"], ("Running when last read", "neutral"))
 
     def test_no_state_reads_as_healthy(self):
         self.proxy(8080)

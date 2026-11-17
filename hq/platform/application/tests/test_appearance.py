@@ -8,6 +8,7 @@ from django.template import Context, Template
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
+from hq.platform.application.markup_testing import elements, select
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.context_processors import appearance
@@ -16,7 +17,6 @@ from hq.platform.core.models import Appearance, AuditLog
 from ..appearance import SET_THEME, ThemeCommand, set_theme, theme_for
 from ..capabilities import execute_capability
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, web_principal
-from .markup import elements, select
 
 
 def drawn_theme(response) -> str | None:

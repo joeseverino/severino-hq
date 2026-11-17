@@ -20,15 +20,23 @@ from hq.platform.application.describe import Describe
 from hq.platform.application.security import Principal
 
 # The shape describe_capabilities answers an agent in, apart from the API's: it moves when this shape does.
-AGENT_CAPABILITIES_SCHEMA_VERSION = 3
+AGENT_CAPABILITIES_SCHEMA_VERSION = 4
 AgentCapabilitiesVersion = Annotated[SchemaVersion, Pinned(AGENT_CAPABILITIES_SCHEMA_VERSION)]
+
+
+class CapabilityIndexEntry(CapabilitySummary):
+    """One capability as the index names it, and whether the caller is refused it."""
+
+    refused: Annotated[
+        bool, Describe("Whether the caller lacks a permission it requires; absent when the caller may run it.")
+    ]
 
 
 class CapabilityIndex(TypedDict):
     """Every capability the caller's interface can run, each named without its schema."""
 
     schema_version: AgentCapabilitiesVersion
-    capabilities: list[CapabilitySummary]
+    capabilities: list[CapabilityIndexEntry]
 
 
 # A class statement cannot name the key ``$defs``.
@@ -77,14 +85,14 @@ def agent_capabilities(
 
     entries = describe_capabilities(principal=principal, name=name, resource=resource)["capabilities"]
     if not (name.strip() or resource.strip()):
-        index: list[CapabilitySummary] = [
+        index: list[CapabilityIndexEntry] = [
             {
                 "name": entry["name"],
                 "label": entry["label"],
                 "summary": entry["summary"],
                 "effect": entry["effect"],
                 "resource": entry["resource"],
-                "permitted": entry["permitted"],
+                "refused": not entry["permitted"],
             }
             for entry in entries
         ]

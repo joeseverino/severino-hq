@@ -6,7 +6,7 @@ from django.test import Client, RequestFactory, SimpleTestCase, TestCase, overri
 from django.urls import path
 
 from hq.config.urls import urlpatterns as site_urls
-from hq.platform.application.tests.markup import text, texts, with_class
+from hq.platform.application.markup_testing import text, texts, with_class
 from hq.platform.core.error_views import server_error
 
 

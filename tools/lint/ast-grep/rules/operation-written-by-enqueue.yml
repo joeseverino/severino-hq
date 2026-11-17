@@ -1,12 +1,14 @@
 # An operation enters the queue through resource_operations.enqueue. Its key
 # column is unique, and enqueue lets that column settle two writers on one
 # key; a caller that checks for the key and then creates the row has a race of
-# its own between the two.
+# its own between the two. enqueue also answers a retry key's operation before
+# anything is checked and refuses one used for another request, so a lookup
+# by the key anywhere else is a second set of retry rules.
 id: operation-written-by-enqueue
 language: python
 severity: error
-message: An OperationRequest row is written outside resource_operations.enqueue.
-note: Queue it with resource_operations.enqueue.
+message: An OperationRequest row is written, or found by its retry key, outside resource_operations.enqueue.
+note: Queue it with resource_operations.enqueue(resource_key, action, prepare, idempotency_key=...).
 files:
   - "hq/**"
   - "hq_sdk/**"
@@ -17,7 +19,19 @@ ignores:
   - "**/migrations/**"
   - "**/platform/application/resource_operations.py"
 rule:
-  pattern: OperationRequest.objects.$WRITE($$$)
-constraints:
-  WRITE:
-    regex: ^(create|get_or_create|update_or_create)$
+  kind: call
+  all:
+    - has:
+        field: function
+        regex: (^|\.)OperationRequest\.objects\.(create|get_or_create|update_or_create|filter|get|exclude)$
+    - any:
+        - has:
+            field: function
+            regex: \.(create|get_or_create|update_or_create)$
+        - has:
+            field: arguments
+            has:
+              kind: keyword_argument
+              has:
+                field: name
+                regex: ^idempotency_key$

@@ -10,23 +10,34 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.markup_testing import hrefs, select
+from hq.platform.application.tests.worded import worded
+
+from ..attention import raised
 from ..github_posture import (
     COMMANDS,
     PINS_CALLED,
     PINS_UNREAD,
     REASONS,
     STANDARD,
-    attention,
-    build_attention,
     postures,
 )
-from ..standards import INTENDED, MET, UNAVAILABLE, UNMET
-from .markup import hrefs, select
+from ..item_help import CANNOT, DO, RUN
+from ..repository_findings import PROJECTS
+from ..standards import INTENDED, Standing
 from .test_github_estate import store
 from .test_item_help import COMMAND, item_help
 
 # What a well-kept repository reads as: only its owner, one read-only key in
 # use, a read-only token that approves nothing, pinned actions, fixes on.
+
+
+def raised_items():
+    """What Projects raises on the queue: its repository rules' findings."""
+
+    return worded(raised(PROJECTS))
+
+
 KEPT = {
     "collaborators": [{"login": "example", "role": "admin"}],
     "deploy_keys": [{"title": "deploy", "read_only": True, "last_used": timezone.now().isoformat()}],
@@ -62,10 +73,10 @@ class PostureTests(TestCase):
 
         found = postures()[0]
 
-        self.assertEqual(found.state_of("secret-scanning"), MET)
-        self.assertEqual(found.state_of("push-protection"), UNMET)
-        self.assertEqual(found.state_of("deletion-blocked"), UNMET)
-        self.assertEqual(found.state_of("code-scanning"), MET)
+        self.assertEqual(found.state_of("secret-scanning"), Standing.MET)
+        self.assertEqual(found.state_of("push-protection"), Standing.UNMET)
+        self.assertEqual(found.state_of("deletion-blocked"), Standing.UNMET)
+        self.assertEqual(found.state_of("code-scanning"), Standing.MET)
         self.assertEqual(len(found.results), 14)
 
     def test_what_hq_could_not_read_is_unavailable_not_a_failure(self):
@@ -73,9 +84,9 @@ class PostureTests(TestCase):
 
         found = postures()[0]
 
-        self.assertEqual(found.state_of("only-you"), UNAVAILABLE)
-        self.assertEqual(found.state_of("secret-scanning"), UNAVAILABLE)
-        self.assertEqual((found.measured, attention()), (0, ()))
+        self.assertEqual(found.state_of("only-you"), Standing.UNAVAILABLE)
+        self.assertEqual(found.state_of("secret-scanning"), Standing.UNAVAILABLE)
+        self.assertEqual((found.measured, raised_items()), (0, ()))
 
     def test_someone_gaining_reach_is_serious_and_drift_is_not(self):
         stale = (timezone.now() - timedelta(days=200)).isoformat()
@@ -89,16 +100,16 @@ class PostureTests(TestCase):
             ),
         )
 
-        items = {item.key: item.status for item in attention()}
+        items = {item.key: item.status for item in raised_items()}
 
         self.assertEqual(
             items,
             {
-                "github-posture:only-you": "serious",
-                "github-posture:keys-read-only": "serious",
-                "github-posture:keys-in-use": "attention",
-                "github-posture:token-read-only": "attention",
-                "github-posture:no-variables": "attention",
+                "finding:github-posture::only-you": "serious",
+                "finding:github-posture::keys-read-only": "serious",
+                "finding:github-posture::keys-in-use": "attention",
+                "finding:github-posture::token-read-only": "attention",
+                "finding:github-posture::no-variables": "attention",
             },
         )
 
@@ -126,9 +137,9 @@ class PostureTests(TestCase):
             },
         )
 
-        (item,) = attention()
+        (item,) = raised_items()
 
-        self.assertEqual((item.key, item.value, item.magnitude), ("github-posture:actions-pinned", "3", 3))
+        self.assertEqual((item.key, item.value, item.magnitude), ("finding:github-posture::actions-pinned", "3", 3))
         self.assertTrue(item.body.startswith("alpha, beta, gamma."))
 
     def test_an_archived_repository_is_held_to_nothing(self):
@@ -161,8 +172,8 @@ class PostureTests(TestCase):
         )
 
         self.assertEqual([found.subject.name for found in postures()], ["example/kept"])
-        (item,) = attention()
-        self.assertEqual((item.key, item.magnitude), ("github-posture:vulnerability-alerts", 1))
+        (item,) = raised_items()
+        self.assertEqual((item.key, item.magnitude), ("finding:github-posture::vulnerability-alerts", 1))
         self.assertNotIn("retired", item.body)
 
     def test_an_item_is_as_old_as_the_oldest_repository_reading_it_names(self):
@@ -172,16 +183,16 @@ class PostureTests(TestCase):
         read = timezone.now() - timedelta(hours=2)
         ProviderInventory.objects.filter(kind="github.repository").update(observed_at=read)
 
-        (item,) = attention()
+        (item,) = raised_items()
 
         self.assertEqual(item.observed_at, read)
 
     def test_the_build_queue_carries_both_the_repository_and_the_standard(self):
         store(private=True, checks={"state": "failure", "failing": ["lint"]}, access=kept(token="write"), variables=[])
 
-        keys = {item.key for item in build_attention()}
+        keys = {item.key for item in raised_items()}
 
-        self.assertEqual(keys, {"github-failing:example/alpha", "github-posture:token-read-only"})
+        self.assertEqual(keys, {"finding:github-failing::example/alpha", "finding:github-posture::token-read-only"})
 
 
 class PostureViewTests(TestCase):
@@ -213,7 +224,7 @@ class PostureViewTests(TestCase):
         response = self.client.get(reverse("posture"))
 
         self.assertIn(project.get_absolute_url(), hrefs(response))
-        self.assertEqual(response.context["unmet"], [])
+        self.assertFalse(response.context["unmet"])
 
     def test_nothing_read_says_so(self):
         response = self.client.get(reverse("posture"))
@@ -230,15 +241,17 @@ class PostureViewTests(TestCase):
 
 
 def runs(item) -> list[tuple[str, str]]:
-    """Each step of an item's workflow: its label and what it says."""
+    """Each step of an item's own help (its commands, its words, why there
+    are none): its label and what it says. The resolution plan's check
+    again is every finding's, and is left out."""
 
-    return [(step.label, step.summary) for step in item.workflow.steps]
+    return [(step.label, step.summary) for step in item.workflow.steps if step.phase in {RUN, DO, CANNOT}]
 
 
 class PostureHelpTests(TestCase):
     def item(self, key: str, **record):
         store(private=True, **{"access": kept(), "variables": [], **record})
-        return {item.key: item for item in attention()}[f"github-posture:{key}"]
+        return {item.key: item for item in raised_items()}[f"finding:github-posture::{key}"]
 
     def test_vulnerability_alerts_name_the_exact_command_for_the_repository(self):
         item = self.item("vulnerability-alerts", access=kept(vulnerability_alerts=False))
@@ -349,7 +362,7 @@ class PostureHelpTests(TestCase):
         # Why, in one sentence that names no workflow; which workflows, as a
         # step each.
         *told, reason = item.workflow.steps
-        self.assertEqual((reason.phase, reason.summary), ("cannot", PINS_CALLED))
+        self.assertEqual((reason.phase, reason.summary), ("do", PINS_CALLED))
         self.assertEqual(
             [step.summary for step in told if step.phase == "do"],
             [f"alpha: check that {called[0]} pins its own actions, then require pinning."],
@@ -367,7 +380,7 @@ class PostureHelpTests(TestCase):
         ]
         item = self.item("actions-pinned", access=kept(pinning_required=False), pins=pins)
 
-        self.assertEqual([label for label, _summary in runs(item)], ["Why HQ cannot do this for you"])
+        self.assertEqual([label for label, _summary in runs(item) if label], ["Why HQ cannot do this for you"])
         self.assertIn("example/gone@v1", item.workflow.steps[-1].summary)
         self.assertNotIn("sha_pinning_required", str(item.workflow))
 
@@ -410,10 +423,10 @@ class PostureHelpTests(TestCase):
             variables=[],
             rules={"pull_request": True, "blocks_force_push": True, "blocks_deletion": False},
         )
-        items = {item.key: item for item in attention()}
+        items = {item.key: item for item in raised_items()}
 
-        (deletion,) = runs(items["github-posture:deletion-blocked"])
-        (scanning,) = runs(items["github-posture:secret-scanning"])
+        (deletion,) = runs(items["finding:github-posture::deletion-blocked"])
+        (scanning,) = runs(items["finding:github-posture::secret-scanning"])
 
         self.assertTrue(deletion[1].startswith("gh api -X POST repos/example/alpha/rulesets --input - <<< '"))
         self.assertIn('"rules":[{"type":"deletion"}]', deletion[1])
@@ -456,18 +469,18 @@ class FollowingTheHostTests(TestCase):
         )
 
         self.assertEqual(state, INTENDED)
-        self.assertNotIn("github-posture:actions-pinned", {item.key for item in attention()})
+        self.assertNotIn("finding:github-posture::actions-pinned", {item.key for item in raised_items()})
 
     def test_another_action_left_unpinned_is_still_a_gap(self):
         state = self.state(
             "example/alpha", "example/host/.github/workflows/plugin-checks.yml@main", "actions/checkout@v4"
         )
 
-        self.assertEqual(state, UNMET)
+        self.assertEqual(state, Standing.UNMET)
 
     def test_the_host_is_held_to_pinning_itself(self):
-        self.assertEqual(self.state("example/host", "example/host/.github/actions/admit-plugin@main"), UNMET)
+        self.assertEqual(self.state("example/host", "example/host/.github/actions/admit-plugin@main"), Standing.UNMET)
 
     @override_settings(SEVERINO_HQ_SOURCE="")
     def test_a_host_that_names_no_source_excuses_nothing(self):
-        self.assertEqual(self.state("example/alpha", "example/host/.github/actions/admit-plugin@main"), UNMET)
+        self.assertEqual(self.state("example/alpha", "example/host/.github/actions/admit-plugin@main"), Standing.UNMET)

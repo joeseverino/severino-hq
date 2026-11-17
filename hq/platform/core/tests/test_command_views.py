@@ -12,8 +12,8 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
 from hq.platform.application.capabilities import Ran, capability_registry
 from hq.platform.application.command_targets import capability_target_options
+from hq.platform.application.markup_testing import elements, links, select, text, texts, with_class, within
 from hq.platform.application.security import Capability, Principal
-from hq.platform.application.tests.markup import elements, links, select, text, texts, with_class, within
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.ui import MISSING
 from hq.platform.application.web_writes import RETRY_KEY_FIELD

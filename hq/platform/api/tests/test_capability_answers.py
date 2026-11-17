@@ -3,6 +3,7 @@ names, published under ``data`` of its 200; a handler that names no
 shape, or one the host cannot resolve, answers an object and never breaks
 the document."""
 
+from dataclasses import dataclass
 from typing import Annotated, Literal, TypedDict
 
 from django.test import SimpleTestCase
@@ -13,7 +14,6 @@ from hq.platform.application.command_fields import Describe
 from hq.platform.application.integration_specs import CapabilitySpec
 from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import compile_integration_graph
-from hq_sdk.capabilities import StrictCommand
 
 from .. import openapi
 
@@ -28,7 +28,8 @@ class ExampleCounted(TypedDict):
     counted: Annotated[int, Describe("How many example things it counted.")]
 
 
-class ExampleCommand(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class ExampleCommand:
     value: int = 0
 
 

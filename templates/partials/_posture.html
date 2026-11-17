@@ -1,15 +1,16 @@
 {% comment %}
-HQ's standard (application.posture), in a section. Each check
+HQ's standard (application.posture), in a section, given its ``posture``
+(a standards.Measurement) and the ``guide`` that says how to enforce it. Each check
 is its own statement, so nothing above the list restates it: a met check's
 sentence is its tooltip, and how to enforce the standard is in the docs the
 heading links to. An unread check says what would read it.
 {% endcomment %}
-{% section posture.advanced|yesno:"Advanced HQ Posture,HQ's standard" id="posture" %}
+{% section posture.enforced|yesno:"Advanced HQ Posture,HQ's standard" id="posture" %}
   {% steps %}
-    {% for standing in posture.standings %}
-      {% step icon=standing.icon tone=standing.state title=standing.met|then:standing.check.holds %}
-        <strong>{{ standing.check.label|breakable }}</strong> <span class="muted">{% if standing.reading.evidence %}{% if standing.reading.remedy %}{{ standing.reading.evidence|breakable:":" }} {% if standing.reading.remedy_url %}<a href="{{ standing.reading.remedy_url }}">{{ standing.reading.remedy|breakable:"." }}</a>{% else %}{{ standing.reading.remedy|breakable:"." }}{% endif %}{% else %}{{ standing.reading.evidence|breakable:"." }}{% endif %} {% endif %}Stops {{ standing.check.stops|breakable:"." }}</span>{% endstep %}
+    {% for result in posture.results %}
+      {% step icon=result.icon tone=result.tone title=result.met|then:result.check.holds %}
+        <strong>{{ result.check.label|breakable }}</strong> {% muted %}{% if result.reading.evidence %}{% if result.reading.fix %}{{ result.reading.evidence|breakable:":" }} {% if result.reading.fix_url %}<a href="{{ result.reading.fix_url }}">{{ result.reading.fix|breakable:"." }}</a>{% else %}{{ result.reading.fix|breakable:"." }}{% endif %}{% else %}{{ result.reading.evidence|breakable:"." }}{% endif %} {% endif %}Stops {{ result.check.why|breakable:"." }}{% endmuted %}{% endstep %}
     {% endfor %}
   {% endsteps %}
-{% aside %}<span class="count prose">{{ posture.count_line|breakable }}{% if posture.guide %}{% dot %}{% entity posture.guide|outside label="Checks guide" %}{% endif %}</span>
+{% aside %}<span class="count prose">{{ posture.count_line|breakable }}{% if guide %}{% dot %}{% entity guide|outside label="Checks guide" %}{% endif %}</span>
 {% endsection %}

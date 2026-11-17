@@ -87,7 +87,7 @@ class ContradictionTests(TestCase):
 
         self.assertIn("db.example.com goes to edge-1 from the internet and lab-1 from home", finding.title)
         self.assertEqual([remedy.target for remedy in finding.remedies], ["example-db-rewrite"])
-        self.assertIn("?target=example-db-rewrite", finding.remedies[0].url)
+        self.assertIn("example-db-rewrite", finding.remedies[0].reach[0])
 
     def test_disagreeing_answers_offer_to_change_each_record_hq_declares(self):
         db_record = record("db.example.com", "A", "198.51.100.20", proxied=False)

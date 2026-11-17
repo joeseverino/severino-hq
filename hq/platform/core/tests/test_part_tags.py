@@ -1,16 +1,18 @@
 """The section part: one look whether a template writes it or code builds it."""
 
+import ast
 import inspect
 import re
 from datetime import date
+from pathlib import Path
 
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import Context, Template, TemplateSyntaxError, engines
 from django.test import SimpleTestCase, tag
 from django.utils.functional import SimpleLazyObject
 
+from hq.platform.application.markup_testing import all_elements, elements, select, with_class
 from hq.platform.application.page_parts import SectionPart
-from hq.platform.application.tests.markup import all_elements, elements, select, with_class
-from hq.platform.core.templatetags.part_tags import SECTION
+from hq.platform.core.templatetags.facts_tags import LAYOUTS
 lazy from hq.platform.core.tests.browser.catalog import CATALOG
 
 MONTH = date(2026, 11, 1)
@@ -273,6 +275,10 @@ class SectionTagTests(SimpleTestCase):
         (aside,) = with_class(after, "section-aside")
         self.assertTrue(aside.words.startswith("3 due"))
         self.assertTrue(aside.words.removesuffix("→").strip().endswith("View renewals"))
+        # The dot before the link is the run's (`.end-run`), so where the link
+        # wraps to a line of its own no line ends with it.
+        self.assertNotIn("·", aside.words)
+        self.assertTrue(with_class(after, "end-run"))
 
     def test_its_link_to_the_rest_is_drawn_where_there_is_somewhere_to_go(self):
         html = _render('{% section "Plan" more_label="Change plan" more_url=url %}<p>Body</p>{% endsection %}', url="")
@@ -399,34 +405,67 @@ def _catalog_templates() -> dict[str, str]:
     return {name: entry.template for name, entry in CATALOG.items()}
 
 
-@tag("source")
-class SectionCatalogTests(SimpleTestCase):
-    def test_every_option_and_part_of_the_section_tag_has_a_catalog_entry(self):
-        """The browser survey reads the part through the catalog, so each
-        thing the tag takes is drawn there at least once."""
+# The tags the browser survey reads through the catalog, each with what an
+# entry must draw beyond its options and later parts.
+CATALOGED = {
+    "section": ("data_",),
+    "notice": ("data_",),
+    "title_meta": ("data_",),
+    "stack_list": ("data_",),
+    "switch": (),
+    "choice": (),
+    "check_ladder": (),
+    "check_rung": (),
+    "facts": tuple(f'layout="{layout}"' for layout in LAYOUTS),
+    "fact": (),
+    "control_label": (),
+}
+# An option whose absence draws a state of its own, so an entry leaves it out.
+LEFT_OUT = {"notice": "tone", "control_label": "control"}
 
-        taken = [
-            *(
-                f"{name}="
-                for name, parameter in inspect.signature(SECTION).parameters.items()
-                if parameter.kind is inspect.Parameter.KEYWORD_ONLY
-            ),
-            "data_",
-            *(f"{{% {part} %}}" for part in SECTION.parts if part != "content"),
-        ]
-        sections = [template for template in _catalog_templates().values() if "{% section " in template]
-        opened = " ".join(" ".join(re.findall(r"\{% section (.*?)%\}", template)) for template in sections)
-        drawn = {
-            word
-            for word in taken
-            if (
-                re.search(rf"\b{re.escape(word)}", opened)
-                if word.endswith(("=", "_"))
-                else any(word in t for t in sections)
-            )
+
+def _catalog_source() -> str:
+    """Every string the catalog's families write, read from their source,
+    where a part an entry hands its page (a page head's aside) is written
+    too."""
+
+    from hq.platform.core.tests.browser.catalog.families import chart, form, graph, part, status, table
+
+    return "\n".join(
+        node.value
+        for family in (chart, form, graph, part, status, table)
+        for node in ast.walk(ast.parse(Path(family.__file__).read_text(encoding="utf-8")))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    )
+
+
+@tag("source")
+class CatalogTests(SimpleTestCase):
+    def test_every_option_and_part_of_a_cataloged_tag_has_a_catalog_entry(self):
+        """The browser survey reads a shared tag through the catalog, so each
+        option and later part it takes is drawn there at least once."""
+
+        source = _catalog_source()
+        tags = {
+            name: compile_
+            for library in engines["django"].engine.template_libraries.values()
+            for name, compile_ in library.tags.items()
         }
-        self.assertEqual(
-            sorted(set(taken) - drawn),
-            [],
-            "add a part/section-* entry to browser/catalog/families/part.py that draws it",
-        )
+        for name, extra in CATALOGED.items():
+            takes = inspect.unwrap(tags[name])
+            options = [
+                option
+                for option, parameter in inspect.signature(takes).parameters.items()
+                if parameter.kind is inspect.Parameter.KEYWORD_ONLY
+                or (inspect.isfunction(takes) and parameter.default is not inspect.Parameter.empty)
+            ]
+            opened = re.findall(rf"\{{% {name}\b(.*?)%\}}", source)
+            missing = [option for option in options if not any(re.search(rf"\b{option}=", o) for o in opened)]
+            missing += [word for word in extra if not any(word in o for o in opened)]
+            missing += [
+                f"{{% {part} %}}" for part in getattr(takes, "parts", ())[1:] if f"{{% {part} %}}" not in source
+            ]
+            if left := LEFT_OUT.get(name):
+                missing += [f"no {left}="] if all(f"{left}=" in o for o in opened) else []
+            with self.subTest(tag=name):
+                self.assertEqual(missing, [], "add an entry to browser/catalog/families/ that draws it")

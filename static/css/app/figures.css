@@ -31,8 +31,11 @@
     & > :not(dialog) { flex-grow: 0; }
   }
 }
-/* A status pill is a label: wrapped it grows its row, so it stays whole. */
-.data-table .pill { white-space: nowrap; }
+/* A pill in a status column stays whole (cards.css), its column as narrow as
+   its widest; one among a cell's other words wraps its words inside its one
+   box, no wider than its cell, so a sentence it holds is never drawn as two
+   pills. */
+.data-table > tbody > tr > :not([data-kind="status"]) .pill { white-space: normal; max-inline-size: 100%; }
 /* A row's name set in one line with its controls (`name-line`): the controls and the name are a grid's columns, never a flex row, since WebKit keeps a flex row's min-content from before a row closes, so its column reopened narrower than the name it holds out for. */
 .name-line { display: grid; grid-auto-flow: column; justify-content: start; align-items: center; gap: var(--space-4); }
 /* Links one to a line in a cell are a target apart (`--target-min`): each line that tall, and the link's box with it. */
@@ -172,13 +175,13 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
    graph is one click per hop. */
 .relation-list { display: grid; gap: var(--space-1); }
 .relation-list > .eyebrow { margin: var(--space-2) 0 0; }
-.relation-list > ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.relation-list > ul { display: grid; gap: var(--space-1); }
 /* One edge: the link to the other end on its own line, then each value it
    carries on a line of its own with its kind and age. */
 .relation-list > ul > li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
 .relation-values {
   display: grid; gap: var(--space-2); flex: 1 1 100%; min-width: 0;
-  margin: 0 0 var(--space-2); padding: 0 0 0 var(--space-7); list-style: none; font-size: var(--text-xs);
+  margin: 0 0 var(--space-2); padding: 0 0 0 var(--space-7); font-size: var(--text-xs);
   overflow-wrap: anywhere;
 }
 .relation-values li { display: grid; gap: 1px; min-width: 0; }
@@ -203,12 +206,14 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* A run of chips is no wider than what holds it, and a chip longer than the run gives way inside it, where it is cut or broken as its own rules say. */
 .code-list { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); max-inline-size: 100%; }
 .code-list > * { min-inline-size: 0; }
+/* A run that links its names wraps onto lines a target tall (`--target-min`), each link as tall as its line, in a cell too, so a name is hit through a target's height wherever the run is drawn. */
+.code-list:has(> [href]) { line-height: var(--target-min); }
 /* The title says where the link goes, so the arrow is for the eye alone. */
 .external-link::after { content: "\00a0\2197" / ""; font-size: .85em; }
 /* A row of links, each a chip (partials/_link_chips.html): a place to go, so
    it reads as a target by its frame, with no underline at rest. An outside
    one's arrow sits in the chip's gap, quieter than the name. */
-.link-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.link-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .link-chips a {
   display: inline-flex; align-items: center; gap: var(--space-3);
   padding: var(--space-2) var(--space-6);
@@ -280,6 +285,8 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .fact-value :is(code, kbd, samp) { line-height: 1; }
 /* An identifier in a value (code, a `|breakable` token) runs inline, its parts too, code a chip on each line it wraps to, so the value's first line is its first line in every engine: an inline block stands on its last line wherever `baseline-source` is not supported (WebKit), so a wrapped identifier would lift a band's value off its row's baseline and draw a list's over the fact above, whose row lines up on baselines. A table lays out its own cells' identifiers; a panel a cell shows (a popover, a dialog) is no part of the cell, so its facts are laid out here. */
 :is(.facts-band, .facts-list) .fact-value :is(code, kbd, samp, .token, .whole):is(:not(td *), [popover] *, dialog *) { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+/* A value holding a pill's link sets its lines a target tall (`--target-min`), so the area the pill is hit through (page.css) stays in its own line, clear of a link on the line above. */
+.facts-list .fact-value:has(.pill[href]) { line-height: var(--target-min); }
 .band-icon {
   display: grid; place-items: center; flex: none;
   width: 36px; height: 36px; border-radius: var(--radius);
@@ -302,7 +309,6 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-inline .band-icon { order: 0; align-self: center; width: auto; height: auto; background: none; font-size: var(--text-md); }
 .facts-inline .fact-value { order: 1; margin: 0; color: var(--ink); font-weight: 650; font-variant-numeric: tabular-nums; }
 .facts-inline .fact-value a { color: inherit; text-decoration: none; }
-.facts-inline .fact-value a::after { content: ""; position: absolute; inset: 0; }
 /* Its words read on from the value ("3 rules"), so a label in a line is written in lower case where it is given. */
 .facts-inline .fact-label { order: 2; min-width: 0; }
 .facts-inline .fact-detail { order: 3; margin: 0; }
@@ -326,7 +332,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .page-actions form { margin: 0; display: inline-flex; }
 
 /* A stack list ({% stack_list %}): items read down, each its parts inline. */
-.stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; }
 /* A raw answer kept for the open row scrolls inside it rather than lengthening it. */
 .row-below > pre { max-block-size: 18rem; }
 

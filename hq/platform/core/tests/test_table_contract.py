@@ -12,10 +12,10 @@ from django.urls import reverse
 
 from hq.platform.application import asks
 from hq.platform.application.asks import Ask, Standing
-from hq.platform.application.plugin_testing import hand_drawn_tables, table_problems
+from hq.platform.application.markup_testing import all_elements, elements, links, select, with_class, within
+from hq.platform.application.plugin_testing import table_problems
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
-from hq.platform.application.tests.markup import all_elements, elements, links, select, with_class, within
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 
@@ -40,7 +40,12 @@ class TableContractTests(SimpleTestCase):
     maxDiff = None
 
     def test_every_table_is_declared_through_the_tags(self):
-        problems = [problem for root in _template_roots() for problem in hand_drawn_tables(root)]
+        problems = [
+            f"{template.relative_to(root)}: {problem}"
+            for root in _template_roots()
+            for template in sorted(root.rglob("*.html"))
+            for problem in table_problems(template.read_text(encoding="utf-8"))
+        ]
         self.assertEqual(problems, [], "Draw these tables with {% table_region %} and {% table_heading %}.")
 
     def test_no_template_writes_what_the_region_derives(self):
@@ -61,7 +66,6 @@ class TableContractTests(SimpleTestCase):
 
     def test_a_hand_drawn_table_is_refused(self):
         bare = '<table class="data-table"><thead><tr><th>Name</th></tr></thead></table>'
-        self.assertIn("a data table outside {% table_region %}", table_problems(bare))
         wrapped = f'<div class="table-scroll">{bare}</div>'
         self.assertIn("a scroll region written by hand", table_problems(wrapped))
         in_region = '{% table_region "Things" %}' + bare + "{% endtable_region %}"
@@ -167,7 +171,6 @@ class TableTagTests(SimpleTestCase):
 
         for options, stop in (
             ("", False),
-            (' room="shared"', False),
             (" compare=True", False),
             (" pane=True", True),
             (" chart=True", True),
@@ -275,15 +278,6 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual((words.startswith("Add a run"), href), (True, "/runs/new/"))
         self.assertEqual(asked, [True])
 
-    def test_a_region_names_the_room_its_identifiers_get(self):
-        for room in ("shared", "snug"):
-            with self.subTest(room):
-                source = '{% table_region "Services" room="' + room + '" %}{% endtable_region %}'
-                (region,) = with_class(_render(source), "table-scroll")
-                self.assertIn(f"is-{room}", region.classes)
-        (plain,) = with_class(_render('{% table_region "Services" %}{% endtable_region %}'), "table-scroll")
-        self.assertFalse({"is-shared", "is-snug"} & set(plain.classes))
-
     def test_a_compare_region_says_so(self):
         (region,) = with_class(
             _render('{% table_region "Changes" compare=True %}{% endtable_region %}'), "table-scroll"
@@ -291,10 +285,6 @@ class TableTagTests(SimpleTestCase):
         self.assertIn("is-compare", region.classes)
         (plain,) = with_class(_render('{% table_region "Changes" %}{% endtable_region %}'), "table-scroll")
         self.assertNotIn("is-compare", plain.classes)
-
-    def test_a_room_no_share_is_named_for_is_refused(self):
-        with self.assertRaises(ValueError):
-            _render('{% table_region "Services" room="wide" %}{% endtable_region %}')
 
     def test_a_chart_region_says_so(self):
         html = _render('{% table_region "Runs" chart=True %}{% endtable_region %}')
@@ -321,6 +311,50 @@ class TableTagTests(SimpleTestCase):
             [heading.attrs["data-kind"] for heading in elements(html, "th")], ["prose", "status", "control"]
         )
         self.assertEqual([cell.attrs.get("data-kind") for cell in elements(html, "td")], ["name", "status", "control"])
+
+    def test_a_stacked_cell_names_its_column(self):
+        """A narrow box stacks its table, each value under its column's name
+        (tables.css), so each body cell carries that name. The cell that
+        names its row, a row's controls and a tick-box need none."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table" data-selectable-table><thead><tr>'
+            '{% table_heading "Select" select_all=True %}{% table_heading "Name" gutter=True %}'
+            '{% table_heading "State" "status" %}{% table_heading "Act" css="actions-col" %}</tr></thead><tbody>'
+            "<tr>{% row_select 1 %}<td>a</td><td>Up &amp; on</td><td><button>Go</button></td></tr>"
+            "</tbody></table>{% endtable_region %}"
+        )
+        cells = [cell.attrs.get("data-label") for cell in elements(_render(source), "td")]
+        self.assertEqual(cells, [None, None, "State", None])
+
+    def test_a_stacked_choice_names_its_column(self):
+        """A column a row fills a field in holds the rows' values, so each of
+        its cells, the field's and the words standing in for one, stands
+        under its column's name once stacked, whatever kind its heading says."""
+
+        source = (
+            '{% table_region "Rules" %}<table class="data-table"><thead><tr>{% table_heading "Action" %}'
+            '{% table_heading "example-agent" "control" %}{% table_heading "Act" css="actions-col" %}</tr></thead>'
+            "<tbody><tr><td>a</td><td><select><option>Allow</option></select></td><td><button>Go</button></td></tr>"
+            "<tr><td>b</td><td>Not granted</td><td><button>Go</button></td></tr></tbody></table>{% endtable_region %}"
+        )
+        cells = [cell.attrs.get("data-label") for cell in elements(_render(source), "td")]
+        self.assertEqual(cells, [None, "example-agent", None, None, "example-agent", None])
+        self.assertIn("Not granted", [box.words for box in with_class(_render(source), "cell-short")])
+
+    def test_a_rows_actions_are_its_controls_under_any_heading(self):
+        """A row's actions keep one line as controls whatever their heading
+        says, so they are never a value of words held in a box."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
+            '<tr><td>a</td><td class="row-actions"><a class="btn compact" href="/example/">Open</a></td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        html = _render(source)
+        self.assertEqual([cell.attrs.get("data-kind") for cell in elements(html, "td")], ["name", "control"])
+        self.assertEqual([box.text for box in with_class(html, "cell-short")], ["a"])
 
     def test_every_cell_under_a_control_heading_is_marked_a_control(self):
         """tables.css sizes a select or a field to what it holds only in a
@@ -407,10 +441,9 @@ class TableTagTests(SimpleTestCase):
         (toggle,) = [each for each in elements(html, "button") if "data-row-toggle" in each.attrs]
         self.assertEqual(toggle.ancestors[-1].tag, "td")
 
-    def test_only_a_cut_cell_with_a_line_past_its_floor_is_long(self):
-        """A cut value with a line longer than its column shows whole at its
-        floor offers its row's toggle, so the open row shows it whole; a
-        status is never cut, and a short line or a blank cell offers nothing."""
+    def test_only_a_cut_cell_with_a_long_line_is_clamped(self):
+        """A value with a long line is held to a few lines; a status is never
+        held, and a short line or a blank cell is not."""
 
         long = "A sentence long enough to stand <em>several</em> lines tall in a narrow column"
         lines = "Two lines, each of them short<br>and the second one as short"
@@ -422,56 +455,58 @@ class TableTagTests(SimpleTestCase):
             f'<tr><td>c</td><td>Up</td><td data-col="blank"><span class="empty-value">{"\u2014" * 18}</span></td></tr>'
             "</tbody></table>{% endtable_region %}"
         )
-        marked = [each.attrs.get("data-col") for each in elements(_render(source), "td") if "data-long" in each.attrs]
-        self.assertEqual(marked, ["name", "long"])
+        found = all_elements(_render(source))
+        clamped = [each.ancestors[-1].attrs.get("data-col") for each in found if "cell-clamp" in each.classes]
+        self.assertEqual(clamped, ["name", "long"])
+        # An open row releases its clamp in place, so the value is never
+        # copied to the open line; on a wide line the title holds it, so no
+        # row opens for it there.
+        self.assertFalse([each for each in found if each.tag == "dl"])
+        self.assertFalse(any("data-below" in each.attrs for each in found if each.tag == "tr"))
 
-    def test_the_words_beside_a_rows_controls_keep_their_line(self):
-        """Beside a row's controls the column that names it holds out for
-        `--row-words`, so a table with no room for both stands its controls
-        beneath the words rather than read a few words a line beside them."""
+    def test_a_long_value_and_its_heading_are_marked_long_whatever_its_kind(self):
+        """A value with a line longer than a line of words wraps and its column
+        shares the room (tables.css), a state's or a control's too; a short
+        one, lines of short ones, or a blank cell is not long."""
 
-        def table(last):
-            source = (
-                '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-                '{% table_heading "Note" %}<th></th></tr></thead><tbody>'
-                f"<tr><td>a</td><td>b</td>{last}</tr></tbody></table>{{% endtable_region %}}"
-            )
-            (drawn,) = elements(_render(source), "table")
-            return drawn.attrs["style"]
-
-        self.assertIn("var(--row-words)", table('<td class="row-actions"><button>Read</button></td>'))
-        self.assertNotIn("var(--row-words)", table('<td class="select-column"><input type="checkbox"></td>'))
-
-    def test_a_status_said_by_one_pill_alone_is_marked_to_take_its_columns_width(self):
-        """So the pills down a status column share both edges, whatever their words."""
-
-        cells = {
-            "one": '{% status "Changed" tone="attention" %}',
-            "other": '{% status "New" tone="good" %}',
-            "linked": '{% status "Open" href="/example/" %}',
-            "beside words": '{% status "Up" tone="good" %} since Nov 2',
-            "two": '{% status "Up" %}{% status "Pinned" %}',
-            "words": "Up",
-            "blank": "",
-        }
-        rows = "".join(f'<tr><td>a</td><td data-col="{name}">{cell}</td></tr>' for name, cell in cells.items())
-        prose = '<tr><td>b</td><td>x</td><td data-col="prose">{% status "Up" %}</td></tr>'
+        long = "Ask me first for container stack, domain, public DNS record and tailnet policy"
+        lines = "Two lines, each of them short<br>and the second one as short"
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-            f'{{% table_heading "State" "status" %}}</tr></thead><tbody>{rows}</tbody></table>{{% endtable_region %}}'
-            '{% table_region "Others" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-            f'{{% table_heading "Kind" %}}{{% table_heading "Note" %}}</tr></thead><tbody>{prose}</tbody></table>'
-            "{% endtable_region %}"
+            '{% table_heading "State" "status" %}{% table_heading "Note" %}{% table_heading "Act" "control" %}'
+            "</tr></thead><tbody>"
+            f'<tr><td data-col="name">a</td><td data-col="status">{long}</td><td data-col="lines">{lines}</td>'
+            f'<td data-col="control"><a href="/x/">{long}</a></td></tr>'
+            f'<tr><td>b</td><td>Up</td><td><span class="empty-value">{"–" * 60}</span></td><td>Go</td></tr>'
+            "</tbody></table>{% endtable_region %}"
         )
-        cells = elements(_render("{% load status_tags %}" + source), "td")
-        marked = [each.attrs.get("data-col") for each in cells if "data-pill-only" in each.attrs]
-        self.assertEqual(marked, ["one", "other", "linked"])
+        found = all_elements(_render(source))
+        self.assertEqual(
+            [each.attrs.get("data-col") or each.text.strip() for each in found if "data-long" in each.attrs],
+            ["State", "Act", "status", "control"],
+        )
+
+    def test_a_short_value_is_one_box_and_a_longer_one_is_not(self):
+        """A body cell whose longest line is a short name (an address and its
+        port) holds it in one box, whole up to its share (tables.css); a
+        longer value, a heading or a blank cell has none."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "Proxy" %}</tr></thead><tbody>'
+            '<tr><td data-col="name">a</td><td data-col="proxy"><code>192.0.2.10:9000</code></td></tr>'
+            f'<tr><td data-col="longer">{"example-primary-host-" * 2}</td>'
+            '<td data-col="blank"><span class="empty-value">–</span></td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        boxed = re.findall(r'data-col="(\w+)"[^>]*>\s*<div class="cell-short">', _render(source))
+        self.assertEqual(boxed, ["name", "proxy"])
 
     def test_a_row_that_holds_something_back_has_its_line_beneath(self):
-        """After a row is the line its toggle opens: the blocks it keeps
-        beneath itself, then each labeled block under its label. A column
-        that left and a narrow part show in the row itself once it opens
-        (tables.css), so the line copies neither."""
+        """After a row is the line its toggle opens: its controls, the blocks
+        it keeps beneath itself, then each labeled block under its label and a
+        copy of each cell that holds something back, the copy saying when it
+        shows: where its column has left, or in a narrow box."""
 
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
@@ -496,8 +531,10 @@ class TableTagTests(SimpleTestCase):
         (cell,) = [each for each in beneath if each.tag == "td"]
         self.assertEqual(cell.attrs["colspan"], "5")
         self.assertEqual([each.words for each in beneath if "row-below" in each.classes], ["tall", "x"])
-        self.assertEqual([each.words for each in beneath if each.tag == "dt"], ["Also"])
-        self.assertEqual([each.words for each in beneath if each.tag == "dd"], ["x"])
+        entries = [each for each in beneath if each.tag == "div" and each.ancestors[-1].tag == "dl"]
+        said = {entry.words for entry in entries if not {"data-drop", "data-narrow"} & set(entry.attrs)}
+        self.assertEqual(said, {"Also x"})
+        self.assertEqual(len([each for each in beneath if "row-controls" in each.classes]), 1)
 
     def test_each_part_of_a_cell_is_marked_with_its_role(self):
         """The region marks what a part of a cell is, so the stylesheet keys
@@ -569,6 +606,32 @@ class TableTagTests(SimpleTestCase):
         idle = Ask("Refresh", "/example/ask/")
         self.assertEqual(with_class(_render(source, {"ask": idle}), "row-detail"), [])
 
+    def test_the_line_a_script_adds_beneath_a_row_is_the_one_drawn_there(self):
+        """ask.js clones the frame _ask.html draws for a row whose ask says
+        something once the row is drawn, so its entry nests as a drawn one's
+        does, the label beside the value."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
+            '{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
+            '<tr><td>A</td><td>{% include "partials/_ask.html" with ask=ask %}</td>'
+            "</tr></tbody></table>{% endtable_region %}"
+        )
+        failed = Ask("Refresh", "/example/ask/", Standing(asks.FAILED, "The example could not be read."))
+
+        def nesting(markup):
+            found = all_elements(markup)
+            (why,) = [each for each in found if "data-ask-why" in each.attrs]
+            (detail,) = [each for each in why.ancestors if "data-row-detail" in each.attrs]
+            entry = why.ancestors[-2]
+            terms = [each.tag for each in found if each.tag == "dt" and entry in each.ancestors]
+            return [each.tag for each in why.ancestors[why.ancestors.index(detail) :]], terms
+
+        drawn = _render(source, {"ask": failed})
+        frame = _render('{% include "partials/_ask.html#frames" %}')
+        (below,) = re.findall(r"<template data-ask-below>(.*?)</template>", frame, re.DOTALL)
+        self.assertEqual(nesting(below), nesting(drawn))
+
     def test_a_row_with_nothing_held_back_has_no_line_beneath(self):
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
@@ -588,7 +651,8 @@ class TableTagTests(SimpleTestCase):
             '<td>Shut <div class="row-below" data-label="Shut">y</div></td></tr></tbody></table>{% endtable_region %}'
         )
         values = [each.words for each in all_elements(_render(source)) if each.tag == "dd"]
-        self.assertEqual(values, ["y"])
+        self.assertIn("y", values)
+        self.assertNotIn("x", values)
 
     def test_a_rank_on_the_column_that_names_the_row_is_refused(self):
         source = (

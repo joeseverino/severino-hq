@@ -14,7 +14,6 @@ from django.conf import settings
 from django.db.models import Count, Q, Sum
 
 from hq.domains.content.models import ContentItem
-from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.routes import reverse
@@ -25,7 +24,7 @@ from .projection import read_once
 from .ui import counted
 lazy from .github_estate import repository_for
 lazy from .github_profile import accounts, profile, profiles
-lazy from .timestamps import moment
+lazy from .moments import moment
 
 # The display projection of a reading, in the shape an extension emits, so the
 # dashboard renders host and extension cards through one loop and a new section
@@ -146,32 +145,6 @@ def content() -> tuple[Card, ...]:
     )
 
 
-# ----- Documentation ---------------------------------------------------------
-
-
-def docs_needing_review():
-    return DocumentationRecord.objects.needing_review()
-
-
-def documentation_reading() -> dict[str, int]:
-    return read_once(
-        "sections.documentation",
-        lambda: {"needing_review": docs_needing_review().count()},
-    )
-
-
-def documentation() -> tuple[Card, ...]:
-    reading = documentation_reading()
-    if not reading["needing_review"]:
-        return ()
-    return _card(
-        id="hq.docs.needing_review",
-        label="Docs to review",
-        value=str(reading["needing_review"]),
-        url=f"{reverse('docs_index:list')}?needs_review=1",
-    )
-
-
 # ----- Expenses --------------------------------------------------------------
 
 
@@ -235,7 +208,6 @@ def _deductible(reading: dict[str, Any]) -> str:
 # and how many of them a glance is worth. Held here beside the querysets they
 # read, so a field added to a summary is one edit in the section that owns it.
 
-ROW_LIMIT = 4
 # The Projects and Publishing cards sit beside the calendar, which always
 # shows six weeks, so six rows fill each card.
 CALENDAR_ROWS = 6
@@ -264,14 +236,6 @@ def _content(item: ContentItem) -> dict[str, Any]:
     }
 
 
-def _documentation(record: DocumentationRecord) -> dict[str, Any]:
-    return {
-        "doc_id": record.doc_id,
-        "title": record.title,
-        "last_reviewed": record.last_reviewed.isoformat() if record.last_reviewed else None,
-    }
-
-
 def recent_active_projects() -> list[dict[str, Any]]:
     return [_project(project) for project in active_projects().order_by("-updated_at")[:CALENDAR_ROWS]]
 
@@ -282,10 +246,6 @@ def recent_draft_content() -> list[dict[str, Any]]:
 
 def recently_published() -> list[dict[str, Any]]:
     return [_content(item) for item in published_content().order_by("-published_at", "-updated_at")[:CALENDAR_ROWS]]
-
-
-def docs_awaiting_review() -> list[dict[str, Any]]:
-    return [_documentation(record) for record in docs_needing_review().order_by("last_reviewed")[:ROW_LIMIT]]
 
 
 # ----- Watching --------------------------------------------------------------

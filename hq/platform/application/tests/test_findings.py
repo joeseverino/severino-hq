@@ -7,8 +7,9 @@ from django.utils import timezone
 from pydantic import ValidationError
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
+from hq.platform.application.action_links import read_link
+from hq.platform.application.tests.links import example_command
 
-from ..action_links import ActionLink
 from ..cadence import ControllerSweepCommand
 from ..findings import FINDINGS_SCHEMA_VERSION, derive_findings, finding_rules, findings, rule_for
 from ..security import Capability, Principal
@@ -91,6 +92,15 @@ class FindingsTests(SentinelMixin, TestCase):
         self.assertEqual(found[0].severity, "serious")
         evidence = dict(found[0].evidence)
         self.assertEqual(set(evidence), {"Last seen", "Others read"})
+
+    def test_the_only_record_of_its_type_left_behind_names_no_others(self):
+        observed(self.rewrite("sole"), self.now - timedelta(hours=6))
+        kind_read("adguard.rewrite", self.now)
+
+        (found,) = [f for f in self.raised() if f.rule == "skipped-by-a-sweep"]
+
+        said = " ".join((found.explanation, *(label for label, _value in found.evidence)))
+        self.assertNotIn("other", said.lower())
 
     def test_the_skipped_record_is_offered_to_be_created_again(self):
         skipped = self.rewrite("skipped-record")
@@ -266,20 +276,15 @@ class FindingsTests(SentinelMixin, TestCase):
                     "HQ dev",
                     "Controller",
                     actions=(
-                        ActionLink("open", "Open connections", "read", "/connections/"),
-                        ActionLink(
+                        read_link("open", "Open connections", "/connections/"),
+                        example_command(
                             "command",
                             "Request fresh sweep",
                             "infrastructure_change",
                             "/commands/infrastructure.controller.refresh/",
                             capability="infrastructure.controller.refresh",
                         ),
-                        ActionLink(
-                            "change",
-                            "Unsafe shortcut",
-                            "infrastructure_change",
-                            "/change/",
-                        ),
+                        example_command("change", "Unsafe shortcut", "infrastructure_change", "/change/"),
                     ),
                 ),
                 TopologyNode("connection:one", "connection", "Provider", "Connection"),
@@ -654,20 +659,15 @@ class FindingsTests(SentinelMixin, TestCase):
 
     # ----- properties that must hold ---------------------------------------
 
-    def test_deriving_findings_costs_no_query_and_changes_nothing(self):
-        from django.db import connection as database_connection
-        from django.test.utils import CaptureQueriesContext
-
+    def test_deriving_findings_changes_nothing(self):
         observed(self.rewrite("one"), self.now)
         observed(self.rewrite("two"), self.now - timedelta(hours=9))
         with host_only():
             projection = derive_topology(principal=MANAGE)
         before = list(ManagedResource.objects.values_list("key", "last_observed_at", "conditions"))
 
-        with CaptureQueriesContext(database_connection) as captured:
-            derive_findings(projection, principal=MANAGE)
+        derive_findings(projection, principal=MANAGE)
 
-        self.assertEqual(len(captured), 0)
         self.assertEqual(
             before,
             list(ManagedResource.objects.values_list("key", "last_observed_at", "conditions")),

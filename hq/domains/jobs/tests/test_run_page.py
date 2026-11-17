@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import OperationRequest
-from hq.platform.application.tests.markup import all_elements, elements, within
+from hq.platform.application.markup_testing import all_elements, elements, within
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.automation import CACHE_FLUSH, CORRELATION
 from hq.platform.core.example_estate.names import MACHINE
@@ -93,7 +93,8 @@ class RunPageTests(TestCase):
         from hq.platform.core.models import AuditLog
 
         queued = AuditLog.objects.get(object_id=str(run.pk), action=AuditLog.Action.CREATED)
-        self.assertEqual(said["Asked by"][0], queued.who.words)
+        # Read as words, whichever space keeps "· approved by" with what it follows.
+        self.assertEqual(said["Asked by"][0].split(), queued.who.words.split())
         self.assertEqual(said["Result"][0], run.result["message"])
         self.assertEqual(said["Correlation"][0], CORRELATION)
         self.assertEqual(said["Machines"][1], reverse("control_plane:machine", kwargs={"name": MACHINE}))
@@ -116,12 +117,13 @@ class RunPageTests(TestCase):
         posts = {element.attrs.get("formaction", "") for element in all_elements(html)}
         self.assertFalse({path for path in posts if path.endswith(("/adopt/", "/reject/"))})
 
-    def test_a_working_run_s_page_names_its_lease(self):
+    def test_a_working_run_s_page_names_its_worker_in_plain_words(self):
         run = OperationRequest.objects.get(action=OperationRequest.Action.RUN, state=OperationRequest.State.CLAIMED)
 
         said = facts(self.page(run_page(run.pk)))
 
-        self.assertIn(run.claimed_by, said["Lease"][0])
+        self.assertIn(run.claimed_by, said["Claimed by"][0])
+        self.assertNotIn("Lease", said)
         self.assertNotIn("Result", said)
 
     def test_a_reader_who_may_not_open_jobs_is_refused_a_run_s_page_and_offered_no_link_to_one(self):
@@ -191,7 +193,7 @@ class RunHereTests(TestCase):
 
         response = self.client.get(reverse("control_plane:machine", kwargs={"name": MACHINE}))
 
-        offered = dict(response.context["playbooks_here"])
+        offered = {each.title: each.url for each in response.context["playbooks_here"]}
         self.assertTrue(offered)
         runnable = [manifest for manifest in operation_registry().values() if manifest.admits("machine", MACHINE)]
         self.assertEqual(len(offered), len(runnable))
@@ -216,7 +218,7 @@ class RunHereTests(TestCase):
             for manifest in operation_registry().values()
             if manifest.effect == "read" and manifest.admits("machine", MACHINE)
         }
-        offered = {url.split("/")[2] for _, url in response.context["playbooks_here"]}
+        offered = {each.capability for each in response.context["playbooks_here"]}
         self.assertTrue(reads)
         self.assertEqual(offered, reads)
 
@@ -234,3 +236,24 @@ class RunHereTests(TestCase):
         runs = next(at for at, words in enumerate(headings) if words.startswith("Recent runs"))
         containers = next(at for at, words in enumerate(headings) if words.startswith("Containers"))
         self.assertLess(runs, containers)
+
+    def test_the_audit_log_titles_a_run_and_a_scan_as_jobs_does(self):
+        """Each run of a playbook still adopted, whose title is the same now as when it was asked."""
+
+        from hq.platform.application.automation_adoption import playbook_titles
+        from hq.platform.application.work_runs import RUN as LISTED_RUN, hydrated, scan_title, work_rows
+        from hq.platform.core.models import AuditLog
+
+        titled = {*playbook_titles().values(), scan_title()}
+        listed = {
+            row.id: row.title for row in hydrated(work_rows()) if row.source == LISTED_RUN and row.title in titled
+        }
+        asked = dict(
+            AuditLog.objects.filter(object_id__in=listed, action=AuditLog.Action.CREATED).values_list(
+                "object_id", "object_repr"
+            )
+        )
+
+        self.assertTrue(asked)
+        for pk, title in asked.items():
+            self.assertEqual(title, listed[pk])

@@ -2,15 +2,14 @@
 
 from functools import cached_property
 from typing import override
-from urllib.parse import urlencode
 
 from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.connections import machines_once
+from hq.platform.application.glance import machine_metrics
 from hq.platform.application.hq_self import LABEL as HQ_LABEL
 from hq.platform.application.machine_context import (
     header_addresses,
@@ -21,7 +20,9 @@ from hq.platform.application.machine_context import (
 from hq.platform.application.machines import declaration_seed, machine
 from hq.platform.application.pages import PageAction, PageDialog, PageMixin
 from hq.platform.application.resource_capabilities import (
-    UPDATE_CAPABILITY,
+    CREATE_CAPABILITY,
+    MACHINE_DETAILS,
+    REMOVAL_CAPABILITY,
     Offered,
     offered_changes,
     resource_capabilities,
@@ -32,11 +33,11 @@ from hq.platform.application.service_context import RUNS_SECTION
 from hq.platform.application.tailnet_context import tailnet_context
 from hq.platform.application.visit_refresh import page_visit
 lazy from hq.platform.application import tailnet
-lazy from hq.platform.application.automation_runs import playbooks_on
+lazy from hq.platform.application.automation_runs import HERE, RUN_HERE, PlaybookHere, playbooks_on
 lazy from hq.platform.application.containers import on_machine
 lazy from hq.platform.application.docker_sections import docker_line
 lazy from hq.platform.application.page_relations import for_machine
-lazy from hq.platform.application.request_channel import displayed_client_ip
+lazy from hq.platform.application.request_channel import forwarding_of
 lazy from hq.platform.application.tailnet import declaration, may_reach, ports, proposed_grant
 
 from .models import ManagedResource
@@ -64,16 +65,16 @@ class MachineListView(PageMixin, TemplateView):
         context["machines"] = machines
         context["hq_label"] = HQ_LABEL
         # How many are in each state, in the order the states first appear.
-        states = [item.state[0] for item in machines]
+        states = [item.state for item in machines]
         context["state_counts"] = [(states.count(state), state) for state in dict.fromkeys(states)]
         return context
 
 
-def policy_edit_url(key: str) -> str:
+def policy_edit(key: str) -> PageAction | None:
     """The tailnet policy's editor, when its declaration offers one."""
 
     resource = ManagedResource.objects.filter(key=key).first() if key else None
-    return offered_changes([resource])[key].edit_url if resource is not None else ""
+    return offered_changes([resource])[key].edit(key) if resource is not None else None
 
 
 def whatif_context(request, default: str = "", *, target_default: str | None = None) -> dict:
@@ -96,7 +97,7 @@ def whatif_context(request, default: str = "", *, target_default: str | None = N
         "ports": ports(),
         "asked": asked,
         "whatif_action": request.path,
-        "policy_edit_url": policy_edit_url(declaration()),
+        "policy_edit": policy_edit(declaration()),
     }
     # Answered only when all three were given. A half-filled form is a question
     # nobody has asked yet, not one whose answer is "no".
@@ -126,7 +127,7 @@ class TailnetView(PageMixin, TemplateView):
 
     @override
     def get_page_actions(self):
-        policy_edit = policy_edit_url(self.tailnet.declaration)
+        edit = policy_edit(self.tailnet.declaration)
         return (
             PageAction(
                 "Policy test",
@@ -139,7 +140,7 @@ class TailnetView(PageMixin, TemplateView):
                     lede="Check whether the policy allows a connection. Tailscale evaluates it.",
                 ),
             ),
-            *((PageAction(capability_words(UPDATE_CAPABILITY), policy_edit),) if policy_edit else ()),
+            *((edit,) if edit else ()),
             PageAction("All machines", reverse("control_plane:machines")),
         )
 
@@ -190,45 +191,42 @@ class MachineDetailView(PageMixin, TemplateView):
             resource = ManagedResource.objects.filter(key=key).first()
             capabilities = resource_capabilities(resource) if resource is not None else None
             offered = capabilities.offered if capabilities is not None else Offered()
-            actions = [PageAction(capability_words(UPDATE_CAPABILITY), offered.edit_url)] if offered.edit_url else []
-            if capabilities is not None and offered.remove_url:
-                actions.append(PageAction(capabilities.removal_words, offered.remove_url, danger=True))
+            actions = [
+                offered.edit(key),
+                PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant)
+                if capabilities is not None and offered.removes
+                else None,
+            ]
         else:
             # Seeded with what HQ knows, and back here after saving. A machine the
             # tailnet device declaration already names gets its details added; one
             # with no declaration at all is declared.
-            seeded = urlencode(
-                {
-                    "kind": MACHINE_KIND,
-                    **declaration_seed(self.found),
-                    "next": self.found.url,
-                },
-                doseq=True,
-            )
             actions = [
-                PageAction(
-                    "Add machine details" if self.found.route_approval_key else "Add this machine to HQ",
-                    f"{reverse('control_plane:create')}?{seeded}",
+                PageAction.command(
+                    CREATE_CAPABILITY,
+                    variant=MACHINE_DETAILS if self.found.route_approval_key else MACHINE_KIND,
+                    query={"kind": MACHINE_KIND, **declaration_seed(self.found), "next": self.found.url},
                 ),
             ]
         return (*self._run_here(), *actions)
 
     @cached_property
-    def playbooks_here(self) -> tuple[tuple[str, str], ...]:
-        """Each playbook its reader may run on this machine, by title and its Run page."""
+    def playbooks_here(self) -> tuple[PlaybookHere, ...]:
+        """Each playbook its reader may run on this machine."""
 
         return playbooks_on(normalized_hostname(self.found.name), web_principal(self.request.user))
 
     def _run_here(self) -> tuple[PageAction, ...]:
         """One playbook's Run page with this machine chosen, or a dialog of several, Playbooks without script."""
 
-        label = "Run a playbook here"
         if not self.playbooks_here:
             return ()
         if len(self.playbooks_here) == 1:
-            return (PageAction(label, self.playbooks_here[0][1]),)
-        dialog = PageDialog("run-playbook", label, "control_plane/_run_playbook.html")
-        return (PageAction(label, reverse("control_plane:playbooks"), modal=dialog),)
+            hosts = (normalized_hostname(self.found.name),)
+            only = PageAction.command(self.playbooks_here[0].capability, variant=HERE, query={"hosts": hosts})
+            return (only,) if only is not None else ()
+        dialog = PageDialog("run-playbook", RUN_HERE, "control_plane/_run_playbook.html")
+        return (PageAction(RUN_HERE, reverse("control_plane:playbooks"), modal=dialog),)
 
     @override
     def get_context_data(self, **kwargs):
@@ -267,7 +265,7 @@ class MachineDetailView(PageMixin, TemplateView):
         # page states one count, the container list's, so the two cannot differ.
         context["load_metrics"] = [
             metric
-            for metric in found.telemetry.get("metrics") or ()
+            for metric in machine_metrics(found.telemetry)
             if not (found.containers and metric.get("label") == "Containers")
         ]
         context.update(machine_links(found, whole))
@@ -276,7 +274,7 @@ class MachineDetailView(PageMixin, TemplateView):
         # carries the addresses it answers at, so the page could always have
         # known, and said "this machine" while you looked at your own laptop.
         # Arithmetic on one address: no query, no sweep.
-        context["is_this_device"] = displayed_client_ip(self.request) in found.addresses
+        context["is_this_device"] = forwarding_of(self.request).reported in found.addresses
         context["hq_label"] = HQ_LABEL
         context["page_aside"] = "control_plane/_machine_status.html"
         context["page_visit"] = page_visit("machine", found.name)

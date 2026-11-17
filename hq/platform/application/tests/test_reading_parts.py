@@ -36,7 +36,7 @@ def refused(zone, part="rules", refusal="permission"):
 
 
 def sweep(**kinds):
-    return record_inventory(kinds, principal=cli_principal(), controller_id="example-controller")
+    return record_inventory(kinds, controller_id="example-controller")
 
 
 def refused_on_every_zone():

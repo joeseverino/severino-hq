@@ -27,7 +27,7 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import OutboundInRequest, off_request, serving_request
 from hq.platform.core.outside_requests import connections_of_its_own
 
-from .models import LOST_ERROR, Job
+from .models import LAPSE, LOST_ERROR, Job
 
 logger = logging.getLogger("severino.jobs")
 
@@ -356,10 +356,10 @@ def reap(kind: str | None = None) -> int:
     blocks, and by the hourly ``due`` work for the rest; a page shows a stale
     job as stopped early without writing it (``Job.seen_state``).
     """
-    live = Job.objects.filter(state__in=(Job.State.QUEUED, Job.State.RUNNING)).select_related("requested_by")
+    live = Job.objects.filter(LAPSE.q(timezone.now())).select_related("requested_by")
     if kind:
         live = live.filter(kind=kind)
-    lost = [job for job in live if job.is_stale]
+    lost = list(live)
     if not lost:
         return 0
     ended = timezone.now()

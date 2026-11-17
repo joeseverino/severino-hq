@@ -21,7 +21,7 @@ of one: use _activity_calendar.html for what actually happened on given dates.
   </ol>
   {% if plan.notes %}
     <ul class="week-plan-notes">
-      {% for note in plan.notes %}<li><span class="muted">{{ note.label|breakable }}</span><strong>{{ note.value|breakable }}</strong></li>{% endfor %}
+      {% for note in plan.notes %}<li>{% muted %}{{ note.label|breakable }}{% endmuted %}<strong>{{ note.value|breakable }}</strong></li>{% endfor %}
     </ul>
   {% endif %}
 {% aside %}{% if plan.url %}<a class="subtle-link" href="{{ plan.url }}">Change plan</a>{% endif %}

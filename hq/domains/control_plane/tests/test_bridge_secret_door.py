@@ -70,7 +70,18 @@ EXAMPLES: dict[str, Any] = {
             }
         ]
     },
-    "glance": [{"panel": "example", "as_of": "2026-08-12T00:00:00+00:00", "summary": "Fine."}],
+    "glance": [
+        {
+            "panel_id": "weather",
+            "as_of": "2026-08-12T00:00:00+00:00",
+            "weather": {
+                "point": "41.8781,-87.6298",
+                "city": "Fairview",
+                "hours": [{"start": "2026-08-12T01:00:00+00:00", "name": "Tonight", "forecast": "Clear"}],
+                "alerts": [{"event": "Heat Advisory", "headline": "Heat Advisory until 8 PM", "severity": "Moderate"}],
+            },
+        }
+    ],
 }
 
 # A synthetic of each credential the controller holds or mints, assembled here

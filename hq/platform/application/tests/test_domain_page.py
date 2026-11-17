@@ -7,10 +7,10 @@ from django.test import SimpleTestCase
 
 from hq.domains.control_plane.zone_views import _page_relationships, _records_lede
 from hq.platform.application.entity_links import EntityLink
+from hq.platform.application.infrastructure import ResourceState
+from hq.platform.application.markup_testing import elements, select, text, texts
 from hq.platform.application.relationships import RelationGroup, Relationship, Relationships
 from hq.platform.application.zones import Zone, ZoneRecord
-
-from .markup import elements, select, text, texts
 
 
 def group(phrase: str, *ends: EntityLink) -> RelationGroup:
@@ -89,9 +89,7 @@ class RecordTableTests(SimpleTestCase):
             "service_url": "",
             "manageable": True,
             "managed": True,
-            "edit_url": "/edit/",
-            "remove_url": "/remove/",
-            "health": {"state": "healthy", "label": "Healthy"},
+            "health": {"state": ResourceState.HEALTHY, "label": "Healthy"},
         }
         return SimpleNamespace(**{**base, **fields})
 
@@ -111,7 +109,7 @@ class RecordTableTests(SimpleTestCase):
     def test_a_state_is_said_only_where_it_is_not_healthy(self):
         html = self.table(
             self.record(),
-            self.record(name="old.example.com", health={"state": "degraded", "label": "Needs attention"}),
+            self.record(name="old.example.com", health={"state": ResourceState.DEGRADED, "label": "Needs attention"}),
         )
 
         self.assertNotIn("Healthy", html)

@@ -14,6 +14,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.forms import ModelForm
 from django.utils.text import capfirst
 
+from .contracts import Effect
 from .deletion import DeleteCommand, RecordDeleted, delete_record
 from .describe import meanings
 from .domains import Records, host_records, load, records_of
@@ -29,6 +30,8 @@ _TARGET_NAMES = {"slug": "slug", "integer": "ID", "doc_id": "ID", "key": "key"}
 KEPT = "A field left out keeps its value."
 # What opens every record's form, and so what its update is called: "Edit an asset".
 EDIT = "Edit"
+# What opens its deletion's confirmation, and what confirms it.
+DELETE = "Delete"
 
 
 def deleter(resource: str) -> Callable[..., RecordDeleted]:
@@ -51,10 +54,8 @@ def deleter(resource: str) -> Callable[..., RecordDeleted]:
             lookup={records.lookup: value},
             target=str(value),
             command=command,
-            principal=principal,
-            capability=records.delete,
-            operation=f"{records.noun}.delete",
             type_name=records.noun,
+            called=records.called,
             expected_updated_at=expected_updated_at,
             after_commit=load(records.on_delete) if records.on_delete else None,
         )
@@ -144,13 +145,6 @@ def _as_field_declares(field: Any, declared: dict[str, Any]) -> dict[str, Any]:
     return declared
 
 
-def display_noun(records: Records) -> str:
-    """What a message calls one record: "Content item", "Expense"."""
-
-    name = records.title or records.noun
-    return capfirst(name)
-
-
 def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
     title = records.title or records.noun
     command = load(records.command)
@@ -159,7 +153,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
         (
             "create",
             records.create,
-            "remote_write",
+            Effect.REMOTE_WRITE,
             records.write,
             command,
             records.save,
@@ -170,7 +164,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
         (
             "upsert",
             bool(records.upsert),
-            "remote_write",
+            Effect.REMOTE_WRITE,
             records.write,
             command,
             records.upsert,
@@ -181,7 +175,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
         (
             "update",
             True,
-            "remote_write",
+            Effect.REMOTE_WRITE,
             records.write,
             command,
             records.save,
@@ -192,7 +186,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
         (
             "delete",
             True,
-            "destructive",
+            Effect.DESTRUCTIVE,
             records.delete,
             DeleteCommand,
             deleter(records.resource),
@@ -216,7 +210,8 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             target_label=target_label if targeted else "",
             target_help=ended(f"The {title} to {verb}") if targeted else "",
             label=wording.get(verb, ("", ""))[1] or label,
-            verb=EDIT if verb == "update" else "",
+            verb={"update": EDIT, "delete": DELETE}.get(verb, ""),
+            variants=tuple((variant, words) for of, variant, words in records.variants if of == verb),
         )
         for verb, declared, effect, permission, command_type, handler, summary, label, targeted in verbs
         if declared

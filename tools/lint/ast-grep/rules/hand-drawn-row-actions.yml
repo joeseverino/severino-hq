@@ -1,8 +1,8 @@
 # A row's actions are the row actions part, drawn from hq_sdk.pages.PageAction,
 # which draws the row's cell, so every row's verbs stand alike. A cell holds
-# them by hand when it holds a {% post_button %} drawn as a button (its
-# default class, given no css=), or anything given the button class. No fix:
-# the part reads the row's declared actions.
+# them by hand when it holds a {% button %} drawn as a button (given no
+# css=, which draws a control that is not one). No fix: the part reads the
+# row's declared actions.
 id: hand-drawn-row-actions
 language: html
 severity: error
@@ -20,12 +20,7 @@ rule:
           regex: ^td$
     - has:
         stopBy: end
-        any:
-          - kind: text
-            regex: '\{%\s*post_button\b'
-            not:
-              regex: '\{%\s*post_button\b[^%]*\bcss='
-          - kind: text
-            regex: '\b(?:class|css)="(?:[^"]*\s)?btn(?:[^\w-]|$)'
-          - kind: attribute
-            regex: '(?:^|\})class="(?:[^"]*\s)?btn(?:[^\w-]|$)'
+        kind: text
+        regex: '\{%\s*button\b'
+        not:
+          regex: '\{%\s*button\b[^%]*\bcss='

@@ -8,7 +8,7 @@
   {% facts label="Event" %}
     {% fact "When" %}{{ event.created_at|when:"exact" }}{% endfact %}
     {% fact "Who" value=event.who.words %}
-    {% if event.object_type %}{% fact "Object" %}{{ event.object_repr|default:event.type_label|or_empty }}{% if event.object_id %} <span class="muted">#{{ event.object_id|breakable }}</span>{% endif %}{% endfact %}{% endif %}
+    {% if event.object_type %}{% fact "Object" %}{{ event.object_repr|default:event.type_label|or_empty }}{% if event.object_id %} {% muted %}#{{ event.object_id|breakable }}{% endmuted %}{% endif %}{% endfact %}{% endif %}
     {% if about %}{% fact "About" %}<a href="{{ about.1 }}">{{ about.0|breakable }}</a>{% endfact %}{% endif %}
     {% if cause %}{% fact "Started by" %}<a href="{{ cause.1 }}">{{ cause.0|breakable }}</a>{% endfact %}{% endif %}
     {% if operation or operation_id %}{% fact "Operation" %}{{ operation|breakable }}{% if operation and operation_id %} {% endif %}{% if operation_id %}<code>{{ operation_id|breakable }}</code>{% endif %}{% endfact %}{% endif %}
@@ -37,12 +37,12 @@
 {% if scan %}
   {% if scan.unplaced %}
     {% notice tone="error" %}
-      <ul>{% for reason in scan.unplaced %}<li>{{ reason|breakable }}</li>{% endfor %}</ul>
+      {% prose_list %}{% for reason in scan.unplaced %}<li>{{ reason|breakable }}</li>{% endfor %}{% endprose_list %}
     {% title %}HQ can't adopt this commit{% endnotice %}
   {% endif %}
   {% if scan.unmarked %}
     {% notice tone="warning" title="More access" %}
-      <ul>{% for widening in scan.unmarked %}<li>{{ widening|breakable }}</li>{% endfor %}</ul>
+      {% prose_list %}{% for widening in scan.unmarked %}<li>{{ widening|breakable }}</li>{% endfor %}{% endprose_list %}
     {% endnotice %}
   {% endif %}
   {% if scan_rows %}

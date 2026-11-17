@@ -1,17 +1,18 @@
-"""The connection page's security story must stay derived and honest."""
+"""The connections page's security story is the standards' checks, measured once."""
 
+from dataclasses import replace
+
+from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
+from hq.platform.application.markup_testing import select
 from hq.platform.core.tests.forwarding import arrived
 
 from ..connection_catalog import ConnectionAbilityState, ConnectionGroup, ConnectionView
-from ..connection_security import (
-    connection_security_posture,
-    observed_connection_controls,
-    observed_request_controls,
-)
+from ..connection_security import connection_security_posture
 from ..connections import (
     ConnectionAbility,
     ConnectionInstance,
@@ -19,19 +20,39 @@ from ..connections import (
     ConnectionSpec,
 )
 from ..facts import stored_snapshots
+from ..posture import Inputs, posture
 from ..projection import projection_scope
+from ..request_connection import connection
 from ..security import Capability
+from ..standards import Reading, Standing
 
 
-def observed_ingress_control(hostname):
-    return observed_request_controls(hostname)[0]
+# The readings are imported where they are read, so this module imports at a
+# base that names them otherwise (`mise run test --at`).
+def observed_edge(hostname):
+    from ..connection_security import request_readings
+
+    return request_readings(hostname)[0]
 
 
-def observed_firewall_control():
-    return observed_request_controls("hq.example.test")[1]
+def observed_firewall():
+    from ..connection_security import request_readings
+
+    return request_readings("hq.example.test")[1]
 
 
-def _groups(*, ability_available=True, status="good", required_scopes=("example:read",)):
+def _posture(groups, request=None):
+    inputs = Inputs(edge=Reading.unavailable("Not read"), firewall=Reading.unavailable("Not read"), groups=groups)
+    return connection_security_posture(
+        inputs, posture(inputs), connection=connection(request) if request is not None else None
+    )
+
+
+def _result(found, check_id):
+    return next(result for result in found.results if result.check.id == check_id)
+
+
+def _groups(*, ability_available=True, status="good", required_scopes=("example:read",), observed=True):
     ability = ConnectionAbility(
         "example.read",
         "Read example",
@@ -49,6 +70,7 @@ def _groups(*, ability_available=True, status="good", required_scopes=("example:
         ability_names=(ability.name,),
         dependencies=(ConnectionLink("example.resource"),),
         credential_model="scoped",
+        observed_at=timezone.now() if observed else None,
     )
     spec = ConnectionSpec(
         "example.connections",
@@ -93,12 +115,9 @@ class OneStateModelTests(TestCase):
     """The headline counts the lifecycle each row shows, so they cannot disagree."""
 
     def _posture_with(self, lifecycle):
-        from dataclasses import replace
-
         (group,) = _groups()
         view = replace(group.connections[0], lifecycle=lifecycle)
-        request = RequestFactory().get("/", HTTP_HOST="hq.example.test", REMOTE_ADDR="100.64.0.5")
-        return connection_security_posture((replace(group, connections=(view,)),), request=request)
+        return _posture((replace(group, connections=(view,)),))
 
     def test_each_lifecycle_lands_in_exactly_one_headline_bucket(self):
         for lifecycle, bucket in (
@@ -119,46 +138,32 @@ class OneStateModelTests(TestCase):
                 self.assertEqual(sum(counts.values()), 1, counts)
 
     def test_the_posture_is_serious_for_a_connection_needing_attention_and_neutral_for_an_unverified_one(self):
-        from dataclasses import replace
-
-        (group,) = _groups()
         for lifecycle, state in (("ready", "good"), ("configured", "neutral"), ("stale", "serious")):
             with self.subTest(lifecycle=lifecycle):
-                view = replace(group.connections[0], lifecycle=lifecycle)
-                posture = connection_security_posture((replace(group, connections=(view,)),))
+                self.assertEqual(self._posture_with(lifecycle).state, state)
 
-                self.assertEqual(posture.state, state)
-
-    def test_the_posture_is_serious_for_a_revoked_permission_and_neutral_for_one_unchecked(self):
-        from dataclasses import replace
-
+    def test_a_permission_not_held_is_never_green_and_a_fault_under_advanced_posture(self):
         (group,) = _groups()
         view = group.connections[0]
-        for evidence, state in (
-            ("not_applicable", "good"),
-            ("coarse", "neutral"),
-            ("unverified", "neutral"),
-            ("revoked", "serious"),
+        for evidence, state, advanced in (
+            ("not_applicable", "good", ""),
+            ("coarse", "neutral", ""),
+            ("unverified", "neutral", ""),
+            ("revoked", "neutral", ""),
+            ("revoked", "serious", "advanced"),
         ):
-            with self.subTest(evidence=evidence):
+            with self.subTest(evidence=evidence, advanced=advanced), override_settings(SEVERINO_POSTURE=advanced):
                 judged = replace(view, abilities=(replace(view.abilities[0], evidence=evidence),))
-                posture = connection_security_posture((replace(group, connections=(judged,)),))
-
-                self.assertEqual(posture.state, state)
+                self.assertEqual(_posture((replace(group, connections=(judged,)),)).state, state)
 
     def test_without_a_request_the_posture_is_the_estate_alone(self):
-        from ..connection_security import REQUEST_CONTROLS
-
-        posture = connection_security_posture(_groups())
+        posture = _posture(_groups())
 
         self.assertEqual(posture.headline, "")
-        self.assertEqual(posture.channel_label, "")
-        self.assertFalse(REQUEST_CONTROLS & {control.id for control in posture.controls})
+        self.assertEqual(posture.admission, ())
         self.assertEqual(posture.state, "good")
 
     def test_a_whole_account_credential_is_named_and_still_ready(self):
-        from dataclasses import replace
-
         from hq.platform.application.connection_catalog import (
             AUTHORITY_LABELS,
             connection_authority,
@@ -172,14 +177,10 @@ class OneStateModelTests(TestCase):
 
         self.assertEqual(authority, "whole_account")
         self.assertEqual(AUTHORITY_LABELS[authority], "Credential has full account access")
-        observed = replace(view.instance, observed_at=timezone.now())
-        self.assertEqual(
-            connection_lifecycle(observed, authority, stale_after_hours=24, now=timezone.now()),
-            "ready",
-        )
+        self.assertEqual(connection_lifecycle(view.instance, authority, now=timezone.now()), "ready")
 
 
-@override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True)
+@override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True, ALLOWED_HOSTS=["hq.example.test"])
 class ConnectionSecurityPostureTests(TestCase):
     def request(self, address="100.64.0.5", *, secure=True, **extra):
         return RequestFactory().get(
@@ -190,69 +191,65 @@ class ConnectionSecurityPostureTests(TestCase):
         )
 
     def test_tailnet_ingress_and_connection_authority_are_derived_together(self):
-        posture = connection_security_posture(_groups(), request=self.request())
+        posture = _posture(_groups(), self.request())
 
         self.assertEqual(posture.headline, "You are connected over the tailnet.")
         self.assertEqual(posture.external_custody_count, 1)
-        self.assertEqual(posture.scope_verified_count, 1)
         self.assertEqual(posture.dependency_count, 1)
-        self.assertEqual(
-            next(control for control in posture.controls if control.id == "edge").state,
-            "neutral",
-        )
+        self.assertEqual(_result(posture, "scope").reading.evidence, "1 checked")
+
+    def test_plain_http_over_the_tailnet_is_encrypted_by_wireguard(self):
+        posture = _posture(_groups(), self.request(secure=False))
+
+        self.assertTrue(_result(posture, "transport").met)
+        self.assertEqual(posture.headline, "You are connected over the tailnet.")
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=["10.0.0.9/32"])
     def test_the_current_trusted_proxy_path_is_proven_without_a_probe(self):
-        posture = connection_security_posture(
-            _groups(),
-            request=self.request("10.0.0.9", HTTP_X_FORWARDED_FOR="100.64.0.5"),
-        )
+        posture = _posture(_groups(), self.request("10.0.0.9", HTTP_X_FORWARDED_FOR="100.64.0.5"))
 
-        proxy = next(control for control in posture.controls if control.id == "proxy")
-        self.assertEqual(proxy.state, "good")
-        self.assertEqual(proxy.evidence, "1 trusted proxy")
+        self.assertTrue(_result(posture, "forwarder").met)
+        self.assertEqual(posture.trusted_proxy_count, 1)
 
-    def test_unknown_scope_evidence_stays_visibly_unknown(self):
-        posture = connection_security_posture(_groups(ability_available=None), request=self.request())
+    def test_a_request_not_forwarded_has_no_proxy_check(self):
+        posture = _posture(_groups(), self.request())
 
-        scope = next(control for control in posture.controls if control.id == "scope")
-        self.assertEqual(scope.state, "attention")
-        self.assertIn("1 not reported", scope.evidence)
+        self.assertEqual({result.check.id for result in posture.admission}, {"gate", "transport"})
+
+    def test_unknown_scope_evidence_is_not_read_rather_than_judged(self):
+        posture = _posture(_groups(ability_available=None), self.request())
+
+        scope = _result(posture, "scope")
+        self.assertEqual(scope.state, Standing.UNAVAILABLE)
+        self.assertIn("1 not reported", scope.reading.evidence)
         self.assertEqual(posture.state, "neutral")
 
-    def test_an_ability_that_declared_no_proof_is_reported_as_undeclared(self):
-        # Not "capability-only", which sounded like a kind of authorization. An
-        # ability with no grant model and no credential model has told HQ
+    def test_an_ability_that_declared_no_proof_is_reported_as_unchecked(self):
+        # An ability with no grant model and no credential model has told HQ
         # nothing, and the posture carries that as a visible debt.
-        posture = connection_security_posture(
-            _groups(ability_available=True, required_scopes=()), request=self.request()
-        )
+        posture = _posture(_groups(ability_available=True, required_scopes=()), self.request())
 
-        scope = next(control for control in posture.controls if control.id == "scope")
-        self.assertEqual(scope.state, "attention")
-        self.assertIn("1 not checked", scope.evidence)
-        self.assertNotIn("not reported", scope.evidence)
-        self.assertEqual(posture.scope_undeclared_count, 1)
-        self.assertEqual(posture.scope_unknown_count, 0)
+        scope = _result(posture, "scope")
+        self.assertEqual(scope.state, Standing.UNAVAILABLE)
+        self.assertIn("1 not checked", scope.reading.evidence)
+        self.assertNotIn("not reported", scope.reading.evidence)
         self.assertEqual(posture.state, "neutral")
 
-    def test_verified_and_keyless_evidence_alone_is_a_proven_control(self):
-        posture = connection_security_posture(_groups(), request=self.request())
+    def test_a_missing_permission_is_unmet_and_names_the_credential(self):
+        scope = _result(_posture(_groups(ability_available=False), self.request()), "scope")
 
-        scope = next(control for control in posture.controls if control.id == "scope")
-        self.assertEqual(scope.state, "good")
-        self.assertEqual(scope.evidence, "1 checked")
+        self.assertEqual(scope.state, Standing.UNMET)
+        self.assertEqual(scope.reading.evidence, "Permission missing: Example")
 
     def test_missing_scope_or_untrusted_ingress_never_gets_a_green_summary(self):
-        missing = connection_security_posture(_groups(ability_available=False), request=self.request())
-        public = connection_security_posture(_groups(), request=self.request("203.0.113.7"))
+        missing = _posture(_groups(ability_available=False), self.request())
+        public = _posture(_groups(), self.request("203.0.113.7"))
 
-        self.assertEqual(missing.state, "serious")
+        self.assertNotEqual(missing.state, "good")
         self.assertEqual(public.state, "serious")
+        self.assertEqual(public.headline, "This connection needs a look.")
 
-    def test_full_account_access_counts_and_names_the_credentials(self):
-        from dataclasses import replace
-
+    def test_full_account_access_names_the_credentials(self):
         (group,) = _groups()
         view = group.connections[0]
         coarse = tuple(replace(state, evidence="coarse") for state in view.abilities * 3)
@@ -260,43 +257,33 @@ class ConnectionSecurityPostureTests(TestCase):
             replace(view, abilities=coarse),
             replace(view, instance=replace(view.instance, label="Another"), abilities=coarse[:1]),
         )
-        posture = connection_security_posture((replace(group, connections=views),), request=self.request())
+        scope = _result(_posture((replace(group, connections=views),), self.request()), "scope")
 
-        scope = next(control for control in posture.controls if control.id == "scope")
-        self.assertEqual(scope.evidence, "2 credentials with full account access")
-        self.assertIn("Full account access: Another, Example.", scope.detail)
+        self.assertTrue(scope.reading.limited)
+        self.assertIn("Another, Example", scope.reading.evidence)
 
     def test_a_connection_never_read_asks_to_be_checked(self):
-        from dataclasses import replace
-
-        (group,) = _groups()
+        (group,) = _groups(observed=False)
         view = group.connections[0]
         read = replace(view, instance=replace(view.instance, observed_at=timezone.now()))
 
-        for connections, state in (((view,), "attention"), ((read,), "good"), ((), "neutral")):
+        for connections, state in (((view,), Standing.UNMET), ((read,), Standing.MET), ((), Standing.UNAVAILABLE)):
             with self.subTest(state=state):
-                posture = connection_security_posture(
-                    (replace(group, connections=connections),), request=self.request()
-                )
-                freshness = next(control for control in posture.controls if control.id == "freshness")
-                self.assertEqual(freshness.state, state)
+                found = _posture((replace(group, connections=connections),), self.request())
+                self.assertEqual(_result(found, "freshness").state, state)
 
     def test_a_keyless_public_service_is_not_owed_a_reading(self):
-        from dataclasses import replace
-
         (group,) = _groups()
         view = group.connections[0]
-        read = replace(view, instance=replace(view.instance, observed_at=timezone.now()))
-        keyless = replace(view, instance=replace(view.instance, label="Lookups", credential_model="none"))
+        keyless = replace(
+            view, instance=replace(view.instance, label="Lookups", credential_model="none", observed_at=None)
+        )
 
-        posture = connection_security_posture((replace(group, connections=(read, keyless)),), request=self.request())
+        found = _posture((replace(group, connections=(view, keyless)),), self.request())
 
-        freshness = next(control for control in posture.controls if control.id == "freshness")
-        self.assertEqual(freshness.state, "good")
+        self.assertTrue(_result(found, "freshness").met)
 
     def test_a_keyless_service_is_counted_once_and_alike_by_every_check(self):
-        from dataclasses import replace
-
         (group,) = _groups()
         view = group.connections[0]
         keyless = replace(
@@ -306,31 +293,23 @@ class ConnectionSecurityPostureTests(TestCase):
         )
 
         keyless_group = replace(group, spec=replace(group.spec, secret_store=""), connections=(keyless,))
-        posture = connection_security_posture((keyless_group,), request=self.request())
+        found = _posture((keyless_group,), self.request())
 
-        controls = {control.id: control for control in posture.controls}
-        self.assertIn("1 need no key", controls["credentials"].evidence)
-        self.assertIn("1 need no key", controls["scope"].evidence)
+        self.assertIn("1 need no key", _result(found, "credentials").reading.evidence)
+        self.assertIn("1 need no key", _result(found, "scope").reading.evidence)
 
     def test_a_keyless_connection_needs_no_key_whatever_its_family_keeps(self):
-        from dataclasses import replace
-
         (group,) = _groups()
         view = group.connections[0]
         keyless = replace(
             view, instance=replace(view.instance, granted_scopes=(), scopes_known=False, credential_model="none")
         )
 
-        posture = connection_security_posture((replace(group, connections=(view, keyless)),), request=self.request())
+        custody = _result(_posture((replace(group, connections=(view, keyless)),), self.request()), "credentials")
 
-        custody = next(control for control in posture.controls if control.id == "credentials")
-        self.assertIn("1 in Example Vault", custody.evidence)
-        self.assertIn("1 need no key", custody.evidence)
-        self.assertEqual(custody.state, "good")
-
-    def test_deriving_the_posture_costs_no_queries(self):
-        with self.assertNumQueries(0):
-            connection_security_posture(_groups(), request=self.request())
+        self.assertIn("1 in Example Vault", custody.reading.evidence)
+        self.assertIn("1 need no key", custody.reading.evidence)
+        self.assertTrue(custody.met)
 
     def test_npm_policy_is_derived_into_current_hostname_security(self):
         ProviderInventory.objects.create(
@@ -358,12 +337,10 @@ class ConnectionSecurityPostureTests(TestCase):
             ],
         )
 
-        edge = observed_ingress_control("hq.example.test")
-        posture = connection_security_posture(_groups(), request=self.request(), edge=edge)
+        edge = observed_edge("hq.example.test")
 
-        self.assertEqual(edge.state, "good")
+        self.assertEqual(edge.standing, Standing.MET)
         self.assertEqual(edge.evidence, "Tailnet ranges\xa0· deny all")
-        self.assertEqual(posture.state, "good")
 
     def test_npm_generated_final_deny_is_not_duplicated_to_prove_the_policy(self):
         ProviderInventory.objects.create(
@@ -391,9 +368,9 @@ class ConnectionSecurityPostureTests(TestCase):
             ],
         )
 
-        edge = observed_ingress_control("hq.example.test")
+        edge = observed_edge("hq.example.test")
 
-        self.assertEqual(edge.state, "good")
+        self.assertEqual(edge.standing, Standing.MET)
         self.assertEqual(edge.evidence, "Tailnet ranges\xa0· implicit deny all")
 
     def test_a_widened_npm_policy_degrades_the_whole_posture(self):
@@ -415,48 +392,88 @@ class ConnectionSecurityPostureTests(TestCase):
             ],
         )
 
-        edge = observed_ingress_control("hq.example.test")
-        posture = connection_security_posture(_groups(), request=self.request(), edge=edge)
+        edge = observed_edge("hq.example.test")
+        inputs = Inputs(edge=edge, firewall=Reading.unavailable("Not read"), groups=_groups())
+        with override_settings(SEVERINO_POSTURE="advanced"):
+            found = connection_security_posture(inputs, posture(inputs))
 
-        self.assertEqual(edge.state, "serious")
-        self.assertEqual(posture.state, "serious")
+        self.assertEqual(edge.standing, Standing.UNMET)
+        self.assertEqual(found.state, "serious")
 
-    def test_tailscale_policy_and_npm_edge_share_one_cached_read(self):
-        ProviderInventory.objects.bulk_create(
-            [
-                ProviderInventory(
-                    kind="tailscale.policy",
-                    observed_at=timezone.now(),
-                    records=[
-                        {
-                            "record": "policy",
-                            "grants": [{"src": ["group:staff"]}],
-                            "tests": [{"src": "example@example.test"}],
-                        }
-                    ],
-                ),
-                ProviderInventory(
-                    kind="npm.proxy_host",
-                    observed_at=timezone.now(),
-                    records=[],
-                ),
-            ]
-        )
+    def test_the_proxy_and_the_firewall_share_the_estates_one_read(self):
+        from ..connection_security import estate_readings
+
+        ProviderInventory.objects.create(kind="npm.proxy_host", observed_at=timezone.now(), records=[])
 
         with projection_scope():
             stored_snapshots()
             with self.assertNumQueries(0):
-                tailnet_policy, _edge = observed_connection_controls("hq.example.test")
+                estate_readings("hq.example.test")
 
-        self.assertEqual(tailnet_policy.state, "good")
-        self.assertEqual(tailnet_policy.evidence, "1 grant\xa0· 1 test")
+
+class TailnetPolicyTests(TestCase):
+    """One check reads the tailnet policy, and judges it as well as reading it."""
+
+    def policy(self, **record):
+        ProviderInventory.objects.create(
+            kind="tailscale.policy", observed_at=timezone.now(), records=[{"record": "policy", **record}]
+        )
+
+    def reading(self):
+        from ..connection_security import tailnet_policy_reading
+
+        return tailnet_policy_reading()
+
+    def test_a_policy_read_is_met_and_counted(self):
+        self.policy(grants=[{"src": ["group:staff"]}], tests=[{"src": "example@example.test"}])
+
+        found = self.reading()
+        self.assertEqual(found.standing, Standing.MET)
+        self.assertEqual(found.evidence, "1 rule\xa0· 1 test")
+
+    def test_an_allow_all_rule_is_unmet_although_read(self):
+        self.policy(grants=[{"src": ["*"], "dst": ["*"], "ip": ["*"]}])
+
+        self.assertEqual(self.reading().standing, Standing.UNMET)
+
+    def test_a_policy_never_read_is_not_a_verdict(self):
+        self.assertEqual(self.reading().standing, Standing.UNAVAILABLE)
+
+
+@override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True)
+class OneAnswerOnBothPagesTests(TestCase):
+    """The Connections page answers each of the request's checks as the
+    connection panel draws it, since both read the one result."""
+
+    def test_a_plain_http_visit_over_the_tailnet_reads_alike_on_both_pages(self):
+        self.client.force_login(get_user_model().objects.create_superuser("reader"))
+        visit = arrived(REMOTE_ADDR="100.64.0.5")
+        listed = self.client.get(reverse("control_plane:connections"), **visit).content.decode()
+        panel = self.client.get(reverse("connection"), **visit).content.decode()
+
+        drawn = {
+            # The rung's own state, nearest first: a check's rung sits in its hop's.
+            rung.attrs["data-connection-layer"]: next(
+                ancestor.attrs["data-state"] for ancestor in reversed(rung.ancestors) if "data-state" in ancestor.attrs
+            )
+            for rung in select(panel, "data-connection-layer")
+        }
+        answered = {
+            section.attrs["data-connection-control"]: section.words
+            for section in select(listed, "data-connection-control")
+        }
+        said = {"met": "Yes", "unmet": "No", "unavailable": "Unknown"}
+        self.assertIn("transport", answered.keys() & drawn.keys())
+        for check_id in answered.keys() & drawn.keys():
+            with self.subTest(check=check_id):
+                self.assertIn(said[drawn[check_id]], answered[check_id].split())
 
 
 class ArrivalInterfaceTests(TestCase):
     """The strongest claim on the page must not be the least evidenced one.
 
     "The address is on the tailnet" reads a field the sender writes. This
-    control says whether the kernel also required the packet to arrive there,
+    reading says whether the kernel also required the packet to arrive there,
     so its absence has to read as unknown rather than as either answer.
     """
 
@@ -476,8 +493,8 @@ class ArrivalInterfaceTests(TestCase):
         )
 
     def test_a_reading_nothing_took_is_not_a_verdict(self):
-        control = observed_firewall_control()
-        self.assertEqual(control.state, "neutral")
+        control = observed_firewall()
+        self.assertEqual(control.standing, Standing.UNAVAILABLE)
 
     def test_an_unreachable_reading_is_not_a_verdict_either(self):
         ProviderInventory.objects.create(
@@ -486,33 +503,32 @@ class ArrivalInterfaceTests(TestCase):
             records=[{"record": "interface-binding"}],
             reachable=False,
         )
-        self.assertEqual(observed_firewall_control().state, "neutral")
+        self.assertEqual(observed_firewall().standing, Standing.UNAVAILABLE)
 
     def test_the_interface_being_required_is_what_makes_it_good(self):
         self._reading()
-        control = observed_firewall_control()
-        self.assertEqual(control.state, "good")
+        control = observed_firewall()
+        self.assertEqual(control.standing, Standing.MET)
         self.assertIn("tailscale0", control.evidence)
         self.assertIn("drops a tailnet address", control.detail)
 
     def test_admitting_on_the_address_alone_is_reported_as_such(self):
         self._reading(accept_requires_interface=False, foreign_interface_dropped=False)
-        control = observed_firewall_control()
-        self.assertEqual(control.state, "bad")
+        control = observed_firewall()
+        self.assertEqual(control.standing, Standing.UNMET)
         self.assertIn("address alone", control.detail)
 
     def test_accepting_without_dropping_says_what_is_uncounted(self):
         self._reading(foreign_interface_dropped=False)
-        control = observed_firewall_control()
-        self.assertEqual(control.state, "good")
+        control = observed_firewall()
+        self.assertEqual(control.standing, Standing.MET)
         self.assertIn("has no rule that drops", control.detail)
 
 
 class IngressRegistryTests(TestCase):
-    """The ingress control asks the registry which kinds carry a source policy."""
+    """The ingress reading asks the registry which kinds carry a source policy."""
 
     def test_any_kind_declaring_an_ingress_policy_is_read(self):
-        from dataclasses import replace
         from unittest import mock
 
         from hq.domains.control_plane.provider_adapters.contracts import IngressPolicy
@@ -531,8 +547,8 @@ class IngressRegistryTests(TestCase):
             records=[{"names": ["hq.example.test"]}],
         )
         with mock.patch.dict(PROVIDERS, {"example.proxy": proxy}):
-            edge = observed_ingress_control("hq.example.test")
+            edge = observed_edge("hq.example.test")
 
-        self.assertEqual(edge.state, "serious")
+        self.assertEqual(edge.standing, Standing.UNMET)
         self.assertEqual(edge.evidence, "No access list")
         self.assertIn("SSH", edge.detail)

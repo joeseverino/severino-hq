@@ -46,7 +46,7 @@ this page in the same commit as the rule.
 
 | Do | Enforced by |
 |---|---|
-| Views never call `.save()`, `.delete()` or a manager's or queryset's bulk write. They reach a domain write only through `run_posted` (or `execute_posted`, its answer alone), and none takes `ServiceWriteMixin` or `CommandFormMixin`, which run a service that is no capability outside the runner. The rule reads the module of every routed view and its bases, whatever the module is called | `hq/platform/application/tests/test_view_writes.py` |
+| Views never call `.save()`, `.delete()` or a manager's or queryset's bulk write. They reach a domain write only through `run_posted` (or `execute_posted`, its answer alone), an installed extension's as the host's. The rule reads the module of every routed view and its bases, whatever the module is called | `hq/platform/application/tests/test_view_writes.py` |
 | A view with `paginate_by` takes `TableListMixin` | `DeliveryAdapterArchitectureTests.test_paginated_list_views_use_the_shared_table_engine` |
 | `hq/platform/mcp/services.py` stays free of models and `.objects`; expose reads through `hq/platform/application/resources.py` and read models | `lint:ast-grep` (`tools/lint/ast-grep/rules/mcp-services-reach-no-model.yml`) |
 | Keep the workflow layering: `workflow_contracts.py` imports nothing of HQ, `ui.py` never reaches `workflows`, `workflows.py` never reaches `action_links` | `lint:imports`, the contracts in `pyproject.toml`'s `[tool.importlinter]` |
@@ -54,9 +54,9 @@ this page in the same commit as the rule.
 | Resolve URLs with `hq.platform.application.routes.reverse`, never `django.urls.reverse`, in `hq/platform/application/` and `hq/domains/control_plane/` | `RouteOwnerTests.test_the_application_resolves_routes_through_its_one_owner`, `RouteOwnerTests.test_a_remembered_route_is_djangos_and_follows_the_url_configuration` |
 | Every template sets `{% block title %}` to the page's own name, without the site name | `PageTitleTests.test_every_page_names_itself`, `PageTitleTests.test_no_page_appends_the_site_name_itself`, `PageTitleTests.test_the_layout_is_what_appends_it` |
 | Link a command's form with `command_url`, never `reverse("command")` or `{% url "command" %}` | `OnePrimitiveTests.test_a_command_is_linked_through_command_url` |
-| List what a record is related to through `partials/_related.html`, its groups built by `application.related` | `OnePrimitiveTests.test_a_related_list_is_drawn_by_its_partial` |
+| List what a record is related to through `partials/_related.html`, its groups built by `application.related` | `lint:ast-grep` (`hand-drawn-heading.yml`) |
 | Name hosts with `normalized_hostname` and zone membership with `in_zone` | `OnePrimitiveTests.test_hostnames_are_spelled_by_normalized_hostname`, `OnePrimitiveTests.test_zone_membership_is_asked_of_in_zone` |
-| Templates show dates with `when` (HQ's engine has no other way to write one) (`when_text` where a `<time>` cannot stand), byte counts with `bytes` (`human_bytes` in Python), amounts with `money` (`hq.platform.application.money.money` in Python) and name entities with the entity tag; Python links entities with `entity_link` | `OnePrimitiveTests.test_templates_say_byte_counts_through_the_bytes_filter`, `OnePrimitiveTests.test_templates_write_amounts_through_the_money_filter`, `lint:ast-grep` (`byte-counts-said-by-human-bytes.yml`, `amount-written-by-money.yml`), `OnePrimitiveTests.test_templates_name_entities_through_the_entity_tag`, `OnePrimitiveTests.test_entity_pages_are_addressed_by_entity_link` |
+| Templates show dates with `when` (HQ's engine has no other way to write one) (`when_text` where a `<time>` cannot stand), byte counts with `bytes` (`human_bytes` in Python), amounts with `money` (`hq.platform.application.money.money` in Python) and name entities with the entity tag; Python links entities with `entity_link` | `OnePrimitiveTests.test_templates_say_byte_counts_through_the_bytes_filter`, `OnePrimitiveTests.test_templates_write_amounts_through_the_money_filter`, `lint:ast-grep` (`byte-counts-said-by-human-bytes.yml`, `amount-written-by-money.yml`, `hand-drawn-record-link.yml`), `OnePrimitiveTests.test_entity_pages_are_addressed_by_entity_link` |
 | Write an identifier (an address, a path, a key, an image) through `breakable`, in code or as a link's text, so it wraps only at its seams | `OnePrimitiveTests.test_an_identifier_is_written_as_a_breakable_token` |
 | Declare the domain once in `HOST_DOMAINS` (`hq/platform/application/domains.py`): a unique `hq.<name>` id, nav routes that resolve, grouped nav at order 100 or above (machinery at 900) | `DomainRegistryTests.test_domain_ids_are_unique`, `DomainRegistryTests.test_every_declared_route_resolves`, `DomainRegistryTests.test_host_sections_never_squat_the_extension_order_band`, `DomainRegistryTests.test_machinery_sorts_after_every_section_that_holds_work` |
 | Keep no second roster of sections: no nav list in `hq/platform/core/context_processors.py`, no code-to-URL table in a core view | `DomainRegistryTests.test_the_registry_is_the_only_list_of_sections`, `DomainRegistryTests.test_the_view_keeps_no_code_to_url_table` |
@@ -80,10 +80,10 @@ docstring is the rule.
 | Rule | What it holds |
 | --- | --- |
 | `lint:css` | Stylelint under `tools/lint/stylelint.config.mjs`: tokens, spacing, color |
-| `StyleContractTests`, `TemplateClassStyleTests` | CSS, layers |
+| `StyleContractTests`, `TemplateClassStyleTests`, `HandRolledClassTests` | CSS, layers |
 | `TemplateCommentTests` | what a `{# #}` comment left open is |
 | `FileSizeTests` | no source or test file past `SEVERINO_FILE_LINE_LIMIT` |
-| `PageReadCapabilityTests` | every routed page reads under one capability (`required_capability`, else `read`), refused before its view; a route that answers without a session authorizes itself |
+| `PageReadCapabilityTests` | every routed page reads under `read` and the one capability it declares (`required_capability`), refused before its view; a route that answers without a session authorizes itself |
 | `PageTrailTests` | a view declares `page_trail`, every crumb above it, and `trail_label`, not a `get_page_trail` that restates them |
 | `lint:ast-grep` | the rules under `tools/lint/ast-grep`. Among them, a setting is read as `settings.NAME`, never with a default. An operation is queued through `resource_operations.enqueue`, whose unique key settles two writers. Who a request's session signed in is `request_identity.signed_in`. A module-level name is assigned once. A table cell is read by its text, never by the tag that closes it, in HQ or an extension |
 | `CountedTests` | plurals |

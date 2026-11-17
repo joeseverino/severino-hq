@@ -5,7 +5,7 @@ import re
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.markup import elements
+from hq.platform.application.markup_testing import elements
 from hq.platform.core.tests.test_part_tags import _catalog_templates
 
 OPTIONS = (("", "Default"), ("allow", "On"), ("deny", "Off"))
@@ -31,6 +31,20 @@ class SelectTagTests(SimpleTestCase):
         html = _render('{% select "rule" options chosen=rule %}', rule=None)
 
         self.assertEqual([o.attrs["value"] for o in elements(html, "option") if "selected" in o.attrs], [""])
+
+    def test_a_value_alone_is_its_own_words_and_a_number_is_chosen_by_its_value(self):
+        html = _render('{% select "port" ports chosen="443" %}', ports=(80, 443))
+
+        options = elements(html, "option")
+        self.assertEqual([(o.attrs["value"], o.words) for o in options], [("80", "80"), ("443", "443")])
+        self.assertEqual([o.attrs["value"] for o in options if "selected" in o.attrs], ["443"])
+
+    def test_one_that_sends_its_form_as_it_changes_carries_the_hook_and_others_do_not(self):
+        (sends,) = elements(_render('{% select "year" options submit_on_change=True %}'), "select")
+        (waits,) = elements(_render('{% select "year" options %}'), "select")
+
+        self.assertIn("data-submit-on-change", sends.attrs)
+        self.assertNotIn("data-submit-on-change", waits.attrs)
 
     def test_its_label_is_the_name_a_reader_hears_and_its_id_the_one_a_control_label_names(self):
         named = _render('{% select "rule" options label=label %}', label='Edit a record, for "agent"')

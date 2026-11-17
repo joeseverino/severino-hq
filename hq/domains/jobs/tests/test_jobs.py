@@ -9,7 +9,7 @@ from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application.tests.markup import text, with_class
+from hq.platform.application.markup_testing import text, with_class
 from hq.platform.core.models import AuditLog
 from hq_sdk.testing import plain
 
@@ -271,7 +271,7 @@ class JobStatusViewTests(TestCase):
         self.assertEqual(payload["note"], "halfway")
         self.assertTrue(payload["live"])
         # The word and the tone a following control's pill takes, the run table's.
-        self.assertEqual((payload["label"], payload["tone"]), ("Running", "active"))
+        self.assertEqual((payload["label"], payload["tone"]), ("Running", Job.State.RUNNING.tone))
 
     def test_status_requires_a_session(self):
         job = Job.objects.create(kind="test.private", label="Private")
@@ -433,13 +433,13 @@ class JobNameTests(TestCase):
         self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
 
     def test_a_declared_job_reads_by_its_declared_name_whatever_its_run_stored(self):
-        from hq.platform.application.scheduled_work import named
+        from hq.platform.application.outbound_work import declared_work
 
         Job.objects.create(kind="sessions.clear", label="sessions.clear", state=Job.State.SUCCEEDED, actor="timer")
 
         page = text(self.client.get(reverse("jobs:list")))
 
-        self.assertIn(named("sessions.clear").label, page)
+        self.assertIn(declared_work()["sessions.clear"].label, page)
         self.assertNotIn("sessions.clear", page)
 
     def test_work_no_longer_declared_keeps_the_name_its_run_stored(self):
@@ -499,13 +499,11 @@ class JobsListRunsTests(TestCase):
         self.assertTrue(any(row.source == "job" for row in rows))
 
     def test_a_state_is_drawn_as_a_status_in_its_tone(self):
-        from hq.platform.application.work_runs import TONES
-
         page = self.listed(state=Job.State.RUNNING)
         found = [row for row in page.context["object_list"] if row.source == "run"]
 
         self.assertTrue(found)
-        self.assertContains(page, f"pill-{TONES[Job.State.RUNNING]}")
+        self.assertContains(page, f"pill-{Job.State.RUNNING.tone}")
 
     def test_a_machine_s_runs_are_listed_by_its_name(self):
         from hq.platform.core.example_estate.names import MACHINE
@@ -542,7 +540,7 @@ class JobsListRunsTests(TestCase):
         approver = self.runs().exclude(Q(input__approved_by="") | Q(input__approved_by__isnull=True)).first()
         task = next(event["task"] for run in self.runs(state="failed") for event in run.result.get("events", ()))
 
-        for label in ("Machines", "Correlation", "Lease", "Tasks"):
+        for label in ("Machines", "Correlation", "Claimed by", "Tasks"):
             with self.subTest(label=label):
                 self.assertIn(f'data-label="{label}"', body)
         for said in (CORRELATION, WORKER, approver.input["approved_by"], task):

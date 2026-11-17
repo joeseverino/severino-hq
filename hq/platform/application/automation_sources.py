@@ -13,7 +13,6 @@ and never runnable. How the scan reads a repository: docs/Architecture.md,
 
 import json
 import re
-import secrets
 from collections import Counter
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, Any
@@ -33,26 +32,26 @@ from pydantic import (
 
 lazy from hq.domains.control_plane import models
 lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
-lazy from hq.platform.core.audit import audit_operation, audited_labels
+lazy from hq.platform.core.audit import audited_labels
 lazy from hq.platform.core.models import AuditLog
 
 from .automation_manifest import DottedName, ProcedureTerms
 from .command_fields import Describe
+from .contracts import Effect
 from .integration_specs import CapabilitySpec
+from .resource_operations import OperationAsked
 from .security import Capability, Principal
 from .ui import ended
 lazy from . import asks, automation_adoption, pages
 lazy from .action_links import capability_action_link, command_url
 lazy from .approval_review import grouped, marked
 lazy from .automation_runs import access_words, anywhere, capability_name
-lazy from .cadence import automation_standing, ring_automation_doorbell
-lazy from .capabilities import capability_words
+lazy from .cadence import ask, automation_standing
+lazy from .capabilities import Consented, consent
 lazy from .findings import rule_for
-lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
-lazy from .labels import effect_label
 lazy from .record_errors import PolicyError, RecordNotFound
-lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
+lazy from .resource_operations import Prepared, asked_fields, enqueue, operation_asked
 lazy from .routes import reverse
 lazy from .work_runs import UNENDED, run_rows, run_url, seen_as_runs, standing_of
 
@@ -183,60 +182,60 @@ def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourcePropo
     )
 
 
-class RefreshCommand(BaseModel):
-    """A Refresh takes nothing but why it was asked and its retry key: the
-    repository is the host's configuration."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
+@dataclass(frozen=True, slots=True)
+class RefreshCommand:
+    """A Refresh takes nothing but why it was asked: the repository is the
+    host's configuration."""
 
     reason: Annotated[StrictStr, Field(max_length=300), Describe("Why it is refreshed, kept with the scan.")] = ""
-    # Filled by the capability runner with the caller's key, or a fresh one.
-    idempotency_key: StrictStr = ""
 
 
-def _source(principal: Principal) -> ManagedResource:
+def _source(consented: Consented) -> ManagedResource:
     current = models.ManagedResource.objects.select_for_update().filter(key=SOURCE_KEY).first()
     if current is None:
         save_managed_resource(
-            ManagedResourceCommand(key=SOURCE_KEY, kind=SOURCE_KIND, spec={"named_by": "host"}), principal=principal
+            ManagedResourceCommand(key=SOURCE_KEY, kind=SOURCE_KIND, spec={"named_by": "host"}), consented=consented
         )
     return models.ManagedResource.objects.select_for_update().get(key=SOURCE_KEY)
 
 
-@transaction.atomic
-def refresh(command: RefreshCommand, *, principal: Principal) -> OperationQueued:
-    """Queue one scan of the automation source for the worker, once per retry
-    key, and answer the one already waiting while there is one."""
+def scan_status_url(operation_id: str) -> str:
+    """Where a page follows one scan, signed so it reports on nothing else."""
 
-    key = command.idempotency_key or f"refresh:{secrets.token_urlsafe(18)}"
-    existing = models.OperationRequest.objects.filter(idempotency_key=key).select_related("resource").first()
-    if existing is not None:
-        if existing.action != models.OperationRequest.Action.SCAN:
-            raise IdempotencyConflict("That retry key was already used for a different request.")
-        return {"ok": True, "queued": False, "operation": serialize_operation(existing)}
-    # A scan no worker will take would wait for nothing: the finding that
-    # says so (``automation_findings``) carries how to set one up.
-    untaken = automation_standing().cannot("refresh", now=timezone.now())
-    if untaken:
-        raise PolicyError(untaken)
-    with audit_operation(operation=REFRESH, principal=principal):
-        resource = _source(principal)
-        operation, created = enqueue(
-            resource,
-            models.OperationRequest.Action.SCAN,
-            idempotency_key=key,
-            requested_actor=principal.actor,
-            requested_interface=principal.interface,
-            requested_device=principal.device,
-            requested_person_key=principal.person_key,
-            reason=command.reason,
-            input={"generation": resource.generation},
+    return f"{reverse('control_plane:playbooks_status')}?watch={asks.watch_token({'scan': operation_id})}"
+
+
+def _scan_asked(operation: OperationRequest, *, queued: bool) -> OperationAsked:
+    """How the scan stands, saying nothing beyond its standing's own note."""
+
+    scan = str(operation.pk)
+    return operation_asked(
+        operation, queued=queued, standing=scan_standing(scan) or asks.Standing(), status_url=scan_status_url(scan)
+    )
+
+
+@transaction.atomic
+def refresh(command: RefreshCommand, *, consented: Consented) -> OperationAsked:
+    """Queue one scan of the automation source for the worker, and answer the
+    one already waiting while there is one."""
+
+    def prepare() -> Prepared:
+        # A scan no worker will take would wait for nothing: the finding that
+        # says so (``automation_findings``) carries how to set one up.
+        untaken = automation_standing().cannot("refresh", now=timezone.now())
+        if untaken:
+            raise PolicyError(untaken)
+        resource = _source(consented)
+        return resource, asked_fields(
+            consent(consented).principal, reason=command.reason, generation=resource.generation
         )
+
+    operation, created = enqueue(models.OperationRequest.Action.SCAN, prepare)
     if created:
         # The worker pulls the scan over the bridge; the ring only says one
         # waits, and only once it is stored for the claim to find.
-        transaction.on_commit(ring_automation_doorbell)
-    return {"ok": True, "queued": created, "operation": serialize_operation(operation)}
+        ask(doorbell="automation")
+    return _scan_asked(operation, queued=created)
 
 
 # ----------------------------------------------------------- how it stands
@@ -438,16 +437,14 @@ def decisions(pending: Reviewed | None, principal: Principal, *, diff: bool) -> 
         return ()
     proposal = pending.proposal
     adopts, rejects = _deciding(principal)
-    shown: list[PageAction] = []
+    shown: list[PageAction | None] = []
     if diff and principal.permits(Capability.READ_AUDIT_LOG):
         shown.append(pages.PageAction("View diff", entry_url(proposal)))
     if not pending.refused and adopts:
-        adopt = reverse("control_plane:playbooks_adopt", kwargs={"pk": proposal.pk})
-        shown.append(pages.PageAction("Adopt all", adopt, method="post"))
+        shown.append(pages.PageAction.command(automation_adoption.ADOPT, proposal.pk, variant="all"))
     if rejects:
-        reject = reverse("control_plane:playbooks_reject", kwargs={"pk": proposal.pk})
-        shown.append(pages.PageAction("Reject all", reject, method="post"))
-    return tuple(shown)
+        shown.append(pages.PageAction.command(automation_adoption.REJECT, proposal.pk, variant="all"))
+    return tuple(action for action in shown if action is not None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -505,31 +502,25 @@ def _row(
     """One playbook's row: ``procedure`` as adopted (``adopted``) or as the
     scan brings it, None for one HQ can't adopt, which is its ``title`` alone."""
 
-    actions: list[PageAction] = []
+    actions: list[PageAction | None] = []
     if change is not None and review is not None:
         sent = {"playbook": change.key}
         if adopts and not change.problems and not review.unplaced:
-            adopt = reverse("control_plane:playbooks_adopt", kwargs={"pk": review.proposal.pk})
-            actions.append(
-                pages.PageAction(capability_words(automation_adoption.ADOPT), adopt, method="post", fields=sent)
-            )
+            actions.append(pages.PageAction.command(automation_adoption.ADOPT, review.proposal.pk, fields=sent))
         if rejects:
-            reject = reverse("control_plane:playbooks_reject", kwargs={"pk": review.proposal.pk})
-            actions.append(
-                pages.PageAction(capability_words(automation_adoption.REJECT), reject, method="post", fields=sent)
-            )
+            actions.append(pages.PageAction.command(automation_adoption.REJECT, review.proposal.pk, fields=sent))
     kind = change.change if change is not None else ""
     if procedure is None:
-        return PlaybookTableRow(title, "", "", (), "", "", kind, tuple(actions))
+        return PlaybookTableRow(title, "", "", (), "", "", kind, tuple(filter(None, actions)))
     return PlaybookTableRow(
         procedure.title,
         command_url(capability_name(procedure.id)) if adopted else "",
-        effect_label(procedure.effect),
+        procedure.effect.label,
         tuple(procedure.hosts),
         anywhere(procedure.target_kinds),
         access_words(procedure.privilege),
         kind,
-        tuple(actions),
+        tuple(filter(None, actions)),
     )
 
 
@@ -538,7 +529,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             REFRESH,
             "Scan your repository for playbooks and keep the scan result. Nothing in it runs until an operator adopts it.",
-            "remote_write",
+            Effect.REMOTE_WRITE,
             Capability.MANAGE_INFRASTRUCTURE,
             RefreshCommand,
             refresh,

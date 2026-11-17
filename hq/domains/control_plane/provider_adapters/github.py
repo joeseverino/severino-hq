@@ -13,6 +13,7 @@ from pydantic import Field
 from hq.platform.application.ui import ended
 
 from ..connection_shapes import GITHUB_APP
+from ..observations import github as readings
 from ..observations.github import PROVIDER
 from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, SharedValue, applies
 
@@ -115,6 +116,7 @@ DEFINITION = ProviderSpec(
     ),
 )
 DEFINITIONS = (DEFINITION,)
+OBSERVATIONS = readings.OBSERVATIONS
 
 SHARED = (
     SharedValue(

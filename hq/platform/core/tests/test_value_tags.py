@@ -1,12 +1,13 @@
 import re
+from html import unescape
 
 from django import forms
 from django.test import SimpleTestCase
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.entity_links import EntityLink
+from hq.platform.application.markup_testing import all_elements, links, select, text, texts, with_class
 from hq.platform.application.printable import Unprintable
-from hq.platform.application.tests.markup import all_elements, links, select, text, texts, with_class
 from hq.platform.core.templatetags.value_tags import breakable, cell_line, code_spans, entity, or_empty, readout
 
 
@@ -231,6 +232,14 @@ class BreakableTests(SimpleTestCase):
         self.assertEqual(str(breakable("12 of example.com")).count("\xa0"), 1)
         self.assertNotIn("\xa0", str(breakable("80 example.com")))
 
+    def test_a_line_the_text_breaks_stays_broken(self):
+        """A block of code keeps each of its lines, whatever the word that
+        opens the next one."""
+
+        for block in ('user: "1000:1000"\n    ports:', "Due in 80\ndays"):
+            with self.subTest(block=block):
+                self.assertEqual(unescape(re.sub(r"<[^>]*>", "", str(breakable(block)))), block)
+
     def test_it_is_marked_a_token_and_nothing_is_one(self):
         self.assertIn('class="token"', breakable("example.com"))
         self.assertEqual(breakable(""), "")
@@ -246,26 +255,16 @@ class BreakableTests(SimpleTestCase):
         self.assertIn("data-sole", breakable("example-docker-host-01"))
         self.assertNotIn("data-sole", breakable("Receipt for example-docker-host-01"))
 
-    def test_a_name_has_its_box_and_its_strut_side_by_side_in_its_token(self):
-        """A name is drawn in a box of its own beside its strut, both in its
-        token, so whatever lays the name out holds the strut that sizes it
-        beside the box that draws it (cuts.css); a word of a sentence has
-        neither, and a line of words is cut by the line's own box."""
+    def test_a_name_has_its_box_in_its_token(self):
+        """A name is drawn in a box of its own in its token; a word of a
+        sentence has none, and a line of words is cut by the line's own box."""
 
         for name in ("example.com/example-path", "hq.example.com"):
             with self.subTest(name=name):
                 html = str(breakable(name))
                 (token,) = with_class(html, "token")
-                (strut,) = with_class(html, "strut")
                 (box,) = with_class(html, "cut")
-                self.assertEqual(strut.ancestors[-1:], (token,))
                 self.assertEqual(box.ancestors[-1:], (token,))
-                self.assertEqual(strut.attrs.get("aria-hidden"), "true")
-                self.assertEqual(strut.words, "")
-                pieces = strut.attrs["data-strut"].split("\u200b")
-                self.assertEqual("".join(pieces), name)
-                self.assertGreater(len(pieces), 1)
-        self.assertEqual(with_class(str(breakable("Receipt for example-docker-host-01")), "strut"), [])
         self.assertEqual(with_class(str(breakable("Receipt for example-docker-host-01")), "cut"), [])
         (line,) = with_class(str(cell_line("on example-web")), "cut")
         self.assertIn("cell-line", line.ancestors[-1].classes)
@@ -419,7 +418,10 @@ class LeadActionTests(SimpleTestCase):
         from hq.platform.application.pages import PageAction
 
         self.assertEqual(
-            self.lead(PageAction("Stop", "/stop/", danger=True), PageAction("Restart", "/restart/", method="post")),
+            self.lead(
+                PageAction._built(label="Stop", url="/stop/", danger=True),
+                PageAction._built(label="Restart", url="/restart/", method="post"),
+            ),
             "Restart",
         )
 
@@ -438,7 +440,7 @@ class LeadActionTests(SimpleTestCase):
     def test_with_only_a_destructive_control_it_leads(self):
         from hq.platform.application.pages import PageAction
 
-        self.assertEqual(self.lead(PageAction("Remove", "/r/", danger=True)), "Remove")
+        self.assertEqual(self.lead(PageAction._built(label="Remove", url="/r/", danger=True)), "Remove")
 
 
 class HeadActionsTests(SimpleTestCase):
@@ -455,10 +457,10 @@ class HeadActionsTests(SimpleTestCase):
 
         self.assertEqual(
             self.split(
-                PageAction("Restart", "/restart/", method="post"),
-                PageAction("Stop", "/stop/", danger=True),
+                PageAction._built(label="Restart", url="/restart/", method="post"),
+                PageAction._built(label="Stop", url="/stop/", danger=True),
                 PageAction("Edit", "/edit/"),
-                PageAction("Remove", "/remove/", danger=True),
+                PageAction._built(label="Remove", url="/remove/", danger=True),
             ),
             (["Restart", "Edit"], ["Edit", "Stop", "Remove"]),
         )

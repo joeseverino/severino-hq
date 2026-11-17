@@ -1028,6 +1028,24 @@ func (e TLSConsumerKind) Valid() bool {
 	}
 }
 
+// Defines values for TailnetRange.
+const (
+	TailnetRangeIPv4 TailnetRange = "100.64.0.0/10"
+	TailnetRangeIPv6 TailnetRange = "fd7a:115c:a1e0::/48"
+)
+
+// Valid indicates whether the value is a known member of the TailnetRange enum.
+func (e TailnetRange) Valid() bool {
+	switch e {
+	case TailnetRangeIPv4:
+		return true
+	case TailnetRangeIPv6:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UnpinnedPathKind.
 const (
 	Config    UnpinnedPathKind = "config"
@@ -1708,8 +1726,86 @@ type GlanceMachineTarget struct {
 	RequestID   string   `json:"request_id"`
 }
 
+// GlanceObservation One dashboard panel the controller read (record_dashboard_observations), carrying the as_of of the plan it answers. Numbers, instants and states only: HQ words them.
+type GlanceObservation struct {
+	AsOf     string                     `json:"as_of"`
+	Machines []GlanceObservationMachine `json:"machines,omitempty"`
+
+	// PanelID A dashboard panel the glance plan can ask the controller to read.
+	PanelID GlancePanelID `json:"panel_id"`
+
+	// Weather The forecast at the configured point: the hours ahead, the first of
+	// them now, and the alerts in force.
+	Weather *GlanceObservationWeather `json:"weather,omitempty"`
+}
+
+// GlanceObservationAlert One active Weather Service alert for the point.
+type GlanceObservationAlert struct {
+	Event    string `json:"event,omitempty"`
+	Headline string `json:"headline,omitempty"`
+	Severity string `json:"severity,omitempty"`
+}
+
+// GlanceObservationDocker A machine read through its Docker environment: what its running
+// containers take of it. “cpu_percent“ is a share of the whole machine.
+type GlanceObservationDocker struct {
+	Containers  int     `json:"containers"`
+	Cores       int     `json:"cores"`
+	CPUPercent  float64 `json:"cpu_percent"`
+	MemoryTotal int     `json:"memory_total"`
+	MemoryUsed  int     `json:"memory_used"`
+	Storage     int     `json:"storage"`
+}
+
+// GlanceObservationHost A machine read over SSH, as the controller's host script prints it.
+type GlanceObservationHost struct {
+	Cores        int     `json:"cores"`
+	CPUPercent   float64 `json:"cpu_percent"`
+	Load1M       float64 `json:"load_1m"`
+	MemoryTotal  int     `json:"memory_total"`
+	MemoryUsed   int     `json:"memory_used"`
+	StorageTotal int     `json:"storage_total"`
+	StorageUsed  int     `json:"storage_used"`
+}
+
+// GlanceObservationHour One hour of the Weather Service's hourly forecast.
+type GlanceObservationHour struct {
+	Chance          int       `json:"chance,omitempty"`
+	Forecast        string    `json:"forecast,omitempty"`
+	Name            string    `json:"name,omitempty"`
+	Start           time.Time `json:"start"`
+	Temperature     *float64  `json:"temperature,omitempty"`
+	TemperatureUnit string    `json:"temperature_unit,omitempty"`
+	WindDirection   string    `json:"wind_direction,omitempty"`
+	WindSpeed       string    `json:"wind_speed,omitempty"`
+}
+
+// GlanceObservationMachine One machine on the infrastructure panel. A machine with neither part
+// and no failure is one the controller had no way to read.
+type GlanceObservationMachine struct {
+	// Docker A machine read through its Docker environment: what its running
+	// containers take of it. ``cpu_percent`` is a share of the whole machine.
+	Docker *GlanceObservationDocker `json:"docker,omitempty"`
+
+	// Host A machine read over SSH, as the controller's host script prints it.
+	Host          *GlanceObservationHost `json:"host,omitempty"`
+	Key           string                 `json:"key"`
+	RefreshFailed string                 `json:"refresh_failed,omitempty"`
+}
+
+// GlanceObservationWeather The forecast at the configured point: the hours ahead, the first of
+// them now, and the alerts in force.
+type GlanceObservationWeather struct {
+	Alerts        []GlanceObservationAlert `json:"alerts,omitempty"`
+	City          string                   `json:"city,omitempty"`
+	Hours         []GlanceObservationHour  `json:"hours,omitempty"`
+	Point         string                   `json:"point"`
+	RefreshFailed string                   `json:"refresh_failed,omitempty"`
+	State         string                   `json:"state,omitempty"`
+}
+
 // GlanceObservations defines model for GlanceObservations.
-type GlanceObservations = []map[string]interface{}
+type GlanceObservations = []GlanceObservation
 
 // GlancePanelID A dashboard panel the glance plan can ask the controller to read.
 type GlancePanelID string
@@ -1875,13 +1971,22 @@ type HostRenderStatusSecretRenderSuccess struct {
 	RenderedAt       string                             `json:"rendered_at,omitempty"`
 }
 
-// HostTailnetLockRecord Tailnet lock as the controller's own machine sees it: `tailscale lock status`, counted. It names no key, only how many sign.
+// HostTailnetLockRecord Tailnet lock as the controller's own machine sees it: `tailscale lock status`, with each key it trusts to sign.
 type HostTailnetLockRecord struct {
-	Enabled       bool     `json:"enabled,omitempty"`
-	LockedOut     []string `json:"locked_out,omitempty"`
-	NodeKeySigned bool     `json:"node_key_signed,omitempty"`
-	Record        string   `json:"record"`
-	TrustedKeys   int      `json:"trusted_keys,omitempty"`
+	Enabled       bool                               `json:"enabled,omitempty"`
+	LockedOut     []string                           `json:"locked_out,omitempty"`
+	NodeKeySigned bool                               `json:"node_key_signed,omitempty"`
+	Record        string                             `json:"record"`
+	Signers       []HostTailnetLockTailnetLockSigner `json:"signers,omitempty"`
+}
+
+// HostTailnetLockTailnetLockSigner One key tailnet lock trusts to sign: the public half a device holds,
+// the kind of key it is, its votes and the labels it was added with.
+type HostTailnetLockTailnetLockSigner struct {
+	Key      string            `json:"key"`
+	Kind     string            `json:"kind,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+	Votes    int               `json:"votes,omitempty"`
 }
 
 // HostUnitRecord One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships and of each other service systemd has restarted, and the controller reports no other. Each string is a unit name, one of systemd's state words, an instant in UTC or the unit file's own title for a person to read; none is a path, a command line or an environment.
@@ -2484,6 +2589,9 @@ type TLSCertificateName = string
 
 // TLSConsumerKind Where a certificate is served from: the kinds of TLS consumer a certificate spec declares.
 type TLSConsumerKind string
+
+// TailnetRange The address ranges Tailscale numbers a tailnet's devices from.
+type TailnetRange string
 
 // TailscaleDNSRecord One tailscale.dns record: Tailnet DNS.
 type TailscaleDNSRecord struct {

@@ -9,8 +9,8 @@ and who can reach it. Takes `repositories`, each a `posture` and the
   {% for row in repositories %}{% with posture=row.posture %}
     <li>
       <div class="posture-repo-name">
-        {% if row.project %}<a href="{{ row.project.get_absolute_url }}">{{ posture.subject.short|breakable }}</a>{% else %}{% entity posture.subject.url|outside label=posture.subject.short %}{% endif %}
-        <small class="muted">{% if posture.subject.private %}Private{% else %}Public{% endif %}</small>
+        {% if row.project %}{% entity row.project|record label=posture.subject.short %}{% else %}{% entity posture.subject.url|outside label=posture.subject.short %}{% endif %}
+        <small>{% muted %}{% if posture.subject.private %}Private{% else %}Public{% endif %}{% endmuted %}</small>
       </div>
       <span class="posture-meter" data-hit role="img" tabindex="0" aria-label="{{ posture.summary }}" data-tip="{{ posture.summary }}">
         {% for result in posture.results %}{% ifchanged result.check.scope %}{% if not forloop.first %}<span class="posture-meter-break" aria-hidden="true"></span>{% endif %}{% endifchanged %}<span class="is-{{ result.state }}" aria-hidden="true"></span>{% endfor %}

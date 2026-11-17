@@ -12,14 +12,17 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.providers import registry_label
+from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
 
 from ..adoption_testing import managing_everything
+from ..capabilities import execute_capability
 from ..controller import claim_next_operation, peek_next_operation
-from ..infrastructure import ManagedResourceCommand, save_managed_resource
+from ..labels import lower_first
+from ..report_testing import bridged
 from ..resource_operations import OperationCommand, request_reconcile, request_removal
 from ..security import cli_principal
-from ..sweep import record_sweep
 from .inventory_records import A_REWRITE, a_sweep
 
 KIND = "adguard.rewrite"
@@ -27,23 +30,19 @@ RECONCILES = ((KIND, "reconcile"),)
 
 
 def switch(resource: ManagedResource, *, enabled: bool) -> None:
-    save_managed_resource(
-        ManagedResourceCommand(key=resource.key, kind=resource.kind, spec=resource.spec, enabled=enabled),
-        principal=cli_principal(),
-        current_key=resource.key,
-        sent=frozenset({"enabled"}),
+    answer = execute_capability(
+        "infrastructure.resource.update", {"enabled": enabled}, principal=cli_principal(), target=resource.key
     )
+    assert answer["ok"], answer
 
 
 class SwitchedOffRecord(TestCase):
     def setUp(self):
         super().setUp()
         managing_everything()
-        record_sweep(a_sweep(**{KIND: [A_REWRITE]}), principal=cli_principal())
+        bridged("inventory", a_sweep(**{KIND: [A_REWRITE]}))
         self.resource = ManagedResource.objects.get(kind=KIND)
-        request_reconcile(
-            OperationCommand(idempotency_key="apply-1"), principal=cli_principal(), current_key=self.resource.key
-        )
+        request_reconcile(OperationCommand(), consented=consented(cli_principal()), current_key=self.resource.key)
 
 
 class QueuedBeforeTheSwitchOffTests(SwitchedOffRecord):
@@ -59,6 +58,8 @@ class QueuedBeforeTheSwitchOffTests(SwitchedOffRecord):
         operation = OperationRequest.objects.get()
 
         self.assertEqual(operation.state, OperationRequest.State.CANCELLED)
+        # Said as what it is, never as "the record".
+        self.assertIn(lower_first(registry_label(KIND)), operation.result["message"])
         self.assertTrue(
             AuditLog.objects.filter(
                 object_id=str(operation.pk),
@@ -68,9 +69,7 @@ class QueuedBeforeTheSwitchOffTests(SwitchedOffRecord):
         )
 
     def test_its_removal_is_still_handed_over(self):
-        request_removal(
-            OperationCommand(idempotency_key="remove-1"), principal=cli_principal(), current_key=self.resource.key
-        )
+        request_removal(OperationCommand(), consented=consented(cli_principal()), current_key=self.resource.key)
 
         claim = claim_next_operation("test-controller", capabilities=((KIND, "delete"),))
 
@@ -92,4 +91,9 @@ class ClaimedBeforeTheSwitchOffTests(SwitchedOffRecord):
         OperationRequest.objects.update(lease_expires_at=timezone.now() - timedelta(seconds=1))
 
         self.assertIsNone(claim_next_operation("test-controller", capabilities=RECONCILES)["operation"])
-        self.assertEqual(OperationRequest.objects.get().state, OperationRequest.State.CANCELLED)
+        ended = OperationRequest.objects.get()
+        self.assertEqual(ended.state, OperationRequest.State.CANCELLED)
+        # The ending names what was switched off, as the switch's own refusal does.
+        self.assertEqual(
+            ended.result["message"], "The internal DNS record was switched off in HQ before its controller finished."
+        )

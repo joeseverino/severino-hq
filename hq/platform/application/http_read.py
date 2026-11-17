@@ -16,6 +16,11 @@ UNREACHABLE = (httpx2.HTTPError, httpx2.InvalidURL, httpx2.StreamError, OSError)
 
 Hook = Callable[..., None]
 
+# Who every outside read says is asking, with where to find out more. An HTTP
+# library's default signature is refused by some (Cloudflare's browser
+# integrity check), and GitHub's API refuses a request with none.
+USER_AGENT = "Severino-HQ (+https://github.com/joeseverino/severino-hq)"
+
 
 def at_most(chunks: Iterator[bytes], limit: int) -> bytes:
     """The body's first ``limit`` bytes, reading no further than it takes."""
@@ -41,8 +46,8 @@ def fetch(
     method: str,
     url: str,
     *,
-    headers: Mapping[str, str],
-    timeout: float,
+    headers: Mapping[str, str] | None = None,
+    timeout: float | httpx2.Timeout,
     limit: int,
     content: bytes | None = None,
     follow_redirects: bool = False,
@@ -53,10 +58,11 @@ def fetch(
     so a caller can tell an answer that ran past ``limit``. Raises one of
     ``UNREACHABLE`` when nothing answered, and whatever a hook raises."""
 
+    sent = {**(headers or {}), "User-Agent": USER_AGENT}
     hooks = {"request": list(on_request), "response": list(on_response)}
     with (
         httpx2.Client(timeout=timeout, follow_redirects=follow_redirects, event_hooks=hooks) as client,
-        client.stream(method, url, headers=headers, content=content) as response,
+        client.stream(method, url, headers=sent, content=content) as response,
     ):
         body = b"" if method == "HEAD" else at_most(response.iter_bytes(), limit + 1)
     return response, body

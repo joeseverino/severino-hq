@@ -4,7 +4,8 @@ from django.conf import settings
 from django.test import TestCase, override_settings
 from django.utils.csp import CSP
 
-from hq.platform.application.request_layers import _browser_layer
+from hq.platform.application.request_standard import _browser
+from hq.platform.application.standards import Standing
 
 
 def sources_of(response, wanted):
@@ -16,7 +17,7 @@ class BrowserLayerTests(TestCase):
     def test_the_claim_holds_and_a_page_is_sent_a_script_src_of_its_nonce(self):
         sources = sources_of(self.client.get(settings.LOGIN_URL), "script-src")
 
-        self.assertTrue(_browser_layer().holds)
+        self.assertIs(_browser(None).standing, Standing.MET)
         self.assertTrue(any(source.startswith("'nonce-") for source in sources), sources)
         self.assertIn(CSP.STRICT_DYNAMIC, sources)
         self.assertNotIn(CSP.UNSAFE_INLINE, sources)
@@ -33,6 +34,6 @@ class BrowserLayerTests(TestCase):
                 self.subTest(scripts=scripts),
                 override_settings(SECURE_CSP={**settings.SECURE_CSP, "script-src": scripts}),
             ):
-                layer = _browser_layer()
-                self.assertFalse(layer.holds)
-                self.assertIn("scripts by origin", layer.evidence)
+                reading = _browser(None)
+                self.assertIs(reading.standing, Standing.UNMET)
+                self.assertIn("scripts by origin", reading.evidence)

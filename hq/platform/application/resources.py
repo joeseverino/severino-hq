@@ -42,7 +42,7 @@ from .connection_records import (
     CredentialRow,
     Tailnet,
 )
-from .contracts import DOTTED_NAME
+from .contracts import DOTTED_NAME, Closed
 from .describe import Describe
 from .field_masks import FieldMaskRefusal, Fields, asks_whole, selected
 from .input_errors import pydantic_refusal
@@ -88,8 +88,8 @@ from .resource_refusals import (
     unlisted,
 )
 from .search_contracts import SearchDefinition, search_lines
-from .security import Capability, Principal, require_all
-lazy from .domains import all_domains
+from .security import Capability, Principal
+lazy from .domains import queue_sources
 lazy from .plugins import ATTENTION_ORDER
 
 
@@ -110,10 +110,8 @@ class ResourceSearchDefinition(SearchDefinition):
         return "\n".join(line for field in fields for line in search_lines(instance.serializable_value(field)))
 
 
-class ResourceQuery(BaseModel):
+class ResourceQuery(Closed):
     """Base for list inputs: unknown fields are always programmer errors."""
-
-    model_config = ConfigDict(extra="forbid")
 
 
 def limit_words(most: int, *, paged: bool) -> str:
@@ -240,7 +238,7 @@ def action_item_query() -> type[BoundedQuery]:
     """The queue's narrowing: a status the queue holds, and a domain that raises
     items, as this composition declares them."""
 
-    sources = (domain.id for domain in all_domains() if domain.integration.attention is not None)
+    sources = queue_sources()
     return create_model(
         "ActionItemQuery",
         __base__=BoundedQuery,
@@ -522,8 +520,7 @@ def connections() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "request.path",
             "Request path",
-            "How the calling request reached HQ, hop by hop, each checked against the request, "
-            "with the admission layers decided there.",
+            "How the calling request reached HQ, hop by hop, and the request standard's checks decided at each.",
             Capability.READ,
             derived_reads.list_request_path,
             EmptyQuery,
@@ -756,14 +753,10 @@ def _resource(name: str) -> ResourceSpec:
         raise unknown(name, resource_registry()) from exc
 
 
-def _authorize(spec: ResourceSpec, principal: Principal) -> None:
-    require_all(principal, spec.required_capabilities)
-
-
 def readable(spec: ResourceSpec, principal: Principal) -> bool:
-    """Whether ``principal`` may read ``spec``: what ``_authorize`` refuses by, as a boolean."""
+    """Whether ``principal`` may read ``spec`` (``Requires.permitted_to``), for an adapter, which asks no permission itself."""
 
-    return principal.permits(*spec.required_capabilities)
+    return spec.permitted_to(principal)
 
 
 def _caller(spec: ResourceSpec, principal: Principal) -> dict[str, Principal]:
@@ -782,7 +775,7 @@ def list_resource(
     ``["*"]`` the whole item, and none its kind's ``list_fields``."""
 
     spec = _resource(name)
-    _authorize(spec, principal)
+    spec.authorize(principal)
     if not spec.list_handler or not spec.list_query_type:
         raise unlisted(spec)
     try:
@@ -898,6 +891,9 @@ def _bound(parsed: BaseModel) -> str:
     """The filters a page was read under, as one digest: every query field but the page's size and cursor."""
 
     terms = parsed.model_dump(mode="json", exclude={"limit", PAGE_FIELD})
+    # A cursor issued before carries this digest of spaced JSON; on digest's
+    # form it would be refused as issued under other filters.
+    # ast-grep-ignore: json-digest-by-digests
     return hashlib.sha256(json.dumps(terms, sort_keys=True).encode()).hexdigest()[:32]
 
 
@@ -949,7 +945,7 @@ def get_resource(
     """
 
     spec = _resource(name)
-    _authorize(spec, principal)
+    spec.authorize(principal)
     if not spec.detail_handler or not spec.identifier:
         raise undetailed(spec)
     try:

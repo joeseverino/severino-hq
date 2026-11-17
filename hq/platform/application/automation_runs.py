@@ -6,22 +6,20 @@ here. What it binds to, and what its approval is measured against:
 docs/Architecture.md, "Running a playbook".
 """
 
-import hashlib
-import json
-import secrets
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, make_dataclass, replace
 from functools import lru_cache, partial
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 from urllib.parse import urlencode
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import get_text_list
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictStr, create_model
+from pydantic import AfterValidator, Field, StrictStr
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
+from hq.platform.core.digests import digest
 lazy from hq.domains.control_plane.models import (
     ApprovalRequest,
     ManagedResource,
@@ -32,38 +30,45 @@ lazy from hq.domains.control_plane.models import (
 lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 lazy from hq.domains.control_plane.providers import validate_spec
-lazy from hq.platform.core.audit import audit_operation
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Describe, ForAgents, Names
-from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec, CommandAbout, CommandFact
+from .contracts import Effect
+from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
+from .tone import Tone
 lazy from . import approvals, automation_adoption, pages
 lazy from .action_links import command_url
-lazy from .approval_review import ChangePreview, asked_by
-lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
+lazy from .approval_review import ChangePreview
+lazy from .approvals import AUDIT_LABELS, ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
-lazy from .cadence import automation_standing, ring_automation_doorbell
-lazy from .capabilities import capability_words
+lazy from .cadence import ask, automation_standing
+lazy from .capabilities import Consented, consent
 lazy from .controller import release_lapsed
 lazy from .doors import NOBODY
 lazy from .entity_links import entity_link, kind_label
 lazy from .finding_model import FindingRemedy
 lazy from .findings import rule_for
-lazy from .idempotency import IdempotencyConflict
+lazy from .history import asked_by
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import fields as whole_fields, json_schema
-lazy from .labels import effect_label, lower_first
+lazy from .labels import lower_first
 lazy from .machines import machine_catalog
-lazy from .moments import ago, when
+lazy from .moments import ago, moment, when
 lazy from .payload_words import ChangeRow, field_words, value_words
-lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
+lazy from .resource_operations import (
+    OperationAsked,
+    Prepared,
+    asked_fields,
+    enqueue,
+    operation_asked,
+    serialize_operation,
+)
 lazy from .routes import reverse
 lazy from .run_reads import RUNS
 lazy from .service_context import Cell, ServiceSection, machines_cell, recent_work
-lazy from .timestamps import moment
 lazy from .ui import ended
 lazy from .work_runs import RUN, WorkRun, operation_of, recent_runs, run_url
 
@@ -90,6 +95,12 @@ def operation_registry(generation: str | None = None) -> OperationRegistry:
 
 def clear_operation_registry_cache() -> None:
     _registry.cache_clear()
+
+
+# The variant of a playbook's run command that runs it again as it ran.
+AGAIN = "again"
+HERE = "here"
+RUN_HERE = "Run a playbook here"
 
 
 def capability_name(operation_id: str) -> str:
@@ -152,7 +163,8 @@ type Reason = Annotated[
 ]
 
 
-class RunCommand(BaseModel):
+@dataclass(frozen=True, kw_only=True)
+class RunCommand:
     """What every run takes beside its playbook's own parameters.
 
     Closed like every command, so a playbook path, an inventory, extra-vars or
@@ -160,11 +172,9 @@ class RunCommand(BaseModel):
     input type refuses one sent inside them (``automation_manifest._closed``).
     """
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
     hosts: Annotated[Hosts, MACHINES]
     # Each procedure's own input type, which ``command_type`` declares.
-    parameters: BaseModel
+    parameters: Any
     correlation: Correlation = ""
     reason: Reason = ""
 
@@ -174,35 +184,31 @@ def command_type(manifest: OperationManifest) -> type[RunCommand]:
     parameters as its manifest's input type, and the retry key of a change."""
 
     parameters = manifest.input_type
-    takes_none = not any(field.is_required() for field in parameters.model_fields.values())
+    takes_none = not any(each.is_required() for each in parameters.model_fields.values())
     # Offered as a person's choices, the machines a run can reach now
     # (``reachable``); ``reached`` refuses any other however it is asked.
     now = AmongNow(partial(reachable, manifest))
-    fields: dict[str, Any] = {"hosts": (Annotated[Hosts, now, MACHINES], ...)}
+    hosts: Any = Annotated[Hosts, now, MACHINES]
     if manifest.hosts or MACHINE_KIND not in manifest.target_kinds:
         # What ``resolved_hosts`` admits, published as the only choices.
         admitted = manifest.hosts if MACHINE_KIND in manifest.target_kinds else ()
-        fields["hosts"] = (Annotated[Hosts, Among(admitted), now, MACHINES], ...)
-    fields |= {
-        "parameters": (
+        hosts = Annotated[Hosts, Among(admitted), now, MACHINES]
+    fields: list[tuple[str, Any, Any]] = [
+        ("hosts", hosts, field()),
+        (
+            "parameters",
             Annotated[parameters, Describe("The playbook's own inputs, as its manifest lists them.")],
-            Field(default_factory=parameters) if takes_none else ...,
+            field(default_factory=parameters) if takes_none else field(),
         ),
-    }
-    if manifest.effect != "read":
-        # Filled by the capability runner with the caller's key, or a fresh one.
-        fields[IDEMPOTENCY_FIELD] = (StrictStr, ...)
-    model: type[RunCommand] = create_model(
+    ]
+    return make_dataclass(
         f"Run{''.join(part.title() for part in manifest.id.replace('.', '_').split('_'))}",
-        __base__=RunCommand,
-        __module__=__name__,
-        **fields,
+        fields,
+        bases=(RunCommand,),
+        frozen=True,
+        kw_only=True,
+        module=__name__,
     )
-    return model
-
-
-def _canonical(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def pinned(manifest: OperationManifest) -> dict[str, Any]:
@@ -214,14 +220,13 @@ def pinned(manifest: OperationManifest) -> dict[str, Any]:
     offered and nothing of what a run does.
     """
 
-    schema = _canonical(json_schema(manifest.input_type))
     return validate_spec(
         OPERATION_KIND,
         {
             **manifest.model_dump(mode="json", exclude={"id", "input_type", "privilege", "fixes"}),
             "operation": manifest.id,
             "privilege": manifest.privilege or "",
-            "input_schema_sha256": hashlib.sha256(schema.encode()).hexdigest(),
+            "input_schema_sha256": digest(json_schema(manifest.input_type)),
         },
     )
 
@@ -319,7 +324,7 @@ def _bound(manifest: OperationManifest, command: RunCommand) -> dict[str, Any]:
     return {
         "operation": manifest.id,
         "revision": manifest.revision,
-        "parameters": command.parameters.model_dump(mode="json"),
+        "parameters": command_adapter(type(command)).dump_python(command, mode="json")["parameters"],
         "hosts": list(hosts),
         "correlation": command.correlation,
     }
@@ -340,7 +345,7 @@ def run_subject(manifest: OperationManifest, command: RunCommand) -> ApprovalSub
     )
 
 
-def _record(manifest: OperationManifest, *, principal: Principal) -> ManagedResource:
+def _record(manifest: OperationManifest, *, consented: Consented) -> ManagedResource:
     """The procedure's record, written as its manifest now says.
 
     Written here, when a run is asked for, rather than when the registry is
@@ -359,7 +364,7 @@ def _record(manifest: OperationManifest, *, principal: Principal) -> ManagedReso
             ManagedResourceCommand(
                 key=key, kind=OPERATION_KIND, spec=spec, enabled=current.enabled if current else True
             ),
-            principal=principal,
+            consented=consented,
             current_key=key if current else None,
         )
     return ManagedResource.objects.select_for_update().get(key=key)
@@ -446,33 +451,22 @@ def _holder_cancel(holding: dict[str, Any], principal: Principal | None) -> Page
 
 
 @transaction.atomic
-def request_run(
-    manifest: OperationManifest, command: RunCommand, *, principal: Principal, idempotency_key: str
-) -> OperationQueued:
-    """Queue one run of ``manifest`` for the automation worker, once per retry key."""
+def request_run(manifest: OperationManifest, command: RunCommand, *, consented: Consented) -> OperationAsked:
+    """Queue one run of ``manifest`` for the automation worker.
+
+    A read takes no retry key, so asking twice queues twice, and the
+    procedure's one active run refuses the second.
+    """
 
     bound = _bound(manifest, command)
-    asked = {
-        **bound,
-        **({"approved_by": principal.approved_by} if principal.approved_by else {}),
-    }
-    existing = OperationRequest.objects.filter(idempotency_key=idempotency_key).select_related("resource").first()
-    if existing is not None:
-        kept = {name: existing.input.get(name) for name in bound}
-        if (
-            existing.resource.key != resource_key(manifest.id)
-            or existing.action != OperationRequest.Action.RUN
-            or (kept != bound)
-        ):
-            raise IdempotencyConflict("That retry key was already used for a different request.")
-        return {"ok": True, "queued": False, "operation": serialize_operation(existing)}
-    # A run no worker will take would wait for nothing: the finding that says
-    # so (``automation_findings``) carries how to set one up.
-    untaken = automation_standing().cannot("run", now=timezone.now())
-    if untaken:
-        raise PolicyError(untaken)
-    with audit_operation(operation="automation.run.request", principal=principal):
-        resource = _record(manifest, principal=principal)
+
+    def prepare() -> Prepared:
+        # A run no worker will take would wait for nothing: the finding that
+        # says so (``automation_findings``) carries how to set one up.
+        untaken = automation_standing().cannot("run", now=timezone.now())
+        if untaken:
+            raise PolicyError(untaken)
+        resource = _record(manifest, consented=consented)
         if not resource.enabled:
             raise PolicyError("This playbook is switched off in HQ.")
         # A claim whose lease ran out is ended or put back first, by the rule
@@ -485,24 +479,18 @@ def request_run(
                 "Ask again once it ends.",
                 details=_held_by(holder, resource, bound["hosts"]),
             )
-        # No run of this procedure is active and the key is new, so this
-        # queues one.
-        operation, _ = enqueue(
-            resource,
-            OperationRequest.Action.RUN,
-            idempotency_key=idempotency_key,
-            requested_actor=principal.actor,
-            requested_interface=principal.interface,
-            requested_device=principal.device,
-            requested_person_key=principal.person_key,
-            reason=command.reason,
-            input={"generation": resource.generation, **asked},
+        return resource, asked_fields(
+            consent(consented).principal, reason=command.reason, generation=resource.generation, **bound
         )
-        OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
+
+    operation, queued = enqueue(OperationRequest.Action.RUN, prepare)
+    if not queued:
+        return operation_asked(operation, queued=False)
+    OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
     # The worker pulls the run over the bridge; the ring only says one waits,
     # and only once it is stored for the claim to find.
-    transaction.on_commit(ring_automation_doorbell)
-    return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
+    ask(doorbell="automation")
+    return operation_asked(operation, queued=True)
 
 
 CANCEL = "automation.run.cancel"
@@ -513,7 +501,7 @@ CANCELLED_REASON = "Cancelled"
 def run_authority(effect: str) -> Capability:
     """What asking for a run of a procedure of ``effect`` takes, and so what cancelling one does."""
 
-    return Capability.READ if effect == "read" else Capability.MANAGE_INFRASTRUCTURE
+    return Capability.READ if effect == Effect.READ else Capability.MANAGE_INFRASTRUCTURE
 
 
 @dataclass(frozen=True, slots=True)
@@ -562,7 +550,7 @@ def _asked_it(operation: OperationRequest, principal: Principal) -> bool:
 
 
 @transaction.atomic
-def cancel_run(command: CancelRunCommand, *, principal: Principal) -> OperationQueued:
+def cancel_run(command: CancelRunCommand, *, principal: Principal) -> OperationAsked:
     """Cancel a run nothing has claimed, so it holds its playbook and machines no more.
 
     A claimed run is left to its runner, which ends it or lets its lease run
@@ -590,7 +578,7 @@ def cancel_run(command: CancelRunCommand, *, principal: Principal) -> OperationQ
         "reason": CANCELLED_REASON,
     }
     operation.save(update_fields=("state", "completed_at", "result", "updated_at"))
-    return {"ok": True, "queued": False, "operation": serialize_operation(operation)}
+    return operation_asked(operation, queued=False)
 
 
 def _offers_cancel(state: str, effect: str, principal: Principal) -> bool:
@@ -605,12 +593,10 @@ def _offers_cancel(state: str, effect: str, principal: Principal) -> bool:
     )
 
 
-def _cancel_button(operation_id: str) -> PageAction:
+def _cancel_button(operation_id: str) -> PageAction | None:
     """The press that posts the run's id to its cancel command's own form."""
 
-    return pages.PageAction(
-        capability_words(CANCEL), command_url(CANCEL), method="post", field="operation_id", value=operation_id
-    )
+    return pages.PageAction.command(CANCEL, field="operation_id", value=operation_id)
 
 
 def cancel_action(run: WorkRun, principal: Principal) -> PageAction | None:
@@ -627,18 +613,28 @@ def run_here_url(operation_id: str, hosts: tuple[str, ...]) -> str:
     return command_url(capability_name(operation_id), hosts=hosts)
 
 
-def playbooks_on(machine: str, principal: Principal) -> tuple[tuple[str, str], ...]:
+class PlaybookHere(NamedTuple):
+    """A playbook that may run on one machine: its title, its command, and its
+    Run page with the machine chosen."""
+
+    title: str
+    capability: str
+    url: str
+
+
+def playbooks_on(machine: str, principal: Principal) -> tuple[PlaybookHere, ...]:
     """Each adopted playbook that may run on the machine ``machine`` and that
-    ``principal`` may run, as its title and its Run page with the machine
-    chosen, A to Z."""
+    ``principal`` may run, A to Z."""
 
     titles = automation_adoption.playbook_titles()
     found = (
-        (run_title(manifest.id, titles), run_here_url(manifest.id, (machine,)))
+        PlaybookHere(
+            run_title(manifest.id, titles), capability_name(manifest.id), run_here_url(manifest.id, (machine,))
+        )
         for manifest in operation_registry().values()
         if manifest.admits(MACHINE_KIND, machine) and principal.permits(run_authority(manifest.effect))
     )
-    return tuple(sorted(found, key=lambda each: each[0].casefold()))
+    return tuple(sorted(found, key=lambda each: each.title.casefold()))
 
 
 def playbook_remedies(rule: str, machine: str) -> tuple[FindingRemedy, ...]:
@@ -670,13 +666,6 @@ def listed_with_actions(runs: Iterable[WorkRun], principal: Principal) -> list[W
     """``runs`` each with what ``principal`` may do to it where it is listed."""
 
     return [replace(run, actions=(action,)) if (action := cancel_action(run, principal)) else run for run in runs]
-
-
-def _run(manifest: OperationManifest, command: RunCommand, *, principal: Principal) -> OperationQueued:
-    # A read takes no retry key, so its run is keyed afresh: asking twice
-    # queues twice, and the procedure's one active run refuses the second.
-    key = getattr(command, IDEMPOTENCY_FIELD, "") or f"run:{secrets.token_urlsafe(18)}"
-    return request_run(manifest, command, principal=principal, idempotency_key=key)
 
 
 # What a manifest's ``retry`` lets a run that stopped without a known
@@ -726,14 +715,14 @@ def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSect
     when none waits."""
 
     waiting = approvals.pending(principal=principal, capability=capability_name(manifest.id))
-    who = asked_by(waiting)
+    who = asked_by(ApprovalRequest, waiting, formerly=AUDIT_LABELS)
     records = tuple(
         (
             machines_cell([str(host) for host in held.baseline.get("hosts") or ()]),
             Cell(
                 "Waiting for approval",
                 reverse("core:approval_entry", kwargs={"approval_id": held.id}),
-                tone="attention",
+                tone=Tone.ATTENTION,
             ),
             Cell(ago(held.created_at), muted=True),
             Cell(who.get(str(held.pk), NOBODY).words),
@@ -755,7 +744,7 @@ def about(manifest: OperationManifest, principal: Principal) -> CommandAbout:
 
     facts = (
         _runs_on(manifest),
-        CommandFact("Effect", effect_label(manifest.effect)),
+        CommandFact("Effect", manifest.effect.label),
         CommandFact("Access", access_words(manifest.privilege)),
         CommandFact("Timeout", timeout_words(manifest.timeout_seconds)),
         CommandFact("Preconditions", _statements(manifest.preconditions)),
@@ -790,7 +779,7 @@ def run_preview(manifest: OperationManifest, held: ApprovalRequest) -> ChangePre
             (field_words(name, inputs.get(name)), value_words(value, inputs.get(name)))
             for name, value in dict(held.baseline.get("parameters") or {}).items()
         ),
-        ("Effect", effect_label(str(pinned.get("effect", "")))),
+        ("Effect", Effect(pinned["effect"]).label if pinned.get("effect") in Effect else ""),
         ("Access", access_words(str(pinned.get("privilege", "")))),
         ("Adopted commit", str(pinned.get("revision", ""))[:SHORT_REVISION]),
         (field_words("correlation"), str(held.payload.get("correlation") or "")),
@@ -831,13 +820,15 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
 
     # The playbook by its title in quotes, or by its id where it has none.
     named = f"“{titles[manifest.id]}”" if titles.get(manifest.id) else manifest.id
-    run = measured_by(partial(run_subject, manifest), shown=partial(run_preview, manifest))(partial(_run, manifest))
-    # A read is keyed afresh at each ask (``_run``), so asking again finds the first run in the way.
+    run = measured_by(partial(run_subject, manifest), shown=partial(run_preview, manifest))(
+        partial(request_run, manifest)
+    )
+    # A read is keyed afresh at each ask (``request_run``), so asking again finds the first run in the way.
     asked_again = (
         "A read takes no `idempotency_key`. Asked again after `call_timed_out`, it is refused while the first "
         "run waits or works, and `details.holding` is that run."
     )
-    if manifest.effect != "read":
+    if manifest.effect.changes:
         # A procedure that changes a machine is a person's to approve each time
         # an agent asks; a person's own click is their consent.
         run = waits_for_a_person(every_call)(run)
@@ -853,12 +844,15 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
             "Refuse while another run waits or works on this playbook or on one of those machines.",
             "Queue it once, and HQ runs it with Ansible outside this request.",
             # What ``waits_for_a_person`` above holds, for an agent to read before it asks.
-            *((asked_again,) if manifest.effect == "read" else (WAITS_FOR_APPROVAL,)),
+            *((WAITS_FOR_APPROVAL,) if manifest.effect.changes else (asked_again,)),
             f"Read how it went from `{RUNS}`, by the `operation.id` this answers.",
             *_reviewed_notes(manifest),
         ),
         label=run_title(manifest.id, titles),
         verb=OperationRequest.Action.RUN.label,
+        # On a run's page once it has ended: the same playbook on the same machines.
+        # A machine's page, which offers each playbook that runs there by this one name.
+        variants=((AGAIN, f"{OperationRequest.Action.RUN.label} again"), (HERE, RUN_HERE)),
         # Read on a held run's card, where the procedure is what was asked for.
         wants=f"carry out the playbook {named}",
         # A run belongs to Playbooks, where its playbook is listed.
@@ -872,7 +866,7 @@ def _cancel_spec() -> CapabilitySpec:
         CANCEL,
         "Cancel a playbook's run that has not started, so it holds its playbook and machines no more. "
         "Send the run's `operation.id`. An agent may cancel only a run it asked for.",
-        "remote_write",
+        Effect.REMOTE_WRITE,
         # Held to the run's own authority by the handler, which reads the run.
         Capability.READ,
         CancelRunCommand,

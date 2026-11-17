@@ -9,34 +9,30 @@ the reading each run comes back as are docs/Derived-Facts.md#dependency-updates.
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Annotated, Any, Literal, TypedDict
+from datetime import datetime
+from typing import Any
 
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
-from hq.domains.control_plane.observations.github import (
-    DEPENDENCY_RUN_EVERY,
-    DEPENDENCY_RUN_KIND as KIND,
-    REPOSITORY,
-)
+from hq.domains.control_plane.observations.github import DEPENDENCY_RUN_KIND as KIND, REPOSITORY
 from hq.domains.jobs.models import JobState
 from hq.domains.projects.models import Project
 
-from .command_fields import Describe
+from .asks import AskedAnswer, asked_read
+from .freshness import RETRY_AFTER, freshness
 from .projection import iso, read_once
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
-lazy from .cadence import asked_at as read_asked_at, request_reads
+from .tone import Tone
+lazy from .cadence import ask, asked_at as read_asked_at
+lazy from .capabilities import command_spec
+lazy from .moments import moment
 lazy from .projects import repository_key
-lazy from .timestamps import moment
-lazy from .work_runs import TONES
 
 RUN_NOW = "project.dependency_updates.run"
 # Each outcome a run reports, as the job state every page words and tones.
 SEEN = {"ok": JobState.SUCCEEDED, "handed_off": JobState.RUNNING, "timeout": JobState.LOST}
-# A hand-off that failed is tried again after this, not on every sweep.
-RETRY_AFTER = timedelta(hours=1)
 _REPOSITORY = re.compile(REPOSITORY)
 
 
@@ -78,8 +74,8 @@ class Run:
         return SEEN.get(self.outcome, JobState.FAILED)
 
     @property
-    def tone(self) -> str:
-        return TONES[self.seen]
+    def tone(self) -> Tone:
+        return self.seen.tone
 
     def as_record(self) -> dict[str, Any]:
         return {"outcome": self.outcome, "started_at": iso(self.started_at), "finished_at": iso(self.finished_at)}
@@ -141,7 +137,7 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
     elif snapshot is not None and not snapshot.reachable and now - snapshot.updated_at < RETRY_AFTER:
         due = False
     else:
-        due = started is None or now - started >= DEPENDENCY_RUN_EVERY
+        due = started is None or freshness(KIND, started, now).due
     return {**found, "due": due}
 
 
@@ -150,15 +146,7 @@ class DependencyRunCommand:
     """A run of every opted-in repository now."""
 
 
-class RunRequested(TypedDict):
-    """A dependency update run, asked for now."""
-
-    ok: Literal[True]
-    requested: Annotated[Literal[True], Describe("That a run was asked for.")]
-    asked_at: Annotated[str, Describe("When the run was asked for, an ISO 8601 date-time.")]
-
-
-def request_run(_command: DependencyRunCommand, *, principal: Principal) -> RunRequested | RefusalEnvelope:
+def request_run(_command: DependencyRunCommand, *, principal: Principal) -> AskedAnswer | RefusalEnvelope:
     """Ask the controller to hand off a run now, and wake it.
 
     The ask is a read of ``github.dependency_run``: the controller's next pass
@@ -168,6 +156,5 @@ def request_run(_command: DependencyRunCommand, *, principal: Principal) -> RunR
     del principal
     if not owners():
         return refuse("precondition", "No project is opted in to dependency updates.")
-    request_reads((KIND,))
-    asked = asked_at() or timezone.now()
-    return {"ok": True, "requested": True, "asked_at": asked.isoformat()}
+    at = ask(reads=(KIND,), activity=True)
+    return asked_read((KIND,), at, message=command_spec(RUN_NOW).requested()).answer()

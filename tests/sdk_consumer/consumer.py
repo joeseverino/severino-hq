@@ -8,11 +8,12 @@ able to make carries the error mypy reports for it. ``warn_unused_ignores``
 fails the gate the day one of those stops being an error.
 """
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Annotated, Any, assert_type, override
+from typing import Annotated, Any, Literal, assert_type, override
 
 from django import forms
 from django.db import models
@@ -58,6 +59,26 @@ def the_clock(moment: datetime) -> None:
     reads.reached("2026-01-01")  # type: ignore[arg-type]
     reads.whole(moment)  # type: ignore[call-arg]
     reads.day_span(date(2026, 1, 1), last=3)  # type: ignore[arg-type]
+
+
+def a_kinds_cadence(moment: datetime) -> None:
+    # An extension declares how old a reading of its kind may get, and reads
+    # it back through the host's one freshness.
+    def weekly() -> reads.ReadCadence:
+        return reads.ReadCadence(timedelta(days=1), timedelta(days=7))
+
+    integration = plugin.PluginIntegration(cadences=lambda: {"example.readings": weekly})
+    assert_type(integration.cadences, Callable[[], Mapping[str, Callable[[], reads.ReadCadence]]] | None)
+    found = reads.freshness("example.readings", moment)
+    assert_type(found, reads.Freshness)
+    assert_type(found.stale, bool)
+    assert_type(found.due, bool)
+    assert_type(found.stale_after, timedelta)
+    assert_type(reads.freshness("example.readings", None, moment).label, str)
+
+    reads.freshness("example.readings", "2026-01-01")  # type: ignore[arg-type]
+    reads.ReadCadence(timedelta(days=1), 7)  # type: ignore[arg-type]
+    plugin.PluginIntegration(cadences=lambda: {"example.readings": weekly()})  # type: ignore[dict-item]
 
 
 def a_held_clock(moment: datetime) -> None:
@@ -110,6 +131,18 @@ def signs(pace: float, beats: int, unread: float | None) -> None:
     money.signed_number(pace, str, True)  # type: ignore[call-arg]
 
 
+def measures(pace: float, beats: int, unread: float | None) -> None:
+    # A figure and its unit in one call, rounded and signed where it is written.
+    assert_type(ui.measured(pace, "mi", 2), str)
+    assert_type(ui.measured(-beats, "bpm", plus=True), str)
+    assert_type(ui.measured(unread, "%", -1), str)
+    assert_type(ui.measured("1:23", "measured"), str)
+
+    ui.measured(pace, "mi", "2")  # type: ignore[arg-type]
+    ui.measured(pace, "mi", 2, True)  # type: ignore[call-arg]
+    ui.measured([pace], "mi")  # type: ignore[arg-type]
+
+
 def sentences(registrar: str) -> None:
     assert_type(ui.ended(f"Renews through {registrar}"), str)
 
@@ -131,7 +164,11 @@ def sentences(registrar: str) -> None:
     ui.status_pill("1 serious", pill=False, icon=True)  # type: ignore[arg-type]
     assert_type(ui.status_pill("django", chip=True), SafeString)
     ui.status_pill("django", chip="yes")  # type: ignore[arg-type]
-    assert_type(ui.Kpi("Net worth", "$1.00", "+$1.00", tone="good", detail_url="/x/").holds_links, bool)
+    assert_type(ui.Kpi("Net worth", "$1.00", "+$1.00", tone=ui.Tone.GOOD, detail_url="/x/").holds_links, bool)
+    # A tone is a member of ui.Tone, the one vocabulary of how a thing stands.
+    assert_type(ui.Tone.worst((ui.Tone.GOOD, ui.Tone.SERIOUS)), ui.Tone)
+    assert_type(ui.Tone.SERIOUS.urgency, str)
+    ui.Kpi("Net worth", "$1.00", tone="goood")  # type: ignore[arg-type]
     ui.ListRow("Group", actions=("Up",))  # type: ignore[arg-type]
     # A search hit's snippet is runs of the record's text, each with whether it matched.
     ui.ListRow("Backup host", snippet=(("nightly ", False), ("backup", True)))
@@ -212,6 +249,42 @@ def as_someone(principal: capabilities.Principal) -> None:
     capabilities.execute_capability("example.do", ["x"], principal=principal)  # type: ignore[arg-type]
 
 
+def may_use(spec: capabilities.CapabilitySpec, principal: capabilities.Principal) -> None:
+    # Whether a principal may use a spec is asked of the spec, one way.
+    assert_type(spec.permitted_to(principal), bool)
+    assert_type(spec.authorize(principal), None)
+    assert_type(principal.require(capabilities.Capability.READ, "example.write"), None)
+
+    spec.authorize()  # type: ignore[call-arg]
+    spec.permitted_to("example.write")  # type: ignore[arg-type]
+
+
+@dataclass(frozen=True, slots=True)
+class _ThingCommand:
+    name: str = ""
+
+
+def keeping(thing: models.Model) -> None:
+    # An update that keeps what it is not sent reads the record as a caller sends it.
+    assert_type(capabilities.as_sent(thing, _ThingCommand, {}), dict[str, Any])
+    assert_type(capabilities.KEPT, str)
+    kept = capabilities.Kept(lambda key: capabilities.as_sent(thing, _ThingCommand, {}))
+    assert_type(kept.always_sent, frozenset[str])
+
+    @capabilities.keeps(kept)
+    def update(
+        command: _ThingCommand, *, principal: capabilities.Principal, sent: frozenset[str] | None = None
+    ) -> dict[str, Any]:
+        # The fields it sets: those sent, laid over the row it holds, never the read before.
+        return {"ok": True, **capabilities.written(command, sent)}
+
+    assert_type(update(_ThingCommand(), principal=capabilities.cli_principal()), dict[str, Any])
+
+    capabilities.keeps(lambda key: {})  # type: ignore[arg-type]
+    capabilities.as_sent(thing, _ThingCommand)  # type: ignore[call-arg]
+    capabilities.written(_ThingCommand(), ["name"])  # type: ignore[arg-type]
+
+
 def from_a_form(request: HttpRequest) -> None:
     # A view's write runs as the signed-in person, under the key their form posted.
     assert_type(capabilities.execute_posted(request, "example.do", {"name": "x"}), dict[str, Any])
@@ -271,11 +344,13 @@ def catalogs(principal: capabilities.Principal) -> None:
 
 def a_connection() -> None:
     # A connection says what kind of credential it holds, a keyless one included.
-    keyless = connections.ConnectionInstance("example", "Example", "example", "good", "Read", credential_model="none")
+    keyless = connections.ConnectionInstance(
+        "example", "Example", "example", ui.Tone.GOOD, "Read", credential_model="none"
+    )
     assert_type(keyless.credential_model, str)
     assert_type(keyless.keyless, bool)
 
-    connections.ConnectionInstance("example", "Example", "example", "good", "Read")  # type: ignore[call-arg]
+    connections.ConnectionInstance("example", "Example", "example", ui.Tone.GOOD, "Read")  # type: ignore[call-arg]
 
 
 def looking_up(progress: jobs.Progress, *, subject: str, principal: capabilities.Principal) -> dict[str, Any]:
@@ -288,6 +363,24 @@ def declared_words(spec: capabilities.CapabilitySpec) -> None:
         "example.lookup", "Look up a note", "Ask.", "example.write", looking_up, verb="Look up"
     )
     assert_type(lookup.words, str)
+    # Work only the timer does is offered to nobody.
+    timed = outbound.OutboundWork(
+        "example.sweep", "Sweep the notes", "", "", looking_up, every=timedelta(days=1), offered=False
+    )
+    assert_type(timed.offered, bool)
+    outbound.OutboundWork("example.sweep", "Sweep", "", "", looking_up, offered="no")  # type: ignore[arg-type]
+    # What running it does is a member, and a spec holds one.
+    assert_type(spec.effect, capabilities.Effect)
+    assert_type(spec.effect.changes, bool)
+    assert_type(spec.effect.label, str)
+    capabilities.CapabilitySpec(
+        "example.keep",
+        "Keep a note.",
+        "remote_write",  # type: ignore[arg-type]
+        "example.write",
+        Noting,
+        noting,
+    )
     assert_type(spec.words(), str)
     assert_type(spec.words("all"), str)
     assert_type(spec.requested("example"), str)
@@ -295,7 +388,7 @@ def declared_words(spec: capabilities.CapabilitySpec) -> None:
     capabilities.CapabilitySpec(
         "example.keep",
         "Keep a note.",
-        "local_write",
+        capabilities.Effect.REMOTE_WRITE,
         "example.write",
         Noting,
         noting,
@@ -319,7 +412,9 @@ class Note(models.Model):
         return self.about_name
 
 
-class Noting(capabilities.StrictCommand):
+# A command is a frozen dataclass, which HQ closes to the fields it names.
+@dataclass(frozen=True, slots=True)
+class Noting:
     # A field says what it is, which records it names, or which choices it takes.
     note: Annotated[str, capabilities.Describe("What to write down.")]
     project: Annotated[str, capabilities.Names("example.projects"), capabilities.Describe("The project it is for.")]
@@ -335,31 +430,55 @@ def noting(command: Noting, *, principal: capabilities.Principal) -> dict[str, A
 def a_command_that_starts_somewhere() -> None:
     # Where a person starts a command is its page's route, or the page of what it acts on.
     started = capabilities.CapabilitySpec(
-        "example.note", "Write a note.", "local_write", "example.write", Noting, noting, reached_from="example:notes"
+        "example.note",
+        "Write a note.",
+        capabilities.Effect.REMOTE_WRITE,
+        "example.write",
+        Noting,
+        noting,
+        reached_from="example:notes",
     )
     assert_type(started.reached_from, str)
     # A command whose records are no resource of its own names the page it belongs to.
     homed = capabilities.CapabilitySpec(
-        "example.sweep", "Sweep notes.", "local_write", "example.write", Noting, noting, home="example:notes"
+        "example.sweep",
+        "Sweep notes.",
+        capabilities.Effect.REMOTE_WRITE,
+        "example.write",
+        Noting,
+        noting,
+        home="example:notes",
     )
     assert_type(homed.home, str)
     assert_type(capabilities.ON_ITS_PAGE, str)
     # A switch whose state no record holds declares where it stands.
     capabilities.CapabilitySpec(
-        "example.quiet", "Quiet notes.", "local_write", "example.write", Noting, noting, state=lambda: False
+        "example.quiet",
+        "Quiet notes.",
+        capabilities.Effect.REMOTE_WRITE,
+        "example.write",
+        Noting,
+        noting,
+        state=lambda: False,
     )
     # What its page says of it beside its form, read as the page is drawn,
     # given its reader.
     about = capabilities.CommandAbout("Notes", (capabilities.CommandFact("Kept for", "A year", ("Then archived.",)),))
     described = capabilities.CapabilitySpec(
-        "example.tidy", "Tidy notes.", "local_write", "example.write", Noting, noting, about=lambda _principal: about
+        "example.tidy",
+        "Tidy notes.",
+        capabilities.Effect.REMOTE_WRITE,
+        "example.write",
+        Noting,
+        noting,
+        about=lambda _principal: about,
     )
     assert_type(described.about, Callable[[capabilities.Principal], capabilities.CommandAbout] | None)
     assert_type(about.facts[0].detail, tuple[str, ...])
     capabilities.CapabilitySpec(
         "example.tidy",
         "Tidy notes.",
-        "local_write",
+        capabilities.Effect.REMOTE_WRITE,
         "example.write",
         Noting,
         noting,
@@ -368,7 +487,7 @@ def a_command_that_starts_somewhere() -> None:
     capabilities.CapabilitySpec(
         "example.pin",
         "Pin a note.",
-        "local_write",
+        capabilities.Effect.REMOTE_WRITE,
         "example.write",
         Noting,
         noting,
@@ -388,7 +507,7 @@ def a_command_that_starts_somewhere() -> None:
     capabilities.CapabilitySpec(
         "example.pin",
         "Pin.",
-        "local_write",
+        capabilities.Effect.REMOTE_WRITE,
         "example.write",
         Noting,
         noting,
@@ -401,23 +520,37 @@ def a_page() -> None:
     assert_type(pages.PageAction("Open", "/example/", primary=True).css, str)
 
     pages.PageAction("Open")  # type: ignore[call-arg]
-    # A POST action names the field its value is sent as, for a row's actions.
-    assert_type(pages.PageAction("Mark read", "/example/1/", method="post", value="read", field="status").field, str)
-    pages.PageAction("Mark read", "/example/1/", field=1)  # type: ignore[arg-type]
-    # A POST action may send more than its button's field: what it acts on.
-    pages.PageAction("Block", "/example/block/", method="post", field="blocked", value="1", fields={"client_id": "a"})
-    pages.PageAction("Block", "/example/block/", method="post", fields=["client_id"])  # type: ignore[arg-type]
+    # A hand-built action is a link: only a command's control posts, sends or looks destructive.
+    pages.PageAction("Mark read", "/example/1/", method="post")  # type: ignore[call-arg]
+    pages.PageAction("Remove", "/example/1/", danger=True)  # type: ignore[call-arg]
+    # A command's control reads its words, address and method from the
+    # command, and is None for a reader who may not run it.
+    assert_type(
+        pages.PageAction.command("example.review", 1, variant="read", field="status", value="read"),
+        pages.PageAction | None,
+    )
+    pages.PageAction.command("example.block", fields={"client_id": "a"}, query={"next": "/example/"})
+    pages.PageAction.command("example.review", label="Mark read")  # type: ignore[call-arg]
+    pages.PageAction.command("example.block", fields=["client_id"])  # type: ignore[arg-type]
     pages.page_context("Example", actions=["Open"])  # type: ignore[list-item]
     assert_type(pages.page_context("Example", reads=("example.things",)), dict[str, pages.Page])
     pages.page_context("Example", reads=1)  # type: ignore[arg-type]
 
 
-def a_refused_action() -> None:
+def a_refused_action(link: workflows.ActionLink) -> None:
     # A link the command would refuse now says why, and is drawn unusable.
-    link = workflows.ActionLink("run", "Run", "remote_write", "/run/", refusal="Not now.")
     assert_type(link.refusal, str)
 
-    workflows.ActionLink("run", "Run", "remote_write", "/run/", refusal=True)  # type: ignore[arg-type]
+    workflows.ActionLink()  # type: ignore[call-arg]
+
+
+def a_read_link() -> None:
+    # A link that only opens a page is a read, with no command or effect of its own.
+    link = workflows.read_link("subject", "Example", "/example/", reason="What it is.")
+    assert_type(link, workflows.ActionLink)
+
+    workflows.read_link("subject", "Example", "/example/", method="POST")  # type: ignore[call-arg]
+    workflows.read_link("subject", "Example", "/example/", capabilities.Effect.READ)  # type: ignore[call-arg]
 
 
 def a_page_lead(page: pages.Page) -> None:
@@ -437,8 +570,12 @@ def a_dialog() -> None:
     assert_type(action.modal_id, str)
     assert_type(pages.page_context("Example", actions=(action,))["page"].dialogs, tuple[pages.PageDialog, ...])
 
+    # A command whose view draws a form may open it in a dialog.
+    assert_type(pages.PageAction.command("example.import", primary=True, modal=dialog), pages.PageAction | None)
+
     pages.PageDialog("import", "Import records")  # type: ignore[call-arg]
     pages.PageAction("Import", "/example/import/", modal=3)  # type: ignore[arg-type]
+    pages.PageAction.command("example.import", modal=3)  # type: ignore[arg-type]
 
 
 class Things(tables.TableListMixin, pages.PageMixin):
@@ -452,8 +589,6 @@ class Things(tables.TableListMixin, pages.PageMixin):
     )
     table_search_fields = ("name",)
     table_default_sort = "name"
-    # An identifier beside a wide prose column takes what it leaves.
-    table_room = "shared"
 
 
 class Projections(tables.TableListMixin):
@@ -521,7 +656,6 @@ def a_trail(page: AThing) -> None:
 class WronglyDeclared(tables.TableListMixin):
     table_empty = None  # type: ignore[assignment]
     table_columns = ("Name",)  # type: ignore[assignment]
-    table_room = "wide"  # type: ignore[assignment]
 
 
 def a_column() -> None:
@@ -538,59 +672,72 @@ def the_deployment() -> None:
     testing.plain(2)  # type: ignore[arg-type]
 
 
-class Renamed(writes.ServiceCreateMixin):
-    """A write view rewords what it says by overriding the defaults it inherits."""
+def reading_a_page(response: HttpResponse) -> None:
+    # An extension's test reads what a page says through the host's reader,
+    # from a response or the markup a template rendered.
+    assert_type(testing.text(response), str)
+    assert_type(testing.text("<p>Due</p>"), str)
+    assert_type(testing.texts(response, "h2"), list[str])
+    assert_type(testing.links(response), list[tuple[str, str]])
+    assert_type(testing.hrefs(response), list[str])
+    found = testing.elements(response, "a")
+    assert_type(found, list[testing.Element])
+    assert_type(testing.select(response, "data-row-key", "example"), list[testing.Element])
+    assert_type(testing.within(response, "data-fragment"), list[testing.Element])
+    assert_type(testing.all_elements(response), list[testing.Element])
+    assert_type(testing.with_class("<span class=band></span>", "band"), list[testing.Element])
+    assert_type(found[0].attrs, dict[str, str])
+    assert_type(found[0].words, str)
 
-    created_message = "{noun} {target} added."
-
-
-class Welcoming(writes.WriteMessages):
-    """A mixin that rewords a message for several views subclasses the root,
-    so it wins in whichever order a view writes its bases."""
-
-    created_message = "{noun} {target} is in."
-
-
-class WelcomedFirst(Welcoming, writes.ServiceCreateMixin):
-    pass
-
-
-class WelcomedLast(writes.ServiceCreateMixin, Welcoming):
-    pass
-
-
-class Miscounted(writes.WriteMessages):
-    created_message = 3  # type: ignore[assignment]
-
-
-class Unsaid(writes.ServiceDeleteMixin):
-    deleted_message = None  # type: ignore[assignment]
+    assert_type(testing.text(response.content), str)
+    testing.text(3)  # type: ignore[arg-type]
+    testing.select(response, "data-row-key", 3)  # type: ignore[arg-type]
+    testing.elements(response)  # type: ignore[call-arg]
+    testing.all_elements(response, "a")  # type: ignore[call-arg]
+    testing.with_class(response)  # type: ignore[call-arg]
 
 
-def saving(command: Any, *, principal: Any) -> dict[str, Any]:
-    return {}
+class Submitted(writes.CapabilityCommandMixin):
+    """A command view names the capability its form submits, and may shape
+    what the form sends it; the runner alone writes."""
+
+    submits = "example.notes.adjust"
+    success_url_name = "example_notes:list"
+
+    @override
+    def payload(self, form: Any) -> dict[str, Any]:
+        return {"note": "x"}
+
+    @override
+    def target(self) -> str | int | None:
+        return "a-note"
+
+    @override
+    def capability(self, form: Any) -> str:
+        return self.submits
 
 
-class Saved(writes.CommandFormMixin):
-    """A command view names its service as a staticmethod, which the declaration takes."""
-
-    service = staticmethod(saving)
-    success_message = "Saved."
+class Unnamed(writes.CapabilityCommandMixin):
+    submits = 3  # type: ignore[assignment]
 
 
-class Unserviced(writes.CommandFormMixin):
-    service = "saving"  # type: ignore[assignment]
+class NoteForm(writes.CapabilityFormMixin):
+    creates = "example.notes.create"
+    updates = "example.notes.update"
+    result_key = "note"
+    identity_attr = "slug"
+
+
+class NoteDelete(writes.CapabilityDeleteMixin):
+    deletes = "example.notes.delete"
+    result_key = "note"
+    identity_attr = "slug"
 
 
 def announcements() -> None:
-    assert_type(writes.ServiceWriteMixin.created_message, str)
-    assert_type(writes.ServiceWriteMixin.updated_message, str)
-    assert_type(writes.ServiceWriteMixin.deleted_message, str)
-    assert_type(writes.ServiceWriteMixin.identity_result_key, str)
-    assert_type(Renamed.created_message, str)
-    assert_type(writes.WriteMessages.created_message, str)
-    assert_type(WelcomedFirst.created_message, str)
-    assert_type(WelcomedLast.created_message, str)
+    assert_type(Submitted().runs, tuple[str, ...])
+    assert_type(NoteForm.identity_result_key, str)
+    assert_type(NoteDelete().runs, tuple[str, ...])
 
 
 def a_manifest() -> None:
@@ -641,31 +788,71 @@ def a_demo() -> None:
     plugin.PluginIntegration(demo_pages=("/examples/notes/first/",))  # type: ignore[arg-type]
 
 
-def a_gated_insight() -> None:
-    # An item about what only some capabilities may read names them; left
+def a_finding_on_the_queue() -> None:
+    # What needs a person is a finding: its rule and subject are what the
+    # queue knows it by, and the page it leads with is opened by its words.
+    found = plugin.Finding(
+        rule="example-lapsing",
+        subject="passport",
+        severity=ui.Tone.SERIOUS,
+        title="Passport expires",
+        explanation="It expires in 20 days.",
+        evidence=(("Expires", "in 20 days"),),
+        primary=plugin.opens("Renew it", "/examples/passport/"),
+        count=1,
+    )
+    assert_type(found.primary, workflows.ActionLink | None)
+    integration = plugin.PluginIntegration(attention=lambda: (found,))
+    assert_type(integration.attention, Callable[[], Iterable[plugin.Finding]] | None)
+
+    plugin.Finding(rule="example", subject="", severity="urgent", title="Example", explanation="")  # type: ignore[arg-type]
+    plugin.Finding(rule="example", subject="", severity=ui.Tone.SERIOUS, title="Example")  # type: ignore[call-arg]
+
+
+def a_gated_finding() -> None:
+    # A finding about what only some capabilities may read names them; left
     # out, every reader of the queue is shown it.
-    gated = ui.Insight("attention", "Finding", "Example is not answering", "", "", read_capabilities=("example.read",))
+    gated = plugin.Finding(
+        rule="example",
+        subject="",
+        severity=ui.Tone.ATTENTION,
+        title="Example is not answering",
+        explanation="",
+        read_capabilities=("example.read",),
+    )
     assert_type(gated.read_capabilities, tuple[str, ...])
-    ui.Insight("attention", "Finding", "Example", "", "", read_capabilities="example.read")  # type: ignore[arg-type]
 
 
-def an_insight_about_one_part() -> None:
-    # An item about one of its subject's many things names that thing, so a
-    # page about it alone leaves out its neighbors' items.
-    about = ui.Insight("attention", "Finding", "Example is restarting", "", "", part="example-web")
+def a_finding_about_one_part() -> None:
+    # A finding about one of its subject's many things names that thing, so a
+    # page about it alone leaves out its neighbors' findings.
+    about = plugin.Finding(
+        rule="example",
+        subject="",
+        severity=ui.Tone.ATTENTION,
+        title="Example is restarting",
+        explanation="",
+        part="web",
+    )
     assert_type(about.part, str)
-    ui.Insight("attention", "Finding", "Example", "", "", part=("example-web",))  # type: ignore[arg-type]
 
 
-def an_insight_that_says_why() -> None:
-    # An item says why it is as urgent as it is, which the panel behind its
-    # urgency leads with.
-    said = ui.Insight("serious", "Renewals", "Passport expires", "", "", why="It expires in 20 days.")
-    assert_type(said.why, str)
-    ui.Insight("serious", "Renewals", "Passport", "", "", why=("It expires.",))  # type: ignore[arg-type]
-    # One a threshold raises says what clears it.
-    held = ui.Insight("attention", "Renewals", "Passport", "", "", why="Under 90 days.", clears="it is renewed")
-    assert_type(held.clears, str)
+def a_finding_that_says_its_own_words() -> None:
+    # A finding no host rule raises says why it is as urgent as it is, what
+    # clears it, and the kind of matter it is, as a rule would.
+    said = plugin.Finding(
+        rule="example-lapsing",
+        subject="passport",
+        severity=ui.Tone.ATTENTION,
+        title="Passport",
+        explanation="",
+        why="Under 90 days.",
+        clears="it is renewed",
+        family="Renewals",
+    )
+    assert_type((said.why, said.clears, said.family), tuple[str, str, str])
+    # A held request is decided, never set aside.
+    assert_type(said.held, bool)
 
 
 def a_section(hosts: int) -> None:
@@ -702,10 +889,10 @@ def an_allocation(cash: Decimal, owed: Decimal) -> None:
     ui.AllocationBar("Assets by kind", [ui.Share("Cash", 1.0, 1)])  # type: ignore[arg-type]
     ui.Share("Cash", 1.0, "one")  # type: ignore[arg-type]
     # A part its legend links onward, with its amount as the page says it.
-    owing = ui.Share("Owed", float(owed), 2, url="/example/?type=owed", detail=f"-${owed}", tone="attention")
+    owing = ui.Share("Owed", float(owed), 2, url="/example/?type=owed", detail=f"-${owed}", tone=ui.Tone.ATTENTION)
     assert_type(owing.url, str)
     assert_type(owing.detail, str)
-    assert_type(owing.tone, str)
+    assert_type(owing.tone, ui.Tone | Literal[""])
     assert_type(bar.legend, tuple[tuple[ui.Share, str], ...])
     ui.Share("Cash", 1.0, 1, url=None)  # type: ignore[arg-type]
 
@@ -759,3 +946,21 @@ def a_capability_renamed() -> None:
     assert_type(migrations.CAPABILITY_ROWS, tuple[str, str])
 
     migrations.RenameCapabilities(["example.entries"])  # type: ignore[arg-type]
+
+
+def a_spatial_chart() -> None:
+    segment = ui.PathSegment("M 0 0 L 10 20", 1, "Example reading")
+    marker = ui.PathMarker(0, 0, "Start")
+    scale = ui.PathScale(5, 25, 10, "100 m")
+    assert_type(
+        ui.PathChart(
+            title="Example path",
+            description="The example path.",
+            segments=(segment,),
+            width=100,
+            height=50,
+            markers=(marker,),
+            scale=scale,
+        ),
+        ui.PathChart,
+    )

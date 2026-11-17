@@ -9,6 +9,12 @@ const describe = (el) => el.tagName.toLowerCase()
 const box = (el) => { const r = el.getBoundingClientRect();
   return {top: r.top, bottom: r.bottom, left: r.left, right: r.right,
           width: r.width, height: r.height}; };
+// Whether a table stands in a narrow box: its region narrower than the 36rem
+// its container query names (tables.css).
+const narrowBox = (table) => {
+  const region = table && table.closest('.table-scroll');
+  return !!region && region.clientWidth < 36 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+};
 const scrolls = (el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowX);
 const inFlow = (parent) => {
   const found = [];

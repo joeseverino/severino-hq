@@ -17,7 +17,7 @@ what is not met. A check met everywhere is a word in one closing line.
 
   {% if everywhere %}
     {% section "Passing everywhere" count=everywhere|length fold=True %}
-      <ul>{% for check in everywhere %}<li>{{ check.label|breakable }}</li>{% endfor %}</ul>
+      {% prose_list %}{% for check in everywhere %}<li>{{ check.label|breakable }}</li>{% endfor %}{% endprose_list %}
     {% endsection %}
   {% endif %}
 {% else %}

@@ -1,0 +1,13 @@
+id: tools-imported-only-by-tools
+valid:
+  - 'from toolsmith import forge'
+  - 'import toolset'
+  - 'from hq.platform.core import tools'
+  - 'from . import tools'
+invalid:
+  - 'import tools'
+  - 'import tools.gate'
+  - 'import tools.gate as gate'
+  - 'from tools import credentials'
+  - 'from tools.perf.report import tokens'
+  - 'lazy from tools.gate import turn'

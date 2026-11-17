@@ -14,7 +14,6 @@ from typing import Any, Literal
 
 from django.urls import NoReverseMatch
 from pydantic import (
-    BaseModel,
     ConfigDict,
     Field,
     TypeAdapter,
@@ -22,14 +21,16 @@ from pydantic import (
     model_validator,
 )
 
+from hq.platform.application.contracts import Closed
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.labels import dotted
 from hq.platform.application.moments import span, when_day
 from hq.platform.application.record_errors import Sentence
 from hq.platform.application.routes import reverse
 lazy from hq.platform.application.expiry import days_until
-lazy from hq.platform.application.timestamps import moment
+lazy from hq.platform.application.moments import moment
 
+from .glance_shapes import GlanceObservation
 from .names import in_zone
 from .observations.contract import ReadingPart
 from .permissions import Permission
@@ -146,8 +147,8 @@ class ConnectionKind:
     gives: str = ""
 
 
-class ProviderModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class ProviderModel(Closed):
+    model_config = ConfigDict(frozen=True)
 
     # ``after`` because a ``before`` validator is not allowed on a
     # discriminated union's discriminator, and this one matches every field.
@@ -167,8 +168,8 @@ class ProviderModel(BaseModel):
 
 
 class ControllerVerification(ProviderModel):
-    timeout_seconds: int = Field(ge=1, le=3600)
-    interval_seconds: int = Field(ge=1, le=300)
+    timeout_seconds: int = Field(ge=30, le=600)
+    interval_seconds: int = Field(ge=1, le=30)
 
     @model_validator(mode="after")
     def interval_fits_timeout(self) -> ControllerVerification:
@@ -204,6 +205,24 @@ class ControllerProviderCapability(ProviderModel):
 class ControllerCapabilityRegistry(ProviderModel):
     schema_version: Literal[1]
     capabilities: dict[str, ControllerProviderCapability]
+
+
+SHARED = (
+    SharedValue(
+        "Verification",
+        ControllerVerification,
+        "How long the controller keeps checking that an applied change is actually served, "
+        "declared by the action it belongs to.",
+    ),
+    SharedValue(
+        "GlanceObservation",
+        GlanceObservation,
+        "One dashboard panel the controller read (record_dashboard_observations), carrying the as_of "
+        "of the plan it answers. Numbers, instants and states only: HQ words them.",
+        mode="validation",
+        refs=(("panel_id", "GlancePanelID"),),
+    ),
+)
 
 
 def applies(*, automatic: bool = False, verification: ControllerVerification | None = None) -> ControllerActionPolicy:
@@ -361,6 +380,11 @@ class ProviderSpec:
     # declaration it would write: a sentence per thing in it that reaches
     # further than the kind's name suggests. Shown on the approval card.
     review_warnings: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
+    # What a change from one declaration of this kind to another does, in the
+    # words a person reads first (what it opens, a check it drops), or "" when
+    # nothing needs saying ahead of the field-by-field change. It heads that
+    # change wherever a held request is shown.
+    change_words: Callable[[Mapping[str, Any], Mapping[str, Any]], str] | None = None
     # Fields that are optional to the model but unanswerable-by-default when
     # the record does not exist yet. An NPM proxy keeps whatever certificate it
     # already has when this is blank, which is a sensible default for an edit

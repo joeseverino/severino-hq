@@ -24,8 +24,8 @@ const caddyRole = "caddy"
 
 // Why a route carries no certificate, when the edge could not say.
 const (
-	caddyNoCertificateOperation = "the edge target does not report its certificates; redeploy it at version " + edge.Version + " or later"
-	caddySomeUnreported         = "the edge loads %d certificates from files and its target reports %d; redeploy it at version " + edge.Version + " or later"
+	caddyNoCertificateOperation = "the edge target does not report its certificates; " + edge.Redeploy
+	caddySomeUnreported         = "the edge loads %d certificates from files and its target reports %d; " + edge.Redeploy
 	caddyManagesCertificate     = "Caddy manages this name's certificate itself, and the edge reports only the certificate it loads from a file"
 )
 

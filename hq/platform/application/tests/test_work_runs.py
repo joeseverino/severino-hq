@@ -24,9 +24,8 @@ from ..work_runs import (
     FAILED_FIRST,
     JOB,
     LAPSED,
-    OUTCOME_TONES,
     RUN,
-    TONES,
+    TaskOutcome,
     hydrated,
     job_seen_state,
     recent_runs,
@@ -42,7 +41,7 @@ WORKER = "example-worker"
 CLAIMS = (("automation.operation", "run"),)
 # What asks the automation worker for a scan, and what it rings on commit.
 REFRESH = "automation.source.refresh"
-DOORBELL = "hq.platform.application.automation_sources.ring_automation_doorbell"
+DOORBELL = "hq.platform.application.cadence._ring"
 
 
 class WorkRunsTestCase(TestCase):
@@ -102,7 +101,7 @@ class OneListTests(WorkRunsTestCase):
 
         summary = operation_summary(row, run)
         self.assertEqual((row.by.words, row.by.approved_by, row.note), (summary["by"], summary["approved_by"], "Done."))
-        self.assertEqual((row.word, row.tone), (JobState.SUCCEEDED.label, TONES[JobState.SUCCEEDED]))
+        self.assertEqual((row.word, row.tone), (JobState.SUCCEEDED.label, JobState.SUCCEEDED.tone))
         self.assertEqual(row.evidence.hosts, (APP, DB))
         self.assertEqual(row.evidence.correlation, "example-investigation-7")
         self.assertEqual(row.evidence.events[0]["outcome"], "changed")
@@ -116,8 +115,7 @@ class OneListTests(WorkRunsTestCase):
         from hq.domains.jobs.runner import AUDIT_TYPE, run as run_job
         from hq.platform.core.models import AuditLog
 
-        from ..history import who_did
-        from ..resource_operations import asked_by
+        from ..history import asked_by, who_did
 
         asked = self.run_of(APP)
         person = get_user_model().objects.create_user("example-person", password="x" * 14)
@@ -127,7 +125,7 @@ class OneListTests(WorkRunsTestCase):
             rows = {row.source: row for row in self.listed()}
 
         self.assertEqual(rows[JOB].by, who_did((AUDIT_TYPE,), [job.pk])[str(job.pk)])
-        self.assertEqual(rows[RUN].by, asked_by([asked])[str(asked.pk)])
+        self.assertEqual(rows[RUN].by, asked_by(OperationRequest, [asked])[str(asked.pk)])
         self.assertNotEqual(rows[JOB].by, rows[RUN].by)
         self.assertEqual(len([query for query in sent if AuditLog._meta.db_table in query["sql"]]), 1)
 
@@ -147,7 +145,7 @@ class OneListTests(WorkRunsTestCase):
 
         standing = standing_of(row)
         self.assertEqual((row.word, row.note), (standing.label, "The registry lists nothing."))
-        self.assertEqual(row.tone, TONES[JobState.FAILED])
+        self.assertEqual(row.tone, JobState.FAILED.tone)
 
     def test_a_held_run_is_not_listed(self):
         from hq.domains.control_plane.models import ApprovalRequest
@@ -179,16 +177,16 @@ class SameWordsTests(WorkRunsTestCase):
             return next(row.tone for row in self.listed() if row.id == str(run.pk))
 
         run = self.run_of(APP)
-        self.assertEqual(tone(run), TONES[JobState.QUEUED])
-        self.assertEqual(tone(self.claimed(run)), TONES[JobState.RUNNING])
+        self.assertEqual(tone(run), JobState.QUEUED.tone)
+        self.assertEqual(tone(self.claimed(run)), JobState.RUNNING.tone)
         report_operation(
             str(run.pk),
             ControllerReport(success=True, observed_generation=run.input["generation"], message="Done."),
             controller_id=WORKER,
         )
-        self.assertEqual(tone(run), TONES[JobState.SUCCEEDED])
+        self.assertEqual(tone(run), JobState.SUCCEEDED.tone)
         failed = self.reported(self.run_of(DB, name=f"automation.{LOGS}.run"), success=False)
-        self.assertEqual(tone(failed), TONES[JobState.FAILED])
+        self.assertEqual(tone(failed), JobState.FAILED.tone)
 
     def test_a_run_not_yet_ended_says_only_its_state(self):
         """Its State column says Waiting or Running; its Result has nothing yet."""
@@ -207,7 +205,7 @@ class SameWordsTests(WorkRunsTestCase):
 
         (row,) = self.listed()
 
-        self.assertEqual((row.state, row.word, row.tone), (JobState.LOST, "Stopped early", TONES[JobState.LOST]))
+        self.assertEqual((row.state, row.word, row.tone), (JobState.LOST, "Stopped early", JobState.LOST.tone))
 
     def test_a_run_whose_lease_ran_out_stopped_early_before_the_next_claim_ends_it(self):
         run = self.claimed(self.run_of(APP))
@@ -360,14 +358,16 @@ class OrderTests(WorkRunsTestCase):
         self.assertEqual([row.id for row in self.listed(order=BY_TITLE)], [str(alpha.pk), str(run.pk), str(zebra.pk)])
 
     def test_a_declared_job_is_called_by_its_declaration_and_other_work_by_what_it_stored(self):
-        from ..scheduled_work import named
+        from ..outbound_work import declared_work
 
         declared = self.job(kind="sessions.clear", label="sessions.clear")
         gone = self.job(kind="example.gone", label="")
 
         titles = {row.id: row.title for row in self.listed()}
 
-        self.assertEqual(titles, {str(declared.pk): named("sessions.clear").label, str(gone.pk): "example.gone"})
+        self.assertEqual(
+            titles, {str(declared.pk): declared_work()["sessions.clear"].label, str(gone.pk): "example.gone"}
+        )
 
     def test_a_run_is_called_by_its_playbook_s_title_and_found_by_it(self):
         """The title the playbook was adopted with, on every list of work; a
@@ -408,7 +408,7 @@ class ScanTests(WorkRunsTestCase):
 
     def scanned(self):
         principal = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-        with self.captureOnCommitCallbacks(execute=True), mock.patch(DOORBELL):
+        with mock.patch(DOORBELL), self.captureOnCommitCallbacks(execute=True):
             answer = run_capability(REFRESH, {}, principal=principal, idempotency_key="example-refresh").answer
         self.assertTrue(answer["ok"], answer)
         return OperationRequest.objects.get(pk=answer["operation"]["id"])
@@ -465,11 +465,9 @@ class EvidenceTests(WorkRunsTestCase):
 
         (row,) = self.listed()
 
-        self.assertEqual(set(OUTCOME_TONES), set(outcomes))
-        self.assertEqual(
-            [event["tone"] for event in row.evidence.events], [OUTCOME_TONES[outcome] for outcome in outcomes]
-        )
-        self.assertEqual(set(OUTCOME_TONES.values()) - set(TONES.values()), set())
+        self.assertEqual(set(TaskOutcome), set(outcomes))
+        self.assertEqual([event["tone"] for event in row.evidence.events], [outcome.tone for outcome in TaskOutcome])
+        self.assertEqual({outcome.tone for outcome in TaskOutcome} - {state.tone for state in JobState}, set())
 
 
 class WorkRunsBudgetTests(TestCase):

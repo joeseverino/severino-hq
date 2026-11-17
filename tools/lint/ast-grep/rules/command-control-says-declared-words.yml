@@ -2,8 +2,10 @@
 # or the jobs:ask route outbound work is asked through) says that command's
 # declared words. A label the call site writes out itself, a literal or an
 # f-string, drifts from the declaration the command's other surfaces read.
-# The label is label=, or the constructor's positional one: first for Ask
-# and PageAction, second for ActionLink and TopologyAction.
+# The label is label=, or the constructor's positional one: first for Ask,
+# second for ActionLink and TopologyAction. A PageAction cannot reach a
+# command at all: its constructor refuses a URL that runs one, and
+# PageAction.command reads the words.
 id: command-control-says-declared-words
 language: python
 severity: error
@@ -42,7 +44,7 @@ rule:
         - all:
             - has:
                 field: function
-                regex: (^|\.)(Ask|PageAction)$
+                regex: (^|\.)Ask$
             - has:
                 field: arguments
                 any:

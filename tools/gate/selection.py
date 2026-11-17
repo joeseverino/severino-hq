@@ -7,6 +7,7 @@ from __future__ import annotations
 import ast
 import functools
 import json
+import os
 import re
 import subprocess
 import sys
@@ -15,12 +16,14 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import NamedTuple
 
+import grimp
+
 from hq.platform.application.tests.reads import Reads
 from hq.platform.application.tests.tree import TreeTests, tree_tests
-from hq.platform.core.tests.task import RefError, changed_paths, git, names
+from hq.platform.core.tests.task import RefError, changed_paths, names
 from tests.mise_tasks import ROOT as TASKS_ROOT, body, mise_tasks, run_files, runs
 from tools.gate import chain, testmap
-from tools.gate.chain import maps, recorded_ancestor
+from tools.gate.chain import SENT, maps
 
 # Never part of the Django suite: other languages and vendored trees.
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
@@ -36,10 +39,12 @@ TASK_READER = "tests.mise_tasks"
 # task, never as a label.
 GROUP_TASK = "test:"
 GROUP_RUN = re.compile(r"\buv run\b[^\n]*--group\b[^\n]*\bmanage\.py test\b((?:\s+[\w.]+)+)")
-# How many importers away from a changed module a test is still selected: one
-# that imports it, or imports a module that does. Further out the walk reaches
-# most of the tree through the shared layers, and the module in between has
-# tests of its own at this distance.
+# How many importers away from a changed module a test is still selected
+# through any import, one a function or a lazy import makes as it runs among
+# them: one that imports it, or imports a module that does. Further out such a
+# walk reaches most of the tree, through the cycle those imports close in the
+# shared layers. The imports a module makes as it loads are followed all the
+# way (``loaded``).
 REACH = 2
 
 
@@ -113,6 +118,54 @@ def _importers(root: Path, files: tuple[Path, ...]) -> dict[str, set[str]]:
     return reverse
 
 
+def loaded(files: list[Path]) -> dict[str, set[str]]:
+    """module -> modules that import it as they load, read once per tree and file list."""
+
+    return _loaded(chain.ROOT, tuple(files))
+
+
+@functools.cache
+def _loaded(root: Path, files: tuple[Path, ...]) -> dict[str, set[str]]:
+    """grimp's graph of the packages ``files`` lie in (import-linter's), held to the imports that run as
+    the importing module loads: at its top level, in a class body or a block there, never in a function, a
+    ``lazy`` import or one under TYPE_CHECKING. Every test that loads a module runs them, so the walk
+    along them goes all the way. A module's import also runs the package ``__init__`` files above it."""
+
+    modules = {module_name(p) for p in files}
+    tops = sorted({p.parts[0] for p in files if len(p.parts) > 1 and (root / p.parts[0] / "__init__.py").is_file()})
+    graph = grimp.build_graph(*tops, cache_dir=None)
+    reverse: dict[str, set[str]] = {m: set() for m in modules}
+    paths = {module_name(p): p for p in files}
+    for importer in graph.modules & paths.keys():
+        lines = load_lines(ast.parse((root / paths[importer]).read_text(encoding="utf-8")))
+        for imported in graph.find_modules_directly_imported_by(importer):
+            details = graph.get_import_details(importer=importer, imported=imported)
+            if any(not d["is_lazy"] and d["line_number"] in lines for d in details):
+                for module in packages(imported, modules) - {importer}:
+                    reverse[module].add(importer)
+    return reverse
+
+
+def load_lines(tree: ast.Module) -> set[int]:
+    """The lines of the import statements a module runs as it loads (``_loaded``)."""
+
+    found: set[int] = set()
+    blocks = [tree.body]
+    while blocks:
+        for node in blocks.pop():
+            if isinstance(node, ast.Import | ast.ImportFrom):
+                found.add(node.lineno)
+            elif isinstance(node, ast.If):
+                if "TYPE_CHECKING" not in ast.unparse(node.test):
+                    blocks.append(node.body)
+                blocks.append(node.orelse)
+            elif isinstance(node, ast.Try | ast.TryStar):
+                blocks += [node.body, node.orelse, node.finalbody, *(handler.body for handler in node.handlers)]
+            elif isinstance(node, ast.With | ast.ClassDef):
+                blocks.append(node.body)
+    return found
+
+
 def import_graph(files: list[Path], *flags: str) -> dict[str, list[str]]:
     """Each file and the files of this tree it imports, as `ruff analyze graph` reads them."""
 
@@ -167,22 +220,28 @@ def string_attributes(node: ast.ClassDef) -> dict[str, str]:
 
 
 def affected(
-    changed: list[str], deleted: list[str], files: list[Path], apart: frozenset[str] = frozenset()
+    changed: list[str],
+    deleted: list[str],
+    files: list[Path],
+    apart: frozenset[str] = frozenset(),
+    mapped: frozenset[str] = frozenset(),
 ) -> tuple[set[str], set[str]]:
     """(modules the change reaches, the apps whose models it reaches).
 
     It reaches the modules that import what it touched, those that name a file it touched, and those that
     name a route whose view it reaches, by its name or its path: a test that drives a view through the
     client imports its models, never its views. A path in ``apart`` reaches no route: the map names the
-    tests that ran it, or it is a test module (``by_map``).
+    tests that ran it, or it is a test module (``by_map``). A path in ``mapped`` reaches no importer
+    either, since the map names every test that ran the lines it changed; it still reaches the modules
+    that name it, which run it in a process of their own, where coverage does not follow.
     """
 
     reverse = with_gone(importers(files), deleted, files)
     paths = [*changed, *deleted]
-    reached = import_reach(seeds(paths), reverse) | reading(paths, files)
+    reached = importing(seeds([path for path in paths if path not in mapped]), reverse, files) | reading(paths, files)
     own = [path for path in paths if path not in apart]
     started = seeds(own)
-    imported = import_reach(started, reverse)
+    imported = importing(started, reverse, files)
     read = reading(own, files)
     index = named(chain.ROOT, tuple(files))
     shown = [path for path in rendering(own) if not path.endswith(".py")]
@@ -573,14 +632,25 @@ def with_gone(reverse: dict[str, set[str]], deleted: list[str], files: list[Path
     return reverse | {module: {m for m, text in texts.items() if word.search(text)} for module, word in spelled.items()}
 
 
-def import_reach(start: set[str], reverse: dict[str, set[str]], hops: int = REACH) -> set[str]:
-    """``start`` and the modules that import it, ``hops`` out."""
+def import_reach(start: set[str], reverse: dict[str, set[str]], hops: int | None = REACH) -> set[str]:
+    """``start`` and the modules that import it, ``hops`` out, or all the way."""
 
     reached = frontier = set(start)
-    for _ in range(hops):
+    while frontier and (hops is None or hops > 0):
         frontier = {i for m in frontier for i in reverse.get(m, ())} - reached
         reached |= frontier
+        hops = None if hops is None else hops - 1
     return reached
+
+
+def importing(start: set[str], reverse: dict[str, set[str]], files: list[Path]) -> set[str]:
+    """``start`` and the modules that import it: through any import ``REACH`` out, and through the imports
+    that run as a module loads (``loaded``) all the way. A deleted module is in no graph of the tree, so the
+    walk all the way starts from the modules that still spell an import of it (``with_gone``)."""
+
+    graph = loaded(files)
+    gone = {importer for module in start - graph.keys() for importer in reverse.get(module, ())}
+    return import_reach(start, reverse) | import_reach(start | gone, graph, None)
 
 
 def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tuple[list[str], int]:
@@ -593,52 +663,81 @@ def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tupl
 
 def by_map(labels: list[str], files: list[Path]) -> list[str]:
     """The selection read from the nearest map of the tests that ran each
-    file, when it is narrower than ``labels``, and ``labels`` otherwise; both
-    are sound, so the run takes the one with fewer modules.
+    line (``chain.nearest_map``), when it is narrower than ``labels``, and
+    ``labels`` otherwise; both are sound, so the run takes the one with fewer
+    modules.
 
-    The change is read from the map's tree, which passed the whole suite. A
-    Python file the map holds whose change stays inside function bodies
-    (``testmap.bodies_only``) selects the test modules that ran it there, and
-    no app; so does a test module, which no other test runs, only imports.
-    Every other path selects as without a map. A test module the recording
-    did not run (new since, or skipped there) selects by every rule."""
+    The change is read from the map's own commit, whose lines the map numbers.
+    A Python file the map holds whose change stays inside function bodies
+    (``ran_bodies``) selects the test modules that ran those bodies there, and
+    no importer, route or app; a test module reaches no route either. Every
+    other path selects as without a map. A test module the recording did not
+    run (new since, or skipped there) selects by every rule."""
 
-    found = recorded_ancestor(maps(chain.ROOT), ".json", chain.ROOT)
+    if not os.environ.get(SENT):
+        # A run sent to the second machine reads the maps the machine that sent it fetched.
+        print(f"[fast] {chain.fetch_map()}")
+    found = chain.nearest_map()
     if not found:
+        print(
+            f"[fast] no map of the tests that ran each line within {chain.MAP_REACH} commits back, so none narrows it"
+        )
         return labels
     commit, back = found
-    tree = git("rev-parse", f"{commit}^{{tree}}", root=chain.ROOT)[0]
-    the_map = testmap.load(maps(chain.ROOT) / f"{tree}.json")
-    changed, deleted = changed_paths(commit, chain.ROOT)
-    mapped = frozenset(path for path in changed if confined(path, commit, the_map))
-    tests = {module_name(p) for p in files if is_test(p)}
-    apart = mapped | {path for path in [*changed, *deleted] if is_test(Path(path))}
-    reached, touched = affected(changed, deleted, files, apart)
-    picked = set(test_labels(files, reached, touched)[0])
-    picked |= {module for path in mapped for module in the_map.tests_of(path)} & tests
-    if apart:
-        unran = set(test_labels(files, *affected(changed, deleted, files))[0]) - the_map.ran
-        picked |= unran
+    the_map = testmap.load(testmap.kept(maps(chain.ROOT), commit))
+    picked = from_map(the_map, commit, files)
     narrower = len(picked) < len(labels)
     print(
-        f"[fast] the map of the tests that ran each file, {back} back: {len(mapped)} of the"
-        f" {len(changed) + len(deleted)} files changed since change only bodies it saw run;"
+        f"[fast] the map of the tests that ran each line, of {commit[:9]}, {back} back:"
         f" {len(picked)} test modules from it, {'taken' if narrower else 'not narrower'}"
     )
     return sorted(picked) if narrower else labels
 
 
-def confined(path: str, commit: str, the_map: testmap.TestMap) -> bool:
-    """Whether ``path`` is a Python file the map holds, changed since ``commit`` only inside function bodies."""
+def from_map(the_map: testmap.TestMap, commit: str, files: list[Path]) -> set[str]:
+    """The test modules the change since ``commit``, ``the_map``'s, selects with it (``by_map``)."""
 
-    if not path.endswith(".py") or not the_map.tests_of(path):
-        return False
+    changed, deleted = changed_paths(commit, chain.ROOT)
+    bodies = {path: lines for path in changed if (lines := ran_bodies(path, commit, the_map)) is not None}
+    mapped = frozenset(bodies)
+    tests = {module_name(p) for p in files if is_test(p)}
+    apart = mapped | {path for path in [*changed, *deleted] if is_test(Path(path))}
+    picked = set(test_labels(files, *affected(changed, deleted, files, apart, mapped))[0])
+    picked |= {module for path, lines in bodies.items() for module in the_map.tests_of(path, lines)} & tests
+    if apart:
+        picked |= set(test_labels(files, *affected(changed, deleted, files))[0]) - the_map.ran
+    print(
+        f"[fast] {len(mapped)} of the {len(changed) + len(deleted)} files changed since {commit[:9]}"
+        " change only function bodies the map holds"
+    )
+    return picked
+
+
+def ran_bodies(path: str, commit: str, the_map: testmap.TestMap) -> set[int] | None:
+    """The lines, as ``commit`` numbers them, of each function body the change to ``path`` since ``commit``
+    touches, when ``path`` is a Python file the map holds and every line the change touches is inside a
+    function body there (``testmap.touched_bodies``); None otherwise."""
+
+    if not path.endswith(".py") or path not in the_map.lines:
+        return None
     before = subprocess.run(
         ["git", "cat-file", "blob", f"{commit}:{path}"], cwd=chain.ROOT, capture_output=True, check=False
     )
     if before.returncode:
-        return False
-    return testmap.bodies_only(before.stdout.decode(), (chain.ROOT / path).read_text(encoding="utf-8"))
+        return None
+    diff = subprocess.run(
+        ["git", "diff", "-U0", "--no-ext-diff", "--no-color", commit, "--", path],
+        cwd=chain.ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    old, new = testmap.touched(diff)
+    # Each added line lies in a function body of the new file too: an addition that dedents out of a body
+    # leaves the old line it is added before inside one.
+    if testmap.touched_bodies((chain.ROOT / path).read_text(encoding="utf-8"), new) is None:
+        return None
+    return testmap.touched_bodies(before.stdout.decode(), old)
 
 
 def whole_suite(files: list[Path]) -> list[str]:

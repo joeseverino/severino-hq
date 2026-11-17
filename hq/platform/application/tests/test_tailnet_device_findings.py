@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.tests.worded import worded
 
 from ..attention import infrastructure
 from ..findings import findings
@@ -210,7 +211,7 @@ class QueueTests(TestCase):
             }
         )
 
-        items = [item for item in infrastructure() if item.key.startswith("finding:tailnet-")]
+        items = [item for item in worded(infrastructure()) if item.key.startswith("finding:tailnet-")]
 
         self.assertEqual(machine("example-laptop").aliases, ("Someone’s Laptop",))
         self.assertEqual(

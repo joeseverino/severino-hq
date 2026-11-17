@@ -26,14 +26,14 @@ lazy from django.template.smartif import TokenBase
 lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.table_cells import ROLE_CLASSES
 lazy from hq.platform.core.templatetags.part_tags import SectionTakes
-lazy from hq.platform.core.templatetags.value_tags import Takes
+lazy from hq.platform.core.templatetags.value_tags import PresentNode, Takes
 
 lazy from .contract import _parameters
 
 # The frames a page may extend, and the blocks of each it may fill. Every
 # public block is an empty slot, so an override never needs ``block.super``.
 FRAMES: dict[str, tuple[str, ...]] = {
-    "page.html": ("page",),
+    "page.html": ("page", "print_footer"),
     "list_page.html": ("summary", "row", "foot"),
     "confirm_page.html": ("consequences",),
     "form_page.html": (),
@@ -59,10 +59,10 @@ PARTIALS: dict[str, str] = {
     "partials/_activity_calendar.html": "One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`.",
     "partials/_allocation.html": "Parts of one whole as one bar, from `hq_sdk.ui.AllocationBar`.",
     "partials/_ask.html": "A do-this-now control and how its work stands, from `hq_sdk.outbound.ask`.",
-    "partials/_attention_list.html": "Decisions waiting on the operator, from `hq_sdk.ui.Insight` entries.",
+    "partials/_attention_list.html": "Decisions waiting on the operator, from the entries `hq_sdk.plugin.plugin_attention_items` gathers.",
     "partials/_cadence.html": "Whether a thing happened, period by period, from `hq_sdk.ui.Cadence`.",
     "partials/_cadence_matrix.html": "Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`.",
-    "partials/_chart.html": "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`.",
+    "partials/_chart.html": "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`.",
     "partials/_chart_tabs.html": "Up to four charts of one thing in the space of one.",
     "partials/_dropzone.html": "A file field that also accepts a drop.",
     "partials/_empty_state.html": "The one empty state: what is missing, then what would fill it.",
@@ -73,6 +73,9 @@ PARTIALS: dict[str, str] = {
     "partials/_insight_grid.html": "Readings that need interpreting, each with its next step.",
     "partials/_job_progress.html": "A running job and what it is doing.",
     "partials/_kpi_grid.html": "Responsive linked or static figures.",
+    "partials/_reading_age.html": (
+        "When a reading was taken, `at` the moment, in the one wording every page uses; `unread` why there is none."
+    ),
     "partials/_record_list.html": "A compact list of records, from `hq_sdk.ui.ListRow`.",
     "partials/_row_field.html": "One field of a form whose fields stand one to a row of a table, in its row.",
     "partials/_timeline.html": "Chronological linked events, from `hq_sdk.ui.Timeline`.",
@@ -83,16 +86,21 @@ PARTIALS: dict[str, str] = {
 # too; they are recorded from Django itself.
 TAGS = (
     "arrow",
+    "button_row",
     "card",
     "dot",
+    "dot_list",
     "empty_value",
     "entity",
     "fact",
     "facts",
     "filter_bar",
+    "muted",
     "notice",
     "outside_link",
-    "post_button",
+    "button",
+    "present",
+    "prose_list",
     "reference",
     "referenced_by",
     "row_actions",
@@ -114,6 +122,7 @@ FILTERS = (
     "or_empty",
     "outside",
     "readout",
+    "record",
     "span",
     "when",
     "when_text",
@@ -130,12 +139,9 @@ CLASSES = (
     "address-list",
     "allocation",
     "allocation-legend",
-    "btn",
     "cell-data",
     "cell-part",
     "cell-whole",
-    "chart-axis",
-    "chart-legend",
     "code-list",
     "compact",
     "compact-table",
@@ -146,10 +152,8 @@ CLASSES = (
     "domain-charts",
     "errors",
     "eyebrow",
-    "field",
     "finding",
     "form",
-    "form-actions",
     "ghost",
     "help",
     "icon-link",
@@ -157,7 +161,6 @@ CLASSES = (
     "key-col",
     "keyboard-only",
     "list-rows",
-    "muted",
     "name-line",
     "narrow-more",
     "narrow-only",
@@ -166,20 +169,6 @@ CLASSES = (
     "optional-col",
     "page-lede",
     "primary",
-    "print-footer",
-    "print-only",
-    "prose-list",
-    "route-band-1",
-    "route-band-2",
-    "route-band-3",
-    "route-band-4",
-    "route-band-5",
-    "route-frame",
-    "route-line",
-    "route-map",
-    "route-marker",
-    "route-scale",
-    "route-swatch",
     "row-actions",
     "row-below",
     "row-empty",
@@ -313,6 +302,11 @@ class _Reads:
                 names = frozenset(name for name, _ in _expression_names(condition))
                 self.note(condition, bound, guards, guarded=True)
                 self.walk(branch, bound, guards | names)
+        elif isinstance(node, PresentNode):
+            # What its body reads of the value is read only when it is there.
+            names = frozenset(name for name, _ in _expression_names(node.value))
+            self.note(node.value, bound, guards, guarded=True)
+            self.walk(node.nodelist, bound, guards | names)
         elif isinstance(node, WithNode):
             self.note(node.extra_context, bound, guards)
             self.walk(node.nodelist, bound | set(node.extra_context), guards)

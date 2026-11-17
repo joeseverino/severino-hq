@@ -10,15 +10,16 @@ from django.urls import reverse
 
 from hq.domains.assets.models import Asset
 from hq.domains.control_plane.models import ProviderConnection
+from hq.platform.application.markup_testing import hrefs, with_class
+from hq.platform.application.tests.worded import worded
 
-from ..attention import MOST_NAMED, assets
+from ..attention import raised
 from ..connection_context import connections_context
 from ..entity_links import entity_link
 from ..resource_context import RecordStatus, record_list
 from ..security import cli_principal
 from ..services import certificate_use
 from .host_only import host_only
-from .markup import hrefs, with_class
 from .test_relationships import connected, estate
 
 
@@ -27,18 +28,17 @@ class NamedBacklogTests(TestCase):
         for name in ("Desk", "Bench", "Camera", "Anvil"):
             Asset.objects.create(item_name=name)
 
-        (item,) = assets()
+        (item,) = worded(raised("hq.assets"))
 
         self.assertEqual(item.magnitude, 4)
         self.assertTrue(item.body.startswith("Anvil, Bench, Camera and 1 other. "))
-        self.assertEqual([action.label for action in item.actions], ["Anvil", "Bench", "Camera"])
-        self.assertEqual(len(item.actions), MOST_NAMED)
-        self.assertTrue(all(action.url.startswith("/assets/") for action in item.actions))
+        self.assertEqual([link.label for link in item.links], ["Anvil", "Bench", "Camera"])
+        self.assertTrue(all(link.url.startswith("/assets/") for link in item.links))
 
     def test_a_backlog_of_one_names_it_and_counts_nothing(self):
         Asset.objects.create(item_name="Desk")
 
-        (item,) = assets()
+        (item,) = worded(raised("hq.assets"))
 
         self.assertTrue(item.body.startswith("Desk. "))
 
@@ -103,7 +103,7 @@ def _row(key, kind, label, tone="healthy", **extra):
         shown_name=key,
         summary=extra.get("summary", ""),
         record_status=RecordStatus(
-            "working" if tone == "healthy" else "degraded", tone, "Working" if tone == "healthy" else "Has a problem"
+            "working" if tone == "healthy" else "degraded", "Working" if tone == "healthy" else "Has a problem"
         ),
     )
 

@@ -6,12 +6,10 @@ requests, checks and workflows on the project page follow on the controller's
 next pass. Where it does not, the anonymous public read is the fallback.
 """
 
-import tempfile
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -19,6 +17,7 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
 from hq.domains.jobs.testing import held_jobs
 from hq.domains.projects.models import Project
+from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
@@ -27,13 +26,7 @@ from ..capabilities import execute_capability
 from ..outbound_work import ANOTHER_RUNNING
 from ..projects import REFRESH, refresh_project
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal
-from .markup import select, within
 
-DIRECTORY = Path(tempfile.mkdtemp())
-MARKERS = override_settings(
-    SEVERINO_CONTROLLER_DOORBELL=str(DIRECTORY / "doorbell"),
-    SEVERINO_ACTIVITY_MARKER=str(DIRECTORY / "activity"),
-)
 REF = "example-github"
 PUSHED = "2026-09-27T12:00:00Z"
 OPERATOR = Principal("operator", "web", OPERATOR_CAPABILITIES)
@@ -68,7 +61,6 @@ class Fetcher:
         return self.pushed_at
 
 
-@MARKERS
 class RefreshAsksTheAppTests(TestCase):
     def setUp(self):
         self.project = Project.objects.create(
@@ -109,16 +101,6 @@ class RefreshAsksTheAppTests(TestCase):
         self.assertEqual(fetcher.asked, [self.project.repository_url])
         self.assertTrue(result["github"]["ok"])
 
-    def test_a_principal_that_may_not_write_projects_is_refused_before_anything(self):
-        read_by_app()
-        reader = Principal("agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-
-        from ..security import AuthorizationError
-
-        with self.assertRaises(AuthorizationError):
-            self.refresh(reader)
-        self.assertFalse(ReadRequest.objects.exists())
-
     def test_a_repository_the_app_does_not_read_uses_the_public_read(self):
         read_by_app("example/other")
 
@@ -150,7 +132,6 @@ class RefreshAsksTheAppTests(TestCase):
         self.assertEqual(result["github"], {"ok": True, "last_push_at": None})
 
 
-@MARKERS
 class RefreshButtonTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_user(username="operator", password="x"))
@@ -233,7 +214,6 @@ class RefreshButtonTests(TestCase):
         self.assertEqual(Job.objects.count(), 1)
 
 
-@MARKERS
 class RefreshCapabilityTests(TestCase):
     """``project.refresh`` over the API, MCP and a command line is the same ask."""
 

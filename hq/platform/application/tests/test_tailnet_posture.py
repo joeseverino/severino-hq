@@ -8,12 +8,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
+from hq.platform.application.markup_testing import texts
+from hq.platform.application.tests.worded import worded
 
 from ..findings import findings
 from ..inventory_testing import store
 from ..security import Capability, Principal
 from ..tailnet import TAILNET_KIND, WELL_KNOWN_PORTS, grant_ports
-from .markup import texts
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
 
@@ -85,7 +86,10 @@ class DeviceApprovalTests(TestCase):
         """Under lock a new node is filtered out until a signing key vouches
         for it, and Tailscale will not turn device approval on beside it."""
 
-        policy(settings={"devicesApprovalOn": False}, lock={"enabled": True, "trusted_keys": 2})
+        policy(
+            settings={"devicesApprovalOn": False},
+            lock={"enabled": True, "signers": [{"key": "tlpub:01"}, {"key": "tlpub:02"}]},
+        )
         self.assertEqual(raised("devices-join-without-approval"), [])
         policy(settings={"devicesApprovalOn": False}, lock={"enabled": False})
         self.assertEqual(len(raised("devices-join-without-approval")), 1)
@@ -95,7 +99,7 @@ class DeviceApprovalTests(TestCase):
 
         policy(settings={"devicesApprovalOn": False})
 
-        keys = [item.key for item in infrastructure()]
+        keys = [item.key for item in worded(infrastructure())]
 
         self.assertTrue(any(key.startswith("finding:devices-join-without-approval") for key in keys))
 

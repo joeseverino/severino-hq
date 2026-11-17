@@ -208,3 +208,35 @@ class ApprovalTitleTests(TestCase):
 
         self.assertTrue(str(held))
         self.assertNotIn("automation-source", str(held))
+
+
+class TitleTests(SimpleTestCase):
+    def test_a_controller_action_is_titled_by_its_declaration(self):
+        from hq.domains.control_plane.bridge_actions import ACTIONS
+
+        for action in ACTIONS:
+            with self.subTest(action=action.name):
+                self.assertEqual(title_of(f"bridge.{action.name}"), action.title)
+                self.assertTrue(title_of(f"bridge.{action.name}.refused"))
+
+    def test_an_operation_bound_with_its_title_reads_it(self):
+        from hq.platform.application.approvals import LAPSE, REQUEST
+        from hq.platform.application.reports import EXPORT
+        from hq.platform.application.security import MCP_OPERATION
+
+        for operation in (REQUEST, LAPSE, MCP_OPERATION, EXPORT):
+            with self.subTest(operation=str(operation)):
+                self.assertEqual(title_of(str(operation)), operation.title)
+
+    def test_a_name_a_handler_once_bound_reads_as_the_capability_that_records_it_now(self):
+        from hq.platform.application.capabilities import command_spec
+        from hq.platform.application.capability_renames import RECORDED_AS
+
+        for retired, capability in RECORDED_AS.items():
+            with self.subTest(retired=retired):
+                self.assertEqual(title_of(retired), command_spec(capability).title)
+
+    def test_a_name_nothing_declares_has_no_title(self):
+        for name in ("", "bridge.example-undeclared", "example.undeclared", "core:audit_list"):
+            with self.subTest(name=name):
+                self.assertIsNone(title_of(name))

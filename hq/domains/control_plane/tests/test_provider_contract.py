@@ -13,6 +13,7 @@ from hq.platform.application.infrastructure import (
 )
 from hq.platform.application.record_errors import PolicyError
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.consent import consented
 
 from ..desired_state import advance_dependents
 from ..models import ManagedResource
@@ -198,7 +199,7 @@ class DesiredStateOwnershipTests(TestCase):
                 kind=target.kind,
                 spec={**target.spec, "certificate_directory": "/srv/certs"},
             ),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
             current_key=target.key,
         )
 
@@ -330,7 +331,7 @@ class ProviderContractTests(TestCase):
                     "content": "192.0.2.1",
                 },
             ),
-            principal=cli_principal(),
+            consented=consented(cli_principal()),
         )
         self.assertTrue(disabled["ok"])
         with self.assertRaisesRegex(PolicyError, "Public DNS changes are off"):
@@ -345,5 +346,5 @@ class ProviderContractTests(TestCase):
                         "content": "192.0.2.1",
                     },
                 ),
-                principal=cli_principal(),
+                consented=consented(cli_principal()),
             )

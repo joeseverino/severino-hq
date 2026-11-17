@@ -25,6 +25,7 @@ from hq.domains.control_plane.models import (
     ProviderInventory,
     ReadRequest,
 )
+from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
 
 from .. import cadence, readings
@@ -36,10 +37,10 @@ from ..cadence import (
     recently_used,
     request_boot_reads,
     request_controller_sweep,
-    ring_doorbell,
     sweep_due,
     sweep_interval,
 )
+from ..report_testing import bridged
 from ..resource_operations import OperationCommand, request_reconcile
 from ..security import cli_principal
 
@@ -179,8 +180,8 @@ class DoorbellTests(TestCase):
         # rollback then took away.
         with self.captureOnCommitCallbacks(execute=True):
             request_reconcile(
-                OperationCommand(idempotency_key="test-1", reason=""),
-                principal=cli_principal(),
+                OperationCommand(reason=""),
+                consented=consented(cli_principal()),
                 current_key="a-rewrite",
             )
 
@@ -194,13 +195,13 @@ class DoorbellTests(TestCase):
         cause is a controller run that finds nothing to do.
         """
 
-        ring_doorbell()
+        cadence._ring("controller")
 
         self.assertEqual((self.directory / "doorbell").read_bytes(), b"")
 
     def test_ringing_twice_leaves_one_doorbell(self):
-        ring_doorbell()
-        ring_doorbell()
+        cadence._ring("controller")
+        cadence._ring("controller")
 
         self.assertEqual([path.name for path in self.directory.iterdir()], ["doorbell"])
 
@@ -211,16 +212,11 @@ class DoorbellTests(TestCase):
     def test_an_operator_can_request_a_due_sweep_without_provider_authority(self):
         swept(age_seconds=600)
 
-        result = request_controller_sweep(ControllerSweepCommand(), principal=cli_principal())
+        with self.captureOnCommitCallbacks(execute=True):
+            result = request_controller_sweep(ControllerSweepCommand(), principal=cli_principal())
 
-        self.assertTrue(result["requested"])
         self.assertTrue(result["due"])
         self.assertTrue((self.directory / "doorbell").exists())
-
-    @override_settings(SEVERINO_CONTROLLER_DOORBELL="/proc/nonexistent/doorbell")
-    def test_an_explicit_sweep_request_reports_an_unreachable_doorbell(self):
-        with self.assertRaisesRegex(ValueError, "could not reach the controller"):
-            request_controller_sweep(ControllerSweepCommand(), principal=cli_principal())
 
     @override_settings(SEVERINO_CONTROLLER_DOORBELL="/proc/nonexistent/doorbell")
     def test_a_doorbell_it_cannot_write_does_not_fail_the_write(self):
@@ -233,8 +229,8 @@ class DoorbellTests(TestCase):
 
         with self.captureOnCommitCallbacks(execute=True):
             result = request_reconcile(
-                OperationCommand(idempotency_key="test-2", reason=""),
-                principal=cli_principal(),
+                OperationCommand(reason=""),
+                consented=consented(cli_principal()),
                 current_key="a-rewrite",
             )
 
@@ -370,7 +366,6 @@ class CarriedConnectionRecordTests(TestCase):
                     "detail": "Not asked again this sweep.",
                 }
             ],
-            principal=cli_principal(),
             controller_id="here",
         )
 
@@ -395,7 +390,6 @@ class CarriedConnectionRecordTests(TestCase):
                     "detail": "Not asked again this sweep.",
                 }
             ],
-            principal=cli_principal(),
             controller_id="here",
         )
 
@@ -404,8 +398,9 @@ class CarriedConnectionRecordTests(TestCase):
 
 
 class BootTests(TestCase):
-    """A new image asks for delivery, and for each kind whose stored records
-    were let through under another contract; nothing polls for either."""
+    """A new image asks for delivery, for the repositories whose deployments
+    it moved, and for each kind whose stored records were let through under
+    another contract; nothing polls for any of them."""
 
     def setUp(self):
         self.settings_override, self.directory = markers()
@@ -430,7 +425,8 @@ class BootTests(TestCase):
         self.hold("github.delivery")
         self.booted()
 
-        self.assertEqual(request_boot_reads(), ("github.delivery",))
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(request_boot_reads(), ("github.delivery",))
         self.assertTrue(ReadRequest.objects.filter(kind="github.delivery").exists())
         self.assertTrue((self.directory / "doorbell").exists())
         # A boot is not a person using HQ: the idle cadence stands.
@@ -442,17 +438,30 @@ class BootTests(TestCase):
         self.assertFalse((self.directory / "doorbell").exists())
 
     def test_a_kind_whose_contract_moved_is_read_and_no_other(self):
-        self.hold("github.repository", "host.firewall")
-        self.booted(moved=["github.repository"])
+        self.hold("host.unit", "host.firewall")
+        self.booted(moved=["host.unit"])
 
-        self.assertEqual(request_boot_reads(), ("github.repository",))
-        self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", "kind")), [("", "github.repository")])
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(request_boot_reads(), ("host.unit",))
+        self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", "kind")), [("", "host.unit")])
+        self.assertTrue((self.directory / "doorbell").exists())
+        self.assertFalse(recently_used())
+
+    def test_a_boot_where_repositories_are_read_asks_for_their_deployments(self):
+        """The deploy that booted the image moved what production runs, and
+        the repositories' reading says which commit that is."""
+
+        self.hold("github.repository", "host.firewall")
+        self.booted()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(request_boot_reads(), ("github.repository",))
         self.assertTrue((self.directory / "doorbell").exists())
         self.assertFalse(recently_used())
 
     def test_a_boot_stores_the_contracts_it_asked_on(self):
-        self.hold("github.repository")
-        self.booted(moved=["github.repository"])
+        self.hold("host.firewall")
+        self.booted(moved=["host.firewall"])
         request_boot_reads()
         ReadRequest.objects.all().delete()
 
@@ -461,9 +470,9 @@ class BootTests(TestCase):
 
     def test_a_first_boot_reads_every_kind_it_holds_once(self):
         # Nothing says what the records it holds were let through as.
-        self.hold("github.repository", "host.firewall")
+        self.hold("host.unit", "host.firewall")
 
-        self.assertEqual(set(request_boot_reads()), {"github.repository", "host.firewall"})
+        self.assertEqual(set(request_boot_reads()), {"host.unit", "host.firewall"})
         self.assertEqual(request_boot_reads(), ())
 
     def test_a_kind_no_sweep_reads_is_never_asked(self):
@@ -497,11 +506,9 @@ class WorkerStandingTests(TestCase):
         """A failed first read stores no moment it was read, and only a
         controller reports one, so it says a controller has run."""
 
-        from ..sweep import record_sweep
-
-        record_sweep(
+        bridged(
+            "inventory",
             {"tailscale.policy": {"ok": False, "records": [], "error": "Tailscale refused the token."}},
-            principal=cli_principal(),
             controller_id="example-controller",
         )
 
@@ -640,13 +647,13 @@ class ControllerTimerTests(SimpleTestCase):
 
         controller = watched("severino-hq-controller.path", "PathChanged")
         for ring, unit, key in (
-            (cadence.ring_doorbell, "severino-hq-controller.path", "PathChanged"),
-            (cadence.ring_glance_doorbell, "severino-hq-glance.path", "PathExists"),
-            (cadence.ring_automation_doorbell, "severino-hq-automation.path", "PathExists"),
+            ("controller", "severino-hq-controller.path", "PathChanged"),
+            ("glance", "severino-hq-glance.path", "PathExists"),
+            ("automation", "severino-hq-automation.path", "PathExists"),
         ):
             with self.subTest(unit=unit), tempfile.TemporaryDirectory() as directory:
                 with override_settings(SEVERINO_CONTROLLER_DOORBELL=str(Path(directory) / controller.name)):
-                    self.assertTrue(ring())
+                    self.assertTrue(cadence._ring(ring))
                 (rung,) = Path(directory).iterdir()
                 self.assertEqual(controller.with_name(rung.name), watched(unit, key))
 

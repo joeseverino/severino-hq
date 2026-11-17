@@ -7,7 +7,7 @@ center read ``estate_reading``; none keeps a list of its own.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from hq.domains.control_plane.provider_adapters.tls import (
@@ -19,21 +19,18 @@ from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 lazy from hq.domains.control_plane.names import in_zone
 
-from .card_items import Insight, Kpi
+from .action_links import read_link
+from .card_items import Kpi
 from .certificate_expiry import serving
 from .connection_lifecycle import Lifecycle, probed, standing
-from .derivations import reached
 from .drawings import Dot, Dots
 from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
-from .first_seen import dated
-from .item_help import cannot_help
-from .moments import ago, when_day
+from .moments import moment, when_day
 from .projection import read_once
 from .security import Principal
-from .service_health import UNKNOWN
-from .timestamps import moment
-from .ui import DomainOverview, counted, ended
+from .tone import Tone
+from .ui import DomainOverview, counted
 from .workflow_contracts import ActionLink
 lazy from . import connections, services, zones
 lazy from .connection_catalog import connection_total
@@ -41,12 +38,10 @@ lazy from .connections import connection_rows
 lazy from .credential_sight import credential_sight
 lazy from .facts import Subject, inventory_about, readings
 lazy from .infrastructure import enabled_resources
+lazy from .machines import MachineState
 lazy from .services import service_reading
 lazy from .zones import ZONE_KIND
 
-# A machine that holds something for the estate and has been offline this long
-# is an action item. Shorter gaps are restarts.
-OFFLINE_AFTER = timedelta(hours=1)
 # An edge certificate renews itself well before this; inside it, renewal is failing.
 EDGE_RENEWAL_OVERDUE_DAYS = 14
 MANAGED_CERTIFICATE_KINDS = (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND)
@@ -60,7 +55,7 @@ def subject_link(kind: str, name: str) -> ActionLink | None:
     if not name:
         return None
     link = entity_link(kind, name)
-    return ActionLink("subject", link.label, "read", link.url) if link.url else None
+    return read_link("subject", link.label, link.url) if link.url else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,18 +121,17 @@ class Estate:
 
     @property
     def online(self) -> tuple[Any, ...]:
-        return tuple(item for item in self.machines if item.state[0] == "online")
+        return tuple(item for item in self.machines if item.state is MachineState.ONLINE)
 
     @property
     def offline(self) -> tuple[Any, ...]:
         # A personal device that is off reads as away, never offline.
-        return tuple(item for item in self.machines if item.state[0] == "offline")
+        return tuple(item for item in self.machines if item.state is MachineState.OFFLINE)
 
     @property
     def watched(self) -> tuple[Any, ...]:
-        # What "online" is out of: a machine no connection reaches (an offline
-        # CA, a printer) and a personal device that is away are not missing.
-        return tuple(item for item in self.machines if item.state[1] != "unprobed")
+        # What "online" is out of.
+        return tuple(item for item in self.machines if item.state.watched)
 
     @property
     def empty(self) -> bool:
@@ -290,7 +284,7 @@ def cards(*, principal: Principal) -> tuple[dict[str, Any], ...]:
             "value": str(len(estate.online)),
             "url": reverse("control_plane:machines"),
             "detail": (f"{len(estate.offline)} offline" if estate.offline else f"of {len(estate.watched)}"),
-            **({"status": "attention"} if estate.offline else {}),
+            **({"status": Tone.ATTENTION} if estate.offline else {}),
         },
         {
             "id": "hq.estate.services",
@@ -326,7 +320,7 @@ def cards(*, principal: Principal) -> tuple[dict[str, Any], ...]:
                     "value": counted(max(first.days, 0), "day"),
                     "url": first.url or reverse(listed),
                     "detail": dotted(first.subject, first.source, "not renewed by its issuer" if first.overdue else ""),
-                    **({"status": "attention"} if first.overdue else {}),
+                    **({"status": Tone.ATTENTION} if first.overdue else {}),
                 }
             )
     if total := connection_total(principal=principal):
@@ -352,7 +346,7 @@ def _connections_card(estate: Estate, total: int) -> dict[str, Any]:
         }
     elif troubled:
         card["detail"] = f"{len(troubled)} with a problem"
-    return card | ({"status": "attention"} if troubled else {})
+    return card | ({"status": Tone.ATTENTION} if troubled else {})
 
 
 def _answers_at(machine) -> str:
@@ -375,7 +369,7 @@ def overview(*, principal: Principal):
     # A service is drawn when HQ reads its health, as a machine is when a
     # connection reaches it: one with no health reading (a DNS record only,
     # hosted elsewhere) is neither up nor down, and a hollow dot would say down.
-    checked = tuple(service for service in estate.services if service.health.state != UNKNOWN)
+    checked = tuple(service for service in estate.services if service.health.state is not None)
     # A part of a whole is drawn as well as said: one dot a machine or a
     # service, naming it when pointed at and leading to its page. On the
     # overview only: the cards are also a transport payload, which carries no
@@ -384,8 +378,8 @@ def overview(*, principal: Principal):
         "hq.estate.machines": Dots(
             tuple(
                 Dot(
-                    filled=machine.state[0] == "online",
-                    tip=dotted(machine.name, _answers_at(machine), machine.state[0]),
+                    filled=machine.state is MachineState.ONLINE,
+                    tip=dotted(machine.name, _answers_at(machine), machine.state),
                     url=entity_link("machine", machine.name).url,
                 )
                 for machine in estate.watched
@@ -396,7 +390,7 @@ def overview(*, principal: Principal):
                 # Filled for what the services page calls healthy, so a dot is
                 # never greener than the State it leads to.
                 Dot(
-                    filled=service.health.state == "good",
+                    filled=service.health.state == Tone.GOOD,
                     tip=dotted(service.hostname, service.faults[0] if service.faults else service.health.label),
                     url=entity_link("service", service.hostname).url,
                 )
@@ -445,66 +439,3 @@ def overview(*, principal: Principal):
             for card in shown
         ),
     )
-
-
-# ----- Action items ---------------------------------------------------------
-
-
-@dated
-def attention() -> tuple[Insight, ...]:
-    """Offline machines the estate depends on.
-
-    A connection that does not answer is the ``connection-not-answering``
-    finding; a domain that will not renew is ``registration-lapsing``, and a
-    certificate near expiry is ``certificate-expiring``.
-    """
-
-    return _offline(estate_reading())
-
-
-def _holds_something(machine) -> bool:
-    return bool(machine.declaration or machine.hostnames or machine.containers or machine.roles or machine.runs_hq)
-
-
-def _offline(estate: Estate) -> tuple[Insight, ...]:
-    items = []
-    for machine in estate.machines:
-        presence = machine.presence
-        # A person's laptop asleep or phone away is normal, not an outage.
-        if presence is None or presence.online or presence.personal or not _holds_something(machine):
-            continue
-        seen = moment(presence.last_seen)
-        if seen is None or seen.year < 2000 or not reached(seen + OFFLINE_AFTER):
-            continue
-        serves = bool(machine.hostnames or machine.roles or machine.runs_hq)
-        what = ", ".join(role.label for role in machine.roles)
-        items.append(
-            Insight(
-                status="serious" if serves else "attention",
-                eyebrow="Machines",
-                key=f"estate-offline:{machine.name}",
-                title=f"{machine.name} is offline",
-                value="1",
-                body=(
-                    f"Last seen {ago(seen)}."
-                    + (ended(f" It is the {what}") if what else "")
-                    + (f" It serves {counted(len(machine.hostnames), 'name')}." if machine.hostnames else "")
-                ),
-                why=(
-                    f"Tailscale last saw it {ago(seen)}, and a machine that serves a name or a role is urgent "
-                    "while it is away."
-                    if serves
-                    else f"Tailscale last saw it {ago(seen)}, and a machine that serves no name or role needs "
-                    "attention while it is away."
-                ),
-                action="Open machine",
-                url=machine.url,
-                subject=subject_link("machine", machine.name),
-                since=seen,
-                workflow=cannot_help(
-                    f"estate-offline:{machine.name}",
-                    "HQ has no power or console access to machines. Bring it back on the machine itself.",
-                ),
-            )
-        )
-    return tuple(items)

@@ -46,13 +46,6 @@ worth interrupting for.
     {% for field in spec.advanced %}{{ field.as_field_group }}{% endfor %}
     {% if resource %}
       {{ identity }}
-      {% if kind == "machine" %}
-        <div class="field">
-          <label for="id_show_on_dashboard">Show on dashboard</label>
-          <input id="id_show_on_dashboard" type="checkbox" name="show_on_dashboard"{% if show_on_dashboard %} checked{% endif %}>
-          <p class="help">Its CPU, memory and storage in the dashboard header.</p>
-        </div>
-      {% endif %}
     {% endif %}
   {% endsection %}
 {% endif %}

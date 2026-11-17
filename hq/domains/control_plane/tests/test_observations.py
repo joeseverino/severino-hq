@@ -16,7 +16,6 @@ from hq.domains.control_plane.observations import (
 )
 from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.application.inventory import record_inventory
-from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.sentinel import SENTINEL
 
 
@@ -142,10 +141,7 @@ class StampTests(SimpleTestCase):
 
 class IngestTests(TestCase):
     def _sweep(self, records):
-        record_inventory(
-            {"host.perimeter": {"ok": True, "records": records}},
-            principal=cli_principal(),
-        )
+        record_inventory({"host.perimeter": {"ok": True, "records": records}})
         return ProviderInventory.objects.get(kind="host.perimeter")
 
     def test_a_stored_reading_keeps_only_its_schema(self):
@@ -172,10 +168,7 @@ class IngestTests(TestCase):
 
 class NotConnectedIngestTests(TestCase):
     def test_not_connected_is_stored(self):
-        record_inventory(
-            {"host.perimeter": {"ok": True, "records": [], "connected": False}},
-            principal=cli_principal(),
-        )
+        record_inventory({"host.perimeter": {"ok": True, "records": [], "connected": False}})
 
         stored = ProviderInventory.objects.get(kind="host.perimeter")
         self.assertFalse(stored.connected)

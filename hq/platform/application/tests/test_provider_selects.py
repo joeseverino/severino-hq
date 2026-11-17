@@ -23,7 +23,7 @@ from pydantic import TypeAdapter
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.platform.application.tests.markup import all_elements, select
+from hq.platform.application.markup_testing import all_elements, select
 
 from ..plugins import import_reference
 from ..provider_forms import spec_form_class

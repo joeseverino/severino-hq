@@ -6,10 +6,11 @@ recent readings, or an ``AllocationBar``, the parts of one whole as one bar.
 """
 
 import math
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from .display_words import display
-lazy from .ui import STATUS_VALUES
+from .tone import Tone
+lazy from .ui import measured
 
 
 @display
@@ -148,13 +149,7 @@ class Share:
     slot: int
     url: str = ""
     detail: str = ""
-    tone: str = ""
-
-    def __post_init__(self) -> None:
-        if self.tone and self.tone not in STATUS_VALUES:
-            raise ValueError(
-                f"Share tone must be one of {', '.join(sorted(STATUS_VALUES))} or empty; got {self.tone!r}."
-            )
+    tone: Tone | Literal[""] = ""
 
 
 @display
@@ -202,7 +197,7 @@ class AllocationBar:
         """Each part with a value, and its share of the whole as a percent."""
 
         whole = sum(part.value for part in self.parts)
-        return tuple((part, f"{part.value / whole:.0%}") for part in self.parts if part.value > 0)
+        return tuple((part, measured(part.value * 100 / whole, "%", 0)) for part in self.parts if part.value > 0)
 
     @property
     def links(self) -> bool:

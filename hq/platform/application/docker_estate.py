@@ -1,8 +1,7 @@
 """The Docker readings joined into the relation graph, and what they imply.
 
 A container running an image its own tag no longer names
-locally, an image with no tag at all, or one started by tag alone when the
-machine holds the digest it could be pinned to, is a fact on its machine, and a
+locally, or an image with no tag at all, is a fact on its machine, and a
 finding reads it from there, as it reads a container no compose project
 declares. Nothing here calls a registry: "behind" means behind the image
 already pulled onto the machine.
@@ -31,14 +30,13 @@ from .finding_model import (
     cannot_run_commands,
     machine_step,
 )
-from .images import ImageRef
+from .tone import Tone
 from .ui import ended
 lazy from .adoption import unmanaged
 lazy from .inventory import record_token
 
 IMAGE_BEHIND = "image-behind"
 IMAGE_UNTAGGED = "image-untagged"
-IMAGE_UNPINNED = "image-unpinned"
 
 
 def add(nodes, machine: Callable[[Any], str]) -> None:
@@ -109,39 +107,6 @@ def image_verdicts(records: Iterable[Mapping[str, Any]]) -> list[tuple[str, ...]
     return found
 
 
-def unpinned(records: Iterable[Mapping[str, Any]]) -> list[tuple[str, ...]]:
-    """``(container, reference, running id, pin, service)`` for each container
-    started by tag alone, with ``pin`` the reference locked to the registry
-    digest the machine holds for it.
-
-    An image the machine built, or holds under another name, has no registry
-    digest to pin to, so nothing is claimed for it.
-    """
-
-    found = []
-    for record in records:
-        pulled = {
-            ref.name: ref.digest
-            for named in record.get("digests") or ()
-            if (ref := ImageRef.parse(str(named))) is not None and ref.digest
-        }
-        for user in record.get("containers") or ():
-            reference = str(user.get("reference", ""))
-            ref = ImageRef.parse(reference)
-            if ref is None or ref.digest or not (digest := pulled.get(ref.name)):
-                continue
-            found.append(
-                (
-                    str(user.get("container", "")),
-                    reference,
-                    str(record.get("id", "")),
-                    f"{reference}@{digest}",
-                    str(user.get("service", "")),
-                )
-            )
-    return found
-
-
 def _image_facts(nodes, machine) -> None:
     by_environment: dict[tuple[str, Any], list[Mapping[str, Any]]] = {}
     for _snapshot, record in inventory_records(IMAGE_KIND):
@@ -159,9 +124,6 @@ def _image_facts(nodes, machine) -> None:
                 "|".join((f"{container}@{host}", reference, short_id(running), short_id(tagged), service)),
             )
             for fact, container, reference, running, tagged, service in image_verdicts(records)
-        ) + tuple(
-            (IMAGE_UNPINNED, "|".join((f"{container}@{host}", reference, short_id(running), pin, service)))
-            for container, reference, running, pin, service in unpinned(records)
         )
         for fact in added:
             _add_fact(nodes, host_id, fact)
@@ -208,7 +170,7 @@ def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
                     rule="unrecognized-container",
                     subject=node.id,
                     title=f"Unrecognized container {name} on {node.label}",
-                    severity="serious",
+                    severity=Tone.SERIOUS,
                     explanation=(
                         "No compose project started it, so HQ is not tracking it. "
                         "Adopt it if you started it. Otherwise find what did and remove it."
@@ -225,7 +187,6 @@ def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
                             capability="infrastructure.resource.create",
                             target=name,
                             intent="Adopt it",
-                            effect="HQ starts watching it like any other container.",
                             url=adopt_url,
                             method="POST",
                         ),
@@ -249,7 +210,7 @@ def images_behind(estate: FindingEstate) -> tuple[Finding, ...]:
             rule="container-image-behind",
             subject=node.id,
             title=f"{container} on {node.label} runs an older {reference}",
-            severity="attention",
+            severity=Tone.ATTENTION,
             explanation=(
                 f"{reference} on this machine is now image {tagged}, and the "
                 f"container still runs {ended(running)} Recreate it to run what "
@@ -277,7 +238,7 @@ def images_untagged(estate: FindingEstate) -> tuple[Finding, ...]:
             rule="container-image-untagged",
             subject=node.id,
             title=f"{container} on {node.label} runs an untagged image",
-            severity="attention",
+            severity=Tone.ATTENTION,
             explanation=(
                 "No tag on this machine names the image it runs, so its "
                 "version cannot be told or reproduced. Pin a tag in its "
@@ -292,37 +253,6 @@ def images_untagged(estate: FindingEstate) -> tuple[Finding, ...]:
             steps=_recreate(container, service, host or node.label),
         )
         for node, container, host, reference, running, _tagged, service in _stated(estate, IMAGE_UNTAGGED)
-    ]
-    return tuple(sorted(found, key=lambda item: item.title))
-
-
-def images_unpinned(estate: FindingEstate) -> tuple[Finding, ...]:
-    """A container started by tag alone from an image it could be pinned to.
-
-    The reference is the whole judgment: a tag can later name a different
-    build, so the next pull or recreate may run one nobody chose, and a digest
-    always names the same one.
-    """
-
-    found = [
-        Finding(
-            rule="container-image-unpinned",
-            subject=node.id,
-            title=f"{container} on {node.label} runs {reference} by tag alone",
-            severity="attention",
-            explanation="A tag can later name a different build. Pin it by digest.",
-            part=container,
-            evidence=(
-                ("Container", container),
-                ("Image reference", reference),
-                ("Pin it as", pin),
-            ),
-            steps=(
-                OperatorStep(label=f"In the compose file that runs {container}, set its image to {pin}"),
-                *_recreate(container, service, host or node.label),
-            ),
-        )
-        for node, container, host, reference, _running, pin, service in _stated(estate, IMAGE_UNPINNED)
     ]
     return tuple(sorted(found, key=lambda item: item.title))
 
@@ -343,41 +273,31 @@ RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "unrecognized-container",
         "Container started outside compose",
-        "serious",
+        Tone.SERIOUS,
         unrecognized_containers,
         operator_action=("Adopt it if you started it. Otherwise remove it on its machine."),
         no_help_reason=("HQ cannot remove a container it did not start."),
         card=CONTAINERS_CARD,
-        bars={"serious": "a container runs that no compose project started"},
+        bars={Tone.SERIOUS: "a container runs that no compose project started"},
     ),
     FindingRule(
         "container-image-behind",
         "Container runs an older image than its tag",
-        "attention",
+        Tone.ATTENTION,
         images_behind,
         operator_action=("Recreate the container from its compose project so it runs the image its tag names now."),
         no_help_reason=cannot_run_commands(),
         card=CONTAINERS_CARD,
-        bars={"attention": "a container runs an older image than its tag names now"},
+        bars={Tone.ATTENTION: "a container runs an older image than its tag names now"},
     ),
     FindingRule(
         "container-image-untagged",
         "Container runs an untagged image",
-        "attention",
+        Tone.ATTENTION,
         images_untagged,
         operator_action=("Pin a tag for the image in the container's compose file and recreate it."),
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,
-        bars={"attention": "a container runs an image with no tag"},
-    ),
-    FindingRule(
-        "container-image-unpinned",
-        "Container runs an image by tag alone",
-        "attention",
-        images_unpinned,
-        operator_action=("Pin the image by digest in the container's compose file and recreate it."),
-        no_help_reason=CANNOT_EDIT_COMPOSE,
-        card=CONTAINERS_CARD,
-        bars={"attention": "a container names its image by tag, with no digest"},
+        bars={Tone.ATTENTION: "a container runs an image with no tag"},
     ),
 )

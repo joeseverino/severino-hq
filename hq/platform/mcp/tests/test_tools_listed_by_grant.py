@@ -29,11 +29,21 @@ def _callers():
 
 
 ARGUMENTS = {"export_year_summary": {"year": 2026}}
-# The tools run or read by kind, and the catalog entry each is usable by.
+# The tools run or read by kind, and the catalog entry each is usable by. An entry's
+# `permitted` or `refused` left out holds the default, false: the capability index
+# states only a refusal.
 BY_CATALOG = {
-    "execute_capability": ("describe_capabilities", "capabilities", lambda entry: True),
-    "list_resource": ("describe_resources", "resources", lambda entry: entry["operations"].get("list") is not None),
-    "get_resource": ("describe_resources", "resources", lambda entry: entry["operations"].get("get") is not None),
+    "execute_capability": ("describe_capabilities", "capabilities", lambda entry: not entry.get("refused", False)),
+    "list_resource": (
+        "describe_resources",
+        "resources",
+        lambda entry: entry.get("permitted", False) and entry["operations"].get("list") is not None,
+    ),
+    "get_resource": (
+        "describe_resources",
+        "resources",
+        lambda entry: entry.get("permitted", False) and entry["operations"].get("get") is not None,
+    ),
 }
 # A record no kind holds: reading it is refused for the grant before it is looked for.
 MISSING = "example-missing"
@@ -55,9 +65,9 @@ async def _tools(client, server):
     for name in server.tools:
         if name in BY_CATALOG:
             catalog, field, serves = BY_CATALOG[name]
-            # An entry left out of its catalog, or its `permitted`, holds the default: none, false.
+            # An entry left out of its catalog holds the default: none.
             entries = (await client.call_tool(catalog, {})).structured_content.get(field, [])
-            usable[name] = any(entry.get("permitted", False) and serves(entry) for entry in entries)
+            usable[name] = any(serves(entry) for entry in entries)
         else:
             answer = await client.call_tool(name, ARGUMENTS.get(name, {}))
             usable[name] = not answer.is_error or answer.structured_content["error"]["code"] != "forbidden"

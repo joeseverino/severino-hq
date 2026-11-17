@@ -3,7 +3,6 @@
 import json
 import re
 from datetime import UTC, datetime, timedelta
-from html import unescape
 from pathlib import Path
 
 from django.test import SimpleTestCase, TestCase, tag
@@ -19,6 +18,7 @@ from hq.domains.control_plane.observations.host import (
     STATUS_WORD,
     UNREADABLE_WORD,
 )
+from hq.platform.application.markup_testing import all_elements
 
 from .. import render_status_findings as rules
 from ..dashboard import work_queue
@@ -26,7 +26,7 @@ from ..findings import derive_findings
 from ..inventory import record_inventory
 from ..inventory_testing import store
 from ..projection import projection_scope
-from ..security import cli_principal, web_principal
+from ..security import web_principal
 from ..topology import derive_topology
 from .commands import commands_on
 from .test_remedy_links import TRAP, UNOFFERED, _command_links, an_operator
@@ -470,10 +470,7 @@ class UnreadTests(TestCase):
         self.assertEqual([item["value"] for item in finding["evidence"] if item["label"] == "Job"], ["other-apps"])
 
     def test_a_record_the_schema_refused_is_a_finding_not_a_silence(self):
-        record_inventory(
-            {RENDER_STATUS_KIND: {"ok": True, "records": [{"renderer": "hq", "state": "fine"}]}},
-            principal=cli_principal(),
-        )
+        record_inventory({RENDER_STATUS_KIND: {"ok": True, "records": [{"renderer": "hq", "state": "fine"}]}})
         self.assertEqual(ProviderInventory.objects.get(kind=RENDER_STATUS_KIND).records, [])
 
         (finding,) = raised("render-status-unread")
@@ -560,7 +557,9 @@ class PageTests(TestCase):
             self.assertIn("could not refresh its credentials from 1Password", body)
             self.assertIn("sudo systemctl start severino-hq-secrets.service", commands_on(body))
             emitted += [
-                (unescape(match.group(1)), "GET") for match in re.finditer(r'<a [^>]*href="(/commands/[^"]+)"', body)
+                (element.attrs["href"], "GET")
+                for element in all_elements(body)
+                if element.tag == "a" and element.attrs.get("href", "").startswith("/commands/")
             ]
         principal = web_principal(self.user)
         with projection_scope():

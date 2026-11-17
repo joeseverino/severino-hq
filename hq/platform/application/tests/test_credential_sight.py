@@ -18,7 +18,7 @@ from hq.domains.control_plane.provider_adapters.contracts import (
     PERMISSION_REFUSAL,
 )
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.platform.application.tests.markup import text
+from hq.platform.application.markup_testing import text
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import _controller_contract
@@ -32,7 +32,6 @@ from ..credential_sight import (
     sight_by_connection,
 )
 from ..inventory import record_inventory
-from ..security import cli_principal
 
 
 class ExampleRecord(ObservationRecord):
@@ -326,7 +325,7 @@ class RefusalEndToEndTests(TestCase):
             for kind, spec in OBSERVATIONS.items()
             if spec.provider == "cloudflare_api" and spec.read_by == "controller"
         }
-        record_inventory(report, principal=cli_principal())
+        record_inventory(report)
         return report, by_provider()["cloudflare_api"]
 
     def test_a_refused_credential_reaches_the_page_as_one_refusal(self):
@@ -358,11 +357,8 @@ class RefusalEndToEndTests(TestCase):
         self.assertIn(spec.label, d1.remedy)
 
     def test_a_refusal_is_cleared_by_a_read_that_succeeds(self):
-        record_inventory(
-            {"host.perimeter": {"ok": False, "records": [], "error": "x", "refusal": CREDENTIAL_REFUSAL}},
-            principal=cli_principal(),
-        )
-        record_inventory({"host.perimeter": {"ok": True, "records": []}}, principal=cli_principal())
+        record_inventory({"host.perimeter": {"ok": False, "records": [], "error": "x", "refusal": CREDENTIAL_REFUSAL}})
+        record_inventory({"host.perimeter": {"ok": True, "records": []}})
 
         self.assertEqual(ProviderInventory.objects.get(kind="host.perimeter").refusal, "")
 

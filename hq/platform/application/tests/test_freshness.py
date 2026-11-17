@@ -1,13 +1,16 @@
 """One freshness rule per reading kind, used by every surface."""
 
+from dataclasses import replace
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection
+from hq.platform.application.markup_testing import elements, links, select, text
 
 from ..entity_links import entity_link
 from ..freshness import (
@@ -17,13 +20,13 @@ from ..freshness import (
     NEVER,
     SSH_PROBE,
     STALE,
+    ReadCadence,
     cadence,
     freshness,
     stale_after,
 )
+from ..plugin_testing import installed, sibling
 from ..report_testing import report_connections
-from ..security import cli_principal
-from .markup import elements, links, select, text
 
 # A kind the controller sweeps, read through a provider's API.
 SWEPT = "adguard.rewrite"
@@ -62,10 +65,105 @@ class FreshnessTests(TestCase):
         self.assertEqual(stale_after("host.perimeter"), timedelta(hours=2))
         self.assertEqual(stale_after(), timedelta(hours=2))
 
+    def test_a_record_is_left_behind_once_its_kind_is_read_over_an_hour_after_it(self):
+        from ..freshness import behind
+
+        newest = timezone.now()
+        self.assertFalse(behind(newest - timedelta(hours=1), newest))
+        self.assertTrue(behind(newest - timedelta(hours=1, seconds=1), newest))
+        self.assertFalse(behind(None, newest))
+        self.assertFalse(behind(newest, None))
+
     def test_the_join_engine_uses_the_same_rule(self):
         from .. import facts
 
-        self.assertIs(facts.stale_after, stale_after)
+        self.assertIs(facts.freshness, freshness)
+
+    def test_a_cadence_is_two_positive_spans(self):
+        with self.assertRaises(ValueError):
+            ReadCadence(timedelta(0), timedelta(days=1))
+        with self.assertRaises(ValueError):
+            ReadCadence(timedelta(days=1), -timedelta(days=1))
+        with self.assertRaises(TypeError):
+            ReadCadence(timedelta(days=1), 2)
+
+
+# An extension's own kind, read when somebody asks.
+EXAMPLE_KIND = "example.readings"
+
+
+def declaring(identifier, declared):
+    """An example extension whose ``cadences`` answers ``declared``."""
+
+    manifest, integration = sibling(identifier=identifier)
+    return manifest, replace(integration, cadences=lambda: declared)
+
+
+def every(days, stale_days):
+    found = ReadCadence(timedelta(days=days), timedelta(days=stale_days))
+    return lambda: found
+
+
+class ExtensionCadenceTests(TestCase):
+    """An extension's kind is judged by the cadence it declares, on every surface."""
+
+    def test_its_readings_are_due_and_stale_on_its_own_cadence(self):
+        now = timezone.now()
+        with installed(declaring("example.alpha", {EXAMPLE_KIND: every(1, 4)})):
+            self.assertEqual(freshness(EXAMPLE_KIND, now - timedelta(hours=1), now).state, CURRENT)
+            self.assertEqual(freshness(EXAMPLE_KIND, now - timedelta(days=2), now).state, DUE)
+            self.assertEqual(freshness(EXAMPLE_KIND, now - timedelta(days=4), now).state, STALE)
+            self.assertEqual(stale_after(EXAMPLE_KIND), timedelta(days=4))
+
+    def test_its_connections_go_stale_on_its_own_cadence(self):
+        from ..connection_catalog import connection_lifecycle
+        from ..connections import ConnectionInstance
+
+        now = timezone.now()
+
+        def lifecycle(age):
+            instance = ConnectionInstance(
+                "one", "One", EXAMPLE_KIND, "good", "ok", credential_model="none", observed_at=now - age
+            )
+            return connection_lifecycle(instance, "proven", now=now)
+
+        with installed(declaring("example.alpha", {EXAMPLE_KIND: every(30, 30)})):
+            self.assertEqual(lifecycle(timedelta(days=20)), "ready")
+            self.assertEqual(lifecycle(timedelta(days=31)), "stale")
+
+    def test_a_kind_the_host_declares_or_two_extensions_claim_is_refused(self):
+        weekly = every(7, 7)
+        cases = {
+            "the host's": (declaring("example.alpha", {DASHBOARD_GLANCE: weekly}),),
+            "twice": (
+                declaring("example.alpha", {EXAMPLE_KIND: weekly}),
+                declaring("example.beta", {EXAMPLE_KIND: weekly}),
+            ),
+            "not a callable": (declaring("example.alpha", {EXAMPLE_KIND: weekly()}),),
+        }
+        for case, siblings in cases.items():
+            with self.subTest(case), installed(*siblings), self.assertRaises(ImproperlyConfigured):
+                freshness("example.other", timezone.now())
+
+    def test_a_kinds_cadence_is_asked_only_as_that_kind_is_judged(self):
+        asked = []
+
+        def weekly():
+            asked.append(EXAMPLE_KIND)
+            return ReadCadence(timedelta(days=7), timedelta(days=7))
+
+        with installed(declaring("example.alpha", {EXAMPLE_KIND: weekly})):
+            freshness("example.other", timezone.now())
+            self.assertEqual(asked, [])
+            self.assertEqual(stale_after(EXAMPLE_KIND), timedelta(days=7))
+            self.assertEqual(asked, [EXAMPLE_KIND])
+
+    def test_a_kind_answered_with_no_cadence_is_refused(self):
+        with (
+            installed(declaring("example.alpha", {EXAMPLE_KIND: lambda: timedelta(days=7)})),
+            self.assertRaises(ImproperlyConfigured),
+        ):
+            freshness(EXAMPLE_KIND, timezone.now())
 
 
 def ssh_report(**extra):
@@ -83,15 +181,11 @@ class CarriedConnectionTests(TestCase):
     """An SSH connection carried between probes is still reported each pass."""
 
     def test_a_carried_connection_is_reported_now_and_probed_earlier(self):
-        report_connections([ssh_report()], principal=cli_principal(), controller_id="c")
+        report_connections([ssh_report()], controller_id="c")
         earlier = timezone.now() - timedelta(minutes=48)
         ProviderConnection.objects.update(observed_at=earlier, reported_at=earlier)
 
-        report_connections(
-            [ssh_report(carried=True, probed=False)],
-            principal=cli_principal(),
-            controller_id="c",
-        )
+        report_connections([ssh_report(carried=True, probed=False)], controller_id="c")
 
         row = ProviderConnection.objects.get()
         self.assertEqual(row.observed_at, earlier)
@@ -105,7 +199,7 @@ class CarriedConnectionTests(TestCase):
         self.assertEqual(reading.probed_at, earlier)
 
     def test_a_probed_connection_has_no_separate_probe_time(self):
-        report_connections([ssh_report()], principal=cli_principal(), controller_id="c")
+        report_connections([ssh_report()], controller_id="c")
 
         from ..connections import connection_readings
 

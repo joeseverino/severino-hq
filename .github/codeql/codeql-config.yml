@@ -53,6 +53,12 @@ query-filters:
   # reads, and it reads `type` statements.
   - exclude:
       id: py/unused-global-variable
+  # py/undefined-export reads a name a `type` statement (PEP 695) binds as
+  # undefined, so a field alias exported through __all__, as command_fields'
+  # markers are, is reported. Ruff's F822 holds the rule it makes, on every
+  # file, and reads `type` statements.
+  - exclude:
+      id: py/undefined-export
 
 # The type checker's settings shim, for the host's mypy and each extension's.
 # django-stubs reads a settings module's names statically, so it re-exports

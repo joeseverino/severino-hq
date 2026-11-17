@@ -7,20 +7,21 @@ authorization and mutation; capability links are additionally filtered here so
 a projection never advertises authority its principal does not hold.
 """
 
-from collections.abc import Iterable
-from dataclasses import dataclass, replace
-from typing import Protocol
+from collections.abc import Iterable, Mapping
+from dataclasses import MISSING, dataclass, fields
+from typing import Any, Protocol
 from urllib.parse import urlencode
 
 from django.urls import NoReverseMatch
 
 from hq.platform.application.routes import reverse
 
-from .contracts import route_url
+from .contracts import Effect, route_url
 from .security import Principal
 from .ui import counted
 from .workflow_contracts import ActionLink
 lazy from . import capabilities, outbound_work
+lazy from .pages import command_reach
 
 
 class ConnectionLinkSpec(Protocol):
@@ -49,10 +50,36 @@ def connection_action_links(spec: ConnectionLinkSpec) -> tuple[ActionLink, ...]:
         if not url or url in seen:
             continue
         seen.add(url)
-        actions.append(ActionLink(name, label, "read", url))
+        actions.append(read_link(name, label, url))
     if spec.documentation_url:
-        actions.append(ActionLink("documentation", "Documentation", "read", spec.documentation_url))
+        actions.append(read_link("documentation", "Documentation", spec.documentation_url))
     return tuple(actions)
+
+
+def read_link(name: str, label: str, url: str, *, reason: str = "", recommended: bool = False) -> ActionLink:
+    """A link that only opens a page: a read, by GET, that runs no command.
+
+    The way every offer that is no command's is built, so only
+    ``command_action`` gives one an effect, a method or a capability.
+    """
+
+    return _built(name=name, label=label, effect=Effect.READ, url=url, reason=reason, recommended=recommended)
+
+
+def _built(**values: Any) -> ActionLink:
+    """The link whose fields the page or command factory has derived."""
+
+    link = object.__new__(ActionLink)
+    for field in fields(ActionLink):
+        value = values.get(field.name, field.default)
+        if value is MISSING:
+            raise TypeError(f"Missing link field: {field.name}")
+        object.__setattr__(link, field.name, value)
+    return link
+
+
+# The route of every command's own page, by its name.
+COMMAND_ROUTE = "command"
 
 
 def command_url(name: str, target: str = "", *, kinds: Iterable[str] = (), **query: str | tuple[str, ...]) -> str:
@@ -67,7 +94,7 @@ def command_url(name: str, target: str = "", *, kinds: Iterable[str] = (), **que
     """
 
     try:
-        url = reverse("command", kwargs={"name": name})
+        url = reverse(COMMAND_ROUTE, kwargs={"name": name})
     except NoReverseMatch:
         return ""
     params = [("target", target)] if target else []
@@ -84,10 +111,11 @@ def command_url(name: str, target: str = "", *, kinds: Iterable[str] = (), **que
 def command_action(
     name: str,
     capability: str,
-    url: str,
+    url: str = "",
     *,
-    target: str = "",
-    method: str = "GET",
+    target: str | Mapping[str, str] = "",
+    method: str = "",
+    query: Mapping[str, str] | None = None,
     variant: str = "",
     intent: str = "",
     reason: str = "",
@@ -97,27 +125,38 @@ def command_action(
 
     The one place an ``ActionLink`` names a capability (an architecture test
     holds every other module to it), so its label and effect are read from the
-    declaration and cannot drift from it.
+    declaration and cannot drift from it. Its address and method are the
+    command's too (``pages.command_reach``), as a page's control for it is:
+    the route whose view runs it, posted where that view draws no page.
+    ``target`` is the record it runs on, or the route's arguments by name;
+    ``query`` is added to the address. A ``url`` and ``method`` handed in
+    are the remedies' that still carry their own (``FindingRemedy``).
     """
 
     spec = capabilities.command_spec(capability)
-    return ActionLink(
-        name,
+    subject = "" if isinstance(target, Mapping) else target
+    if not url:
+        url, answers_get = command_reach(capability, target, variant)
+        method = "GET" if answers_get else "POST"
+        if url and query:
+            url = f"{url}{'&' if '?' in url else '?'}{urlencode(query)}"
+    return _built(
+        name=name,
         # ``variant`` picks one of the words the command declares for its
         # modes; ``intent`` is a remedy's own words for what this press does
         # ("Add an access list"), where the command's would not.
-        intent or spec.words(variant),
-        spec.effect,
-        url,
-        method=method,
+        label=intent or spec.words(variant),
+        effect=spec.effect,
+        url=url,
+        method=method or "GET",
         capability=capability,
-        target=target,
+        target=subject,
         reason=reason,
         recommended=recommended,
         # Why the command would be refused for ``target`` now, so every
         # renderer draws it unusable with that reason instead of offering a
         # press that fails.
-        refusal=outbound_work.refusal(capability, target),
+        refusal=outbound_work.refusal(capability, subject),
     )
 
 
@@ -134,10 +173,8 @@ def capability_action_link(
     if spec is None:
         return None
     target = subject if spec.target_kind else ""
-    url = command_url(name, target)
-    if not url:
-        return None
-    return command_action("command", name, url, target=target, variant=variant, reason="Its permissions were checked.")
+    link = command_action("command", name, target=target, variant=variant, reason="Its permissions were checked.")
+    return link if link.url else None
 
 
 def _permitted_spec(name: str, principal: Principal):
@@ -148,7 +185,7 @@ def _permitted_spec(name: str, principal: Principal):
     spec = capabilities.capability_spec(name)
     if spec is None:
         return None
-    return spec if principal.permits(*spec.required_capabilities) else None
+    return spec if spec.permitted_to(principal) else None
 
 
 READ_NOW_CAPABILITY = "infrastructure.controller.refresh"
@@ -257,10 +294,9 @@ def topology_investigation_links(node_id: str) -> tuple[ActionLink, ...]:
     """The canonical read-only ways to understand an affected topology node."""
 
     links = tuple(
-        ActionLink(
+        read_link(
             investigation.name,
             investigation.label,
-            "read",
             topology_url(node_id, direction=investigation.direction, depth=investigation.depth),
             reason=investigation.reason,
         )
@@ -276,8 +312,8 @@ def action_with_return(action: ActionLink, route_name: str) -> ActionLink:
     if not destination or not action.url:
         return action
     separator = "&" if "?" in action.url else "?"
-    return replace(
-        action,
+    return _built(
+        **{field.name: getattr(action, field.name) for field in fields(action) if field.name != "url"},
         url=f"{action.url}{separator}{urlencode({'next': destination})}",
     )
 
@@ -291,13 +327,7 @@ def connection_relationship_link(spec_name: str, instance_id: str) -> ActionLink
     )
     if not url:
         return None
-    return ActionLink(
-        "relationships",
-        "Show links",
-        "read",
-        url,
-        reason="What it reads, reaches and changes.",
-    )
+    return read_link("relationships", "Show links", url, reason="What it reads, reaches and changes.")
 
 
 def recommend_connection_action(
@@ -328,5 +358,17 @@ def recommend_connection_action(
         return actions
 
     return tuple(
-        replace(item, label=label, reason=reason, recommended=True) if item is preferred else item for item in actions
+        _built(
+            **{
+                field.name: getattr(item, field.name)
+                for field in fields(item)
+                if field.name not in {"label", "reason", "recommended"}
+            },
+            label=label,
+            reason=reason,
+            recommended=True,
+        )
+        if item is preferred
+        else item
+        for item in actions
     )

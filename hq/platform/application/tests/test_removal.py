@@ -12,6 +12,7 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.tests.consent import consented
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..record_errors import PolicyError
@@ -46,8 +47,8 @@ class RemovalRequestTests(TestCase):
         resource = a_rewrite()
 
         result = request_removal(
-            OperationCommand(idempotency_key="remove-1"),
-            principal=cli_principal(),
+            OperationCommand(),
+            consented=consented(cli_principal()),
             current_key=resource.key,
         )
 
@@ -64,8 +65,8 @@ class RemovalRequestTests(TestCase):
         resource = a_rewrite(enabled=False)
 
         result = request_removal(
-            OperationCommand(idempotency_key="remove-1"),
-            principal=cli_principal(),
+            OperationCommand(),
+            consented=consented(cli_principal()),
             current_key=resource.key,
         )
 
@@ -94,17 +95,17 @@ class RemovalRequestTests(TestCase):
 
         with self.assertRaises(PolicyError):
             request_removal(
-                OperationCommand(idempotency_key="remove-1"),
-                principal=cli_principal(),
+                OperationCommand(),
+                consented=consented(cli_principal()),
                 current_key="a-certificate",
             )
 
     def test_asking_twice_queues_one_operation(self):
         resource = a_rewrite()
-        for key in ("remove-1", "remove-2"):
+        for _ in range(2):
             request_removal(
-                OperationCommand(idempotency_key=key),
-                principal=cli_principal(),
+                OperationCommand(),
+                consented=consented(cli_principal()),
                 current_key=resource.key,
             )
 
@@ -123,8 +124,8 @@ class RemovalReportTests(TestCase):
     def _claimed_removal(self) -> tuple[ManagedResource, dict]:
         resource = a_rewrite()
         request_removal(
-            OperationCommand(idempotency_key="remove-1"),
-            principal=cli_principal(),
+            OperationCommand(),
+            consented=consented(cli_principal()),
             current_key=resource.key,
         )
         claim = claim_next_operation("test-controller", capabilities=(("adguard.rewrite", "delete"),))
@@ -179,8 +180,8 @@ class RemovalReportTests(TestCase):
         from ..resource_operations import request_reconcile
 
         request_reconcile(
-            OperationCommand(idempotency_key="reconcile-1"),
-            principal=cli_principal(),
+            OperationCommand(),
+            consented=consented(cli_principal()),
             current_key=resource.key,
         )
         claim = claim_next_operation("test-controller", capabilities=(("adguard.rewrite", "reconcile"),))

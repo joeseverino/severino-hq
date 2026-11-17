@@ -6,11 +6,12 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.tests.consent import consented
 
 from ..adoption_testing import managing_everything
+from ..report_testing import bridged
 from ..security import cli_principal
 from ..services import prospects, service_catalog
-from ..sweep import record_sweep
 from ..zones import find_zone
 from .zone_records import APEX, DNS_CONNECTIONS, RECORD_KIND, ZONE_KIND, ZONES, record, sweep
 
@@ -37,12 +38,12 @@ class SelfClosingAdoptionTests(TestCase):
     def test_a_sweep_takes_on_every_record_in_a_declared_domain(self):
         self._declare_domain()
 
-        result = record_sweep(
+        result = bridged(
+            "inventory",
             {
                 ZONE_KIND: {"ok": True, "records": ZONES},
                 RECORD_KIND: {"ok": True, "records": APEX},
             },
-            principal=cli_principal(),
         )
 
         self.assertEqual(len(result["adopted"]), len(APEX))
@@ -51,12 +52,12 @@ class SelfClosingAdoptionTests(TestCase):
     def test_a_domain_the_credential_reaches_is_taken_on_with_its_records(self):
         """Holding a token that can edit the zone is the decision."""
 
-        record_sweep(
+        bridged(
+            "inventory",
             {
                 ZONE_KIND: {"ok": True, "records": ZONES},
                 RECORD_KIND: {"ok": True, "records": APEX},
             },
-            principal=cli_principal(),
         )
 
         self.assertIn(
@@ -69,10 +70,10 @@ class SelfClosingAdoptionTests(TestCase):
 
     def test_a_record_added_at_the_provider_later_is_taken_on_too(self):
         self._declare_domain()
-        record_sweep({RECORD_KIND: {"ok": True, "records": APEX}}, principal=cli_principal())
+        bridged("inventory", {RECORD_KIND: {"ok": True, "records": APEX}})
 
         later = [*APEX, record("new.example.com", "A", "203.0.113.9", rid="n1")]
-        result = record_sweep({RECORD_KIND: {"ok": True, "records": later}}, principal=cli_principal())
+        result = bridged("inventory", {RECORD_KIND: {"ok": True, "records": later}})
 
         self.assertEqual(len(result["adopted"]), 1)
 
@@ -86,7 +87,7 @@ class SelfClosingAdoptionTests(TestCase):
 
         self._declare_domain()
 
-        result = record_sweep({RECORD_KIND: {"ok": True, "records": APEX}}, principal=cli_principal())
+        result = bridged("inventory", {RECORD_KIND: {"ok": True, "records": APEX}})
 
         self.assertEqual(len(result["adopted"]), len(APEX))
         self.assertIn(RECORD_KIND, result["recorded"])
@@ -111,7 +112,7 @@ class SelfClosingAdoptionTests(TestCase):
                     spec={key: value for key, value in APEX[0].items() if key != "record_id"},
                     enabled=True,
                 ),
-                principal=cli_principal(),
+                consented=consented(cli_principal()),
             )
 
 
@@ -136,14 +137,14 @@ class StopManagingDomainTests(TestCase):
             spec={"zone": "example.com", "connection_ref": "cf-example"},
             enabled=True,
         )
-        record_sweep({RECORD_KIND: {"ok": True, "records": APEX}}, principal=self.principal)
+        bridged("inventory", {RECORD_KIND: {"ok": True, "records": APEX}})
 
     def _remove(self):
         from ..resource_operations import OperationCommand, request_removal
 
         return request_removal(
-            OperationCommand(idempotency_key="forget-1", reason="no longer mine"),
-            principal=self.principal,
+            OperationCommand(reason="no longer mine"),
+            consented=consented(self.principal),
             current_key="example-com",
         )
 
@@ -178,8 +179,8 @@ class StopManagingDomainTests(TestCase):
 
         key = ManagedResource.objects.filter(kind=RECORD_KIND).first().key
         request_removal(
-            OperationCommand(idempotency_key="delete-1"),
-            principal=self.principal,
+            OperationCommand(),
+            consented=consented(self.principal),
             current_key=key,
         )
 

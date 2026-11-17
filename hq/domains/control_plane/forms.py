@@ -1,6 +1,7 @@
 """The DNS tool's two lookups, each a form that asks rather than writes, the
-one question that starts publishing a service, and the two policies a
-domain's mail page publishes.
+one question that starts publishing a service, the two policies a
+domain's mail page publishes, a machine's identity, and why a record is
+removed.
 
 Each lookup field's name is the one its capability's command takes, which
 ``application.toolkit`` names for the tab and the view reads from the query
@@ -27,8 +28,9 @@ from hq.platform.application.mail_policy import (
     compose_spf,
     parse_spf,
 )
-from hq.platform.application.provider_forms import NameList
+from hq.platform.application.provider_forms import NameList, ResourceIdentityForm
 from hq.platform.application.ui import counted
+from hq.platform.core.templatetags.action_tags import POST_FORM_ID
 from hq.platform.core.templatetags.value_tags import breakable
 
 from .names import normalized_hostname
@@ -191,3 +193,28 @@ class MailFailuresForm(MailPolicyForm):
         return compose_dmarc(
             {**self.record_tags, **{key: "" if value is None else str(value) for key, value in given.items()}}
         )
+
+
+class RemovalReasonForm(forms.Form):
+    """Why a record is removed, saved with the removal. The confirmation
+    button posts through the page's shared form (``POST_FORM_ID``), so the
+    field joins that form by its ``form`` attribute rather than standing in
+    a form of its own."""
+
+    reason = forms.CharField(
+        required=False,
+        max_length=300,
+        label="Why (optional)",
+        help_text="Saved with the removal and in the audit log.",
+        widget=forms.TextInput(attrs={"form": POST_FORM_ID}),
+    )
+
+
+class MachineIdentityForm(ResourceIdentityForm):
+    """A machine's identity, and whether the dashboard header shows it."""
+
+    show_on_dashboard = forms.BooleanField(
+        required=False,
+        label="Show on dashboard",
+        help_text="Its CPU, memory and storage in the dashboard header.",
+    )

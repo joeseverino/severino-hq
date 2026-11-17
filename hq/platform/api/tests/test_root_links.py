@@ -10,12 +10,14 @@ from django.contrib.auth.decorators import login_not_required
 from django.test import TestCase, override_settings
 from django.urls import URLResolver, clear_url_caches, get_resolver, path
 
+from hq.platform.application.access import ANYONE
+
 from .. import openapi, urls, views
 from .tokens import ISSUER, RESOURCE, _serving, _token
 
 
 @login_not_required
-@views._endpoint(("GET",), title="Example read", data=dict[str, Any])
+@views._endpoint(("GET",), title="Example read", requires=ANYONE, data=dict[str, Any])
 def example_read(_request):
     """What an example read answers."""
 

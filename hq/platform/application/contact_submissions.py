@@ -20,17 +20,20 @@ from hq.domains.control_plane.desired_state import desired_fingerprint
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.cloudflare import CONTACT_CHANGES_LIMIT, ContactStatus
 from hq.domains.control_plane.providers import validate_spec
-from hq.platform.core.audit import audit_operation
 
 from .adoption import WriteGap, require_writable, write_gap
-from .cadence import request_reading
-from .command_fields import Choices, Describe
+from .answer_fields import CallMessage
+from .cadence import ask
+from .command_fields import Choices, Describe, confirm
+from .deletion import DeleteCommand
 from .integration_specs import Kept, keeps
 from .projection import window
 from .record_errors import PolicyError, RecordNotFound
 from .record_saves import written
 from .resource_operations import queue_reconcile
-from .security import Principal
+from .ui import ended
+lazy from .asks import APPLIES_SHORTLY
+lazy from .capabilities import Consented, consent
 
 CONTACT_STATUSES = frozenset(get_args(ContactStatus))
 ASSIGNEE_LENGTH = 120
@@ -53,11 +56,6 @@ class ContactReviewCommand:
     status: ReviewStatus
     assigned_to: Assignee = ""
     admin_notes: AdminNotes = ""
-
-
-@dataclass(frozen=True, slots=True)
-class ContactDeleteCommand:
-    confirm: Annotated[str, Describe("The submission's ID again, to confirm the delete.")]
 
 
 def _status(value: str, *, allow_blank: bool = False) -> str:
@@ -158,9 +156,10 @@ def _ids(spec: dict[str, Any]) -> dict[str, str]:
     return {name: str(spec.get(name, "")) for name in ("connection_ref", "account_id", "database_id")}
 
 
-def _declare(spec: dict[str, Any], *, principal: Principal, said: str) -> None:
+def _declare(spec: dict[str, Any], *, consented: Consented, said: str) -> None:
     """Write the declaration and queue the controller to apply it; ``said`` is what its audit row says."""
 
+    consent(consented).require(inbox.DECLARATION)
     validated = validate_spec(inbox.DECLARATION, spec)
     require_writable(inbox.DECLARATION, validated)
     resource = ManagedResource.objects.select_for_update().filter(key=inbox.DECLARATION_KEY).first()
@@ -176,8 +175,8 @@ def _declare(spec: dict[str, Any], *, principal: Principal, said: str) -> None:
     resource.full_clean()
     resource.audit_said = said
     resource.save()
-    queue_reconcile(resource, principal=principal, reason="A contact message was changed.")
-    transaction.on_commit(lambda: request_reading(inbox.READING))
+    queue_reconcile(resource, consented=consented, reason="A contact message was changed.")
+    ask(reads=(inbox.READING,))
 
 
 def _review_of(submission: dict[str, Any]) -> dict[str, Any]:
@@ -193,6 +192,7 @@ class ContactReviewed(TypedDict):
     id: Annotated[int, Describe("The id of the message reviewed.")]
     status: Annotated[str, Describe("The review status the message was given.")]
     queued: Annotated[Literal[True], Describe("That the review was handed to the inbox.")]
+    message: CallMessage
 
 
 @keeps(Kept(lambda current_id: _review_of(_submission(current_id, inbox.current()))))
@@ -200,7 +200,7 @@ class ContactReviewed(TypedDict):
 def execute_contact_review(
     command: ContactReviewCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_id: int,
     sent: frozenset[str] | None = None,
 ) -> ContactReviewed:
@@ -213,13 +213,20 @@ def execute_contact_review(
     }
     status = review["status"] = _status(review["status"])
     review["assigned_to"] = review["assigned_to"].strip()
-    with audit_operation(operation=REVIEW, principal=principal):
-        _declare(
-            _change(current, review),
-            principal=principal,
-            said=f"Asked for contact submission #{current_id} to be reviewed.",
-        )
-    return {"ok": True, "id": current_id, "status": status, "queued": True}
+    _declare(
+        _change(current, review),
+        consented=consented,
+        said=f"Asked for contact submission #{current_id} to be reviewed.",
+    )
+    marked = status != _review_of(before)["status"]
+    done = f"marked {ended(dict(STATUS_CHOICES)[status].lower())}" if marked else "saved."
+    return {
+        "ok": True,
+        "id": current_id,
+        "status": status,
+        "queued": True,
+        "message": f"Message {done} {APPLIES_SHORTLY}",
+    }
 
 
 class ContactDeletedPart(TypedDict):
@@ -239,27 +246,31 @@ class ContactDeleted(TypedDict):
     queued: NotRequired[
         Annotated[Literal[True], Describe("That the delete was handed to the inbox; absent when nothing was asked.")]
     ]
+    message: CallMessage
 
 
 @transaction.atomic
 def execute_contact_delete(
-    command: ContactDeleteCommand,
+    command: DeleteCommand,
     *,
-    principal: Principal,
+    consented: Consented,
     current_id: int,
 ) -> ContactDeleted:
-    if command.confirm != str(current_id):
-        raise ValidationError({"confirm": ValidationError("Must match the message.", code="invalid")})
+    confirm(command.confirm, current_id)
     current = inbox.current()
     before = find_submission(current_id, current)
     if before is None:
         # Already gone, or already waiting to be deleted: the requested end
         # state either way, so a retry succeeds.
-        return {"ok": True, "deleted": {"id": current_id, "already_absent": True}}
-    with audit_operation(operation=DELETE, principal=principal):
-        _declare(
-            _change(current, {"delete": current_id}),
-            principal=principal,
-            said=f"Asked for contact submission #{current_id} to be deleted.",
-        )
-    return {"ok": True, "deleted": {"id": current_id, "already_absent": False}, "queued": True}
+        return {"ok": True, "deleted": {"id": current_id, "already_absent": True}, "message": "Message deleted."}
+    _declare(
+        _change(current, {"delete": current_id}),
+        consented=consented,
+        said=f"Asked for contact submission #{current_id} to be deleted.",
+    )
+    return {
+        "ok": True,
+        "deleted": {"id": current_id, "already_absent": False},
+        "queued": True,
+        "message": f"Message deleted. {APPLIES_SHORTLY}",
+    }

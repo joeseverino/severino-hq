@@ -7,30 +7,31 @@ for the kinds that matter most a person has to agree; what a held request may
 and may not do is docs/Security.md#what-hq-enforces.
 """
 
-import hashlib
-import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 from functools import wraps
-from typing import Annotated, Any, Final
+from typing import TYPE_CHECKING, Annotated, Any, Final, final
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ApprovalRequest, ManagedResource
+from hq.domains.control_plane.models import APPROVAL_LAPSE, ApprovalRequest, ManagedResource
 from hq.platform.core.attribution import own_operation
+from hq.platform.core.digests import digest
 lazy from hq.domains.control_plane.providers import record_spec
 lazy from hq.platform.core.models import AuditLog
 
 from . import derivations
 from .command_fields import Describe
+from .contracts import Effect
 from .derivations import holds_until
 from .held_answer import HELD, ApprovalApplied, ApprovalRejected, HeldCall, serialize_approval
 from .record_errors import PolicyError, RecordNotFound
 from .refusal_status import refusal_of, refuse
+from .sealing import Sealed, sealer
 from .security import (
     INTERNAL_INTERFACE,
     OPERATOR_INTERFACES,
@@ -40,15 +41,22 @@ from .security import (
     internal_principal,
     is_interactive,
 )
-lazy from . import agent_access, capabilities, resources
+from .titled import Titled
+from .workflow_contracts import ActionLink
+lazy from . import agent_access, capabilities, resources, roles
+lazy from .action_links import command_action
 lazy from .approval_review import asked
-lazy from .capabilities import authorize_capability, execute_approved, validate_command
+lazy from .capabilities import execute_approved, validate_command
 lazy from .command_targets import item_name
 lazy from .held_answer import ApprovalWithdrawn
 lazy from .integration_specs import capability_fields
 lazy from .resource_refusals import UnsupportedResourceOperation
 lazy from .resources import InvalidResourceInput
+lazy from .roles import Role
 lazy from .ui import counted
+
+if TYPE_CHECKING:
+    from .integration_specs import CapabilitySpec
 
 # How many outstanding requests one actor may hold. A caller that has already
 # asked for ten decisions and been answered none does not need an eleventh: it
@@ -56,12 +64,6 @@ lazy from .ui import counted
 # the page it is read on.
 MAX_PENDING_PER_ACTOR = 10
 
-# Reads never wait for anybody. Stated as the exemption rather than listing the
-# effects that are gated, so an effect introduced later is considered rather
-# than exempted by omission.
-READ_EFFECT = "read"
-# What takes something away from whoever is using it: a deletion, or a stop.
-DESTRUCTIVE_EFFECT = "destructive"
 # Payload fields that turn a write into deleting whatever it does not name: an
 # orphan prune removes every record the manifest leaves out, restricted ones
 # included. Such a call is held like a destructive capability, whatever the
@@ -72,7 +74,7 @@ DELETING_FLAGS = ("prune_orphans",)
 def is_destructive(spec, command: Any) -> bool:
     """Whether this call takes something away: by its effect, or by what it asks for."""
 
-    if spec.effect == DESTRUCTIVE_EFFECT:
+    if spec.effect is Effect.DESTRUCTIVE:
         return True
     return any(getattr(command, flag, False) is True for flag in DELETING_FLAGS)
 
@@ -137,10 +139,6 @@ def _window() -> timedelta:
     return timedelta(hours=hours)
 
 
-def _canonical(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
-
-
 def fingerprint(capability: str, target: Any, payload: dict[str, Any], baseline: dict[str, Any]) -> str:
     """One digest over the requested call and the state it was read against.
 
@@ -151,7 +149,7 @@ def fingerprint(capability: str, target: Any, payload: dict[str, Any], baseline:
     approval of an untrue comparison is not an approval of anything.
     """
 
-    material = _canonical(
+    return digest(
         {
             "capability": capability,
             "target": "" if target is None else str(target),
@@ -159,7 +157,6 @@ def fingerprint(capability: str, target: Any, payload: dict[str, Any], baseline:
             "baseline": baseline,
         }
     )
-    return hashlib.sha256(material.encode()).hexdigest()
 
 
 def _baseline_of(resource: ManagedResource) -> dict[str, Any]:
@@ -264,7 +261,8 @@ def approval_subject(spec, command: Any, target: Any) -> ApprovalSubject | None:
     whose fingerprints must match. None for a read or a missing target.
     """
 
-    if spec.effect == READ_EFFECT:
+    # Reads never wait for anybody: an effect added later is held unless it says it changes nothing.
+    if not spec.effect.changes:
         return None
     if (measured := getattr(spec.handler, _MEASURED, None)) is not None:
         return measured(command)
@@ -304,7 +302,7 @@ def _record_subject(spec, target: Any) -> ApprovalSubject | None:
     except UnsupportedResourceOperation, InvalidResourceInput:
         # No canonical read: still holdable, but staleness cannot be detected.
         baseline = {}
-    if baseline and spec.effect != DESTRUCTIVE_EFFECT:
+    if baseline and spec.effect is not Effect.DESTRUCTIVE:
         # A change shows the fields it sends, as they are now, and the record's
         # name; the rest of a read (a last push, open pulls) moves with sweeps.
         read = baseline.get("resource", baseline)
@@ -437,7 +435,7 @@ def _awaiting(held: ApprovalRequest, *, repeated: bool) -> HeldCall:
     }
 
 
-def asked_by(approval_id: str, *, principal: Principal) -> ApprovalRequest | None:
+def own_held_request(approval_id: str, *, principal: Principal) -> ApprovalRequest | None:
     """The held request ``principal`` itself asked for, by its id, or None.
 
     None as much for another caller's request as for an id nothing holds, so
@@ -482,7 +480,7 @@ def outcome(held: ApprovalRequest) -> dict[str, Any] | None:
     """
 
     state = held.state
-    if state == ApprovalRequest.State.PENDING and held.expires_at <= derivations.clock():
+    if APPROVAL_LAPSE.holds(held, derivations.clock()):
         state = ApprovalRequest.State.EXPIRED
     if state == ApprovalRequest.State.PENDING:
         return None
@@ -505,14 +503,12 @@ def lapse_expired() -> int:
 
     principal = internal_principal("approvals")
     lapsed = 0
-    for approval_id in ApprovalRequest.objects.filter(
-        state=ApprovalRequest.State.PENDING, expires_at__lte=timezone.now()
-    ).values_list("pk", flat=True):
+    for approval_id in ApprovalRequest.objects.filter(APPROVAL_LAPSE.q(timezone.now())).values_list("pk", flat=True):
         # One at a time, so each lapse is audited as part of its request.
         with transaction.atomic():
             held = (
                 ApprovalRequest.objects.select_for_update()
-                .filter(pk=approval_id, state=ApprovalRequest.State.PENDING, expires_at__lte=timezone.now())
+                .filter(APPROVAL_LAPSE.q(timezone.now()), pk=approval_id)
                 .first()
             )
             if held is not None:
@@ -550,8 +546,9 @@ def pending(*, principal: Principal, limit: int | None = 50, capability: str = "
     decision ``approve`` would refuse.
     """
 
-    principal.require(Capability.READ)
-    waiting = ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING, expires_at__gt=derivations.clock())
+    waiting = ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING).exclude(
+        APPROVAL_LAPSE.q(derivations.clock())
+    )
     if capability:
         waiting = waiting.filter(capability=capability)
     if not reads_every_hold(principal):
@@ -584,7 +581,11 @@ def _settle(
 
 def _refuse_decided(row: ApprovalRequest) -> None:
     if row.state != ApprovalRequest.State.PENDING:
-        raise ApprovalError(f"That request is already {row.get_state_display().lower()}.")
+        raise _decided(row)
+
+
+def _decided(row: ApprovalRequest) -> ApprovalError:
+    return ApprovalError(f"That request is already {row.get_state_display().lower()}, so nothing was written.")
 
 
 def _lock_pending(held: ApprovalRequest) -> ApprovalRequest:
@@ -613,43 +614,165 @@ def _decidable(approval_id: str, principal: Principal) -> ApprovalRequest:
     except (ApprovalRequest.DoesNotExist, ValueError) as exc:
         raise ApprovalError("That approval request was not found.") from exc
     _refuse_decided(held)
-    if held.expires_at <= timezone.now():
+    if APPROVAL_LAPSE.holds(held, timezone.now()):
         _settle(held, ApprovalRequest.State.EXPIRED, _LAPSED_NOTE, operation=LAPSE, principal=principal)
         raise Settled("That request expired before it was decided, so nothing was written.")
     return held
 
 
-def _require_person(principal: Principal, held: ApprovalRequest) -> None:
-    """Only a person, and not the caller that asked.
-
-    The interface is the test rather than a capability, and that is the whole
-    point of the module. The requesting token already held every capability its
-    request needed; a capability to approve would be one more thing that token
-    could be granted, or could be found to have been granted, and the gate would
-    be back where it started.
-    """
-
-    if not is_interactive(principal):
-        raise AuthorizationError("Approve this in the browser, signed in. An agent cannot approve a change.")
-    if principal.actor == held.requested_actor:
-        raise AuthorizationError("You cannot approve a request you asked for.")
-
-
-def _require_asker_running(held: ApprovalRequest) -> None:
-    """Pausing agents or blocking one stops what it already asked for, not only what it asks next."""
-
-    if ApprovalRequest.objects.filter(agent_access.held_askers(), pk=held.pk).exists():
-        raise ApprovalError(
-            "The agent that asked for this is paused or blocked. Resume or allow it to approve this, or decline it."
-        )
-
-
-REQUEST = "approval.request"
+REQUEST = Titled("approval.request", "Asked for a change a person approves")
 APPROVE = "approval.approve"
 REJECT = "approval.reject"
 WITHDRAW = "approval.withdraw"
-LAPSE = "approval.lapse"
+LAPSE = Titled("approval.lapse", "A held change lapsed")
 _LAPSED_NOTE = "It expired without an answer."
+# Each decision a person takes on a held request, by its command: its path
+# in the decide route.
+DECISIONS: Final = {APPROVE: "approve", REJECT: "reject"}
+
+
+@dataclass(frozen=True, slots=True)
+class Refusal:
+    """Why one reader may not take one decision: what a page says where its
+    button would be, and what the decision raises: ``error``, or, for a reader
+    short of what it takes, ``Principal.require``'s own refusal of ``needs``."""
+
+    words: str
+    error: Exception | None = None
+    needs: tuple[Capability | str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Offer:
+    """What one held request offers one reader: a button for each decision
+    they may take, and why any other is withheld, in their words."""
+
+    actions: tuple[ActionLink, ...]
+    withheld: str
+
+
+NO_OFFER: Final = Offer((), "")
+
+
+def refusals(principal: Principal, rows: Iterable[ApprovalRequest]) -> dict[Any, dict[str, Refusal | None]]:
+    """Who may decide a held request, for each of ``rows``: each decision's
+    refusal by its capability name, None where ``principal`` may take it.
+
+    The one rule: a decision refuses what this refuses (``require_decidable``)
+    and a page offers what it allows (``offers``), so the two cannot disagree.
+    Whether each asker is stopped is one query for all of ``rows``.
+    """
+
+    rows = tuple(rows)
+    stopped = _stopped_askers(principal, rows)
+    return {
+        row.pk: {decision: _refusal(principal, row, decision, stopped=row.pk in stopped) for decision in DECISIONS}
+        for row in rows
+    }
+
+
+def require_decidable(principal: Principal, held: ApprovalRequest, decision: str) -> None:
+    """Raise what the rule refuses ``principal`` for ``decision`` on ``held``."""
+
+    refused = refusals(principal, (held,))[held.pk][decision]
+    if refused is None:
+        return
+    if refused.error is not None:
+        raise refused.error
+    principal.require(*refused.needs)
+
+
+def offers(principal: Principal, rows: Iterable[ApprovalRequest]) -> dict[Any, Offer]:
+    """What each of ``rows`` offers ``principal``, by its id: the only place a
+    decision's button is made, and only for a decision the rule allows."""
+
+    offered = {}
+    for pk, refused in refusals(principal, rows).items():
+        actions = tuple(_decision_link(pk, decision) for decision in DECISIONS if refused[decision] is None)
+        withheld = next((refusal.words for refusal in refused.values() if refusal is not None), "")
+        offered[pk] = Offer(actions, withheld)
+    return offered
+
+
+def _decision_link(approval_id: Any, decision: str) -> ActionLink:
+    return command_action(
+        decision,
+        decision,
+        target={"approval_id": str(approval_id), "decision": DECISIONS[decision]},
+        recommended=decision == APPROVE,
+    )
+
+
+def _stopped_askers(principal: Principal, rows: tuple[ApprovalRequest, ...]) -> frozenset[Any]:
+    """Which of ``rows`` an asker the brakes hold now asked for. Read only for
+    a reader who could approve anything, so a viewer's queue costs nothing."""
+
+    if not rows or not is_interactive(principal) or not principal.permits(Capability.DECIDE_APPROVALS):
+        return frozenset()
+    return frozenset(
+        ApprovalRequest.objects.filter(agent_access.held_askers(), pk__in=[row.pk for row in rows]).values_list(
+            "pk", flat=True
+        )
+    )
+
+
+def _refusal(principal: Principal, held: ApprovalRequest, decision: str, *, stopped: bool) -> Refusal | None:
+    """Why ``principal`` may not take ``decision`` on ``held``, or None.
+
+    Only a person, and not the caller that asked. The interface is the test
+    rather than a capability, and that is the whole point of the module. The
+    requesting token already held every capability its request needed; a
+    capability to approve would be one more thing that token could be granted,
+    or could be found to have been granted, and the gate would be back where
+    it started.
+    """
+
+    if held.state != ApprovalRequest.State.PENDING:
+        return _said(_decided(held))
+    if derivations.reached(held.expires_at):
+        return _said(ApprovalError("That request expired before it was decided."))
+    need = [*capabilities.capability_spec(decision).required_capabilities]
+    if decision == APPROVE:
+        spec = capabilities.capability_spec(held.capability)
+        if spec is None:
+            return _said(
+                ApprovalError("What this request asks for is no longer something HQ can do, so it cannot be applied.")
+            )
+        # The approver has to be allowed to do the thing themselves. Otherwise
+        # this would be a way to run a capability the clicker does not hold.
+        need += spec.required_capabilities
+    if not is_interactive(principal):
+        return _said(AuthorizationError("Approve this in the browser, signed in. An agent cannot approve a change."))
+    if principal.actor == held.requested_actor:
+        return _said(AuthorizationError("You cannot approve a request you asked for."))
+    # Pausing agents or blocking one stops what it already asked for, not
+    # only what it asks next; declining it still answers it.
+    if decision == APPROVE and stopped:
+        return _said(
+            ApprovalError(
+                "The agent that asked for this is paused or blocked. Resume or allow it to approve this, or decline it."
+            )
+        )
+    if principal.permits(*need):
+        return None
+    # A device's token can lack what its person's role holds, which a new
+    # sign-in grants (``InsufficientScope``).
+    if principal.grantable.intersection(need):
+        return Refusal("Sign in again so this device carries what deciding this takes.", needs=tuple(need))
+    return Refusal(_deciders(need), needs=tuple(need))
+
+
+def _said(error: Exception) -> Refusal:
+    return Refusal(str(error), error)
+
+
+def _deciders(need: list[Capability | str]) -> str:
+    """Who may take a decision a reader's role does not let them: the roles that grant it."""
+
+    named = [Role(role).label.lower() for role in Role.values if roles.grants(role).issuperset(need)]
+    if not named:
+        return "No role can decide this."
+    return f"Only {' or '.join(f'{name}s' for name in named)} can decide this."
 
 
 @dataclass(frozen=True, slots=True)
@@ -681,15 +804,41 @@ def approve(command: ApproveCommand, *, principal: Principal) -> ApprovalApplied
         return _apply(held, principal)
 
 
+@final
+class Approved(Sealed):
+    """A held change a person has just approved, the only thing ``execute_approved`` runs (``sealing``).
+
+    - One place makes one: ``_apply``, once the approver may decide and the
+      change is still what was asked for. Only this module holds its seal, so
+      no other path has a value that makes a run approved.
+    - It carries the whole change (the spec, the validated command, its
+      target, the fields sent) and who acts, so what runs approved is what
+      the person saw, and nothing handed beside it can swap any part.
+    - ``execute_approved`` reads it only through ``approval``, which refuses
+      anything this module did not seal.
+    """
+
+    __slots__ = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Approval:
+    """What an ``Approved`` carries: the change a person approved, and who it
+    runs as (its asker, with ``approved_by`` naming the person)."""
+
+    spec: CapabilitySpec
+    command: Any
+    target: str | int | None
+    acting: Principal
+    sent: frozenset[str]
+
+
+_seal, approval = sealer(Approved, Approval)
+
+
 def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
+    require_decidable(principal, held, APPROVE)
     spec = capabilities.capability_spec(held.capability)
-    if spec is None:
-        raise ApprovalError("What this request asks for is no longer something HQ can do, so it cannot be applied.")
-    _require_person(principal, held)
-    _require_asker_running(held)
-    # The approver has to be allowed to do the thing themselves. Otherwise this
-    # page would be a way to run a capability the clicker does not hold.
-    authorize_capability(spec, principal)
     command = validate_command(spec, held.payload, held.target or None)
     current = approval_subject(spec, command, held.target or None)
     baseline = current.baseline if current is not None else {}
@@ -722,10 +871,10 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
         # operation: the approver agreed, and the change is the requester's.
         with own_operation(held, operation=spec.name, principal=acting, rebinds=True):
             result = execute_approved(
-                spec, command, locked.target or None, principal=acting, sent=frozenset(held.payload)
+                _seal(Approval(spec, command, locked.target or None, acting, frozenset(held.payload)))
             )
         _record(locked, ApprovalRequest.State.APPROVED, decider=principal, result=result)
-    return {"ok": True, "approved": str(locked.id), "result": result}
+    return {"ok": True, "approved": str(locked.id), "result": result, "message": "Approved and applied."}
 
 
 def answered[**P, R](decide: Callable[P, R]) -> Callable[P, R | dict[str, Any]]:
@@ -755,12 +904,12 @@ def withdraw(command: WithdrawCommand, *, principal: Principal) -> ApprovalWithd
     """Take back a held request its asker no longer wants, before anybody decides it.
 
     Only the caller that asked may: another caller's request reads as one
-    nothing holds (``asked_by``). Withdrawn, it applies nothing, no person is
+    nothing holds (``own_held_request``). Withdrawn, it applies nothing, no person is
     asked to decide it, and it no longer counts against its asker's
     ``MAX_PENDING_PER_ACTOR``.
     """
 
-    held = asked_by(command.approval_id, principal=principal)
+    held = own_held_request(command.approval_id, principal=principal)
     if held is None:
         raise RecordNotFound("No held request of yours has that id.")
     held = _decidable(str(held.pk), principal)
@@ -774,11 +923,11 @@ def reject(command: RejectCommand, *, principal: Principal) -> ApprovalRejected:
     """Refuse a held change, so the caller's request has an answer either way."""
 
     held = _decidable(command.approval_id, principal)
-    _require_person(principal, held)
+    require_decidable(principal, held, REJECT)
     with own_operation(held, operation=REJECT, principal=principal), transaction.atomic():
         locked = _lock_pending(held)
         _record(locked, ApprovalRequest.State.REJECTED, decider=principal, decision_note=command.note.strip()[:300])
-    return {"ok": True, "rejected": str(locked.id)}
+    return {"ok": True, "rejected": str(locked.id), "message": "Rejected. Nothing was applied."}
 
 
 def for_audit_event(event) -> ApprovalRequest | None:

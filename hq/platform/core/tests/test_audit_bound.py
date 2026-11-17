@@ -16,9 +16,8 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.markup_testing import select, text, within
 from hq.platform.application.read_models import recent_activity
-from hq.platform.application.security import cli_principal
-from hq.platform.application.tests.markup import select, text, within
 from hq.platform.core import append_only
 from hq.platform.core.models import AuditLog
 
@@ -74,7 +73,7 @@ class BoundedEventTests(TestCase):
             return self.client.get(reverse("core:audit_list")).content.decode()
 
         def activity():
-            return recent_activity(principal=cli_principal())
+            return recent_activity()
 
         _items(5)
         page(), activity()
@@ -109,7 +108,7 @@ class BoundedEventTests(TestCase):
     def test_recent_activity_says_how_many_more_and_where_they_are(self):
         _items(12)
 
-        (event,) = recent_activity(principal=cli_principal())["items"]
+        (event,) = recent_activity()["items"]
 
         self.assertLess(len(event["items"]), 12)
         self.assertEqual(event["more"], 12 - len(event["items"]))

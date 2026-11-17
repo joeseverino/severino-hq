@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.calendars.models import Entry, Preference
+from hq.platform.application.markup_testing import all_elements, hrefs, select, text, texts, with_class
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
@@ -39,14 +40,11 @@ from ..history import CONTAINERS, DEPLOYS, Moment
 from ..moments import when_day
 from ..plugins import NavigationItem, PluginIntegration
 from ..security import (
-    AuthorizationError,
     Capability,
-    Principal,
     agent_principal,
     cli_principal,
     web_principal,
 )
-from .markup import all_elements, hrefs, select, text, texts, with_class
 
 TODAY = date(2026, 10, 14)
 
@@ -306,14 +304,9 @@ class WriteTests(TestCase):
         agenda = list_agenda(start=TODAY, days=1)
         self.assertIn("Dentist", [item["title"] for item in agenda["items"]])
 
-    def test_writing_and_removing_need_their_capabilities(self):
-        reader = Principal("reader", "mcp", frozenset({Capability.READ}))
-        with self.assertRaises(AuthorizationError):
-            save_entry(EntryCommand(title="x", starts_on=TODAY), principal=reader)
+    def test_removing_needs_the_entry_named_again(self):
         entry = _entry()
-        with self.assertRaises(AuthorizationError):
-            delete_calendar_entry(DeleteCommand(confirm=str(entry.uid)), principal=reader, current_key=str(entry.uid))
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValidationError):
             delete_calendar_entry(DeleteCommand(confirm="other"), principal=cli_principal(), current_key=str(entry.uid))
         delete_calendar_entry(
             DeleteCommand(confirm=str(entry.uid)), principal=cli_principal(), current_key=str(entry.uid)

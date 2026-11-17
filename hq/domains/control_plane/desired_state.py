@@ -6,20 +6,15 @@ resource can fall out of date without anyone editing it. Why a save is then
 not local: docs/Architecture.md#infrastructure-control-plane.
 """
 
-import hashlib
-import json
 from collections.abc import Callable
 from typing import Any
 
+from hq.platform.core.digests import digest
 lazy from hq.platform.application.infrastructure import _NamesByConnection
 
 from .models import ManagedResource
 from .provider_spec import ProviderResolutionContext
 from .providers import resolve_provider_spec
-
-
-def _canonical(payload: dict[str, Any]) -> bytes:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 
 
 def desired_fingerprint(
@@ -63,7 +58,9 @@ def desired_fingerprint(
         resolved = spec
     if resolved != spec:
         desired["resolved"] = resolved
-    return hashlib.sha256(_canonical(desired)).hexdigest()
+    # Stored fingerprints were taken over UTF-8 text, so text past ASCII is
+    # kept as itself, or a resource declared with such text would read as changed.
+    return digest(desired, ensure_ascii=False)
 
 
 def advance_dependents(targets: tuple[dict[str, Any], ...]) -> list[str]:

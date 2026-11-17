@@ -9,7 +9,7 @@ fetched is a picture that is not shown.
 
 import hashlib
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -19,7 +19,9 @@ from django.utils import timezone
 
 from hq.platform.core.models import Avatar
 
-from .http_read import at_most
+from .freshness import AVATAR, freshness
+from .http_read import UNREACHABLE, fetch
+lazy from .entity_links import web_url
 
 logger = logging.getLogger("severino.auth")
 
@@ -27,9 +29,6 @@ logger = logging.getLogger("severino.auth")
 SESSION_KEY = "avatar"
 # A profile picture, not a photograph: larger than this is not one.
 MAX_BYTES = 512 * 1024
-# A session is renewed every few minutes and each renewal is a sign-in. The
-# picture is asked for again only once it is this old.
-REFRESH_AFTER = timedelta(days=1)
 _TIMEOUT = httpx2.Timeout(5, connect=3)
 # What the file starts with, not what the response says it is. SVG is absent
 # on purpose: it is a document that can carry script.
@@ -60,8 +59,7 @@ def picture_allowed(url: str, issuer: str) -> bool:
 
     if not url or not issuer:
         return False
-    scheme, host, _port = _origin(url)
-    return scheme in ("https", "http") and bool(host) and _origin(url) == _origin(issuer)
+    return bool(web_url(url)) and _origin(url) == _origin(issuer)
 
 
 def fetch_picture(url: str, *, access_token: str = "") -> tuple[str, bytes] | None:
@@ -74,13 +72,10 @@ def fetch_picture(url: str, *, access_token: str = "") -> tuple[str, bytes] | No
 
     headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
     try:
-        with httpx2.stream("GET", url, headers=headers, timeout=_TIMEOUT, follow_redirects=False) as response:
-            if response.status_code != 200:
-                return None
-            image = at_most(response.iter_bytes(), MAX_BYTES + 1)
-    except httpx2.HTTPError, httpx2.InvalidURL, httpx2.StreamError, OSError, ValueError:
+        response, image = fetch("GET", url, headers=headers, timeout=_TIMEOUT, limit=MAX_BYTES)
+    except (*UNREACHABLE, ValueError):
         return None
-    if not image or len(image) > MAX_BYTES:
+    if response.status_code != 200 or not image or len(image) > MAX_BYTES:
         return None
     kind = _kind(image)
     return (kind, image) if kind else None
@@ -106,7 +101,7 @@ def remember_avatar(user: Any, url: str, *, issuer: str, access_token: str = "",
             extra={"event": "auth.avatar.refused"},
         )
         return kept.digest if kept else ""
-    if kept is not None and kept.source == url and now - kept.fetched_at < REFRESH_AFTER:
+    if kept is not None and kept.source == url and not freshness(AVATAR, kept.fetched_at, now).due:
         return kept.digest
     fetched = fetch_picture(url, access_token=access_token)
     if fetched is None:

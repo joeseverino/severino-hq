@@ -20,7 +20,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.docs_index.models import DocStatus
 from hq.domains.expenses.models import EXPENSE_CATEGORY_CHOICES
 from hq.domains.projects.models import Project
-from hq.platform.application.domains import all_domains
+from hq.platform.application.domains import queue_sources
 from hq.platform.application.json_schemas import fields
 from hq.platform.application.plugins import ATTENTION_ORDER
 from hq.platform.application.projection import MAX_PAGE_SIZE
@@ -51,7 +51,7 @@ def declared_choices():
         (
             "action_items",
             "source",
-            [domain.id for domain in all_domains() if domain.integration.attention is not None],
+            queue_sources(),
         ),
         ("infrastructure", "kind", list(PROVIDERS)),
         ("readings", "provider", {spec.provider for spec in OBSERVATIONS.values()}),

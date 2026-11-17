@@ -1,6 +1,7 @@
-"""For what an extension can do: declare its capabilities and strict commands, and run a write."""
+"""For what an extension can do: declare its capabilities and their commands, and run a write.
 
-from pydantic import BaseModel, ConfigDict
+A command is a frozen dataclass or a TypedDict: HQ closes it to the fields it names.
+"""
 
 from hq.platform.application.capabilities import (
     CapabilitySpec,
@@ -9,8 +10,11 @@ from hq.platform.application.capabilities import (
     execute_capability,
 )
 from hq.platform.application.command_fields import Choices, Describe, Names, Refers
-from hq.platform.application.integration_specs import ON_ITS_PAGE, CommandAbout, CommandFact
+from hq.platform.application.contracts import Effect
+from hq.platform.application.integration_specs import ON_ITS_PAGE, CommandAbout, CommandFact, Kept, keeps
 from hq.platform.application.record_errors import InputError
+from hq.platform.application.record_saves import as_sent, written
+from hq.platform.application.records import KEPT
 from hq.platform.application.security import (
     AuthorizationError,
     Capability,
@@ -21,14 +25,8 @@ from hq.platform.application.security import (
 )
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 
-
-class StrictCommand(BaseModel):
-    """Base for JSON commands that reject misspelled or obsolete fields."""
-
-    model_config = ConfigDict(extra="forbid")
-
-
 __all__ = [
+    "KEPT",
     "ON_ITS_PAGE",
     "AuthorizationError",
     "Capability",
@@ -37,18 +35,22 @@ __all__ = [
     "CommandAbout",
     "CommandFact",
     "Describe",
+    "Effect",
     "InputError",
+    "Kept",
     "Names",
     "Principal",
     "Refers",
-    "StrictCommand",
+    "as_sent",
     "capability_registry",
     "cli_principal",
     "describe_capabilities",
     "execute_capability",
     "execute_posted",
+    "keeps",
     "mcp_principal",
     "refusal_response",
     "refused",
     "web_principal",
+    "written",
 ]

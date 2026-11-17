@@ -7,6 +7,7 @@
 import js from "@eslint/js";
 import noUnsanitized from "eslint-plugin-no-unsanitized";
 import globals from "globals";
+import { readFileSync } from "node:fs";
 
 // What reads layout, or watches it change. Layout is the stylesheet's: a
 // script reads it only where a disable comment says why CSS cannot answer
@@ -72,11 +73,17 @@ const primitiveSyntax = [
 // the template's never sees change. A class is written as a literal in a
 // className, a class attribute or a classList change, and each form is
 // refused for a primitive's class or one of its tones (`msg-error`).
-// Today's instances are counted in eslint-suppressions.json beside it,
-// which ESLint fails on once one no longer occurs.
-// Python strings are refused the same names by markup-drawn-by-templates
-// (tools/lint/ast-grep), which MarkupRuleTests holds to this list.
-const primitiveClass = String.raw`/(^|\s)(notice(-attention)?|msg(-(error|info|success|warning))?|btn|pill(-[\w-]+)?|row-detail|row-columns)(\s|$)/`;
+// The names are markup-drawn-by-templates' (tools/lint/ast-grep), which
+// refuses them in a Python string, read from its one class= regex so both
+// tools refuse one list.
+const markupRule = readFileSync(new URL("ast-grep/rules/markup-drawn-by-templates.yml", import.meta.url), "utf8");
+const [before, after] = [String.raw`([^"']*\s)?`, String.raw`(\s|`];
+const classRegex = markupRule.split("\n").filter((line) => line.includes("regex: class=") && line.includes(before));
+if (classRegex.length !== 1 || !classRegex[0].includes(after)) {
+  throw new Error("markup-drawn-by-templates.yml names the primitives' classes in one regex, class=...([^\"']*\\s)?(names)(\\s|...");
+}
+const primitiveNames = classRegex[0].slice(classRegex[0].indexOf(before) + before.length, classRegex[0].lastIndexOf(after));
+const primitiveClass = String.raw`/(^|\s)${primitiveNames}(\s|$)/`;
 const drawnMarkup = [
   `AssignmentExpression[left.property.name='className'] Literal[value=${primitiveClass}]`,
   `AssignmentExpression[left.property.name='className'] TemplateElement[value.raw=${primitiveClass}]`,
@@ -87,6 +94,14 @@ const drawnMarkup = [
   message:
     "A primitive's markup is the server's: fill what the page's HTML already holds, or swap in a part a template draws (`hqFragment.swap`), never spelling its class in a script.",
 }));
+
+// An element a script makes is markup no template draws, whatever its class:
+// the server draws each piece a script adds as a <template>, which it clones.
+const builtMarkup = {
+  selector: "CallExpression[callee.property.name='createElement']",
+  message:
+    "Markup is the server's: clone a <template> the partial that owns the region draws (`template.content.firstElementChild.cloneNode(true)`), never build an element in a script.",
+};
 
 // In fragment.js each of these happens once, where a disable comment says
 // so; a second one is refused, and a comment left over is reported unused.
@@ -130,6 +145,8 @@ const loadTimeQuery = {
     "An element found once at load is lost when a fragment replaces its part: set it up through `hqFragment.each(selector, setup)`, or listen on the document.",
 };
 
+const scriptSyntax = [...primitiveSyntax, ...drawnMarkup, layoutReads, submitterRebuilt, loadTimeQuery];
+
 export default [
   {
     linterOptions: { reportUnusedDisableDirectives: "error" },
@@ -169,8 +186,14 @@ export default [
     rules: {
       "no-restricted-globals": ["error", ...primitiveGlobals],
       "no-restricted-properties": ["error", ...primitiveProperties],
-      "no-restricted-syntax": ["error", ...primitiveSyntax, ...drawnMarkup, layoutReads, submitterRebuilt, loadTimeQuery],
+      "no-restricted-syntax": ["error", ...scriptSyntax, builtMarkup],
     },
+  },
+  {
+    // The reference viewer breaks the third party's long names where they
+    // may wrap, inside markup HQ never draws.
+    files: ["static/js/api-reference.js"],
+    rules: { "no-restricted-syntax": ["error", ...scriptSyntax] },
   },
   {
     files: ["static/js/fragment.js"],
@@ -182,7 +205,7 @@ export default [
         { name: "setTimeout", message: "fragment.js keeps one timer, hqEvery's, as window.setTimeout." },
       ],
       "no-restricted-properties": ["error", ...oncePerPage],
-      "no-restricted-syntax": ["error", parserStaysInside, ...drawnMarkup, layoutReads, submitterRebuilt, loadTimeQuery],
+      "no-restricted-syntax": ["error", parserStaysInside, ...drawnMarkup, layoutReads, submitterRebuilt, loadTimeQuery, builtMarkup],
     },
   },
 ];

@@ -1651,9 +1651,7 @@
       "GlanceObservations": {
         "type": "array",
         "items": {
-          "type": "object",
-          "additionalProperties": true,
-          "description": "One dashboard panel observation (record_dashboard_observations), carrying the as_of of the plan it answers."
+          "$ref": "#/components/schemas/GlanceObservation"
         }
       },
       "ForcedRead": {
@@ -2109,23 +2107,6 @@
           "cls_needs_improvement",
           "cls_poor"
         ]
-      },
-      "Verification": {
-        "type": "object",
-        "description": "How long the controller keeps checking that an applied change is actually served, declared by the action it belongs to.",
-        "properties": {
-          "timeout_seconds": {
-            "type": "integer"
-          },
-          "interval_seconds": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "timeout_seconds",
-          "interval_seconds"
-        ],
-        "additionalProperties": false
       },
       "PassMode": {
         "type": "string",
@@ -4211,6 +4192,248 @@
         },
         "type": "object"
       },
+      "GlanceObservation": {
+        "additionalProperties": false,
+        "description": "One dashboard panel the controller read (record_dashboard_observations), carrying the as_of of the plan it answers. Numbers, instants and states only: HQ words them.",
+        "properties": {
+          "panel_id": {
+            "$ref": "#/components/schemas/GlancePanelID"
+          },
+          "as_of": {
+            "type": "string"
+          },
+          "machines": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GlanceObservationMachine"
+            },
+            "type": "array"
+          },
+          "weather": {
+            "$ref": "#/components/schemas/GlanceObservationWeather",
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "required": [
+          "panel_id",
+          "as_of"
+        ],
+        "type": "object"
+      },
+      "GlanceObservationAlert": {
+        "additionalProperties": false,
+        "description": "One active Weather Service alert for the point.",
+        "properties": {
+          "event": {
+            "default": "",
+            "type": "string"
+          },
+          "headline": {
+            "default": "",
+            "type": "string"
+          },
+          "severity": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GlanceObservationDocker": {
+        "additionalProperties": false,
+        "description": "A machine read through its Docker environment: what its running\ncontainers take of it. ``cpu_percent`` is a share of the whole machine.",
+        "properties": {
+          "containers": {
+            "type": "integer"
+          },
+          "cpu_percent": {
+            "format": "double",
+            "type": "number"
+          },
+          "cores": {
+            "type": "integer"
+          },
+          "memory_used": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "memory_total": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "storage": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "containers",
+          "cpu_percent",
+          "cores",
+          "memory_used",
+          "memory_total",
+          "storage"
+        ],
+        "type": "object"
+      },
+      "GlanceObservationHost": {
+        "additionalProperties": false,
+        "description": "A machine read over SSH, as the controller's host script prints it.",
+        "properties": {
+          "cpu_percent": {
+            "format": "double",
+            "type": "number"
+          },
+          "cores": {
+            "type": "integer"
+          },
+          "load_1m": {
+            "format": "double",
+            "type": "number"
+          },
+          "memory_used": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "memory_total": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "storage_used": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "storage_total": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cpu_percent",
+          "cores",
+          "load_1m",
+          "memory_used",
+          "memory_total",
+          "storage_used",
+          "storage_total"
+        ],
+        "type": "object"
+      },
+      "GlanceObservationHour": {
+        "additionalProperties": false,
+        "description": "One hour of the Weather Service's hourly forecast.",
+        "properties": {
+          "start": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "temperature": {
+            "default": null,
+            "format": "double",
+            "type": "number",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "temperature_unit": {
+            "default": "",
+            "type": "string"
+          },
+          "forecast": {
+            "default": "",
+            "type": "string"
+          },
+          "chance": {
+            "default": 0,
+            "type": "integer"
+          },
+          "wind_speed": {
+            "default": "",
+            "type": "string"
+          },
+          "wind_direction": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start"
+        ],
+        "type": "object"
+      },
+      "GlanceObservationMachine": {
+        "additionalProperties": false,
+        "description": "One machine on the infrastructure panel. A machine with neither part\nand no failure is one the controller had no way to read.",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "host": {
+            "$ref": "#/components/schemas/GlanceObservationHost",
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          },
+          "docker": {
+            "$ref": "#/components/schemas/GlanceObservationDocker",
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          },
+          "refresh_failed": {
+            "default": "",
+            "maxLength": 60,
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "GlanceObservationWeather": {
+        "additionalProperties": false,
+        "description": "The forecast at the configured point: the hours ahead, the first of\nthem now, and the alerts in force.",
+        "properties": {
+          "point": {
+            "type": "string"
+          },
+          "city": {
+            "default": "",
+            "type": "string"
+          },
+          "state": {
+            "default": "",
+            "type": "string"
+          },
+          "hours": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GlanceObservationHour"
+            },
+            "maxItems": 12,
+            "type": "array"
+          },
+          "alerts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GlanceObservationAlert"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "refresh_failed": {
+            "default": "",
+            "maxLength": 60,
+            "type": "string"
+          }
+        },
+        "required": [
+          "point"
+        ],
+        "type": "object"
+      },
       "HostEdgeRebootRecord": {
         "additionalProperties": false,
         "description": "Whether an edge waits on a restart: the host.edge_reboot reading's record for each edge, read the same way by its receiver's reboot operation and handed over its SSH transport.",
@@ -4630,7 +4853,7 @@
         "type": "object"
       },
       "HostTailnetLockRecord": {
-        "description": "Tailnet lock as the controller's own machine sees it: `tailscale lock status`, counted. It names no key, only how many sign.",
+        "description": "Tailnet lock as the controller's own machine sees it: `tailscale lock status`, with each key it trusts to sign.",
         "properties": {
           "record": {
             "type": "string"
@@ -4643,10 +4866,13 @@
             "default": false,
             "type": "boolean"
           },
-          "trusted_keys": {
-            "default": 0,
-            "minimum": 0,
-            "type": "integer"
+          "signers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HostTailnetLockTailnetLockSigner"
+            },
+            "maxItems": 64,
+            "type": "array"
           },
           "locked_out": {
             "default": [],
@@ -4658,6 +4884,37 @@
         },
         "required": [
           "record"
+        ],
+        "type": "object"
+      },
+      "HostTailnetLockTailnetLockSigner": {
+        "description": "One key tailnet lock trusts to sign: the public half a device holds,\nthe kind of key it is, its votes and the labels it was added with.",
+        "properties": {
+          "key": {
+            "pattern": "^tlpub:[0-9a-f]{1,128}$",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "maxLength": 32,
+            "type": "string"
+          },
+          "votes": {
+            "default": 0,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "maxProperties": 16,
+            "type": "object"
+          }
+        },
+        "required": [
+          "key"
         ],
         "type": "object"
       },
@@ -5941,6 +6198,18 @@
           "TLSConsumerKindNPM"
         ]
       },
+      "TailnetRange": {
+        "type": "string",
+        "description": "The address ranges Tailscale numbers a tailnet's devices from.",
+        "enum": [
+          "100.64.0.0/10",
+          "fd7a:115c:a1e0::/48"
+        ],
+        "x-enum-varnames": [
+          "TailnetRangeIPv4",
+          "TailnetRangeIPv6"
+        ]
+      },
       "TailscaleDNSRecord": {
         "properties": {
           "record": {
@@ -6094,6 +6363,27 @@
         ],
         "type": "object",
         "description": "One tailscale.user record: Tailnet user."
+      },
+      "Verification": {
+        "additionalProperties": false,
+        "properties": {
+          "timeout_seconds": {
+            "maximum": 600,
+            "minimum": 30,
+            "type": "integer"
+          },
+          "interval_seconds": {
+            "maximum": 30,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "timeout_seconds",
+          "interval_seconds"
+        ],
+        "type": "object",
+        "description": "How long the controller keeps checking that an applied change is actually served, declared by the action it belongs to."
       }
     }
   }

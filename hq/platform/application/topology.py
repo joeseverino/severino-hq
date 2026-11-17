@@ -28,23 +28,25 @@ from .action_links import (
     ActionLink as TopologyAction,
     capability_action_link,
     command_action,
-    command_url,
     connection_action_links,
+    read_link,
     topology_url,
 )
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
+from .conditions import DRIFTED, holding
 from .connection_catalog import ConnectionGroup, connection_catalog
 from .connections import ConnectionLink, ConnectionSpec
 from .contradiction_findings import add_contradiction_facts
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, node_name, record_name
-from .infrastructure import RESOURCE_TONES, is_drifted, resource_health
+from .infrastructure import ResourceState, resource_health
 from .integration_validation import required_capability_names
 from .projection import QUERY, QueryRefusal, projection_scope
-from .resource_capabilities import REMOVAL_CAPABILITY, removals_pending, resource_capabilities
+from .resource_capabilities import REMOVAL_CAPABILITY, UPDATE_CAPABILITY, removals_pending, resource_capabilities
 from .resource_context import record_summary, shared_names
 from .security import Capability, Principal
+from .tone import Tone
 from .topology_answer import TOPOLOGY_SCHEMA_VERSION, TopologyAnswer, TopologySummary
 from .topology_facts import add_connection_facts, add_observed_facts
 from .topology_lenses import (
@@ -79,83 +81,36 @@ def _focus_url(node_id: str) -> str:
     return topology_url(node_id)
 
 
-def _resource_status(resource: ManagedResource) -> tuple[str, str, str]:
+def _resource_status(resource: ManagedResource) -> tuple[Tone, str, str]:
     if not resource.enabled:
-        return "neutral", "Switched off in HQ", ""
+        return Tone.NEUTRAL, "Switched off in HQ", ""
     health = resource_health(resource)
-
-    state = RESOURCE_TONES.get(health["state"], "neutral")
-    return state, health["label"], health["message"]
+    return ResourceState(health["state"]).tone, health["label"], health["message"]
 
 
 def _resource_actions(
     resource: ManagedResource, principal: Principal, *, removal_pending: bool, manages
 ) -> tuple[TopologyAction, ...]:
     key = resource.key
-    actions = [
-        TopologyAction(
-            "open",
-            "Open",
-            "read",
-            resource.get_absolute_url(),
-        )
-    ]
+    actions = [read_link("open", "Open", resource.get_absolute_url())]
     if not principal.permits(Capability.MANAGE_INFRASTRUCTURE) or removal_pending:
         return tuple(actions)
     capabilities = resource_capabilities(resource, running=(), removal_pending=removal_pending, manages=manages)
-    if capabilities.offered.edit_url:
-        actions.append(
-            command_action(
-                "edit",
-                "infrastructure.resource.update",
-                capabilities.offered.edit_url,
-                target=key,
-            )
-        )
-    drifted = is_drifted(resource)
+    if capabilities.offered.edits:
+        actions.append(command_action("edit", UPDATE_CAPABILITY, target=key))
+    drifted = bool(holding(resource.conditions, DRIFTED))
     if drifted:
         # Something changed it outside HQ: keeping that is the choice that
         # loses nothing, so it is offered, and first.
-        actions.append(
-            command_action(
-                "keep_live",
-                "infrastructure.resource.accept_observed",
-                command_url("infrastructure.resource.accept_observed", key),
-                target=key,
-            )
-        )
+        actions.append(command_action("keep_live", "infrastructure.resource.accept_observed", target=key))
     reconcile = capabilities.actions.get("reconcile")
     if reconcile and reconcile.enabled:
-        actions.append(
-            command_action(
-                "reconcile",
-                "infrastructure.resource.reconcile",
-                reverse("control_plane:reconcile", kwargs={"key": key}),
-                method="POST",
-                target=key,
-            )
-        )
+        actions.append(command_action("reconcile", "infrastructure.resource.reconcile", target=key))
     renew = capabilities.actions.get("renew")
     if renew and renew.enabled and principal.permits(Capability.REQUEST_CERTIFICATE_RENEWAL):
-        actions.append(
-            command_action(
-                "renew",
-                "certificate.renew",
-                reverse("control_plane:renew", kwargs={"key": key}),
-                method="POST",
-                target=key,
-            )
-        )
-    if capabilities.offered.remove_url:
-        actions.append(
-            command_action(
-                "remove",
-                REMOVAL_CAPABILITY,
-                capabilities.offered.remove_url,
-                target=key,
-                intent=capabilities.removal_words,
-            )
-        )
+        actions.append(command_action("renew", "certificate.renew", target=key))
+    if capabilities.offered.removes:
+        actions.append(command_action("remove", REMOVAL_CAPABILITY, target=key, variant=capabilities.removal_variant))
     return tuple(actions)
 
 
@@ -176,7 +131,7 @@ def _link_node(
         label=link.label,
         subtitle=reached if kind == "target" else "Not read yet",
         url=link.url,
-        actions=((TopologyAction("open", "Open", "read", link.url),) if link.url else ()),
+        actions=((read_link("open", "Open", link.url),) if link.url else ()),
         read_capabilities=read_capabilities,
     )
 
@@ -223,7 +178,7 @@ def _ability_actions(ability, ability_id: str, principal: Principal) -> tuple[To
     the graph acquiring a way to run it.
     """
 
-    actions = [TopologyAction("focus", "Show links", "read", _focus_url(ability_id))]
+    actions = [read_link("focus", "Show links", _focus_url(ability_id))]
     command = capability_action_link(ability.capability, principal=principal)
     if command is not None:
         actions.append(command)
@@ -288,7 +243,7 @@ def _merge_controller_node(
     Its observed time is the newest of the connections it reports.
     """
 
-    action = TopologyAction("open", f"Open {group_label}", "read", url) if url else None
+    action = read_link("open", f"Open {group_label}", url) if url else None
     refresh = capability_action_link(READ_NOW_CAPABILITY, principal=principal)
     emitted = tuple(item for item in (action, refresh) if item is not None)
     current = nodes.get(node_id)
@@ -429,7 +384,7 @@ def _dependency_edges(instance, connection, nodes, edges) -> None:
 def _ability_edges(group, connection, connection_id, edges) -> None:
     for state in connection.abilities:
         ability_id = f"ability:{group.spec.name}:{state.ability.name}"
-        available = "good" if state.available is True else "serious" if state.available is False else "neutral"
+        available = Tone.GOOD if state.available is True else Tone.SERIOUS if state.available is False else Tone.NEUTRAL
         relation = edge_between(connection_id, ability_id, "enables", status=available)
         edges[relation.id] = relation
 
@@ -477,7 +432,6 @@ def derive_topology(*, principal: Principal, request: Any = None) -> Topology:
     ``request``, where there is one, says which address reached HQ.
     """
 
-    principal.require(Capability.READ)
     with projection_scope(seed=serving(request) if request is not None else None):
         return _derive(principal)
 
@@ -520,8 +474,6 @@ def relation_graph(*, principal: Principal) -> RelationGraph:
     needs: health, actions, abilities' governance, traffic and perimeter facts.
     Read once per projection, so every page section shares one derivation.
     """
-
-    principal.require(Capability.READ)
 
     def build() -> RelationGraph:
         nodes: dict[str, TopologyNode] = {}
@@ -573,8 +525,8 @@ def _derive(principal: Principal) -> Topology:
     )
     ordered_edges = tuple(sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target)))
     unmet = tuple(
-        (standing.check.id, standing.reading.evidence, standing.reading.read_capabilities)
-        for standing in estate_posture(groups).unmet
+        (result.check.id, result.reading.evidence, result.reading.read_capabilities)
+        for result in estate_posture(groups).unmet
     )
     return Topology(ordered_nodes, ordered_edges, unmet, _kinds_read(), _automation_worker(resources))
 
@@ -715,7 +667,6 @@ def topology(*, principal: Principal, **narrowing: object) -> TopologyAnswer:
     choices that would.
     """
 
-    principal.require(Capability.READ)
     query = TopologyQuery.model_validate(narrowing).model_dump()
     selected: TopologyLens | None = lens_for(query["lens"]) if query["lens"] else None
     focus: str = query["focus"]

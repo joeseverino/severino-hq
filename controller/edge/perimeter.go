@@ -7,7 +7,10 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"slices"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/api"
 )
 
 // perimeterReading is what this machine relies on to stay shut, as it is now.
@@ -44,9 +47,8 @@ func (r Receiver) perimeter(ctx context.Context, stdout io.Writer) error {
 	})
 }
 
-// sharedAddressSpace is 100.64.0.0/10, the carrier-grade NAT range a tailnet
-// numbers its machines from.
-var sharedAddressSpace = netip.MustParsePrefix("100.64.0.0/10")
+// tailnetRanges are what a tailnet numbers its machines from.
+var tailnetRanges = api.MustPrefixes("TailnetRange", "enum")
 
 // publicAddresses is every IPv4 address on an interface that is neither
 // private, loopback, link-local nor tailnet: derived, so a machine renumbered
@@ -63,7 +65,7 @@ func publicAddresses(addresses []net.Addr) []string {
 			continue
 		}
 		ip = ip.Unmap()
-		if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || sharedAddressSpace.Contains(ip) {
+		if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || slices.ContainsFunc(tailnetRanges, func(p netip.Prefix) bool { return p.Contains(ip) }) {
 			continue
 		}
 		public = append(public, ip.String())

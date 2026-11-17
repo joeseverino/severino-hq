@@ -17,14 +17,14 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Model
 
-from hq.platform.core.audit import audit_operation
-
+from .answer_fields import CallMessage
 from .describe import Describe
 from .domains import Records, load, records_of
 from .integration_specs import TARGET_KINDS, Kept, keeps
 from .record_errors import RecordConflict, RecordNotFound, Sentence
 from .security import Principal
 lazy from .resources import resource_registry
+lazy from .ui import ended
 
 Save = Callable[..., dict[str, Any]]
 
@@ -46,7 +46,7 @@ def saved_type(resource: str) -> Any:
     record = spec.record_type or spec.row_type
     saved: Any = TypedDict(  # type: ignore[operator]
         _saved_name(records),
-        {"ok": Literal[True], "created": Created, records.noun: record},
+        {"ok": Literal[True], "created": Created, records.noun: record, "message": CallMessage},
     )
     saved.__doc__ = f"The {records.title or records.noun} as saved, and whether the call created it."
     saved.__module__ = __name__
@@ -175,7 +175,13 @@ def linked_saver(
         current = target.get(keyword)
         with transaction.atomic():
             record = _saved(records, command, principal, current, expected_updated_at, sent, refusals, links)
-            return {"ok": True, "created": current is None, records.noun: serialize(record)}
+            done = "created" if current is None else "updated"
+            return {
+                "ok": True,
+                "created": current is None,
+                records.noun: serialize(record),
+                "message": ended(f"{records.called} “{record}” {done}"),
+            }
 
     save.__name__ = save.__qualname__ = f"save_{records.noun}"
     declared = save.__annotate__
@@ -201,27 +207,24 @@ def _saved(
     refusals: Held,
     links: Mapping[str, Link],
 ) -> Any:
-    principal.require(records.write)
     model = load(records.model)
-    operation = f"{records.noun}.{'create' if current is None else 'update'}"
-    with audit_operation(operation=operation, principal=principal):
-        record = model() if current is None else held(model, refusals, {records.lookup: current}, expected_updated_at)
-        values = written(command, sent if current is not None else None)
-        sets = {}
-        for name, link in links.items():
-            if name not in values:
-                continue
-            field = model._meta.get_field(name)
-            if field.many_to_many:
-                sets[name] = _linked_set(field.related_model, link, values.pop(name))
-            else:
-                values[name] = _linked_one(field.related_model, link, values.pop(name))
-        for name, value in values.items():
-            setattr(record, name, value)
-        record.full_clean()
-        record.save()
-        for name, found in sets.items():
-            getattr(record, name).set(found)
+    record = model() if current is None else held(model, refusals, {records.lookup: current}, expected_updated_at)
+    values = written(command, sent if current is not None else None)
+    sets = {}
+    for name, link in links.items():
+        if name not in values:
+            continue
+        field = model._meta.get_field(name)
+        if field.many_to_many:
+            sets[name] = _linked_set(field.related_model, link, values.pop(name))
+        else:
+            values[name] = _linked_one(field.related_model, link, values.pop(name))
+    for name, value in values.items():
+        setattr(record, name, value)
+    record.full_clean()
+    record.save()
+    for name, found in sets.items():
+        getattr(record, name).set(found)
     return record
 
 

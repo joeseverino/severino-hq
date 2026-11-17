@@ -1,6 +1,5 @@
 """The shared pieces a write or list view is built from: file fields, rows, totals and the write spine."""
 
-from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase
 
 
@@ -74,9 +73,10 @@ class ListRowTests(SimpleTestCase):
     def test_a_row_named_by_its_link_draws_it_as_every_mention_is_drawn(self):
         from django.template.loader import render_to_string
 
+        from hq.platform.application.markup_testing import select
+
         from ..card_items import ListRow
         from ..entity_links import EntityLink
-        from .markup import select
 
         host = EntityLink("example-host", "/example/host/", kind="machine", kind_label="machine")
         drawn = render_to_string("partials/_record_list.html", {"rows": [ListRow(link=host, meta="An example note")]})
@@ -91,9 +91,10 @@ class ListRowTests(SimpleTestCase):
         from django.template.loader import render_to_string
         from django.utils import timezone
 
+        from hq.platform.application.markup_testing import text
+
         from ..card_items import ListRow
         from ..moments import when_day
-        from .markup import text
 
         today = timezone.localdate()
         for stamp in ("2026-10-22 09:36:47", "2026-10-22T09:36:47Z", "2026-10-22", today):
@@ -109,8 +110,9 @@ class ListRowTests(SimpleTestCase):
 
         from django.template.loader import render_to_string
 
+        from hq.platform.application.markup_testing import elements, text
+
         from ..card_items import ListRow
-        from .markup import elements, text
 
         quoted = "enabled: False at 2026-11-02 09:30, <b> "
         row = ListRow(title="Example host", snippet=((quoted, False), ("backup", True)))
@@ -124,8 +126,9 @@ class ListRowTests(SimpleTestCase):
     def test_a_places_chips_are_each_a_word_after_its_line(self):
         from django.template.loader import render_to_string
 
+        from hq.platform.application.markup_testing import elements
+
         from ..card_items import ListRow
-        from .markup import elements
 
         row = ListRow(
             title="Example connection", url="/example/connection/", chips=("Reads accounts", "Reads balances")
@@ -143,15 +146,18 @@ class ListRowTests(SimpleTestCase):
 
         from django.template.loader import render_to_string
 
+        from hq.platform.application.markup_testing import elements, select
+
         from ..card_items import ListRow
         from ..pages import PageAction
-        from .markup import elements, select
 
         row = ListRow(
             title="Example group",
             actions=(
-                PageAction("↑", "/example/group/", method="post", value="up", title="Move up", disabled=True),
-                PageAction("↓", "/example/group/", method="post", value="down", title="Move down"),
+                PageAction._built(
+                    label="↑", url="/example/group/", method="post", value="up", title="Move up", disabled=True
+                ),
+                PageAction._built(label="↓", url="/example/group/", method="post", value="down", title="Move down"),
                 PageAction("Open", "/example/group/open/"),
             ),
         )
@@ -304,59 +310,3 @@ class ProjectedListTests(TestCase):
         view.setup(RequestFactory().get("/example/"))
 
         self.assertEqual(view.get_queryset().count(), 5)
-
-
-class WriteSpineContractTests(TestCase):
-    """What a write view must declare, enforced where the fix is obvious.
-
-    Both guards exist because the failure they replace is quiet. A service left
-    as a plain function binds as a method and passes the view where the command
-    belongs; a missing noun renders a success message with a hole in it.
-    """
-
-    def _view(self, **attributes):
-        from ..writes import ServiceCreateMixin
-
-        return type("AView", (ServiceCreateMixin,), attributes)
-
-    def test_a_service_that_is_not_a_staticmethod_is_refused(self):
-        with self.assertRaises(ImproperlyConfigured) as caught:
-            self._view(service=lambda command, **kwargs: None)
-
-        self.assertIn("staticmethod", str(caught.exception))
-
-    def test_a_view_that_writes_must_say_what_it_writes(self):
-        with self.assertRaises(ImproperlyConfigured) as caught:
-            self._view(service=staticmethod(lambda command, **kwargs: None))
-
-        self.assertIn("noun", str(caught.exception))
-        self.assertIn("result_key", str(caught.exception))
-
-    def test_a_complete_view_is_accepted(self):
-        view = self._view(
-            service=staticmethod(lambda command, **kwargs: None),
-            noun="Thing",
-            result_key="thing",
-            identity_attr="slug",
-        )
-
-        self.assertEqual(view.noun, "Thing")
-
-    def test_a_mixin_that_supplies_no_service_is_not_a_view(self):
-        """Intermediate layers declare part of the contract and finish none of
-        it, so completeness is asked of the class that supplies the service."""
-
-        from ..writes import ServiceCreateMixin
-
-        layer = type("PartialLayer", (ServiceCreateMixin,), {"noun": "Thing"})
-
-        self.assertEqual(layer.noun, "Thing")
-
-    def test_the_base_declares_no_noun_to_collide_with(self):
-        """A placeholder value that is never correct still wins or loses by base
-        order, so which one applies depends on how the bases were written."""
-
-        from ..writes import ServiceWriteMixin
-
-        for name in ("noun", "result_key", "identity_attr"):
-            self.assertNotIn(name, vars(ServiceWriteMixin))

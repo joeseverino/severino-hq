@@ -1,38 +1,26 @@
 """The endpoint browsers report Content Security Policy violations to."""
 
 import json
-from datetime import timedelta
 from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_not_required
 from django.http import HttpResponse
-from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from .audit import record_event
-from .models import AuditLog
+from hq.platform.application.policy_reports import CSP_REPORTS, record_violation
+lazy from hq.platform.application.entity_links import web_url
+
 from .network import client_ip
-from .write_bounds import RowCap, writes
+from .write_bounds import writes
 
 # The browser's own account of a policy it refused to follow. Bounded on every
-# axis a stranger controls: how much it may send, which values of it are kept,
-# how often the same complaint may reach the database, and how many rows every
-# complaint together may write.
+# axis a stranger controls: how much it may send and which values of it are
+# kept here, and how often the same complaint may reach the database and how
+# many rows every complaint together may write (``policy_reports``).
 _CSP_REPORT_MAX_BYTES = 8 * 1024
 _CSP_FIELD_LIMIT = 200
-_CSP_REPEAT_WINDOW_SECONDS = 3600
-_LABEL = "ContentSecurityPolicy"
-
-CSP_REPORTS = RowCap(
-    "policy reports",
-    "at most 60 rows an hour, of a directive HQ's policy governs and a blocked origin or keyword",
-    action=AuditLog.Action.FAILED,
-    type_label=_LABEL,
-    rows=60,
-    window=timedelta(hours=1),
-)
 
 # Each directive a violation can name, and the directives it falls back to when
 # the policy does not declare it (CSP Level 3, 6.8.3 "Get the fallback list";
@@ -123,7 +111,7 @@ def _blocked(violation: dict) -> str:
     scheme = parts.scheme.lower()
     if scheme in _KEYWORDS:
         return scheme
-    if scheme not in ("http", "https") or not parts.hostname:
+    if not web_url(value) or not parts.hostname:
         return ""
     host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
     return f"{scheme}://{host}" + (f":{port}" if port is not None else "")
@@ -172,30 +160,10 @@ def csp_report(request):
         directive = _directive(violation)
         if not directive:
             continue
-        blocked = _blocked(violation)
-        document = str(violation.get("document-uri") or violation.get("documentURL") or "")[:_CSP_FIELD_LIMIT]
-        # One row per distinct complaint per hour. A page that violates the
-        # policy on every load would otherwise write a row on every load, and
-        # the thousandth copy says nothing the first did not.
-        since = timezone.now() - timedelta(seconds=_CSP_REPEAT_WINDOW_SECONDS)
-        already = AuditLog.objects.filter(
-            action=AuditLog.Action.FAILED,
-            object_type=_LABEL,
-            metadata__directive=directive,
-            metadata__blocked=blocked,
-            created_at__gte=since,
-        ).exists()
-        if already or not CSP_REPORTS.admits():
-            continue
-        record_event(
-            action=AuditLog.Action.FAILED,
-            type_label=_LABEL,
-            message=f"The browser refused {blocked or 'a resource'} under {directive}.",
-            metadata={
-                "directive": directive,
-                "blocked": blocked,
-                "document": document,
-                "source": client_ip(request),
-            },
+        record_violation(
+            directive=directive,
+            blocked=_blocked(violation),
+            document=str(violation.get("document-uri") or violation.get("documentURL") or "")[:_CSP_FIELD_LIMIT],
+            source=client_ip(request),
         )
     return HttpResponse(status=204)

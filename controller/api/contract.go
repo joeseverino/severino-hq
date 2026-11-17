@@ -6,7 +6,9 @@ package api
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/netip"
 	"regexp"
 	"strings"
 	"sync"
@@ -74,6 +76,21 @@ func Limit(schema string, path ...string) (int, error) {
 	return value, err
 }
 
+// Prefixes is a list of address ranges, such as an enum of CIDR blocks.
+func Prefixes(schema string, path ...string) ([]netip.Prefix, error) {
+	values, err := lookup[[]string](schema, path)
+	if err == nil && len(values) == 0 {
+		err = fmt.Errorf("the bridge contract's %s is empty", strings.Join(append([]string{schema}, path...), "."))
+	}
+	prefixes := make([]netip.Prefix, 0, len(values))
+	for _, value := range values {
+		prefix, parseErr := netip.ParsePrefix(value)
+		err = errors.Join(err, parseErr)
+		prefixes = append(prefixes, prefix)
+	}
+	return prefixes, err
+}
+
 // must is for a package-level declaration: a controller built against a
 // contract without the keyword does not start.
 func must[T any](value T, err error) T {
@@ -88,6 +105,11 @@ func MustKeyword(schema string, path ...string) string { return must(Keyword(sch
 
 // MustLimit is Limit, or a controller that does not start.
 func MustLimit(schema string, path ...string) int { return must(Limit(schema, path...)) }
+
+// MustPrefixes is Prefixes, or a controller that does not start.
+func MustPrefixes(schema string, path ...string) []netip.Prefix {
+	return must(Prefixes(schema, path...))
+}
 
 // MustPattern compiles the pattern keyword at the path.
 func MustPattern(schema string, path ...string) *regexp.Regexp {

@@ -1,25 +1,13 @@
-"""Form views whose write is one application service call.
+"""Form views whose write is one capability, run through the runner.
 
-``ServiceCreateMixin``, ``ServiceUpdateMixin`` and ``ServiceDeleteMixin`` write
-a record with a URL of its own and go to it; ``CommandFormMixin`` posts a
-command from a page that shows itself again, a domain's refusal on the form.
-The host and every extension share these steps rather than restate them.
+``CapabilityFormMixin`` creates or updates a record from its ``ModelForm`` and
+goes to it, ``CapabilityDeleteMixin`` deletes one and goes back to the list,
+and ``CapabilityCommandMixin`` posts a command from a page that shows itself
+again, a refusal on the form. Each names the capabilities it runs, and has no
+way to write but the runner. What a write says on the next page is its
+answer's ``message``, never the view's.
 """
 
-from hq.platform.application.writes import (
-    CommandFormMixin,
-    ServiceCreateMixin,
-    ServiceDeleteMixin,
-    ServiceUpdateMixin,
-    ServiceWriteMixin,
-    WriteMessages,
-)
+from hq.platform.application.writes import CapabilityCommandMixin, CapabilityDeleteMixin, CapabilityFormMixin
 
-__all__ = [
-    "CommandFormMixin",
-    "ServiceCreateMixin",
-    "ServiceDeleteMixin",
-    "ServiceUpdateMixin",
-    "ServiceWriteMixin",
-    "WriteMessages",
-]
+__all__ = ["CapabilityCommandMixin", "CapabilityDeleteMixin", "CapabilityFormMixin"]

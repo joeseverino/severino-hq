@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, DeleteView, RedirectView, TemplateView, UpdateView
 
-from hq.platform.application.calendar import calendar_day, calendar_month, month_of, month_url, new_entry_url
+from hq.platform.application.calendar import calendar_day, calendar_month, month_of, month_url
 from hq.platform.application.calendar_entries import (
     CHOOSE_SOURCE,
     calendar_choices,
@@ -19,9 +19,10 @@ from hq.platform.application.calendar_entries import (
     upcoming,
     when_label,
 )
-from hq.platform.application.capabilities import capability_title, capability_words
+from hq.platform.application.capabilities import capability_title
 from hq.platform.application.card_items import ListRow
-from hq.platform.application.moments import when_day
+from hq.platform.application.entity_links import web_url
+from hq.platform.application.moments import stamp_day, when_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.references import ReferencePickerMixin, reference_of
 from hq.platform.application.security import Capability, safe_next, web_principal
@@ -39,13 +40,6 @@ DELETE = "calendar.entry.delete"
 CALENDAR_TRAIL = (("Calendar", reverse_lazy("calendar:month")),)
 
 
-def _day(value: str) -> date | None:
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
-
-
 class CalendarView(PageMixin, TemplateView):
     # The calendar is personal, so reading it is a grant of its own, never READ.
     required_capability = Capability.READ_CALENDAR
@@ -53,18 +47,12 @@ class CalendarView(PageMixin, TemplateView):
     page_title = "Calendar"
 
     def _selected(self) -> date | None:
-        return _day(self.request.GET.get("day", ""))
+        return stamp_day(self.request.GET.get("day", ""))
 
     @override
     def get_page_actions(self):
         day = self._selected() or timezone.localdate()
-        return (
-            PageAction(
-                capability_words(CREATE),
-                new_entry_url(day),
-                primary=True,
-            ),
-        )
+        return (PageAction.command(CREATE, primary=True, query={"on": day.isoformat()}),)
 
     @override
     def get_context_data(self, **kwargs):
@@ -109,8 +97,8 @@ class CalendarView(PageMixin, TemplateView):
             if entry.repeat
             else (),
             "actions": (
-                PageAction(capability_words("calendar.entry.update"), reverse("calendar:entry_edit", args=[entry.uid])),
-                PageAction("Delete", reverse("calendar:entry_delete", args=[entry.uid]), danger=True),
+                PageAction.command("calendar.entry.update", entry.uid),
+                PageAction.command("calendar.entry.delete", entry.uid),
             ),
         }
 
@@ -146,7 +134,7 @@ def _upcoming(calendar) -> tuple:
                 title=event.title,
                 meta=" ".join(filter(None, (when_day(day), event.time_label))),
                 url=event.url or month_url(day.replace(day=1), day),
-                external=event.url.startswith("http"),
+                external=bool(web_url(event.url)),
             )
         )
     return tuple(rows)
@@ -164,7 +152,7 @@ def _rows(day, *, opened: str = "") -> tuple:
                 detail=event.detail,
                 meta=event.time_label or _range(event),
                 url=event.url,
-                external=event.url.startswith("http"),
+                external=bool(web_url(event.url)),
             )
             for event in events
             if not (opened and event.id.startswith(f"{opened}:"))
@@ -201,7 +189,6 @@ class EntryWrite:
     """How an event's write names it; each write names its own capabilities,
     so no base holds a placeholder for them that another base contradicts."""
 
-    noun = "Event"
     result_key = "entry"
     identity_attr = "uid"
 
@@ -237,7 +224,7 @@ class EntryCreateView(EntryFormPage, CreateView):
 
     @override
     def get_initial(self):
-        on = _day(self.request.GET.get("on", ""))
+        on = stamp_day(self.request.GET.get("on", ""))
         return {"starts_on": on or timezone.localdate()}
 
 

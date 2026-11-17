@@ -110,8 +110,12 @@ source_modules = ["hq.platform.application.workflow_contracts"]
 forbidden_modules = ["hq.**"]
 # The field description marker, a leaf held to importing nothing of HQ below.
 # The shared answer fields are one too, and join this list when a field here
-# takes one.
-ignore_imports = ["hq.platform.application.workflow_contracts -> hq.platform.application.describe"]
+# takes one. A link's effect is the one Effect, a leaf beside its tone.
+ignore_imports = [
+  "hq.platform.application.workflow_contracts -> hq.platform.application.describe",
+  "hq.platform.application.workflow_contracts -> hq.platform.application.effects",
+  "hq.platform.application.effects -> hq.platform.application.tone",
+]
 
 [[tool.importlinter.contracts]]
 name = "The field description marker is a leaf: it imports nothing of HQ"
@@ -140,12 +144,13 @@ ignore_imports = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "HQ reaches the component catalog only through the Design page's gallery, which the image build writes once"
+name = "HQ never reaches the application's test support, which mints an approved consent for anybody, and reaches the component catalog only through the Design page's gallery, which the image build writes once"
 type = "forbidden"
-# Each package that holds no test of its own, and each module of the one that
-# does: a forbidden module inside a source is skipped (see above).
-source_modules = ["hq.config", "hq.domains", "hq.platform.*", "hq.platform.core.*", "hq_sdk"]
-forbidden_modules = ["hq.platform.core.tests.browser.catalog"]
+# Each package that holds no test of its own, and each module of the ones that
+# do: a forbidden module inside a source is skipped (see above). The image
+# ships the tests, so this is what keeps them out of a running HQ.
+source_modules = ["hq.config", "hq.domains", "hq.platform.*", "hq.platform.application.*", "hq.platform.core.*", "hq_sdk"]
+forbidden_modules = ["hq.platform.application.tests", "hq.platform.core.tests.browser.catalog"]
 ignore_imports = [
   "hq.**.tests.** -> hq.**",
   "hq.platform.core.design_gallery -> hq.platform.core.tests.browser.catalog",
@@ -299,7 +304,6 @@ ignore = [
 check-typed-exception = true
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
-"tools".msg = "tools/ is development and CI code the image does not ship; a test of it lives under tools/."
 "urllib.request".msg = "urllib carries every header across a redirect, to any origin and to http://; read over HTTP with hq.platform.application.http_read."
 
 [tool.ruff.lint.per-file-ignores]
@@ -336,7 +340,7 @@ check-typed-exception = true
 # It runs cPanel's uapi by name, as an argument list.
 "deploy/targets/severino-hq-cpanel-controller" = ["UP", "SIM", "PTH", "PERF", "FURB", "B", "RUF", "C4", "S603"]
 # Naive datetimes are the input moment() is tested on.
-"hq/platform/application/tests/test_timestamps.py" = ["DTZ001", "DTZ901"]
+"hq/platform/application/tests/test_moment_reading.py" = ["DTZ001", "DTZ901"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true

@@ -1,7 +1,7 @@
 """Desired state and operation queue; credentials live only in the controller."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import override
 
 from django.conf import settings
@@ -12,12 +12,16 @@ from django.utils import timezone
 
 from hq.domains.jobs.models import JobState
 from hq.platform.application.labels import dotted
+from hq.platform.core.lapses import Lapse
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
 lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 lazy from hq.platform.application.approval_review import title as approval_title
+lazy from hq.platform.application.automation_adoption import playbook_titles
+lazy from hq.platform.application.automation_runs import run_title
 lazy from hq.platform.application.capabilities import capability_title
 lazy from hq.platform.application.security import subject_parts
+lazy from hq.platform.application.work_runs import scan_title
 
 lazy from .providers import readout_rows, registry_label, resource_home
 
@@ -449,10 +453,27 @@ class OperationState(models.TextChoices):
 
     @property
     def as_job(self) -> JobState:
-        """The job state this one reads as on Jobs, found by the word both say,
-        so the label above is the one declaration of the mapping."""
+        """The job state this one reads as on Jobs."""
 
-        return next(state for state in JobState if state.label == self.label)
+        return READS_AS_JOB[self]
+
+
+# Each operation state and the job state it reads as on Jobs, declared as data
+# so that rewording a label changes words alone; each label above is the words
+# of the state it maps to here.
+READS_AS_JOB: dict[OperationState, JobState] = {
+    OperationState.QUEUED: JobState.QUEUED,
+    OperationState.CLAIMED: JobState.RUNNING,
+    OperationState.SUCCEEDED: JobState.SUCCEEDED,
+    OperationState.FAILED: JobState.FAILED,
+    OperationState.CANCELLED: JobState.LOST,
+}
+
+
+# A claimed operation whose lease has run out is nobody's: the next claim
+# puts it back or ends it (``controller.release_lapsed``), and until then it
+# reads as stopped early.
+OPERATION_LAPSE = Lapse(((OperationState.CLAIMED, "lease_expires_at", timedelta(0)),))
 
 
 class OperationRequest(TimestampedModel):
@@ -552,6 +573,11 @@ class OperationRequest(TimestampedModel):
 
     @override
     def __str__(self) -> str:
+        # A run and a scan by the title Jobs and their own pages give them.
+        if self.action == self.Action.RUN:
+            return run_title(str((self.input or {}).get("operation") or ""), playbook_titles())
+        if self.action == self.Action.SCAN:
+            return scan_title()
         return f"{self.get_action_display()}: {self.resource.key}"
 
 
@@ -660,6 +686,11 @@ class ApprovalState(models.TextChoices):
     STALE = "stale", "Superseded"
     # Taken back by whoever asked, before anybody decided it.
     WITHDRAWN = "withdrawn", "Withdrawn"
+
+
+# A request nobody decided by its expiry has lapsed, whether or not the
+# sweep has marked it (``approvals.lapse_expired``).
+APPROVAL_LAPSE = Lapse(((ApprovalState.PENDING, "expires_at", timedelta(0)),))
 
 
 class ApprovalRequest(TimestampedModel):
@@ -772,9 +803,11 @@ class CapabilityRule(models.Model):
     """
 
     class Rule(models.TextChoices):
-        ALLOW = "allow", "Allow"
-        APPROVE = "approve", "Require approval"
-        DENY = "deny", "Deny"
+        """Each rule as the policy page and its audit rows call it, beside "Default"."""
+
+        ALLOW = "allow", "On"
+        APPROVE = "approve", "Ask me first"
+        DENY = "deny", "Off"
 
     # An agent subject (``security.agent_subject``): a client id of up to 160 and its person's key.
     subject = models.CharField(max_length=255)
@@ -795,4 +828,5 @@ class CapabilityRule(models.Model):
 
     @override
     def __str__(self) -> str:
-        return f"{self.get_rule_display()} “{capability_title(self.capability)}” for {subject_parts(self.subject)[0]}"
+        # The rule itself is the audit row's change, from one to the other.
+        return f"“{capability_title(self.capability)}” for {subject_parts(self.subject)[0]}"

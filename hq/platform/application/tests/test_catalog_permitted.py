@@ -5,9 +5,9 @@ held only by HQ itself is never told an entry needing it is permitted, and
 the use it would try is refused.
 """
 
-from django.test import TestCase
+from dataclasses import dataclass
 
-from hq_sdk.capabilities import StrictCommand
+from django.test import TestCase
 
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
 from ..connections import ConnectionSpec, describe_connections
@@ -27,7 +27,8 @@ from ..security import (
 CALLERS = ("api", "mcp", "web", DEVICE_INTERFACE)
 
 
-class _Nothing(StrictCommand):
+@dataclass(frozen=True, slots=True)
+class _Nothing:
     pass
 
 

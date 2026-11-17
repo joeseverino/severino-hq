@@ -1,11 +1,11 @@
 id: hand-drawn-row-actions
 snapshots:
-  "<tr><td class=\"row-actions\">{% if a %}<a class=\"btn\" href=\"/\">B</a>{% endif %}</td></tr>":
+  "<tr><td class=\"row-actions\">{% if a %}{% button \"B\" \"/\" %}{% endif %}</td></tr>":
     labels:
-    - source: <td class="row-actions">{% if a %}<a class="btn" href="/">B</a>{% endif %}</td>
+    - source: <td class="row-actions">{% if a %}{% button "B" "/" %}{% endif %}</td>
       style: primary
       start: 4
-      end: 83
+      end: 74
     - source: td
       style: secondary
       start: 5
@@ -14,16 +14,16 @@ snapshots:
       style: secondary
       start: 4
       end: 28
-    - source: class="btn"
+    - source: "{% if a %}{% button \"B\" \"/\" %}{% endif %}"
       style: secondary
-      start: 41
-      end: 52
-  "<tr><td>{% include \"x.html\" with class=\"ghost btn\" %}</td></tr>":
+      start: 28
+      end: 69
+  "<tr><td>{% button \"A\" \"/a/\" post=True %}</td></tr>":
     labels:
-    - source: <td>{% include "x.html" with class="ghost btn" %}</td>
+    - source: <td>{% button "A" "/a/" post=True %}</td>
       style: primary
       start: 4
-      end: 58
+      end: 45
     - source: td
       style: secondary
       start: 5
@@ -32,34 +32,16 @@ snapshots:
       style: secondary
       start: 4
       end: 8
-    - source: "{% include \"x.html\" with class=\"ghost btn\" %}"
+    - source: "{% button \"A\" \"/a/\" post=True %}"
       style: secondary
       start: 8
-      end: 53
-  "<tr><td>{% post_button \"A\" \"/a/\" %}</td></tr>":
-    labels:
-    - source: <td>{% post_button "A" "/a/" %}</td>
-      style: primary
-      start: 4
       end: 40
-    - source: td
-      style: secondary
-      start: 5
-      end: 7
-    - source: <td>
-      style: secondary
-      start: 4
-      end: 8
-    - source: "{% post_button \"A\" \"/a/\" %}"
-      style: secondary
-      start: 8
-      end: 35
-  "<tr><td>{% post_button \"A\" \"/a/\" css=\"btn danger\" %}</td></tr>":
+  "<tr><td>{% button \"A\" \"/a/\" post=True look=\"danger\" %}</td></tr>":
     labels:
-    - source: <td>{% post_button "A" "/a/" css="btn danger" %}</td>
+    - source: <td>{% button "A" "/a/" post=True look="danger" %}</td>
       style: primary
       start: 4
-      end: 57
+      end: 59
     - source: td
       style: secondary
       start: 5
@@ -68,7 +50,7 @@ snapshots:
       style: secondary
       start: 4
       end: 8
-    - source: "{% post_button \"A\" \"/a/\" css=\"btn danger\" %}"
+    - source: "{% button \"A\" \"/a/\" post=True look=\"danger\" %}"
       style: secondary
       start: 8
-      end: 52
+      end: 54

@@ -31,16 +31,16 @@ would be a page about anybody.
           <tr>
             <td>
               <strong>{% entity repo.url|outside label=repo.name %}</strong>
-              {% if repo.description %}<div class="muted">{{ repo.description|truncatechars:110|breakable }}</div>{% endif %}
+              {% if repo.description %}{% muted element="div" %}{{ repo.description|truncatechars:110|breakable }}{% endmuted %}{% endif %}
             </td>
-            <td class="prose">{% if repo.release %}{% entity repo.release.url|outside label=repo.release.tag %}{% if repo.release.published %} <span class="muted nowrap">{{ repo.release.published|when_text:"ago" }}</span>{% endif %}{% else %}{% empty_value %}{% endif %}</td>
+            <td><span class="prose">{% present repo.release %}{% entity repo.release.url|outside label=repo.release.tag %}{% if repo.release.published %} {% muted css="nowrap" %}{{ repo.release.published|when_text:"ago" }}{% endmuted %}{% endif %}{% endpresent %}</span></td>
             <td>
               {% for item in repo.advisories|slice:":2" %}
-                <div class="prose">{% status item.severity|default:"advisory" tone=item.severity|severity_tone %} {% entity item.url|outside label=item.id %}{% if item.summary %} {{ item.summary|truncatechars:90|breakable }}{% endif %}{% if item.published %} <span class="muted nowrap">{{ item.published|when_text:"ago" }}</span>{% endif %}</div>
+                <div class="prose">{% status item.severity|default:"advisory" tone=item.severity|severity_tone %} {% entity item.url|outside label=item.id %}{% if item.summary %} {{ item.summary|truncatechars:90|breakable }}{% endif %}{% if item.published %} {% muted css="nowrap" %}{{ item.published|when_text:"ago" }}{% endmuted %}{% endif %}</div>
               {% empty %}{% empty_value %}{% endfor %}
-              {% if repo.advisories|length > 2 %}<span class="muted">and {% entity repo.url|add:"/security/advisories"|outside label=repo.advisories|length|add:"-2"|stringformat:"s"|add:" more" %}</span>{% endif %}
+              {% if repo.advisories|length > 2 %}{% muted %}and {% entity repo.url|add:"/security/advisories"|outside label=repo.advisories|length|add:"-2"|stringformat:"s"|add:" more" %}{% endmuted %}{% endif %}
             </td>
-            <td class="nowrap">{% if repo.starred %}{{ repo.starred|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
+            <td class="nowrap">{{ repo.starred|when:"ago" }}</td>
           </tr>
         {% endfor %}
       </tbody>
@@ -61,9 +61,9 @@ would be a page about anybody.
     {% fact "HQ's GitHub App" %}
       {% if app_repositories %}
         Installed, reading {{ app_repositories|length }} of your repositories
-        <ul class="dot-list">{% for item in app_repositories %}<li{% if item.repo.private %} class="prose"{% endif %}>{% if item.project %}<a href="{{ item.project.get_absolute_url }}">{{ item.repo.short|breakable }}</a>{% else %}{% entity item.repo.url|outside label=item.repo.short %}{% endif %}{% if item.repo.private %} <span class="muted">(private)</span>{% endif %}</li>{% endfor %}<li>{% entity "https://github.com/settings/installations"|outside label="Manage on GitHub" %}</li></ul>
+        {% dot_list %}{% for item in app_repositories %}<li{% if item.repo.private %} class="prose"{% endif %}>{% if item.project %}{% entity item.project|record label=item.repo.short %}{% else %}{% entity item.repo.url|outside label=item.repo.short %}{% endif %}{% if item.repo.private %} {% muted %}(private){% endmuted %}{% endif %}</li>{% endfor %}<li>{% entity "https://github.com/settings/installations"|outside label="Manage on GitHub" %}</li>{% enddot_list %}
       {% else %}
-        <span class="muted">Not reading any repository this account owns.</span>
+        {% muted %}Not reading any repository this account owns.{% endmuted %}
       {% endif %}
     {% endfact %}
   {% endfacts %}

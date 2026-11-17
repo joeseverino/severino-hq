@@ -20,7 +20,6 @@ from pydantic import Field
 from hq.domains.calendars.models import INTERVAL_MAXIMUM, INTERVAL_MINIMUM, Entry, Preference
 from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
-from hq.platform.core.audit import audit_operation
 
 from .calendar import CalendarEvent, CalendarSource, gather
 from .command_fields import Choices, Describe, Refers
@@ -31,12 +30,11 @@ from .projection import window
 from .record_errors import RecordNotFound
 from .record_fields import Notes
 from .record_saves import Held, as_sent, found, held, written
-from .security import Capability, Principal, person
-from .ui import counted
+from .security import Principal, person
+from .ui import counted, ended
 lazy from . import calendar
 lazy from .calendar_specs import EntryRecord
 lazy from .record_answers import EntrySaved
-lazy from .references import dangling
 
 _ENTRY = Held("That calendar event was not found.", "This event changed after it was read.")
 
@@ -277,23 +275,21 @@ def save_entry(
     expected_updated_at: str | None = None,
     sent: frozenset[str] | None = None,
 ) -> EntrySaved:
-    principal.require(Capability.WRITE_CALENDAR)
-    operation = "calendar.entry.create" if current_key is None else "calendar.entry.update"
-    with audit_operation(operation=operation, principal=principal):
-        if current_key is None:
-            entry, created = Entry(), True
-        else:
-            entry, created = held(Entry, _ENTRY, {"uid": current_key}, expected_updated_at), False
-        values = written(command, None if created else sent)
-        if "title" in values:
-            values["title"] = values["title"].strip()
-        if "weekdays" in values:
-            values["weekdays"] = ",".join(str(day) for day in sorted(set(values["weekdays"])))
-        for name, value in values.items():
-            setattr(entry, name, value)
-        entry.full_clean()
-        entry.save()
-    return {"ok": True, "created": created, "entry": serialize_entry(entry)}
+    if current_key is None:
+        entry, created = Entry(), True
+    else:
+        entry, created = held(Entry, _ENTRY, {"uid": current_key}, expected_updated_at), False
+    values = written(command, None if created else sent)
+    if "title" in values:
+        values["title"] = values["title"].strip()
+    if "weekdays" in values:
+        values["weekdays"] = ",".join(str(day) for day in sorted(set(values["weekdays"])))
+    for name, value in values.items():
+        setattr(entry, name, value)
+    entry.full_clean()
+    entry.save()
+    said = ended(f"Event “{entry}” {'created' if created else 'updated'}")
+    return {"ok": True, "created": created, "entry": serialize_entry(entry), "message": said}
 
 
 def calendar_choices(user: Any) -> dict[str, bool]:
@@ -330,12 +326,6 @@ def choose_source(command: SourceChoiceCommand, *, principal: Principal) -> Sour
     preference.choices = {**preference.choices, command.source: bool(command.shown)}
     preference.save(update_fields=("choices", "updated_at"))
     return {"ok": True, "choices": calendar_choices(user)}
-
-
-def attention() -> tuple[Any, ...]:
-    """An event about something HQ no longer has, for the queue."""
-
-    return dangling(Entry)
 
 
 # ----- Agenda -----------------------------------------------------------------

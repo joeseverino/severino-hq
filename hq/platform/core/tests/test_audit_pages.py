@@ -15,7 +15,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
-from hq.platform.application.tests.markup import hrefs, text, with_class, within
+from hq.platform.application.markup_testing import hrefs, text, with_class, within
 from hq.platform.core.audit import audited_labels, operation_context
 from hq.platform.core.models import AuditLog
 
@@ -117,7 +117,7 @@ class AuditDetailPageTests(_AuthedTestCase):
         page = self.client.get(reverse("core:audit_detail", args=[event.pk]))
         shown = text(page)
 
-        self.assertIn("Spec › Grants › Entry 1 › Src", shown)
+        self.assertIn("Spec › Grants › group:example › Src", shown)
         self.assertIn("group:example, group:elsewhere", shown)
         self.assertIn("Spec › Hosts › One", shown)
         self.assertIn("192.0.2.2", shown)

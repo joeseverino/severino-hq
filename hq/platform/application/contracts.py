@@ -4,28 +4,29 @@ import re
 from urllib.parse import urlsplit
 
 from django.urls import NoReverseMatch
+from pydantic import BaseModel, ConfigDict
 
+from hq.platform.application.effects import Effect
 from hq.platform.application.routes import reverse
 
 DOTTED_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
 DJANGO_ROUTE = re.compile(r"(?:[A-Za-z_][\w-]*:)*[A-Za-z_][\w-]*\Z")
 SCOPE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
-# What running a capability of each effect does, in the words every reference
-# of the machine contract reads beside the name (the API document, MCP's
-# capability catalog); a page says it shorter, as ``labels.EFFECT_LABELS``.
-EFFECT_MEANINGS = {
-    "read": "Reads and answers; changes nothing.",
-    "remote_write": "Changes a record, in HQ or through a connection HQ holds.",
-    "infrastructure_change": "Changes a live system HQ manages, such as a DNS record, a proxy route or a container.",
-    "destructive": "Stops or deletes something; running it again does not bring it back.",
-}
-EFFECTS = frozenset(EFFECT_MEANINGS)
+
+
+class Closed(BaseModel):
+    """The base of every Pydantic model HQ reads input with that is not a
+    command (a manifest, a query, a provider's spec): a field it does not
+    declare is refused, never dropped. A command is a dataclass or TypedDict,
+    which ``command_adapter`` closes."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 def effect_glossary(field: str) -> str:
     """What each effect means, as a Markdown list introduced by the ``field`` it is read from."""
 
-    meanings = "\n".join(f"- `{effect}`: {meaning}" for effect, meaning in EFFECT_MEANINGS.items())
+    meanings = "\n".join(f"- `{effect}`: {effect.meaning}" for effect in Effect)
     return f"What `{field}` says running it does:\n\n{meanings}"
 
 

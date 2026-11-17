@@ -5,8 +5,7 @@ again happens where waiting costs nobody: a request the browser makes after the
 page, or the write that changed the value.
 """
 
-from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from django.utils import timezone
@@ -34,18 +33,6 @@ def stored_many(keys) -> dict[str, UpstreamReading]:
         found = {reading.key: reading for reading in UpstreamReading.objects.filter(key__in=missing)}
         asked.update((key, found.get(key)) for key in missing)
     return {key: reading for key in keys if (reading := asked[key]) is not None}
-
-
-def refresh(key: str, fetch: Callable[[], Any], *, older_than: timedelta) -> None:
-    """Read again if the stored value is missing or older than ``older_than``.
-
-    ``fetch`` returns the value to store, or raises to leave the last one as is.
-    """
-
-    reading = stored(key)
-    if reading and timezone.now() - reading.observed_at < older_than:
-        return
-    record(key, fetch())
 
 
 def record(key: str, value: Any, *, observed_at: datetime | None = None) -> None:

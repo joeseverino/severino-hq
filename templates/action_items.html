@@ -1,12 +1,10 @@
 {% extends "page.html" %}
 {% block page %}
 {% url 'action_items' as every_item %}
-{% filter_bar filtered=action_filtered clear=every_item shown=action_shown total=action_total %}
-  <input type="search" name="q" value="{{ action_query }}" placeholder="Filter what needs you" aria-label="Filter what needs you">
+{% filter_bar search="Filter what needs you" query=action_query keep=action_kept filtered=action_filtered clear=every_item shown=action_shown total=action_total %}
   {% choices %}
   {% select "status" action_urgencies chosen=action_status label="Urgency" every="urgency" %}
   {% select "source" action_sources chosen=action_source label="Area" every="area" %}
-  {% if action_about %}<input type="hidden" name="about" value="{{ action_about }}">{% endif %}
 {% endfilter_bar %}
 
 {% comment %}
@@ -27,7 +25,7 @@ queue's (data-queue) is counted down as its rows are dismissed.
 {% if action_groups|length == 1 %}{% firstof area.label as queue_heading %}{% elif action_query or action_status or action_source or action_about %}{% firstof "Matches" as queue_heading %}{% else %}{% firstof "To do" as queue_heading %}{% endif %}
 {% section queue_heading count=action_item_total data_queue=True data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
   {% include "partials/_queue_groups.html" with groups=action_groups prefix="queue" aside_url=aside_all_url titled=action_groups|length|add:"-1" %}
-{% aside %}{% if action_groups|length == 1 and area.url %}<a class="subtle-link" href="{{ area.url }}">View all{% arrow %}</a>{% dot %}{% endif %}{% post_button "Dismiss all" aside_all_url css="btn compact ghost" %}
+{% aside %}{% if action_groups|length == 1 and area.url %}<a class="subtle-link" href="{{ area.url }}">View all{% arrow %}</a>{% dot %}{% endif %}{% button "Dismiss all" aside_all_url post=True look="compact ghost" %}
 {% endsection %}
 {% endwith %}
 {% elif action_query or action_status or action_source or action_about %}
@@ -45,7 +43,7 @@ of it unless it reports something else.
 {% if notice_groups %}
   {% section "Notices" count=notice_total data_queue=True %}
     {% include "partials/_queue_groups.html" with groups=notice_groups prefix="notice" aside_url=notices_aside_url %}
-  {% aside %}{% post_button "Dismiss all" notices_aside_url css="btn compact ghost" %}
+  {% aside %}{% button "Dismiss all" notices_aside_url post=True look="compact ghost" %}
   {% endsection %}
 {% endif %}
 

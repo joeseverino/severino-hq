@@ -3,7 +3,7 @@ from typing import override
 
 from django.contrib import messages
 from django.shortcuts import redirect, render
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse_lazy
 from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
@@ -15,16 +15,14 @@ from django.views.generic import (
 )
 
 from hq.platform.application import related
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import SYNC
-from hq.platform.application.labels import dotted_html
+from hq.platform.application.labels import dotted
 from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.tables import (
     TableColumn,
     TableFilter,
     TableListMixin,
     TableSort,
-    TableToggle,
 )
 from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
@@ -46,7 +44,6 @@ class DocsListView(PageMixin, TableListMixin, ListView):
     table_search_scope = "documentation"
     table_selectable = True
     # The ID sits beside a title of a dozen words, which it leaves the room.
-    table_room = "shared"
     table_columns = (
         TableColumn("Title", "title", css="key-col"),
         TableColumn("ID", "doc_id"),
@@ -54,7 +51,7 @@ class DocsListView(PageMixin, TableListMixin, ListView):
         TableColumn("Environment", "environment"),
         TableColumn("Status", "status"),
         TableColumn("Sensitivity", "sensitivity"),
-        TableColumn("Last reviewed", "last_reviewed"),
+        TableColumn("Last changed", "last_reviewed"),
     )
     table_filters = (
         TableFilter("status", "Status", "status", DocumentationRecord.Status.choices),
@@ -82,23 +79,22 @@ class DocsListView(PageMixin, TableListMixin, ListView):
         TableSort("-doc_type", "Type Z–A", "-doc_type"),
         TableSort("environment", "Environment A–Z", "environment"),
         TableSort("-environment", "Environment Z–A", "-environment"),
-        TableSort("last_reviewed", "Oldest review", "last_reviewed"),
-        TableSort("-last_reviewed", "Newest review", "-last_reviewed"),
+        TableSort("last_reviewed", "Oldest change", "last_reviewed"),
+        TableSort("-last_reviewed", "Newest change", "-last_reviewed"),
         TableSort("status", "Status A–Z", "status"),
         TableSort("-status", "Status Z–A", "-status"),
         TableSort("sensitivity", "Sensitivity A–Z", "sensitivity"),
         TableSort("-sensitivity", "Sensitivity Z–A", "-sensitivity"),
         TableSort("updated_at", "Least recently updated", "updated_at"),
     )
-    table_toggles = (TableToggle("needs_review", "Due for review"),)
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search IDs, titles, systems, paths, and notes…"
 
     @override
     def get_page_actions(self):
         return (
-            PageAction("Import manifest", reverse("docs_index:import")),
-            PageAction(capability_words("documentation.create"), reverse("docs_index:create"), primary=True),
+            PageAction.command(SYNC),
+            PageAction.command("documentation.create", primary=True),
         )
 
     @override
@@ -106,15 +102,12 @@ class DocsListView(PageMixin, TableListMixin, ListView):
         qs = DocumentationRecord.objects.all()
         q = self.request.GET.get("q", "").strip()
         doc_types = self.table_values("doc_type")
-        needs_review = self.request.GET.get("needs_review", "").strip()
 
         # Writeups and pages live in the Content tab; hide them from the
         # default Docs view unless the user explicitly filtered for that
         # doc_type or searched for one.
         if not doc_types and not q:
             qs = qs.exclude(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT)
-        if needs_review:
-            qs = qs.needing_review()
         return self.apply_table_query(qs)
 
 
@@ -161,20 +154,20 @@ class DocsDetailView(PageMixin, DetailView):
     @override
     def get_page_lede(self):
         record = self.object
-        return dotted_html(
-            format_html("<code>{}</code>", breakable(record.doc_id)),
-            record.get_doc_type_display(),
-            record.get_environment_display(),
-            status_pill(record.get_status_display(), tone=record.status),
-            status_pill(record.get_sensitivity_display(), tone=record.sensitivity),
+        return format_html(
+            "{} {} {} {}",
+            format_html("<code>{}</code>", breakable(record.doc_id, "·")),
+            breakable(dotted(record.get_doc_type_display(), record.get_environment_display())),
+            breakable(status_pill(record.state)),
+            breakable(status_pill(record.get_sensitivity_display(), chip=True)),
         )
 
     @override
     def get_page_actions(self):
         doc_id = self.object.doc_id
         return (
-            PageAction(capability_words("documentation.update"), reverse("docs_index:edit", args=[doc_id])),
-            PageAction("Delete", reverse("docs_index:delete", args=[doc_id]), danger=True),
+            PageAction.command("documentation.update", doc_id),
+            PageAction.command("documentation.delete", doc_id),
         )
 
 
@@ -202,6 +195,7 @@ class DocsDeleteView(DocsPage, RecordDeleteMixin, DeleteView):
 
 
 class ManifestImportView(View):
+    runs = (SYNC,)
     template_name = "docs_index/import.html"
 
     def render_form(self, request, form):
@@ -241,9 +235,4 @@ class ManifestImportView(View):
             if refusal.code == "invalid_input" and refusal.details:
                 messages.error(request, f"Fix these entries first: {refusal.details}")
             return self.render_form(request, form)
-        stats = result["stats"]
-        messages.success(
-            request,
-            (f"Manifest imported: {stats['created']} new, {stats['updated']} changed, {stats['skipped']} unchanged."),
-        )
         return redirect("docs_index:list")

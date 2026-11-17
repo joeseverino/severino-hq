@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Protocol
 
-from .security import AuthorizationError, Capability, Principal, require_all
+from .security import AuthorizationError, Capability, Principal
 lazy from . import capabilities, resources
 lazy from .integration_specs import ResourceSpec
 
@@ -43,7 +43,7 @@ class Holding:
         return principal.permits(*self.capabilities)
 
     def check(self, principal: Principal) -> None:
-        require_all(principal, self.capabilities)
+        principal.require(*self.capabilities)
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +81,7 @@ def _runs_a_capability(principal: Principal) -> bool:
     # A change is held for a person only once its caller holds its grant
     # (run_capability authorizes before it asks the policy), so a caller who
     # could hold a grant but does not has nothing to run or to ask for.
-    return any(principal.permits(*spec.required_capabilities) for spec in capabilities.capability_registry().values())
+    return any(spec.permitted_to(principal) for spec in capabilities.capability_registry().values())
 
 
 def _reads_a_kind(serves: Callable[[ResourceSpec], bool]) -> Callable[[Principal], bool]:
