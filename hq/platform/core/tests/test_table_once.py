@@ -5,7 +5,7 @@ moves no column)."""
 import re
 
 from django.template import Context, Template
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import all_elements, with_class
@@ -18,6 +18,13 @@ ROW_BYTES = 1_410
 # The bytes a signed-in page of a list with no rows may draw: the page's
 # chrome, every frame it carries for its scripts, and the list's empty state.
 CHROME_BYTES = 16_700
+# Assets by their plain names: an image's collected copies are named by their
+# content, which lengthens every reference by its hash wherever it is served
+# from one, so the markup is weighed alike in a checkout and in an image.
+_PLAIN_ASSETS = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
 
 
 def _render(source: str, context: dict | None = None) -> str:
@@ -103,6 +110,7 @@ class RowWrittenOnceTests(SimpleTestCase):
         self.assertLessEqual(len(body.encode()) / rows, ROW_BYTES)
 
 
+@override_settings(STORAGES=_PLAIN_ASSETS)
 class EmptyListBytesTests(_AuthedTestCase):
     def test_a_page_with_no_rows_holds_to_its_chrome_budget(self):
         """What every page carries, read where no row adds to it: a number load
