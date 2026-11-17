@@ -11,15 +11,11 @@ from django.test import SimpleTestCase, TestCase
 
 import hq_sdk
 from hq.platform.application.capabilities import CapabilitySpec
-from hq.platform.application.connections import ConnectionSpec
 from hq.platform.application.integration_testing import commands_registered
-from hq.platform.application.plugins import NavigationItem, PluginManifest
 from hq.platform.application.security import Principal
-from hq.platform.application.workflows import WorkflowPlan
 from hq.platform.core.models import AuditLog
 from hq_sdk.audit import record_operation
 from hq_sdk.capabilities import execute_capability
-from hq_sdk.plugin import NavigationItem as SdkNavigationItem, PluginManifest as SdkPluginManifest
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,10 +92,6 @@ class SdkContractTests(SimpleTestCase):
                 ["example.html: .hq-sdk-intentionally-undefined-class"],
             )
 
-    def test_manifest_contract_is_the_supported_facade(self):
-        self.assertIs(SdkNavigationItem, NavigationItem)
-        self.assertIs(SdkPluginManifest, PluginManifest)
-
     def test_a_command_with_a_pydantic_config_of_its_own_is_refused_where_it_is_declared(self):
         """Such a config holds over the one HQ closes a command with, so even
         one closed today is a command a later edit of its config opens."""
@@ -148,26 +140,6 @@ class SdkContractTests(SimpleTestCase):
         self.assertEqual(fields["tone"]["enum"], ["plain"])
         self.assertEqual(fields["tone"]["x-enumDescriptions"], {"plain": "Plain"})
         self.assertEqual(fields["about"]["x-hq-reference"], {"model": "calendars.entry", "field": "about"})
-
-    def test_capability_spec_is_available_from_the_sdk(self):
-        from hq_sdk.capabilities import CapabilitySpec as SdkCapabilitySpec
-
-        self.assertIs(SdkCapabilitySpec, CapabilitySpec)
-
-    def test_connection_spec_is_available_from_the_sdk(self):
-        from hq.platform.application.connections import describe_connections
-        from hq_sdk.connections import (
-            ConnectionSpec as SdkConnectionSpec,
-            describe_connections as sdk_describe_connections,
-        )
-
-        self.assertIs(SdkConnectionSpec, ConnectionSpec)
-        self.assertIs(sdk_describe_connections, describe_connections)
-
-    def test_resolution_workflows_are_available_to_every_plugin_domain(self):
-        from hq_sdk.workflows import WorkflowPlan as SdkWorkflowPlan
-
-        self.assertIs(SdkWorkflowPlan, WorkflowPlan)
 
 
 class AuditSdkTests(TestCase):

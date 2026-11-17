@@ -6,6 +6,7 @@ list of its own. Group labels arrive from installed manifests at runtime, so
 nothing here names an extension (``test_domains`` holds it).
 """
 
+import itertools
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache, partial
@@ -78,6 +79,14 @@ class DomainDescriptor:
         # (``FindingRule.domain``), and the held requests are Approvals'.
         if self.integration.attention is not None:
             raise ImproperlyConfigured(f"{self.id} raises queue items as finding rules, not an attention provider.")
+        # The band below the floor is the extensions', which this repository
+        # cannot see; an ungrouped item renders inline and may lead.
+        for item in self.navigation:
+            if item.group and item.order < HOST_ORDER_FLOOR:
+                raise ImproperlyConfigured(
+                    f"{self.id}'s {item.label!r} is ordered {item.order}, in the extensions' band below "
+                    f"{HOST_ORDER_FLOOR}."
+                )
 
 
 # Runtime behavior is one typed, lazy ``PluginIntegration`` for both. The
@@ -776,7 +785,12 @@ def all_domains() -> tuple[Domain, ...]:
     presentation order asks ``domain_navigation`` for it.
     """
 
-    return tuple(sorted((*host_domains(), *extension_domains()), key=lambda domain: domain.id))
+    domains = tuple(sorted((*host_domains(), *extension_domains()), key=lambda domain: domain.id))
+    # An id keys attribution on every surface that composes the two.
+    shared = sorted({a.id for a, b in itertools.pairwise(domains) if a.id == b.id})
+    if shared:
+        raise ImproperlyConfigured(f"Two domains declare the id {', '.join(shared)}.")
+    return domains
 
 
 def composition() -> tuple[tuple[str, str, str], ...]:
