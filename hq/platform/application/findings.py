@@ -42,7 +42,7 @@ from . import (
     github_findings,
     machine_findings,
     perimeter_findings,
-    posture_findings,
+    posture,
     reboot_findings,
     record_findings,
     reference_findings,
@@ -147,7 +147,7 @@ def _carrying(indexed: dict[str, dict[str, set[str]]], connections: set[str]) ->
     return {controller for connection in connections for controller in indexed["carries"].get(connection, set())}
 
 
-def _estate(topology: Topology) -> FindingEstate:
+def _estate(topology: Topology, principal: Principal | None = None) -> FindingEstate:
     observed: dict[str, datetime] = {}
     for node in topology.nodes:
         moment = parse_stamp(node.observed_at)
@@ -172,6 +172,7 @@ def _estate(topology: Topology) -> FindingEstate:
         frozenset(counts),
         counts,
         _controllers_by_kind(topology, by_id),
+        principal,
     )
 
 
@@ -196,7 +197,7 @@ RULE_MODULES = (
     tailnet_device_findings,
     dns_findings,
     contradiction_findings,
-    posture_findings,
+    posture,
     automation_findings,
     delivery_findings,
     machine_findings,
@@ -391,29 +392,30 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
 # The resource each part of a finding is read through, whose declared
 # capabilities are that part's read gate: a topology node through the
 # relationships around it, a declared kind through its records, an observed
-# kind through its readings, a check of HQ's standard through the connection
-# standing that reports it.
+# kind through its readings, a rule through its ``read_through``.
 NODE_READ = "relationships"
 _RECORDS_READ = "infrastructure"
 _READINGS_READ = "readings"
-_POSTURE_READ = "connections"
 
 
 def read_gate(finding: Finding, subject: TopologyNode | None) -> tuple[str, ...] | None:
     """What a reader must hold to be told ``finding``; None when it cannot be derived.
 
     The union of its subject node's gate, each scope's, its rule's section's
-    and what its detector carried for the evidence it names. A subject that
-    names no node, a scope no resource reads, or a claim about nothing that
-    carries no gate leaves it underivable.
+    and ``read_through``'s, and what its detector carried for the evidence it
+    names. A subject that names no node, a scope no resource reads, or a claim
+    about nothing that carries no gate leaves it underivable.
     """
 
     scopes = _finding_scopes(finding)
     declared = _RULE_BY_NAME.get(finding.rule)
-    section = declared.domain if declared is not None else ""
-    if (finding.subject and subject is None) or not (subject or scopes or finding.read_capabilities or section):
+    section, through = (declared.domain, declared.read_through) if declared is not None else ("", "")
+    if (finding.subject and subject is None) or not (
+        subject or scopes or finding.read_capabilities or section or through
+    ):
         return None
-    gates = [finding.read_capabilities, *(_resource_gate(name) for name in resources_of(section))]
+    read = (*resources_of(section), *([through] if through else []))
+    gates = [finding.read_capabilities, *(_resource_gate(name) for name in read)]
     if subject is not None:
         gates += [_resource_gate(NODE_READ), subject.read_capabilities]
     for scope in scopes:
@@ -430,8 +432,6 @@ def _held_to(finding: Finding, subject: TopologyNode | None, principal: Principa
 
 
 def _scope_resource(scope: str) -> str | None:
-    if posture_findings.posture_check(scope) is not None:
-        return _POSTURE_READ
     if scope in OBSERVATIONS:
         return _READINGS_READ
     if scope in PROVIDERS:
@@ -565,7 +565,7 @@ def derive_findings(
     already read.
     """
 
-    estate = _estate(topology)
+    estate = _estate(topology, principal)
     wanted = _RULE_BY_NAME.get(rule) if rule else None
     raised: dict[str, tuple[Finding, ...]] = {}
     found = gathered or {}
@@ -613,7 +613,7 @@ def estate_findings(*, principal: Principal, rule: str = "") -> tuple[Any, ...]:
 )
 def _estate_findings(principal: Principal, rule: str) -> tuple[Any, ...]:
     topology = derive_topology(principal=principal)
-    gathered = gather_findings(_estate(topology), principal=principal)
+    gathered = gather_findings(_estate(topology, principal), principal=principal)
     raised = derive_findings(topology, principal=principal, rule=rule, gathered=gathered)
     seen = recorded() if raised else {}
     # A notice says when in its own words; a detector may read when its condition began.

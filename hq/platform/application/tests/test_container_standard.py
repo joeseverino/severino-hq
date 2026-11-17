@@ -246,8 +246,9 @@ class ResourceTests(TestCase):
         self.assertEqual(found["standing"]["state"], "vulnerable")
         self.assertEqual(found["image"]["digest"], "sha256:aaa")
         self.assertTrue(found["runtime"]["privileged"])
-        self.assertIn("not-privileged", [item["id"] for item in found["posture"]["unmet"]])
-        self.assertTrue(all(item["fix"] for item in found["posture"]["unmet"]))
+        unmet = [check for check in found["posture"]["checks"] if check["state"] == "unmet"]
+        self.assertIn("not-privileged", [check["id"] for check in unmet])
+        self.assertTrue(all(check["fix"] and check["why"] for check in unmet))
 
     def test_an_unknown_address_is_not_found(self):
         from ..resources import get_resource

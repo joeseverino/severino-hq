@@ -21,7 +21,7 @@ from .own_addresses import tailnet_sightings
 from .projection import complete, page_size, projection_scope, window
 from .record_errors import RecordNotFound
 from .security import Principal
-from .standards import CheckResult
+from .standards import CheckResult, Measurement
 lazy from . import connections, dashboard, estate, machines, request_context
 lazy from .action_items import filter_items
 lazy from .command_center import estate_search
@@ -34,7 +34,7 @@ lazy from .machine_context import header_addresses
 lazy from .paths import path_to
 lazy from .relationships import readout_records, relationships_for
 lazy from .request_path import request_path, serialize_request_path
-lazy from .resource_records import CheckPart
+lazy from .resource_records import CheckPart, MeasurementPart
 lazy from .search import global_search
 lazy from .service_list import services_by_zone
 lazy from .topology import relation_graph
@@ -389,12 +389,29 @@ def serialize_check(result: CheckResult) -> CheckPart:
     return {
         "id": check.id,
         "label": check.label,
-        "state": reading.standing,
-        "detail": reading.detail,
+        "state": result.state,
+        "limited": reading.limited,
+        "serious": check.serious,
+        "detail": result.reason or reading.detail,
         "evidence": reading.evidence,
+        "why": check.why_said,
+        "fix": check.fix,
+        "read_with": reading.fix,
+        "read_with_url": reading.fix_url,
         "boundary": check.boundary,
         "mechanism": check.mechanism,
         "rules": list(reading.rules),
+    }
+
+
+def serialize_measurement(found: Measurement) -> MeasurementPart:
+    """One subject against a standard, as the API answers it."""
+
+    return {
+        "met": found.met,
+        "measured": found.measured,
+        "unread": found.unread,
+        "checks": [serialize_check(result) for result in found.results],
     }
 
 

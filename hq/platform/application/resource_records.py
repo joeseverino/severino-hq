@@ -49,7 +49,7 @@ from .json_schemas import Written
 from .plugins import ATTENTION_ORDER
 from .record_fields import Notes, PublishedAt
 from .services import HQ_MARK, OBSERVED_MARK
-from .standards import Standing
+from .standards import INTENDED, Standing
 from .tone import Tone
 from .ui import ended
 from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE
@@ -299,35 +299,32 @@ class EvidencePart(TypedDict):
 
 
 class CheckPart(TypedDict):
-    id: Annotated[str, Describe("The check's stable id, such as `edge` or `identity`.")]
-    label: Annotated[str, Describe("The check, in words.")]
+    id: Annotated[str, Describe("The check's stable id, such as `edge` or `tailnet-lock`.")]
+    label: Annotated[str, Describe("What is true when it is met, in words.")]
     state: Annotated[
         str,
-        Describe(ended(f"Where it stands: {listed(Standing)}, the last when what decides it did not answer")),
+        Describe(ended(f"Where it stands: {listed((*Standing, INTENDED))}; the last is failed on purpose")),
     ]
-    detail: Annotated[str, Describe("Why it was decided so, in a sentence.")]
-    evidence: Annotated[str, Describe("The value it was decided from; empty for none.")]
+    limited: Annotated[bool, Describe("Met, with a limit the reader should see.")]
+    serious: Annotated[bool, Describe("Whether failing it lets someone or something gain reach.")]
+    detail: Annotated[str, Describe("Why it was decided so, or why it is failed on purpose, in a sentence.")]
+    evidence: Annotated[str, Describe("What it was decided from, or why HQ could not read it; empty for none.")]
+    why: Annotated[str, Describe("Why it matters, in a sentence.")]
+    fix: Annotated[str, Describe("How it is met, in a sentence.")]
+    read_with: Annotated[str, Describe("What would let HQ read a check it could not; empty for none.")]
+    read_with_url: Annotated[str, Describe("Where that is done; empty for none.")]
     boundary: Annotated[str, Describe("The security boundary it belongs to; empty for none.")]
     mechanism: Annotated[str, Describe("What enforces it; empty for none.")]
     rules: Annotated[list[str], Describe("The rules behind it, where what decides it has rules.")]
 
 
-class StandardCheckPart(TypedDict):
-    id: Annotated[str, Describe("The check's stable id, such as `tailnet-lock`.")]
-    label: Annotated[str, Describe("What is true when it is met, in words.")]
-    met: Annotated[bool | None, Describe("Whether it is met; null when HQ could not read it.")]
-    evidence: Annotated[str, Describe("What it was judged from, or why HQ could not read it; empty for none.")]
-    qualified: Annotated[bool, Describe("Met, with a limit the reader should see.")]
-    stops: Annotated[str, Describe("What it stops, as a clause.")]
-    remedy: Annotated[str | None, Describe("What would let HQ read a check it could not; null for none.")]
-    remedy_url: Annotated[str | None, Describe("Where that is done; null for none.")]
+class MeasurementPart(TypedDict):
+    """One subject against a standard: how many checks it meets, and each check."""
 
-
-class StandardPart(TypedDict):
-    advanced: Annotated[bool, Describe("Whether Advanced HQ Posture raises each unmet check as a finding.")]
     met: Annotated[int, Describe("How many checks are met.")]
+    measured: Annotated[int, Describe("How many checks HQ could read.")]
     unread: Annotated[int, Describe("How many checks HQ could not read.")]
-    checks: list[StandardCheckPart]
+    checks: Annotated[list[CheckPart], Describe("Each check that applies, in the standard's order.")]
 
 
 class ObservedPart(TypedDict):
@@ -627,13 +624,7 @@ class ContainerRecord(ContainerRow):
     usage: Annotated[
         UsagePart | None, Describe("The memory and CPU it uses beside its limits; null when that was not read.")
     ]
-    posture: Annotated[
-        dict[str, Any],
-        Describe(
-            "How it meets the container standard: the checks met and each check's state. An unmet check "
-            "has its reason and fix; a check off by design says so."
-        ),
-    ]
+    posture: MeasurementPart
     supply_chain: Annotated[
         dict[str, Any],
         Describe(

@@ -74,7 +74,6 @@ lazy from .adoption import manages_through
 lazy from .cadence import WorkerStanding, automation_standing
 lazy from .facts import stored_snapshots
 lazy from .hq_self import serving
-lazy from .posture import estate_posture
 lazy from .topology_estate import add_estate
 
 
@@ -525,11 +524,9 @@ def _derive(principal: Principal) -> Topology:
         )
     )
     ordered_edges = tuple(sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target)))
-    unmet = tuple(
-        (result.check.id, result.reading.evidence, result.reading.read_capabilities)
-        for result in estate_posture(groups).unmet
+    return Topology(
+        ordered_nodes, ordered_edges, kinds_read=_kinds_read(), automation_worker=_automation_worker(resources)
     )
-    return Topology(ordered_nodes, ordered_edges, unmet, _kinds_read(), _automation_worker(resources))
 
 
 def _automation_worker(resources) -> WorkerStanding | None:

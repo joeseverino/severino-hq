@@ -11,8 +11,8 @@ from typing import Any
 
 from .projection import projection_scope, window
 from .record_errors import RecordNotFound
-from .tone import Tone
 lazy from .containers import containers
+lazy from .derived_reads import serialize_measurement
 lazy from .upgrades import plans
 
 
@@ -44,29 +44,6 @@ def _repository(repo: Any) -> dict[str, Any] | None:
                 "draft": bool(pull.get("draft")),
             }
             for pull in repo.pull_requests or ()
-        ],
-    }
-
-
-def _posture(posture: Any) -> dict[str, Any]:
-    return {
-        "met": posture.met,
-        "measured": posture.measured,
-        "checks": [
-            {"id": result.check.id, "label": result.check.label, "state": result.state} for result in posture.results
-        ],
-        "unmet": [
-            {
-                "id": result.check.id,
-                "label": result.check.label,
-                Tone.SERIOUS: result.check.serious,
-                "why": result.check.why,
-                "fix": result.check.fix,
-            }
-            for result in posture.unmet
-        ],
-        "by_design": [
-            {"id": result.check.id, "label": result.check.label, "reason": result.reason} for result in posture.intended
         ],
     }
 
@@ -175,8 +152,8 @@ def serialize_container(item: Any) -> dict[str, Any]:
         "repository": _repository(standing.repository),
         "runtime": dict(item.runtime) if item.runtime is not None else None,
         "usage": _usage(item.usage),
-        "posture": _posture(item.posture),
-        "supply_chain": _supply_chain(standing) | {"standard": _posture(item.supply_chain)},
+        "posture": serialize_measurement(item.posture),
+        "supply_chain": _supply_chain(standing) | {"standard": serialize_measurement(item.supply_chain)},
     }
 
 

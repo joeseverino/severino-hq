@@ -1,4 +1,5 @@
-"""HQ's standard: each check read from what decides it, shown always, raised under Advanced HQ Posture."""
+"""HQ's standard: each check read from what decides it, shown always, raised
+under Advanced HQ Posture (``standards.Standard``, held in test_standards)."""
 
 import os
 import subprocess
@@ -19,9 +20,8 @@ from ..posture import STANDARD, estate_posture
 from ..report_testing import bridged
 from ..security import cli_principal
 from ..standards import CheckResult, Reading, Standing
-from .test_tailnet_posture import raised, tailnet_connection
+from .test_tailnet_posture import tailnet_connection
 
-RULE = "posture-unmet"
 PASSWORDS = ["hq.platform.core.oidc.HQOIDCAuthenticationBackend", "django.contrib.auth.backends.ModelBackend"]
 SSO_ONLY = ["hq.platform.core.oidc.HQOIDCAuthenticationBackend"]
 
@@ -236,47 +236,6 @@ class ReadingTests(TestCase):
             self.assertIn(result.check.label, found.count_line)
 
 
-@override_settings(AUTHENTICATION_BACKENDS=PASSWORDS)
-class FindingTests(TestCase):
-    def test_without_advanced_posture_nothing_is_raised(self):
-        self.assertEqual(raised(RULE), [])
-
-    @override_settings(SEVERINO_POSTURE="advanced")
-    def test_under_advanced_posture_each_unmet_check_is_raised(self):
-        found = {finding["title"]: finding for finding in raised(RULE)}
-
-        finding = found["Password sign-in is installed"]
-        self.assertEqual(finding["severity"], "attention")
-        self.assertIn("a guessed or reused password", finding["explanation"])
-
-    @override_settings(SEVERINO_POSTURE="advanced")
-    def test_a_check_not_read_yet_is_no_finding_and_says_what_would_read_it(self):
-        from ..connection_context import connections_context
-
-        unread = [
-            found
-            for found in estate_posture(connection_catalog(principal=cli_principal())).results
-            if found.state == Standing.UNAVAILABLE
-        ]
-        self.assertIn("tailnet-policy", {found.check.id for found in unread})
-
-        found = raised(RULE)
-        steps = [step.get("label") or step["text"] for item in found for step in item["steps"]]
-        for waiting in unread:
-            with self.subTest(check=waiting.check.id):
-                self.assertNotIn(f"posture.{waiting.check.id}", {item["scope"] for item in found})
-                self.assertNotIn(waiting.check.fix, steps)
-        checks = connections_context(principal=cli_principal()).as_dict()["standard"]["checks"]
-        served = next(check for check in checks if check["id"] == "tailnet-policy")
-        self.assertIsNone(served["met"])
-        self.assertEqual(served["remedy"], "connect Tailscale")
-        self.assertTrue(served["remedy_url"])
-
-    @override_settings(SEVERINO_POSTURE="advanced", AUTHENTICATION_BACKENDS=SSO_ONLY)
-    def test_a_met_check_is_not_raised(self):
-        self.assertNotIn("Password sign-in is installed", [finding["title"] for finding in raised(RULE)])
-
-
 class PageTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_superuser("posture-reader"))
@@ -300,13 +259,16 @@ class PageTests(TestCase):
         self.assertIn("Advanced HQ Posture", [words for words, _target in links(response)])
         self.assertNotContains(response, "SEVERINO_POSTURE=advanced")
 
-    def test_the_api_carries_the_standard(self):
+    def test_the_api_carries_the_standard_and_what_would_read_a_check_not_read(self):
         from ..connection_context import connections_context
 
         standard = connections_context(principal=cli_principal()).as_dict()["standard"]
 
         self.assertFalse(standard["advanced"])
         self.assertEqual([check["id"] for check in standard["checks"]], [check.id for check in STANDARD])
+        served = next(check for check in standard["checks"] if check["id"] == "tailnet-policy")
+        self.assertEqual((served["state"], served["read_with"]), (Standing.UNAVAILABLE, "connect Tailscale"))
+        self.assertTrue(served["read_with_url"])
 
 
 class ScopeTests(TestCase):

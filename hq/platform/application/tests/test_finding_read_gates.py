@@ -3,6 +3,7 @@ filter (``attention.readable_by``) holds it back from a reader who may not
 read that thing, including a finding about a whole kind or a check of HQ's
 standard, which has no subject node."""
 
+from dataclasses import replace
 from datetime import timedelta
 from unittest import mock
 
@@ -23,7 +24,6 @@ from ..derivation_testing import uncached
 from ..finding_model import Finding
 from ..inventory_testing import store
 from ..plugin_testing import offering
-from ..posture import STANDARD
 from ..projection import projection_scope
 from ..security import Capability, Principal, cli_principal, web_principal
 from ..topology import derive_topology
@@ -82,7 +82,7 @@ class TheSeededEstateTests(TestCase):
         operator = cli_principal()
         with offering(gated_family(credential_model)), uncached(), projection_scope():
             topology = derive_topology(principal=operator)
-            return topology, findings.derive_findings(topology, principal=operator)
+            return topology, findings.estate_findings(principal=operator)
 
     def told(self, principal, credential_model: str = "coarse") -> list[dict]:
         """Every finding the operator's estate raises, as a queue item, after the one reader filter."""
@@ -105,7 +105,7 @@ class TheSeededEstateTests(TestCase):
     def test_a_check_that_names_a_gated_instance_takes_its_family_s_gate(self):
         _topology, raised = self.raised()
 
-        (scope,) = [finding for finding in raised if finding.scope == "posture.scope"]
+        (scope,) = [finding for finding in raised if (finding.rule, finding.part) == ("posture-unmet", "scope")]
 
         self.assertIn(Capability.MANAGE_INFRASTRUCTURE, scope.read_capabilities)
 
@@ -130,11 +130,19 @@ class TheSeededEstateTests(TestCase):
 class EveryScopeTests(TestCase):
     """Every scope a finding can name reads through a resource, so its gate is that resource's."""
 
-    def test_every_kind_and_check_derives_a_gate(self):
-        scopes = (*PROVIDERS, *OBSERVATIONS, *(f"posture.{check.id}" for check in STANDARD))
-        for scope in scopes:
+    def test_every_kind_derives_a_gate(self):
+        for scope in (*PROVIDERS, *OBSERVATIONS):
             with self.subTest(scope):
                 self.assertTrue(findings.read_gate(unknown(subject="", scope=scope), None))
+
+    def test_a_rule_read_through_a_resource_takes_its_gate(self):
+        through = [rule for rule in findings.RULES if rule.read_through]
+
+        self.assertTrue(through, "no rule is read through a resource")
+        for rule in through:
+            with self.subTest(rule.name):
+                gate = findings.read_gate(replace(unknown(subject=""), rule=rule.name), None)
+                self.assertTrue(set(findings._resource_gate(rule.read_through)) <= set(gate or ()))
 
     def test_a_node_s_gate_is_its_own_beside_the_read_of_any_node(self):
         node = TopologyNode("connection:example", "connection", "Example", "Connection", read_capabilities=("example",))

@@ -528,6 +528,24 @@
               "usage.cpu_limit",
               "usage.read_at",
               "posture",
+              "posture.met",
+              "posture.measured",
+              "posture.unread",
+              "posture.checks",
+              "posture.checks.id",
+              "posture.checks.label",
+              "posture.checks.state",
+              "posture.checks.limited",
+              "posture.checks.serious",
+              "posture.checks.detail",
+              "posture.checks.evidence",
+              "posture.checks.why",
+              "posture.checks.fix",
+              "posture.checks.read_with",
+              "posture.checks.read_with_url",
+              "posture.checks.boundary",
+              "posture.checks.mechanism",
+              "posture.checks.rules",
               "supply_chain",
               "*"
             ],
@@ -1027,8 +1045,14 @@
               "layers.id",
               "layers.label",
               "layers.state",
+              "layers.limited",
+              "layers.serious",
               "layers.detail",
               "layers.evidence",
+              "layers.why",
+              "layers.fix",
+              "layers.read_with",
+              "layers.read_with_url",
               "layers.boundary",
               "layers.mechanism",
               "layers.rules",
@@ -1447,8 +1471,14 @@
               "routes.hops.layers.id",
               "routes.hops.layers.label",
               "routes.hops.layers.state",
+              "routes.hops.layers.limited",
+              "routes.hops.layers.serious",
               "routes.hops.layers.detail",
               "routes.hops.layers.evidence",
+              "routes.hops.layers.why",
+              "routes.hops.layers.fix",
+              "routes.hops.layers.read_with",
+              "routes.hops.layers.read_with_url",
               "routes.hops.layers.boundary",
               "routes.hops.layers.mechanism",
               "routes.hops.layers.rules",
@@ -2053,8 +2083,14 @@
               "path.routes.hops.layers.id",
               "path.routes.hops.layers.label",
               "path.routes.hops.layers.state",
+              "path.routes.hops.layers.limited",
+              "path.routes.hops.layers.serious",
               "path.routes.hops.layers.detail",
               "path.routes.hops.layers.evidence",
+              "path.routes.hops.layers.why",
+              "path.routes.hops.layers.fix",
+              "path.routes.hops.layers.read_with",
+              "path.routes.hops.layers.read_with_url",
               "path.routes.hops.layers.boundary",
               "path.routes.hops.layers.mechanism",
               "path.routes.hops.layers.rules",
@@ -6070,23 +6106,39 @@
             "type": "string"
           },
           "detail": {
-            "description": "Why it was decided so, in a sentence.",
+            "description": "Why it was decided so, or why it is failed on purpose, in a sentence.",
             "type": "string"
           },
           "evidence": {
-            "description": "The value it was decided from; empty for none.",
+            "description": "What it was decided from, or why HQ could not read it; empty for none.",
+            "type": "string"
+          },
+          "fix": {
+            "description": "How it is met, in a sentence.",
             "type": "string"
           },
           "id": {
-            "description": "The check's stable id, such as `edge` or `identity`.",
+            "description": "The check's stable id, such as `edge` or `tailnet-lock`.",
             "type": "string"
           },
           "label": {
-            "description": "The check, in words.",
+            "description": "What is true when it is met, in words.",
             "type": "string"
+          },
+          "limited": {
+            "description": "Met, with a limit the reader should see.",
+            "type": "boolean"
           },
           "mechanism": {
             "description": "What enforces it; empty for none.",
+            "type": "string"
+          },
+          "read_with": {
+            "description": "What would let HQ read a check it could not; empty for none.",
+            "type": "string"
+          },
+          "read_with_url": {
+            "description": "Where that is done; empty for none.",
             "type": "string"
           },
           "rules": {
@@ -6096,8 +6148,16 @@
             },
             "type": "array"
           },
+          "serious": {
+            "description": "Whether failing it lets someone or something gain reach.",
+            "type": "boolean"
+          },
           "state": {
-            "description": "Where it stands: `met`, `unmet` or `unavailable`, the last when what decides it did not answer.",
+            "description": "Where it stands: `met`, `unmet`, `unavailable` or `intended`; the last is failed on purpose.",
+            "type": "string"
+          },
+          "why": {
+            "description": "Why it matters, in a sentence.",
             "type": "string"
           }
         },
@@ -7303,8 +7363,7 @@
             "$ref": "#/components/schemas/ContainerRow/properties/name"
           },
           "posture": {
-            "description": "How it meets the container standard: the checks met and each check's state. An unmet check has its reason and fix; a check off by design says so.",
-            "type": "object"
+            "$ref": "#/components/schemas/MeasurementPart"
           },
           "project": {
             "anyOf": [
@@ -14116,6 +14175,32 @@
           "ok",
           "data"
         ],
+        "type": "object"
+      },
+      "MeasurementPart": {
+        "additionalProperties": false,
+        "description": "One subject against a standard: how many checks it meets, and each check.",
+        "properties": {
+          "checks": {
+            "description": "Each check that applies, in the standard's order.",
+            "items": {
+              "$ref": "#/components/schemas/CheckPart"
+            },
+            "type": "array"
+          },
+          "measured": {
+            "description": "How many checks HQ could read.",
+            "type": "integer"
+          },
+          "met": {
+            "description": "How many checks are met.",
+            "type": "integer"
+          },
+          "unread": {
+            "description": "How many checks HQ could not read.",
+            "type": "integer"
+          }
+        },
         "type": "object"
       },
       "MethodNotAllowedRefusal": {

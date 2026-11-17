@@ -13,10 +13,10 @@ from typing import Any, Self
 
 from .labels import dotted
 from .tone import Tone
+from .ui import ended
 lazy from . import dashboard
 lazy from .finding_model import Finding
-lazy from .finding_steps import Do
-lazy from .workflow_contracts import ActionLink
+lazy from .standard_findings import worded
 
 
 class Standing(StrEnum):
@@ -109,6 +109,14 @@ class Check:
     # The security boundary it belongs to, and what enforces it.
     boundary: str = field(default="", kw_only=True)
     mechanism: str = field(default="", kw_only=True)
+
+    @property
+    def why_said(self) -> str:
+        """Why it matters as a sentence, where ``why`` may be a clause of what it stops."""
+
+        if not self.why or self.why.endswith("."):
+            return self.why
+        return ended(f"Stops {self.why}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,7 +228,7 @@ class Measurement:
         fails by design with why."""
 
         unmet = sorted(self.unmet, key=lambda result: not result.check.serious)
-        return tuple(unmet_finding(result.check) for result in unmet) + tuple(
+        return tuple(worded(_rule(result.check), (result.check,), [(None, result)]) for result in unmet) + tuple(
             Finding(
                 rule=_rule(result.check),
                 subject="",
@@ -264,24 +272,6 @@ def measure(
         reason = (intended or {}).get(check.id, "") if reading.standing is Standing.UNMET else ""
         results.append(CheckResult(check, reading, reason, enforced and not any(check is held for held in quiet)))
     return Measurement(subject, tuple(results), enforced)
-
-
-def unmet_finding(
-    check: Check, *, evidence: tuple[tuple[str, str], ...] = (), offers: tuple[ActionLink, ...] = ()
-) -> Finding:
-    """A check not met: what is wrong, why it matters, and its fix as the step
-    to take; ``evidence`` and ``offers`` say where it fails."""
-
-    return Finding(
-        rule=_rule(check),
-        subject="",
-        title=check.unmet,
-        severity=Tone.SERIOUS if check.serious else Tone.ATTENTION,
-        explanation=check.why,
-        evidence=evidence,
-        offers=offers,
-        steps=(Do(check.fix),) if check.fix else (),
-    )
 
 
 def _rule(check: Check) -> str:

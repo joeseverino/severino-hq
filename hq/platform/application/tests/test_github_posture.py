@@ -139,7 +139,7 @@ class PostureTests(TestCase):
         (item,) = raised_items()
 
         self.assertEqual((finding_key(item), item.count), ("finding:github-posture::actions-pinned", 3))
-        self.assertTrue(item.explanation.startswith("alpha, beta, gamma."))
+        self.assertEqual(dict(item.evidence)["Not met in"], "alpha, beta, gamma")
 
     def test_an_archived_repository_is_held_to_nothing(self):
         from hq.domains.control_plane.models import ProviderInventory
@@ -173,7 +173,7 @@ class PostureTests(TestCase):
         self.assertEqual([found.subject.name for found in postures()], ["example/kept"])
         (item,) = raised_items()
         self.assertEqual((finding_key(item), item.count), ("finding:github-posture::vulnerability-alerts", 1))
-        self.assertNotIn("retired", item.explanation)
+        self.assertNotIn("retired", dict(item.evidence)["Not met in"])
 
     def test_an_item_is_as_old_as_the_oldest_repository_reading_it_names(self):
         from hq.domains.control_plane.models import ProviderInventory

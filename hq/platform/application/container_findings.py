@@ -5,13 +5,14 @@ for a known advisory, for a newer release (an update is a chore to schedule,
 not a fire) and for being run by tag alone; and one per container for the
 serious checks of the standard it fails, offering its compose change
 (``application.container_hardening``) or, for the Docker socket, the
-declaration that holding it is the container's job. Worded as the topology is
-derived, from the container readings and what reaches each container, and
-carried on the machine's node (``finding_model.carry``).
+declaration that holding it is the container's job. An image's are carried on
+the machine's node (``finding_model.carry``); a container's are the container
+standard's (``HARDENING_STANDARD``).
 """
 
 import shlex
 from collections.abc import Callable, Iterator
+from functools import partial
 from typing import Any
 
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
@@ -20,12 +21,14 @@ from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.routes import reverse
 
 from .action_links import command_action, read_link
+from .container_standard import STANDARD
 from .containers import VULNERABLE, Container, ImageStanding, containers
 from .exposure import LEVELS, OPEN, UNKNOWN, exposure_of_container, status_at
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
     CONTAINERS_CARD,
     Finding,
+    FindingEstate,
     FindingRemedy,
     FindingRule,
     carried,
@@ -35,13 +38,12 @@ from .finding_model import (
 )
 from .finding_steps import Do, Run
 from .images import version
-from .labels import lower_first
 from .lists import split_list
+from .standard_findings import Help, Measured, Per, Standard
+from .standards import Check
 from .tone import Tone
 from .ui import ended
 from .workflow_contracts import ActionLink
-lazy from .container_standard import STANDARD
-lazy from .standards import Standing
 lazy from .upgrades import OVERRIDES, plan_for
 
 # Why an update is a person's to apply.
@@ -54,16 +56,13 @@ HARDENING = "container-hardening"
 
 
 def add(nodes, machine: Callable[[Any], str]) -> None:
-    """Each image's findings and each container's, on the machine they run on."""
+    """Each image's findings, on the machine they run on."""
 
     images: dict[tuple[str, str], list[Container]] = {}
-    found: list[Finding] = []
     for item in containers():
         if at := machine(item.machine.name):
             images.setdefault((at, item.standing.label), []).append(item)
-            found.extend(_hardening(item, at))
     carry(nodes, (finding for (at, _label), running in images.items() for finding in _of(running, at)))
-    carry(nodes, found)
 
 
 def _of(running: list[Container], subject: str) -> Iterator[Finding]:
@@ -177,7 +176,7 @@ def _advisory(running: list[Container], subject: str) -> Finding:
         title=f"{standing.label} has {standing.summary}" + (", and no release fixes it yet" if waiting else ""),
         explanation=f"Worst severity: {ended(standing.worst)}{_running_as(running)}{fixed_in}"
         + _brings(running)
-        + reached,
+        + f" {reached}",
     )
 
 
@@ -294,27 +293,25 @@ def _adopt(item: Container, intent: str) -> FindingRemedy:
     )
 
 
-def _hardening(item: Container, subject: str) -> Iterator[Finding]:
-    """The serious checks the container fails, as one finding about it.
-    Hardening waits on its page; reach over a machine does not."""
+def _on_machines(estate: FindingEstate) -> Iterator[Measured]:
+    """Each container on a machine the estate holds, measured."""
 
-    failed = [check for check in STANDARD if check.serious and item.posture.state_of(check.id) == Standing.UNMET]
-    if not failed:
-        return
+    machines = {node.id for node in estate.nodes() if node.kind == "machine"}
+    for item in containers():
+        if (node := f"machine:{item.machine.name}") in machines:
+            yield Measured(
+                measurement=item.posture,
+                name=f"{item.running.name} on {item.machine.name}",
+                node=node,
+                part=item.running.name,
+                reach=partial(_reached, item),
+                **_read([item], standing=False),
+            )
+
+
+def _reached(item: Container, severity: Tone) -> tuple[Tone, str]:
     level, reached = _reach([item])
-    helped = [_posture_help(check.id, item) for check in failed]
-    yield Finding(
-        rule=HARDENING,
-        subject=subject,
-        part=item.running.name,
-        severity=status_at(Tone.SERIOUS, level),
-        title=f"{item.running.name} on {item.machine.name} " + ", ".join(lower_first(check.unmet) for check in failed),
-        explanation=" ".join(f"{check.why} {check.fix} {_help(check.id)}" for check in failed) + reached,
-        **_read([item], standing=False),
-        primary=_containers(),
-        remedies=tuple(dict.fromkeys(remedy for said in helped for remedy in said.get("remedies", ()))),
-        offers=tuple(dict.fromkeys(offer for said in helped for offer in said.get("offers", ()))),
-    )
+    return status_at(severity, level), reached
 
 
 def _reach(running: list[Container]) -> tuple[str, str]:
@@ -325,7 +322,7 @@ def _reach(running: list[Container]) -> tuple[str, str]:
     """
 
     exposure = min((exposure_of_container(item) for item in running), key=lambda found: LEVELS.index(found.level))
-    return exposure.level, ended(f" {exposure.sentence}")
+    return exposure.level, ended(exposure.sentence)
 
 
 def _help(check_id: str) -> str:
@@ -337,32 +334,29 @@ def _help(check_id: str) -> str:
     return "The compose change is on its page."
 
 
-def _posture_help(check_id: str, item: Container) -> dict[str, Any]:
-    name = item.running.name
-    if not item.running.watcher:
-        then = "mark it" if check_id == "no-docker-socket" else "see its compose change"
-        return {"remedies": (_adopt(item, f"Adopt {name} to {then}"),)}
-    if check_id == "no-docker-socket":
-        key = item.running.watcher
-        return {
-            "remedies": (
-                FindingRemedy(
-                    capability=UPDATE_CAPABILITY,
-                    target=key,
-                    intent=SOCKET_HOLDER_INTENT,
-                ),
+def _posture_help(check: Check, subjects: tuple[Measured, ...]) -> Help:
+    remedies: list[FindingRemedy] = []
+    offers: list[ActionLink] = []
+    for about in subjects:
+        item = about.measurement.subject
+        name = item.running.name
+        if not item.running.watcher:
+            then = "mark it" if check.id == "no-docker-socket" else "see its compose change"
+            remedies.append(_adopt(item, f"Adopt {name} to {then}"))
+        elif check.id == "no-docker-socket":
+            remedies.append(
+                FindingRemedy(capability=UPDATE_CAPABILITY, target=item.running.watcher, intent=SOCKET_HOLDER_INTENT)
             )
-        }
-    return {
-        "offers": (
-            read_link(
-                "compose-change",
-                f"Compose change for {name}",
-                f"{item.url}#hardening",
-                reason="The lines to add to its compose file, and what each can break.",
-            ),
-        )
-    }
+        else:
+            offers.append(
+                read_link(
+                    "compose-change",
+                    f"Compose change for {name}",
+                    f"{item.url}#hardening",
+                    reason="The lines to add to its compose file, and what each can break.",
+                )
+            )
+    return Help(steps=(Do(check.fix, notes=(_help(check.id),)),), remedies=tuple(remedies), offers=tuple(offers))
 
 
 SOCKET_HOLDER_INTENT = "Mark as meant to control Docker"
@@ -390,6 +384,25 @@ def _fixed_in(standing: ImageStanding) -> str:
     }
     return ", ".join(sorted(fixes, key=version)) if fixes else ""
 
+
+# Only its serious checks are raised; the rest wait on the container's page.
+HARDENING_STANDARD = Standard(
+    name=HARDENING,
+    title="Container hardening",
+    severity=Tone.SERIOUS,
+    checks=tuple(check for check in STANDARD if check.serious),
+    subjects=_on_machines,
+    raises=Per.SUBJECT,
+    operator_action="Make the compose change on the container's page.",
+    no_help_reason=CANNOT_EDIT_COMPOSE,
+    bars={
+        Tone.SERIOUS: "a container anyone may reach fails a serious hardening check",
+        Tone.ATTENTION: "a container behind a login or on the tailnet fails a serious hardening check",
+        Tone.NEUTRAL: "nothing routes to the container",
+    },
+    primary=_containers,
+    helps=_posture_help,
+)
 
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
@@ -430,18 +443,5 @@ RULES: tuple[FindingRule, ...] = (
         card=CONTAINERS_CARD,
         bars={Tone.ATTENTION: "an image a registry holds is run by its tag, with no digest"},
     ),
-    FindingRule(
-        HARDENING,
-        "Container hardening",
-        Tone.SERIOUS,
-        carried(HARDENING),
-        operator_action="Make the compose change on the container's page.",
-        no_help_reason=CANNOT_EDIT_COMPOSE,
-        card=CONTAINERS_CARD,
-        bars={
-            Tone.SERIOUS: "a container anyone may reach fails a serious hardening check",
-            Tone.ATTENTION: "a container behind a login or on the tailnet fails a serious hardening check",
-            Tone.NEUTRAL: "nothing routes to the container",
-        },
-    ),
+    HARDENING_STANDARD.rule(card=CONTAINERS_CARD),
 )

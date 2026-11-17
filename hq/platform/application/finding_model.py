@@ -27,6 +27,7 @@ lazy from .pages import command_reach
 
 if TYPE_CHECKING:
     from .cadence import ControllerSweepCommand
+    from .security import Principal
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,6 +237,8 @@ class FindingRule:
     # what the section declares. Empty for a rule about the estate, whose
     # subject gates it and which Infrastructure raises.
     domain: str = ""
+    # The resource whose gate joins its findings' read gate.
+    read_through: str = ""
     # Whether its detector reads HQ's own records (a model, a stored reading)
     # rather than the projection. It runs as the estate is gathered, before
     # derivation, which reads nothing of its own.
@@ -269,6 +272,8 @@ class FindingEstate:
     declared_kinds: frozenset[str]
     declared_counts: dict[str, int]
     controllers_by_kind: dict[str, frozenset[str]]
+    # Whom it was narrowed for, so a gathered rule reads only what they may.
+    principal: Principal | None = None
 
     def nodes(self) -> tuple[TopologyNode, ...]:
         return self.topology.nodes

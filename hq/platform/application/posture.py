@@ -18,9 +18,12 @@ lazy from hq.domains.control_plane.observations.host import FIREWALL_KIND, TAILN
 lazy from hq.domains.control_plane.providers import PROVIDERS, registry_label
 
 from .labels import dotted
+from .standard_findings import Measured, Per, Standard
 from .standards import Check, Measurement, Reading, Standing, measure
+from .tone import Tone
 from .ui import counted
 lazy from . import cadence, tailnet
+lazy from .connection_catalog import connection_catalog
 lazy from .connection_security import estate_readings, ingress_kinds, tailnet_policy_reading
 lazy from .connection_setup import docs_url, setups
 lazy from .connections import connection_rows
@@ -30,7 +33,6 @@ lazy from .github_estate import REPOSITORY_KIND
 lazy from .hq_context.release_part import repository
 lazy from .hq_self import hq_hostnames
 lazy from .integration_validation import required_capability_names
-lazy from .resource_records import StandardPart
 lazy from .routes import reverse
 
 
@@ -327,24 +329,23 @@ def guide() -> str:
     return docs_url("Posture.md")
 
 
-def as_part(found: Measurement) -> StandardPart:
-    """HQ's standard as the connections read answers it."""
+def _hq(estate) -> tuple[Measured, ...]:
+    """HQ, under Advanced HQ Posture, measured from the connections its reader may read."""
 
-    return {
-        "advanced": found.enforced,
-        "met": found.met,
-        "unread": found.unread,
-        "checks": [
-            {
-                "id": result.check.id,
-                "label": result.check.label,
-                "met": None if result.state == Standing.UNAVAILABLE else result.met,
-                "evidence": result.reading.evidence,
-                "qualified": result.reading.limited,
-                "stops": result.check.why,
-                "remedy": result.reading.fix or None,
-                "remedy_url": result.reading.fix_url or None,
-            }
-            for result in found.results
-        ],
-    }
+    if estate.principal is None or not advanced():
+        return ()
+    return (Measured(measurement=estate_posture(connection_catalog(principal=estate.principal))),)
+
+
+POSTURE_STANDARD = Standard(
+    name="posture-unmet",
+    title="A check of HQ's standard is not met",
+    severity=Tone.ATTENTION,
+    checks=STANDARD,
+    subjects=_hq,
+    raises=Per.CHECK,
+    operator_action="Meet the check, or turn Advanced HQ Posture off.",
+    no_help_reason="HQ does not change these settings.",
+    bars={Tone.ATTENTION: "a check of the standard HQ holds itself to is not met"},
+)
+RULES = (POSTURE_STANDARD.rule(read_through="connections"),)

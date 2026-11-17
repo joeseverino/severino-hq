@@ -36,13 +36,19 @@ from .connection_setup import ProviderSetup, guide_url, setups
 from .connections import connection_rows
 from .credential_mint import CredentialFix, credential_fixes
 from .credential_sight import PART_SOURCE, ProviderSight, Sight, fed_kinds, sight_by_connection
-from .derived_reads import serialize_check, serialize_path, serialize_provider_sight, serialize_sight
+from .derived_reads import (
+    serialize_check,
+    serialize_measurement,
+    serialize_path,
+    serialize_provider_sight,
+    serialize_sight,
+)
 from .entity_links import entity_link
 from .freshness import freshness
 from .moments import ago
 from .path_model import ServicePath
 from .paths import hq_path
-from .posture import as_part, estate_inputs, guide, posture
+from .posture import estate_inputs, guide, posture
 from .problems import problem_counts
 from .projection import complete, projection_scope, read_once
 from .record_errors import RecordNotFound
@@ -365,7 +371,7 @@ class ConnectionsContext:
                     else None
                 ),
             },
-            "standard": as_part(self.standard),
+            "standard": {"advanced": self.standard.enforced, **serialize_measurement(self.standard)},
             "not_connected": [
                 {
                     "family": group.spec.name,

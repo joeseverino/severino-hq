@@ -82,6 +82,83 @@ class GapTests(SimpleTestCase):
         self.assertEqual(rows[2]["detail"], "It answers DNS.")
 
 
+class RaisesTests(SimpleTestCase):
+    """Each of a standard's checks a subject was read to fail, by check or by
+    subject; one met, not read or failed on purpose raises nothing."""
+
+    def test_each_way_a_standard_raises(self):
+        from dataclasses import replace
+        from types import SimpleNamespace
+
+        from django.test import override_settings
+
+        from ..posture import POSTURE_STANDARD
+        from ..standard_findings import Measured, Per, Standard
+        from ..tone import Tone
+
+        drift, reach, unread, kept = (
+            replace(_check(name, f"{name.title()} is off"), test=lambda said, name=name: said.get(name, Reading.met()))
+            for name in ("drift", "reach", "unread", "kept")
+        )
+        reach = replace(reach, serious=True)
+        checks = (drift, reach, unread, kept)
+        not_read = Reading.unavailable("Not read")
+        readings = {
+            "alpha": {"drift": Reading.unmet(), "reach": Reading.unmet(), "unread": not_read},
+            "beta": {"drift": Reading.unmet(), "kept": Reading.unmet(), "unread": not_read},
+        }
+        # Beta fails kept on purpose.
+        measured = [
+            Measured(measurement=measure(said, checks, {"kept": "On purpose."}), name=name, node=name, part=name)
+            for name, said in readings.items()
+        ]
+
+        def raised(raises, held=checks):
+            rule = Standard(
+                name="example-standard",
+                title="Example standard",
+                severity=Tone.ATTENTION,
+                checks=held,
+                subjects=lambda _estate: measured,
+                raises=raises,
+                operator_action="Meet the check.",
+                no_help_reason="HQ does not change it.",
+                bars={Tone.ATTENTION: "a check is not met"},
+            ).rule()
+            self.assertTrue(rule.gathered, "its rule reads beyond the projection")
+            return {
+                (found.subject, found.part): (found.title, found.severity, dict(found.evidence).get("Not met in"))
+                for found in rule.detect(None)
+            }
+
+        with override_settings(SEVERINO_POSTURE=""):
+            plain = POSTURE_STANDARD.subjects(SimpleNamespace(principal=object()))
+        alpha = ("alpha", "alpha")
+        cases = (
+            (
+                "by check",
+                raised(Per.CHECK),
+                {
+                    ("", "drift"): ("Drift is off", Tone.ATTENTION, "alpha, beta"),
+                    ("", "reach"): ("Reach is off", Tone.SERIOUS, "alpha"),
+                },
+            ),
+            (
+                "by subject",
+                raised(Per.SUBJECT),
+                {
+                    alpha: ("alpha: drift is off, reach is off", Tone.SERIOUS, None),
+                    ("beta", "beta"): ("beta: drift is off", Tone.ATTENTION, None),
+                },
+            ),
+            ("only its checks", raised(Per.SUBJECT, (reach,)), {alpha: ("alpha: reach is off", Tone.SERIOUS, None)}),
+            ("HQ's own without Advanced HQ Posture", plain, ()),
+        )
+        for policy, found, expected in cases:
+            with self.subTest(policy):
+                self.assertEqual(found, expected)
+
+
 class UnmetCheckRowTests(SimpleTestCase):
     """A check a subject does not meet reaches its page as a finding, so its
     row is worded and helped as every finding's is."""

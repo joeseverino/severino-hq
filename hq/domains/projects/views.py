@@ -17,7 +17,7 @@ lazy from django.template.loader import render_to_string
 
 from hq.domains.projects.github import github_repository
 from hq.platform.application import related
-from hq.platform.application.action_links import capability_action_link, read_link
+from hq.platform.application.action_links import capability_action_link
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
@@ -52,7 +52,7 @@ lazy from hq.platform.application.github_profile import KIND, READ_NOW, profile,
 lazy from hq.platform.application.linked_accounts import GITHUB, linked_login
 lazy from hq.platform.application.outbound_work import ask
 lazy from hq.platform.application.page_reads import Remedy
-lazy from hq.platform.application.standards import unmet_finding
+lazy from hq.platform.application.repository_findings import REPOSITORY_STANDARD, repositories_measured
 
 from .models import PROJECT_CATEGORY_CHOICES, Project
 
@@ -410,30 +410,14 @@ class PostureView(PageMixin, TemplateView):
         context["repositories"] = [
             {"posture": item, "project": projects.get(repository_key(item.subject.name))} for item in found
         ]
-        unmet = []
         everywhere = []
         for check in STANDARD:
-            states = [(item.subject, item.state_of(check.id)) for item in found]
-            held = [state for _, state in states if state]
-            failing = [repo for repo, state in states if state == standards.Standing.UNMET]
-            if failing:
-                unmet.append((check, failing, len(held)))
-            elif held and all(state == standards.Standing.MET for state in held):
+            held = [state for item in found if (state := item.state_of(check.id))]
+            if held and all(state == standards.Standing.MET for state in held):
                 everywhere.append(check)
-        unmet.sort(key=lambda found: not found[0].serious)
+        raised = REPOSITORY_STANDARD.raised(repositories_measured())
         context["unmet"] = finding_rows(
-            "standards",
-            "Standards",
-            (
-                unmet_finding(
-                    check,
-                    evidence=(
-                        ("Repositories", f"{len(failing)} of {held} {'repository' if held == 1 else 'repositories'}"),
-                    ),
-                    offers=tuple(read_link("open", repo.short, f"{repo.url}/settings") for repo in failing),
-                )
-                for check, failing, held in unmet
-            ),
+            "standards", "Standards", sorted(raised, key=lambda finding: finding.severity.rank)
         )
         context["everywhere"] = everywhere
         return context
