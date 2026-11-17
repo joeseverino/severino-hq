@@ -47,8 +47,9 @@ tailnet keeps the client's own rules for every call, and a person's own device
 needs no approval ([Security](Security.md#agents)).
 
 The catalogs' `permitted` flags (capabilities, resources and connections,
-here and on `/api/mcp/` alike) say what the caller may use after that cap, by
-the same rule its use is refused by.
+here and on `/api/mcp/` alike), and the `refused` flag of MCP's capability
+index, say what the caller may use after that cap, by the same rule its use
+is refused by.
 
 A capability held only by a person (an upload, an approval, adopting
 playbooks) is out of any token's reach, whatever its grant. So neither the
@@ -860,8 +861,8 @@ one answer. The exceptions are the shapes that are MCP's own: `get_findings`
 (`dashboard_answer.AgentSnapshot`) and `describe_capabilities`
 (`capability_answer`). `describe_capabilities` answers in two levels, as an API
 catalog is read. With no `name` and no `resource`, it is an index of each
-capability's name, label, summary, effect, resource and `permitted`, without
-its schema. Narrowed, it is each entry in full, as `/api/v2/capabilities/`
+capability's name, label, summary, effect and resource, without its schema,
+and `refused` on one the caller lacks a permission for. Narrowed, it is each entry in full, as `/api/v2/capabilities/`
 answers it. The definitions the entries' `input_schema`s share are held once in
 the answer's root `$defs`, which each `#/$defs/<name>` there points to. The API
 answers every entry in full with each schema whole, since its readers index one
@@ -928,7 +929,8 @@ that is beside its handler (`@tool(..., requires=...)`, an access from
 binding refuses a call by the same rule, `forbidden`, before the handler runs,
 so the list and the refusal never disagree. The catalogs
 (`describe_capabilities`, `describe_resources`, `describe_connections`) are
-listed to everyone, since each says `permitted` of every entry. `list_resource`
+listed to everyone, since each says of every entry whether the caller may
+use it. `list_resource`
 and `get_resource` are listed to a caller who may read some kind each serves,
 and `execute_capability` to one who may run some capability. A change is held
 for a person only after its caller's grant is checked, so a caller without one

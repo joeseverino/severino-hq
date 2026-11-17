@@ -64,7 +64,7 @@ class CapabilityAnswerTests(TestCase):
         index = self._answered()
 
         self.assertEqual([entry["name"] for entry in index["capabilities"]], [entry["name"] for entry in everything])
-        self.assertTrue(any(entry.get("permitted") for entry in index["capabilities"]))
+        self.assertFalse(any(entry.get("refused") for entry in index["capabilities"]))
         self.assertEqual(_defined(index), [])
         self.assertFalse(any("input_schema" in entry for entry in index["capabilities"]))
 

@@ -7179,7 +7179,7 @@
             "$ref": "#/components/schemas/CapabilitySummary/properties/name"
           },
           "permitted": {
-            "$ref": "#/components/schemas/CapabilitySummary/properties/permitted"
+            "$ref": "#/components/schemas/Permitted"
           },
           "required_capabilities": {
             "$ref": "#/components/schemas/RequiredPermissions"
@@ -7292,7 +7292,7 @@
             "$ref": "#/components/schemas/CapabilitySummary/properties/name"
           },
           "permitted": {
-            "$ref": "#/components/schemas/CapabilitySummary/properties/permitted"
+            "$ref": "#/components/schemas/CapabilityDescription/properties/permitted"
           },
           "request_schema": {
             "description": "The JSON Schema of the request body that runs it.",
@@ -7375,7 +7375,7 @@
       },
       "CapabilitySummary": {
         "additionalProperties": false,
-        "description": "One command as the index lists it: what it does and whether you may run it, without its schema.",
+        "description": "One command as an index names it: what it does, without its schema.",
         "properties": {
           "effect": {
             "$ref": "#/components/schemas/Effect"
@@ -7387,9 +7387,6 @@
           "name": {
             "description": "The command's dotted name, which you run it by.",
             "type": "string"
-          },
-          "permitted": {
-            "$ref": "#/components/schemas/Permitted"
           },
           "resource": {
             "anyOf": [
@@ -7412,8 +7409,7 @@
           "label",
           "summary",
           "effect",
-          "resource",
-          "permitted"
+          "resource"
         ],
         "type": "object"
       },

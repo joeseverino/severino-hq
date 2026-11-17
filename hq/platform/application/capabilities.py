@@ -99,7 +99,7 @@ def capability_registry() -> dict[str, CapabilitySpec]:
 
 
 class CapabilitySummary(TypedDict):
-    """One command as the index lists it: what it does and whether you may run it, without its schema."""
+    """One command as an index names it: what it does, without its schema."""
 
     name: Annotated[str, Describe("The command's dotted name, which you run it by.")]
     label: Annotated[str, Describe("The command's name, as HQ's pages show it.")]
@@ -109,12 +109,12 @@ class CapabilitySummary(TypedDict):
         str | None,
         Describe("The list its targets are read from, by the name `describe_resources` gives it; null for none."),
     ]
-    permitted: Permitted
 
 
 class CapabilityDescription(CapabilitySummary):
     """One registry entry as every adapter describes it."""
 
+    permitted: Permitted
     verb: Annotated[str, Describe("What its button says.")]
     variants: Annotated[
         dict[str, str],
