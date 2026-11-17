@@ -1,8 +1,15 @@
+from typing import TypedDict
+
 from hq.platform.application.integration_specs import ResourceSpec
 from hq.platform.application.resources import BoundedQuery
 from hq.platform.application.security import Capability
 
 from .service import list_widgets
+
+
+class WidgetRow(TypedDict):
+    slug: str
+    name: str
 
 
 def resources() -> tuple[ResourceSpec, ...]:
@@ -15,5 +22,6 @@ def resources() -> tuple[ResourceSpec, ...]:
             list_widgets,
             BoundedQuery,
             web_route="widgets:list",
+            item_type=WidgetRow,
         ),
     )

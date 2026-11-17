@@ -68,6 +68,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 label="Expenses",
             ),
             web_route="expenses:list",
-            row_type=ExpenseRow,
+            item_type=ExpenseRow,
         ),
     )

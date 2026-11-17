@@ -1,6 +1,7 @@
 import json
 import threading
 from datetime import UTC, datetime, timedelta
+from typing import TypedDict
 from unittest.mock import patch
 
 import jwt
@@ -167,6 +168,9 @@ class CompositionCheckTests(SimpleTestCase):
 
         from ..checks import capability_contract_check
 
+        class ExampleRecord(TypedDict):
+            name: str
+
         resource = ResourceSpec(
             "example.records",
             "Records",
@@ -175,6 +179,7 @@ class CompositionCheckTests(SimpleTestCase):
             list_handler=lambda: {"items": [], "count": 0},
             list_query_type=EmptyQuery,
             web_route="missing:list",
+            item_type=ExampleRecord,
         )
         graph = compile_integration_graph(capabilities=(), resources=(resource,), connections=())
         with override_integration_graph(graph):

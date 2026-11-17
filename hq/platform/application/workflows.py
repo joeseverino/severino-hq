@@ -10,6 +10,7 @@ from .workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, Workf
 # A plan and an action as an answer carries them.
 WrittenWorkflow = Annotated[dict[str, Any], Written(WorkflowPlan)]
 WrittenAction = Annotated[dict[str, Any], Written(ActionLink)]
+WrittenStep = Annotated[dict[str, Any], Written(WorkflowStep)]
 
 
 def claim_identity(namespace: str, key: str) -> str:

@@ -14,7 +14,7 @@ from typing import Any, NoReturn
 from .json_schemas import LOCAL, json_schema
 
 Fields = list[str] | tuple[str, ...]
-# The one field mask that keeps every field (AIP-157), a list read's way past its kind's list_fields.
+# The one field mask that keeps every field (AIP-157): a list's whole item, past its kind's list_fields.
 WHOLE_RECORD = "*"
 # A field mask (AIP-161): each name keeps its whole value, or the names under
 # it keep only those parts. ``None`` is a whole value.

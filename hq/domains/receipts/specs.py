@@ -60,6 +60,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 label="Receipts",
             ),
             web_route="receipts:list",
-            row_type=ReceiptRow,
+            item_type=ReceiptRow,
         ),
     )

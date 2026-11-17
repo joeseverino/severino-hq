@@ -190,7 +190,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             get_run,
             "operation_id",
             web_route="jobs:list",
-            row_type=RunRow,
+            item_type=RunRow,
             record_type=RunRecord,
         ),
     )

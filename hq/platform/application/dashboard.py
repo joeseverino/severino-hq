@@ -33,6 +33,8 @@ from .security import Capability, Principal
 from .workflows import WrittenAction, WrittenWorkflow, serialize_workflow
 lazy from .action_items import item_key, item_revision, waiting_count
 lazy from .card_items import Insight
+lazy from .item_help import CANNOT
+lazy from .resource_records import ActionItem
 lazy from .routes import reverse
 lazy from .ui import DomainOverview
 
@@ -194,6 +196,38 @@ def _queue_item(source_id: str, source: str, item: Insight) -> QueueItem:
         "facts": [list(fact) for fact in item.facts],
         "links": [asdict(link) for link in item.links],
         "read_capabilities": list(item.read_capabilities),
+    }
+
+
+def listed_item(item: QueueItem) -> ActionItem:
+    """``item`` as a machine reads it, by list or at a glance: every command
+    and address it acts on or points at, without what the page keeps for
+    itself (the revision a person sets it aside at, the capabilities the
+    queue was already filtered by, the heading items are grouped under, and
+    a plan's own id, heading and completion). A step that says why HQ cannot
+    do it keeps its reason without the page's heading for it."""
+
+    workflow = item["workflow"]
+    return {
+        "key": item["key"],
+        "source_id": item["source_id"],
+        "source": item["source"],
+        "label": item["label"],
+        "detail": item["detail"],
+        "count": item["count"],
+        "status": item["status"],
+        "url": item["url"],
+        "action": item["action"],
+        "steps": [{**step, "label": ""} if step["phase"] == CANNOT else step for step in workflow["steps"]]
+        if workflow
+        else [],
+        "actions": item["actions"],
+        "subject": item["subject"],
+        "notice": item["notice"],
+        "since": item["since"],
+        "observed_at": item["observed_at"],
+        "facts": item["facts"],
+        "links": item["links"],
     }
 
 

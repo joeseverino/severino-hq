@@ -80,7 +80,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="title",
             ),
             web_route="content:list",
-            row_type=ContentRow,
+            item_type=ContentRow,
             record_type=ContentRecord,
         ),
     )

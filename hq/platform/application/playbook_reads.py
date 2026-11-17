@@ -193,7 +193,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "playbook",
             web_route=PAGE,
             pass_principal=True,
-            row_type=PlaybookRow,
+            item_type=PlaybookRow,
             record_type=PlaybookRecord,
         ),
         ResourceSpec(
@@ -208,7 +208,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "id",
             identifier_type=RecordId,
             web_route=PAGE,
-            row_type=ScanResult,
+            item_type=ScanResult,
             record_type=ScanResult,
         ),
     )

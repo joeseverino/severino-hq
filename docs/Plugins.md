@@ -718,6 +718,9 @@ the words every list's does, so the API reference writes them once.
 
 | Field | Set it |
 | --- | --- |
+| `item_type` | to the TypedDict one list item is whole, which every list declares: a list answers only its keys, and the API document types each item by it |
+| `list_fields` | to the keys a list keeps when the caller names none, where that is fewer than its item's |
+| `record_type` | to the TypedDict a read of one record answers |
 | `pass_principal=True` | when the answer depends on what the caller may see; both handlers then also receive `principal=` |
 | `web_route` | to the resource's list route, which must reverse without arguments, to link it from the Command Center |
 
@@ -927,6 +930,10 @@ keyword: it takes any number of capabilities, by position.
 `PLUGIN_API_VERSION` 18 exports `NonEmpty` and `RequiredText` from
 `hq_sdk.capabilities`: a field that must hold something says so through them,
 never `min_length=1`, and its schema says `minLength` (`minItems`).
+It also retires `ResourceSpec`'s `row_type`: a list declares `item_type`, the
+TypedDict one item is whole, and answers no key beside it; `list_fields`
+names the ones a list keeps by default, every key of the item where it names
+none.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body

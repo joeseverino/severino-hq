@@ -101,7 +101,7 @@ def list_action_items(
     with projection_scope():
         queue = dashboard.readable_queue(principal)
         items = filter_items(queue, query=query, status=status or "", source=source or "")
-    return _collection(items, limit)
+    return _collection(items, limit, dashboard.listed_item)
 
 
 # ----- Machines ---------------------------------------------------------------

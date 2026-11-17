@@ -44,7 +44,7 @@ def saved_type(resource: str) -> Any:
 
     records = records_of(resource)
     spec = resource_registry()[resource]
-    record = spec.record_type or spec.row_type
+    record = spec.record_type or spec.item_type
     saved: Any = TypedDict(  # type: ignore[operator]
         _saved_name(records),
         {"ok": Literal[True], "created": Created, records.noun: record, "message": CallMessage},

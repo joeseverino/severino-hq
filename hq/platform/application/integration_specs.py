@@ -452,17 +452,15 @@ class ResourceSpec(Requires):
     # The handlers also take ``principal=``: the answer depends on what the
     # caller may see, not only on whether it may read the resource.
     pass_principal: bool = False
-    # The fields each item of a list read keeps when the caller names none, so
-    # a page costs what it shows; empty keeps the whole item. The whole record
-    # is the detail read, or a list read's ``fields``. Derived from
-    # ``row_type`` where the spec declares one.
+    # The TypedDict one item of a list read is whole (``fields=*``): a list
+    # answers only its keys, and the API document types each item by it.
+    item_type: type | None = None
+    # The fields each item keeps when the caller names none, so a page costs
+    # what it shows; every key of ``item_type`` where the spec names none.
     list_fields: tuple[str, ...] = ()
-    # The TypedDict one item of a list read is, as it keeps ``list_fields``,
-    # and the one a read of one record answers, which extends it. The API
-    # document types each read's answer by them.
-    row_type: type | None = None
+    # The TypedDict a read of one record answers.
     record_type: type | None = None
 
     def __post_init__(self) -> None:
-        if self.row_type is not None and not self.list_fields and is_typeddict(self.row_type):
-            object.__setattr__(self, "list_fields", typed_keys(self.row_type))
+        if self.item_type is not None and not self.list_fields and is_typeddict(self.item_type):
+            object.__setattr__(self, "list_fields", typed_keys(self.item_type))

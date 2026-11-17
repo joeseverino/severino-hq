@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 from collections.abc import Callable, Iterable, Mapping
-from typing import Annotated, Any, Literal, NotRequired, TypedDict, get_type_hints, is_typeddict, override
+from typing import Annotated, Any, Literal, NotRequired, TypedDict, override
 
 from django.core import signing
 from django.db.models import Model
@@ -54,6 +54,7 @@ from .projection import MAX_PAGE_SIZE, CursorRefusal, NextPage, PageScope, page_
 from .record_errors import HostRefusal, RecordNotFound
 from .refusal_status import next_call
 from .resource_records import (
+    ActionItem,
     ActionItemRow,
     ContainerRecord,
     ContainerRow,
@@ -63,14 +64,17 @@ from .resource_records import (
     HopRow,
     MachineRecord,
     MachineRow,
+    ManagedResourceItem,
     ManagedResourceRecord,
     ManagedResourceRow,
     Match,
     PathRecord,
     Problem,
+    ReadingItem,
     ReadingRecord,
     ReadingRow,
     RelationshipsRecord,
+    ServiceItem,
     ServiceRecord,
     ServiceRow,
     UpgradeRecord,
@@ -321,7 +325,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
                 snippet_field="search_summary",
             ),
             web_route="control_plane:list",
-            row_type=ManagedResourceRow,
+            item_type=ManagedResourceItem,
+            list_fields=typed_keys(ManagedResourceRow),
             record_type=ManagedResourceRecord,
         ),
         ResourceSpec(
@@ -334,7 +339,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             service_list.get_service,
             "hostname",
             web_route="control_plane:services",
-            row_type=ServiceRow,
+            item_type=ServiceItem,
+            list_fields=typed_keys(ServiceRow),
             record_type=ServiceRecord,
         ),
         ResourceSpec(
@@ -346,7 +352,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             web_route="dashboard",
             pass_principal=True,
-            row_type=EstateFigure,
+            item_type=EstateFigure,
         ),
         ResourceSpec(
             "machines",
@@ -358,7 +364,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             derived_reads.get_machine,
             "name",
             web_route="control_plane:machines",
-            row_type=MachineRow,
+            item_type=MachineRecord,
+            list_fields=typed_keys(MachineRow),
             record_type=MachineRecord,
         ),
         ResourceSpec(
@@ -372,7 +379,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             container_reads.get_container,
             "address",
             web_route="control_plane:containers",
-            row_type=ContainerRow,
+            item_type=ContainerRecord,
+            list_fields=typed_keys(ContainerRow),
             record_type=ContainerRecord,
         ),
         ResourceSpec(
@@ -386,7 +394,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             container_reads.get_upgrade,
             "address",
             web_route="control_plane:containers",
-            row_type=UpgradeRow,
+            item_type=UpgradeRecord,
+            list_fields=typed_keys(UpgradeRow),
             record_type=UpgradeRecord,
         ),
         ResourceSpec(
@@ -399,7 +408,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             derived_reads.get_domain,
             "name",
             web_route="zones:index",
-            row_type=DomainRow,
+            item_type=DomainRow,
             record_type=DomainRecord,
         ),
         ResourceSpec(
@@ -433,7 +442,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             web_route="hq_self",
             pass_principal=True,
-            row_type=Problem,
+            item_type=Problem,
         ),
         ResourceSpec(
             READINGS,
@@ -445,7 +454,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             derived_reads.get_reading,
             "kind",
             web_route="control_plane:connections",
-            row_type=ReadingRow,
+            item_type=ReadingItem,
+            list_fields=typed_keys(ReadingRow),
             record_type=ReadingRecord,
         ),
         ResourceSpec(
@@ -458,7 +468,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             derived_reads.get_credential,
             "provider",
             web_route="control_plane:connections",
-            row_type=CredentialRow,
+            item_type=CredentialRecord,
+            list_fields=typed_keys(CredentialRow),
             record_type=CredentialRecord,
         ),
         ResourceSpec(
@@ -471,7 +482,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             web_route="control_plane:tailnet",
             pass_principal=True,
-            row_type=Tailnet,
+            item_type=Tailnet,
         ),
         ResourceSpec(
             "connections",
@@ -485,7 +496,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "connection_ref",
             web_route="control_plane:connections",
             pass_principal=True,
-            row_type=ConnectionStandingRow,
+            item_type=ConnectionStandingRecord,
+            list_fields=typed_keys(ConnectionStandingRow),
             record_type=ConnectionStandingRecord,
         ),
     )
@@ -506,7 +518,8 @@ def dashboard() -> tuple[ResourceSpec, ...]:
             action_item_query(),
             web_route="action_items",
             pass_principal=True,
-            row_type=ActionItemRow,
+            item_type=ActionItem,
+            list_fields=typed_keys(ActionItemRow),
         ),
     )
 
@@ -522,7 +535,7 @@ def connections() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             web_route="connection",
             pass_principal=True,
-            row_type=HopRow,
+            item_type=HopRow,
         ),
     )
 
@@ -538,7 +551,7 @@ def search() -> tuple[ResourceSpec, ...]:
             SearchQuery,
             web_route="search",
             pass_principal=True,
-            row_type=Match,
+            item_type=Match,
         ),
     )
 
@@ -614,12 +627,7 @@ class ListOperation(TypedDict):
             "given this name says each one's type and choices."
         ),
     ]
-    fields: NotRequired[
-        Annotated[
-            list[str],
-            Describe("The fields each item keeps unless the caller names its own; absent, items keep them all."),
-        ]
-    ]
+    fields: Annotated[list[str], Describe("The fields each item keeps unless the caller names its own.")]
     query_schema: NotRequired[
         Annotated[
             dict[str, Any],
@@ -702,9 +710,7 @@ def describe_resources(*, principal: Principal | None = None, name: str = "") ->
 def _listing(spec: ResourceSpec, *, whole: bool) -> ListOperation | None:
     if not spec.list_query_type:
         return None
-    listing: ListOperation = {"filters": list(list_filters(spec.list_query_type))}
-    if spec.list_fields:
-        listing["fields"] = list(spec.list_fields)
+    listing: ListOperation = {"filters": list(list_filters(spec.list_query_type)), "fields": list(spec.list_fields)}
     if whole:
         schema = json_schema(spec.list_query_type)
         properties = schema.get("properties", {})
@@ -786,25 +792,16 @@ def list_resource(
         raise invalid from None
     if handled["count"] != len(handled["items"]):
         raise invalid
+    if spec.item_type is None:
+        raise RuntimeError(f"Resource {name!r} lists items of no declared type.")
     page: ResourceCollection = {**handled, **_page(spec, parsed, handled, scope, bound)}
-    if fields is None:
-        return {**page, "items": _listed_fields(spec, page["items"])}
-    if asks_whole(fields):
-        return page
-    return {**page, "items": _masked(spec, page["items"], fields, listed=True)}
-
-
-def _listed_fields(spec: ResourceSpec, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Each item cut to its kind's ``list_fields``, or whole where it declares none.
-
-    A field an item lacks is left out rather than refused: it is the kind's
-    declaration, not the caller's ask, and a page of items that happen to lack
-    an optional one is still a page.
-    """
-
-    if not spec.list_fields:
-        return items
-    return [{key: item[key] for key in item if key in spec.list_fields} for item in items]
+    # Each item holds only what its type declares, whatever its handler built,
+    # and by default only its kind's list_fields of that.
+    kept = frozenset(spec.list_fields if fields is None else typed_keys(spec.item_type))
+    items = [{key: value for key, value in item.items() if key in kept} for item in page["items"]]
+    if fields is not None and not asks_whole(fields):
+        items = _masked(spec, items, fields, listed=True)
+    return {**page, "items": items}
 
 
 class PagePosition(TypedDict):
@@ -824,7 +821,7 @@ class ResourceCollection(PagePosition):
     """One page of a list: every list holds these, and may hold metadata of its own."""
 
     items: Annotated[
-        list[dict[str, Any]], Describe("The page's records, in the list's order, each in its row's shape.")
+        list[dict[str, Any]], Describe("The page's records, in the list's order, each of its list's item type.")
     ]
     count: Annotated[int, Describe("How many records this page holds.")]
 
@@ -907,35 +904,18 @@ def _cursor_refused(name: str, reason: str) -> InvalidResourceInput:
     return InvalidResourceInput(name, [{"type": "value_error", "loc": [PAGE_FIELD], "msg": reason}])
 
 
-def masked_kinds(spec: ResourceSpec, *, listed: bool) -> tuple[type, ...]:
-    """The types a field mask over ``spec``'s records declares paths from: a
-    list's row and, since ``*`` keeps each item whole, ``whole_item``; a read
-    of one's record, else its row; none where it types neither."""
+def masked_kind(spec: ResourceSpec, *, listed: bool) -> type | None:
+    """The type a field mask over ``spec``'s records declares paths from: a
+    list's item, or a read of one's record; none where it types neither."""
 
-    kinds = (spec.row_type, whole_item(spec)) if listed else (spec.record_type or spec.row_type,)
-    return tuple(dict.fromkeys(kind for kind in kinds if kind is not None))
-
-
-def whole_item(spec: ResourceSpec) -> type | None:
-    """What one item of ``spec``'s list is whole: its record where that extends
-    the row; else the record's field that does, where a read of one answers the
-    item beside what it is read with (a service and its path); else the row."""
-
-    row, record = spec.row_type, spec.record_type
-    if row is None or record is None:
-        return record or row
-    keys = set(typed_keys(row))
-    candidates: tuple[type, ...] = (record, *get_type_hints(record).values())
-    for kind in candidates:
-        if is_typeddict(kind) and keys <= set(typed_keys(kind)):
-            return kind
-    return row
+    return spec.item_type if listed else spec.record_type
 
 
 def mask_paths(spec: ResourceSpec, *, listed: bool) -> tuple[str, ...]:
-    """Every field path a mask over ``spec``'s records may name, from ``masked_kinds``."""
+    """Every field path a mask over ``spec``'s records may name, from ``masked_kind``."""
 
-    return tuple(dict.fromkeys(path for kind in masked_kinds(spec, listed=listed) for path in field_paths(kind)))
+    kind = masked_kind(spec, listed=listed)
+    return () if kind is None else field_paths(kind)
 
 
 def _masked(spec: ResourceSpec, records: list[Any], fields: Fields, *, listed: bool) -> list[dict[str, Any]]:

@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass, replace
+from typing import TypedDict
 
 from django.test import SimpleTestCase
 
@@ -22,6 +23,10 @@ class _Nothing:
 
 class _ExampleQuery(TopQuery):
     pass
+
+
+class _ExampleRow(TypedDict):
+    name: str
 
 
 def _rows(*, limit: int = 50) -> dict:
@@ -50,7 +55,9 @@ def _trails():
     command = CapabilitySpec(
         "example.walk.create", "Log a walk.", "remote_write", "example.trails.write", _Nothing, _run, label="Log a walk"
     )
-    rows = ResourceSpec("example.walks", "Walks", "Every walk logged.", Capability.READ, _rows, _ExampleQuery)
+    rows = ResourceSpec(
+        "example.walks", "Walks", "Every walk logged.", Capability.READ, _rows, _ExampleQuery, item_type=_ExampleRow
+    )
     work = OutboundWork(
         name="example.trails.sync",
         label="Sync walks",
@@ -72,7 +79,15 @@ def _summits():
         description="The summits reached.",
         navigation=(NavigationItem("Summits", "example_summits:home", "example_summits", 41, "Trails"),),
     )
-    rows = ResourceSpec("example.summits", "Reached", "Every summit reached.", Capability.READ, _rows, _ExampleQuery)
+    rows = ResourceSpec(
+        "example.summits",
+        "Reached",
+        "Every summit reached.",
+        Capability.READ,
+        _rows,
+        _ExampleQuery,
+        item_type=_ExampleRow,
+    )
     return manifest, replace(integration, resources=lambda: (rows,))
 
 

@@ -1,5 +1,6 @@
 """Contract tests for HQ's shared read-resource registry."""
 
+from typing import Any, NotRequired, TypedDict
 from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
@@ -61,6 +62,7 @@ class ResourceExecutionTests(TestCase):
             list_handler=lambda: {"items": [], "count": 0},
             list_query_type=EmptyQuery,
             web_route="missing:list",
+            item_type=_ExampleRecord,
         )
         installed = plugin_resource_specs()
         with mock.patch(
@@ -200,6 +202,13 @@ class ResourceExecutionTests(TestCase):
         self.assertLess(len(json.dumps(selected)) * 20, len(json.dumps(whole)))
 
 
+class _ExampleRecord(TypedDict):
+    name: str
+    state: NotRequired[str]
+    trace: NotRequired[None]
+    items: NotRequired[list[dict[str, Any]]]
+
+
 def _nested(_identifier):
     return {
         "name": "example",
@@ -221,6 +230,7 @@ NESTED = ResourceSpec(
     EmptyQuery,
     _nested,
     "name",
+    item_type=_ExampleRecord,
 )
 
 
@@ -296,6 +306,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             Capability.READ,
             list_handler=_no_rows,
             list_query_type=EmptyQuery,
+            item_type=_ExampleRecord,
         )
         with (
             mock.patch(
@@ -337,6 +348,7 @@ class ResourceRegistrationTests(SimpleTestCase):
                 Capability.READ,
                 list_handler=lambda **_: {"items": [], "count": 0},
                 list_query_type=query,
+                item_type=_ExampleRecord,
             )
             with (
                 self.subTest(query=query.__name__),
@@ -354,6 +366,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             list_handler=lambda: {"items": [], "count": 0},
             list_query_type=EmptyQuery,
             web_route="example:records:list",
+            item_type=_ExampleRecord,
         )
         installed = plugin_resource_specs()
         with mock.patch(

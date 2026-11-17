@@ -10,7 +10,7 @@
       }
     },
     "parameters": {
-      "ActionItemRowFields": {
+      "ActionItemPageFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -26,6 +26,61 @@
               "action",
               "url",
               "since",
+              "key",
+              "source_id",
+              "count",
+              "steps",
+              "steps.phase",
+              "steps.label",
+              "steps.summary",
+              "steps.state",
+              "steps.actions",
+              "steps.actions.name",
+              "steps.actions.label",
+              "steps.actions.effect",
+              "steps.actions.url",
+              "steps.actions.method",
+              "steps.actions.capability",
+              "steps.actions.target",
+              "steps.actions.reason",
+              "steps.actions.recommended",
+              "steps.actions.refusal",
+              "actions",
+              "actions.name",
+              "actions.label",
+              "actions.effect",
+              "actions.url",
+              "actions.method",
+              "actions.capability",
+              "actions.target",
+              "actions.reason",
+              "actions.recommended",
+              "actions.refusal",
+              "subject",
+              "subject.name",
+              "subject.label",
+              "subject.effect",
+              "subject.url",
+              "subject.method",
+              "subject.capability",
+              "subject.target",
+              "subject.reason",
+              "subject.recommended",
+              "subject.refusal",
+              "notice",
+              "observed_at",
+              "facts",
+              "links",
+              "links.name",
+              "links.label",
+              "links.effect",
+              "links.url",
+              "links.method",
+              "links.capability",
+              "links.target",
+              "links.reason",
+              "links.recommended",
+              "links.refusal",
               "*"
             ],
             "type": "string"
@@ -123,7 +178,40 @@
         },
         "style": "form"
       },
-      "BreakdownFields": {
+      "AssetRowPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "slug",
+              "item_name",
+              "vendor",
+              "category",
+              "status",
+              "purchase_date",
+              "total_cost",
+              "business_use_percentage",
+              "estimated_deductible_amount",
+              "payment_method",
+              "serial_number",
+              "warranty_date",
+              "notes",
+              "infrastructure",
+              "updated_at",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
+      "BreakdownPageFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -468,6 +556,34 @@
         },
         "style": "form"
       },
+      "ContentRowPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "slug",
+              "title",
+              "content_type",
+              "status",
+              "topic",
+              "tags",
+              "published_url",
+              "published_at",
+              "notes",
+              "updated_at",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "CredentialRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -576,6 +692,38 @@
         },
         "style": "form"
       },
+      "DocumentationRowPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "doc_id",
+              "title",
+              "doc_type",
+              "system",
+              "environment",
+              "status",
+              "sensitivity",
+              "obsidian_path",
+              "github_path",
+              "external_url",
+              "last_reviewed",
+              "published_at",
+              "notes",
+              "updated_at",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "DomainRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -623,6 +771,35 @@
         },
         "style": "form"
       },
+      "DomainRowPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "name",
+              "node",
+              "url",
+              "declaration",
+              "services",
+              "services.hostname",
+              "services.status",
+              "registration",
+              "registration.expires",
+              "registration.source",
+              "registration.auto_renew",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "EntryRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -657,7 +834,7 @@
         },
         "style": "form"
       },
-      "EstateFigureFields": {
+      "EstateFigurePageFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -681,7 +858,7 @@
         },
         "style": "form"
       },
-      "ExpenseRowFields": {
+      "ExpenseRowPageFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -769,7 +946,7 @@
         },
         "style": "form"
       },
-      "HopRowFields": {
+      "HopRowPageFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -983,6 +1160,47 @@
         },
         "style": "form"
       },
+      "ManagedResourceItemPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "key",
+              "kind",
+              "enabled",
+              "in_sync",
+              "health",
+              "health.state",
+              "health.label",
+              "health.reason",
+              "health.message",
+              "public_effect",
+              "last_observed_at",
+              "id",
+              "spec",
+              "status",
+              "conditions",
+              "conditions.type",
+              "conditions.status",
+              "conditions.reason",
+              "conditions.message",
+              "conditions.since",
+              "generation",
+              "observed_generation",
+              "updated_at",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "ManagedResourceRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -1054,48 +1272,7 @@
         },
         "style": "form"
       },
-      "ManagedResourceRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "key",
-              "kind",
-              "enabled",
-              "in_sync",
-              "health",
-              "health.state",
-              "health.label",
-              "health.reason",
-              "health.message",
-              "public_effect",
-              "last_observed_at",
-              "id",
-              "spec",
-              "status",
-              "conditions",
-              "conditions.type",
-              "conditions.status",
-              "conditions.reason",
-              "conditions.message",
-              "conditions.since",
-              "generation",
-              "observed_generation",
-              "updated_at",
-              "*"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
-      "MatchFields": {
+      "MatchPageFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -1304,7 +1481,30 @@
         },
         "style": "form"
       },
-      "ProblemFields": {
+      "PlaybookRowPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "playbook",
+              "title",
+              "capability",
+              "effect",
+              "reachable",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
+      "ProblemPageFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -1381,6 +1581,43 @@
         },
         "style": "form"
       },
+      "ProjectRowPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "slug",
+              "name",
+              "category",
+              "status",
+              "description",
+              "technologies",
+              "repository_url",
+              "public_url",
+              "last_push_at",
+              "dependency_updates",
+              "updated_at",
+              "updates",
+              "updates.open_pulls",
+              "updates.oldest_pull_days",
+              "updates.unmatched_alerts",
+              "updates.last_run",
+              "updates.last_run.outcome",
+              "updates.last_run.started_at",
+              "updates.last_run.finished_at",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "ProviderIdentifier": {
         "description": "The record's `provider`, as each item of the list carries it.",
         "in": "path",
@@ -1389,6 +1626,38 @@
         "schema": {
           "type": "string"
         }
+      },
+      "ReadingItemPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "kind",
+              "label",
+              "provider",
+              "state",
+              "records",
+              "observed_at",
+              "error",
+              "provider_label",
+              "read_by",
+              "facet",
+              "relation",
+              "requires",
+              "refusal",
+              "remedy",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
       },
       "ReadingRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
@@ -1423,7 +1692,7 @@
         },
         "style": "form"
       },
-      "ReceiptRowFields": {
+      "ReceiptRowPageFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -1543,6 +1812,39 @@
         },
         "style": "form"
       },
+      "RunRowPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "operation_id",
+              "playbook",
+              "capability",
+              "state",
+              "state_label",
+              "headline",
+              "hosts",
+              "by",
+              "approved_by",
+              "correlation",
+              "created_at",
+              "started_at",
+              "finished_at",
+              "duration_seconds",
+              "stated",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "ScanResultFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -1586,6 +1888,40 @@
           "maximum": 100,
           "minimum": 1,
           "type": "integer"
+        },
+        "style": "form"
+      },
+      "ServiceItemPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "hostname",
+              "status",
+              "status_label",
+              "origin",
+              "origin.address",
+              "origin.host",
+              "origin.container",
+              "project",
+              "faults",
+              "mark",
+              "facets",
+              "facets.id",
+              "facets.label",
+              "facets.present",
+              "facets.state",
+              "facets.resources",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
         },
         "style": "form"
       },
@@ -1716,40 +2052,6 @@
         },
         "style": "form"
       },
-      "ServiceRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "hostname",
-              "status",
-              "status_label",
-              "origin",
-              "origin.address",
-              "origin.host",
-              "origin.container",
-              "project",
-              "faults",
-              "mark",
-              "facets",
-              "facets.id",
-              "facets.label",
-              "facets.present",
-              "facets.state",
-              "facets.resources",
-              "*"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
       "SlugIdentifier": {
         "description": "The record's `slug`, as each item of the list carries it.",
         "in": "path",
@@ -1759,7 +2061,7 @@
           "type": "string"
         }
       },
-      "TailnetFields": {
+      "TailnetPageFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -3219,6 +3521,127 @@
         },
         "type": "object"
       },
+      "ActionItem": {
+        "additionalProperties": false,
+        "description": "One action item: what needs doing, where, and the calls and commands that do it.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ActionItemRow/properties/action"
+          },
+          "actions": {
+            "description": "The quick actions offered on it, each through its owner's own command or page.",
+            "items": {
+              "$ref": "#/components/schemas/ActionLink"
+            },
+            "type": "array"
+          },
+          "count": {
+            "description": "How many things it stands for, at least 1.",
+            "type": "integer"
+          },
+          "detail": {
+            "$ref": "#/components/schemas/ActionItemRow/properties/detail"
+          },
+          "facts": {
+            "description": "What was read that shows it, each a label and its value.",
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "key": {
+            "description": "The item's key, which setting it aside names it by.",
+            "type": "string"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ActionItemRow/properties/label"
+          },
+          "links": {
+            "description": "Pages that help look into it, such as where it sits; never one that acts.",
+            "items": {
+              "$ref": "#/components/schemas/ActionLink"
+            },
+            "type": "array"
+          },
+          "notice": {
+            "description": "Whether it only reports something, with nothing to resolve.",
+            "type": "boolean"
+          },
+          "observed_at": {
+            "description": "When the reading it is drawn from was taken, in ISO 8601; empty for none.",
+            "type": "string"
+          },
+          "since": {
+            "$ref": "#/components/schemas/ActionItemRow/properties/since"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ActionItemRow/properties/source"
+          },
+          "source_id": {
+            "description": "The stable id of the part of HQ it comes from, such as `containers`.",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ActionItemRow/properties/status"
+          },
+          "steps": {
+            "description": "The steps of the plan that resolves it, in order; empty where it has no plan.",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStep"
+            },
+            "type": "array"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActionLink",
+                "title": "Action link"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The thing it is about, as a link to its own page; null for none."
+          },
+          "url": {
+            "$ref": "#/components/schemas/ActionItemRow/properties/url"
+          }
+        },
+        "type": "object"
+      },
+      "ActionItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ActionItem"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ActionItemRestoreRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -3283,35 +3706,14 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "ActionItemRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "$ref": "#/components/schemas/ActionItemRow"
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
         "required": [
-          "ok",
-          "data"
+          "status",
+          "source",
+          "label",
+          "detail",
+          "action",
+          "url",
+          "since"
         ],
         "type": "object"
       },
@@ -4290,14 +4692,7 @@
             "properties": {
               "items": {
                 "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/AssetRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/AssetRecord"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/AssetRow"
                 },
                 "type": "array"
               }
@@ -6417,6 +6812,36 @@
         },
         "type": "object"
       },
+      "ConnectionStandingRecordPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectionStandingRecord"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ConnectionStandingRecordSuccess": {
         "additionalProperties": false,
         "properties": {
@@ -6491,42 +6916,17 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "ConnectionStandingRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ConnectionStandingRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ConnectionStandingRecord"
-                    }
-                  ]
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
         "required": [
-          "ok",
-          "data"
+          "id",
+          "connection_ref",
+          "label",
+          "kind",
+          "family",
+          "status",
+          "status_label",
+          "detail",
+          "observed_at",
+          "open_problems"
         ],
         "type": "object"
       },
@@ -6964,6 +7364,36 @@
         },
         "type": "object"
       },
+      "ContainerRecordPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ContainerRecord"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ContainerRecordSuccess": {
         "additionalProperties": false,
         "properties": {
@@ -7019,42 +7449,15 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "ContainerRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ContainerRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ContainerRecord"
-                    }
-                  ]
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
         "required": [
-          "ok",
-          "data"
+          "address",
+          "machine",
+          "name",
+          "compose_project",
+          "url",
+          "state",
+          "status",
+          "serves"
         ],
         "type": "object"
       },
@@ -7365,14 +7768,7 @@
             "properties": {
               "items": {
                 "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ContentRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ContentRecord"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ContentRow"
                 },
                 "type": "array"
               }
@@ -7754,6 +8150,36 @@
         },
         "type": "object"
       },
+      "CredentialRecordPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/CredentialRecord"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "CredentialRecordSuccess": {
         "additionalProperties": false,
         "properties": {
@@ -7794,42 +8220,11 @@
             "type": "array"
           }
         },
-        "type": "object"
-      },
-      "CredentialRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/CredentialRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/CredentialRecord"
-                    }
-                  ]
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
         "required": [
-          "ok",
-          "data"
+          "provider",
+          "label",
+          "credential_refusal",
+          "tally"
         ],
         "type": "object"
       },
@@ -8847,14 +9242,7 @@
             "properties": {
               "items": {
                 "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/DocumentationRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/DocumentationItem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/DocumentationRow"
                 },
                 "type": "array"
               }
@@ -9325,14 +9713,7 @@
             "properties": {
               "items": {
                 "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/DomainRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/DomainRecord"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/DomainRow"
                 },
                 "type": "array"
               }
@@ -12418,7 +12799,7 @@
         "description": "How a resource is listed, where it can be.",
         "properties": {
           "fields": {
-            "description": "The fields each item keeps unless the caller names its own; absent, items keep them all.",
+            "description": "The fields each item keeps unless the caller names its own.",
             "items": {
               "type": "string"
             },
@@ -12441,7 +12822,8 @@
           }
         },
         "required": [
-          "filters"
+          "filters",
+          "fields"
         ],
         "type": "object"
       },
@@ -12668,6 +13050,36 @@
         },
         "type": "object"
       },
+      "MachineRecordPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/MachineRecord"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "MachineRecordSuccess": {
         "additionalProperties": false,
         "properties": {
@@ -12730,42 +13142,15 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "MachineRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/MachineRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/MachineRecord"
-                    }
-                  ]
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
         "required": [
-          "ok",
-          "data"
+          "name",
+          "url",
+          "state",
+          "role",
+          "roles",
+          "addresses",
+          "hostnames",
+          "runs_hq"
         ],
         "type": "object"
       },
@@ -12858,6 +13243,36 @@
             "$ref": "#/components/schemas/UpdatedAt"
           }
         },
+        "type": "object"
+      },
+      "ManagedResourceItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ManagedResourceItem"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "ManagedResourceKey": {
@@ -12983,42 +13398,14 @@
             "type": "boolean"
           }
         },
-        "type": "object"
-      },
-      "ManagedResourceRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ManagedResourceRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ManagedResourceItem"
-                    }
-                  ]
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
         "required": [
-          "ok",
-          "data"
+          "key",
+          "kind",
+          "enabled",
+          "in_sync",
+          "health",
+          "public_effect",
+          "last_observed_at"
         ],
         "type": "object"
       },
@@ -15193,14 +15580,7 @@
             "properties": {
               "items": {
                 "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/PlaybookRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/PlaybookRecord"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/PlaybookRow"
                 },
                 "type": "array"
               }
@@ -16177,14 +16557,7 @@
             "properties": {
               "items": {
                 "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ProjectRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ProjectRecord"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ProjectRow"
                 },
                 "type": "array"
               }
@@ -16762,21 +17135,35 @@
             "$ref": "#/components/schemas/ReadingRow/properties/state"
           }
         },
+        "type": "object"
+      },
+      "ReadingItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ReadingItem"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
         "required": [
-          "kind",
-          "label",
-          "provider",
-          "state",
-          "records",
-          "observed_at",
-          "error",
-          "provider_label",
-          "read_by",
-          "facet",
-          "relation",
-          "requires",
-          "refusal",
-          "remedy"
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -16891,42 +17278,14 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "ReadingRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ReadingRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ReadingRecord"
-                    }
-                  ]
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
         "required": [
-          "ok",
-          "data"
+          "kind",
+          "label",
+          "provider",
+          "state",
+          "records",
+          "observed_at",
+          "error"
         ],
         "type": "object"
       },
@@ -17563,7 +17922,7 @@
             "type": "integer"
           },
           "items": {
-            "description": "The page's records, in the list's order, each in its row's shape.",
+            "description": "The page's records, in the list's order, each of its list's item type.",
             "items": {
               "type": "object"
             },
@@ -18247,14 +18606,7 @@
             "properties": {
               "items": {
                 "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/RunRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/RunRecord"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/RunRow"
                 },
                 "type": "array"
               }
@@ -18663,6 +19015,36 @@
         },
         "type": "object"
       },
+      "ServiceItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ServiceItem"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ServiceRecord": {
         "additionalProperties": false,
         "description": "One service name and the path a request for it takes.",
@@ -18738,42 +19120,13 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "ServiceRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ServiceRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ServiceItem"
-                    }
-                  ]
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
         "required": [
-          "ok",
-          "data"
+          "hostname",
+          "status",
+          "status_label",
+          "origin",
+          "project",
+          "faults"
         ],
         "type": "object"
       },
@@ -20781,6 +21134,36 @@
         },
         "type": "object"
       },
+      "UpgradeRecordPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/UpgradeRecord"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "UpgradeRecordSuccess": {
         "additionalProperties": false,
         "properties": {
@@ -20833,42 +21216,14 @@
             "type": "boolean"
           }
         },
-        "type": "object"
-      },
-      "UpgradeRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/UpgradeRow"
-                    },
-                    {
-                      "$ref": "#/components/schemas/UpgradeRecord"
-                    }
-                  ]
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
         "required": [
-          "ok",
-          "data"
+          "address",
+          "viable",
+          "risk",
+          "change",
+          "from",
+          "to",
+          "blockers"
         ],
         "type": "object"
       },
@@ -26799,7 +27154,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ActionItemRowFields"
+            "$ref": "#/components/parameters/ActionItemPageFields"
           }
         ],
         "responses": {
@@ -26807,7 +27162,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ActionItemRowPageSuccess"
+                  "$ref": "#/components/schemas/ActionItemPageSuccess"
                 }
               }
             },
@@ -26907,7 +27262,7 @@
             "$ref": "#/components/parameters/TopLimit"
           },
           {
-            "$ref": "#/components/parameters/BreakdownFields"
+            "$ref": "#/components/parameters/BreakdownPageFields"
           }
         ],
         "responses": {
@@ -27042,7 +27397,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/AssetRecordFields"
+            "$ref": "#/components/parameters/AssetRowPageFields"
           }
         ],
         "responses": {
@@ -27402,7 +27757,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConnectionStandingRowPageSuccess"
+                  "$ref": "#/components/schemas/ConnectionStandingRecordPageSuccess"
                 }
               }
             },
@@ -27733,7 +28088,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ContainerRowPageSuccess"
+                  "$ref": "#/components/schemas/ContainerRecordPageSuccess"
                 }
               }
             },
@@ -27881,7 +28236,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ContentRecordFields"
+            "$ref": "#/components/parameters/ContentRowPageFields"
           }
         ],
         "responses": {
@@ -28059,7 +28414,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CredentialRowPageSuccess"
+                  "$ref": "#/components/schemas/CredentialRecordPageSuccess"
                 }
               }
             },
@@ -28200,7 +28555,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/DocumentationItemFields"
+            "$ref": "#/components/parameters/DocumentationRowPageFields"
           }
         ],
         "responses": {
@@ -28376,7 +28731,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/DomainRecordFields"
+            "$ref": "#/components/parameters/DomainRowPageFields"
           }
         ],
         "responses": {
@@ -28507,7 +28862,7 @@
         "operationId": "listEstateV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/EstateFigureFields"
+            "$ref": "#/components/parameters/EstateFigurePageFields"
           }
         ],
         "responses": {
@@ -28603,7 +28958,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ExpenseRowFields"
+            "$ref": "#/components/parameters/ExpenseRowPageFields"
           }
         ],
         "responses": {
@@ -28674,7 +29029,7 @@
         "operationId": "listHqV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/ProblemFields"
+            "$ref": "#/components/parameters/ProblemPageFields"
           }
         ],
         "responses": {
@@ -28777,7 +29132,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ManagedResourceRowPageFields"
+            "$ref": "#/components/parameters/ManagedResourceItemPageFields"
           }
         ],
         "responses": {
@@ -28785,7 +29140,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ManagedResourceRowPageSuccess"
+                  "$ref": "#/components/schemas/ManagedResourceItemPageSuccess"
                 }
               }
             },
@@ -29004,7 +29359,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MachineRowPageSuccess"
+                  "$ref": "#/components/schemas/MachineRecordPageSuccess"
                 }
               }
             },
@@ -29250,7 +29605,7 @@
         "operationId": "listPlaybooksV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PlaybookRecordFields"
+            "$ref": "#/components/parameters/PlaybookRowPageFields"
           }
         ],
         "responses": {
@@ -29412,7 +29767,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ProjectRecordFields"
+            "$ref": "#/components/parameters/ProjectRowPageFields"
           }
         ],
         "responses": {
@@ -29642,7 +29997,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ReadingRecordFields"
+            "$ref": "#/components/parameters/ReadingItemPageFields"
           }
         ],
         "responses": {
@@ -29650,7 +30005,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReadingRowPageSuccess"
+                  "$ref": "#/components/schemas/ReadingItemPageSuccess"
                 }
               }
             },
@@ -29792,7 +30147,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ReceiptRowFields"
+            "$ref": "#/components/parameters/ReceiptRowPageFields"
           }
         ],
         "responses": {
@@ -29918,7 +30273,7 @@
         "operationId": "listRequestPathV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/HopRowFields"
+            "$ref": "#/components/parameters/HopRowPageFields"
           }
         ],
         "responses": {
@@ -30034,7 +30389,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/RunRecordFields"
+            "$ref": "#/components/parameters/RunRowPageFields"
           }
         ],
         "responses": {
@@ -30185,7 +30540,7 @@
             "$ref": "#/components/parameters/SearchLimit"
           },
           {
-            "$ref": "#/components/parameters/MatchFields"
+            "$ref": "#/components/parameters/MatchPageFields"
           }
         ],
         "responses": {
@@ -30293,7 +30648,7 @@
         "operationId": "listServicesV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/ServiceRowPageFields"
+            "$ref": "#/components/parameters/ServiceItemPageFields"
           }
         ],
         "responses": {
@@ -30301,7 +30656,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServiceRowPageSuccess"
+                  "$ref": "#/components/schemas/ServiceItemPageSuccess"
                 }
               }
             },
@@ -30416,7 +30771,7 @@
         "operationId": "listTailnetV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/TailnetFields"
+            "$ref": "#/components/parameters/TailnetPageFields"
           }
         ],
         "responses": {
@@ -30482,7 +30837,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpgradeRowPageSuccess"
+                  "$ref": "#/components/schemas/UpgradeRecordPageSuccess"
                 }
               }
             },

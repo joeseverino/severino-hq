@@ -17,7 +17,7 @@ import sys
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Annotated, Any, TypeAliasType
+from typing import Annotated, Any, TypeAliasType, TypedDict
 
 from django.test import SimpleTestCase
 from pydantic import Field, WithJsonSchema
@@ -301,11 +301,16 @@ class DescribedOnceTests(SimpleTestCase):
         class ExampleTaskQuery(TopQuery):
             pass
 
+        class ExampleRow(TypedDict):
+            name: str
+
         def rows(*, limit: int = 50) -> dict:
             return {"items": [], "count": 0}
 
         specs = tuple(
-            ResourceSpec(f"example.{kind}", kind.title(), f"Example {kind}.", "example.read", rows, query)
+            ResourceSpec(
+                f"example.{kind}", kind.title(), f"Example {kind}.", "example.read", rows, query, item_type=ExampleRow
+            )
             for kind, query in (("notes", ExampleNoteQuery), ("tasks", ExampleTaskQuery))
         )
         composed = compile_integration_graph(capabilities=(), resources=specs, connections=())

@@ -130,7 +130,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "id",
             RecordId,
             web_route="contacts:list",
-            row_type=ContactSubmissionRow,
+            item_type=ContactSubmissionRow,
             record_type=ContactSubmissionRow,
         ),
     )

@@ -1,10 +1,10 @@
-"""The shapes the host's own resources answer in: each list's row and each record.
+"""The shapes the host's own resources answer in: each list's item, row and record.
 
-A row is what a list read keeps of each item unless the caller names its own
-fields, so its keys are the kind's ``list_fields``; a record is what a read of
-one answers, and extends the row where it is the item itself. The API document
-types each read by them, and a test holds every answer on the showcase data to
-its type. Each part of a record HQ builds is a type here too, so every object
+An item is one entry of a list whole, and a list answers no key beside it; a
+row is what a list keeps of each item unless the caller names its own fields,
+so its keys are the kind's ``list_fields``; a record is what a read of one
+answers. The API document types each read by them, and a test holds every
+answer on the showcase data to its type. Each part of a record HQ builds is a type here too, so every object
 the API document writes names its fields; a part in its source's own shape is
 ``AsRead``.
 
@@ -52,7 +52,7 @@ from .standards import Standing
 from .tone import Tone
 from .ui import ended
 from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE
-from .workflows import WrittenAction
+from .workflows import WrittenAction, WrittenStep
 
 # What a container row and a machine's list of its containers say alike.
 type ComposeProject = Annotated[str, Describe("The compose project it belongs to; empty for one started on its own.")]
@@ -425,6 +425,29 @@ class ActionItemRow(TypedDict):
     action: Annotated[str, Describe("The button that opens it, such as `Open containers`; empty for none.")]
     url: Annotated[str, Describe("The page where it is dealt with.")]
     since: Since
+
+
+class ActionItem(ActionItemRow):
+    """One action item: what needs doing, where, and the calls and commands that do it."""
+
+    key: Annotated[str, Describe("The item's key, which setting it aside names it by.")]
+    source_id: Annotated[str, Describe("The stable id of the part of HQ it comes from, such as `containers`.")]
+    count: Annotated[int, Describe("How many things it stands for, at least 1.")]
+    steps: Annotated[
+        list[WrittenStep], Describe("The steps of the plan that resolves it, in order; empty where it has no plan.")
+    ]
+    actions: Annotated[
+        list[WrittenAction], Describe("The quick actions offered on it, each through its owner's own command or page.")
+    ]
+    subject: Annotated[
+        WrittenAction | None, Describe("The thing it is about, as a link to its own page; null for none.")
+    ]
+    notice: Annotated[bool, Describe("Whether it only reports something, with nothing to resolve.")]
+    observed_at: Annotated[str, Describe("When the reading it is drawn from was taken, in ISO 8601; empty for none.")]
+    facts: Annotated[list[list[str]], Describe("What was read that shows it, each a label and its value.")]
+    links: Annotated[
+        list[WrittenAction], Describe("Pages that help look into it, such as where it sits; never one that acts.")
+    ]
 
 
 class RolePart(TypedDict):
@@ -907,6 +930,7 @@ class DocumentationItem(DocumentationRow):
 
 
 __all__ = [
+    "ActionItem",
     "ActionItemRow",
     "ContainerRecord",
     "ContainerRow",
@@ -918,14 +942,17 @@ __all__ = [
     "HopRow",
     "MachineRecord",
     "MachineRow",
+    "ManagedResourceItem",
     "ManagedResourceRecord",
     "ManagedResourceRow",
     "Match",
     "PathRecord",
     "Problem",
+    "ReadingItem",
     "ReadingRecord",
     "ReadingRow",
     "RelationshipsRecord",
+    "ServiceItem",
     "ServiceRecord",
     "ServiceRow",
     "UpgradeRecord",

@@ -47,7 +47,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 badge_field="doc_id",
             ),
             web_route="docs_index:list",
-            row_type=DocumentationRow,
+            item_type=DocumentationRow,
             record_type=DocumentationItem,
         ),
     )

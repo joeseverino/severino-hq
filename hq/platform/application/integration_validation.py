@@ -284,13 +284,18 @@ def _validate_search_contract(spec: ResourceSpec) -> None:
 
 
 def _validate_record_types(spec: ResourceSpec) -> None:
-    """A row types a list's items and a record one read's answer, each a
-    TypedDict, and the row's keys are the list's fields. A record usually
-    extends its row, but a read of one may answer the item beside what it
-    is read with (a service and its path), so that is not required."""
+    """A list's whole item and a read of one's record are each a TypedDict, so
+    an answer holds only the keys its type declares; a list's default fields
+    are some of its item's. A record usually extends the item, but a read of
+    one may answer the item beside what it is read with (a service and its
+    path), so that is not required."""
 
+    if spec.list_handler and spec.item_type is None:
+        raise ImproperlyConfigured(
+            f"Resource {spec.name!r} must declare item_type, the TypedDict its list's items are."
+        )
     for kind, operation, served in (
-        (spec.row_type, "list", spec.list_handler),
+        (spec.item_type, "list", spec.list_handler),
         (spec.record_type, "detail", spec.detail_handler),
     ):
         if kind is None:
@@ -299,9 +304,9 @@ def _validate_record_types(spec: ResourceSpec) -> None:
             raise ImproperlyConfigured(f"Resource {spec.name!r} must type its {operation} read with a TypedDict.")
         if not served:
             raise ImproperlyConfigured(f"Resource {spec.name!r} types a {operation} read it does not serve.")
-    if spec.row_type is not None and spec.list_fields != typed_keys(spec.row_type):
+    if spec.item_type is not None and (undeclared := set(spec.list_fields) - set(typed_keys(spec.item_type))):
         raise ImproperlyConfigured(
-            f"Resource {spec.name!r} list_fields are its row_type's keys; declare the row and leave them out."
+            f"Resource {spec.name!r} list_fields {sorted(undeclared)} are not keys of its item_type."
         )
 
 

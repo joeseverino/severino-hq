@@ -9,7 +9,7 @@ from hq.platform.application.resources import EmptyQuery
 from hq.platform.application.security import Capability, Principal
 
 from ..identity import set_principal
-from .registry import KIND, served, with_kind
+from .registry import KIND, ExampleRecord, served, with_kind
 
 HOLDER = Principal("example-holder", "mcp", frozenset({Capability.READ, "example_read"}))
 READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
@@ -31,6 +31,7 @@ def _kind():
         EmptyQuery,
         lambda name: {"name": name},
         "name",
+        item_type=ExampleRecord,
     )
 
 

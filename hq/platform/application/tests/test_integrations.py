@@ -1,6 +1,7 @@
 """Contract tests for the one compiled integration graph."""
 
 from dataclasses import dataclass
+from typing import TypedDict
 
 from django.test import TestCase
 
@@ -21,6 +22,10 @@ from ..plugins import clear_plugin_composition_cache
 from ..resources import EmptyQuery, ResourceSpec, describe_resources
 from ..search_contracts import SearchDefinition
 from ..security import Capability, Principal
+
+
+class SyntheticRecord(TypedDict):
+    name: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +92,7 @@ class IntegrationGraphTests(TestCase):
             Capability.READ,
             list_handler=lambda **kwargs: {"items": [], "count": 0},
             list_query_type=ProjectQuery,
+            item_type=SyntheticRecord,
         )
         capabilities = (
             CapabilitySpec(
@@ -353,6 +359,7 @@ class IntegrationGraphTests(TestCase):
             Capability.READ,
             list_handler=lambda: {"items": [], "count": 0},
             list_query_type=EmptyQuery,
+            item_type=SyntheticRecord,
         )
         capability = CapabilitySpec(
             "example.records.refresh",

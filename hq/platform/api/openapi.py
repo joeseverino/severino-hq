@@ -37,7 +37,7 @@ from hq.platform.application.integration_specs import (
 from hq.platform.application.json_schemas import LOCAL, json_schema
 from hq.platform.application.refusal_status import LATER_CODES
 from hq.platform.application.resource_operations import RunAsked
-from hq.platform.application.resources import describe_resources, mask_paths, masked_kinds, resource_registry
+from hq.platform.application.resources import describe_resources, mask_paths, masked_kind, resource_registry
 from hq.platform.application.run_reads import RUNS
 from hq.platform.application.security import API_INTERFACE, Principal
 lazy from hq.platform.application.routes import routed
@@ -272,8 +272,8 @@ class _Builder:
             found[_list_id(resource)] = _link(
                 _list_id(resource), {f"query.{PAGE_FIELD}": f"$response.body#/data/next/{PAGE_FIELD}", **parameters}
             )
-        kind = spec.row_type if listed else spec.record_type
-        carried = (spec.list_fields if listed else ()) or (typed_keys(kind) if kind is not None else ())
+        record = spec.record_type
+        carried = spec.list_fields if listed else (typed_keys(record) if record is not None else ())
         identifier = spec.identifier
         if spec.detail_handler is None or identifier not in carried:
             return found
@@ -521,7 +521,7 @@ class _Builder:
             )
 
     def typed(self, kind: type) -> dict[str, Any]:
-        """The ``$ref`` to a resource's row or record, kept as the component of its name.
+        """The ``$ref`` to a resource's list item or record, kept as the component of its name.
 
         A caller's field mask cuts it, so neither it nor any part a mask can
         reach promises a field (``Components.sparse``).
@@ -534,17 +534,15 @@ class _Builder:
         return {"$ref": SCHEMAS + name}
 
     def page_of(self, name: str) -> tuple[str, dict[str, Any]] | None:
-        """A list's answer whose items are what its mask answers: every list's
-        page, its items narrowed to its row, or whole (``resources.whole_item``)
-        where a mask (``*``, a whole item's path) keeps more of each."""
+        """A list's answer: every list's page, its items of the type the
+        resource declares, which a mask cuts and never widens."""
 
-        kinds = masked_kinds(self.resource_specs[name], listed=True)
-        if not kinds:
+        kind = masked_kind(self.resource_specs[name], listed=True)
+        if kind is None:
             return None
         page = self.data[views.resource_list.__name__]
-        typed = [self.typed(kind) for kind in kinds]
-        items = {"type": "array", "items": typed[0] if len(typed) == 1 else {"anyOf": typed}}
-        return f"{kinds[0].__name__}Page", {"allOf": [page], "properties": {"items": items}}
+        items = {"type": "array", "items": self.typed(kind)}
+        return f"{kind.__name__}Page", {"allOf": [page], "properties": {"items": items}}
 
     def record_of(self, record: type | None) -> tuple[str, dict[str, Any]] | None:
         """A read of one record's answer, where its kind types it; else the view's object."""
@@ -580,14 +578,14 @@ class _Builder:
         as the parameter component named for their type."""
 
         spec = self.resource_specs[name]
-        kinds = masked_kinds(spec, listed=listed)
-        if not kinds:
+        declared = masked_kind(spec, listed=listed)
+        if declared is None:
             return _FIELDS
         paths = mask_paths(spec, listed=listed)
-        if listed and masked_kinds(spec, listed=False) and set(paths) == set(mask_paths(spec, listed=False)):
-            # A list whose row's paths are all its record's keeps what one record's read keeps.
+        if listed and masked_kind(spec, listed=False) and set(paths) == set(mask_paths(spec, listed=False)):
+            # A list whose item's paths are its record's keeps what one record's read keeps.
             return self.mask(name, listed=False)
-        kind = f"{kinds[0].__name__}{'Page' if listed else ''}Fields"
+        kind = f"{declared.__name__}{'Page' if listed else ''}Fields"
         return self.parameter(kind, _mask({"type": "string", "enum": [*paths, WHOLE_RECORD]}))
 
     def resource_detail_paths(self, template: str, method: str, view: Any) -> None:
