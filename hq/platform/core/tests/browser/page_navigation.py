@@ -16,7 +16,7 @@ from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 
-_MAP = "part/page-navigation"
+_MAP = "part/page-navigation-states"
 # app.js after fragment.js, as base.html loads them.
 _SCRIPT = '{% include "scripts/fragment.html" %}<script defer src="{{ static }}js/app.js" nonce="{{ nonce }}"></script>'
 
