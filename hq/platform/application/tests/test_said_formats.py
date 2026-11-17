@@ -46,6 +46,10 @@ URLS = (
     "ftp://a]@example.com",
     "ftp://a[@example.com",
     "ftp://u:p]@example.com",
+    # Spaces as Python's \s means them, which another reader's \s may not.
+    "ftp://a\x1f@example.com",
+    "https://example.com/\x85",
+    "https://example.com/\ufeff",
 )
 
 

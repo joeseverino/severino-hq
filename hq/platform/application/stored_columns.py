@@ -66,6 +66,9 @@ ROW_RULES = "x-hq-rules"
 # digits and inner hyphens under a top-level domain or ``localhost``, a port,
 # and anything after it that is not a space.
 _ANY = r"a-zA-Z\u00a1-\uffff"
+# Python's ``\s``, which Django's check means, spelled out: a schema's reader
+# (ECMA-262) and pydantic's (Rust) each mean another set by ``\s``.
+SPACE = r"\t\n\x0b\x0c\r\x1c-\x1f \x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000"
 _LABEL = rf"[{_ANY}0-9](?:[{_ANY}0-9-]{{0,61}}[{_ANY}0-9])?"
 _TOP = rf"(?:[{_ANY}][{_ANY}-]{{0,61}}[{_ANY}]|[Xx][Nn]--[a-zA-Z0-9]{{1,59}})"
 _OCTET = r"(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)"
@@ -105,8 +108,8 @@ def url_pattern(schemes: Iterable[str]) -> str:
 
     scheme = "|".join(_anycase(name) for name in schemes)
     return (
-        rf"^(?:{scheme})://(?:[^\s:@/\[\]]+(?::[^\s:@/\[\]]*)?@)?{_HOST}"
-        r"(?::[0-9]{1,5})?(?:[/?#][^\s]*)?$"
+        rf"^(?:{scheme})://(?:[^{SPACE}:@/\[\]]+(?::[^{SPACE}:@/\[\]]*)?@)?{_HOST}"
+        rf"(?::[0-9]{{1,5}})?(?:[/?#][^{SPACE}]*)?$"
     )
 
 

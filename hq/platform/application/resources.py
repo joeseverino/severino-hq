@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 from collections.abc import Callable, Iterable, Mapping
-from typing import Annotated, Any, Literal, NotRequired, TypedDict, override
+from typing import Annotated, Any, Literal, NotRequired, TypedDict, get_type_hints, is_typeddict, override
 
 from django.core import signing
 from django.db.models import Model
@@ -46,7 +46,7 @@ from .contracts import Closed
 from .describe import Describe
 from .field_masks import FieldMaskRefusal, Fields, asks_whole, field_paths, selected
 from .input_errors import pydantic_refusal
-from .integration_specs import PAGE_FIELD, ResourceSpec
+from .integration_specs import PAGE_FIELD, ResourceSpec, typed_keys
 from .integration_validation import required_capability_names
 from .integrations import held_graph
 from .json_schemas import json_schema, narrowed
@@ -909,11 +909,27 @@ def _cursor_refused(name: str, reason: str) -> InvalidResourceInput:
 
 def masked_kinds(spec: ResourceSpec, *, listed: bool) -> tuple[type, ...]:
     """The types a field mask over ``spec``'s records declares paths from: a
-    list's row and, since ``*`` keeps each item whole, its record; a read of
-    one's record, else its row; none where it types neither."""
+    list's row and, since ``*`` keeps each item whole, ``whole_item``; a read
+    of one's record, else its row; none where it types neither."""
 
-    kinds = (spec.row_type, spec.record_type) if listed else (spec.record_type or spec.row_type,)
+    kinds = (spec.row_type, whole_item(spec)) if listed else (spec.record_type or spec.row_type,)
     return tuple(dict.fromkeys(kind for kind in kinds if kind is not None))
+
+
+def whole_item(spec: ResourceSpec) -> type | None:
+    """What one item of ``spec``'s list is whole: its record where that extends
+    the row; else the record's field that does, where a read of one answers the
+    item beside what it is read with (a service and its path); else the row."""
+
+    row, record = spec.row_type, spec.record_type
+    if row is None or record is None:
+        return record or row
+    keys = set(typed_keys(row))
+    candidates: tuple[type, ...] = (record, *get_type_hints(record).values())
+    for kind in candidates:
+        if is_typeddict(kind) and keys <= set(typed_keys(kind)):
+            return kind
+    return row
 
 
 def mask_paths(spec: ResourceSpec, *, listed: bool) -> tuple[str, ...]:

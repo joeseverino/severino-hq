@@ -137,12 +137,16 @@ def _cut(selection: _Selection, records: list[dict[str, Any]], mask: Mask, at: t
 
     A name no record here carries is refused with the names there are, so a
     typo is never answered with records that silently lack it. With no records
-    there is nothing to name a key against.
+    the names are the ones their kind declares here; with neither there is
+    nothing to name a key against.
     """
 
     known = list(dict.fromkeys(key for record in records for key in record))
+    if not records:
+        below = [path.split(".") for path in selection.declared]
+        known = sorted({path[len(at)] for path in below if len(path) > len(at) and tuple(path[: len(at)]) == at})
     unknown = [key for key in mask if key not in known and ".".join((*at, key)) not in selection.declared]
-    if records and unknown:
+    if (records or known) and unknown:
         choices = ", ".join(f"'{key}'" for key in known)
         selection.refuse((*at, unknown[0]), "literal_error", f"Input should be {choices}")
     cut = [{key: value for key, value in record.items() if key in mask and mask[key] is None} for record in records]

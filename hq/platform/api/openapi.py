@@ -535,8 +535,8 @@ class _Builder:
 
     def page_of(self, name: str) -> tuple[str, dict[str, Any]] | None:
         """A list's answer whose items are what its mask answers: every list's
-        page, its items narrowed to its row, or to its record where a mask
-        (``*``, a record's path) keeps more of each."""
+        page, its items narrowed to its row, or whole (``resources.whole_item``)
+        where a mask (``*``, a whole item's path) keeps more of each."""
 
         kinds = masked_kinds(self.resource_specs[name], listed=True)
         if not kinds:

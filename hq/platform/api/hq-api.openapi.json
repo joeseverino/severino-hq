@@ -62,20 +62,6 @@
               "state",
               "detail",
               "url",
-              "uid",
-              "starts_on",
-              "ends_on",
-              "starts_at",
-              "ends_at",
-              "location",
-              "notes",
-              "repeat",
-              "repeat_label",
-              "interval",
-              "weekdays",
-              "repeat_until",
-              "about",
-              "updated_at",
               "*"
             ],
             "type": "string"
@@ -1088,59 +1074,18 @@
               "health.message",
               "public_effect",
               "last_observed_at",
-              "resource",
-              "resource.key",
-              "resource.kind",
-              "resource.enabled",
-              "resource.in_sync",
-              "resource.health",
-              "resource.health.state",
-              "resource.health.label",
-              "resource.health.reason",
-              "resource.health.message",
-              "resource.public_effect",
-              "resource.last_observed_at",
-              "resource.id",
-              "resource.spec",
-              "resource.status",
-              "resource.conditions",
-              "resource.conditions.type",
-              "resource.conditions.status",
-              "resource.conditions.reason",
-              "resource.conditions.message",
-              "resource.conditions.since",
-              "resource.generation",
-              "resource.observed_generation",
-              "resource.updated_at",
-              "derived",
-              "operations",
-              "operations.id",
-              "operations.action",
-              "operations.action_label",
-              "operations.state",
-              "operations.state_label",
-              "operations.tone",
-              "operations.headline",
-              "operations.automatic",
-              "operations.requested_actor",
-              "operations.requested_interface",
-              "operations.by",
-              "operations.approved_by",
-              "operations.created_at",
-              "operations.completed_at",
-              "operations.attempt_count",
-              "operations.reason",
-              "operations.condition",
-              "operations.condition.type",
-              "operations.condition.status",
-              "operations.condition.reason",
-              "operations.condition.message",
-              "operations.condition.since",
-              "operations.affected",
-              "operations.evidence",
-              "operations.matched",
-              "operations.expected_fingerprint_sha256",
-              "operations.raw_result",
+              "id",
+              "spec",
+              "status",
+              "conditions",
+              "conditions.type",
+              "conditions.status",
+              "conditions.reason",
+              "conditions.message",
+              "conditions.since",
+              "generation",
+              "observed_generation",
+              "updated_at",
               "*"
             ],
             "type": "string"
@@ -1789,115 +1734,13 @@
               "origin.container",
               "project",
               "faults",
-              "service",
-              "service.hostname",
-              "service.status",
-              "service.status_label",
-              "service.origin",
-              "service.origin.address",
-              "service.origin.host",
-              "service.origin.container",
-              "service.project",
-              "service.faults",
-              "service.mark",
-              "service.facets",
-              "service.facets.id",
-              "service.facets.label",
-              "service.facets.present",
-              "service.facets.state",
-              "service.facets.resources",
-              "path",
-              "path.hostname",
-              "path.line",
-              "path.redirects_to",
-              "path.machine",
-              "path.unread",
-              "path.observed",
-              "path.observed.relation",
-              "path.observed.name",
-              "path.observed.link",
-              "path.observed.link.label",
-              "path.observed.link.url",
-              "path.observed.link.external",
-              "path.observed.link.kind",
-              "path.observed.link.kind_label",
-              "path.observed.link.title",
-              "path.observed.link.detail",
-              "path.observed.link.identity",
-              "path.observed.detail",
-              "path.observed.source",
-              "path.observed.source.kind",
-              "path.observed.source.label",
-              "path.observed.source.connection",
-              "path.observed.source.observed_at",
-              "path.observed.source.declared",
-              "path.routes",
-              "path.routes.via",
-              "path.routes.port",
-              "path.routes.line",
-              "path.routes.hops",
-              "path.routes.hops.step",
-              "path.routes.hops.label",
-              "path.routes.hops.name",
-              "path.routes.hops.link",
-              "path.routes.hops.link.label",
-              "path.routes.hops.link.url",
-              "path.routes.hops.link.external",
-              "path.routes.hops.link.kind",
-              "path.routes.hops.link.kind_label",
-              "path.routes.hops.link.title",
-              "path.routes.hops.link.detail",
-              "path.routes.hops.link.identity",
-              "path.routes.hops.detail",
-              "path.routes.hops.source",
-              "path.routes.hops.source.kind",
-              "path.routes.hops.source.label",
-              "path.routes.hops.source.connection",
-              "path.routes.hops.source.observed_at",
-              "path.routes.hops.source.declared",
-              "path.routes.hops.certificate",
-              "path.routes.hops.certificate.role",
-              "path.routes.hops.certificate.name",
-              "path.routes.hops.certificate.issuer",
-              "path.routes.hops.certificate.expiry",
-              "path.routes.hops.certificate.source",
-              "path.routes.hops.certificate.source.kind",
-              "path.routes.hops.certificate.source.label",
-              "path.routes.hops.certificate.source.connection",
-              "path.routes.hops.certificate.source.observed_at",
-              "path.routes.hops.certificate.source.declared",
-              "path.routes.hops.certificate.unread",
-              "path.routes.hops.unread",
-              "path.routes.hops.overlays",
-              "path.routes.hops.overlays.relation",
-              "path.routes.hops.overlays.link",
-              "path.routes.hops.overlays.link.label",
-              "path.routes.hops.overlays.link.url",
-              "path.routes.hops.overlays.link.external",
-              "path.routes.hops.overlays.link.kind",
-              "path.routes.hops.overlays.link.kind_label",
-              "path.routes.hops.overlays.link.title",
-              "path.routes.hops.overlays.link.detail",
-              "path.routes.hops.overlays.link.identity",
-              "path.routes.hops.check",
-              "path.routes.hops.check.state",
-              "path.routes.hops.check.label",
-              "path.routes.hops.check.detail",
-              "path.routes.hops.check.step",
-              "path.routes.hops.evidence",
-              "path.routes.hops.evidence.label",
-              "path.routes.hops.evidence.value",
-              "path.routes.hops.evidence.detail",
-              "path.routes.hops.evidence.role",
-              "path.routes.hops.layers",
-              "path.routes.hops.layers.id",
-              "path.routes.hops.layers.label",
-              "path.routes.hops.layers.state",
-              "path.routes.hops.layers.detail",
-              "path.routes.hops.layers.evidence",
-              "path.routes.hops.layers.boundary",
-              "path.routes.hops.layers.mechanism",
-              "path.routes.hops.layers.rules",
+              "mark",
+              "facets",
+              "facets.id",
+              "facets.label",
+              "facets.present",
+              "facets.state",
+              "facets.resources",
               "*"
             ],
             "type": "string"
@@ -3746,14 +3589,7 @@
             "properties": {
               "items": {
                 "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/AgendaItem"
-                    },
-                    {
-                      "$ref": "#/components/schemas/EntryRecord"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/AgendaItem"
                 },
                 "type": "array"
               }
@@ -7275,7 +7111,7 @@
                 "$ref": "#/components/schemas/PublishedUrl",
                 "default": "",
                 "maxLength": 200,
-                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
               },
               "related_assets": {
                 "default": [],
@@ -7672,7 +7508,7 @@
               "published_url": {
                 "$ref": "#/components/schemas/PublishedUrl",
                 "maxLength": 200,
-                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
               },
               "related_assets": {
                 "description": "The assets it is about.",
@@ -8717,7 +8553,7 @@
                 "$ref": "#/components/schemas/ExternalUrl",
                 "default": "",
                 "maxLength": 200,
-                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
               },
               "github_path": {
                 "$ref": "#/components/schemas/GithubPath",
@@ -9248,7 +9084,7 @@
               "external_url": {
                 "$ref": "#/components/schemas/ExternalUrl",
                 "maxLength": 200,
-                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
               },
               "github_path": {
                 "$ref": "#/components/schemas/GithubPath",
@@ -11659,12 +11495,12 @@
           "public_url": {
             "$ref": "#/components/schemas/PublishedUrl",
             "maxLength": 200,
-            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
           },
           "repository_url": {
             "$ref": "#/components/schemas/RepositoryUrl",
             "maxLength": 200,
-            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
           },
           "security_notes": {
             "$ref": "#/components/schemas/SecurityNotes",
@@ -13167,7 +13003,7 @@
                       "$ref": "#/components/schemas/ManagedResourceRow"
                     },
                     {
-                      "$ref": "#/components/schemas/ManagedResourceRecord"
+                      "$ref": "#/components/schemas/ManagedResourceItem"
                     }
                   ]
                 },
@@ -15980,13 +15816,13 @@
             "$ref": "#/components/schemas/PublishedUrl",
             "default": "",
             "maxLength": 200,
-            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
           },
           "repository_url": {
             "$ref": "#/components/schemas/RepositoryUrl",
             "default": "",
             "maxLength": 200,
-            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
           },
           "security_notes": {
             "$ref": "#/components/schemas/SecurityNotes",
@@ -16480,12 +16316,12 @@
               "public_url": {
                 "$ref": "#/components/schemas/PublishedUrl",
                 "maxLength": 200,
-                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
               },
               "repository_url": {
                 "$ref": "#/components/schemas/RepositoryUrl",
                 "maxLength": 200,
-                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\s:@/\\[\\]]+(?::[^\\s:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\s]*)?$"
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
               },
               "security_notes": {
                 "$ref": "#/components/schemas/SecurityNotes",
@@ -18922,7 +18758,7 @@
                       "$ref": "#/components/schemas/ServiceRow"
                     },
                     {
-                      "$ref": "#/components/schemas/ServiceRecord"
+                      "$ref": "#/components/schemas/ServiceItem"
                     }
                   ]
                 },
