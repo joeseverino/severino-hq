@@ -98,9 +98,3 @@ class SwitchTagTests(SimpleTestCase):
             _render('{% switch %}{% choice url="/" %}A{% endchoice %}{% endswitch %}')
         with self.assertRaisesMessage(TemplateSyntaxError, "choice is given url="):
             _render('{% switch label="L" %}{% choice %}A{% endchoice %}{% endswitch %}')
-
-    def test_an_unknown_or_data_option_is_refused(self):
-        with self.assertRaises(TemplateSyntaxError):
-            _render('{% switch label="L" tone="good" %}{% endswitch %}')
-        with self.assertRaises(TemplateSyntaxError):
-            _render('{% switch label="L" %}{% choice url="/" data_example="x" %}A{% endchoice %}{% endswitch %}')

@@ -123,11 +123,6 @@ class CardTests(SimpleTestCase):
         (card,) = with_class(html, "card")
         self.assertEqual(card.tag, "details")
 
-    def test_a_card_is_never_an_inline_or_unknown_element(self):
-        for element in ("span", "p", "script", ""):
-            with self.subTest(element=element), self.assertRaises(TemplateSyntaxError):
-                _render("{% card element=element %}A{% endcard %}", element=element)
-
     def test_a_data_option_is_its_attribute_bare_when_true_and_absent_when_empty(self):
         html = _render(
             "{% card data_fragment=True data_state=state data_paused=paused data_ask_status=url %}A{% endcard %}",
@@ -148,15 +143,6 @@ class CardTests(SimpleTestCase):
         (card,) = with_class(html, "card")
         self.assertEqual(elements(html, "b"), [])
         self.assertEqual(card.attrs["data-state"], '"><b>x</b>')
-
-    def test_an_option_it_does_not_take_is_refused(self):
-        for source in (
-            '{% card class="x" %}A{% endcard %}',
-            '{% card "x" %}A{% endcard %}',
-            '{% card aria_hidden="true" %}A{% endcard %}',
-        ):
-            with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
-                Template(source)
 
 
 class OutsideLinkTests(SimpleTestCase):

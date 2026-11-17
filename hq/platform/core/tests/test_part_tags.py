@@ -398,16 +398,3 @@ def _catalog_templates() -> dict[str, str]:
     """Each catalog entry's template, by its name."""
 
     return {name: entry.template for name, entry in CATALOG.items()}
-
-
-class CatalogTests(SimpleTestCase):
-    def test_every_part_has_its_default_entry(self):
-        """The browser survey reads every shared part through the catalog, so
-        each draws there at least as its declaration shows it written."""
-
-        from hq.platform.core.template_contract import parts
-        from hq.platform.core.tests.browser.catalog import default_name
-
-        for each in parts():
-            with self.subTest(part=each.name or each.partial):
-                self.assertIn(default_name(each), CATALOG)

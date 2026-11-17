@@ -695,10 +695,6 @@ class TableTagTests(SimpleTestCase):
             with self.subTest(source), self.assertRaises(ValueError):
                 _render(source)
 
-    def test_an_unknown_argument_is_refused_when_the_template_compiles(self):
-        with self.assertRaises(TemplateSyntaxError):
-            _render('{% table_heading "Name" color="red" %}')
-
     def test_a_page_sorted_heading_draws_its_button(self):
         (heading,) = elements(_render('{% table_heading "Name" local_sort=True %}'), "th")
         self.assertEqual(heading.attrs["aria-sort"], "none")

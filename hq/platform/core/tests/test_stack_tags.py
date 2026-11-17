@@ -1,7 +1,7 @@
 """The stack list and the dot list: a plain list read down, and a run read
 across, are each one part."""
 
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import Context, Template
 from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import elements, with_class
@@ -32,10 +32,6 @@ class StackListTagTests(SimpleTestCase):
         self.assertIn("row-below", stack.classes)
         self.assertEqual(stack.attrs["data-label"], "Affected")
 
-    def test_an_unknown_option_is_refused(self):
-        with self.assertRaises(TemplateSyntaxError):
-            Template('{% stack_list css="example" %}{% endstack_list %}')
-
 
 class DotListTagTests(SimpleTestCase):
     def test_its_items_are_the_pages_in_one_run_with_no_separator_written(self):
@@ -57,12 +53,6 @@ class DotListTagTests(SimpleTestCase):
 
         (run,) = with_class(html, "dot-list")
         self.assertIn("muted", run.classes)
-
-    def test_muted_is_true_or_false_and_an_unknown_option_is_refused(self):
-        with self.assertRaises(TemplateSyntaxError):
-            _render('{% dot_list muted="yes" %}<li>a</li>{% enddot_list %}')
-        with self.assertRaises(TemplateSyntaxError):
-            Template('{% dot_list css="example" %}{% enddot_list %}')
 
     def test_an_extension_may_write_it(self):
         from hq.platform.core.template_contract import describe

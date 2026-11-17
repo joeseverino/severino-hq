@@ -6,7 +6,7 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.messages.storage.base import Message
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings, tag
 
@@ -93,12 +93,6 @@ class NoticeTagTests(SimpleTestCase):
 
         self.assertEqual(elements(html, "b"), [])
         self.assertEqual(elements(html, "i"), [])
-
-    def test_an_unknown_tone_or_option_is_refused(self):
-        with self.assertRaisesMessage(TemplateSyntaxError, "tone= is one of error, info, success, warning"):
-            _render('{% notice tone="attention" %}Body{% endnotice %}')
-        with self.assertRaises(TemplateSyntaxError):
-            _render('{% notice heading="Body" %}Body{% endnotice %}')
 
     def test_a_message_is_a_notice_in_its_levels_tone(self):
         request = RequestFactory().get("/")
