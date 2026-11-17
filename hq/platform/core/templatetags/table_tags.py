@@ -488,6 +488,8 @@ def row_actions(
     gap: Annotated[Any, Describe("A `WriteGap` standing in for every action the connection cannot make.")] = None,
     first: Annotated[int, Describe("How many show; the rest wait in the row's open line.")] = 0,
     put_away: Annotated[Any, Describe("The reader's own way to set the row aside, last of its buttons.")] = None,
+    mark: Annotated[Any, Describe("A `RowMark` the reader keeps on the row's record, first of its controls.")] = None,
+    order: Annotated[Any, Describe("A `RowOrder` that moves the row in an order the reader keeps.")] = None,
 ) -> dict[str, Any]:
     """The cell that ends a row with what can be done to its record: each of
     ``actions`` (a ``PageAction``, as a ``ListRow``'s are) a compact control
@@ -499,11 +501,15 @@ def row_actions(
     cannot make the change. Given ``first``, the actions past that many wait
     in the row's open line. ``put_away``, a POST ``PageAction`` such as the
     queue's Dismiss, is the reader's own way to set the row aside: the last
-    of its buttons, drawn as they are, and never waiting in the open line."""
+    of its buttons, drawn as they are, and never waiting in the open line.
+    ``mark`` (a ``RowMark``, such as a favorite's star) and ``order`` (a
+    ``RowOrder``) come first, the star last of the two, so a row's own
+    arrangement is a column the table sizes and counts, never a part of the
+    cell that names the row."""
 
     actions = tuple(actions or ())
     shown, later = (actions[:first], actions[first:]) if first else (actions, ())
-    return {"actions": shown, "later": later, "gap": gap, "put_away": put_away}
+    return {"actions": shown, "later": later, "gap": gap, "put_away": put_away, "mark": mark, "order": order}
 
 
 def row_toggle() -> dict[str, Any]:

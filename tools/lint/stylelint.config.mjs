@@ -136,7 +136,7 @@ const primitives = [
     sheets: ["base", "cuts", "figures", "tables", "surfaces"],
     parts: [
       "btn", "button-words", "cell-clamp", "cell-line", "cell-part", "cell-short", "cell-whole", "cut", "external-link", "icon-link", "is-expanded", "line-list", "line-rest", "line-run", "muted",
-      "name-line", "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
+      "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
       "row-editor", "row-expand", "row-fold", "row-later", "row-less", "row-more", "select-column", "strut", "table-clamp", "table-scroll", "tag", "token", "visually-hidden", "whole",
     ],
   },

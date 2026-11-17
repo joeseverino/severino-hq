@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from unittest import mock
 from uuid import UUID
@@ -33,7 +33,7 @@ from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, St
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.finding_model import OperatorStep
 from hq.platform.application.freshness import CURRENT, STALE, Freshness
-from hq.platform.application.pages import Page, PageAction, PageVisit
+from hq.platform.application.pages import Page, PageAction, PageVisit, RowMark, RowOrder
 from hq.platform.application.payload_words import ChangeRow
 from hq.platform.application.relationships import RelationGroup, Relationship, Relationships
 from hq.platform.application.request_channel import NETWORK_CHANNEL, TAILNET_CHANNEL
@@ -370,12 +370,16 @@ def _route():
     )
 
 
-@dataclass(frozen=True)
-class _Service:
-    """A row of the services table, as far as its name cell reads it."""
+def _arranged_rows():
+    """Services as the services table arranges them: three favorites, in the
+    order kept, and one that is not."""
 
-    hostname: str
-    pinned: bool = False
+    names = ("app.example.com", "example-dashboard-with-a-long-name.example.com", "home.example.com")
+    favorites = [
+        (name, RowMark("/example/pin/", True, name, "favorites"), RowOrder("/example/move/", name, at > 0, at < 2))
+        for at, name in enumerate(names)
+    ]
+    return [*favorites, ("shop.example.com", RowMark("/example/pin/", False, "shop.example.com", "favorites"), None)]
 
 
 def _runs():
@@ -2331,26 +2335,17 @@ ENTRIES = {
         'label="Path via example record" %}{% endsection %}',
         {"route": _route()},
     ),
-    # The services table's name cell: favorites with the pair that moves them
-    # (the first with no way up, the last with no way down), and a service
-    # that is not one, which draws its star alone.
-    "part/service-pin": Entry(
+    # A row's own arrangement in its controls column: favorites with the pair
+    # that moves them (the first with no way up, the last with no way down),
+    # and a row that is not one, which draws its star alone.
+    "part/row-arrangement": Entry(
         '{% section "Example services" %}{% table_region "Example services" %}<table class="data-table"><thead>'
-        '<tr>{% table_heading "Service" "identifier" gutter=True %}{% table_heading "Open to" %}</tr></thead>'
-        "<tbody>{% for service in favorites %}<tr><td>"
-        '{% include "control_plane/_service_pin.html" with service=service reorderable=True '
-        "first=forloop.first last=forloop.last only %}</td><td>Example network</td></tr>{% endfor %}"
-        "{% for service in others %}<tr><td>"
-        '{% include "control_plane/_service_pin.html" with service=service only %}</td><td>Example network</td></tr>{% endfor %}'
+        '<tr>{% table_heading "Service" "identifier" gutter=True %}{% table_heading "Open to" %}'
+        '{% table_heading "Actions" css="actions-col" hidden=True %}</tr></thead>'
+        "<tbody>{% for name, mark, order in rows %}<tr><td><strong>{{ name|breakable }}</strong></td>"
+        "<td>Example network</td>{% row_actions mark=mark order=order %}</tr>{% endfor %}"
         "</tbody></table>{% endtable_region %}{% endsection %}",
-        {
-            "favorites": [
-                _Service("app.example.com", pinned=True),
-                _Service("example-dashboard-with-a-long-name.example.com", pinned=True),
-                _Service("home.example.com", pinned=True),
-            ],
-            "others": [_Service("shop.example.com")],
-        },
+        {"rows": _arranged_rows()},
     ),
     # Repositories against their standard, each a row of its name, its meter
     # and its score: one failing that others can reach, one meeting it all,

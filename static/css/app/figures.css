@@ -36,8 +36,6 @@
    box, no wider than its cell, so a sentence it holds is never drawn as two
    pills. */
 .data-table > tbody > tr > :not([data-kind="status"]) .pill { white-space: normal; max-inline-size: 100%; }
-/* A row's name set in one line with its controls (`name-line`): the controls and the name are a grid's columns, never a flex row, since WebKit keeps a flex row's min-content from before a row closes, so its column reopened narrower than the name it holds out for. */
-.name-line { display: grid; grid-auto-flow: column; justify-content: start; align-items: center; gap: var(--space-4); }
 /* Links one to a line in a cell are a target apart (`--target-min`): each line that tall, and the link's box with it. */
 .data-table td :is(a, .cell-line):is(:has(+ br), br + *) { line-height: var(--target-min); }
 .data-table td a:not([data-entity], .cell-line):is(:has(+ br), br + *) { display: inline-block; }

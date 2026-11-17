@@ -159,6 +159,8 @@ fails when this file falls behind. The rules around it are in
 | `row_actions` | `actions` |  |  | What can be done to the row's record, each a `PageAction`. |
 | `row_actions` | `first` | `0` |  | How many show; the rest wait in the row's open line. |
 | `row_actions` | `gap` | `None` |  | A `WriteGap` standing in for every action the connection cannot make. |
+| `row_actions` | `mark` | `None` |  | A `RowMark` the reader keeps on the row's record, first of its controls. |
+| `row_actions` | `order` | `None` |  | A `RowOrder` that moves the row in an order the reader keeps. |
 | `row_actions` | `put_away` | `None` |  | The reader's own way to set the row aside, last of its buttons. |
 | `row_editor` | `form`, first and unnamed | required |  | The one form the view declares for the table's editors. |
 | `row_editor` | `key`, second and unnamed | required |  | The row's key, which its ids and the address that opens it carry. |
@@ -228,7 +230,7 @@ fails when this file falls behind. The rules around it are in
 
 Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
+Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
 
 Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
 

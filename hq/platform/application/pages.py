@@ -227,6 +227,69 @@ class PageAction:
         return button_classes(self.look)
 
 
+def _reached_by(name: str, target: str, mode: str) -> str:
+    """The address a row's control for the command ``name`` posts to, or ""
+    when the person the page is for may not run it."""
+
+    request = current_request()
+    if request is not None and not offering_for(request).runs(command_spec(name)):
+        return ""
+    return command_reach(name, target, mode)[0]
+
+
+@dataclass(frozen=True, slots=True)
+class RowMark:
+    """A mark a reader keeps on a row's record, such as a favorite's star, set
+    or cleared by one press. ``row_actions`` draws it after the row's order,
+    among its controls, so its column is one the table sizes."""
+
+    url: str
+    on: bool
+    # The record's name and what the mark keeps it among, said by the press.
+    name: str
+    among: str
+
+    @classmethod
+    def command(cls, name: str, target: str, *, mode: str, on: bool, among: str) -> RowMark | None:
+        """The mark the command ``name`` sets on ``target`` in its mode
+        ``mode``, or None when the person the page is for may not set it."""
+
+        url = _reached_by(name, target, mode)
+        return cls(url, on, target, among) if url else None
+
+    @property
+    def title(self) -> str:
+        return f"Remove {self.name} from {self.among}" if self.on else f"Add {self.name} to {self.among}"
+
+
+@dataclass(frozen=True, slots=True)
+class RowOrder:
+    """The pair that moves a row past its neighbor in an order the reader
+    keeps (``direction`` up or down), each drawn only where the row has a
+    neighbor that way."""
+
+    url: str
+    name: str
+    up: bool
+    down: bool
+
+    @classmethod
+    def command(cls, name: str, target: str, *, mode: str, up: bool, down: bool) -> RowOrder | None:
+        """The pair the command ``name`` moves ``target`` by in its mode
+        ``mode``, or None when the person the page is for may not move it."""
+
+        url = _reached_by(name, target, mode)
+        return cls(url, target, up, down) if url and (up or down) else None
+
+    @property
+    def up_title(self) -> str:
+        return f"Move {self.name} up"
+
+    @property
+    def down_title(self) -> str:
+        return f"Move {self.name} down"
+
+
 @dataclass(frozen=True, slots=True)
 class PageBadge:
     """A short fact beside a page's title: its reach, that it is read-only."""

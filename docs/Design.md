@@ -477,11 +477,12 @@ What each part of a cell is decides how it wraps, and the region marks it
 wraps on that mark, never on a page's class or a cell's tags. The bold a cell
 leads with, or its leading link's, is the row's `name`; free text (a message, a
 record's words) is declared `cell-data` and marked `data`; what a row means in
-words is declared `cell-prose`. A context line is `{% muted %}`. A row's
-name set in one line with its controls (a star, a move) is a `.name-line`,
-where the name is cut rather than wrapped. A service's star and the pair that
-moves a favorite are one part, `control_plane/_service_pin.html` (*Catalog:*
-`part/service-pin`). A table written later sets as every other does by writing
+words is declared `cell-prose`. A context line is `{% muted %}`. A row's own
+arrangement (a favorite's star, the pair that moves it) is no part of the cell
+that names the row: `{% row_actions mark=... order=... %}` draws it first in
+the row's controls column, the star last of the two, a `RowMark` and a `RowOrder`
+(`application.pages`), so the table sizes and counts it and the name keeps its
+column's whole line (*Catalog:* `part/row-arrangement`). A table written later sets as every other does by writing
 those, and `lint:css` refuses a table primitive rule that tells a cell's part
 by anything else. Free text breaks a run with no seam in it (a link, a digest)
 wherever it must, so it never holds its column wider than its box. An

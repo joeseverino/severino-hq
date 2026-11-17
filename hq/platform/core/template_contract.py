@@ -102,7 +102,6 @@ CLASSES = (
     "inline",
     "key-col",
     "keyboard-only",
-    "name-line",
     "narrow-more",
     "narrow-only",
     "nowrap",

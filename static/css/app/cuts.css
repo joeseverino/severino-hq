@@ -139,10 +139,10 @@
 .data-table > tbody > tr > [data-kind="identifier"] > .cell-short > :is(a[href], [tabindex]) { line-height: var(--target-min); }
 /* Words that open a tip are a box of their own a target tall, no wider than the cell, alone in it or on one of its lines; a chip or a pill keeps its one size. On the open line they are words of a sentence, held to the words around them. */
 .data-table > tbody > tr:not(.row-detail) > td span[data-tip][tabindex]:not(.pill) { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
-/* An identifier's link, or a name's set among its controls, stays text of its line, a target tall by its padding as a name's is. */
+/* An identifier's link, bare or as the row's bold name, stays text of its line, a target tall by its padding as a name's is. */
 .data-table > tbody > tr > [data-kind="identifier"] > a[href],
 .data-table > tbody > tr > [data-kind="identifier"] > .cell-short > a[href],
-.data-table > tbody > tr > td .name-line > strong > a[href]:only-child { padding-block: calc((var(--target-min) - 1.2em) / 2); }
+.data-table > tbody > tr > [data-kind="identifier"] > strong > a[href]:only-child { padding-block: calc((var(--target-min) - 1.2em) / 2); }
 /* A link alone in its cell is a box of its own a target tall, no wider than the cell: alone, it wraps as it would inline. */
 .data-table > tbody > tr > td:not([data-kind="identifier"]) > a[href]:only-child,
 .data-table > tbody > tr > td:not([data-kind="identifier"]) > .cell-short:only-child > a[href]:only-child { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
