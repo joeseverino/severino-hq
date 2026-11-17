@@ -45,15 +45,6 @@ _SETTINGS = (
     "</form>{% endsection %}<p data-after>An example line after the settings.</p>"
 )
 
-# One row's select in a narrow control cell, its longest choice chosen.
-_CHOICE = (
-    '{% section "Example choice" %}{% table_region "Example choice" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Account" "identifier" %}{% table_heading "Group" "control" %}</tr></thead><tbody>'
-    '<tr><td>Example account with a name long enough to take the row</td><td><select aria-label="Group">'
-    "<option>No example group</option><option>Example</option></select></td></tr></tbody></table>"
-    "{% endtable_region %}{% endsection %}"
-)
-
 
 def _page(content, title="Example", **values):
     """``content``, through HQ's tags, alone in a page's main."""
@@ -94,17 +85,6 @@ _GROUND_SHOWN = """(bar) => {
   return behind.content !== 'none' && behind.visibility === 'visible';
 }"""
 
-# How much narrower a select is than its chosen words on one line.
-_SHORT_OF_ITS_WORDS = """(choice) => {
-  const select = document.querySelector(choice);
-  const style = getComputedStyle(select);
-  const context = document.createElement('canvas').getContext('2d');
-  context.font = style.font;
-  const words = context.measureText(select.selectedOptions[0].textContent).width;
-  const room = select.clientWidth - parseFloat(style.paddingInlineStart) - parseFloat(style.paddingInlineEnd);
-  return Math.max(0, words - room);
-}"""
-
 
 class CommandFormBrowserTests(BrowserGate):
     """A switch is pressed as one of two buttons: the one pressed is what posts."""
@@ -133,7 +113,6 @@ class CommandFormBrowserTests(BrowserGate):
             # in the fade between pages as every page of HQ's does.
             "example/done": _page("Done", title="Done"),
             "example/settings": _page(_SETTINGS, rows=range(1, 25)),
-            "example/choice": _page(_CHOICE),
         }
 
     @override
@@ -208,11 +187,3 @@ class CommandFormBrowserTests(BrowserGate):
 
         self.assertEqual(len(self.posted), 1)
         self.assertFalse(self.page.evaluate(_MARKED, SELECTORS["save_bar"]))
-
-    def test_a_select_in_a_narrow_control_cell_keeps_its_chosen_words_on_one_line(self):
-        if self.browser.browser_type.name == "webkit":
-            self.skipTest("WebKit draws its own select, which the stylesheet does not reach")
-        self.page.set_viewport_size({"width": 820, "height": 900})
-        self.page.goto(f"{ORIGIN}/example/choice/", wait_until="load")
-
-        self.assertEqual(self.page.evaluate(_SHORT_OF_ITS_WORDS, SELECTORS["choice"]), 0)

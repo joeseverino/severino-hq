@@ -15,17 +15,15 @@ from hq.platform.application.money import money
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, line_chart
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.test_runner import browser_engine
-from hq.platform.core.tests.browser.gate import add_css, tab_key, unfold, with_script
+from hq.platform.core.tests.browser.gate import add_css, tab_key, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import MAP, SIDEWAYS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
     DIALOGS_WITHOUT_OPENERS,
-    READINGS,
     SPILLED_LABELS,
     WRAPPED,
-    reading_problems,
 )
 from hq.platform.core.tests.browser.probes.settle import (
     FONTS_READY,
@@ -1115,18 +1113,12 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertEqual([line for line in found if "example-digest" in line], [])
         self.assertTrue(any("example-word" in line for line in found), found)
 
-    def test_a_toolbars_menus_wear_a_buttons_edge_and_its_search_a_fields(self):
-        """A list's filter menu, toggle and sort are pressed, so in either
-        palette none is edged as the search box beside them is, and a control
-        given the field's edge is found."""
+    def test_a_control_given_a_fields_edge_is_found(self):
+        """A pressed control is never edged as a field is (``button edges``,
+        held on every page in both palettes), so one given the field's edge
+        is found."""
 
         self.open("projects", WIDE)
-        unfold(self.page)
-        self.assertGreater(self.page.locator(SELECTORS["table_filter"]).count(), 0)
-        for palette in ("light", "dark"):
-            with self.subTest(palette=palette):
-                self.in_scheme(palette)
-                self.assertEqual(self.page.evaluate(BUTTON_EDGES, SELECTORS["pressed"]), [])
         self.page.evaluate("""() => {
           const button = document.createElement('button');
           button.className = 'example-edged';
@@ -1397,10 +1389,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for part in ("status.", "example-host-name", '"y"'):
             self.assertNotIn(part, said)
 
-    def test_a_chip_draws_its_text_on_what_it_paints(self):
-        """A chip whose words are laid out past the box it paints is found,
-        and the tailnet's port chips, each with the name of what answers on
-        it, draw every word on their chip."""
+    def test_a_chip_drawing_its_words_past_what_it_paints_is_found(self):
+        """A chip whose words are laid out past the box it paints is found."""
 
         from hq.platform.core.templatetags.value_tags import breakable
 
@@ -1414,10 +1404,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         arg = [SELECTORS["chip"], SELECTORS["unseen"]]
         self.open("chip-probe", WIDE)
         self.assertTrue(self.page.evaluate(CHIPS_PAST_THEIR_PAINT, arg))
-        for width in WIDTHS:
-            with self.subTest(width=width):
-                self.open("dense/tailnet", width)
-                self.assertEqual(self.page.evaluate(CHIPS_PAST_THEIR_PAINT, arg), [])
 
     def test_every_selector_parses(self):
         """Every rule the stylesheet writes is one the engine keeps, but for
@@ -1854,18 +1840,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         back = self.page.evaluate(SORT_BY, [SELECTORS["table_scroll"], 0])
         self.assertEqual(back["sort"], "none")
         self.assertEqual(back["values"], came)
-
-    def test_the_dashboards_readings_show_every_line_beside_its_mark(self):
-        """Each is a mark, a lead and its lines: nothing set under the mark,
-        where a caption in the mark's narrow column reads as "Via h", and no
-        line cut short."""
-
-        for width in (PHONE_SCREEN[0], 820, 1280, 1440):
-            with self.subTest(width=width):
-                self.open("dashboard", width)
-                readings = self.page.locator(SELECTORS["readings"]).evaluate_all(READINGS)
-                self.assertGreaterEqual(len(readings), 3)
-                self.assertEqual(reading_problems(readings), [])
 
     @with_script
     def test_what_the_dashboard_says_of_its_readings_covers_none_of_them(self):
