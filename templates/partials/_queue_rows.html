@@ -4,8 +4,8 @@ The queue's rows, one per item, in the queue's table (`_work_queue.html`,
 names it and what can be pressed in its row's actions. Its face is
 `application.decisions`. The first line is the title and, only when urgent,
 the word after it; then its one line of meaning, then since when and, once out of
-date, how old its reading is, quiet, under it. What it offers is `{% row_actions %}`: the
-first two buttons, the rest waiting in the opened line, and where the reader
+date, how old its reading is, quiet, under it. What it offers is `{% row_actions %}`: its
+buttons, and where the reader
 sorts their own queue (`triage`), Dismiss or Restore as the last of them. Everything taller (the meaning in full, facts, advice, the steps and
 their commands, the reason it cannot be done from here, the pages that help)
 is `row-below`, opened by the row's toggle.
@@ -46,6 +46,6 @@ whole.
     {% endif %}
     {% row_toggle %}
   </td>
-  {% if item.aside %}{% row_actions put_away=away %}{% else %}{% row_actions shown first=2 put_away=away %}{% endif %}
+  {% if item.aside %}{% row_actions put_away=away %}{% else %}{% row_actions shown put_away=away %}{% endif %}
 </tr>
 {% endwith %}{% endfor %}

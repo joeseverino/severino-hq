@@ -807,11 +807,12 @@ class DemoSiteTests(unittest.TestCase):
             browser = _engine(playwright).launch()
             page = browser.new_page()
             page.goto(self.origin + "/action-items/", wait_until="load")
-            # The row's own Dismiss (action_tags.triage), the last of its actions.
-            dismiss = '.row-actions > button[name="key"]'
-            row = page.locator(f"[data-attention-item]:has({dismiss})").first
-            key = row.locator(dismiss).get_attribute("value")
-            row.locator(dismiss).click()
+            # A queue row's own Dismiss (action_tags.triage), pressed as a
+            # reader finds it: the button by that name the row shows.
+            dismiss = page.get_by_role("button", name="Dismiss", exact=True)
+            row = page.locator("[data-attention-item]").filter(has=dismiss).first
+            key = row.get_by_role("button", name="Dismiss", exact=True).get_attribute("value")
+            row.get_by_role("button", name="Dismiss", exact=True).click()
             page.reload(wait_until="load")
             kept = page.locator(f'[data-attention-item]:has(button[value="{key}"])').first
             self.assertIsNotNone(kept.get_attribute("data-dismissed"))

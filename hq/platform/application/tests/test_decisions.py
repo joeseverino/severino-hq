@@ -164,15 +164,14 @@ class DecisionTests(SimpleTestCase):
         (meaning,) = select(html, "data-attention-detail")
         self.assertIn("What it means for the reader.", meaning.words)
         self.assertEqual(with_class(html, "row-below"), [])
-        # The first buttons are in one cell, and those that wait stand
-        # together on the row's open line (beside the first ones' copy there).
+        # Every button stands in the row's one cell; none waits beneath it.
         buttons = [link for link in all_elements(html) if link.attrs.get("href", "").startswith("/example/")]
-        shown = [link for link in buttons if not link.beneath]
-        cells = {id(next(ancestor for ancestor in reversed(link.ancestors) if ancestor.tag == "td")) for link in shown}
+        cells = {
+            id(next(ancestor for ancestor in reversed(link.ancestors) if ancestor.tag == "td")) for link in buttons
+        }
         self.assertEqual(len(cells), 1)
-        later = [link for link in buttons if link.beneath and any("row-later" in up.classes for up in link.ancestors)]
-        self.assertTrue(later)
-        self.assertEqual(sorted(link.attrs["href"] for link in shown + later), [f"/example/{n}/" for n in range(3)])
+        self.assertFalse([link for link in buttons if link.beneath])
+        self.assertEqual(sorted(link.attrs["href"] for link in buttons), [f"/example/{n}/" for n in range(3)])
 
     def test_the_title_goes_to_the_thing_and_the_named_next_step_is_a_link(self):
         subject = asdict(read_link("subject", "example-host", "/machines/example-host/"))

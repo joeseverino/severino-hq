@@ -42,18 +42,14 @@ TABLES = (
     "() => {"
     + DESCRIBE
     + """
-  // A table is laid out by the browser's table layout (tables.css), which
-  // keeps every cell under its column's heading, or stacked in a narrow box,
-  // where every value that has a column's name stands under it, and its
+  // A table is laid out by the browser's table layout (tables.css) at every
+  // width, which keeps every cell under its column's heading, and its
   // headings are drawn.
   const width = document.documentElement.clientWidth;
-  const stacked = (table) => {
-    if (getComputedStyle(table).display !== 'block') return false;
-    const rows = [...table.querySelectorAll(':scope > * > tr')].filter((row) => row.checkVisibility());
-    return rows.every((row) => !/^table/.test(getComputedStyle(row).display));
-  };
-  const unlabeled = (table) => [...table.querySelectorAll(':scope > tbody > tr > [data-label]')]
-    .filter((cell) => cell.checkVisibility() && getComputedStyle(cell, '::before').content === 'none');
+  const tabled = (table) => getComputedStyle(table).display === 'table'
+    && [...table.querySelectorAll(':scope > * > tr')].filter((row) => row.checkVisibility())
+      .every((row) => getComputedStyle(row).display === 'table-row'
+        && [...row.cells].every((cell) => !cell.checkVisibility() || getComputedStyle(cell).display === 'table-cell'));
   const found = [];
   let seen = 0;
   let undrawn = 0;
@@ -67,9 +63,7 @@ TABLES = (
     }
     seen += 1;
     const name = describe(table);
-    if (stacked(table)) {
-      for (const cell of unlabeled(table)) found.push(`${describe(cell)} stands stacked without its column's name`);
-    } else if (getComputedStyle(table).display !== 'table') found.push(`${name} is not laid out as a table`);
+    if (!tabled(table)) found.push(`${name} is not laid out as a table`);
     const head = table.querySelector('thead');
     const headings = head ? [...head.querySelectorAll(':scope > tr:last-child > th')] : [];
     if (headings.length && !headings.some((heading) => heading.checkVisibility())) {
@@ -114,7 +108,7 @@ TABLE_PROMISES = (
     for (const cell of table.querySelectorAll(':scope > tbody > tr > [colspan]')) {
       if (cell.checkVisibility() && cell.getBoundingClientRect().width < width - 2) found.add(`${name}: a cell across its row spans less`);
     }
-    // The headings stick as cells of their row, or as the line a stacked table draws them in.
+    // The headings stick as cells of their row.
     const head = table.querySelector(':scope > thead > tr');
     const sticks = (el) => el && getComputedStyle(el).position === 'sticky';
     if (head && !sticks(head.parentElement) && ![...head.children].every(sticks)) found.add(`${name}: its heading row does not stick`);
@@ -929,35 +923,6 @@ ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-det
   beside_name: row.querySelector('button[aria-expanded]')?.parentElement === row.cells[0],
 }))"""
 
-# A stacked row's field, and every value of a column a row fills a field in,
-# stands under its column's name: without it a reader of a row of choices
-# cannot tell whose each one is, as a rule's choice for each agent is. The
-# cell that names the row says what the row is, so it carries no name.
-VALUES_UNNAMED = (
-    "() => {"
-    + DESCRIBE
-    + """
-  const found = [];
-  const field = 'select, textarea, input:not([type="hidden"], [type="submit"], [type="button"])';
-  for (const table of document.querySelectorAll('main table.data-table')) {
-    if (!table.checkVisibility() || getComputedStyle(table).display !== 'block') continue;
-    const heads = [...table.querySelectorAll(':scope > thead > tr:last-child > th')];
-    const rows = [...table.querySelectorAll(':scope > tbody > tr:not(.row-detail)')].filter((row) => row.checkVisibility());
-    const valued = new Set(rows.flatMap((row) => [...row.cells].filter((cell) => cell.querySelector(field)).map((cell) => cell.cellIndex)));
-    for (const row of rows) {
-      const naming = row.querySelector(':scope > .select-column + *') || row.cells[0];
-      for (const cell of row.cells) {
-        const name = (heads[cell.cellIndex]?.textContent || '').trim();
-        if (cell === naming || !name || !valued.has(cell.cellIndex) || !cell.checkVisibility() || !cell.innerText.trim() && !cell.querySelector(field)) continue;
-        if (getComputedStyle(cell, '::before').content === 'none') found.push(`${describe(table)}: "${naming.innerText.trim().replace(/\\s+/g, ' ').slice(0, 24)}" stacks its value under "${name.slice(0, 24)}" without the column's name`);
-      }
-    }
-  }
-  return found;
-}"""
-)
-
-
 # The survey checks these probes answer (`probes/__init__.py`); the table
 # checks (`table=True`) are read again by the sweep of every width
 # (`BrowserGate.table_defects_at_every_width`) at the first width of each shape
@@ -985,9 +950,6 @@ CHECKS = {
         ROOM_UNSHARED,
         table=True,
         reader_sees="words a few to a line beside a column holding room it does not need",
-    ),
-    "values named": Check(
-        VALUES_UNNAMED, table=True, reader_sees="a row's choices stacked with no name saying whose each one is"
     ),
     "empty panels": Check(EMPTY_PANELS, table=True, reader_sees="a panel in a table with nothing in it"),
     "rows unruled": Check(ROWS_UNRULED, table=True, reader_sees="two rows with no rule between them"),

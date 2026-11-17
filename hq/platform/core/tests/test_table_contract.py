@@ -312,25 +312,9 @@ class TableTagTests(SimpleTestCase):
         )
         self.assertEqual([cell.attrs.get("data-kind") for cell in elements(html, "td")], ["name", "status", "control"])
 
-    def test_a_stacked_cell_names_its_column(self):
-        """A narrow box stacks its table, each value under its column's name
-        (tables.css), so each body cell carries that name. The cell that
-        names its row, a row's controls and a tick-box need none."""
-
-        source = (
-            '{% table_region "Things" %}<table class="data-table" data-selectable-table><thead><tr>'
-            '{% table_heading "Select" select_all=True %}{% table_heading "Name" gutter=True %}'
-            '{% table_heading "State" "status" %}{% table_heading "Act" css="actions-col" %}</tr></thead><tbody>'
-            "<tr>{% row_select 1 %}<td>a</td><td>Up &amp; on</td><td><button>Go</button></td></tr>"
-            "</tbody></table>{% endtable_region %}"
-        )
-        cells = [cell.attrs.get("data-label") for cell in elements(_render(source), "td")]
-        self.assertEqual(cells, [None, None, "State", None])
-
-    def test_a_stacked_choice_names_its_column(self):
-        """A column a row fills a field in holds the rows' values, so each of
-        its cells, the field's and the words standing in for one, stands
-        under its column's name once stacked, whatever kind its heading says."""
+    def test_the_words_standing_for_a_choice_are_a_short_value(self):
+        """Where a row has no choice to make, the words standing in its
+        column of choices keep their line as a short value does."""
 
         source = (
             '{% table_region "Rules" %}<table class="data-table"><thead><tr>{% table_heading "Action" %}'
@@ -338,8 +322,6 @@ class TableTagTests(SimpleTestCase):
             "<tbody><tr><td>a</td><td><select><option>Allow</option></select></td><td><button>Go</button></td></tr>"
             "<tr><td>b</td><td>Not granted</td><td><button>Go</button></td></tr></tbody></table>{% endtable_region %}"
         )
-        cells = [cell.attrs.get("data-label") for cell in elements(_render(source), "td")]
-        self.assertEqual(cells, [None, "example-agent", None, None, "example-agent", None])
         self.assertIn("Not granted", [box.words for box in with_class(_render(source), "cell-short")])
 
     def test_a_rows_actions_are_its_controls_under_any_heading(self):

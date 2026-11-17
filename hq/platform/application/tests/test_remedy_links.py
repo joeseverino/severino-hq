@@ -241,7 +241,7 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
             held = {
                 id(box)
                 for box in drawn
-                if box.classes & {"attention-actions", "row-later"}
+                if "attention-actions" in box.classes
                 or ("row-actions" in box.classes and "data-blank" not in box.attrs)
             }
             boxes += len(held)

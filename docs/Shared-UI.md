@@ -167,7 +167,6 @@ fails when this file falls behind. The rules around it are in
 | `referenced_by` | `thing`, first and unnamed | required |  | A record, or the kind of thing it is. |
 | `referenced_by` | `identity` |  |  | Given a kind, what its page is addressed by. |
 | `row_actions` | `actions` |  |  | What can be done to the row's record, each a `PageAction`. |
-| `row_actions` | `first` | `0` |  | How many show; the rest wait in the row's open line. |
 | `row_actions` | `gap` | `None` |  | A `WriteGap` standing in for every action the connection cannot make. |
 | `row_actions` | `mark` | `None` |  | A `RowMark` the reader keeps on the row's record, first of its controls. |
 | `row_actions` | `order` | `None` |  | A `RowOrder` that moves the row in an order the reader keeps. |
@@ -213,7 +212,6 @@ fails when this file falls behind. The rules around it are in
 | `status` | `tone` |  |  | Its tone, or a subject's state in its own words and tone. |
 | `status` | `**data` |  |  | Each a `data-` attribute. |
 | `table_heading` | `label`, first and unnamed | required |  | The column's name. |
-| `table_heading` | `beneath` | `False` |  | In a narrow box its cells stand beneath the row's words, under its name. |
 | `table_heading` | `css` |  |  | The column's classes. |
 | `table_heading` | `descending` |  |  | Its reverse, when that is not `-field`. |
 | `table_heading` | `drop` | `0` |  | The rank it leaves by when the table is too wide, 1 first. |

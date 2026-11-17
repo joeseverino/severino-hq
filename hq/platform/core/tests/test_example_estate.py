@@ -367,19 +367,6 @@ class WalkedStatesTests(TestCase):
         self.assertEqual(page.context["related"], ())
         self.assertFalse(page.context["asset"].notes)
 
-    def test_a_queue_row_holds_buttons_past_the_ones_its_line_shows(self):
-        # The queue's row shows its first two buttons; the rest wait in its
-        # opened line, a part the survey reaches only through a row with more.
-        page = self.walked(reverse("action_items"))
-        waiting = [
-            control
-            for control in all_elements(page)
-            if control.beneath
-            and control.tag in {"a", "button"}
-            and any("row-later" in part.classes for part in control.ancestors)
-        ]
-        self.assertTrue(waiting)
-
     def test_each_reports_reading_has_rows(self):
         page = self.walked(reverse("reports:dashboard"))
 

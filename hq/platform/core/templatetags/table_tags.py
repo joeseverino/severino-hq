@@ -380,9 +380,6 @@ def table_heading(
     *,
     css: Annotated[str, Describe("The column's classes.")] = "",
     drop: Annotated[int, Describe("The rank it leaves by when the table is too wide, 1 first.")] = 0,
-    beneath: Annotated[
-        bool, Describe("In a narrow box its cells stand beneath the row's words, under its name.")
-    ] = False,
     sort: Annotated[str, Describe("The field a server-sorted list orders this column by.")] = "",
     descending: Annotated[str, Describe("Its reverse, when that is not `-field`.")] = "",
     local_sort: Annotated[
@@ -396,10 +393,8 @@ def table_heading(
     """One column heading.
 
     ``drop`` is the order a table too wide for its region lets the column go
-    in, 1 first, the rightmost of a rank first. ``beneath`` keeps a column of
-    words every row must show (a change's two sides): in a narrow box each of
-    its cells stands on a line beneath the row's words, under the column's
-    name, as a row's controls do. ``sort`` names the field a
+    in, 1 first, the rightmost of a rank first; a ``key-col`` is kept at
+    every width. ``sort`` names the field a
     server-sorted list orders this column by (``descending`` when its reverse is
     not ``-field``). Any other column that says something sorts the rows
     already on the page, whose region keeps the control only where it holds
@@ -414,8 +409,6 @@ def table_heading(
     if local_sort is None:
         local_sort = not sort and kind != "control" and not hidden and bool(label)
     check_drop(drop, css, label)
-    if beneath and drop:
-        raise ValueError(f"Column {label!r} stands beneath its row or leaves by its rank, not both.")
     classes = [css] if css else []
     classes += ["select-column"] if select_all else []
     classes += ["row-gutter"] if gutter else []
@@ -424,7 +417,6 @@ def table_heading(
         "kind": kind,
         "css": " ".join(classes),
         "drop": drop,
-        "beneath": beneath,
         "server_sort": _server_sort(context, sort, descending) if sort else None,
         "local_sort": local_sort,
         "hidden": hidden,
@@ -492,7 +484,6 @@ def row_actions(
     actions: Annotated[Any, Describe("What can be done to the row's record, each a `PageAction`.")] = (),
     *,
     gap: Annotated[Any, Describe("A `WriteGap` standing in for every action the connection cannot make.")] = None,
-    first: Annotated[int, Describe("How many show; the rest wait in the row's open line.")] = 0,
     put_away: Annotated[Any, Describe("The reader's own way to set the row aside, last of its buttons.")] = None,
     mark: Annotated[Any, Describe("A `RowMark` the reader keeps on the row's record, first of its controls.")] = None,
     order: Annotated[Any, Describe("A `RowOrder` that moves the row in an order the reader keeps.")] = None,
@@ -501,21 +492,24 @@ def row_actions(
     ``actions`` (a ``PageAction``, as a ``ListRow``'s are) a compact control
     drawn by ``_page_action.html``, so a row's buttons look like every other
     and only a destructive one differs. Under a heading of kind ``control``
-    (``css="actions-col"``), so the region sizes the column to what it holds
-    and a narrow box sets it beneath the row's words. ``gap``, an
-    ``adoption.WriteGap``, stands in for every action when the connection
-    cannot make the change. Given ``first``, the actions past that many wait
-    in the row's open line. ``put_away``, a POST ``PageAction`` such as the
-    queue's Dismiss, is the reader's own way to set the row aside: the last
-    of its buttons, drawn as they are, and never waiting in the open line.
+    (``css="actions-col"``), so the region sizes the column to what it holds.
+    ``gap``, an ``adoption.WriteGap``, stands in for every action when the
+    connection cannot make the change. Every control stands in the cell, and
+    they wrap between them only where the row has no room. ``put_away``, a
+    POST ``PageAction`` such as the queue's Dismiss, is the reader's own way to
+    set the row aside: the last of its buttons, drawn as they are.
     ``mark`` (a ``RowMark``, such as a favorite's star) and ``order`` (a
     ``RowOrder``) come first, the star last of the two, so a row's own
     arrangement is a column the table sizes and counts, never a part of the
     cell that names the row."""
 
-    actions = tuple(actions or ())
-    shown, later = (actions[:first], actions[first:]) if first else (actions, ())
-    return {"actions": shown, "later": later, "gap": gap, "put_away": put_away, "mark": mark, "order": order}
+    return {
+        "actions": tuple(actions or ()),
+        "gap": gap,
+        "put_away": put_away,
+        "mark": mark,
+        "order": order,
+    }
 
 
 def row_toggle() -> dict[str, Any]:
@@ -641,7 +635,6 @@ slotted(
             '{% table_region "Example actions" %}<table class="data-table"><tbody><tr><td>{{ row.name }}</td>'
             "{% row_actions row.actions %}</tr></tbody></table>{% endtable_region %}"
         ),
-        classes=("row-later",),
         public_classes=("row-actions",),
     ),
     library=register,

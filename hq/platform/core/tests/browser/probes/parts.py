@@ -71,37 +71,6 @@ READINGS = """(heads) => heads.map((head) => {
 })"""
 
 
-# A closed row of a table in a narrow box shows every control it shows in a
-# whole box: what a row offers stands in the row (beneath its words, on a
-# phone), never only behind its toggle. The row's own table is drawn in a
-# whole box for a moment to read what it offers there.
-ROW_ACTIONS_BEHIND_THE_TOGGLE = (
-    "([rows, pressed]) => {"
-    + DESCRIBE
-    + """
-  const found = [];
-  const said = (el) => el.textContent.trim().replace(/\\s+/g, ' ');
-  const offered = (row) => new Set([...row.querySelectorAll(pressed)]
-    .filter((el) => el.checkVisibility() && !el.matches('[data-row-toggle], [data-fold-toggle]') && said(el))
-    .map(said));
-  for (const row of document.querySelectorAll(rows)) {
-    if (!row.checkVisibility() || row.matches('.is-expanded')) continue;
-    const table = row.closest('table');
-    if (getComputedStyle(table).getPropertyValue('--box').trim() !== 'narrow') continue;
-    const narrow = offered(row);
-    const before = [table.style.getPropertyValue('--box'), table.style.getPropertyPriority('--box')];
-    table.style.setProperty('--box', 'whole', 'important');
-    const whole = offered(row);
-    table.style.setProperty('--box', ...before);
-    if (!before[0]) table.style.removeProperty('--box');
-    const held = [...whole].filter((label) => !narrow.has(label));
-    if (held.length) found.push(`${describe(row)} shows "${held.join(' / ')}" only once opened in its narrow box`);
-  }
-  return found;
-}"""
-)
-
-
 # An ask drawn beside a table whose rows hold the same ask: the row's button
 # again, outside every row, which reads as a control nothing in the table
 # owns.
@@ -381,12 +350,5 @@ CHECKS = {
     ),
     "summaries hiding": Check(
         (HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"]), reader_sees="what a fold's handle names, hidden"
-    ),
-    "row actions behind the toggle": Check(
-        (
-            ROW_ACTIONS_BEHIND_THE_TOGGLE,
-            [f"main {SELECTORS['controls_row']}", SELECTORS["pressed"]],
-        ),
-        reader_sees="what a row offers hidden until the row is opened",
     ),
 }

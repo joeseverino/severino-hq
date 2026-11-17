@@ -8,7 +8,6 @@ SELECTORS = {
     # controls, whose controls sit on the row's first line.
     "row_actions_cell": 'main td.row-actions, main td[data-kind="control"]',
     # A table's row that offers controls: its actions or a column of controls.
-    "controls_row": '.data-table > tbody > tr:has(> :is(td.row-actions, td[data-kind="control"]))',
     # A device on the Agents page waiting for the reader's approval.
     "device_prompt": "[data-prompt]",
     # An agent's update streams: a full set warned of in its row's cell, and

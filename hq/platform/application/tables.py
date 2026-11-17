@@ -10,6 +10,7 @@ from django.core.paginator import EmptyPage, Page, Paginator
 from django.db import models
 from django.db.models import Model, Q, QuerySet, Sum
 
+from hq.platform.core.table_cells import leaving_order
 lazy from hq.platform.application.search import apply_search
 
 from .page_reads import Remedy
@@ -105,16 +106,7 @@ def ranked(columns: tuple[TableColumn, ...]) -> tuple[TableColumn, ...]:
         raise ValueError(f"Column {columns[0].label!r} names each row, so it has no drop rank.")
     if any(column.drop for column in columns):
         return columns
-    keyed = any("key-col" in column.css.split() for column in columns)
-    last = len(columns) - 1
-
-    def spare(index: int, column: TableColumn) -> bool:
-        closing_figure = not keyed and index == last and column.kind == "numeric"
-        controls = column.kind == "control"
-        return index > 0 and "key-col" not in column.css.split() and not closing_figure and not controls
-
-    far_first = [index for index in reversed(range(len(columns))) if spare(index, columns[index])]
-    order = sorted(far_first, key=lambda index: "optional-col" not in columns[index].css.split())
+    order = leaving_order([(column.kind, column.css.split()) for column in columns])
     rank = {index: place for place, index in enumerate(order, 1)}
     return tuple(replace(column, drop=rank.get(index, 0)) for index, column in enumerate(columns))
 

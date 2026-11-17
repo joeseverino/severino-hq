@@ -2,8 +2,8 @@
 place in the row, and what the stylesheet is to read off it, which
 ``table_tags.mark_cells`` writes into the markup."""
 
-import html
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 
@@ -17,7 +17,7 @@ _SECTIONS = ("thead", "tbody", "tfoot")
 # What a cell holds that is not on its row's line: words for assistive
 # technology alone, and what the row keeps for its open line or shows only in
 # a narrow box.
-_OFF_LINE = frozenset({"visually-hidden", "row-below", "row-more", "narrow-only", "row-editor", "row-later"})
+_OFF_LINE = frozenset({"visually-hidden", "row-below", "row-more", "narrow-only", "row-editor"})
 # The characters of a line of a value past which it is longer than a line of
 # words (`data-long`): it wraps, never to fewer than a line of words, and its
 # column shares the room whatever its kind (tables.css); one of a kind that
@@ -62,7 +62,7 @@ _UNFILLED = frozenset({"hidden", "submit", "button"})
 # What a row moves to its open line: a block kept beneath the row, its
 # buttons past the first few, and the row's editor (`{% row_editor %}`),
 # which opens the row.
-_PART_KINDS = {"row-below": "below", "row-editor": "editor", "row-later": "later"}
+_PART_KINDS = {"row-below": "below", "row-editor": "editor"}
 
 
 Position = tuple[int, int]
@@ -333,7 +333,9 @@ class Cells(HTMLParser):
         self._role(self.getpos(), given)
         if tag in _LINE_ENDS and self.off_line is None:
             cell.text.append(" ")
-        if tag != "br" and self.unsaid is None and "empty-value" not in classes:
+        # What moves whole to the row's open line says nothing on its line.
+        moves = self.part is not None or not _PART_KINDS.keys().isdisjoint(classes)
+        if tag != "br" and self.unsaid is None and not moves and "empty-value" not in classes:
             cell.says_nothing = False
         if not void and tag not in _VOID:
             self._open(cell, tag, classes, given)
@@ -397,7 +399,7 @@ class Cells(HTMLParser):
             self.cell.text.append(data)
             self.cell.line += len(" ".join(data.split()))
             self.cell.longest = max(self.cell.longest, self.cell.line)
-        if not SAYS_NOTHING.fullmatch(data):
+        if self.part is None and not SAYS_NOTHING.fullmatch(data):
             self.cell.says_nothing = False
         if len(self.open) == 1 and data.strip():
             self.cell.loose = True
@@ -439,11 +441,11 @@ class Cells(HTMLParser):
         counted = heads[-1] if heads else max((row.cells for row in records), key=len, default=[])
         if (columns := min(COUNTED, sum(index not in empty for index in range(len(counted))))) > 1:
             self.marks.setdefault(self.table_at, []).append(f' data-columns="{columns}"')
-        names, drops, gutter = _columns(heads[-1] if heads else [])
+        drops, gutter = _columns(heads[-1] if heads else [])
         # The columns that never leave, whatever rank their heading gives
         # them: what a row is (a cell said by its pills alone; a pill beside a
         # value is a note on it), what it does (its controls, a field a reader
-        # fills in), and words every row must show (`beneath=True`). A row
+        # fills in), and words every row must show (`key-col`). A row
         # without them no longer says what it is or does what it is for.
         kept = {
             place
@@ -451,15 +453,8 @@ class Cells(HTMLParser):
             for place, cell in _placed(row)
             if place != named and (cell.fields or (cell.tops and all(cell.tops) and not cell.loose))
         }
-        kept |= {at for at, cell in enumerate(heads[-1] if heads else []) if "data-stacks" in cell.attrs}
-        controls = {place for row in records for place, _ in _row_controls(row, kinds, named)}
-        kept |= controls
-        # A column a row fills in a field in holds the rows' values, each
-        # standing under its column's name once its table stacks. A column of
-        # the rows' controls leaves a narrow box, shown in place as its row
-        # opens, unless it holds such a field, which is the row's value.
-        valued = {place for row in records for place, cell in _placed(row) if cell.fields}
-        leaving = controls - valued
+        kept |= {at for at, cell in enumerate(heads[-1] if heads else []) if "key-col" in _classes(cell.attrs)}
+        kept |= {place for row in records for place, _ in _row_controls(row, kinds, named)}
         ranked = {at: rank for at, rank in drops.items() if at not in kept | empty}
         # Each rank is a width of the region (tables.css), counted from the
         # widest: a table's first rank leaves at the widest, and its others
@@ -469,6 +464,11 @@ class Cells(HTMLParser):
         if len(order) > RANKS:
             raise ValueError(f"A table's columns leave in at most {RANKS} ranks.")
         levels = {at: order.index(rank) + 1 for at, rank in ranked.items()}
+        if heads and not drops:
+            # A cell held back holds no button (`_detail`), so a column
+            # holding one stands.
+            pressed = {place for row in records for place, cell in _placed(row) if cell.presses}
+            levels = _narrow_levels(heads[-1], kinds, kept | empty | pressed | {named})
         self.opens = False
         self.cuts += [cell.drop for row in self.rows if row.section == "thead" for cell in row.cells if cell.drop]
         if not (self.sorts and _sorts(records)):
@@ -480,14 +480,18 @@ class Cells(HTMLParser):
             # A value is clamped only where its row's toggle opens it whole.
             toggle_cell = None if gutter is None else _at_place(row.cells, gutter)
             self.toggled = toggle_cell is not None and not toggle_cell.folds
-            self._mark_cells(row, kinds, named, empty, levels, leaving, valued, names)
+            self._mark_cells(row, kinds, named, empty, levels)
             if row.section == "thead":
                 self._mark_long_heads(row, longs)
             self._name(row, kinds, named)
             if gutter is not None and row.section != "thead":
                 self._gutter(row, gutter)
+            elif row.section == "tbody" and not any(cell.toggled for cell in row.cells) and _moves(row):
+                # What a row moves to its open line is reached by its toggle,
+                # which its first cell holds where no heading keeps the gutter.
+                self._gutter(row, 0)
             if row.section == "tbody" and row.end:
-                self._detail(row, width, leaving, levels)
+                self._detail(row, width, levels)
         if self.opens:
             self.marks.setdefault(self.table_at, []).append(" data-rows-can-open")
 
@@ -521,16 +525,9 @@ class Cells(HTMLParser):
         named: int,
         empty: set[int],
         levels: dict[int, int],
-        leaving: set[int],
-        valued: set[int],
-        names: list[str],
     ) -> None:
         """What each cell says of itself: blank, its whole column blank, the
-        width its column leaves at (a column of the rows' controls leaves in
-        a narrow box, `data-narrow`), and in the body its kind, its clamp
-        and the name it stands under once its table stacks
-        (`data-label`; none for the cell naming the row, nor for the row's
-        controls unless their column holds the rows' fields)."""
+        width its column leaves at, and in the body its kind and its clamp."""
 
         body = row.section == "tbody"
         for at, cell in _placed(row):
@@ -538,14 +535,8 @@ class Cells(HTMLParser):
             if "colspan" not in cell.attrs:
                 marks += [" data-blank-column"] if at in empty else []
                 marks += [f' data-drop="{levels[at]}"'] if at in levels else []
-                marks += [" data-narrow"] if at in leaving else []
                 if row.section != "thead":
-                    kind = _kind_at(at, kinds, named)
-                    marks += self._body_marks(cell, kind, body=body)
-                    label = names[at] if 0 <= at < len(names) else ""
-                    labeled = kind != "name" and (kind != "control" or at in valued)
-                    if label and labeled and "data-label" not in cell.attrs:
-                        marks.append(f' data-label="{html.escape(label)}"')
+                    marks += self._body_marks(cell, _kind_at(at, kinds, named), body=body)
             self.marks.setdefault(cell.start, []).extend(marks)
 
     def _mark_long_heads(self, row: _Row, longs: set[int]) -> None:
@@ -611,14 +602,14 @@ class Cells(HTMLParser):
             for start in cell.names:
                 self.roles.setdefault(start, set()).add("name")
 
-    def _detail(self, row: _Row, width: int, leaving: set[int], levels: dict[int, int]) -> None:
+    def _detail(self, row: _Row, width: int, levels: dict[int, int]) -> None:
         """The row's open line as the server draws it: the blocks it moves
         there (its editor first, then each block it keeps beneath itself and
         its buttons past the first few), each labeled one under its label.
         What a cell holds back (its column left, `data-drop`; a part only the
         open line shows, `row-more` or `line-rest`) is written once, in the
         cell: tables.js copies it onto the line as the row opens, and a
-        narrow box shows the row's controls and `narrow-more` parts in place.
+        narrow box shows the row's `narrow-more` parts in place.
         So a cell that holds something back holds no control, which a copy
         would draw twice."""
 
@@ -631,7 +622,7 @@ class Cells(HTMLParser):
             # The row's editor leads its line, moved there: its ids are its own.
             editors = [span for _, span in _finished(cell, "editor")]
             blocks[:0] = editors
-            moved = [*_finished(cell, "below"), *_finished(cell, "later")]
+            moved = _finished(cell, "below")
             self.cuts += [((start, 0), (end, None)) for start, end in [*editors, *(span for _, span in moved)]]
             blocks += [span for label, span in moved if not label]
             entries += [LineEntry(label, span) for label, span in moved if label]
@@ -640,11 +631,11 @@ class Cells(HTMLParser):
                 if cell.presses or cell.fields:
                     raise ValueError(
                         "A cell that holds something back for its row's open line holds no control: "
-                        "it stands in place or moves there whole (row-later, row-below)."
+                        "it stands in place or moves there whole (row-below)."
                     )
                 self.held = True
             always = always or bool(moved) or shown
-            self.opens = self.opens or shown or at in levels or at in leaving or "narrow-more" in cell.holds
+            self.opens = self.opens or shown or at in levels or "narrow-more" in cell.holds
         if always:
             self.marks.setdefault(row.start, []).append(" data-below")
         if blocks or entries:
@@ -709,17 +700,43 @@ def _kept_naming_column(heads: list[list[_Cell]]) -> int:
     return named
 
 
-def _columns(heading: list[_Cell]) -> tuple[list[str], dict[int, int], int | None]:
-    """Each column's name (none for the tick-boxes, which their own label
-    names), the rank of each column that may leave, and the one whose heading
+def leaving_order(columns: Sequence[tuple[str, Sequence[str]]]) -> list[int]:
+    """The places of a table's columns, each by its kind and its classes, in
+    the order a narrow table lets them go: ``optional-col`` columns first,
+    then the rest, each from the far end. Never the first, which names the
+    row, a ``key-col``, a column of the row's controls, or the closing figure
+    of a table that marks no key."""
+
+    keyed = any("key-col" in classes for _, classes in columns)
+    last = len(columns) - 1
+
+    def spare(index: int, kind: str, classes: Sequence[str]) -> bool:
+        closing_figure = not keyed and index == last and kind == "numeric"
+        return index > 0 and "key-col" not in classes and not closing_figure and kind != "control"
+
+    far_first = [index for index in reversed(range(len(columns))) if spare(index, *columns[index])]
+    return sorted(far_first, key=lambda index: "optional-col" not in columns[index][1])
+
+
+def _narrow_levels(heading: list[_Cell], kinds: dict[int, str], kept: set[int]) -> dict[int, int]:
+    """The levels of a table whose headings rank no column: each column a
+    row can do without (`leaving_order`) leaves at the narrowest widths, the
+    first to go at the widest of them and the last below the narrowest rank's
+    width, so a table keeps every column until a narrow box and is never
+    wider than its region there."""
+
+    columns = [(kinds.get(at, ""), _classes(cell.attrs)) for at, cell in enumerate(heading)]
+    spare = [at for at in leaving_order(columns) if at not in kept]
+    return {at: max(1, RANKS - len(spare) + place) for place, at in enumerate(spare, 1)}
+
+
+def _columns(heading: list[_Cell]) -> tuple[dict[int, int], int | None]:
+    """The rank of each column that may leave, and the one whose heading
     keeps the gutter."""
 
-    names = [
-        "" if "select-column" in _classes(cell.attrs) else " ".join("".join(cell.text).split()) for cell in heading
-    ]
     drops = {index: int(cell.attrs["data-drop"]) for index, cell in enumerate(heading) if cell.attrs.get("data-drop")}
     gutters = (index for index, cell in enumerate(heading) if "row-gutter" in _classes(cell.attrs))
-    return names, drops, next(gutters, None)
+    return drops, next(gutters, None)
 
 
 def _sorts(records: list[_Row]) -> bool:
@@ -750,6 +767,12 @@ def _finished(cell: _Cell, kind: str) -> list[tuple[str | None, Span]]:
     label and its span."""
 
     return [(part.label, (part.start, part.end)) for part in cell.parts if part.end and part.kind == kind]
+
+
+def _moves(row: _Row) -> bool:
+    """Whether the row moves a part to its open line (`row-below`)."""
+
+    return any(_finished(cell, "below") for cell in row.cells)
 
 
 def _kinds(heads: list[list[_Cell]], body: list[_Row]) -> dict[int, str]:
