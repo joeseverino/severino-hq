@@ -17,7 +17,7 @@ from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.test_runner import browser_engine
 from hq.platform.core.tests.browser.gate import add_css, tab_key, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
-from hq.platform.core.tests.browser.probes.boxes import MAP, SIDEWAYS, SMALL_TARGETS
+from hq.platform.core.tests.browser.probes.boxes import CHECKS, SIDEWAYS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
@@ -1821,10 +1821,16 @@ class ComponentLayoutTests(LayoutBrowserTests):
         survey holds on every page: a lane emptied there is found."""
 
         self.open("topology", WIDE)
-        arg = [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]]
-        self.assertEqual(self.page.evaluate(MAP, arg), [])
-        self.page.evaluate("(node) => document.querySelectorAll(node).forEach((el) => el.remove())", arg[2])
-        self.assertTrue(self.page.evaluate(MAP, arg))
+        check, arg = CHECKS["map"].probe
+        self.assertEqual(self.page.evaluate(check, arg), [])
+        # The stylesheet hides a lane with no node in it, so the plant empties
+        # the lanes of a sheet that lost that rule.
+        self.page.evaluate(
+            "([lane, node]) => document.querySelectorAll(lane).forEach((el) => {"
+            " el.querySelectorAll(node).forEach((each) => each.remove()); el.style.display = 'block'; })",
+            arg[1:],
+        )
+        self.assertTrue(self.page.evaluate(check, arg))
 
     @with_script
     def test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split(self):
