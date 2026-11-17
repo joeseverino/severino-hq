@@ -59,8 +59,8 @@ lazy from .machines import machine_catalog
 lazy from .moments import ago, moment, when
 lazy from .payload_words import ChangeRow, field_words, value_words
 lazy from .resource_operations import (
-    OperationAsked,
     Prepared,
+    RunAsked,
     asked_fields,
     enqueue,
     operation_asked,
@@ -451,7 +451,7 @@ def _holder_cancel(holding: dict[str, Any], principal: Principal | None) -> Page
 
 
 @transaction.atomic
-def request_run(manifest: OperationManifest, command: RunCommand, *, consented: Consented) -> OperationAsked:
+def request_run(manifest: OperationManifest, command: RunCommand, *, consented: Consented) -> RunAsked:
     """Queue one run of ``manifest`` for the automation worker.
 
     A read takes no retry key, so asking twice queues twice, and the
@@ -550,7 +550,7 @@ def _asked_it(operation: OperationRequest, principal: Principal) -> bool:
 
 
 @transaction.atomic
-def cancel_run(command: CancelRunCommand, *, principal: Principal) -> OperationAsked:
+def cancel_run(command: CancelRunCommand, *, principal: Principal) -> RunAsked:
     """Cancel a run nothing has claimed, so it holds its playbook and machines no more.
 
     A claimed run is left to its runner, which ends it or lets its lease run

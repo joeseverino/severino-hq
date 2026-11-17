@@ -782,6 +782,17 @@ identical described fragments fails `test_described_once.py`, run in
 the host's suite and in the composed suite before a deploy, so an extension's
 declarations are held too. Serving the document never runs it.
 
+Each answer names the requests it leads to as OpenAPI links, derived in one
+place (`_Builder.links`) from what the registries say of it: a page links to
+the page after it, by its `next.cursor` with the same query; a page's first
+item and a record link to that record's read and to each command on its
+resource that takes it as the target, sending its `updated_at` as
+`expected_updated_at` where the command checks for a stale write; a held
+change links to its `approvals` read, and a playbook's run to its `runs`
+read. An operation whose answer has links writes its own response beside the
+answer's schema component, since a `$ref` response takes no other field.
+`tests.fuzz.api_links` walks these links with Schemathesis's stateful phase.
+
 `mise run fix:derived` rewrites the committed `hq-api.openapi.json`, and
 `mise run lint` names it when it is behind.
 
@@ -790,6 +801,13 @@ Django's real WSGI middleware, using Schemathesis from the tools dependency
 set. Host cases have read authority. A synthetic capability tests authorized
 writes and durable retry without provider effects. Each case rolls back
 database changes and blocks outbound connections.
+
+`manage.py test tests.fuzz.api_links` runs that walk over the example estate,
+with read authority and the writes of the records that live in HQ's database,
+each scenario rolled back. Besides conformance it fails a next page that
+repeats a record of the page before it, a read an answer named that finds
+nothing, and a write that took an `expected_updated_at` other than the one
+read. `mise run test:api-properties` runs both modules.
 
 These tooling tests run explicitly in the contributor gates. Production test
 discovery does not require development dependencies.

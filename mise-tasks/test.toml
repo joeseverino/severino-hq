@@ -37,11 +37,11 @@ run = "uv run python manage.py makemigrations --check --dry-run"
 ["test:api-properties"]
 description = "Generated API cases through the real WSGI middleware"
 hide = true
-# One module in one process, outside the heavy turn and its shares, which fast
+# Its modules in one process, outside the heavy turn and its shares, which fast
 # still runs in the turn it holds for its tests (tools/gate/fast.py, HEAVY).
 tags = ["heavy"]
 extends = "django"
-run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
+run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties tests.fuzz.api_links --noinput --parallel 1"
 
 # Go does not vary with Python, so `mise run test` runs it once, outside the
 # interpreter loop. gotestsum renders go test's JSON events as text, and writes

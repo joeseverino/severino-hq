@@ -21,18 +21,26 @@ from django.urls import URLPattern, reverse
 from hq.platform.application.capabilities import capability_registry, describe_capabilities
 from hq.platform.application.contracts import effect_glossary
 from hq.platform.application.domains import NAVIGATION_GROUPS, Domain, all_domains, domain_navigation
+from hq.platform.application.held_answer import HELD, AwaitingApproval
 from hq.platform.application.integration_specs import (
     FIELD_MASK,
     IDEMPOTENCY_FIELD,
     IDEMPOTENCY_FIELD_SCHEMA,
     IDEMPOTENCY_HEADER,
+    PAGE_FIELD,
     RESERVED_QUERY_FIELD,
+    STALE_WRITE_KEYWORD,
     CapabilitySpec,
+    answer_type,
+    takes_stale_write_token,
+    typed_keys,
 )
 from hq.platform.application.json_schemas import LOCAL, json_schema
 from hq.platform.application.plugins import NavigationItem
 from hq.platform.application.refusal_status import LATER_CODES
+from hq.platform.application.resource_operations import RunAsked
 from hq.platform.application.resources import describe_resources, resource_registry
+from hq.platform.application.run_reads import RUNS
 from hq.platform.application.security import API_INTERFACE, Principal
 lazy from hq.platform.application.routes import routed
 
@@ -293,21 +301,29 @@ class _Builder:
         codes: Iterable[str],
         answer: tuple[str, dict[str, Any]] | None,
         held: Any,
+        links: dict[str, Any],
     ) -> dict[str, Any]:
         schema: dict[str, Any]
-        if answer is not None:
-            envelope = self.components.schemas["Success"]
-            schema = {**envelope, "properties": {**envelope["properties"], "data": answer[1]}}
-        elif view.__hq_data__ is None:
+        if view.__hq_data__ is None and answer is None:
             # This document itself.
             schema = {
                 "type": "object",
-                "properties": {"openapi": {"type": "string", "pattern": r"^3\.2\.\d+$"}},
+                "properties": {
+                    "openapi": {
+                        "description": "The OpenAPI version the document is written in.",
+                        "type": "string",
+                        "pattern": r"^3\.2\.\d+$",
+                    }
+                },
                 "required": ["openapi", "info", "paths"],
             }
         else:
             envelope = self.components.schemas["Success"]
-            schema = {**envelope, "properties": {**envelope["properties"], "data": self.data.get(view.__name__, {})}}
+            data = answer[1] if answer is not None else self.data.get(view.__name__, {})
+            # An answer written in place (a page) keeps the envelope's words for ``data``.
+            if "$ref" not in data:
+                data = {**envelope["properties"]["data"], **data}
+            schema = {**envelope, "properties": {**envelope["properties"], "data": data}}
         # Named for the type its data is, which every view answering it shares.
         kind = view.__hq_data__
         name = (
@@ -319,9 +335,12 @@ class _Builder:
             if isinstance(kind, (type, TypeAliasType))
             else "ObjectSuccess"
         )
-        success = self.component(
-            "responses", self.responses, name, {"description": "Success.", "content": _json_content(schema)}
-        )
+        # The answer's schema is a component, so an operation whose answer
+        # leads somewhere writes out its own response, the links beside the
+        # same schema: a Reference Object takes no other field (OpenAPI 3.2.0,
+        # section 4.23).
+        ran = {"description": "Success.", "content": _json_content({"$ref": self.components.add(name, schema)})}
+        success = {**ran, "links": links} if links else self.component("responses", self.responses, name, ran)
         responses: dict[str, Any] = {"200": success}
         if held is not None:
             responses[str(views.HELD_STATUS)] = self.held(held)
@@ -340,6 +359,8 @@ class _Builder:
             "description": "Accepted: held for approval in HQ. Nothing has happened yet.",
             "content": _json_content(schema),
         }
+        if links := self.links(answering=kind):
+            response["links"] = links
         return self.component("responses", self.responses, f"{name}{phrase}", response)
 
     def refusal(self, status: int, codes: list[str]) -> str:
@@ -408,6 +429,61 @@ class _Builder:
             raise OpenAPIError(f"Two {section} claim the component name {name!r}.")
         return {"$ref": f"#/components/{section}/{name}"}
 
+    def links(
+        self, *, resource: str = "", listed: bool = False, query: Iterable[str] = (), answering: Any = None
+    ) -> dict[str, Any]:
+        """Each request an answer leads to, as Link Objects (OpenAPI 3.2.0,
+        section 4.20) keyed by the operation they call.
+
+        Derived from what the registries say of the answer: an answer typed
+        as ``READ_BY`` names leads to the read of what it carries; a page of
+        ``resource`` (``listed``, its query parameters ``query``) leads to the
+        page after it, with the same query, and its first item to that item's
+        read; a page or a record leads to each command on ``resource`` that
+        takes it as its target, with its ``updated_at`` where the command
+        checks for a stale write. A value is a runtime expression (section
+        4.20.3), one in a request body embedded in its string in braces.
+        """
+
+        found: dict[str, Any] = {}
+        members = set(get_args(answering) or (answering,))
+        for kind, (read, pointer) in READ_BY.items():
+            if kind in members and (spec := self.resource_specs.get(read)) and spec.detail_handler is not None:
+                found[_read_id(read)] = _link(_read_id(read), {"path.identifier": f"$response.body#/data{pointer}"})
+        if not resource:
+            return found
+        spec = self.resource_specs[resource]
+        query = tuple(query)
+        if listed and PAGE_FIELD in query:
+            parameters = {f"query.{name}": f"$request.query.{name}" for name in query if name != PAGE_FIELD}
+            found[_list_id(resource)] = _link(
+                _list_id(resource), {f"query.{PAGE_FIELD}": f"$response.body#/data/next/{PAGE_FIELD}", **parameters}
+            )
+        kind = spec.row_type if listed else spec.record_type
+        carried = (spec.list_fields if listed else ()) or (typed_keys(kind) if kind is not None else ())
+        identifier = spec.identifier
+        if spec.detail_handler is None or identifier not in carried:
+            return found
+        at = "/data/items/0" if listed else "/data"
+        if listed:
+            found[_read_id(resource)] = _link(
+                _read_id(resource), {"path.identifier": f"$response.body#{at}/{identifier}"}
+            )
+        registry = capability_registry()
+        for command in self.capabilities:
+            capability = registry[command["name"]]
+            if capability.subject_resource != resource or not capability.target_kind:
+                continue
+            body = {"target": f"{{$response.body#{at}/{identifier}}}"}
+            if takes_stale_write_token(capability.handler) and UPDATED_AT in carried:
+                body[STALE_WRITE_KEYWORD] = f"{{$response.body#{at}/{UPDATED_AT}}}"
+            link = _link(_capability_id(capability.name), {}, body)
+            if capability.target_query:
+                said = " and ".join(f"`{field}` is `{value}`" for field, value in capability.target_query)
+                link["description"] = f"Only for a record whose {said}."
+            found[_capability_id(capability.name)] = link
+        return found
+
     def parameter(self, name: str, value: dict[str, Any]) -> dict[str, Any]:
         return self.component("parameters", self.parameters, name, value)
 
@@ -429,7 +505,8 @@ class _Builder:
         # What a call needs: the view's own access, or the one capability or
         # resource a concrete operation serves.
         scopes = fields.pop("scopes", view.__hq_requires__.scopes)
-        operation_id += f"V{VERSION}"
+        links = fields.pop("links", {})
+        operation_id = _versioned(operation_id)
         if operation_id in self.operation_ids:
             raise OpenAPIError(f"Operation id {operation_id!r} is derived twice.")
         self.operation_ids.add(operation_id)
@@ -447,7 +524,7 @@ class _Builder:
             **({"tags": [tag]} if tag else {}),
             **fields,
             "security": [{BEARER: list(scopes)}],
-            "responses": self._responses(view, codes, answer, held),
+            "responses": self._responses(view, codes, answer, held, links),
         }
         self.paths.setdefault(path, {})[method.lower()] = operation
 
@@ -557,6 +634,7 @@ class _Builder:
                 view,
                 _camel(name),
                 self.tags.of_capability(name),
+                links=self.links(answering=answer_type(registry[name])),
                 summary=spec["label"],
                 description=spec["summary"],
                 parameters=([{"$ref": "#/components/parameters/IdempotencyKey"}] if spec["effect"].changes else []),
@@ -599,11 +677,12 @@ class _Builder:
             name = spec["name"]
             # The machine API reads a list's paging from the query string, beside its filters.
             parts = [listing["query_schema"], *([listing["paging"]] if "paging" in listing else [])]
+            query = [field for part in parts for field in part.get("properties", {})]
             self.operation(
                 template.replace("{name}", name),
                 method,
                 view,
-                f"list{_pascal(name)}",
+                _list_stem(name),
                 self.tags.of_resource(name),
                 # Titled as a read of one is, so it never reads as its section's
                 # name or as a bare verb.
@@ -617,6 +696,7 @@ class _Builder:
                 ]
                 + [_FIELDS],
                 answer=self.page_of(self.resource_specs[name].row_type),
+                links=self.links(resource=name, listed=True, query=[*query, RESERVED_QUERY_FIELD]),
                 scopes=spec["required_capabilities"],
                 **{"x-hq-resource": name},
             )
@@ -706,7 +786,7 @@ class _Builder:
                 template.replace("{name}", name),
                 method,
                 view,
-                f"get{_pascal(name)}",
+                _read_stem(name),
                 self.tags.of_resource(name),
                 summary=f"{spec['label']}: one by {field.replace('_', ' ')}",
                 description=(
@@ -727,6 +807,7 @@ class _Builder:
                     _FIELDS,
                 ],
                 answer=self.record_of(self.resource_specs[name].record_type),
+                links=self.links(resource=name),
                 scopes=spec["required_capabilities"],
                 **{"x-hq-resource": name, "x-hq-identifier": field},
             )
@@ -739,6 +820,45 @@ BEARER = "bearer"
 IDEMPOTENCY_KEY = "IdempotencyKey"
 # Where a capability operation says its effect, which the document's introduction explains.
 EFFECT_EXTENSION = "x-hq-effect"
+
+
+# The answers that carry what a read finds, each by that read's resource and
+# where in the answer's data its identifier stands.
+READ_BY: dict[Any, tuple[str, str]] = {AwaitingApproval: (HELD, "/approval/id"), RunAsked: (RUNS, "/operation/id")}
+UPDATED_AT = "updated_at"
+
+
+def _versioned(stem: str) -> str:
+    return f"{stem}V{VERSION}"
+
+
+def _list_stem(resource: str) -> str:
+    return f"list{_pascal(resource)}"
+
+
+def _read_stem(resource: str) -> str:
+    return f"get{_pascal(resource)}"
+
+
+def _list_id(resource: str) -> str:
+    return _versioned(_list_stem(resource))
+
+
+def _read_id(resource: str) -> str:
+    return _versioned(_read_stem(resource))
+
+
+def _capability_id(capability: str) -> str:
+    return _versioned(_camel(capability))
+
+
+def _link(operation_id: str, parameters: dict[str, str], body: dict[str, str] | None = None) -> dict[str, Any]:
+    link: dict[str, Any] = {"operationId": operation_id}
+    if parameters:
+        link["parameters"] = parameters
+    if body:
+        link["requestBody"] = body
+    return link
 
 
 EXPANSIONS: dict[str, Callable[[_Builder, str, str, Any], None]] = {

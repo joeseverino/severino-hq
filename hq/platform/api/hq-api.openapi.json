@@ -278,97 +278,11 @@
       }
     },
     "responses": {
-      "ActionItemRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/ActionItemRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
       "AddressLookedUpSuccess": {
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/AddressLookedUp"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "AgendaItemPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/AgendaItem"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/AddressLookedUpSuccess"
             }
           }
         },
@@ -398,21 +312,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ApprovalWithdrawn"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ApprovalWithdrawnSuccess"
             }
           }
         },
@@ -422,81 +322,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/AskedAnswer"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "AssetRecordSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/AssetRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "AssetRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/AssetRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/AskedAnswerSuccess"
             }
           }
         },
@@ -506,21 +332,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/AssetSaved"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/AssetSavedSuccess"
             }
           }
         },
@@ -548,39 +360,21 @@
             }
           }
         },
-        "description": "Accepted: held for approval in HQ. Nothing has happened yet."
+        "description": "Accepted: held for approval in HQ. Nothing has happened yet.",
+        "links": {
+          "getApprovalsV2": {
+            "operationId": "getApprovalsV2",
+            "parameters": {
+              "path.identifier": "$response.body#/data/approval/id"
+            }
+          }
+        }
       },
       "BreakdownPageSuccess": {
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/Breakdown"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/BreakdownPageSuccess"
             }
           }
         },
@@ -590,21 +384,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/CapabilityRequestCatalog"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/CapabilityRequestCatalogSuccess"
             }
           }
         },
@@ -669,21 +449,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/CommandAnswer"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/CommandAnswerSuccess"
             }
           }
         },
@@ -693,21 +459,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ConnectionCatalog"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ConnectionCatalogSuccess"
             }
           }
         },
@@ -717,57 +469,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ConnectionStandingRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ConnectionStandingRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/ConnectionStandingRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ConnectionStandingRecordSuccess"
             }
           }
         },
@@ -777,21 +479,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ContactDeleted"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ContactDeletedSuccess"
             }
           }
         },
@@ -801,81 +489,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ContactReviewed"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ContactSubmissionRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/ContactSubmissionRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ContactSubmissionRowSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ContactSubmissionRow"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ContactReviewedSuccess"
             }
           }
         },
@@ -885,117 +499,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ContainerRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ContainerRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/ContainerRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ContentRecordSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ContentRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ContentRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/ContentRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ContainerRecordSuccess"
             }
           }
         },
@@ -1005,21 +509,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ContentSaved"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ContentSavedSuccess"
             }
           }
         },
@@ -1029,21 +519,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ControllerSweepRequested"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ControllerSweepRequestedSuccess"
             }
           }
         },
@@ -1053,57 +529,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/CredentialRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "CredentialRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/CredentialRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/CredentialRecordSuccess"
             }
           }
         },
@@ -1113,21 +539,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/DashboardMachineSet"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/DashboardMachineSetSuccess"
             }
           }
         },
@@ -1137,21 +549,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/DashboardSettingsSaved"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/DashboardSettingsSavedSuccess"
             }
           }
         },
@@ -1161,81 +559,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/DependencyUpdatesSet"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "DocumentationItemSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/DocumentationItem"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "DocumentationRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/DocumentationRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/DependencyUpdatesSetSuccess"
             }
           }
         },
@@ -1245,21 +569,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/DocumentationSaved"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/DocumentationSavedSuccess"
             }
           }
         },
@@ -1269,21 +579,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/DocumentationSynced"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/DocumentationSyncedSuccess"
             }
           }
         },
@@ -1293,57 +589,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/DomainRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "DomainRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/DomainRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/DomainRecordSuccess"
             }
           }
         },
@@ -1353,45 +599,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/EmptyGroupsRemoved"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "EntryRecordSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/EntryRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/EmptyGroupsRemovedSuccess"
             }
           }
         },
@@ -1401,21 +609,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/EntrySaved"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/EntrySavedSuccess"
             }
           }
         },
@@ -1425,69 +619,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/EstateFigure"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ExpenseRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/ExpenseRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/EstateFigurePageSuccess"
             }
           }
         },
@@ -1497,21 +629,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ExpenseSaved"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ExpenseSavedSuccess"
             }
           }
         },
@@ -1521,21 +639,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/Findings"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/FindingsSuccess"
             }
           }
         },
@@ -1560,21 +664,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/HeldRequestRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/HeldRequestRecordSuccess"
             }
           }
         },
@@ -1584,33 +674,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/HopRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/HopRowPageSuccess"
             }
           }
         },
@@ -1620,21 +684,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/HqImported"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/HqImportedSuccess"
             }
           }
         },
@@ -1644,21 +694,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/HqSynced"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/HqSyncedSuccess"
             }
           }
         },
@@ -1688,21 +724,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ItemsActedOn"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ItemsActedOnSuccess"
             }
           }
         },
@@ -1712,57 +734,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/MachineRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "MachineRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/MachineRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/MachineRecordSuccess"
             }
           }
         },
@@ -1772,57 +744,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ManagedResourceRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ManagedResourceRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/ManagedResourceRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ManagedResourceRecordSuccess"
             }
           }
         },
@@ -1832,33 +754,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/Match"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/MatchPageSuccess"
             }
           }
         },
@@ -1878,21 +774,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/NameLookedUp"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/NameLookedUpSuccess"
             }
           }
         },
@@ -1912,21 +794,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ObservedAccepted"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ObservedAcceptedSuccess"
             }
           }
         },
@@ -1936,18 +804,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "properties": {
-                "openapi": {
-                  "pattern": "^3\\.2\\.\\d+$",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "openapi",
-                "info",
-                "paths"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/OpenapiSuccess"
             }
           }
         },
@@ -1957,30 +814,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/OperationAsked",
-                      "title": "Operation asked"
-                    },
-                    {
-                      "$ref": "#/components/schemas/DeclarationForgotten",
-                      "title": "Declaration forgotten"
-                    }
-                  ]
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/OperationAskedDeclarationForgottenSuccess"
             }
           }
         },
@@ -1990,21 +824,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/OperationAsked"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/OperationAskedSuccess"
             }
           }
         },
@@ -2014,21 +834,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/PanelsRefreshRequested"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/PanelsRefreshRequestedSuccess"
             }
           }
         },
@@ -2038,21 +844,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/PathRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/PathRecordSuccess"
             }
           }
         },
@@ -2062,21 +854,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/PinToggled"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/PinToggledSuccess"
             }
           }
         },
@@ -2086,21 +864,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/PinsChanged"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/PinsChangedSuccess"
             }
           }
         },
@@ -2110,57 +874,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/PlaybookRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "PlaybookRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/PlaybookRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/PlaybookRecordSuccess"
             }
           }
         },
@@ -2170,33 +884,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/Problem"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ProblemPageSuccess"
             }
           }
         },
@@ -2206,81 +894,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ProfileReadRequested"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ProjectRecordSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ProjectRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ProjectRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/ProjectRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ProfileReadRequestedSuccess"
             }
           }
         },
@@ -2290,21 +904,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ProjectSaved"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ProjectSavedSuccess"
             }
           }
         },
@@ -2339,93 +939,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ReadingRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ReadingRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/ReadingRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ReceiptRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/ReceiptRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ReadingRecordSuccess"
             }
           }
         },
@@ -2435,21 +949,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ReceiptSaved"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ReceiptSavedSuccess"
             }
           }
         },
@@ -2459,21 +959,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/RecordDeleted"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/RecordDeletedSuccess"
             }
           }
         },
@@ -2483,21 +969,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/RelationshipsRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/RelationshipsRecordSuccess"
             }
           }
         },
@@ -2517,21 +989,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ResourceCatalog"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ResourceCatalogSuccess"
             }
           }
         },
@@ -2541,21 +999,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ResourceCollection"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ResourceCollectionSuccess"
             }
           }
         },
@@ -2585,21 +1029,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ResourceRecordAnswer"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ResourceRecordAnswerSuccess"
             }
           }
         },
@@ -2609,21 +1039,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ResourceSaved"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ResourceSavedSuccess"
             }
           }
         },
@@ -2633,21 +1049,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/RootData"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/RootDataSuccess"
             }
           }
         },
@@ -2657,93 +1059,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/RunRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "RunRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/RunRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ScanResultPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/ScanResult"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/RunRecordSuccess"
             }
           }
         },
@@ -2753,21 +1069,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ScanResult"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ScanResultSuccess"
             }
           }
         },
@@ -2777,21 +1079,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ServiceAdopted"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ServiceAdoptedSuccess"
             }
           }
         },
@@ -2801,57 +1089,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ServiceRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "ServiceRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/ServiceRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ServiceRecordSuccess"
             }
           }
         },
@@ -2871,21 +1109,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/SourcesChosen"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/SourcesChosenSuccess"
             }
           }
         },
@@ -2895,33 +1119,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/Tailnet"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/TailnetPageSuccess"
             }
           }
         },
@@ -2941,21 +1139,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ThemeSet"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ThemeSetSuccess"
             }
           }
         },
@@ -2985,21 +1169,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/TopologyAnswer"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/TopologyAnswerSuccess"
             }
           }
         },
@@ -3068,57 +1238,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/UpgradeRecord"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "UpgradeRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ResourceCollection"
-                    }
-                  ],
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "$ref": "#/components/schemas/UpgradeRow"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/UpgradeRecordSuccess"
             }
           }
         },
@@ -3128,21 +1248,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/VisitRefreshed"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/VisitRefreshedSuccess"
             }
           }
         },
@@ -3152,21 +1258,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/WorkRequested"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/WorkRequestedSuccess"
             }
           }
         },
@@ -3176,21 +1268,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/ZoneAdopted"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/ZoneAdoptedSuccess"
             }
           }
         },
@@ -3435,6 +1513,36 @@
         },
         "type": "object"
       },
+      "ActionItemRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ActionItemRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ActionItemSetAsideRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -3596,6 +1704,23 @@
         ],
         "type": "object"
       },
+      "AddressLookedUpSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AddressLookedUp"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "AdminNotes": {
         "description": "The notes kept on it, for HQ only. Empty for none.",
         "type": "string"
@@ -3677,6 +1802,36 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "AgendaItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/AgendaItem"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "AgendaLimit": {
@@ -3902,6 +2057,23 @@
         ],
         "type": "object"
       },
+      "ApprovalWithdrawnSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ApprovalWithdrawn"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "AsRead": {
         "description": "An object in its source's own shape, passed on as HQ read it: its keys are the source's.",
         "type": "object"
@@ -3924,6 +2096,23 @@
           "standing",
           "status_url",
           "message"
+        ],
+        "type": "object"
+      },
+      "AskedAnswerSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AskedAnswer"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -4235,6 +2424,23 @@
         },
         "type": "object"
       },
+      "AssetRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AssetRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "AssetRow": {
         "additionalProperties": false,
         "description": "One asset: what it is, what it cost and what it is to the business.",
@@ -4287,6 +2493,36 @@
         },
         "type": "object"
       },
+      "AssetRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/AssetRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "AssetSaved": {
         "additionalProperties": false,
         "description": "The asset as saved, and whether the call created it.",
@@ -4305,6 +2541,23 @@
           "created",
           "asset",
           "message"
+        ],
+        "type": "object"
+      },
+      "AssetSavedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AssetSaved"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -4607,6 +2860,36 @@
             "type": "integer"
           }
         },
+        "type": "object"
+      },
+      "BreakdownPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/Breakdown"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "BusinessPurpose": {
@@ -5201,6 +3484,23 @@
         ],
         "type": "object"
       },
+      "CapabilityRequestCatalogSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CapabilityRequestCatalog"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "CapabilitySummary": {
         "additionalProperties": false,
         "description": "One command as an index names it: what it does, without its schema.",
@@ -5667,6 +3967,23 @@
         "description": "What the command answers, in the shape its capability's own route in this document gives.",
         "type": "object"
       },
+      "CommandAnswerSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CommandAnswer"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "CompletedAt": {
         "anyOf": [
           {
@@ -5737,6 +4054,23 @@
         "required": [
           "schema_version",
           "connections"
+        ],
+        "type": "object"
+      },
+      "ConnectionCatalogSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ConnectionCatalog"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -6083,6 +4417,23 @@
         },
         "type": "object"
       },
+      "ConnectionStandingRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ConnectionStandingRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ConnectionStandingRow": {
         "additionalProperties": false,
         "properties": {
@@ -6142,6 +4493,36 @@
         },
         "type": "object"
       },
+      "ConnectionStandingRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectionStandingRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ContactDeleted": {
         "additionalProperties": false,
         "description": "A message the contact inbox was asked to delete.",
@@ -6183,6 +4564,23 @@
         ],
         "type": "object"
       },
+      "ContactDeletedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ContactDeleted"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ContactReviewed": {
         "additionalProperties": false,
         "description": "A message's review, handed to the contact inbox to keep.",
@@ -6209,6 +4607,23 @@
           "status",
           "queued",
           "message"
+        ],
+        "type": "object"
+      },
+      "ContactReviewedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ContactReviewed"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -6401,6 +4816,53 @@
         },
         "type": "object"
       },
+      "ContactSubmissionRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ContactSubmissionRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ContactSubmissionRowSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ContactSubmissionRow"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ContainerRecord": {
         "additionalProperties": false,
         "description": "One running container whole: its image and standing, how it runs and what it uses.",
@@ -6495,6 +4957,23 @@
         },
         "type": "object"
       },
+      "ContainerRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ContainerRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ContainerRow": {
         "additionalProperties": false,
         "properties": {
@@ -6533,6 +5012,36 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ContainerRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ContainerRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "ContentCreateRequest": {
@@ -6770,6 +5279,23 @@
         },
         "type": "object"
       },
+      "ContentRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ContentRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ContentRow": {
         "additionalProperties": false,
         "description": "One writeup, video or page, published or not.",
@@ -6811,6 +5337,36 @@
         },
         "type": "object"
       },
+      "ContentRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ContentRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ContentSaved": {
         "additionalProperties": false,
         "description": "The content item as saved, and whether the call created it.",
@@ -6829,6 +5385,23 @@
           "created",
           "content",
           "message"
+        ],
+        "type": "object"
+      },
+      "ContentSavedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ContentSaved"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -7044,6 +5617,23 @@
         ],
         "type": "object"
       },
+      "ControllerSweepRequestedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ControllerSweepRequested"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "Created": {
         "description": "Whether the call created the record, rather than changing one HQ held.",
         "type": "boolean"
@@ -7141,6 +5731,23 @@
         },
         "type": "object"
       },
+      "CredentialRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CredentialRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "CredentialRow": {
         "additionalProperties": false,
         "properties": {
@@ -7164,6 +5771,36 @@
             "type": "array"
           }
         },
+        "type": "object"
+      },
+      "CredentialRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/CredentialRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "CredentialSightPart": {
@@ -7258,6 +5895,23 @@
         ],
         "type": "object"
       },
+      "DashboardMachineSetSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DashboardMachineSet"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "DashboardPanelsRefreshDueRequest": {
         "$ref": "#/components/schemas/DashboardPanelsRefreshRequest"
       },
@@ -7295,6 +5949,23 @@
         },
         "required": [
           "message"
+        ],
+        "type": "object"
+      },
+      "DashboardSettingsSavedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DashboardSettingsSaved"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -7665,6 +6336,23 @@
         ],
         "type": "object"
       },
+      "DependencyUpdatesSetSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DependencyUpdatesSet"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "DeploymentNotes": {
         "description": "How it is deployed.",
         "type": "string"
@@ -8031,6 +6719,23 @@
         },
         "type": "object"
       },
+      "DocumentationItemSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DocumentationItem"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "DocumentationLinks": {
         "additionalProperties": false,
         "description": "The records a documentation pointer is linked to.",
@@ -8097,6 +6802,36 @@
         },
         "type": "object"
       },
+      "DocumentationRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/DocumentationRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "DocumentationSaved": {
         "additionalProperties": false,
         "description": "The document as saved, and whether the call created it.",
@@ -8115,6 +6850,23 @@
           "created",
           "documentation",
           "message"
+        ],
+        "type": "object"
+      },
+      "DocumentationSavedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DocumentationSaved"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -8199,6 +6951,23 @@
         "required": [
           "stats",
           "message"
+        ],
+        "type": "object"
+      },
+      "DocumentationSyncedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DocumentationSynced"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -8446,6 +7215,23 @@
         },
         "type": "object"
       },
+      "DomainRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DomainRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "DomainRow": {
         "additionalProperties": false,
         "properties": {
@@ -8486,6 +7272,36 @@
         },
         "type": "object"
       },
+      "DomainRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/DomainRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "Effect": {
         "description": "What running a command does, least consequential first.",
         "enum": [
@@ -8523,6 +7339,23 @@
           "applying",
           "message",
           "change"
+        ],
+        "type": "object"
+      },
+      "EmptyGroupsRemovedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EmptyGroupsRemoved"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -8663,6 +7496,23 @@
         },
         "type": "object"
       },
+      "EntryRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EntryRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "EntrySaved": {
         "additionalProperties": false,
         "description": "The calendar entry as saved, and whether the call created it.",
@@ -8681,6 +7531,23 @@
           "created",
           "entry",
           "message"
+        ],
+        "type": "object"
+      },
+      "EntrySavedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EntrySaved"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -8734,6 +7601,36 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "EstateFigurePageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/EstateFigure"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "EvidencePart": {
@@ -9098,6 +7995,36 @@
         },
         "type": "object"
       },
+      "ExpenseRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ExpenseRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ExpenseSaved": {
         "additionalProperties": false,
         "description": "The expense as saved, and whether the call created it.",
@@ -9116,6 +8043,23 @@
           "created",
           "expense",
           "message"
+        ],
+        "type": "object"
+      },
+      "ExpenseSavedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ExpenseSaved"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -9482,6 +8426,23 @@
           "rule",
           "summary",
           "findings"
+        ],
+        "type": "object"
+      },
+      "FindingsSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Findings"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -9856,6 +8817,23 @@
         },
         "type": "object"
       },
+      "HeldRequestRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/HeldRequestRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "HopCheckPart": {
         "additionalProperties": false,
         "properties": {
@@ -9966,6 +8944,36 @@
         },
         "type": "object"
       },
+      "HopRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/HopRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "HopSourcePart": {
         "additionalProperties": false,
         "description": "Where HQ read a hop: a reading, or HQ's own record.",
@@ -10073,6 +9081,23 @@
         ],
         "type": "object"
       },
+      "HqImportedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/HqImported"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "HqSyncRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -10137,6 +9162,23 @@
         },
         "required": [
           "documentation"
+        ],
+        "type": "object"
+      },
+      "HqSyncedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/HqSynced"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -10943,6 +9985,23 @@
         ],
         "type": "object"
       },
+      "ItemsActedOnSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ItemsActedOn"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "JoinedReadingPart": {
         "additionalProperties": false,
         "properties": {
@@ -11330,6 +10389,23 @@
         },
         "type": "object"
       },
+      "MachineRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MachineRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "MachineRow": {
         "additionalProperties": false,
         "properties": {
@@ -11375,6 +10451,36 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "MachineRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/MachineRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "MachineSpec": {
@@ -11537,6 +10643,23 @@
         },
         "type": "object"
       },
+      "ManagedResourceRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ManagedResourceRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ManagedResourceRow": {
         "additionalProperties": false,
         "properties": {
@@ -11574,6 +10697,36 @@
             "type": "boolean"
           }
         },
+        "type": "object"
+      },
+      "ManagedResourceRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ManagedResourceRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "ManagedResourceSpec": {
@@ -11896,6 +11049,36 @@
         },
         "type": "object"
       },
+      "MatchPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/Match"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "MethodNotAllowedRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -12124,6 +11307,23 @@
         ],
         "type": "object"
       },
+      "NameLookedUpSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/NameLookedUp"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "NetworkSpec": {
         "additionalProperties": false,
         "description": "A range of addresses this estate is built on, and what it means.\n\nDeclared, because nothing sweeps a network. HQ learns addresses from the\nthings that answer at them (a container's published port, a device's\ntailnet address) and never learns what range they belong to or what that\nrange implies. An address on the LAN and one on the tailnet are reachable\nby different people, and only the ranges say which is which.",
@@ -12244,6 +11444,23 @@
         ],
         "type": "object"
       },
+      "ObservedAcceptedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ObservedAccepted"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ObservedAt": {
         "description": "When it was last read from its source, an ISO 8601 date-time.",
         "format": "date-time",
@@ -12294,6 +11511,21 @@
         "description": "Its path in the vault. Empty for none.",
         "type": "string"
       },
+      "OpenapiSuccess": {
+        "properties": {
+          "openapi": {
+            "description": "The OpenAPI version the document is written in.",
+            "pattern": "^3\\.2\\.\\d+$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "openapi",
+          "info",
+          "paths"
+        ],
+        "type": "object"
+      },
       "OperationAction": {
         "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `approve-routes`, `run` or `scan`.",
         "type": "string"
@@ -12324,6 +11556,50 @@
           "message",
           "queued",
           "operation"
+        ],
+        "type": "object"
+      },
+      "OperationAskedDeclarationForgottenSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OperationAsked",
+                "title": "Operation asked"
+              },
+              {
+                "$ref": "#/components/schemas/DeclarationForgotten",
+                "title": "Declaration forgotten"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names."
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "OperationAskedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/OperationAsked"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -12800,6 +12076,23 @@
         ],
         "type": "object"
       },
+      "PanelsRefreshRequestedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PanelsRefreshRequested"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "PartOfReading": {
         "additionalProperties": false,
         "description": "The part of a type a sweep could not read, and the permissions it needs.",
@@ -12901,6 +12194,23 @@
             "type": "array"
           }
         },
+        "type": "object"
+      },
+      "PathRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PathRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "PaymentMethod": {
@@ -13094,6 +12404,23 @@
         ],
         "type": "object"
       },
+      "PinToggledSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PinToggled"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "PinsChanged": {
         "additionalProperties": false,
         "description": "Which type of thing the call changed your pins of.",
@@ -13104,6 +12431,23 @@
         },
         "required": [
           "kind"
+        ],
+        "type": "object"
+      },
+      "PinsChangedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PinsChanged"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -13158,6 +12502,23 @@
         },
         "type": "object"
       },
+      "PlaybookRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PlaybookRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "PlaybookRow": {
         "additionalProperties": false,
         "properties": {
@@ -13190,6 +12551,36 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "PlaybookRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/PlaybookRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "PolicyCounts": {
@@ -13618,6 +13009,36 @@
         },
         "type": "object"
       },
+      "ProblemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ProfileReadRequested": {
         "additionalProperties": false,
         "description": "A read of a GitHub profile, asked for now.",
@@ -13641,6 +13062,23 @@
           "status_url",
           "message",
           "login"
+        ],
+        "type": "object"
+      },
+      "ProfileReadRequestedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ProfileReadRequested"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -13968,6 +13406,23 @@
         },
         "type": "object"
       },
+      "ProjectRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ProjectRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ProjectRefreshRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -14054,6 +13509,36 @@
         },
         "type": "object"
       },
+      "ProjectRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ProjectRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ProjectSaved": {
         "additionalProperties": false,
         "description": "The project as saved, and whether the call created it.",
@@ -14072,6 +13557,23 @@
           "created",
           "project",
           "message"
+        ],
+        "type": "object"
+      },
+      "ProjectSavedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ProjectSaved"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -14670,6 +14172,23 @@
         },
         "type": "object"
       },
+      "ReadingRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReadingRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ReadingRow": {
         "additionalProperties": false,
         "properties": {
@@ -14708,6 +14227,36 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ReadingRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ReadingRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "ReceiptAsset": {
@@ -14838,6 +14387,36 @@
         },
         "type": "object"
       },
+      "ReceiptRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ReceiptRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ReceiptSaved": {
         "additionalProperties": false,
         "description": "The receipt as saved, and whether the call created it.",
@@ -14856,6 +14435,23 @@
           "created",
           "receipt",
           "message"
+        ],
+        "type": "object"
+      },
+      "ReceiptSavedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReceiptSaved"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -14951,6 +14547,23 @@
         "required": [
           "deleted",
           "message"
+        ],
+        "type": "object"
+      },
+      "RecordDeletedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RecordDeleted"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -15085,6 +14698,23 @@
             "type": "array"
           }
         },
+        "type": "object"
+      },
+      "RelationshipsRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RelationshipsRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "ReleasePart": {
@@ -15233,6 +14863,23 @@
         ],
         "type": "object"
       },
+      "ResourceCatalogSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ResourceCatalog"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ResourceCollection": {
         "description": "One page of a list: every list holds these, and may hold metadata of its own.",
         "properties": {
@@ -15263,6 +14910,23 @@
           "next",
           "items",
           "count"
+        ],
+        "type": "object"
+      },
+      "ResourceCollectionSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ResourceCollection"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -15430,6 +15094,23 @@
         "description": "One record, in the shape its resource's own route in this document gives.",
         "type": "object"
       },
+      "ResourceRecordAnswerSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ResourceRecordAnswer"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ResourceSaved": {
         "additionalProperties": false,
         "description": "A managed record as saved, and the reconcile queued to apply it.",
@@ -15452,6 +15133,23 @@
           "resource",
           "applying",
           "message"
+        ],
+        "type": "object"
+      },
+      "ResourceSavedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ResourceSaved"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -15530,6 +15228,23 @@
           "actor",
           "granted",
           "links"
+        ],
+        "type": "object"
+      },
+      "RootDataSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RootData"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -15615,6 +15330,52 @@
         "pattern": "^[A-Za-z0-9]{1,16}$",
         "type": "string"
       },
+      "RunAsked": {
+        "additionalProperties": false,
+        "description": "A playbook's run as asking for it or cancelling it answers: the run\nthat `runs` reads by its `operation.id`.",
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/AskedMessage"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/OperationItem"
+          },
+          "queued": {
+            "$ref": "#/components/schemas/Queued"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "status_url": {
+            "$ref": "#/components/schemas/AskedStatusUrl"
+          }
+        },
+        "required": [
+          "standing",
+          "status_url",
+          "message",
+          "queued",
+          "operation"
+        ],
+        "type": "object"
+      },
+      "RunAskedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RunAsked"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "RunRecord": {
         "additionalProperties": false,
         "description": "One run whole: its row, the worker's lease while it holds it, and each task's outcome.",
@@ -15687,6 +15448,23 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "RunRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RunRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "RunRow": {
@@ -15781,6 +15559,36 @@
         },
         "type": "object"
       },
+      "RunRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/RunRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "RunTask": {
         "additionalProperties": false,
         "description": "One task's outcome on one machine, as the worker reported it.",
@@ -15831,6 +15639,7 @@
       },
       "ScanResult": {
         "additionalProperties": false,
+        "description": "One scan of the playbooks' repository: the commit it read and what it found there.",
         "properties": {
           "adopted": {
             "description": "Whether every playbook it holds is adopted as it reads it, or rejected, so adopting it does nothing.",
@@ -15889,6 +15698,53 @@
             "type": "array"
           }
         },
+        "type": "object"
+      },
+      "ScanResultPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ScanResult"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ScanResultSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ScanResult"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "SchemaVersion": {
@@ -16072,6 +15928,23 @@
         ],
         "type": "object"
       },
+      "ServiceAdoptedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ServiceAdopted"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ServiceItem": {
         "additionalProperties": false,
         "description": "One service name whole, each facet with the records behind it.",
@@ -16121,6 +15994,23 @@
         },
         "type": "object"
       },
+      "ServiceRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ServiceRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ServiceRow": {
         "additionalProperties": false,
         "properties": {
@@ -16166,6 +16056,36 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ServiceRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ServiceRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "ServiceUnavailableRefusal": {
@@ -16366,6 +16286,23 @@
         },
         "required": [
           "choices"
+        ],
+        "type": "object"
+      },
+      "SourcesChosenSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SourcesChosen"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -16934,6 +16871,36 @@
         ],
         "type": "object"
       },
+      "TailnetPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/Tailnet"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "TailnetPolicyRemoveEmptyGroupsRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -17112,6 +17079,23 @@
         ],
         "type": "object"
       },
+      "ThemeSetSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ThemeSet"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "TooManyRequestsRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -17215,6 +17199,23 @@
           "lens",
           "trace",
           "summary"
+        ],
+        "type": "object"
+      },
+      "TopologyAnswerSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TopologyAnswer"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -17985,6 +17986,23 @@
         },
         "type": "object"
       },
+      "UpgradeRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UpgradeRecord"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "UpgradeRow": {
         "additionalProperties": false,
         "properties": {
@@ -18020,6 +18038,36 @@
             "type": "boolean"
           }
         },
+        "type": "object"
+      },
+      "UpgradeRowPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/UpgradeRow"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "UpgradeStepPart": {
@@ -18209,6 +18257,23 @@
         ],
         "type": "object"
       },
+      "VisitRefreshedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/VisitRefreshed"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "WarrantyDate": {
         "anyOf": [
           {
@@ -18265,6 +18330,23 @@
           "status_url",
           "message",
           "started"
+        ],
+        "type": "object"
+      },
+      "WorkRequestedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/WorkRequested"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -18359,6 +18441,23 @@
           "resource",
           "adopted",
           "message"
+        ],
+        "type": "object"
+      },
+      "ZoneAdoptedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ZoneAdopted"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -19114,7 +19213,22 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationAskedSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAskedSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getRunsV2": {
+                "operationId": "getRunsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/operation/id"
+                }
+              }
+            }
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -23834,7 +23948,27 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ActionItemRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionItemRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "listActionItemsV2": {
+                "operationId": "listActionItemsV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.query": "$request.query.query",
+                  "query.source": "$request.query.source",
+                  "query.status": "$request.query.status"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -24073,7 +24207,46 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/AssetRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "assetDeleteV2": {
+                "operationId": "assetDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/slug}"
+                }
+              },
+              "assetUpdateV2": {
+                "operationId": "assetUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/slug}"
+                }
+              },
+              "getAssetsV2": {
+                "operationId": "getAssetsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/slug"
+                }
+              },
+              "listAssetsV2": {
+                "operationId": "listAssetsV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.query": "$request.query.query",
+                  "query.status": "$request.query.status"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -24128,7 +24301,30 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/AssetRecordSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetRecordSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "assetDeleteV2": {
+                "operationId": "assetDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/slug}"
+                }
+              },
+              "assetUpdateV2": {
+                "operationId": "assetUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/slug}"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -24221,7 +24417,26 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/AgendaItemPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgendaItemPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "listCalendarV2": {
+                "operationId": "listCalendarV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.days": "$request.query.days",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.start": "$request.query.start"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -24276,7 +24491,30 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/EntryRecordSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntryRecordSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "calendarEntryDeleteV2": {
+                "operationId": "calendarEntryDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/uid}"
+                }
+              },
+              "calendarEntryUpdateV2": {
+                "operationId": "calendarEntryUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/uid}"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -24329,7 +24567,22 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ConnectionStandingRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionStandingRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getConnectionsV2": {
+                "operationId": "getConnectionsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/connection_ref"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -24481,7 +24734,44 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ContactSubmissionRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactSubmissionRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "contactSubmissionDeleteV2": {
+                "operationId": "contactSubmissionDeleteV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/id}"
+                }
+              },
+              "contactSubmissionReviewV2": {
+                "operationId": "contactSubmissionReviewV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/id}"
+                }
+              },
+              "getContactSubmissionsV2": {
+                "operationId": "getContactSubmissionsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/id"
+                }
+              },
+              "listContactSubmissionsV2": {
+                "operationId": "listContactSubmissionsV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.query": "$request.query.query",
+                  "query.status": "$request.query.status"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -24536,7 +24826,28 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ContactSubmissionRowSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactSubmissionRowSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "contactSubmissionDeleteV2": {
+                "operationId": "contactSubmissionDeleteV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/id}"
+                }
+              },
+              "contactSubmissionReviewV2": {
+                "operationId": "contactSubmissionReviewV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/id}"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -24595,7 +24906,30 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ContainerRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContainerRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getContainersV2": {
+                "operationId": "getContainersV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/address"
+                }
+              },
+              "listContainersV2": {
+                "operationId": "listContainersV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -24736,7 +25070,46 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ContentRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "contentDeleteV2": {
+                "operationId": "contentDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/slug}"
+                }
+              },
+              "contentUpdateV2": {
+                "operationId": "contentUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/slug}"
+                }
+              },
+              "getContentV2": {
+                "operationId": "getContentV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/slug"
+                }
+              },
+              "listContentV2": {
+                "operationId": "listContentV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.query": "$request.query.query",
+                  "query.status": "$request.query.status"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -24791,7 +25164,30 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ContentRecordSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentRecordSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "contentDeleteV2": {
+                "operationId": "contentDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/slug}"
+                }
+              },
+              "contentUpdateV2": {
+                "operationId": "contentUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/slug}"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -24844,7 +25240,22 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/CredentialRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getCredentialsV2": {
+                "operationId": "getCredentialsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/provider"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -24986,7 +25397,46 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/DocumentationRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentationRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "documentationDeleteV2": {
+                "operationId": "documentationDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/doc_id}"
+                }
+              },
+              "documentationUpdateV2": {
+                "operationId": "documentationUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/doc_id}"
+                }
+              },
+              "getDocumentationV2": {
+                "operationId": "getDocumentationV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/doc_id"
+                }
+              },
+              "listDocumentationV2": {
+                "operationId": "listDocumentationV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.query": "$request.query.query",
+                  "query.status": "$request.query.status"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -25041,7 +25491,30 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/DocumentationItemSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentationItemSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "documentationDeleteV2": {
+                "operationId": "documentationDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/doc_id}"
+                }
+              },
+              "documentationUpdateV2": {
+                "operationId": "documentationUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/doc_id}"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -25100,7 +25573,30 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/DomainRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getDomainsV2": {
+                "operationId": "getDomainsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/name"
+                }
+              },
+              "listDomainsV2": {
+                "operationId": "listDomainsV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -25320,7 +25816,26 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ExpenseRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpenseRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "listExpensesV2": {
+                "operationId": "listExpensesV2",
+                "parameters": {
+                  "query.category": "$request.query.category",
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.year": "$request.query.year"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -25490,7 +26005,112 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ManagedResourceRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedResourceRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "certificateRenewV2": {
+                "description": "Only for a record whose `kind` is `tls.certificate`.",
+                "operationId": "certificateRenewV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
+              "dashboardMachineSelectV2": {
+                "description": "Only for a record whose `kind` is `machine`.",
+                "operationId": "dashboardMachineSelectV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
+              "getInfrastructureV2": {
+                "operationId": "getInfrastructureV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/key"
+                }
+              },
+              "infrastructureResourceAcceptObservedV2": {
+                "operationId": "infrastructureResourceAcceptObservedV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
+              "infrastructureResourceReconcileV2": {
+                "operationId": "infrastructureResourceReconcileV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
+              "infrastructureResourceRemoveV2": {
+                "operationId": "infrastructureResourceRemoveV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
+              "infrastructureResourceRestartV2": {
+                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "operationId": "infrastructureResourceRestartV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
+              "infrastructureResourceStartV2": {
+                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "operationId": "infrastructureResourceStartV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
+              "infrastructureResourceStopV2": {
+                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "operationId": "infrastructureResourceStopV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
+              "infrastructureResourceUpdateV2": {
+                "operationId": "infrastructureResourceUpdateV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
+              "listInfrastructureV2": {
+                "operationId": "listInfrastructureV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.kind": "$request.query.kind",
+                  "query.kinds": "$request.query.kinds",
+                  "query.limit": "$request.query.limit"
+                }
+              },
+              "tailnetPolicyRemoveEmptyGroupsV2": {
+                "description": "Only for a record whose `kind` is `tailscale.policy`.",
+                "operationId": "tailnetPolicyRemoveEmptyGroupsV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
+              "tailnetReachAllowV2": {
+                "description": "Only for a record whose `kind` is `tls.certificate`.",
+                "operationId": "tailnetReachAllowV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
+              "tailnetRoutesApproveV2": {
+                "description": "Only for a record whose `kind` is `tailscale.device`.",
+                "operationId": "tailnetRoutesApproveV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -25604,7 +26224,30 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/MachineRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getMachinesV2": {
+                "operationId": "getMachinesV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/name"
+                }
+              },
+              "listMachinesV2": {
+                "operationId": "listMachinesV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -25712,7 +26355,22 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ScanResultPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanResultPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getPlaybookScansV2": {
+                "operationId": "getPlaybookScansV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/id"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -25820,7 +26478,22 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/PlaybookRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybookRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getPlaybooksV2": {
+                "operationId": "getPlaybooksV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/playbook"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -25983,7 +26656,60 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ProjectRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getProjectsV2": {
+                "operationId": "getProjectsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/slug"
+                }
+              },
+              "listProjectsV2": {
+                "operationId": "listProjectsV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.query": "$request.query.query",
+                  "query.status": "$request.query.status",
+                  "query.updates": "$request.query.updates"
+                }
+              },
+              "projectDeleteV2": {
+                "operationId": "projectDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/slug}"
+                }
+              },
+              "projectDependencyUpdatesSetV2": {
+                "operationId": "projectDependencyUpdatesSetV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/slug}"
+                }
+              },
+              "projectRefreshV2": {
+                "operationId": "projectRefreshV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/slug}"
+                }
+              },
+              "projectUpdateV2": {
+                "operationId": "projectUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/slug}"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -26038,7 +26764,43 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ProjectRecordSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRecordSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "projectDeleteV2": {
+                "operationId": "projectDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/slug}"
+                }
+              },
+              "projectDependencyUpdatesSetV2": {
+                "operationId": "projectDependencyUpdatesSetV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/slug}"
+                }
+              },
+              "projectRefreshV2": {
+                "operationId": "projectRefreshV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/slug}"
+                }
+              },
+              "projectUpdateV2": {
+                "operationId": "projectUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/slug}"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -26132,7 +26894,31 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ReadingRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getReadingsV2": {
+                "operationId": "getReadingsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/kind"
+                }
+              },
+              "listReadingsV2": {
+                "operationId": "listReadingsV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.provider": "$request.query.provider"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -26258,7 +27044,25 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ReceiptRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "listReceiptsV2": {
+                "operationId": "listReceiptsV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.unmatched_only": "$request.query.unmatched_only"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -26514,7 +27318,34 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/RunRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getRunsV2": {
+                "operationId": "getRunsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/operation_id"
+                }
+              },
+              "listRunsV2": {
+                "operationId": "listRunsV2",
+                "parameters": {
+                  "query.correlation": "$request.query.correlation",
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.machine": "$request.query.machine",
+                  "query.playbook": "$request.query.playbook",
+                  "query.state": "$request.query.state"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -26746,7 +27577,22 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ServiceRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getServicesV2": {
+                "operationId": "getServicesV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/hostname"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -26912,7 +27758,30 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/UpgradeRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "links": {
+              "getUpgradesV2": {
+                "operationId": "getUpgradesV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/address"
+                }
+              },
+              "listUpgradesV2": {
+                "operationId": "listUpgradesV2",
+                "parameters": {
+                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"

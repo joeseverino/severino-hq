@@ -72,6 +72,8 @@ class ScanChange(TypedDict):
 
 
 class ScanResult(TypedDict):
+    """One scan of the playbooks' repository: the commit it read and what it found there."""
+
     id: Annotated[int, Describe("The scan result's id.")]
     revision: Annotated[str, Describe("The commit it read, by its full id.")]
     branch: Annotated[str, Describe("The branch that commit is on.")]
