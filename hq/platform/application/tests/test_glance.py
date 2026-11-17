@@ -432,18 +432,20 @@ class DashboardGlanceTests(TestCase):
         self.assertFalse(DashboardMachine.objects.filter(machine=other).exists())
         self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.DENIED).count(), 3)
 
-    def test_a_record_that_is_not_an_enabled_machine_is_refused_with_its_reason(self):
+    def test_a_machine_switched_off_is_a_precondition_and_a_key_naming_no_machine_is_not_found(self):
         ManagedResource.objects.create(key="off-machine", kind="machine", spec={"name": "off"}, enabled=False)
-        for key in ("off-machine", "nothing-by-this-name"):
+        ManagedResource.objects.create(key="example-zone", kind="cloudflare.zone", spec={"name": "example.com"})
+        for key, code in (
+            ("off-machine", "precondition"),
+            ("nothing-by-this-name", "not_found"),
+            ("example-zone", "not_found"),
+        ):
             with self.subTest(key=key):
                 result = execute_capability(
                     DASHBOARD_MACHINE, keyed({"selected": True}), principal=AN_OPERATOR, target=key
                 )
 
-                self.assertEqual(
-                    result["error"],
-                    {"code": "precondition", "message": "Dashboard telemetry requires an enabled machine record."},
-                )
+                self.assertEqual(result["error"]["code"], code, result)
         self.assertEqual(DashboardMachine.objects.count(), 1)
 
     def test_a_selection_that_is_not_a_yes_or_no_is_invalid(self):

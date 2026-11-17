@@ -31,7 +31,7 @@ from .drawings import StripTile
 from .freshness import DASHBOARD_GLANCE, freshness
 from .labels import dotted, human_bytes
 from .moments import moment, when_hour
-from .record_errors import InputError, PolicyError
+from .record_errors import InputError, PolicyError, RecordNotFound
 from .security import Capability, Principal
 from .tone import Tone
 from .ui import MISSING, counted, measured, severity_tone
@@ -244,8 +244,10 @@ def select_dashboard_machine(
     command: DashboardMachineCommand, *, principal: Principal, current_key: str
 ) -> DashboardMachineSet:
     del principal
-    resource = ManagedResource.objects.filter(key=current_key, kind="machine", enabled=True).first()
+    resource = ManagedResource.objects.filter(key=current_key, kind="machine").first()
     if resource is None:
+        raise RecordNotFound("HQ has no machine by that key.")
+    if not resource.enabled:
         raise PolicyError("Dashboard telemetry requires an enabled machine record.")
     shown = DashboardMachine.objects.filter(machine=resource).exists()
     if command.selected == shown:
