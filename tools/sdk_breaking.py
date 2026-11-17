@@ -1,5 +1,5 @@
 """lint:sdk-breaking: a change that breaks what ``hq_sdk`` offers an extension fails, unless
-``PLUGIN_API_VERSION`` moves in the same change.
+``PLUGIN_API_VERSION`` moves with it.
 
 Griffe reads ``hq_sdk`` here and at the base, statically, and judges each change by its own checks
 (``find_breaking_changes``). Its ``check`` command is not used: it resolves no import from outside
@@ -10,6 +10,10 @@ cannot both create. An addition breaks nothing, so there is nothing to regenerat
     python -m tools.sdk_breaking [base]
 
 The base is fast's: the merge base with the ref named, or else with the branch HEAD lands on.
+The breaks listed are those since that base. The version admits them when it differs from the
+base's or from the one released extensions speak, read at the merge base with the default branch:
+a branch stacked on another that already moved the version lands with it as one release, so each
+later break on it is admitted by that one move.
 """
 
 import io
@@ -23,8 +27,8 @@ from typing import Any
 
 import griffe
 
-from tools.gate.chain import ROOT, merge_base
-from tools.pipeline.plugin_identity import plugin_api_version
+from tools.gate.chain import ROOT, answered, merge_base
+from tools.pipeline.plugin_identity import PLUGINS, plugin_api_version, spoken
 
 PACKAGE = "hq_sdk"
 # The SDK and the host modules it re-exports from.
@@ -33,6 +37,8 @@ SOURCES = (":(glob)hq_sdk/**/*.py", ":(glob)hq/**/*.py")
 # griffe prints that file as the repository names it (its diff.py, Breakage._location).
 BASE_PREFIX = "griffe-worktree-"
 _COLOR = re.compile(r"\x1b\[[0-9;]*m")
+# The branches a release is cut from, the first that exists read (chain.merge_base's defaults).
+RELEASED = ("origin/main", "main")
 
 
 class TransformedDataclasses(griffe.Extension):
@@ -102,16 +108,28 @@ def breakages(base: str, root: Path) -> tuple[list[str], str]:
         return lines, plugin_api_version(before)
 
 
+def released(root: Path) -> str | None:
+    """The ``PLUGIN_API_VERSION`` released extensions speak: the default branch's where HEAD left
+    it, or None where no default branch exists."""
+
+    for ref in RELEASED:
+        if fork := answered("merge-base", "HEAD", ref, root=root):
+            source = answered("show", f"{fork[0]}:{PLUGINS.as_posix()}", root=root)
+            return spoken(f"{ref}:{PLUGINS.as_posix()}", "\n".join(source)) if source else None
+    return None
+
+
 def main(argv: list[str]) -> int:
     base = merge_base(argv[0] if argv and argv[0] else None)
     print(f"lint:sdk-breaking: {PACKAGE} against {base[:9]}", flush=True)
-    found, spoken = breakages(base, ROOT)
+    found, at_base = breakages(base, ROOT)
     current = plugin_api_version(ROOT)
     if not found:
         return 0
     print("\n".join(found), flush=True)
-    if current != spoken:
-        print(f"lint:sdk-breaking: {len(found)} breaks above, admitted by PLUGIN_API_VERSION {spoken} -> {current}")
+    moved = [version for version in (at_base, released(ROOT)) if version is not None and version != current]
+    if moved:
+        print(f"lint:sdk-breaking: {len(found)} breaks above, admitted by PLUGIN_API_VERSION {moved[0]} -> {current}")
         return 0
     print(
         f"lint:sdk-breaking: each of the {len(found)} changes above breaks an extension built against hq_sdk."

@@ -142,8 +142,8 @@ and the signatures, fields, enum members and public methods behind it. An
 extension's binding to a renamed field or a new required parameter is a change
 this repository's suite cannot otherwise see, so `lint:sdk-breaking` reads the
 SDK at the change's base and here with Griffe and fails on each change that
-breaks a caller, named by file and line, unless `PLUGIN_API_VERSION` moves in
-the same change. An addition passes with nothing to regenerate. Types, a
+breaks a caller, named by file and line, unless `PLUGIN_API_VERSION` differs
+from the base's or from main's, the one released extensions speak. An addition passes with nothing to regenerate. Types, a
 pydantic field turning required, a class attribute's default type and a name
 dropped from `__all__` while still importable are not held by it; the
 composed suite runs every extension against the host.

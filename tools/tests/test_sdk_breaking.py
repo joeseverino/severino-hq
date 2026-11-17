@@ -41,7 +41,12 @@ __all__ = ["Card", "lookup"]
 class VerdictTests(SimpleTestCase):
     """Griffe judges a planted host and SDK in a fixture repository, as the gate runs it on the real one."""
 
-    def judge(self, *, shapes: str = SHAPES, sdk: str = SDK, version: int = 1) -> tuple[int, str]:
+    def judge(
+        self, *, shapes: str = SHAPES, sdk: str = SDK, version: int = 1, stacked_on: int | None = None
+    ) -> tuple[int, str]:
+        """The gate's verdict on the change, against a base on main, or with ``stacked_on`` against
+        a branch off main whose one commit already moved the version to it."""
+
         from tools import sdk_breaking
 
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -58,9 +63,13 @@ class VerdictTests(SimpleTestCase):
             (root / name).parent.mkdir(parents=True, exist_ok=True)
             (root / name).write_text(text)
         git = fixture_git(root)
-        git("init", "-q")
+        git("init", "-q", "-b", "main")
         git("add", ".")
         git("commit", "-q", "-m", "base")
+        if stacked_on is not None:
+            git("switch", "-q", "-c", "stack")
+            (root / PLUGINS).write_text(f"PLUGIN_API_VERSION = {stacked_on}\n")
+            git("commit", "-q", "-am", "an earlier change of the release")
         base = git("rev-parse", "HEAD")
         (root / "hq/platform/application/shapes.py").write_text(shapes)
         (root / "hq_sdk/example.py").write_text(sdk)
@@ -86,6 +95,15 @@ class VerdictTests(SimpleTestCase):
         code, said = self.judge(shapes=SHAPES.replace(", *, limit: int = 10", ""), version=2)
 
         self.assertEqual(code, 0)
+        self.assertIn("lookup(limit)", said)
+
+    def test_a_break_on_a_branch_whose_base_moved_the_version_passes(self):
+        """A branch stacked on one that already moved the version lands with it as one release, so
+        that move admits a break the later change makes."""
+
+        code, said = self.judge(shapes=SHAPES.replace(", *, limit: int = 10", ""), version=2, stacked_on=2)
+
+        self.assertEqual(code, 0, said)
         self.assertIn("lookup(limit)", said)
 
     def test_an_addition_passes(self):
