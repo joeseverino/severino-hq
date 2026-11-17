@@ -23,7 +23,7 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from .. import readings
-from ..attention import infrastructure, raised
+from ..attention import infrastructure
 from ..command_center import command_center
 from ..connection_lifecycle import Lifecycle
 from ..estate import Estate, cards, estate_reading, overview
@@ -521,61 +521,6 @@ class OldGlanceTests(TestCase):
 
 
 class ActionItemTests(TestCase):
-    def test_a_machine_offline_past_the_threshold_that_serves_something(self):
-        devices(
-            device(
-                "example-host",
-                online=False,
-                addresses=["100.64.0.5"],
-                tags=["tag:server"],
-                last_seen=(timezone.now() - timedelta(hours=5)).isoformat(),
-            ),
-            device(
-                "example-phone",
-                online=False,
-                last_seen=(timezone.now() - timedelta(days=5)).isoformat(),
-            ),
-            device(
-                "example-restart",
-                online=False,
-                addresses=["100.64.0.7"],
-                tags=["tag:server"],
-                last_seen=(timezone.now() - timedelta(minutes=5)).isoformat(),
-            ),
-        )
-        declare_record("app-record", "app.example.com", "100.64.0.5")
-        declare_record("other-record", "other.example.com", "100.64.0.7")
-
-        with projection_scope():
-            found = [
-                item for item in tuple(raised("hq.estate")) if finding_key(item).startswith("finding:machine-offline:")
-            ]
-
-        self.assertEqual([item.subject_link.label for item in found], ["example-host"])
-        self.assertEqual(found[0].severity, "serious")
-        self.assertEqual(found[0].subject_link.url, reverse("control_plane:machine", args=["example-host"]))
-
-    def test_a_persons_device_away_is_not_an_outage(self):
-        """Untagged is a user's own device: a laptop asleep serving a dev name
-        is normal, where the same machine tagged as a server is down."""
-
-        devices(
-            device(
-                "example-laptop",
-                online=False,
-                addresses=["100.64.0.9"],
-                last_seen=(timezone.now() - timedelta(days=2)).isoformat(),
-            ),
-        )
-        declare_record("dev-record", "dev.example.com", "100.64.0.9")
-
-        with projection_scope():
-            found = [
-                item for item in tuple(raised("hq.estate")) if finding_key(item).startswith("finding:machine-offline:")
-            ]
-
-        self.assertEqual(found, [])
-
     def test_a_managed_certificate_inside_its_renewal_window(self):
         for key, days in (("soon-cert", 5), ("later-cert", 80)):
             declared(

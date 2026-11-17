@@ -41,7 +41,6 @@ UNWALKED = frozenset(
         "contradiction_findings",
         "controller_findings",
         "docker_estate",
-        "machine_findings",
         "posture",
         "record_findings",
         "repository_findings",
