@@ -131,7 +131,7 @@ class EveryScopeTests(TestCase):
         for rule in through:
             with self.subTest(rule.name):
                 gate = findings.read_gate(replace(unknown(subject=""), rule=rule.name), None)
-                self.assertTrue(set(findings._resource_gate(rule.read_through)) <= set(gate or ()))
+                self.assertLessEqual(set(findings._resource_gate(rule.read_through)), set(gate or ()))
 
     def test_a_node_s_gate_is_its_own_beside_the_read_of_any_node(self):
         node = TopologyNode("connection:example", "connection", "Example", "Connection", read_capabilities=("example",))

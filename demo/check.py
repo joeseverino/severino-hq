@@ -729,13 +729,13 @@ class DemoSiteTests(unittest.TestCase):
             browser = _engine(playwright).launch()
             page = browser.new_page()
             page.goto(self.origin + "/", wait_until="networkidle")
-            homelab = page.locator('.reading[data-fragment-part^="machine-"]')
+            homelab = page.locator('[data-glance] .fact[data-fragment-part^="machine-"]')
             self.assertTrue(homelab.first.is_visible(), "the homelab's reading is on the dashboard")
             self.assertTrue(homelab.first.locator('a[href="/infrastructure/containers/"]').count())
-            weather = page.locator('.reading[data-fragment-part="weather"]')
+            weather = page.locator('[data-glance] .fact[data-fragment-part="weather"]')
             self.assertTrue(weather.is_visible(), "the forecast is on the dashboard")
-            self.assertIn("°", weather.locator(".reading-lead").inner_text())
-            self.assertTrue(weather.locator(".tile-strip li").count())
+            self.assertIn("°", weather.locator(".fact-value").inner_text())
+            self.assertTrue(weather.locator(".fact-panel .facts-band > .fact").count())
             for width in (402, 1360):
                 page.set_viewport_size({"width": width, "height": 900})
                 with self.subTest(width=width):
@@ -746,9 +746,9 @@ class DemoSiteTests(unittest.TestCase):
     def _lines_past_their_reading(page) -> list[str]:
         """Each reading's quiet line that runs past the reading it is under."""
 
-        return page.locator(".readings .reading-lines").evaluate_all(
+        return page.locator("[data-glance] .facts-band > .fact > .fact-detail").evaluate_all(
             """lines => lines.filter(line => {
-                const own = line.closest('.reading').getBoundingClientRect();
+                const own = line.closest('.fact').getBoundingClientRect();
                 return line.getBoundingClientRect().right > own.right + 1;
             }).map(line => line.textContent.trim())"""
         )

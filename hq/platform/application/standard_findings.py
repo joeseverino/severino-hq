@@ -120,7 +120,7 @@ def worded(
     about one; why it matters as the explanation; where it fails and what was
     read as the evidence; and each fix as a step unless its help names its own."""
 
-    helped = said or [Help() for _check in checks]
+    helped = said or [Help()] * len(checks)
     clauses = [check.unmet for check in checks]
     subjects = _subjects(failing)
     named = [item.name for item in subjects if item.name]
