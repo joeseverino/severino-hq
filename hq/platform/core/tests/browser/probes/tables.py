@@ -270,7 +270,8 @@ def tables_read(trip):
 
 # A value cut in a closed row while the row leaves room that would show it
 # whole: room in its own cell past what shares its line (a box the value
-# fills keeps its padding), and the room each other column showing holds
+# fills keeps its padding, and a box beside it, a button or a pill, holds all
+# of its own), and the room each other column showing holds
 # past what its widest cell asks (each cell's table laid out again at its
 # max-content, unseen, beside it so its rules still reach it). A column
 # holding a cut gives none, and a fixed layout's columns none at all. A value
@@ -330,13 +331,30 @@ CUT_BESIDE_ROOM = (
         if (/inline-/.test(around.display)) end = Math.max(end, up.getBoundingClientRect().right);
         else if (!['inline', 'contents'].includes(around.display)) end += parseFloat(around.paddingRight) + parseFloat(around.borderRightWidth);
       }
+      // A box of its own beside the cut (a button, a pill, an icon) holds its
+      // whole border box, so the padding past its words is never room; words
+      // set in a box that also holds the cut hold only their lines.
+      const beside = (line) => line.width && Math.min(line.bottom, r.bottom) - Math.max(line.top, r.top) > line.height / 2;
+      const ownBox = (node) => {
+        for (let up = node.parentElement; up && up !== cell; up = up.parentElement) {
+          if (up.contains(by)) return null;
+          if (!['inline', 'contents'].includes(getComputedStyle(up).display)) return up;
+        }
+        return null;
+      };
       const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
       for (let text = walker.nextNode(); text; text = walker.nextNode()) {
         if (!text.data.trim() || by.contains(text) || !textShown(text)) continue;
+        const box = ownBox(text);
         range.selectNodeContents(text);
-        for (const line of range.getClientRects()) {
-          if (line.width && Math.min(line.bottom, r.bottom) - Math.max(line.top, r.top) > line.height / 2) end = Math.max(end, line.right);
+        for (const line of box ? [box.getBoundingClientRect()] : range.getClientRects()) {
+          if (beside(line)) end = Math.max(end, line.right);
         }
+      }
+      for (const control of cell.querySelectorAll('img, svg, input, select, textarea, button, canvas, video')) {
+        if (control.contains(by) || by.contains(control) || !control.checkVisibility()) continue;
+        const line = control.getBoundingClientRect();
+        if (beside(line)) end = Math.max(end, line.right);
       }
       const own = Math.max(0, inner(cell).right - end);
       const asksNothing = boxes.some((box) => /flex/.test(getComputedStyle(box.parentElement).display)

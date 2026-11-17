@@ -40,6 +40,7 @@ from hq.platform.core.tests.browser.probes.tables import (
     CELLS,
     COLUMNS_SHOWN,
     CUT_AND_CLOSED,
+    CUT_BESIDE_ROOM,
     CUT_TABLE,
     CUT_VALUES,
     CUT_WHEN_OPEN,
@@ -965,6 +966,33 @@ class ComponentLayoutTests(LayoutBrowserTests):
         found = self.page.evaluate(STRAYS_OPENING_A_LINE, [SELECTORS["unseen"], IDENTIFIER])
         planted = [line.split(": ", 1)[1] for line in found if '"/' in line]
         self.assertEqual(planted, ['"/ bbbb"'])
+
+    def test_a_cut_beside_a_button_has_room_only_past_the_buttons_box(self):
+        """A button beside a cut name holds its whole box, so the padding past
+        its glyph is no room for the name; room past the button's edge is."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          for (const [name, wide] of [['examplefull', 20], ['examplegap', 26]]) {
+            const table = document.createElement('table');
+            table.style.cssText = `table-layout: fixed; inline-size: ${wide}ch; border-spacing: 0; font: 16px/1.5 monospace`;
+            const cell = table.createTBody().insertRow().insertCell();
+            cell.style.cssText = 'padding: 0';
+            const line = document.createElement('div');
+            line.style.cssText = 'display: grid; grid-auto-flow: column; justify-content: start; gap: 0';
+            const words = document.createElement('strong');
+            words.textContent = name.padEnd(15, 'a');
+            words.style.cssText = 'inline-size: 12ch; overflow: hidden; white-space: nowrap; text-overflow: ellipsis';
+            const button = document.createElement('button');
+            button.textContent = 'x';
+            button.style.cssText = 'all: unset; display: block; inline-size: 8ch; text-align: center; font: inherit';
+            line.append(words, button);
+            cell.append(line);
+            document.querySelector('main').prepend(table);
+          }
+        }""")
+        found = [line for line in self.page.evaluate(CUT_BESIDE_ROOM, SELECTORS["unseen"]) if '"example' in line]
+        self.assertEqual([line.split('"')[1] for line in found], ["examplegapaaaaa"])
 
     def test_a_mark_inside_a_wrapping_identifier_is_part_of_the_value(self):
         self.open(next(iter(PAGES)), WIDE)
