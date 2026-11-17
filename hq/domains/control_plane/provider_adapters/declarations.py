@@ -11,6 +11,7 @@ lazy import ipaddress
 from django.urls.converters import StringConverter
 from pydantic import Field, field_validator, model_validator
 
+from hq.platform.application.command_fields import RequiredText
 from hq.platform.application.labels import dotted
 from hq.platform.application.ui import ended
 lazy from hq.platform.application.expiry import days_until
@@ -42,14 +43,12 @@ class NetworkSpec(ProviderModel):
     by different people, and only the ranges say which is which.
     """
 
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=120,
         title="Name",
         description="A short name for this range.",
     )
-    cidr: str = Field(
-        min_length=1,
+    cidr: RequiredText = Field(
         max_length=64,
         title="Range",
         description="The range in CIDR form, e.g. 198.51.100.0/24.",
@@ -87,8 +86,7 @@ class CertificateAuthoritySpec(ProviderModel):
     watching is the failure this records.
     """
 
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=160,
         title="Authority",
         description="The issuer name, as it appears in certificates.",
@@ -138,8 +136,7 @@ class MachineSpec(ProviderModel):
 
     # The machine page's `<str:name>` converter: a name it cannot route to
     # would be a machine with no page.
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=160,
         pattern=rf"^{StringConverter.regex}$",
         title="Name",
@@ -177,14 +174,12 @@ class TLSDeliveryTargetSpec(ProviderModel):
         title="Type",
         description="Sets how the certificate is delivered and verified.",
     )
-    connection_ref: str = Field(
-        min_length=1,
+    connection_ref: RequiredText = Field(
         max_length=160,
         title="Connection",
         description="The connection HQ uses to reach this target.",
     )
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=160,
         title="Name at target",
         description=("The certificate's name on the target. Used only by the certificate below."),

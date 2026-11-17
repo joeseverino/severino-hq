@@ -29,6 +29,7 @@ from pydantic import (
 )
 from pydantic_core import PydanticKnownError
 
+from .command_fields import RequiredText
 from .integration_specs import CapabilitySpec
 from .json_schemas import json_schema
 from .moments import moment
@@ -96,7 +97,7 @@ class CallEnvelope(TypedDict):
     ]
     target: NotRequired[
         Annotated[
-            Annotated[RecordId, Strict(), BeforeValidator(_whole)] | Annotated[StrictStr, Field(min_length=1)],
+            Annotated[RecordId, Strict(), BeforeValidator(_whole)] | Annotated[RequiredText, Strict()],
             AfterValidator(_as_its_kind),
             Field(description="The record the command acts on, by its identifier."),
         ]

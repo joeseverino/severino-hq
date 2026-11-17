@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, model_validator
 
+from hq.platform.application.command_fields import RequiredText
 from hq.platform.application.describe import Describe
 from hq.platform.application.routes import reverse
 
@@ -148,21 +149,18 @@ _CAA_VALUE_PARTS = r'^\s*(\d{1,3})\s+(issue|issuewild|iodef)\s+"([^"]*)"\s*$'
 class CloudflareDNSRecordSpec(ProviderModel):
     """One DNS record in a Cloudflare zone, as HQ keeps it."""
 
-    zone: str = Field(
-        min_length=1,
+    zone: RequiredText = Field(
         max_length=253,
         title="Zone",
         description="The record's domain, e.g. example.com.",
     )
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=253,
         title="Hostname",
         description="The full name, e.g. app.example.com.",
     )
     record_type: Annotated[DNSRecordTypeId, Describe("", api="The record's DNS type.")] = Field(title="Record type")
-    content: str = Field(
-        min_length=1,
+    content: RequiredText = Field(
         max_length=2048,
         title="Value",
         description=(
@@ -231,14 +229,12 @@ class CloudflareZoneSpec(ProviderModel):
     set here.
     """
 
-    zone: str = Field(
-        min_length=1,
+    zone: RequiredText = Field(
         max_length=253,
         title="Domain",
         description="The domain itself, e.g. example.com.",
     )
-    connection_ref: str = Field(
-        min_length=1,
+    connection_ref: RequiredText = Field(
         max_length=160,
         title="Served by",
         description="The connection that holds this zone.",
@@ -595,9 +591,9 @@ class ContactInboxSpec(ProviderModel):
     nothing.
     """
 
-    connection_ref: str = Field(min_length=1, max_length=160, title="Connection")
-    account_id: str = Field(min_length=1, max_length=64, title="Account")
-    database_id: str = Field(min_length=1, max_length=64, title="Database")
+    connection_ref: RequiredText = Field(max_length=160, title="Connection")
+    account_id: RequiredText = Field(max_length=64, title="Account")
+    database_id: RequiredText = Field(max_length=64, title="Database")
     reviews: tuple[ContactReview, ...] = Field(default=(), max_length=CONTACT_CHANGES_LIMIT, title="Reviews")
     deletions: tuple[Annotated[int, Field(ge=1)], ...] = Field(
         default=(), max_length=CONTACT_CHANGES_LIMIT, title="Deletions"

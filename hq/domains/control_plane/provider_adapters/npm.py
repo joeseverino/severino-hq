@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
+from hq.platform.application.command_fields import NonEmpty, RequiredText
 from hq.platform.application.describe import Describe
 from hq.platform.application.ui import ended
 from hq.platform.core.network import split_host_port
@@ -58,8 +59,7 @@ def served_certificate(record: dict[str, Any]) -> ServedCertificate | None:
 class NPMProxyHostSpec(ProviderModel):
     """A proxy host in Nginx Proxy Manager: the names it serves and the service behind them."""
 
-    domain_names: list[str] = Field(
-        min_length=1,
+    domain_names: Annotated[list[str], NonEmpty()] = Field(
         title="Hostnames",
         description="One per line.",
     )
@@ -67,8 +67,7 @@ class NPMProxyHostSpec(ProviderModel):
         title="Reach it over",
         description="How the proxy connects to your service.",
     )
-    forward_host: str = Field(
-        min_length=1,
+    forward_host: RequiredText = Field(
         max_length=255,
         title="Send traffic to",
         description="The service's address, usually an internal IP.",

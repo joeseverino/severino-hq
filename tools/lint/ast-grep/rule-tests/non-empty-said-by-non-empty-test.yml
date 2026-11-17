@@ -1,0 +1,12 @@
+id: non-empty-said-by-non-empty
+valid:
+  - 'name: RequiredText = Field(max_length=160)'
+  - 'hosts: Annotated[list[str], NonEmpty()]'
+  - 'code: str = Field(min_length=2, max_length=2)'
+  - 'text = "min_length=1"'
+invalid:
+  - 'name: str = Field(min_length=1, max_length=160)'
+  - 'hosts: list[str] = Field(min_length=1)'
+  - 'Statement = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]'
+  - |
+    Query = create_model("Query", machine=(str | None, Field(default=None, min_length=1)))

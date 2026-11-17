@@ -5,6 +5,8 @@ from typing import Annotated, Any
 
 from pydantic import Field
 
+from hq.platform.application.command_fields import RequiredText
+
 from ..certificate_authorities import authority_name
 from ..names import normalized_hostname
 from ..provider_spec import ProviderModel, ProviderSpec, SharedValue, applies
@@ -99,8 +101,7 @@ class CaddyRouteSpec(ProviderModel):
         title="Caddy",
         description=("The connection to the host that serves this route."),
     )
-    domain: str = Field(
-        min_length=1,
+    domain: RequiredText = Field(
         max_length=253,
         pattern=DOMAIN,
         title="Hostname",
@@ -116,8 +117,8 @@ class CaddyRouteSpec(ProviderModel):
 
 
 class CaddyRouteInFile(ProviderModel):
-    domain: str = Field(min_length=1, max_length=253, pattern=DOMAIN)
-    upstream: str = Field(min_length=1, max_length=253, pattern=UPSTREAM)
+    domain: RequiredText = Field(max_length=253, pattern=DOMAIN)
+    upstream: RequiredText = Field(max_length=253, pattern=UPSTREAM)
 
 
 class ResolvedCaddyRouteSpec(CaddyRouteSpec):

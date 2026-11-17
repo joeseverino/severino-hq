@@ -33,7 +33,7 @@ lazy from hq.domains.control_plane.providers import validate_spec
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
-from .command_fields import Among, AmongNow, Describe, ForAgents, Names
+from .command_fields import Among, AmongNow, Describe, ForAgents, Names, NonEmpty
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
 from .record_errors import PolicyError, RecordNotFound
@@ -140,7 +140,8 @@ type Hosts = Annotated[
         ],
         ...,
     ],
-    Field(min_length=1, max_length=64),
+    NonEmpty(),
+    Field(max_length=64),
     AfterValidator(sorted_unique),
     Names("machines"),
     # The label says it on the form, so the sentence is the agent's alone.

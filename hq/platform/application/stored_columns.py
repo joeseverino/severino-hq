@@ -36,7 +36,7 @@ from pydantic_core import CoreSchema, core_schema
 
 from hq.platform.core.rules import Rule
 
-from .command_fields import STORED_IN, Choices
+from .command_fields import STORED_IN, Choices, NonEmpty
 from .domains import host_records, load
 from .json_schemas import json_schema
 
@@ -212,7 +212,7 @@ def _column_rules(column: Any, *, empty: bool) -> tuple[Any, ...]:
             allowed.insert(0, ("", "Not set"))
         return (Choices(allowed),)
     if not empty and isinstance(column, (CharField, TextField, JSONField)):
-        rules.append(Field(min_length=1))
+        rules.append(NonEmpty())
     # An integer column's own range is the database's, never a rule a client
     # works within, so only the bounds its declaration names hold.
     bounding = column._validators if isinstance(column, IntegerField) else column.validators

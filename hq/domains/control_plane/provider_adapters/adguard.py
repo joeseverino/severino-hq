@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import Field
 
+from hq.platform.application.command_fields import RequiredText
+
 from ..connection_shapes import LOGIN
 from ..observations import adguard as readings
 from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
@@ -44,14 +46,12 @@ def _seed(context: Any) -> dict[str, Any]:
 class AdGuardRewriteSpec(ProviderModel):
     """A name AdGuard answers on your network with an address of HQ's choosing."""
 
-    domain: str = Field(
-        min_length=1,
+    domain: RequiredText = Field(
         max_length=253,
         title="Hostname",
         description="The name that should resolve on your network.",
     )
-    answer: str = Field(
-        min_length=1,
+    answer: RequiredText = Field(
         max_length=253,
         title="Points at",
         description="The IP address this hostname resolves to.",

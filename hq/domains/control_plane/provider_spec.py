@@ -10,7 +10,7 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from functools import cache
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from django.urls import NoReverseMatch
 from pydantic import (
@@ -22,6 +22,7 @@ from pydantic import (
     model_validator,
 )
 
+from hq.platform.application.command_fields import NonEmpty
 from hq.platform.application.contracts import Closed
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.labels import dotted
@@ -200,7 +201,7 @@ class ControllerActionPolicy(ProviderModel):
 
 
 class ControllerProviderCapability(ProviderModel):
-    actions: dict[str, ControllerActionPolicy] = Field(min_length=1)
+    actions: Annotated[dict[str, ControllerActionPolicy], NonEmpty()]
 
 
 class ControllerCapabilityRegistry(ProviderModel):

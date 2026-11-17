@@ -9,6 +9,7 @@ from typing import Annotated, Any
 
 from pydantic import Field, field_validator
 
+from hq.platform.application.command_fields import RequiredText
 from hq.platform.application.describe import Describe
 from hq.platform.application.github_public import GitHubRepositoryURL
 from hq.platform.application.ui import ended
@@ -38,20 +39,17 @@ class PortainerContainerSpec(ProviderModel):
     watch and to cycle", and reconciliation is locked with nothing to converge.
     """
 
-    connection_ref: str = Field(
-        min_length=1,
+    connection_ref: RequiredText = Field(
         max_length=160,
         title="Portainer",
         description="The Portainer that manages this machine.",
     )
-    host: str = Field(
-        min_length=1,
+    host: RequiredText = Field(
         max_length=160,
         title="Runs on",
         description="The machine the container runs on.",
     )
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=200,
         title="Container",
         description="The container name, as Docker reports it.",
@@ -111,34 +109,30 @@ class PortainerContainerSpec(ProviderModel):
 class PortainerStackEnvVar(ProviderModel):
     """One environment variable a stack is deployed with."""
 
-    name: Annotated[str, Describe("", api="The variable's name.")] = Field(min_length=1, max_length=200, title="Name")
+    name: Annotated[RequiredText, Describe("", api="The variable's name.")] = Field(max_length=200, title="Name")
     value: Annotated[str, Describe("", api="The variable's value.")] = Field(default="", max_length=4000, title="Value")
 
 
 class PortainerStackSpec(ProviderModel):
     """A compose stack Portainer deploys on one machine."""
 
-    connection_ref: str = Field(
-        min_length=1,
+    connection_ref: RequiredText = Field(
         max_length=160,
         title="Portainer",
         description="The Portainer environment this runs in.",
     )
-    host: str = Field(
-        min_length=1,
+    host: RequiredText = Field(
         max_length=160,
         title="Runs on",
         description="The machine the stack runs on.",
     )
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=120,
         pattern=r"^[a-z0-9][a-z0-9-]*$",
         title="Stack name",
         description="Lowercase and hyphenated. Used as the compose project name.",
     )
-    compose: str = Field(
-        min_length=1,
+    compose: RequiredText = Field(
         title="Compose file",
         description="The docker compose file, as it would be on disk.",
     )

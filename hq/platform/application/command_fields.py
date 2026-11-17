@@ -20,6 +20,7 @@ from django.core.exceptions import ValidationError
 lazy from pydantic_core import PydanticCustomError, core_schema
 
 from .describe import Describe
+from .non_empty import NonEmpty, RequiredText
 
 # Lazy: it loads pydantic, which declaring a command does not.
 lazy from .json_schemas import choices
@@ -243,7 +244,7 @@ def referred(schema: dict[str, Any]) -> tuple[str, str] | None:
     return (declared["model"], declared["field"]) if isinstance(declared, dict) else None
 
 
-# Every marker is imported from here, Describe too, though it lives in a leaf of its own.
+# Every marker is imported from here, Describe and NonEmpty too, though each lives in a leaf of its own.
 __all__ = [
     "AMONG",
     "CONFIRM_MISMATCH",
@@ -257,7 +258,9 @@ __all__ = [
     "Describe",
     "ForAgents",
     "Names",
+    "NonEmpty",
     "Refers",
+    "RequiredText",
     "Upload",
     "among",
     "among_now",

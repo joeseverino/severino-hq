@@ -12,6 +12,7 @@ from typing import Annotated, Any, Literal
 from pydantic import Field
 
 from hq.platform.application.automation_manifest import PLAYBOOK, PLAYBOOK_LONGEST, REVISION, PlaybookEffect
+from hq.platform.application.command_fields import NonEmpty, RequiredText
 from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe
 from hq.platform.application.ui import ended
@@ -41,8 +42,8 @@ SCAN = "scan"
 class OperationSpec(ProviderModel):
     """One adopted playbook: every field but its input type, which its schema's digest stands for."""
 
-    operation: Annotated[str, Describe("", api="The playbook's id, as its sidecar names it.")] = Field(
-        min_length=1, max_length=160, title="Playbook ID"
+    operation: Annotated[RequiredText, Describe("", api="The playbook's id, as its sidecar names it.")] = Field(
+        max_length=160, title="Playbook ID"
     )
     revision: Annotated[str, Describe("", api="The commit of the repository the playbook was reviewed at.")] = Field(
         pattern=REVISION, title="Reviewed commit"
@@ -54,8 +55,8 @@ class OperationSpec(ProviderModel):
     input_schema_sha256: Annotated[str, Describe("", api="The SHA-256 digest of the playbook's input schema.")] = Field(
         pattern=r"^[0-9a-f]{64}$", title="Input schema"
     )
-    target_kinds: Annotated[list[str], Describe("", api="The record types the playbook runs against.")] = Field(
-        min_length=1, title="Record types"
+    target_kinds: Annotated[list[str], NonEmpty(), Describe("", api="The record types the playbook runs against.")] = (
+        Field(title="Record types")
     )
     hosts: Annotated[
         list[str], Describe("", api="The machines the playbook may run on. Empty for any machine a target names.")
@@ -74,8 +75,8 @@ class OperationSpec(ProviderModel):
     verification: Annotated[list[str], Describe("", api="What it checks once it has run.")] = Field(
         default_factory=list, title="Verification"
     )
-    recovery: Annotated[list[str], Describe("", api="What to do when a run fails.")] = Field(
-        min_length=1, title="Recovery"
+    recovery: Annotated[list[str], NonEmpty(), Describe("", api="What to do when a run fails.")] = Field(
+        title="Recovery"
     )
     retry: Annotated[
         Literal["never", "observe_first", "safe"],

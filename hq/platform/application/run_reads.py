@@ -18,6 +18,7 @@ from hq.domains.jobs.models import JobState
 
 from .automation_manifest import DottedName
 from .automation_runs import CORRELATION_LONGEST, CORRELATION_PATTERN, capability_name
+from .command_fields import RequiredText
 from .describe import Describe, listed
 from .integration_specs import ResourceSpec
 from .projection import iso, keyset_page
@@ -89,19 +90,17 @@ RunQuery = create_model(
         ),
     ),
     machine=(
-        str | None,
+        RequiredText | None,
         Field(
             default=None,
-            min_length=1,
             max_length=253,
             description="Only the runs on the machine with this name, as `machines` names it; absent, every machine.",
         ),
     ),
     correlation=(
-        str | None,
+        RequiredText | None,
         Field(
             default=None,
-            min_length=1,
             max_length=CORRELATION_LONGEST,
             pattern=CORRELATION_PATTERN,
             description="Only the runs asked for with this correlation id; absent, every run.",

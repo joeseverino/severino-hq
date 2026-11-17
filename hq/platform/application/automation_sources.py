@@ -36,7 +36,7 @@ lazy from hq.platform.core.audit import audited_labels
 lazy from hq.platform.core.models import AuditLog
 
 from .automation_manifest import DottedName, ProcedureTerms
-from .command_fields import Describe
+from .command_fields import Describe, RequiredText
 from .contracts import Effect
 from .integration_specs import CapabilitySpec
 from .resource_operations import OperationAsked
@@ -97,7 +97,7 @@ class InputBound(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    pattern: Annotated[str, StringConstraints(min_length=1, max_length=500), AfterValidator(_pattern)]
+    pattern: Annotated[RequiredText, StringConstraints(max_length=500), AfterValidator(_pattern)]
     max_length: Annotated[int, Field(ge=1, le=4096)]
 
 

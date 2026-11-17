@@ -19,7 +19,7 @@ from pydantic import Field
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import ActionItemRead, AuditLog
 
-from .command_fields import Describe
+from .command_fields import Describe, RequiredText
 from .moments import moment
 from .projection import projection_scope
 from .security import Principal, person
@@ -41,7 +41,7 @@ REVISION_LENGTH = 16
 
 
 # What one row names: the item's key (``item_key``) and the revision it was drawn at.
-type RowKey = Annotated[str, Field(min_length=1, max_length=ITEM_KEY_LENGTH), Describe("The item's key.")]
+type RowKey = Annotated[RequiredText, Field(max_length=ITEM_KEY_LENGTH), Describe("The item's key.")]
 type RowRevision = Annotated[
     str,
     Field(pattern=f"^[A-Za-z0-9]{{1,{REVISION_LENGTH}}}$"),

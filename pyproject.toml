@@ -121,6 +121,12 @@ source_modules = ["hq.platform.application.describe"]
 forbidden_modules = ["hq.**"]
 
 [[tool.importlinter.contracts]]
+name = "The non-empty marker is a leaf: it imports nothing of HQ"
+type = "forbidden"
+source_modules = ["hq.platform.application.non_empty"]
+forbidden_modules = ["hq.**"]
+
+[[tool.importlinter.contracts]]
 name = "The shared answer fields import nothing of HQ but the description marker"
 type = "forbidden"
 source_modules = ["hq.platform.application.answer_fields"]
@@ -128,16 +134,18 @@ forbidden_modules = ["hq.**"]
 ignore_imports = ["hq.platform.application.answer_fields -> hq.platform.application.describe"]
 
 [[tool.importlinter.contracts]]
-name = "The operation manifest is a leaf: it imports nothing of HQ but two validators"
+name = "The operation manifest is a leaf: it imports nothing of HQ but three validators"
 type = "forbidden"
 source_modules = ["hq.platform.application.automation_manifest"]
 forbidden_modules = ["hq.**"]
-# HQ's one spelling of a dotted name (contracts.DOTTED_NAME) and of a host
-# name (names.is_hostname), which the manifest holds its ids, kinds and hosts
-# to rather than restating them.
+# HQ's one spelling of a dotted name (contracts.DOTTED_NAME), of a host name
+# (names.is_hostname) and of a value that must hold something
+# (non_empty.NonEmpty), which the manifest holds its ids, kinds, hosts and
+# statements to rather than restating them.
 ignore_imports = [
   "hq.platform.application.automation_manifest -> hq.platform.application.contracts",
   "hq.platform.application.automation_manifest -> hq.domains.control_plane.names",
+  "hq.platform.application.automation_manifest -> hq.platform.application.non_empty",
 ]
 
 [[tool.importlinter.contracts]]

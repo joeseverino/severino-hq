@@ -20,7 +20,7 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.receipts.specs import ReceiptRow
 
-from .command_fields import Describe, Names, Upload, stored_in
+from .command_fields import Describe, Names, RequiredText, Upload, stored_in
 from .integration_specs import Kept, keeps
 from .projection import iso
 from .record_errors import RecordNotFound
@@ -77,7 +77,7 @@ class ReceiptFile:
     receipt's file and nowhere else: the audit trail and a response name it by
     its name, size and digest."""
 
-    name: Annotated[str, Field(min_length=1)]
+    name: RequiredText
     content_type: str
     # Bounded before it is decoded, so a file over the limit is refused
     # without its bytes ever being held.
