@@ -94,11 +94,6 @@ class ReferencePageTests(TestCase):
                 self.assertIn("'unsafe-inline'", sources)
                 self.assertEqual([s for s in sources if s.startswith(("'nonce", "'sha"))], [])
 
-    def test_a_stranger_is_sent_to_sign_in(self):
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response["Location"].startswith(settings.LOGIN_URL))
-
     def test_the_nav_links_it(self):
         self._sign_in()
         self.assertContains(self.client.get(reverse("dashboard")), f'href="{self.url}"')

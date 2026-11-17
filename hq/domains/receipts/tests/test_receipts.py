@@ -221,14 +221,6 @@ class ReceiptPageFileTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(b"".join(response.streaming_content), b"bytes")
 
-    def test_the_picture_needs_a_session(self):
-        receipt = self._stored("photo.png", "image/png")
-        self.client.logout()
-
-        response = self.client.get(reverse("receipts:picture", args=[receipt.pk]))
-
-        self.assertNotEqual(response.status_code, 200)
-
     def test_a_pdf_is_a_link_to_the_download_never_framed(self):
         receipt = self._stored("scan.pdf", "application/pdf", b"%PDF-1.4")
 

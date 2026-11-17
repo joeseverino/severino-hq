@@ -443,11 +443,6 @@ class PageTests(PolicyTestCase):
         self.assertIn("The sign-in service does not allow example-agent to use Delete a project.", text(response))
         self.assertFalse(CapabilityRule.objects.exists())
 
-    def test_signed_out_it_cannot_be_reached(self):
-        self.client.logout()
-
-        self.assertEqual(self.page().status_code, 302)
-
     def test_reads_and_writes_on_one_thing_sit_together(self):
         _, groups = matrix()
         projects = next(group for group in groups if group.label == "Projects")

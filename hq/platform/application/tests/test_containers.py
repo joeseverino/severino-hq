@@ -569,11 +569,6 @@ class PageTests(TestCase):
 
         self.assertContains(response, "No containers yet")
 
-    def test_it_needs_a_sign_in(self):
-        self.client.logout()
-
-        self.assertEqual(self.client.get(reverse("control_plane:containers")).status_code, 302)
-
 
 class QueryBudgetTests(TestCase):
     """The page's cost is its readings, never its rows: every container's

@@ -235,12 +235,3 @@ class RemovalWebTests(TestCase):
         self.assertEqual(operation.action, "delete")
         self.assertEqual(operation.reason, "Retired.")
         self.assertTrue(ManagedResource.objects.filter(key="app-dns").exists())
-
-    def test_removal_requires_a_signed_in_operator(self):
-        self.client.logout()
-
-        response = self.client.post(reverse("control_plane:remove", kwargs={"key": "app-dns"}), form_keyed())
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response["Location"])
-        self.assertFalse(OperationRequest.objects.exists())

@@ -158,14 +158,6 @@ class DesignPageTests(TestCase):
             warnings.simplefilter("error")
             design_gallery.drawn()
 
-    def test_signed_out_it_asks_for_a_sign_in(self):
-        self.client.logout()
-
-        response = self.client.get(reverse("design"))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn(reverse("login"), response["Location"])
-
 
 @tag("source")
 class TheImageNamesItsGalleryTests(SimpleTestCase):

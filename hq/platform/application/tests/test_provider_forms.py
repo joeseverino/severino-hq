@@ -308,14 +308,6 @@ class ResourceFormViewTests(TestCase):
         # invent a name for a row the operator did not know existed.
         self.assertNotContains(response, "Name in HQ")
 
-    def test_the_form_requires_a_signed_in_operator(self):
-        self.client.logout()
-
-        response = self.client.get(reverse("control_plane:create"))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response["Location"])
-
     def test_an_unknown_kind_is_not_found(self):
         response = self.client.post(reverse("control_plane:create"), form_keyed({"kind": "example.nothing"}))
 

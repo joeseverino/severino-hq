@@ -232,13 +232,6 @@ class PostureViewTests(TestCase):
         self.assertContains(response, "No repository read yet.")
         self.assertContains(response, "Connect GitHub App")
 
-    def test_it_needs_a_sign_in(self):
-        self.client.logout()
-
-        response = self.client.get(reverse("posture"))
-
-        self.assertEqual(response.status_code, 302)
-
 
 def runs(item) -> list[tuple[str, str]]:
     """Each step of an item's own help (its commands, its words, why there

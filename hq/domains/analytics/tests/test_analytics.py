@@ -502,13 +502,6 @@ class OverviewPageTests(TestCase):
 
                 self.assertEqual(response.context["days"], service.DEFAULT_WINDOW_DAYS)
 
-    def test_signing_in_is_required(self):
-        self.client.logout()
-
-        response = self.client.get("/analytics/")
-
-        self.assertEqual(response.status_code, 302)
-
 
 class ContentSectionTrafficTests(TestCase):
     def setUp(self):

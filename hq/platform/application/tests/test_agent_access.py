@@ -119,13 +119,6 @@ class SwitchTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(agents_paused())
 
-    def test_signed_out_it_cannot_be_reached(self):
-        self.client.logout()
-
-        self._set("1")
-
-        self.assertFalse(agents_paused())
-
     def test_the_menu_shows_the_state_and_asks_for_the_other_one(self):
         page = self.client.get(reverse("dashboard")).content.decode()
         self.assertIn('name="paused" value="1"', page)

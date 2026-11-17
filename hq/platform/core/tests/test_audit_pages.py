@@ -239,15 +239,6 @@ class AuditDetailPageTests(_AuthedTestCase):
         self.assertEqual([change.label for change in page.context["changes"].rows], ["Token"])
         self.assertNotIn("«redacted»", text(page))
 
-    def test_the_detail_page_needs_a_session(self):
-        project = Project.objects.create(name="Private", status=Project.Status.IDEA)
-        event = AuditLog.objects.filter(object_id=str(project.pk)).first()
-        self.client.logout()
-
-        response = self.client.get(reverse("core:audit_detail", args=[event.pk]))
-
-        self.assertEqual(response.status_code, 302)
-
 
 class AuditRegistryCommandTests(TestCase):
     """`manage.py audit_registry` reports registry rows no doc references."""

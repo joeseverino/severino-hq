@@ -153,14 +153,6 @@ class ThemeSwitchTests(TestCase):
         response = self.client.post(reverse("theme"), form_keyed({"theme": "dark", "next": "https://example.net/"}))
         self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
 
-    def test_anybody_signed_out_is_sent_to_sign_in_and_changes_nothing(self):
-        self.client.logout()
-        response = self.choose("dark")
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn(reverse("login"), response["Location"])
-        self.assertFalse(Appearance.objects.exists())
-
     def test_a_choice_belongs_to_the_person_who_made_it(self):
         self.choose("dark")
         other = get_user_model().objects.create_user("other", password="x" * 20)

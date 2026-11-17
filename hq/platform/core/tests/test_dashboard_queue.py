@@ -298,13 +298,6 @@ class DashboardQueueTests(TestCase):
         self.assertContains(response, "Clear filters")
         self.assertNotContains(response, "Nothing needs you.")
 
-    def test_anonymous_reader_cannot_open_either_queue(self):
-        self.client.logout()
-        for path in ("/", "/action-items/"):
-            response = self.client.get(path)
-            self.assertEqual(response.status_code, 302)
-            self.assertIn("/accounts/login/", response.url)
-
     def test_an_empty_month_takes_no_space(self):
         # Nothing contributes, the calendar's sources included, so the month is
         # empty whatever is installed.

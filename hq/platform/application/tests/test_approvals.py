@@ -846,13 +846,6 @@ class SurfaceTests(TestCase):
         self.held.refresh_from_db()
         self.assertEqual(self.held.state, ApprovalRequest.State.PENDING)
 
-    def test_the_page_needs_a_signed_in_operator(self):
-        self.client.logout()
-
-        page = self.client.get(f"{reverse('core:audit_list')}?awaiting=1")
-
-        self.assertEqual(page.status_code, 302)
-
     def test_each_request_is_an_action_item_that_opens_its_audit_entry(self):
         from ..domains import domain_attention_items
 

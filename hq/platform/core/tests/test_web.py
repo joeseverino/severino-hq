@@ -5,7 +5,6 @@ import json
 import logging
 import re
 import tempfile
-from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
@@ -18,16 +17,14 @@ from django.core.management import call_command
 from django.templatetags.static import static
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
-from django.utils import timezone
 
-from hq.domains.receipts.models import Receipt
 from hq.platform.application import request_context
 from hq.platform.application.markup_testing import elements, hrefs
 from hq.platform.core.audit import record_event
 from hq.platform.core.logging import JsonFormatter
 from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, HQOIDCAuthenticationBackend
 
-from .signed_in_case import User, _AuthedTestCase
+from .signed_in_case import User
 
 
 class AuthGateTests(TestCase):
@@ -446,34 +443,6 @@ class OIDCBackendTests(TestCase):
                     "groups": ["admins"],
                 }
             )
-
-
-class ReceiptFileProtectionTests(_AuthedTestCase):
-    def _make_receipt(self) -> Receipt:
-        with override_settings(MEDIA_ROOT=tempfile.mkdtemp()):
-            r = Receipt.objects.create(
-                vendor="Vendor",
-                date=timezone.localdate(),
-                amount=Decimal("10.00"),
-                original_filename="test.txt",
-                content_type="text/plain",
-                size_bytes=5,
-            )
-            # Write a file directly to the storage path so the streaming view
-            # has something to serve.
-            path = Path(r.file.storage.location) / "hq/domains/receipts" / "test.txt"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("hello", encoding="utf-8")
-            r.file.name = "receipts/test.txt"
-            r.save(update_fields=["file"])
-            return r
-
-    def test_anonymous_cannot_fetch_receipt(self):
-        receipt = self._make_receipt()
-        self.client.logout()
-        r = self.client.get(f"/receipts/{receipt.pk}/file/")
-        self.assertEqual(r.status_code, 302)
-        self.assertIn("/accounts/login/", r["Location"])
 
 
 class CompressedResponseTests(TestCase):

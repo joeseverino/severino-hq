@@ -233,14 +233,6 @@ class AuditHistoryPageTests(TestCase):
     def rows(self, **params):
         return list(self.client.get(self.url(), params).context["object_list"])
 
-    def test_signing_in_is_required(self):
-        self.client.logout()
-
-        response = self.client.get(self.url())
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("login", response["Location"])
-
     def test_an_empty_log_says_so(self):
         response = self.client.get(self.url())
 

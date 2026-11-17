@@ -85,11 +85,6 @@ class TopologyPageTests(TestCase):
         self.assertEqual(self.body("resource:not-declared").status_code, 404)
         self.assertEqual(self.page(focus="not-a-node").context["focus_node"], "")
 
-    def test_a_body_needs_a_signed_in_operator(self):
-        self.client.logout()
-
-        self.assertEqual(self.body("resource:internal-name").status_code, 302)
-
     def test_focus_becomes_a_shareable_bounded_trace(self):
         with host_only():
             response = self.client.get(
