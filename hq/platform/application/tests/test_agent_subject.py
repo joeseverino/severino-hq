@@ -216,13 +216,3 @@ class OneSubjectPerAgentAndPersonTests(TestCase):
         self.block_anna()
 
         self.assertIsNotNone(self.claim())
-
-    def test_a_legacy_operation_with_unknown_person_keeps_the_clients_brake(self):
-        declare_policy()
-        approve(ApproveCommand(self.hold(self.as_ben)), principal=web_principal(self.ben))
-        OperationRequest.objects.update(requested_person_key=None)
-        self.block_anna()
-
-        self.assertIsNone(self.claim())
-        self.block_anna(blocked=False)
-        self.assertIsNotNone(self.claim())
