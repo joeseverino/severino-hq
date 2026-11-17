@@ -250,14 +250,14 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 }
 /* The band draws no box of its own: a box is the card around it. A card holding the band alone is its frame and nothing more, so its facts keep their own padding and edges. Anywhere else (a section's body, a card that holds more, the page's ground) the facts stand apart by gaps with no edges, their words at the content's edge. Weightless (`:where`), so a size that spaces its facts its own way says so in a rule of one class more. */
 .card:not(.section-body):has(> .facts-band:only-child) { padding: 0; }
-.facts-band:where(:not(.card:not(.section-body) > :only-child)) { --band-gap: var(--space-8) var(--space-16); --band-rules: none; overflow: visible; }
+.facts-band:where(:not(.card:not(.section-body) > :only-child)) { --band-gap: var(--space-6) var(--space-12); --band-rules: none; overflow: visible; }
 .facts-band > .fact {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-6) var(--space-8);
+  padding: var(--space-4) var(--space-6);
 }
 .facts-band:where(:not(.card:not(.section-body) > :only-child)) > .fact { padding: 0; }
 /* A band of facts beside a page's title (the dashboard's glance) stands on the page's ground: beside the title while its facts fit there, on a line of its own under it, from the page's edge, where not. */
