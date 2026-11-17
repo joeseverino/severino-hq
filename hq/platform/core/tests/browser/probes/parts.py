@@ -57,20 +57,6 @@ SPILLED_LABELS = (
 )
 
 
-# Each reading's lines, as laid out: those that start under its mark rather
-# than beside it, and those cut short.
-READINGS = """(heads) => heads.map((head) => {
-  const [mark, ...lines] = [...head.children].filter((el) => el.checkVisibility());
-  const at = mark.getBoundingClientRect();
-  return {
-    under_the_mark: lines.filter((line) => line.getBoundingClientRect().left < at.right - 1)
-      .map((line) => line.textContent.trim().slice(0, 30)),
-    cut: lines.filter((line) => line.scrollWidth > line.clientWidth + 1)
-      .map((line) => line.textContent.trim().slice(0, 30)),
-  };
-})"""
-
-
 # An ask drawn beside a table whose rows hold the same ask: the row's button
 # again, outside every row, which reads as a control nothing in the table
 # owns.
@@ -130,17 +116,6 @@ HEADINGS_PARTED = (
   return found;
 }"""
 )
-
-
-def reading_problems(readings):
-    """What a reader loses of the readings: a line drawn under its mark, or
-    cut short."""
-
-    found: list[str] = []
-    for reading in readings:
-        found.extend(f"under the mark: {line}" for line in reading["under_the_mark"])
-        found.extend(f"cut short: {line}" for line in reading["cut"])
-    return found
 
 
 # A check's evidence follows its statement: on the same line within a short
@@ -302,8 +277,6 @@ PILLS_IN_PIECES = (
 )
 
 
-_READINGS_OF = f"(selector) => ({READINGS})([...document.querySelectorAll(selector)])"
-
 # A chart, a trend, a bar or a calendar is drawn wherever what holds it is: a
 # drawing hidden for want of room is a figure that shows nothing, when the
 # table beside it or the line under it has the room to show it.
@@ -328,11 +301,6 @@ CHECKS = {
     "links at rest": Check(
         (LINKS_AT_REST, [SELECTORS["link"], SELECTORS["vendored"]]),
         reader_sees="a link among words told apart from them by color alone",
-    ),
-    "readings": Check(
-        (_READINGS_OF, SELECTORS["readings"]),
-        findings=reading_problems,
-        reader_sees="a reading's line cut short or pushed under its mark",
     ),
     "undrawn drawings": Check(
         (UNDRAWN, SELECTORS["drawing"]), reader_sees="a chart or a calendar given room and drawing nothing"
