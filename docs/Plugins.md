@@ -164,7 +164,10 @@ Class-based views inherit
 `CapabilityRequiredMixin` and declare `required_capability`; function views use
 `@capability_required(...)`. Either only names the capability, which the page
 reads under beside the host's `read`. The host's page gate refuses a person who
-does not hold both, and records the refusal, before the view runs. It also refuses to serve a mixin view that names none. Bulk work
+does not hold both, and records the refusal, before the view runs. It also refuses to serve a mixin view that names none. Each route
+an extension mounts names one of its own `operator_capabilities`, and a view
+that `runs` a command names one the command requires
+(`PageReadCapabilityTests`, over every installed extension). Bulk work
 records one summary with `record_operation`. Who acted and which operation a
 row belongs to are the door's: the capability runner names every row a
 handler writes by its capability and its caller, and the job runner every row

@@ -3,10 +3,12 @@ from django.shortcuts import render
 from hq_sdk.outbound import ask
 from hq_sdk.pages import page_context
 from hq_sdk.ui import Kpi
+from hq_sdk.web import capability_required
 
 from .outbound import ARCHIVED, LOOKUP, NOTES, stored
 
 
+@capability_required("notes.read")
 def index(request):
     return render(
         request,
