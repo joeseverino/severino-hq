@@ -38,29 +38,6 @@ def a_tailnet():
     )
 
 
-class UnreachableConsumerTests(TestCase):
-    def test_each_consumer_a_sweep_could_not_reach_is_a_fact(self):
-        resource = a_resource(
-            "a-certificate",
-            {"unreachable_consumers": [{"domain": "app.example.com"}, {"consumer": "an-edge"}, {"domain": " "}, "x"]},
-        )
-
-        found = add_observed_facts((resource,))
-
-        self.assertEqual(
-            found["resource:a-certificate"], (("unreachable", "app.example.com"), ("unreachable", "an-edge"))
-        )
-
-    def test_a_status_naming_none_says_nothing(self):
-        resources = (
-            a_resource("no-status", None),
-            a_resource("not-a-list", {"unreachable_consumers": "app.example.com"}),
-            a_resource("nameless", {"unreachable_consumers": [{"endpoint": "100.64.0.2", "port": "443"}]}),
-        )
-
-        self.assertEqual(add_observed_facts(resources), {})
-
-
 class PolicyVerdictTests(TestCase):
     def facts(self, *consumers):
         a_tailnet()

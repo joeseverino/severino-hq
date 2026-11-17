@@ -38,21 +38,14 @@ LOOPBACK = ("127.0.0.1", "::1")
 UNWALKED = frozenset(
     {
         "automation_findings",
-        "certificate_expiry",
-        "connection_findings",
         "container_findings",
         "contradiction_findings",
         "controller_findings",
-        "credential_findings",
         "delivery_findings",
         "docker_estate",
-        "github_findings",
         "machine_findings",
-        "perimeter_findings",
         "posture",
         "record_findings",
-        "reference_findings",
-        "registration_findings",
         "repository_findings",
     }
 )

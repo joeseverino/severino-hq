@@ -521,38 +521,6 @@ class OldGlanceTests(TestCase):
 
 
 class ActionItemTests(TestCase):
-    def test_a_connection_that_does_not_answer_is_an_action_item(self):
-        connection("example-ssh", reachable=False, detail="Timed out")
-
-        found = [item for item in tuple(infrastructure()) if "connection-not-answering" in finding_key(item)]
-
-        self.assertEqual(len(found), 1)
-        self.assertIn("example-ssh", found[0].title)
-        self.assertIn("Timed out", found[0].explanation)
-        self.assertEqual(found[0].subject_link.label, "example-ssh")
-        self.assertTrue(found[0].subject_link.url)
-
-    def test_a_domain_that_will_not_renew_reaches_the_queue(self):
-        declared("example-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
-        store(
-            "cloudflare.zone",
-            {
-                "zone": "example.com",
-                "connection_ref": "example-dns",
-                "registration": {
-                    "expires_at": (timezone.now() + timedelta(days=40)).date().isoformat(),
-                    "auto_renew": False,
-                    "registrar": "Example Registrar",
-                },
-            },
-        )
-
-        found = [item for item in tuple(infrastructure()) if "registration-lapsing" in finding_key(item)]
-
-        self.assertEqual(len(found), 1)
-        self.assertIn("will not renew", found[0].title)
-        self.assertEqual(found[0].subject_link.url, reverse("zones:detail", args=["example.com"]))
-
     def test_a_machine_offline_past_the_threshold_that_serves_something(self):
         devices(
             device(

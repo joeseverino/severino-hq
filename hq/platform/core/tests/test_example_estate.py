@@ -374,18 +374,6 @@ class WalkedStatesTests(TestCase):
             with self.subTest(reading=reading):
                 self.assertTrue(page.context[reading])
 
-    def test_two_lapsed_certificates_under_one_name_read_apart(self):
-        from hq.platform.core.example_estate.infra import LEFT_OVER, LEFT_OVER_LAPSED
-
-        self.walked(reverse("control_plane:findings"))
-        found = findings(principal=web_principal(self.user), rule="certificate-expiring")["findings"]
-        titles = [finding["title"] for finding in found if LEFT_OVER in finding["title"]]
-
-        self.assertEqual(len(titles), 2, titles)
-        self.assertEqual(len(set(titles)), 2, titles)
-        for title in titles:
-            self.assertIn(f"expired {LEFT_OVER_LAPSED.days} days ago", title)
-
     def test_a_name_one_reading_holds_twice_is_one_item_and_no_source_repeats_a_key(self):
         # The queue knows an item by its key; a source answering two under one
         # has given it one item it cannot tell apart, row or dismissal.

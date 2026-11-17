@@ -25,10 +25,8 @@ from ..credential_mint import (
     store_references,
 )
 from ..credential_sight import credential_sight
-from ..findings import derive_findings
 from ..report_testing import report_connections
 from ..security import cli_principal
-from ..topology import derive_topology
 from .commands import commands_on
 
 ACCOUNT = "0123abcd"
@@ -278,68 +276,6 @@ class MintCommandTests(TestCase):
             "--store 'op://Example Vault/exampleitem01/credential' "
             "--store-id 'op://Example Vault/exampleitem01/username'",
         )
-
-
-class CredentialFindingTests(TestCase):
-    def findings(self):
-        principal = cli_principal()
-        return derive_findings(derive_topology(principal=principal), principal=principal)
-
-    def test_missing_permissions_are_named_and_offer_the_mint(self):
-        production_shape()
-        connect()
-
-        found = {finding.rule: finding for finding in self.findings()}
-
-        self.assertNotIn("connection-not-answering", found)
-        finding = found["credential-missing-permissions"]
-        self.assertEqual(
-            tuple(value for label, value in finding.evidence if label == "Missing"),
-            missing_from_readings(),
-        )
-        self.assertEqual(finding.steps[0].command, COMMAND)
-
-    def test_a_credential_refused_outright_offers_the_same_mint(self):
-        now = timezone.now()
-        ProviderInventory.objects.create(
-            kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=now - timedelta(days=1)
-        )
-        ProviderInventory.objects.filter(kind=PAGES).update(
-            reachable=False, refusal=CREDENTIAL_REFUSAL, error="Invalid API Token"
-        )
-        connect()
-
-        found = {finding.rule: finding for finding in self.findings()}
-
-        finding = found["connection-not-answering"]
-        self.assertIn("refused", finding.title)
-        self.assertNotIn("credential-missing-permissions", found)
-        self.assertTrue(finding.steps)
-
-    def test_expiry_inside_the_window_raises_a_finding_with_the_mint(self):
-        ProviderInventory.objects.create(kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now())
-        connect(expires_at=timezone.now() + timedelta(days=10))
-
-        found = {finding.rule: finding for finding in self.findings()}
-
-        finding = found["credential-expiring"]
-        self.assertEqual(finding.severity, "attention")
-        self.assertEqual(finding.steps[0].command, COMMAND)
-
-    def test_an_expired_credential_is_serious(self):
-        ProviderInventory.objects.create(kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now())
-        connect(expires_at=timezone.now() - timedelta(days=1))
-
-        finding = {f.rule: f for f in self.findings()}["credential-expiring"]
-
-        self.assertEqual(finding.severity, "serious")
-        self.assertIn("expired 1 day ago", finding.title)
-
-    def test_expiry_outside_the_window_is_quiet(self):
-        ProviderInventory.objects.create(kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now())
-        connect(expires_at=timezone.now() + timedelta(days=60))
-
-        self.assertNotIn("credential-expiring", {f.rule for f in self.findings()})
 
 
 class RenderedFixTests(TestCase):
