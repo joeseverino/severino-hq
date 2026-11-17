@@ -31,7 +31,7 @@ from hq.platform.application.routes import reverse
 from .contracts import route_url
 from .domains import load
 from .labels import SAVE_CHANGES
-from .records import DELETE, described, records_for
+from .records import DELETE, described, record_form, records_for
 from .web_writes import form_payload, posted_answer, refused, run_posted, said
 lazy from .capabilities import capability_words, command_spec
 lazy from .domains import Records
@@ -212,7 +212,7 @@ class _Records(_RecordWrite):
 
     @property
     def records(self) -> Records:
-        return records_for(self.get_form_class()._meta.model if self.model is None else self.model)
+        return records_for(self.form_class._meta.model if self.model is None else self.model)
 
     @property
     def record_model(self) -> Any:
@@ -249,6 +249,11 @@ class RecordFormMixin(_Records, CapabilityFormMixin):
     @property
     def updates(self) -> str:
         return f"{self.records.noun}.update"
+
+    def get_form_class(self) -> Any:
+        """Its form, built from its command (``records.record_form``)."""
+
+        return self.form_class or record_form(self.records)
 
     def get_form(self, form_class: Any = None) -> Any:
         form = super().get_form(form_class)

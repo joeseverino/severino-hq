@@ -27,7 +27,10 @@ A `records` declaration yields:
   the health reading.
 
 Its web views take `RecordFormMixin` (create, update) and `RecordDeleteMixin`
-from `hq/platform/application/writes.py` and name only their `ModelForm`.
+from `hq/platform/application/writes.py` and name only their model. The form
+is the command's fields, each drawn from the model's column of that name
+(`records.record_form`), so a field added to the command and the model is on
+the form with no form of its own to edit.
 
 The form sends its values to the domain's create or update capability
 through `run_posted`, as every other door does, and the save runs the model's

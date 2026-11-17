@@ -22,7 +22,6 @@ from hq.platform.application.tables import TableColumn, TableFilter, TableListMi
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.status_tags import status_pill
 
-from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
 
 ASSETS_TRAIL = (("Assets", reverse_lazy("assets:list")),)
@@ -76,6 +75,7 @@ class AssetListView(PageMixin, TableListMixin, ListView):
 class AssetPage(PageMixin):
     """A page about one asset, or a new one: its trail runs back to the list."""
 
+    model = Asset
     page_trail = ASSETS_TRAIL
 
     @override
@@ -143,20 +143,16 @@ FORM_PAGE = {"form_note": "Deductible estimate = cost × business use. Updated w
 
 class AssetCreateView(AssetPage, ReferencePickerMixin, RecordFormMixin, CreateView):
     page_title = "New asset"
-    form_class = AssetForm
     extra_context = FORM_PAGE
 
 
 class AssetUpdateView(AssetPage, ReferencePickerMixin, RecordFormMixin, UpdateView):
     page_title = "Edit asset"
-    model = Asset
-    form_class = AssetForm
     extra_context = FORM_PAGE
 
 
 class AssetDeleteView(AssetPage, RecordDeleteMixin, DeleteView):
     page_title = "Delete asset?"
-    model = Asset
     template_name = "assets/asset_confirm_delete.html"
     success_url = reverse_lazy("assets:list")
     context_object_name = "asset"

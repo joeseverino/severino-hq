@@ -8,12 +8,17 @@ through its capability, which ends in the model's own ``full_clean``.
 """
 
 from collections.abc import Callable
+from dataclasses import fields
+from functools import cache
 from typing import Any
 
+from django import forms
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.forms import ModelForm
+from django.db.models import Field
+from django.forms import ModelForm, modelform_factory
 from django.utils.text import capfirst
 
+from .command_fields import for_agents
 from .contracts import Effect
 from .deletion import DeleteCommand, RecordDeleted, delete_record
 from .describe import meanings
@@ -71,6 +76,38 @@ def records_for(model: type) -> Records:
         if load(records.model) is model:
             return records
     raise LookupError(f"No host domain declares records for {model.__name__}.")
+
+
+# The control a kind of column is drawn in on a record's form, where Django's
+# own says less than the browser offers: a date or time picker, a text box of
+# a few lines, a list tall enough to choose several from.
+_CONTROLS: dict[str, Callable[[], forms.Widget]] = {
+    "DateField": lambda: forms.DateInput(attrs={"type": "date"}),
+    "TimeField": lambda: forms.TimeInput(attrs={"type": "time"}),
+    "TextField": lambda: forms.Textarea(attrs={"rows": 4}),
+    "ManyToManyField": lambda: forms.SelectMultiple(attrs={"size": 6}),
+}
+
+
+def _control(column: Field[Any, Any], **kwargs: Any) -> forms.Field | None:
+    """A column's form field, in the control its kind of column takes; one
+    limited to choices keeps Django's list."""
+
+    control = _CONTROLS.get(column.get_internal_type())
+    if control is not None and not column.choices:
+        kwargs.setdefault("widget", control())
+    return column.formfield(**kwargs)
+
+
+@cache
+def record_form(records: Records) -> type[ModelForm[Any]]:
+    """A plain record domain's form: its command's fields, each drawn from the
+    model's column of that name. A command field the model has no column for
+    is refused as the form is built (Django's ``FieldError``)."""
+
+    command = load(records.command)
+    taken = [item.name for item in fields(command) if item.name not in for_agents(command)]
+    return modelform_factory(load(records.model), fields=taken, formfield_callback=_control)
 
 
 def described[F: ModelForm[Any]](form: F, command: type) -> F:

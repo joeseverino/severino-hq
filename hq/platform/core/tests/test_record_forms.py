@@ -2,14 +2,21 @@
 words on its button, Save changes on one that exists, Cancel back, and each
 field's help the command's meaning."""
 
+from dataclasses import dataclass, replace
+from datetime import date
+
 from django.contrib.auth import get_user_model
+from django.core.exceptions import FieldError
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.describe import meanings
+from hq.platform.application.domains import Records, records_of
 from hq.platform.application.markup_testing import select, within
+from hq.platform.application.plugin_testing import form_keyed
 
 # Each page that makes a record from its form, and the command it makes it by.
 CREATES = (
@@ -73,3 +80,57 @@ class RecordFormTests(TestCase):
 
         self.assertEqual(submits(page), ["Save changes"])
         self.assertEqual(cancels(page), [project.get_absolute_url()])
+
+
+@dataclass(frozen=True, slots=True)
+class TakesAWarranty:
+    item_name: str
+    warranty_date: date | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TakesWhatNoColumnHolds:
+    item_name: str
+    nowhere: str = ""
+
+
+def declared(command: type) -> Records:
+    return replace(records_of("assets"), command=f"{__name__}:{command.__name__}")
+
+
+class DerivedRecordFormTests(TestCase):
+    """A record's form is its command's fields, each drawn from the model's column."""
+
+    def test_a_field_the_command_takes_is_on_the_form_in_its_columns_control(self):
+        from hq.platform.application.records import record_form
+
+        form = record_form(declared(TakesAWarranty))()
+
+        self.assertEqual(list(form.fields), ["item_name", "warranty_date"])
+        self.assertEqual(form.fields["warranty_date"].widget.input_type, "date")
+
+    def test_a_field_no_column_holds_is_refused_as_the_form_is_built(self):
+        from hq.platform.application.records import record_form
+
+        with self.assertRaises(FieldError):
+            record_form(declared(TakesWhatNoColumnHolds))
+
+    def test_a_field_posted_on_the_form_is_saved(self):
+        user = get_user_model().objects.create_superuser("example-saver", "saver@example.test", "x" * 20)
+        self.client.force_login(user)
+
+        self.client.post(
+            reverse("assets:create"),
+            form_keyed(
+                {
+                    "item_name": "Example asset",
+                    "category": "other",
+                    "total_cost": "1.00",
+                    "business_use_percentage": "100",
+                    "status": "active",
+                    "warranty_date": "2030-01-31",
+                }
+            ),
+        )
+
+        self.assertEqual(Asset.objects.get(item_name="Example asset").warranty_date, date(2030, 1, 31))
