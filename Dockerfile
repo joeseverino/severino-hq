@@ -279,7 +279,10 @@ ENTRYPOINT ["/entrypoint.sh"]
 # One process, named so a WEB_CONCURRENCY in the host's environment cannot
 # start more: the agent limits (hq/platform/application/agent_limits.py) are
 # counted in it.
-CMD ["uvicorn", "hq.config.asgi:application", "--host", "127.0.0.1", "--port", "8000", \
+#
+# The module runs uvicorn on the address and port its LISTENS_AT declares,
+# with these options after them.
+CMD ["python", "-m", "hq.config.serve", \
      "--workers", "1", "--no-proxy-headers", "--access-log", "--timeout-keep-alive", "120"]
 
 # The probe is the static controller binary already in the image: no

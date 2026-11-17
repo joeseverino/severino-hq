@@ -42,7 +42,7 @@ class BridgeSocketDeliveryTests(SimpleTestCase):
 
     def test_the_web_listener_is_not_the_socket(self):
         command = re.search(r"^CMD \[(.+?)\]$", DOCKERFILE.read_text(), re.MULTILINE | re.DOTALL).group(1)
-        self.assertIn('"hq.config.asgi:application"', command)
+        self.assertIn('"hq.config.serve"', command)
         self.assertNotIn("--uds", command)
         self.assertNotIn("--fd", command)
         self.assertNotIn("bridge", command)

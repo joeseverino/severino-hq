@@ -266,7 +266,7 @@ class ServerReadsNoForwardedHeadersTests(SimpleTestCase):
         launches = {
             "Dockerfile": (
                 (root / "Dockerfile").read_text(encoding="utf-8").replace("\\\n", ""),
-                "hq.config.asgi:application",
+                "hq.config.serve",
             ),
         }
         for name, (text, served) in launches.items():

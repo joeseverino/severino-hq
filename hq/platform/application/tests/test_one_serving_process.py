@@ -23,7 +23,8 @@ class OneServingProcessTests(SimpleTestCase):
         # the environment only when --workers is absent.
         command = _command()
 
-        self.assertEqual(command[0], "uvicorn")
+        # hq.config.serve hands its options on to uvicorn.
+        self.assertEqual(command[:3], ["python", "-m", "hq.config.serve"])
         workers = [part for part in command if part.startswith("--workers")]
         self.assertIn(workers, (["--workers"], ["--workers=1"]))
         if workers == ["--workers"]:

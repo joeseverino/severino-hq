@@ -10,12 +10,13 @@ import re
 from dataclasses import dataclass
 
 from hq.config.networks import is_loopback
+from hq.config.serve import LISTENS_AT
 
 from . import connections
 from .projection import projection_scope, read_once
 from .tailnet import _by_name, _grant_machines, _PortNamer, _service_ports, _ssh_ports, devices, policy
 lazy from .containers import containers
-lazy from .hq_self import LISTENS_AT, own_container
+lazy from .hq_self import own_container
 
 # A fact on the tailnet connection: a grant port only loopback listens on.
 GRANT_REACHES_ONLY_LOOPBACK = "grant-reaches-only-loopback"
