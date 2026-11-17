@@ -80,6 +80,7 @@ from .finding_steps import Do, Press, Run, WrittenCheck, WrittenReason, WrittenS
 from .first_seen import recorded
 from .integration_validation import required_capability_names
 from .integrations import IntegrationGraph, held_graph, integration_graph
+from .json_schemas import as_written
 from .projection import MAX_PAGE_SIZE, QUERY, projection_scope
 from .security import Principal
 from .tone import Tone
@@ -717,10 +718,10 @@ def finding_facts(finding: Finding) -> FindingFacts:
 def serialize_finding(finding: Finding) -> SerializedFinding:
     return {
         **finding_facts(finding),
-        "steps": [asdict(step) for step in finding.steps],
-        "check": asdict(finding.check) if finding.check else None,
-        "offers": [asdict(action) for action in finding.offers],
-        "investigations": [asdict(action) for action in finding.investigations],
+        "steps": [as_written(step) for step in finding.steps],
+        "check": as_written(finding.check) if finding.check else None,
+        "offers": [as_written(action) for action in finding.offers],
+        "investigations": [as_written(action) for action in finding.investigations],
     }
 
 

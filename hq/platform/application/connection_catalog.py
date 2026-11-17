@@ -4,7 +4,7 @@ Each connection grouped by family, what it may do and why, and the evidence
 behind each ability. The API serializes the same view.
 """
 
-from dataclasses import KW_ONLY, asdict, dataclass, replace
+from dataclasses import KW_ONLY, dataclass, replace
 from datetime import datetime
 
 from django.core.exceptions import ImproperlyConfigured
@@ -33,6 +33,7 @@ from .contracts import SCOPE_NAME, endpoint_has_private_parts
 from .derivations import present
 from .freshness import freshness, last_read
 from .integrations import held_graph
+from .json_schemas import as_written
 from .moments import ago
 from .projection import read_once
 from .security import Principal
@@ -497,11 +498,11 @@ def serialize_connection(connection: ConnectionView) -> dict:
         "lifecycle": connection.lifecycle,
         "authority": connection.authority,
         "abilities": [serialize_ability(state) for state in connection.abilities],
-        "targets": [asdict(link) for link in instance.targets],
-        "dependencies": [asdict(link) for link in instance.dependencies],
-        "facts": [asdict(fact) for fact in instance.facts],
+        "targets": [as_written(link) for link in instance.targets],
+        "dependencies": [as_written(link) for link in instance.dependencies],
+        "facts": [as_written(fact) for fact in instance.facts],
         "controller_id": instance.controller_id or None,
-        "actions": [asdict(action) for action in connection.actions],
+        "actions": [as_written(action) for action in connection.actions],
     }
 
 
@@ -517,5 +518,5 @@ def serialize_ability(state: ConnectionAbilityState) -> dict:
         "missing_scopes": list(state.missing_scopes),
         "capability": state.ability.capability or None,
         "subject_resource": state.ability.subject_resource or None,
-        "action": asdict(state.action) if state.action else None,
+        "action": as_written(state.action) if state.action else None,
     }

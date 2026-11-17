@@ -6,7 +6,6 @@ model and decides no number.
 """
 
 from collections.abc import Iterable, Mapping
-from dataclasses import asdict
 from functools import partial
 from typing import Any, TypedDict
 
@@ -27,6 +26,7 @@ from .domains import (
 from .finding_model import Finding
 from .finding_steps import WrittenStep
 from .findings import finding_key, rule_for
+from .json_schemas import as_written
 from .plugins import source_overview
 from .projection import projection_scope
 from .read_models import ActivityEvent, recent_activity
@@ -190,11 +190,11 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "action": primary.label if primary else "",
         # A finding of a page's own (an unmet check, a step a request contradicts) has no rule the findings page lists.
         "url": primary.url if primary else f"{findings_url}?rule={finding.rule}" if rule else "",
-        "steps": [asdict(step) for step in finding.steps],
+        "steps": [as_written(step) for step in finding.steps],
         "no_help_reason": finding.no_help_reason,
-        "check": asdict(finding.check) if finding.check else None,
+        "check": as_written(finding.check) if finding.check else None,
         "actions": [],
-        "subject": asdict(finding.subject_link) if finding.subject_link else None,
+        "subject": as_written(finding.subject_link) if finding.subject_link else None,
         "notice": finding.notice,
         "held": finding.held,
         # A rule's findings are one kind of matter, named as the rule names itself.
@@ -205,7 +205,7 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "observed_at": finding.observed_at.isoformat() if finding.observed_at else "",
         "reads": finding.reads,
         "facts": [list(fact) for fact in finding.evidence],
-        "links": [asdict(link) for link in finding.pages],
+        "links": [as_written(link) for link in finding.pages],
         "read_capabilities": list(finding.read_capabilities),
     }
 

@@ -9,7 +9,7 @@ mutation that could drift from the thing it claims to represent.
 
 import re
 from collections import Counter
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -41,6 +41,7 @@ from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, node_name, record_name
 from .infrastructure import ResourceState, resource_health
 from .integration_validation import required_capability_names
+from .json_schemas import as_written
 from .projection import QUERY, projection_scope
 from .record_errors import RecordNotFound
 from .resource_capabilities import REMOVAL_CAPABILITY, UPDATE_CAPABILITY, removals_pending, resource_capabilities
@@ -644,8 +645,8 @@ def serialize_topology(
             else None
         ),
         "summary": _counts(topology),
-        "nodes": [asdict(node) for node in topology.nodes],
-        "edges": [asdict(edge) for edge in topology.edges],
+        "nodes": [as_written(node) for node in topology.nodes],
+        "edges": [as_written(edge) for edge in topology.edges],
     }
 
 

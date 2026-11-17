@@ -16,6 +16,7 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
 
+from .json_schemas import as_written
 from .labels import human_label
 from .own_addresses import tailnet_sightings
 from .projection import complete, page_size, projection_scope, window
@@ -45,18 +46,6 @@ def _moment(value: Any) -> str | None:
     if isinstance(value, datetime):
         return value.isoformat()
     return str(value) if value else None
-
-
-def _link(link: Any) -> dict[str, Any] | None:
-    if link is None:
-        return None
-    return {
-        "label": link.label,
-        "url": link.url,
-        "external": link.external,
-        "kind": link.kind,
-        "kind_label": link.kind_label,
-    }
 
 
 def _collection(
@@ -306,8 +295,8 @@ def get_relationships(node: str, *, principal: Principal) -> dict[str, Any]:
                 "rank": group.rank,
                 "items": [
                     {
-                        "entity": _link(item.entity),
-                        "source": _link(item.source),
+                        "entity": as_written(item.entity),
+                        "source": as_written(item.source) if item.source else None,
                         "observed_at": _moment(item.observed_at),
                         "stale": item.stale,
                     }
@@ -357,12 +346,14 @@ def serialize_hop(hop: Any) -> dict[str, Any]:
         "step": hop.step,
         "label": hop.label,
         "name": hop.name,
-        "link": _link(hop.link),
+        "link": as_written(hop.link) if hop.link else None,
         "detail": hop.detail,
         "source": _source(hop.source),
         "certificate": _certificate(hop.certificate),
         "unread": hop.unread,
-        "overlays": [{"relation": relation, "link": _link(link)} for relation, link in hop.overlays],
+        "overlays": [
+            {"relation": relation, "link": as_written(link) if link else None} for relation, link in hop.overlays
+        ],
     }
     if hop.check is None:
         return found
@@ -428,7 +419,7 @@ def serialize_path(path: Any) -> dict[str, Any]:
             {
                 "relation": hop.label,
                 "name": hop.name,
-                "link": _link(hop.link),
+                "link": as_written(hop.link) if hop.link else None,
                 "detail": hop.detail,
                 "source": _source(hop.source),
             }

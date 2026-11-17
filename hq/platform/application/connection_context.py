@@ -8,7 +8,7 @@ path. None of them derives a fact the others cannot return.
 """
 
 from collections import Counter
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 lazy from urllib.parse import urlencode
@@ -45,6 +45,7 @@ from .derived_reads import (
 )
 from .entity_links import entity_link
 from .freshness import freshness
+from .json_schemas import as_written
 from .moments import ago
 from .path_model import ServicePath
 from .paths import hq_path
@@ -226,7 +227,7 @@ class ConnectionRow:
                 if self.last_event is not None
                 else None
             ),
-            "read_now": asdict(self.read_now) if self.read_now else None,
+            "read_now": as_written(self.read_now) if self.read_now else None,
             "read_requested_at": _moment(self.read_requested_at),
         }
 
@@ -263,7 +264,7 @@ def _fix(fix: CredentialFix) -> dict[str, Any]:
         "expiring": fix.expiring,
         "expired": fix.expired,
         "permissions": list(fix.permissions),
-        "steps": [asdict(step) for step in fix.steps],
+        "steps": [as_written(step) for step in fix.steps],
     }
 
 
@@ -400,7 +401,7 @@ class ConnectionsContext:
                 "dependencies": estate.dependency_count,
             },
             "hq_path": serialize_path(self.hq_path) if self.hq_path else None,
-            "read_all": asdict(self.read_all) if self.read_all else None,
+            "read_all": as_written(self.read_all) if self.read_all else None,
             "reading_everything_since": _moment(self.reading_everything_since),
             # The posture's request half (how the request being answered
             # reached HQ) exists only where there is a request; the estate

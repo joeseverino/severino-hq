@@ -27,7 +27,7 @@ from hq.platform.application.findings import (
     finding_facts,
     narrowed_findings,
 )
-from hq.platform.application.json_schemas import Written
+from hq.platform.application.json_schemas import Written, as_written
 from hq.platform.application.security import Principal
 from hq.platform.application.workflow_contracts import ActionLink
 
@@ -227,7 +227,7 @@ def _step(step: Press | Run | Do) -> AgentStep:
     if isinstance(step, Press):
         link = step.link
         return {"kind": "press", "call": {**_command(link.label, link.capability, link.target), "effect": link.effect}}
-    return asdict(step)
+    return as_written(step)
 
 
 def agent_finding(finding: Finding) -> AgentFinding:

@@ -299,8 +299,8 @@ _WRITTEN = "hq_written"
 class Written:
     """``Annotated[dict[str, Any], Written(Kind)]``: a part the API document
     types whole, as ``Kind``, and an MCP tool's shape leaves an object. It is a
-    dataclass as ``asdict`` writes it: a dict to the type checker and ``Kind``
-    to every validator.
+    dataclass as ``as_written`` writes it: a dict to the type checker and
+    ``Kind`` to every validator.
 
     A stdlib dataclass with no config of its own takes the config of the
     answer that holds it, so one held by several answers carries its own
@@ -314,6 +314,20 @@ class Written:
         schema = handler(self.kind)
         schema["metadata"] = {**schema.get("metadata", {}), _WRITTEN: True}
         return schema
+
+
+def as_written(value: Any) -> dict[str, Any]:
+    """``value``, a dataclass a ``Written`` part types, as the part is
+    published: each field its type publishes (one marked ``Field(exclude=True)``
+    left out, a ``computed_field`` property in), as JSON writes it."""
+
+    written: dict[str, Any] = _writer(type(value)).dump_python(value, mode="json")
+    return written
+
+
+@functools.cache
+def _writer(kind: type) -> TypeAdapter[Any]:
+    return TypeAdapter(kind)
 
 
 def json_schema(
