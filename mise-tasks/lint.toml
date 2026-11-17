@@ -79,6 +79,7 @@ sources = [
   "hq/platform/api/hq-api.openapi.json",
   "controller/api/*.openapi.json",
   "tools/lint/package*.json",
+  "tools/lint/redocly.yaml",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -88,12 +89,13 @@ sources = [
 ]
 outputs = []
 depends = ["setup:lint-tools"]
-# Specification rules cover wire contracts. HTTP style recommendations do not
-# apply to Django's canonical trailing slashes or the stdin/stdout bridge.
+# Specification rules cover wire contracts, and redocly.yaml adds the ones that
+# hold each example to its schema. HTTP style recommendations do not apply to
+# Django's canonical trailing slashes or the stdin/stdout bridge.
 # Stylish names each problem's file, line and column. HQ writes all three
 # documents, so a problem is fixed in what declares them, never ignored.
 env = { REDOCLY_SUPPRESS_UPDATE_NOTICE = "true" }
-run = "redocly lint --extends=spec --format=stylish hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json || { echo 'lint:openapi: each problem is at the file:line:column above. HQ writes these documents: fix the Python that declares the shape, then rewrite them: mise run manage -- api_openapi for hq-api, mise run manage -- bridge_contract for the two under controller/api.' >&2; exit 1; }"
+run = "redocly lint --config=tools/lint/redocly.yaml --format=stylish hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json || { echo 'lint:openapi: each problem is at the file:line:column above. HQ writes these documents: fix the Python that declares the shape, then rewrite them: mise run manage -- api_openapi for hq-api, mise run manage -- bridge_contract for the two under controller/api.' >&2; exit 1; }"
 
 ["lint:openapi-breaking"]
 description = "The machine API's document breaks no client of its base's, or its exemption file admits the break with a reason"

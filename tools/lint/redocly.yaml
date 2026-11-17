@@ -1,0 +1,8 @@
+# The specification's own rules, and an example that its schema refuses fails
+# the lint, so a declared example cannot drift from the shape it shows.
+extends:
+  - spec
+rules:
+  no-invalid-schema-examples: error
+  no-invalid-media-type-examples: error
+  no-invalid-parameter-examples: error
