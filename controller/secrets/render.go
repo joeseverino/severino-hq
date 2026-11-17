@@ -433,20 +433,12 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *secrets
 		return result, err
 	}
 	defer unlock()
-	if err := tree.RemoveMCPToken(); err != nil {
-		return result, err
-	}
 	// The restart is owed from before the first byte is written until the
 	// container is healthy on it. A run that dies in between leaves the mark,
 	// and the next run, finding the file already equal, still restarts.
 	_, owed, _ := r.pending(tree)
-	checkout := tree.HasCheckoutEnv()
 	current, ok := install.Read(tree.Web(), install.AppEnvName, layout.WebUID, 0o400)
 	differs := !ok || !bytes.Equal(current, out.AppEnv)
-	if checkout && !differs {
-		current, ok = install.Read(tree.Secret(), install.AppEnvName, layout.WebUID, 0o400)
-		differs = !ok || !bytes.Equal(current, out.AppEnv)
-	}
 	if differs || owed {
 		if err := r.markPending(tree, out.AppEnv); err != nil {
 			return result, err
@@ -455,20 +447,12 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *secrets
 	if err := r.at("marked"); err != nil {
 		return result, err
 	}
-	// Existing bind mounts require in-place updates; this is not a multi-file
-	// transaction.
-	if checkout {
-		changed, err := install.InPlace(tree.Secret(), install.AppEnvName, out.AppEnv, layout.WebUID, layout.WebGID, 0o400)
-		if err != nil {
-			return result, err
-		}
-		result.WebChanged = result.WebChanged || changed
-	}
+	// The web container binds the file, so it is updated in place.
 	changed, err := install.InPlace(tree.Web(), install.AppEnvName, out.AppEnv, layout.WebUID, layout.WebGID, 0o400)
 	if err != nil {
 		return result, err
 	}
-	result.WebChanged = result.WebChanged || changed
+	result.WebChanged = changed
 	result.Changed = result.WebChanged
 	if err := r.at("web-env"); err != nil {
 		return result, err
@@ -502,9 +486,6 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *secrets
 		mode      os.FileMode
 	}
 	targets := []target{{"web", install.AppEnvName, layout.WebUID, 0o400}, {"runtime", install.ConnectionsName, layout.RootUID, 0o400}}
-	if checkout {
-		targets = append(targets, target{"checkout", install.AppEnvName, layout.WebUID, 0o400})
-	}
 	for _, file := range out.SSH {
 		targets = append(targets, target{"runtime", install.SSHDirName + "/" + file.Name, layout.RootUID, file.Mode})
 	}

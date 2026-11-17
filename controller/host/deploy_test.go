@@ -264,9 +264,6 @@ func TestAHealthyReleaseIsSyncedInstalledAndReleasesTheHold(t *testing.T) {
 	f.before(t, filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host")+" install", "systemctl start severino-hq-controller.path")
 	// The release just installed is verified before the deploy ends.
 	f.before(t, "systemctl start severino-hq-controller.path", "systemctl start "+DriftUnit)
-	if leftovers, _ := filepath.Glob(filepath.Join(f.machine.Sbin, "severino-hq-*")); len(leftovers) != 0 {
-		t.Errorf("a program was installed outside the tree: %v", leftovers)
-	}
 }
 
 // The web unit restarts under every drop-in of the release, the prefix

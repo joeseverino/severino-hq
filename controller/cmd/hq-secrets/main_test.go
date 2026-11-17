@@ -31,7 +31,6 @@ func TestConfigurationRefusals(t *testing.T) {
 	}{
 		"a Connect token in the env":  {func(e map[string]string) { e["OP_CONNECT_TOKEN"] = sentinel }, 0, nil, "Remove OP_CONNECT_TOKEN"},
 		"a service token in the env":  {func(e map[string]string) { e["OP_SERVICE_ACCOUNT_TOKEN"] = sentinel }, 0, nil, "Remove OP_SERVICE_ACCOUNT_TOKEN"},
-		"the legacy override":         {func(e map[string]string) { e["SEVERINO_CONTROLLER_ENV"] = "/run/severino-hq/severino_controller_env" }, 0, nil, "Remove SEVERINO_CONTROLLER_ENV"},
 		"a container name as a flag":  {func(e map[string]string) { e["HQ_CONTAINER"] = "--privileged" }, 0, nil, "not a container name"},
 		"not root":                    {func(map[string]string) {}, 10001, nil, "must run as root"},
 		"no vault":                    {func(e map[string]string) { delete(e, "SEVERINO_SECRETS_VAULT") }, 0, nil, "SEVERINO_SECRETS_VAULT is required"},

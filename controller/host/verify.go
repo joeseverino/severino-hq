@@ -66,10 +66,6 @@ func (m *Machine) Verify(ctx context.Context) ([]string, error) {
 	for _, name := range retired {
 		drift = append(drift, filepath.Join(m.Systemd, name)+" is not shipped by the release")
 	}
-	leftovers, _ := filepath.Glob(filepath.Join(m.Sbin, "severino-hq-*"))
-	for _, leftover := range leftovers {
-		drift = append(drift, leftover+" is installed by no release")
-	}
 	return append(drift, m.runnerRules(ctx)...), nil
 }
 

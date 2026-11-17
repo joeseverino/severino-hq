@@ -63,9 +63,6 @@ func configure(args []string, getenv func(string) string, stderr io.Writer) (sec
 			return secrets.Config{}, "", configError("Remove " + name + " from the environment; the token is read from the unit's credentials.")
 		}
 	}
-	if getenv("SEVERINO_CONTROLLER_ENV") != "" {
-		return secrets.Config{}, "", configError("Remove SEVERINO_CONTROLLER_ENV; configure SEVERINO_CONTROLLER_SECRET_DIR consistently instead.")
-	}
 	value := func(name, fallback string) string {
 		if found := getenv(name); found != "" {
 			return found

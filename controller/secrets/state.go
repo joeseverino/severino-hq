@@ -43,7 +43,7 @@ type state struct {
 
 // installed is one file as the render left it.
 type installed struct {
-	// Dir is "web", "checkout" or "runtime".
+	// Dir is "web" or "runtime".
 	Dir    string      `json:"dir"`
 	Name   string      `json:"name"`
 	UID    int         `json:"uid"`
@@ -66,8 +66,6 @@ func (r *Runner) root(tree *install.Tree, dir string) *os.Root {
 	switch dir {
 	case "web":
 		return tree.Web()
-	case "checkout":
-		return tree.Secret()
 	case "runtime":
 		return tree.Runtime()
 	}
@@ -108,7 +106,6 @@ func (r *Runner) saveState(tree *install.Tree, found state) error {
 // file, and nothing has been added to or dropped from the identity directory.
 func (r *Runner) intact(tree *install.Tree, last state) bool {
 	identities := []string{}
-	checkout := false
 	for _, file := range last.Files {
 		root := r.root(tree, file.Dir)
 		if root == nil {
@@ -121,12 +118,6 @@ func (r *Runner) intact(tree *install.Tree, last state) bool {
 		if file.Dir == "runtime" && len(file.Name) > len(install.SSHDirName)+1 && file.Name[:len(install.SSHDirName)+1] == install.SSHDirName+"/" {
 			identities = append(identities, file.Name[len(install.SSHDirName)+1:])
 		}
-		if file.Dir == "checkout" {
-			checkout = true
-		}
-	}
-	if tree.HasCheckoutEnv() != checkout {
-		return false
 	}
 	directory, err := tree.Runtime().Open(install.SSHDirName)
 	if err != nil {
