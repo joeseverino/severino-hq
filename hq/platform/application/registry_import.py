@@ -13,7 +13,6 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from pydantic import ValidationError as PydanticValidationError
 
-from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
@@ -21,7 +20,6 @@ from hq.platform.core.models import AuditLog
 from .answer_fields import BusinessUseShare, RecordSlug
 from .assets import (
     AssetCategory,
-    AssetCommand,
     AssetInfrastructure,
     AssetName,
     AssetProjects,
@@ -31,24 +29,22 @@ from .assets import (
     PurchaseDate,
     SerialNumber,
     WarrantyDate,
-    upsert_asset,
 )
 from .command_fields import Describe
 from .describe import listed
-from .domains import records_of
+from .domains import load, records_of
 from .integration_specs import command_adapter
 from .projects import (
     DeploymentNotes,
     ProjectCategory,
-    ProjectCommand,
     ProjectDescription,
     ProjectName,
     ProjectStatus,
     RepositoryUrl,
     SecurityNotes,
     TechnologiesUsed,
-    upsert_project,
 )
+from .record_declaration import Records
 from .record_errors import RecordConflict, RecordNotFound
 from .record_fields import Notes, PublishedUrl, TotalCost
 from .refusal_status import RefusalEnvelope, refuse
@@ -115,31 +111,13 @@ class HQImportCommand:
     check_only: Annotated[bool, Describe("Check the import without saving anything.")] = False
 
 
-@dataclass(frozen=True, slots=True)
-class _Kind:
-    name: str
-    model: type
-    command: type
-    upsert: Any
-
-
-_PROJECT = _Kind(
-    "project",
-    Project,
-    ProjectCommand,
-    upsert_project,
-)
-_ASSET = _Kind(
-    "asset",
-    Asset,
-    AssetCommand,
-    upsert_asset,
-)
+_PROJECT = records_of("projects")
+_ASSET = records_of("assets")
 
 
 @dataclass
 class _Planned:
-    kind: _Kind
+    kind: Records
     index: int
     slug: str
     command: Any
@@ -163,11 +141,11 @@ def _refused(message: str, problems: list[dict[str, Any]]) -> dict[str, Any]:
     return refuse("invalid_input", message, problems)
 
 
-def _stored(kind: _Kind, instance) -> dict[str, Any]:
+def _stored(kind: Records, instance) -> dict[str, Any]:
     """An existing row as the command's fields."""
 
     values = {}
-    for item in fields(kind.command):
+    for item in fields(load(kind.command)):
         if item.name == "related_projects":
             values[item.name] = tuple(sorted(instance.related_projects.values_list("slug", flat=True)))
         else:
@@ -175,10 +153,10 @@ def _stored(kind: _Kind, instance) -> dict[str, Any]:
     return values
 
 
-def _existing(kind: _Kind, records: list[Any]) -> dict[str, Any]:
+def _existing(kind: Records, records: list[Any]) -> dict[str, Any]:
     slugs = [record["slug"].strip() for record in records]
-    query = kind.model.objects.filter(slug__in=slugs)
-    if kind is _ASSET:
+    query = load(kind.model).objects.filter(slug__in=slugs)
+    if kind.noun == "asset":
         query = query.prefetch_related("related_projects")
     return {row.slug: row for row in query}
 
@@ -196,23 +174,23 @@ def _slug_errors(slug: str, seen: set[str]) -> list[str]:
 
 
 def _keep_derived(
-    kind: _Kind, record: dict, stored: dict[str, Any] | None, values: dict[str, Any]
+    kind: Records, record: dict, stored: dict[str, Any] | None, values: dict[str, Any]
 ) -> list[dict[str, str]]:
     """Hold stored derived fields against an offered change; the kept pairs."""
 
     kept = []
     if stored is None:
         return kept
-    for name in DERIVED_FIELDS[kind.name]:
+    for name in DERIVED_FIELDS[kind.noun]:
         if name in record and stored[name] and record[name] != stored[name]:
             kept.append({"field": name, "kept": str(stored[name]), "offered": str(record[name])})
             values[name] = stored[name]
     return kept
 
 
-def _command(kind: _Kind, values: dict[str, Any]) -> tuple[Any, list[str]]:
+def _command(kind: Records, values: dict[str, Any]) -> tuple[Any, list[str]]:
     try:
-        return command_adapter(kind.command).validate_python(values), []
+        return command_adapter(load(kind.command)).validate_python(values), []
     except PydanticValidationError as exc:
         return None, [
             f"{'.'.join(str(part) for part in error['loc']) or 'record'}: {error['msg']}" for error in exc.errors()
@@ -229,7 +207,7 @@ def _outcome(command: Any, stored: dict[str, Any] | None) -> str:
 
 
 def _plan_record(
-    kind: _Kind,
+    kind: Records,
     index: int,
     record: dict,
     slug: str,
@@ -249,7 +227,7 @@ def _plan_record(
 
 
 def _plan_kind(
-    kind: _Kind,
+    kind: Records,
     records: list[Any],
     problems: list[dict[str, Any]],
     known_projects: set[str],
@@ -263,13 +241,13 @@ def _plan_kind(
         if not errors:
             plan, errors = _plan_record(kind, index, record, slug, existing.get(slug), known_projects)
         if errors:
-            problems.append(_problem(kind.name, index, slug, *errors))
+            problems.append(_problem(kind.noun, index, slug, *errors))
             continue
         planned.append(plan)
     return planned
 
 
-def _model_errors(kind: _Kind, command: Any, known_projects: set[str]) -> list[str]:
+def _model_errors(kind: Records, command: Any, known_projects: set[str]) -> list[str]:
     """Model validation of one record, without writing it."""
 
     values = asdict(command)
@@ -284,7 +262,7 @@ def _model_errors(kind: _Kind, command: Any, known_projects: set[str]) -> list[s
             )
         )
     try:
-        kind.model(**values).full_clean(validate_unique=False)
+        load(kind.model)(**values).full_clean(validate_unique=False)
     except DjangoValidationError as exc:
         errors.extend(f"{name}: {message}" for name, messages in exc.message_dict.items() for message in messages)
     return errors
@@ -297,20 +275,20 @@ def _apply(planned: _Planned, principal: Principal) -> None:
         _audit(planned, planned.slug)
         return
     try:
-        result = planned.kind.upsert(planned.command, principal=principal)
+        result = load(planned.kind.upsert)(planned.command, principal=principal)
     except DjangoValidationError as exc:
-        raise _Refused(_problem(planned.kind.name, planned.index, planned.slug, *exc.messages)) from exc
+        raise _Refused(_problem(planned.kind.noun, planned.index, planned.slug, *exc.messages)) from exc
     except (RecordNotFound, RecordConflict) as exc:
-        raise _Refused(_problem(planned.kind.name, planned.index, planned.slug, str(exc))) from exc
-    _audit(planned, result[planned.kind.name]["slug"])
+        raise _Refused(_problem(planned.kind.noun, planned.index, planned.slug, str(exc))) from exc
+    _audit(planned, result[planned.kind.noun]["slug"])
 
 
 def _audit(planned: _Planned, slug: str) -> None:
     record_event(
         action=AuditLog.Action.IMPORTED,
-        obj=planned.kind.model.objects.get(slug=slug),
-        type_label=planned.kind.model.__name__,
-        message=ended(f"Imported {planned.kind.name} {planned.slug}: {planned.outcome}"),
+        obj=load(planned.kind.model).objects.get(slug=slug),
+        type_label=load(planned.kind.model).__name__,
+        message=ended(f"Imported {planned.kind.noun} {planned.slug}: {planned.outcome}"),
         metadata={"outcome": planned.outcome, "kept": planned.kept},
         required=True,
     )
