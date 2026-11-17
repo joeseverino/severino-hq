@@ -7,7 +7,7 @@ from typing import override
 from hq.platform.core.tests.browser.catalog import CATALOG, PAGES, left_out_on, page
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.shards import sweep
-from hq.platform.core.tests.browser.widths import SPARSE_WIDTHS
+from hq.platform.core.tests.browser.widths import ENTRY
 
 
 class CatalogLayoutTests(LayoutBrowserTests):
@@ -27,17 +27,17 @@ class CatalogLayoutTests(LayoutBrowserTests):
     @sweep
     def test_every_entry_keeps_the_layout_rules_without_script(self):
         for name in self.mine(PAGES):
-            for width in SPARSE_WIDTHS:
+            for width in ENTRY.at():
                 if not self.loaded(name, width):
                     continue
                 self.hold(name, width, [self.draws_the_state_it_stands_for, self.every_layout_check_holds])
                 # A palette is a color per token, the same at every width, so
                 # the narrowest and widest read every part either draws.
-                if width in (SPARSE_WIDTHS[0], SPARSE_WIDTHS[-1]):
+                if width in (ENTRY.widths[0], ENTRY.widths[-1]):
                     was = self.in_scheme("dark")
                     self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
                     self.in_scheme(was)
-                self.hold_opened(name, width)
+                self.hold_opened(name, width, popovers=width in ENTRY.popovers_at)
 
     @override
     def left_out_on(self, path):

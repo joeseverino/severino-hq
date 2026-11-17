@@ -10,14 +10,7 @@ from hq.platform.core.tests.browser.probes.settle import (
 )
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.shards import sweep
-from hq.platform.core.tests.browser.widths import (
-    NARROWEST,
-    PALETTE_AT,
-    WIDE_TABLES,
-    WIDTHS,
-    viewport,
-    with_wide_tables,
-)
+from hq.platform.core.tests.browser.widths import LIST, NARROWEST, PALETTE_AT, SCRIPTED, UNSCRIPTED, viewport
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
@@ -33,15 +26,13 @@ class UnscriptedLayoutTests(LayoutBrowserTests):
 
     def sweep(self, names):
         for name in self.mine(names):
-            for width in self.across(name, WIDTHS):
+            for width in self.across(name, UNSCRIPTED.widths):
                 self.hold(name, width, [self.a_heads_note_costs_its_head_no_room, self.every_layout_check_holds])
                 if width in PALETTE_AT:
                     was = self.in_scheme("dark")
                     self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
                     self.in_scheme(was)
-                # Each popover shown is a survey of its own, so they are read
-                # at the phone, where one has the least room.
-                self.hold_opened(name, width, popovers=width == WIDTHS[0])
+                self.hold_opened(name, width, popovers=width in UNSCRIPTED.popovers_at)
 
     def across(self, name, widths):
         """``name`` at each of ``widths``, narrowest first, from one load; a
@@ -84,7 +75,7 @@ class ScriptedLayoutTests(LayoutBrowserTests):
         each width is a load."""
 
         for name in self.mine(names):
-            for width in with_wide_tables(WIDTHS, self.draws_a_table):
+            for width in SCRIPTED.at(self.draws_a_table):
                 if not self.loaded(name, width, script="on"):
                     continue
                 self.page.evaluate(SETTLE)
@@ -120,7 +111,7 @@ class LongestValueLayoutTests(LayoutBrowserTests):
 
         held = [self.a_table_fits_its_box]
         for name in self.mine(self.lists):
-            for width in (NARROWEST, *WIDTHS, *WIDE_TABLES):
+            for width in LIST.at():
                 if not self.loaded(name, width, script="on"):
                     continue
                 self.page.evaluate(SETTLE)

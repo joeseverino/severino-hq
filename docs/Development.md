@@ -1285,10 +1285,15 @@ or reach out is refused and reported instead.
 what it finds on a page the gates read is what they fail on. Markup a vendored
 script draws (`data-vendored` on its mount, `SELECTORS["vendored"]`: the API
 reference's viewer) is styled by its own rules alone, and the gates read
-none of it. With `--open-folds`, a page with a fold closed is surveyed
+none of it. It reads each page as its gate does (`Judged` in
+`hq/platform/core/tests/browser/widths.py`, which the sweeps read too): at
+its widths, `WIDE_TABLES` among them on a page that draws a table, and where
+the gate opens a page (a catalog entry, a list, a page without script),
 again with every fold open, a fold within a fold and one a region brings in
-included (`survey.open_every_fold`), and only what that adds is said, under
-"with every fold open"; the folds close again before a dialog opens.
+included (`survey.open_every_fold`), saying only what that adds under "with
+every fold open", and with each anchored popover shown at the widths the
+gate shows one. `--open-folds` opens a page with script the same way. The
+folds close again before a dialog opens.
 
 A run that judges takes no screenshots, since a shot and its bands cost more
 than the rule that reads the page: `--shots` takes them too, and `--base`,

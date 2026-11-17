@@ -105,7 +105,7 @@ BUSY = "[data-fragment][aria-busy=true]:not([data-ask])"
 # the page holds; the next rounds reach those a region brings in. An exclusive
 # group's name is set aside, so every member stands open at once, each laid
 # out in its own place as it is when it alone is open. Every row of a table
-# that offers its toggle is opened by it, as a reader opens it.
+# that offers its toggle is opened by it, as a reader opens it once script runs.
 OPEN_ONCE = """(busy) => {
   // A region already waiting is not one this round brings in.
   document.querySelectorAll(busy).forEach((region) => { region.lookWaiting = true; });
@@ -116,6 +116,8 @@ OPEN_ONCE = """(busy) => {
     details.open = true;
     opened += 1;
   });
+  // A row's toggle opens it only once script runs.
+  if (!matchMedia('(scripting: enabled)').matches) return opened;
   document.querySelectorAll('main table [data-row-toggle][aria-expanded="false"]').forEach((toggle) => {
     if (!toggle.checkVisibility()) return;
     toggle.lookOpened = true;

@@ -157,10 +157,12 @@ class Looked:
         return looked
 
 
-def merged(pages: list[str], widths: list[int], shares: list[Looked]) -> tuple[Looked, list[str]]:
+def merged(pages: list[str], shares: list[Looked]) -> tuple[Looked, list[str]]:
     """The shares' looks as one, page by page in the order ``pages`` were
-    asked; and what keeps it from being whole: a page and width no share looked
-    at, or one more than one did."""
+    asked and each page's widths narrowest first; and what keeps it from
+    being whole: a page no share looked at, or a page and width more than one
+    did. A page's widths are its share's to choose (a wide table's only where
+    it draws one), so a share that ended part way says so itself."""
 
     whole, wrong = Looked(), []
     held: dict[Key, Looked] = {}
@@ -171,11 +173,11 @@ def merged(pages: list[str], widths: list[int], shares: list[Looked]) -> tuple[L
             held[key] = looked
         whole.unanswered |= looked.unanswered
     for name in pages:
-        for width in widths:
-            key = (name, width)
-            if (looked := held.get(key)) is None:
-                wrong.append(f"{name} at {width} was looked at by no share")
-                continue
+        keys = sorted((key for key in held if key[0] == name), key=lambda key: key[1])
+        if not keys:
+            wrong.append(f"{name} was looked at by no share")
+        for key in keys:
+            looked = held[key]
             whole.found[key] = looked.found[key]
             whole.errors[key] = looked.errors.get(key, [])
             whole.printed[key] = looked.printed.get(key, [])

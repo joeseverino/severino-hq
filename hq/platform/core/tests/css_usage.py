@@ -38,7 +38,7 @@ lazy from playwright.sync_api import Error as BrowserError
 from hq.platform.core.stalls import stall_watch
 from hq.platform.core.stylesheets import DIRECTORY, SHEETS, STATIC
 from hq.platform.core.tests import look_shares
-from hq.platform.core.tests.browser.widths import viewport
+from hq.platform.core.tests.browser.widths import WIDTHS, viewport
 from hq.platform.core.tests.look import _DIALOGS, Look, this_run
 
 # What a forced state makes every element at once, as DevTools' :hov pane
@@ -452,7 +452,8 @@ class CssUsage(Look):
                     self.served[sheet] = text
 
     def test_css_usage(self):
-        widths, _rule = self.asked_for()
+        self.asked_for()
+        widths = self.widths_asked or list(WIDTHS)
         self.draw_with_script(True)
         read = 0
         for name in self.asked:
