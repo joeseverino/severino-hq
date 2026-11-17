@@ -199,9 +199,7 @@ narrower than 64rem, its next below 56rem, and so on down to 24rem, by six
 container-query rules written once in tables.css. Nothing is measured, so a
 column may leave a box that could still hold it. What leaves shows on the
 row's open line. Below 36rem the table is in a narrow box (below). The gates
-fail a table that runs past its card. `test_a_table_keeps_its_promises_on_every_catalog_entry`
-holds every promise of this section on the table's catalog entries, in each
-engine, with script and without.
+fail a table that runs past its card.
 
 What is marked `narrow-only` shows in a narrow box alone: a few words in the
 cell that names the row, standing in for the columns that left (the audit

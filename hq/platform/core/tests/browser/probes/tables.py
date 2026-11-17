@@ -1,7 +1,10 @@
 """Probes of tables: their cells, rows, columns and gutter, and the tables drawn to probe them."""
 
+import json
+
 from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, PAINTED_PART
+from hq.platform.core.tests.browser.probes.shifts import PROBE_MOVES
 from hq.platform.core.tests.browser.selectors import SELECTORS
 
 CELLS = (
@@ -88,8 +91,8 @@ TABLES = (
 
 
 # What a table promises past what `TABLES` reads: a group's heading spans its
-# table, the heading row sticks, and a value its cell cuts on a closed row
-# offers the row's toggle, which shows it whole. What breaks one, each named once.
+# table and the heading row sticks. What breaks one, each named once. A value
+# cut in a closed row is `CUT_AND_CLOSED`'s.
 TABLE_PROMISES = """(scroll) => {
   const found = new Set();
   const text = (el) => el.textContent.replace(/\\s+/g, ' ').trim();
@@ -105,18 +108,6 @@ TABLE_PROMISES = """(scroll) => {
     const head = table.querySelector(':scope > thead > tr');
     const sticks = (el) => el && getComputedStyle(el).position === 'sticky';
     if (head && !sticks(head.parentElement) && ![...head.children].every(sticks)) found.add(`${name}: its heading row does not stick`);
-    for (const row of table.querySelectorAll(':scope > tbody > tr:not(.is-expanded):not([data-row-detail])')) {
-      const opens = [...row.querySelectorAll('[aria-expanded]')].some((toggle) => toggle.checkVisibility());
-      for (const cell of row.querySelectorAll(':scope > [data-kind]')) {
-        if (!cell.checkVisibility()) continue;
-        const parts = [cell, ...cell.querySelectorAll('*')].filter((el) => el.checkVisibility());
-        const cut = parts.some((el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1);
-        const said = text(cell);
-        if (cut && said && !opens) {
-          found.add(`${name}: ${said.slice(0, 24)} is cut in a row that does not open`);
-        }
-      }
-    }
   }
   return [...found];
 }"""
@@ -675,8 +666,12 @@ SORT_BY = """([scroll, column]) => {
 # each part of that row's cells that showed whole before it opened, a box
 # holding text that neither it nor anything up to its cell cuts: each that
 # moved or changed width once the row opened, as text. Opening a row only
-# lifts cuts, so a part that was whole keeps its box.
-WHOLE_PARTS_MOVED_BY_OPENING = """async (scroll) => {
+# lifts cuts, so a part that was whole keeps its box. The row is closed again,
+# and the time it stood open kept as the check's own move (`PROBE_MOVES`).
+WHOLE_PARTS_MOVED_BY_OPENING = (
+    "async (scroll) => {"
+    + f"const moves = {json.dumps(PROBE_MOVES)};"
+    + """
   const frame = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
   const cuts = (el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
   const whole = (part, cell) => {
@@ -703,6 +698,7 @@ WHOLE_PARTS_MOVED_BY_OPENING = """async (scroll) => {
         && [...part.childNodes].some((node) => node.nodeType === 3 && node.textContent.trim())
         && whole(part, cell)));
     const before = parts.map(edges);
+    const began = performance.now();
     toggle.click();
     await frame();
     parts.forEach((part, at) => {
@@ -711,9 +707,11 @@ WHOLE_PARTS_MOVED_BY_OPENING = """async (scroll) => {
     });
     toggle.click();
     await frame();
+    (window[moves] ??= []).push([began, performance.now()]);
   }
   return moved;
 }"""
+)
 
 # Press the first row toggle (never a family fold) that shows in the page's first table, and say which
 # of its records (counted as PHONE_TABLE counts them) it opened.
@@ -1090,6 +1088,15 @@ CHECKS = {
         (CUT_WHEN_OPEN, SELECTORS["unseen"]), table=True, reader_sees="a value still cut in its opened row"
     ),
     "opens nothing": Check(OPENS_NOTHING, table=True, reader_sees="a row's toggle that opens nothing"),
+    "table promises": Check(
+        (TABLE_PROMISES, SELECTORS["table_scroll"]),
+        reader_sees="a table's heading row scrolling away, or a cell across its row stopping short",
+    ),
+    "whole parts moved by opening": Check(
+        (WHOLE_PARTS_MOVED_BY_OPENING, SELECTORS["table_scroll"]),
+        scripted=True,
+        reader_sees="a row's words moving when the row is opened",
+    ),
     "folded rows stay folded": Check(
         FOLDED_ROWS_SHOWN, table=True, scripted=True, reader_sees="a folded row drawn while its group is closed"
     ),

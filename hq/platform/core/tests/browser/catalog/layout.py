@@ -6,15 +6,8 @@ from typing import override
 
 from hq.platform.core.tests.browser.catalog import CATALOG, PAGES, left_out_on, page
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
-from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.shards import sweep
-from hq.platform.core.tests.browser.widths import PHONE_SCREEN, SPARSE_WIDTHS
-
-_UNDRAWN = """(drawings) => [...document.querySelectorAll(drawings)].filter((drawing) => {
-  const held = drawing.parentElement.getBoundingClientRect();
-  const drawn = drawing.getBoundingClientRect();
-  return held.width > 0 && held.height > 0 && (drawn.width < 1 || drawn.height < 1);
-}).map((drawing) => drawing.outerHTML.slice(0, 120))"""
+from hq.platform.core.tests.browser.widths import SPARSE_WIDTHS
 
 
 class CatalogLayoutTests(LayoutBrowserTests):
@@ -45,19 +38,6 @@ class CatalogLayoutTests(LayoutBrowserTests):
                     self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
                     self.in_scheme(was)
                 self.hold_opened(name, width)
-
-    @sweep
-    def test_every_drawing_is_drawn_on_a_phone(self):
-        """A chart, a trend, a bar or a calendar is drawn wherever what holds
-        it is: on a phone a drawing hidden for want of room is a figure that
-        shows nothing, when the table beside it or the line under it has the
-        room to show it."""
-
-        for name in self.mine(PAGES):
-            if not self.loaded(name, PHONE_SCREEN[0]):
-                continue
-            with self.subTest(page=name):
-                self.assertEqual(self.read([(_UNDRAWN, SELECTORS["drawing"])])[0], [])
 
     @override
     def left_out_on(self, path):

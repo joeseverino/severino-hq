@@ -34,15 +34,7 @@ class UnscriptedLayoutTests(LayoutBrowserTests):
     def sweep(self, names):
         for name in self.mine(names):
             for width in self.across(name, WIDTHS):
-                self.hold(
-                    name,
-                    width,
-                    [
-                        self.no_block_breaks_a_paragraph,
-                        self.a_heads_note_costs_its_head_no_room,
-                        self.every_layout_check_holds,
-                    ],
-                )
+                self.hold(name, width, [self.a_heads_note_costs_its_head_no_room, self.every_layout_check_holds])
                 if width in PALETTE_AT:
                     was = self.in_scheme("dark")
                     self.hold(name, width, [self.every_palette_check_holds], scheme="dark")

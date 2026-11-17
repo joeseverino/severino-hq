@@ -1,4 +1,4 @@
-"""Probes of a page's parts: disclosures, labels, the dashboard's readings and a check's evidence."""
+"""Probes of a page's parts: disclosures, labels, the dashboard's readings, drawings and a check's evidence."""
 
 from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
@@ -335,6 +335,15 @@ PILLS_IN_PIECES = (
 
 _READINGS_OF = f"(selector) => ({READINGS})([...document.querySelectorAll(selector)])"
 
+# A chart, a trend, a bar or a calendar is drawn wherever what holds it is: a
+# drawing hidden for want of room is a figure that shows nothing, when the
+# table beside it or the line under it has the room to show it.
+UNDRAWN = """(drawings) => [...document.querySelectorAll(drawings)].filter((drawing) => {
+  const held = drawing.parentElement.getBoundingClientRect();
+  const drawn = drawing.getBoundingClientRect();
+  return held.width > 0 && held.height > 0 && (drawn.width < 1 || drawn.height < 1);
+}).map((drawing) => drawing.outerHTML.slice(0, 120))"""
+
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
     "control labels": Check(
@@ -355,6 +364,9 @@ CHECKS = {
         (_READINGS_OF, SELECTORS["readings"]),
         findings=reading_problems,
         reader_sees="a reading's line cut short or pushed under its mark",
+    ),
+    "undrawn drawings": Check(
+        (UNDRAWN, SELECTORS["drawing"]), reader_sees="a chart or a calendar given room and drawing nothing"
     ),
     "pills in pieces": Check(
         PILLS_IN_PIECES, table=True, reader_sees="one pill's words drawn as two pills, a line each"

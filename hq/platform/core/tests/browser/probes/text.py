@@ -760,8 +760,22 @@ LINES_SHORT_OF_THEIR_ROOM = (
 }"""
 )
 
+# A block written inside a <p> closes it early and leaves an empty <p> where
+# its end tag was: the rest of the line falls out of it.
+BROKEN_PARAGRAPHS = (
+    "(selector) => {"
+    + DESCRIBE
+    + """
+  return [...document.querySelectorAll(selector)].map((p) => `${describe(p.parentElement)} holds an empty paragraph`
+    + (p.previousElementSibling ? ` after ${describe(p.previousElementSibling)}` : ''));
+}"""
+)
+
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
+    "broken paragraphs": Check(
+        (BROKEN_PARAGRAPHS, SELECTORS["broken_paragraph"]), reader_sees="a line of text split off its paragraph"
+    ),
     "broken words": Check(
         (BROKEN_WORDS, SELECTORS["identifier"]), table=True, reader_sees="a word split across the lines of a cell"
     ),

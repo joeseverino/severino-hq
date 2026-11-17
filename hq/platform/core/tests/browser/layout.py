@@ -178,11 +178,6 @@ class LayoutBrowserTests(BrowserGate):
             self.assertFalse(placed["lines"])
             self.assertEqual(note["cut"], [])
 
-    def no_block_breaks_a_paragraph(self, _name):
-        # A block written inside a <p> closes it early and leaves an empty <p>
-        # where its end tag was: the rest of the line falls out of it.
-        self.assertEqual(self.page.locator(SELECTORS["broken_paragraph"]).count(), 0)
-
     def nothing_runs_out_of_its_table_cell(self, _name):
         self.assertEqual(self.read([(CELLS, None)])[0], [])
 

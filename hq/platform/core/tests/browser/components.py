@@ -55,9 +55,7 @@ from hq.platform.core.tests.browser.probes.tables import (
     ROW_TOGGLES,
     SORT_BY,
     TABLE_PROMISES,
-    TABLES,
     TABLES_THAT_DO_NOT_FIT,
-    WHOLE_PARTS_MOVED_BY_OPENING,
 )
 from hq.platform.core.tests.browser.probes.text import (
     BROKEN_TOKENS,
@@ -1604,8 +1602,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         block it keeps beneath itself) stands on its open line and asks no
         column for width: every column keeps its edges and every other row
         its height, at every width, on each of the table's catalog entries and
-        the wide tables of the estate, and a part shown whole keeps its box;
-        closed again, the table is as it was."""
+        the wide tables of the estate; closed again, the table is as it was."""
 
         from hq.platform.core.tests.browser.catalog import CATALOG
 
@@ -1617,7 +1614,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 with self.subTest(page=name, width=width):
                     self.open(name, width)
                     self.page.evaluate(SETTLE)
-                    self.assertEqual(self.page.evaluate(WHOLE_PARTS_MOVED_BY_OPENING, SELECTORS["table_scroll"]), [])
                     closed = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
                     if not closed or not closed["toggles"]:
                         continue
@@ -1634,40 +1630,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                     self.assertEqual(again["columns"], closed["columns"])
                     self.assertEqual(again["rows"], closed["rows"])
         self.assertGreater(opened_any, 0)
-
-    @with_script
-    def test_a_table_keeps_its_promises_on_every_catalog_entry(self):
-        """The table primitive, on each of its catalog entries at every width:
-        laid out as a table with its headings drawn, a group's heading across
-        its table and the heading row stuck; nothing past its region, and a
-        value it cuts whole in its cell's title. Laid out by the stylesheet
-        alone, it draws every column where it does with no script."""
-
-        from hq.platform.core.tests.browser.catalog import CATALOG
-
-        entries = {name: CATALOG[name].page(name) for name in CATALOG if name.startswith("table/")}
-        self.pages = {**self.pages, **entries}
-        scroll = SELECTORS["table_scroll"]
-        drawn = {}
-        for name in entries:
-            for width in WIDTHS:
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    self.page.evaluate(SETTLE)
-                    read = self.page.evaluate(TABLES)
-                    self.assertEqual(read["found"], [])
-                    self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, scroll), [])
-                    self.assertEqual(self.page.evaluate(TABLE_PROMISES, scroll), [])
-                    drawn[name, width] = self.page.evaluate(PHONE_TABLE, scroll)
-        self.assertTrue(any(each and each["columns"] for each in drawn.values()))
-        self.start(java_script_enabled=False)
-        for (name, width), scripted in drawn.items():
-            with self.subTest(page=name, width=width, script=False):
-                self.open(name, width)
-                unscripted = self.page.evaluate(PHONE_TABLE, scroll)
-                self.assertEqual(
-                    (unscripted or {}).get("columns"), (scripted or {}).get("columns"), "a script moved a column"
-                )
 
     @with_script
     def test_opening_every_row_a_reader_can_open_moves_nothing_they_did_not_ask_for(self):
@@ -1854,14 +1816,15 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.page.locator(SELECTORS["page_note"]).wait_for(state="visible")
                 self.assertEqual(self.page.evaluate(OVERLAPPING_TEXT, SELECTORS["floating"]), [])
 
-    def test_the_map_scrolls_with_the_page_and_draws_no_empty_lane(self):
-        for width in WIDTHS:
-            with self.subTest(width=width):
-                self.open("topology", width)
-                found = self.page.evaluate(MAP, [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]])
-                self.assertIsNotNone(found)
-                self.assertFalse(found["scrolls"])
-                self.assertEqual(found["empty"], [])
+    def test_the_map_check_finds_an_empty_lane_on_the_topology_map(self):
+        """The ``map`` check reads the map the topology page draws, which the
+        survey holds on every page: a lane emptied there is found."""
+
+        self.open("topology", WIDE)
+        arg = [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]]
+        self.assertEqual(self.page.evaluate(MAP, arg), [])
+        self.page.evaluate("(node) => document.querySelectorAll(node).forEach((el) => el.remove())", arg[2])
+        self.assertTrue(self.page.evaluate(MAP, arg))
 
     @with_script
     def test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split(self):
