@@ -410,7 +410,7 @@ def requested(words: str, subject: str = "", *, again: bool = False) -> str:
 RESERVED_QUERY_FIELD = "fields"
 FIELD_MASK = (
     "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only "
-    "the part named inside it, in every element of a list (`items.waiting`); `*` alone keeps every field. "
+    "the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. "
     "Absent, a list keeps the fields its description in `describe_resources` names as "
     "`operations.list.fields`, and a read of one record keeps the whole record."
 )

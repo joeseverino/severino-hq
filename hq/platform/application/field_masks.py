@@ -5,9 +5,13 @@ to them and refuses a name no record carries, so every adapter answers a mask
 the same way.
 """
 
+import functools
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, NoReturn
+
+from .json_schemas import LOCAL, json_schema
 
 Fields = list[str] | tuple[str, ...]
 # The one field mask that keeps every field (AIP-157), a list read's way past its kind's list_fields.
@@ -16,6 +20,10 @@ WHOLE_RECORD = "*"
 # it keep only those parts. ``None`` is a whole value.
 type Mask = dict[str, Mask | None]
 _FIELD_PATH = re.compile(r"[^.]+(?:\.[^.]+)*")
+# A field path as one item of a comma-separated mask, for a reader that has no
+# declared paths to choose from: the whole record, or a key with no comma,
+# space or star, dotted.
+FIELD_PATH_PATTERN = r"^(?:\*|[^.,*\s]+(?:\.[^.,*\s]+)*)$"
 
 
 class FieldMaskRefusal(ValueError):
@@ -26,16 +34,54 @@ class FieldMaskRefusal(ValueError):
         self.errors = errors
 
 
+@functools.cache
+def field_paths(kind: Any) -> tuple[str, ...]:
+    """Every field path a record of ``kind`` carries, in declared order: each
+    key, and each key of an object or a list of objects under it, dotted.
+
+    What a mask over ``kind``'s records can always name: the API document
+    lists them, and ``selected`` answers each even where no record has it.
+    """
+
+    schema = json_schema(kind, mode="serialization")
+    definitions = schema.get("$defs", {})
+    found: dict[str, None] = {}
+
+    def walk(value: Mapping[str, Any], within: tuple[str, ...], seen: frozenset[str]) -> None:
+        ref = value.get("$ref", "")
+        if ref.startswith(LOCAL):
+            name = ref.removeprefix(LOCAL)
+            if name in seen:
+                return
+            seen, value = seen | {name}, {**definitions[name], **value}
+        for branch in (*value.get("anyOf", ()), *value.get("oneOf", ()), *value.get("allOf", ())):
+            walk(branch, within, seen)
+        if isinstance(items := value.get("items"), Mapping):
+            walk(items, within, seen)
+        for key, field in value.get("properties", {}).items():
+            if _FIELD_PATH.fullmatch(key) and "," not in key:
+                found[".".join((*within, key))] = None
+                walk(field, (*within, key), seen)
+
+    walk(schema, (), frozenset())
+    return tuple(found)
+
+
 def asks_whole(fields: Fields) -> bool:
-    """Whether the caller asked for every field: AIP-157's ``*``, alone."""
+    """Whether the caller asked for every field: AIP-157's ``*``, which keeps
+    every field whatever else the mask names."""
 
-    return list(fields) == [WHOLE_RECORD]
+    return WHOLE_RECORD in fields
 
 
-def selected(records: list[dict[str, Any]], fields: Fields) -> list[dict[str, Any]]:
-    """Each record cut to the field mask ``fields`` names, in its own order."""
+def selected(records: list[dict[str, Any]], fields: Fields, declared: tuple[str, ...] = ()) -> list[dict[str, Any]]:
+    """Each record cut to the field mask ``fields`` names, in its own order.
 
-    selection = _selection(fields)
+    A mask names what the records carry, or a path their kind ``declared``
+    (``field_paths``), which a record that lacks it is answered without.
+    """
+
+    selection = _selection(fields, frozenset(declared))
     return _cut(selection, records, selection.mask, ())
 
 
@@ -44,13 +90,14 @@ class _Selection:
     mask: Mask
     # The first field that names each path, so a refusal points at it.
     origin: dict[tuple[str, ...], int]
+    declared: frozenset[str]
 
     def refuse(self, path: tuple[str, ...], error_type: str, msg: str, *, at: tuple[str, ...] = ()) -> NoReturn:
         loc = ["fields", self.origin[path], *at]
         raise FieldMaskRefusal([{"type": error_type, "loc": loc, "msg": msg}])
 
 
-def _selection(fields: Fields) -> _Selection:
+def _selection(fields: Fields, declared: frozenset[str]) -> _Selection:
     """The paths as one mask: shared prefixes merge, and a whole value wins."""
 
     if not fields:
@@ -69,7 +116,7 @@ def _selection(fields: Fields) -> _Selection:
         for depth in range(len(segments)):
             origin.setdefault(tuple(segments[: depth + 1]), index)
         _merge(mask, segments)
-    return _Selection(mask, origin)
+    return _Selection(mask, origin, declared)
 
 
 def _merge(mask: Mask, segments: list[str]) -> None:
@@ -94,7 +141,8 @@ def _cut(selection: _Selection, records: list[dict[str, Any]], mask: Mask, at: t
     """
 
     known = list(dict.fromkeys(key for record in records for key in record))
-    if records and (unknown := [key for key in mask if key not in known]):
+    unknown = [key for key in mask if key not in known and ".".join((*at, key)) not in selection.declared]
+    if records and unknown:
         choices = ", ".join(f"'{key}'" for key in known)
         selection.refuse((*at, unknown[0]), "literal_error", f"Input should be {choices}")
     cut = [{key: value for key, value in record.items() if key in mask and mask[key] is None} for record in records]
@@ -119,7 +167,7 @@ def _cut_within(
         value = record.get(key)
         if isinstance(value, dict):
             elements.append(value)
-        elif isinstance(value, list) and all(isinstance(element, dict) for element in value):
+        elif isinstance(value, list | tuple) and all(isinstance(element, dict) for element in value):
             elements.extend(value)
         elif key in record and value is not None:
             selection.refuse(path, "dict_type", "Input should be a valid dictionary", at=path)
@@ -129,7 +177,7 @@ def _cut_within(
         value = record.get(key)
         if isinstance(value, dict):
             out[key] = next(shaped)
-        elif isinstance(value, list):
+        elif isinstance(value, list | tuple):
             out[key] = [next(shaped) for _ in value]
         elif key in record:
             out[key] = None

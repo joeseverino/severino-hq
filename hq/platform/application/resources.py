@@ -44,7 +44,7 @@ from .connection_records import (
 )
 from .contracts import DOTTED_NAME, Closed
 from .describe import Describe
-from .field_masks import FieldMaskRefusal, Fields, asks_whole, selected
+from .field_masks import FieldMaskRefusal, Fields, asks_whole, field_paths, selected
 from .input_errors import pydantic_refusal
 from .integration_specs import PAGE_FIELD, ResourceSpec
 from .integration_validation import required_capability_names
@@ -795,7 +795,7 @@ def list_resource(
         return {**page, "items": _listed_fields(spec, page["items"])}
     if asks_whole(fields):
         return page
-    return {**page, "items": _masked(name, page["items"], fields)}
+    return {**page, "items": _masked(spec, page["items"], fields, listed=True)}
 
 
 def _listed_fields(spec: ResourceSpec, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -911,13 +911,21 @@ def _cursor_refused(name: str, reason: str) -> InvalidResourceInput:
     return InvalidResourceInput(name, [{"type": "value_error", "loc": [PAGE_FIELD], "msg": reason}])
 
 
-def _masked(name: str, records: list[Any], fields: Fields) -> list[dict[str, Any]]:
+def masked_kind(spec: ResourceSpec, *, listed: bool) -> type | None:
+    """The type a field mask over ``spec``'s records declares paths from: a
+    list's row, a read of one's record, else its row; None where it types neither."""
+
+    return spec.row_type if listed else spec.record_type or spec.row_type
+
+
+def _masked(spec: ResourceSpec, records: list[Any], fields: Fields, *, listed: bool) -> list[dict[str, Any]]:
     if any(not isinstance(record, dict) for record in records):
-        raise TypeError(f"Resource {name!r} returned a record that is not an object.")
+        raise TypeError(f"Resource {spec.name!r} returned a record that is not an object.")
+    kind = masked_kind(spec, listed=listed)
     try:
-        return selected(records, fields)
+        return selected(records, fields, field_paths(kind) if kind is not None else ())
     except FieldMaskRefusal as exc:
-        raise InvalidResourceInput(name, exc.errors) from exc
+        raise InvalidResourceInput(spec.name, exc.errors) from exc
 
 
 def get_resource(
@@ -956,4 +964,4 @@ def get_resource(
         raise TypeError(f"Resource {name!r} detail handler returned a non-object.")
     if fields is None or asks_whole(fields):
         return result
-    return _masked(name, [result], fields)[0]
+    return _masked(spec, [result], fields, listed=False)[0]
