@@ -5,7 +5,7 @@ Its mark, its figure (the first part, set large), its quiet lines (each child
 a part of the line, a dot between them, a `<strong>` one in the attention
 tone) and under them a note on how it stands. A reading leads to a page, or,
 given a `panel`, opens it in place as a menu does, its `heading` over it and
-its `foot` under it. Its options are its Part's (value_tags).
+its `foot` under it. Its options are its Part's (frame_tags).
 {% endcomment %}{% partialdef face %}<span class="reading-mark">{% include "partials/_icon.html" with name=icon only %}</span>
   <span class="reading-lead"{% if title %} title="{{ title }}"{% endif %}><strong>{{ lead|safe }}</strong>{% if unit %} {{ unit|breakable }}{% endif %}</span>
   {% if lines %}<span class="reading-lines">{{ lines|safe }}</span>{% endif %}

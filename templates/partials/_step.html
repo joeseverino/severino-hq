@@ -2,7 +2,7 @@
 One step or check of a {% steps %} list (partials/_steps.html), drawn by {% step %}:
 {% step icon="card" %}<strong>Public client</strong> {% muted %}Register one.{% endmuted %}{% endstep %}.
 Its icon, then what it says; a step of a numbered list draws its number
-instead. Its options are its Part's (value_tags).
+instead. Its options are its Part's (frame_tags).
 {% endcomment %}<li{% if done %} class="is-done"{% elif tone %} class="tone-{{ tone }}"{% endif %}{% if title %} title="{{ title }}"{% endif %}>
   {% if icon %}<span class="band-icon">{% include "partials/_icon.html" with name=icon only %}</span>{% endif %}
   <div>{{ content|safe }}</div>

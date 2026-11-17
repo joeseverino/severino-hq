@@ -424,6 +424,7 @@ TEMPLATES = [
             ],
             "builtins": [
                 "hq.platform.core.templatetags.value_tags",
+                "hq.platform.core.templatetags.frame_tags",
                 "hq.platform.core.templatetags.action_tags",
                 "hq.platform.core.templatetags.table_tags",
                 "hq.platform.core.templatetags.write_tags",

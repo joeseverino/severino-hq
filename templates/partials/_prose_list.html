@@ -1,7 +1,7 @@
 {% comment %}
 A list of sentences, drawn by {% prose_list %}: {% prose_list %}<li>A sentence.</li>{% endprose_list %}.
 Its items are the page's <li>s, each marked as the browser marks it, a muted
-bullet or its number. Its options are its Part's (value_tags,
+bullet or its number. Its options are its Part's (frame_tags,
 docs/Shared-UI.md).
 {% endcomment %}{% if numbered %}<ol class="prose-list">{{ content|safe }}</ol>{% else %}
 <ul class="prose-list">{{ content|safe }}</ul>{% endif %}
