@@ -77,11 +77,3 @@ class SignOutTests(TestCase):
 
         self.assertRedirects(response, settings.LOGOUT_REDIRECT_URL, fetch_redirect_response=False)
         self.assertNotIn(SESSION_KEY, self.client.session)
-
-    def test_a_get_signs_nobody_out(self):
-        self._signed_in_through_the_provider()
-
-        response = self.client.get(reverse("logout"))
-
-        self.assertEqual(response.status_code, 405)
-        self.assertIn(SESSION_KEY, self.client.session)

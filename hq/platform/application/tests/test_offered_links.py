@@ -5,7 +5,6 @@ rule the page gate serves by, so what is offered and what is served agree.
 """
 
 import os
-import re
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -22,29 +21,11 @@ from hq.platform.application.security import web_principal
 from hq.platform.core.context_processors import nav
 from hq.platform.core.test_runner import no_default_role
 
+from .addresses import address
+
 EXAMPLE = "tests.fixtures.example_hq_plugin"
 
 urlpatterns = [*root_urlpatterns, path("examples/notes/", include(f"{EXAMPLE}.urls"))]
-
-# A value each path converter takes, so every route has an address to offer.
-SAMPLES = {
-    "int": "1",
-    "str": "example",
-    "slug": "example",
-    "path": "example",
-    "uuid": "00000000-0000-4000-8000-000000000000",
-}
-PARAMETER = re.compile(r"<(?:(?P<converter>\w+):)?\w+>")
-
-
-def _address(route: str) -> str:
-    def sample(match: re.Match[str]) -> str:
-        converter = match["converter"] or "str"
-        if converter not in SAMPLES:
-            raise AssertionError(f"{route} takes a {converter!r}, which this guard has no sample of")
-        return SAMPLES[converter]
-
-    return PARAMETER.sub(sample, route)
 
 
 def _person(username: str, role: str):
@@ -109,11 +90,11 @@ class OfferedAsServedTests(TestCase):
         routes = [route for route in routed() if route.name]
         self.assertIn("example_plugin:index", {route.name for route in routes}, "the example plugin is not routed")
         for route in routes:
-            address = _address(route.path)
-            view = resolve(address).func
+            url = address(route.path)
+            view = resolve(url).func
             for user in self.people:
                 with self.subTest(person=str(user), route=route.name):
-                    self.assertEqual(offered(user, address), _opens(user, view))
+                    self.assertEqual(offered(user, url), _opens(user, view))
 
 
 class AuditLogLinkTests(TestCase):

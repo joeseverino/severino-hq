@@ -112,10 +112,3 @@ class BackchannelLogoutTests(TestCase):
             with self.subTest(case):
                 self.assertEqual(self._post(token).status_code, 400)
         self.assertTrue(all(self._live(key) for key in [*self.sessions, self.others]))
-
-    def test_it_answers_only_a_post(self):
-        with _serving():
-            response = Client().get(reverse("oidc_backchannel_logout"), {"logout_token": _logout_token()})
-
-        self.assertEqual(response.status_code, 405)
-        self.assertTrue(all(self._live(key) for key in self.sessions))

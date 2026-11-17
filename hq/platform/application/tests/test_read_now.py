@@ -166,12 +166,6 @@ class WebTests(TestCase):
         connect("example-tailnet", "tailscale")
         self.client.force_login(get_user_model().objects.create_user("operator", password="pw", is_staff=True))
 
-    def test_get_has_no_side_effect(self):
-        response = self.client.get(reverse("control_plane:read_now"), {"connection_ref": "example-tailnet"})
-
-        self.assertEqual(response.status_code, 405)
-        self.assertFalse(ReadRequest.objects.exists())
-
     def test_the_link_posts_what_it_names_and_returns_with_the_result(self):
         link = read_now_link(cli_principal(), connection_ref="example-tailnet")
 

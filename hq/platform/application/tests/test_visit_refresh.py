@@ -567,13 +567,12 @@ class VisitRefreshViewTests(TestCase):
         self.assertEqual(response.json()["state"], "failed")
         self.assertNotIn(b"raw-detail", response.content)
 
-    def test_opening_or_prefetching_the_address_reads_nothing(self):
+    def test_asking_how_a_read_stands_without_its_watch_reads_nothing(self):
         self.client.force_login(self.user)
 
         with page(FAST):
             for query in ({}, {"subject": "example", "name": "known"}, {"watch": "forged"}, {"watch": "x" * 5000}):
                 with self.subTest(query=sorted(query)):
-                    self.assertEqual(self.client.get(self.url, query).status_code, 405)
                     self.assertEqual(self.client.get(reverse("control_plane:read_status"), query).status_code, 404)
 
         self.assertEqual(asked(), set())

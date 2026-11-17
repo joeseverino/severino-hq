@@ -258,7 +258,6 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
         response = self.client.post(reverse("jobs:ask", args=["example.undeclared"]), form_keyed())
 
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(self.client.get(self.route).status_code, 405)
 
 
 class TheCapabilityIsDerivedTests(ComposedExample):

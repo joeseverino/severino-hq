@@ -665,14 +665,6 @@ class TransportTests(SentinelMixin, TestCase):
             )
         self.assertEqual(response.status_code, 415)
 
-    def test_get_is_refused_on_an_execute_route(self):
-        with _serving():
-            response = self.client.get(
-                "/api/v2/capabilities/example.import/",
-                HTTP_AUTHORIZATION=f"Bearer {_token()}",
-            )
-        self.assertEqual(response.status_code, 405)
-
     def test_the_root_reports_what_the_credential_may_do(self):
         with _serving():
             response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}")

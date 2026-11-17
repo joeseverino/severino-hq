@@ -189,12 +189,6 @@ class RemoveControlTests(TestCase):
         self.assertEqual(self._post({"client_id": "example-unseen", "removed": "1"}).status_code, 404)
         self.assertTrue(AgentIdentity.objects.filter(client_id=AGENT, blocked_at__isnull=True).exists())
 
-    def test_a_get_cannot_remove(self):
-        response = self.client.get(reverse("agent_block"), {"client_id": AGENT, "removed": "1"})
-
-        self.assertEqual(response.status_code, 405)
-        self.assertTrue(AgentIdentity.objects.filter(client_id=AGENT).exists())
-
 
 @API
 class SignInAfterRemovalTests(Doors, TestCase):

@@ -195,9 +195,3 @@ class BlockControlTests(TestCase):
         self.assertEqual(self._set("1", client_id="").status_code, 400)
         self.assertEqual(self._set("1", client_id="example-unseen").status_code, 404)
         self.assertFalse(_blocked(AGENT))
-
-    def test_a_get_cannot_block(self):
-        response = self.client.get(reverse("agent_block"), {"client_id": AGENT, "blocked": "1"})
-
-        self.assertEqual(response.status_code, 405)
-        self.assertFalse(_blocked(AGENT))

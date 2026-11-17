@@ -149,10 +149,6 @@ class ThemeSwitchTests(TestCase):
         self.assertEqual(theme_for(self.user), "system")
         self.assertEqual(denials(), 1)
 
-    def test_it_only_changes_on_post(self):
-        self.assertEqual(self.client.get(reverse("theme"), {"theme": "dark"}).status_code, 405)
-        self.assertEqual(theme_for(self.user), "system")
-
     def test_it_returns_only_to_this_site(self):
         response = self.client.post(reverse("theme"), form_keyed({"theme": "dark", "next": "https://example.net/"}))
         self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)

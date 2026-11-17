@@ -17,15 +17,20 @@ from collections import deque
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.http import HttpResponse
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from hq.platform.core import example_estate
+from hq.platform.api.testing import ContractClient
+from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
+from hq.platform.core import example_estate, revisions
 from hq.platform.core.example_estate import names, records
 from hq.platform.core.example_estate.testing import throwaway_media
 
 from ..routes import routed
+from .addresses import address
 
 # Routes that are not pages: machine endpoints, downloads, polled status, and
 # anything that acts when fetched.
@@ -73,15 +78,21 @@ ONE_PLURAL = re.compile(r"(?<![\d.,:/-])\b1 ([a-z]+s)\b")
 BRACKETED = re.compile(r"[a-z]\((?:s|es|ies)\)")
 
 
+def _routes():
+    """Every route, with the path it answers: each argument a value its converter takes."""
+
+    for route in routed():
+        if "(?P" in route.path:
+            yield route, ""
+            continue
+        yield route, re.sub(r"[\^$]", "", address(route.path))
+
+
 def _page_routes():
     """Every route that takes no argument, as its path."""
 
-    for route in routed():
-        joined = route.path.removeprefix("/")
-        if "<" in joined or "(?P" in joined:
-            continue
-        path = "/" + joined.lstrip("^").rstrip("$")
-        if not SKIPPED.search(path):
+    for route, path in _routes():
+        if path and "<" not in route.path and not SKIPPED.search(path):
             yield path
 
 
@@ -197,7 +208,7 @@ class RenderedPageTests(TestCase):
             if response.status_code in {301, 302, 303, 307, 308}:
                 queue.append(urlsplit(response["Location"]).path)
                 continue
-            # A route that takes no argument and refuses a GET is an action, not a page.
+            # A route that refuses a GET is an action, not a page (GetHasNoEffectTests).
             if response.status_code == 405 and path in routes:
                 continue
             if response.status_code != 200:
@@ -251,4 +262,74 @@ class RenderedPageTests(TestCase):
             *(reverse("projects:detail", args=[slug]) for _name, slug, *_rest in records.PROJECTS),
         }
         self.assertEqual(estate_pages - crawled, set())
+        self.assertEqual(problems, [])
+
+
+def _declares_no_get(route) -> bool:
+    """Whether a route's view says it answers no GET: an endpoint's methods, or a view class's."""
+
+    methods = getattr(route.pattern.callback, "__hq_methods__", None)
+    if methods is not None:
+        return "GET" not in methods
+    view = route.view
+    return isinstance(view, type) and not ("get" in view.http_method_names and hasattr(view, "get"))
+
+
+def _get(client: Client, path: str, **extra) -> tuple[HttpResponse, list[str]]:
+    """``client``'s GET of ``path``, and each table it wrote."""
+
+    before = revisions.read().counts
+    response = client.get(path, **extra)
+    after = revisions.read().counts
+    return response, sorted(table for table in before.keys() | after.keys() if before.get(table) != after.get(table))
+
+
+def _refused(response: HttpResponse) -> bool:
+    """A method refusal, or the sign-in gate turning away somebody who has not signed in."""
+
+    if response.status_code == 405:
+        return True
+    return response.status_code == 302 and response["Location"].startswith(settings.LOGIN_URL)
+
+
+# The machine API configured, so its routes answer as they do when served.
+@override_settings(OIDC_ISSUER=ISSUER, SEVERINO_API_RESOURCE=RESOURCE)
+class GetHasNoEffectTests(TestCase):
+    """A GET to a route that answers only POST is refused and writes nothing, whoever sends it.
+
+    The routes are the URL configuration's, an installed extension's included.
+    Which answer only POST is each one's own answer to an operator's GET, and a
+    view that says it answers no GET is held to answering so.
+    """
+
+    maxDiff = None
+
+    def test_a_get_to_an_action_is_refused_and_writes_nothing(self):
+        operator = Client(raise_request_exception=False)
+        operator.force_login(get_user_model().objects.create_superuser("example-operator"))
+        anonymous = Client(raise_request_exception=False)
+        problems: list[str] = []
+        actions = 0
+        for route, path in _routes():
+            if not path:
+                problems.append(f"{route.path}: no argument the walk can fill")
+                continue
+            answer, wrote = _get(operator, path)
+            if answer.status_code != 405:
+                if _declares_no_get(route):
+                    problems.append(f"{path}: says it answers no GET, and answered one {answer.status_code}")
+                continue
+            actions += 1
+            callers = [("an operator", answer, wrote), ("somebody signed out", *_get(anonymous, path))]
+            if hasattr(route.pattern.callback, "__hq_methods__"):
+                # Its answer held to the API's document as well, as every API test's is.
+                with _serving():
+                    bearer = _get(ContractClient(), path, headers={"Authorization": f"Bearer {_token()}"})
+                callers.append(("an agent", *bearer))
+            for caller, response, tables in callers:
+                if not _refused(response):
+                    problems.append(f"{path}: a GET from {caller} answered {response.status_code}")
+                if tables:
+                    problems.append(f"{path}: a GET from {caller} wrote {', '.join(tables)}")
+        self.assertTrue(actions, "The walk found no route that answers only POST.")
         self.assertEqual(problems, [])

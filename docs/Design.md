@@ -1786,6 +1786,13 @@ download, a dialog or a region answered in place.
 *Gate:* `hq/platform/core/tests/test_speculation.py`, which prefetches every
 page and fails on one that writes.
 
+A GET to a route that answers only POST is refused and writes nothing, from
+an operator, from somebody signed out, and from an agent's token where the
+route takes one.
+*Gate:* `GetHasNoEffectTests` in
+`hq/platform/application/tests/test_rendered.py`, which sends that GET to
+every route, an installed extension's included.
+
 **A control is big enough to hit.** A target is hit through at least 24 by 24
 CSS px (`--target-min`, WCAG 2.5.8 Target Size Minimum). That counts the area
 its `::before` or `::after` hangs over the space beside it. A control drawn
