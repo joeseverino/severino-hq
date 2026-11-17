@@ -536,11 +536,6 @@ class CommandTitleTests(TestCase):
 
         self.assertEqual(capability_title("example.not.registered"), "Example Not Registered")
 
-    def test_every_core_command_is_named(self):
-        from ..core_capabilities import CORE_CAPABILITY_SPECS
-
-        self.assertEqual([item.name for item in CORE_CAPABILITY_SPECS if not item.label], [])
-
     def test_a_padded_label_does_not_compose(self):
         from dataclasses import replace
 

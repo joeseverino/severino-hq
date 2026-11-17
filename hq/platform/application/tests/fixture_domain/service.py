@@ -1,8 +1,9 @@
 """The widget's one write: create, or update by slug."""
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
 
+from hq.platform.application.command_fields import Describe
 from hq.platform.application.domains import records_of
 from hq.platform.application.security import Principal
 
@@ -11,8 +12,8 @@ from .models import Widget
 
 @dataclass(frozen=True)
 class WidgetCommand:
-    slug: str
-    name: str
+    slug: Annotated[str, Describe("The widget's address.")]
+    name: Annotated[str, Describe("What the widget is called.")]
 
 
 def save_widget(

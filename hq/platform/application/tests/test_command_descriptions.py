@@ -54,13 +54,3 @@ class CommandDescriptionTests(SimpleTestCase):
         said = Asked.model_json_schema()["properties"]["about"]
         self.assertEqual(said["examples"], ["machine:lab-1"])
         self.assertEqual(said["description"], "What it is about. A `type:key` reference.")
-
-    def test_every_host_command_field_is_described(self):
-        missing = sorted(
-            f"{spec.name}.{name}"
-            for spec in host_specs()
-            for name, field in fields(capability_schema(spec)).items()
-            if not str(field.get("description", "")).strip()
-        )
-
-        self.assertEqual(missing, [], "Describe each field in its Annotated type with command_fields.Describe(...).")

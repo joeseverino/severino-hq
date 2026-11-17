@@ -7,6 +7,8 @@ not here: ``application.records`` derives them from its declaration.
 extension declares; ``application.capabilities`` runs them.
 """
 
+from django.core.exceptions import ImproperlyConfigured
+
 from hq.domains.control_plane.models import OperationRequest
 from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
@@ -742,6 +744,10 @@ CORE_CAPABILITY_SPECS = (
         label="Set the agent policy",
     ),
 )
+# HQ's own command says what it is in words of its own; only an extension's
+# falls back to the words of its name.
+if unnamed := [spec.name for spec in CORE_CAPABILITY_SPECS if not spec.label]:
+    raise ImproperlyConfigured(f"Give each of HQ's own commands a label: {', '.join(unnamed)} has none.")
 
 
 # A host domain's own commands, kept here beside the rest of the host's: each
