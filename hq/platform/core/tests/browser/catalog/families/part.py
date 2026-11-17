@@ -1350,7 +1350,7 @@ ENTRIES = {
         '{% fact "Example running" icon="container" %}12{% detail %}<small>on 3 example machines</small>{% endfact %}'
         '{% fact "Example version" icon="layers" %}<code>example-1.2.3</code>{% detail %}'
         "<small>example.com/example/image</small><small>Tag only</small>{% endfact %}"
-        '{% fact "An example label long enough to wrap in its cell" icon="shield" tone="serious" %}'
+        '{% fact "An example label long enough to wrap onto a second line in its cell" icon="shield" tone="serious" %}'
         '<a href="/example/">{{ "2\u00a0example findings"|breakable }}</a>{% detail %}<small>An example detail</small>{% endfact %}'
         '{% fact "Example checks" icon="check-circle" tone="good" value="Passing" %}'
         "{% endfacts %}"
@@ -1368,6 +1368,40 @@ ENTRIES = {
         '{% fact "Example update" icon="deploy" %}{% entity url|outside label=tag code=True %}{% endfact %}'
         "{% endfacts %}",
         {"tag": "2024.11.3-example2404-ls45-example-build", "url": "https://example.com/releases/2024.11.3"},
+    ),
+    # A band of one kind of value, as a machine's load is drawn: each a plain
+    # reading under its mark, with a line saying what it is of.
+    "part/facts-band-readings": Entry(
+        '{% facts layout="band" %}'
+        '{% fact "Example containers" icon="container" value="9 of 9 running" detail="1 has an update" %}'
+        '{% fact "Example memory" icon="activity" value="48%" detail="3.8 GB of 8.0 GB" %}'
+        '{% fact "Example storage" icon="layers" value="38.2 GB" detail="Layers, volumes and build cache" %}'
+        '{% fact "Example uptime" icon="clock" value="12 days" detail="Since Nov 5" %}'
+        "{% endfacts %}"
+    ),
+    # A page's headline figures (`size="large"`), two drawn as well as said,
+    # standing alone and in a section's frame.
+    "part/facts-band-figures": Entry(
+        '{% facts layout="band" size="large" label="Example estate" %}'
+        '{% fact "Example hosts online" icon="server" value="3 of 5" detail="2 example hosts offline" drawing=hosts %}'
+        '{% fact "Example runs" icon="activity" value="4 of 6" detail="The last six example runs" drawing=runs %}'
+        '{% fact "Example certificate" icon="lock" value="24 days" detail="example-com · Dec 11" %}'
+        '{% fact "Example connections" icon="network" value=12 url="/example/" %}'
+        "{% endfacts %}"
+        '{% section "Example estate" %}{% facts layout="band" size="large" %}'
+        '{% fact "Example hosts online" icon="server" value="3 of 5" detail="2 example hosts offline" drawing=hosts %}'
+        '{% fact "Example runs" icon="activity" value="4 of 6" detail="The last six example runs" drawing=runs %}'
+        '{% fact "Example certificate" icon="lock" value="24 days" detail="example-com · Dec 11" %}'
+        '{% fact "Example connections" icon="network" value=12 url="/example/" %}'
+        "{% endfacts %}{% endsection %}",
+        {"hosts": Dots.of(3, 5), "runs": _runs()},
+    ),
+    # A range beside its unit, and a phrase, in a cell held narrow, as three
+    # figures to a row on a phone hold it: each wraps, its lines clear of each other.
+    "part/facts-band-wrapped": Entry(
+        '<div style="inline-size: 110px">{% facts layout="band" size="large" %}'
+        '{% fact "Example range" value="10.5–12.5 mi" %}{% fact "Example phrase" value="up to 2 a week" %}'
+        "{% endfacts %}</div>"
     ),
     # A detail given as lines, one of them holding a link among its words.
     "part/facts-band-lines": Entry(

@@ -210,6 +210,12 @@ PARTS = (
         "demo_foot", "A saved copy's foot, which opens its About dialog.", "demo-about", "demo-about-dot", "demo-foot"
     ),
     _part("document_picture", "A receipt's scan, held in its shape before it arrives.", "document-picture"),
+    _part(
+        "figure_drawing",
+        "What a figure looks like beside its value: dots for a part of a whole, a line for a direction.",
+        *("is-latest", "kpi-trend", "kpi-trend-dot", "kpi-trend-hit"),
+        draws=(CHART,),
+    ),
     _part("dots", "A count as a row of dots, those it reached filled.", "is-filled", "kpi-dot", "kpi-dots"),
     _part(
         "dropzone",
@@ -272,9 +278,7 @@ PARTS = (
     _part(
         "kpi_grid",
         "Responsive linked or static figures.",
-        *("is-featured", "is-latest", "is-zero", "kpi", "kpi-figure", "kpi-grid", "kpi-trend", "kpi-trend-dot"),
-        *("kpi-trend-hit", "label", "value"),
-        draws=(CHART,),
+        *("is-featured", "is-zero", "kpi", "kpi-figure", "kpi-grid", "label", "value"),
         public=True,
     ),
     _part("linked_text", "Free text with the names HQ knows in it as links.", "linked-text"),

@@ -2,5 +2,5 @@
 Facts, drawn by {% facts %}: {% facts layout="band" label="Controller status" %}{% fact ... %}{% endfacts %}.
 A band is a row of cells; a list, the default, is each label beside its
 value; a line (inline) is a card's summary, each fact its value then its
-words. Its options are its Part's (facts_tags, docs/Shared-UI.md).
-{% endcomment %}<dl class="{% if layout == 'band' %}facts-band{% elif layout == 'inline' %}facts-inline{% else %}facts-list{% endif %}"{% if label %} aria-label="{{ label }}"{% endif %}>{{ content|safe }}</dl>
+words. A band's `size="large"` sets its values as a page's headline figures. Its options are its Part's (facts_tags, docs/Shared-UI.md).
+{% endcomment %}<dl class="{% if layout == 'band' %}facts-band{% if size == 'large' %} is-large{% endif %}{% elif layout == 'inline' %}facts-inline{% else %}facts-list{% endif %}"{% if layout == 'band' %} data-band{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}>{{ content|safe }}</dl>

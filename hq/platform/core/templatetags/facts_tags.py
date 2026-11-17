@@ -13,6 +13,9 @@ FACT_PARTIAL = "partials/_fact.html"
 
 # Each layout, drawn as its class (``facts-band``) by the partial.
 LAYOUTS = ("list", "band", "inline")
+# How large a band sets its values: a page's status facts, or its headline
+# figures (``large``), the numbers it is read for.
+SIZES = ("regular", "large")
 
 
 class FactTakes(Part):
@@ -29,7 +32,7 @@ class FactTakes(Part):
 
 FACTS = Part(
     name="facts",
-    classes=("facts-band", "facts-inline", "facts-list"),
+    classes=("facts-band", "facts-inline", "facts-list", "is-large"),
     partial=FACTS_PARTIAL,
     about="Every label and its value a page shows, each a `{% fact %}`.",
     options={
@@ -42,13 +45,18 @@ FACTS = Part(
             ),
         ),
         "label": Option(about="What the whole is, for a reader, when nothing on the page heads it."),
+        "size": Option(
+            default="regular",
+            choices=SIZES,
+            about="How large a band sets its values: status facts, or the headline figures a page is read for.",
+        ),
     },
     public=True,
     example='{% facts layout="band" %}{% fact "Running" value="3" url="/example/" %}{% endfacts %}',
 )
 FACT = FactTakes(
     name="fact",
-    classes=("band-icon", "fact", "fact-detail", "fact-label", "fact-value", "tone-*"),
+    classes=("band-icon", "fact", "fact-detail", "fact-figure", "fact-label", "fact-value", "tone-*"),
     partial=FACT_PARTIAL,
     about=(
         "One fact of a `{% facts %}`: its label, its value and the detail under it. Given `value=` it encloses "
@@ -62,6 +70,12 @@ FACT = FactTakes(
         "detail": Option(about="The words under the value, or a list of them, a line each."),
         "tone": Option(about="A status tone the fact is colored by, for what it means."),
         "icon": Option(about="The icon beside it."),
+        "drawing": Option(
+            about=(
+                "What its value looks like, beside it: `Dots` for a part of a whole, `Trend` for a direction, "
+                "or under it an `AllocationBar` with its legend."
+            )
+        ),
     },
     bare_with="value",
     public=True,

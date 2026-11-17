@@ -1,0 +1,15 @@
+{% comment %}
+What a figure looks like beside its value: dots for a part of a whole, a line
+for a direction. Either repeats what the value and its note already say, so a
+drawing that is only decoration is not announced; dots that are links are,
+each by what it names. Takes `drawing`, a `Dots` or a `Trend`; an
+`AllocationBar` is drawn under the figure by `_allocation.html`.
+
+Each reading of a line answers across its own strip of it, which is far
+easier to point at than the point. Its dot is a zero-length round-capped
+stroke: the drawing is stretched to the room it has, and a circle would
+stretch with it. The box is wider than the line by a margin each side, so the
+dot on the first and the newest reading is whole.
+{% endcomment %}{% if drawing.kind == "dots" and drawing.shown %}{% include "partials/_dots.html" with dots=drawing only %}{% elif drawing.kind == "trend" and drawing.marks %}{% comment %}
+<!-- ast-grep-ignore: hand-drawn-icon --> a figure's trend line, drawn by the figure part
+{% endcomment %}<svg class="kpi-trend" viewBox="-5 -3 110 30" preserveAspectRatio="none" aria-hidden="true" focusable="false"><polyline points="{{ drawing.points }}"></polyline>{% for mark in drawing.marks %}<rect class="kpi-trend-hit" x="{{ mark.left }}" y="0" width="{{ mark.width }}" height="24" data-tip="{{ mark.tip }}"></rect><line class="chart-dot kpi-trend-dot{% if mark.latest %} is-latest{% endif %}" x1="{{ mark.x }}" y1="{{ mark.y }}" x2="{{ mark.x }}" y2="{{ mark.y }}"></line>{% endfor %}</svg>{% endif %}

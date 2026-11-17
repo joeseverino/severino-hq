@@ -545,21 +545,27 @@ and reading ages), and the one band rule in `css/app/figures.css` draws
 every one; its cells keep their own padding. Too narrow for two cells, a band reads as a list:
 label left, value right.
 
-A band of facts draws no rule between them and counts nothing. Its facts share
-its width in equal tracks, as many to a row as keep each at least `--fact-min`
-wide. So a few facts spread across a wide card rather than collecting at its
-start beside an empty end, and past that they wrap. That floor lets a narrow
-band hold fewer facts to a row, and the facts of a row still share their lines.
-Four facts are one row or two of two, never three beside one alone. Standing alone the band is a
-surface with its own inset. In a card or a section, the frame's padding is its
-inset. Under 27.5rem it reads as a list, each fact laying out its own rows.
+A band of facts is a band like any other (`data-band`): its facts are its
+cells, counted into whole rows. Standing alone each fact keeps its own
+padding and draws its edges. In a card or a section the frame's padding is its
+inset, and its facts stand apart by a gap (`--band-gap`) with no edges
+(`--band-rules`), each track short of its share by the gap. A fact is drawn as
+a figure is: its label with its mark before it, its value large under it, its
+detail under that. The facts of a row share their lines, and a label that
+wraps grows its row upward, so each label stands on its own value and every
+value of the row stands level. A link in a value is the value's ink with a
+rule under it, so only a toned fact's value is colored. `size="large"` sets
+the values as a page's headline figures, and a fact's `drawing` is drawn
+beside its value or under its detail as a figure's is. Under 24rem, where a
+band of two takes one track, a band of status facts reads as a list, each
+fact a row of its own.
 
 Every label and its value is a fact: `{% fact "Label" value=n url=...
 detail=... %}` inside `{% facts %}`, or the block form `{% fact "Label"
 %}markup{% detail %}lines{% endfact %}` for a value that is markup. A band (`{%
 facts layout="band" %}`) is the few facts that sum up a page or a part, each a
-cell with its icon, its label over its value over its detail. The facts of a
-row share their lines, so every value stands on one baseline, a zero beside a
+cell with its label and mark over its value over its detail. The facts of a
+row share their lines, so every value stands on one line, a zero beside a
 linked count alike. A list, the default, is the facts about one thing, each
 label beside its value. It lays as many pairs to a row as keep each a short
 label and a short value wide, so a few short facts fill a wide frame rather

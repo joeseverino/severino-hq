@@ -1,11 +1,14 @@
 {% comment %}
 One fact, drawn by {% fact %} inside {% facts %}: its label, its value, and
-the detail under the value, flowing words or, given as lines, a line each. The value and its link are one element, so a
-count of 0 and a linked count of 13 stand alike. An outside link is written
-in the block form, its value {% entity url|outside %} in the fact. Its
-options are its Part's (facts_tags, docs/Shared-UI.md).
+the detail under the value, flowing words or, given as lines, a line each.
+The value and its link are one element, so a count of 0 and a linked count of
+13 stand alike. An outside link is written in the block form, its value
+{% entity url|outside %} in the fact. A `drawing` stands beside the value
+(dots, a line) or under the detail (the parts of a whole). Its options are
+its Part's (facts_tags, docs/Shared-UI.md).
 {% endcomment %}<div class="fact{% if tone %} tone-{{ tone }}{% endif %}">
   <dt>{% if icon %}<span class="band-icon">{% include "partials/_icon.html" with name=icon only %}</span>{% endif %}<span class="fact-label">{{ label|breakable }}</span></dt>
-  <dd class="fact-value">{% present value %}{% if url %}<a href="{{ url }}">{{ value|breakable }}</a>{% else %}{{ value|breakable }}{% endif %}{% endpresent %}</dd>
-  {% if lines %}<dd class="fact-detail">{% for line in lines %}<small>{{ line|breakable }}</small>{% endfor %}</dd>{% elif detail %}<dd class="fact-detail">{{ detail|breakable }}</dd>{% endif %}
+  {% partialdef shown %}{% present value %}{% if url %}<a href="{{ url }}">{{ value|breakable }}</a>{% else %}{{ value|breakable }}{% endif %}{% endpresent %}{% endpartialdef %}
+  {% if drawing and drawing.kind != "allocation" %}<dd class="fact-value fact-figure"><span>{% partial shown %}</span>{% include "partials/_figure_drawing.html" with drawing=drawing only %}</dd>{% else %}<dd class="fact-value">{% partial shown %}</dd>{% endif %}
+  {% if lines or detail or drawing.kind == "allocation" %}<dd class="fact-detail">{% if lines %}{% for line in lines %}<small>{{ line|breakable }}</small>{% endfor %}{% else %}{{ detail|breakable }}{% endif %}{% if drawing.kind == "allocation" and drawing.drawn %}{% include "partials/_allocation.html" with allocation=drawing legend=True stacked=True only %}{% endif %}</dd>{% endif %}
 </div>
