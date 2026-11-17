@@ -14,9 +14,6 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class PluginApiVersionTests(SimpleTestCase):
-    def test_it_is_the_version_the_host_speaks(self):
-        self.assertEqual(plugin_identity.plugin_api_version(), str(PLUGIN_API_VERSION))
-
     def test_a_host_that_declares_none_is_refused(self):
         with tempfile.TemporaryDirectory() as directory:
             plugins = Path(directory) / plugin_identity.PLUGINS

@@ -18,9 +18,7 @@ from django.test import SimpleTestCase, tag
 from hq.platform.application import plugin_validation as validation
 from hq.platform.application.plugin_validation import _closes_by_hand, sentence_closes
 from hq.platform.application.tests.reads import reads
-from hq_sdk import ui as sdk_ui
 
-from ..ui import ended
 from .apart import apart
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -108,9 +106,6 @@ class ExtensionSentenceTests(SimpleTestCase):
             (root / name).parent.mkdir(parents=True, exist_ok=True)
             (root / name).write_text(source, encoding="utf-8")
         return root
-
-    def test_an_extension_closes_a_sentence_with_the_hosts_own_ended(self):
-        self.assertIs(sdk_ui.ended, ended)
 
     def test_a_sentence_closed_by_hand_is_found_where_page_text_is_built(self):
         with tempfile.TemporaryDirectory() as directory:

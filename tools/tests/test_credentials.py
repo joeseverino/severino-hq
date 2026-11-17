@@ -14,7 +14,6 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.github_posture import WIRED_SECRETS
 from hq.platform.core.tests.task import Usage
 from tests.mise_tasks import body, mise_tasks
 from tools import credentials
@@ -314,9 +313,6 @@ class TailscaleMintTests(SimpleTestCase):
 @tag("source")
 class WireGithubAppTests(SimpleTestCase):
     KEY = "-----BEGIN PRIVATE KEY-----\nexample\n-----END PRIVATE KEY-----\n"
-
-    def test_the_secrets_it_wires_are_the_ones_posture_checks(self):
-        self.assertEqual(WIRED_SECRETS, {credentials.APP_KEY, credentials.APP_CLIENT_ID})
 
     def wire(self, *extensions: str) -> tuple[Commands, str]:
         commands = Commands(

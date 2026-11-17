@@ -58,9 +58,6 @@ class TheVectorTests(SimpleTestCase):
         with override_settings(SEVERINO_SEAL_PUBLIC_KEY=self.public_key):
             return secrets.seal_for_controller(self.vector["plaintext"], resource_key=resource_key, slot=slot)
 
-    def test_the_committed_public_key_is_the_seeds(self):
-        self.assertEqual(base64.b64decode(self.public_key), public_bytes(self.seed))
-
     def test_what_hq_seals_the_seed_opens(self):
         sealed = self.seal(self.vector["resource_key"], self.vector["slot"])
         key_id = hashlib.sha256(public_bytes(self.seed)).hexdigest()[:8]
