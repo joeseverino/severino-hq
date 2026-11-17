@@ -17,7 +17,7 @@ from tools.gate.chain import ROOT as CHECKOUT
 from tools.gate.tests.base import fixture_git
 
 # Each form oasdiff matches an --err-ignore line to: an operation's change, a
-# shared schema's and a security scheme's, worded as oasdiff 1.37.0's
+# shared schema's and a security scheme's, worded as oasdiff 1.38.0's
 # checker/localizations_src/en/messages.yaml words them.
 ENTRIES = (
     "- in API GET /api/v2/findings/ the `query` request parameter `limit` became required",

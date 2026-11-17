@@ -140,7 +140,7 @@ lazy_bins = ["otel-tui"]
 # that breaks a client (lint:openapi-breaking). Not in mise's registry. Lazy:
 # only that gate runs it.
 [tools."github:oasdiff/oasdiff"]
-version = "1.37.0"
+version = "1.38.0"
 lazy = true
 lazy_bins = ["oasdiff"]
 

@@ -238,7 +238,7 @@ runner = [
 ]
 # Generates the API cases of test:api-properties, the one task that installs it.
 fuzz = [
-    "schemathesis==4.33.1",
+    "schemathesis==4.33.4",
 ]
 
 [tool.ruff]
