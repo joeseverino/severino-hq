@@ -1,7 +1,6 @@
-"""A row's controls stand beside its words, and in a narrow box leave the row
-for a copy on its open line, as a ranked column does: the region marks the
-column and draws the copy, and the stylesheet shows one or the other
-(docs/Design.md, A row's controls)."""
+"""A row's controls stand beside its words, and in a narrow box wait for their
+row to open, shown there in place: the region marks the column, and no
+control is ever drawn twice (docs/Design.md, A row's controls)."""
 
 from django.template import Context, Template
 from django.test import SimpleTestCase
@@ -35,23 +34,17 @@ def _leaving(html: str) -> list:
     return [each for each in all_elements(html) if each.tag in {"th", "td"} and "data-narrow" in each.attrs]
 
 
-def _copies(html: str) -> list:
-    return [each for each in all_elements(html) if "row-controls" in each.classes]
-
-
 class RowControlsTests(SimpleTestCase):
-    def test_a_rows_controls_leave_a_narrow_box_for_a_copy_that_draws_no_id_twice(self):
+    def test_a_rows_controls_leave_a_narrow_box_and_are_drawn_once(self):
         html = _table(_ROW)
         page = all_elements(html)
         self.assertEqual([each.tag for each in _leaving(html)], ["th", "td"])
-        (copy,) = _copies(html)
-        self.assertIn("data-narrow", copy.attrs)
-        self.assertTrue(any(copy in each.ancestors and each.words == "Open" for each in page))
+        self.assertEqual([each.words for each in page if each.words == "Open" and each.tag == "a"], ["Open"])
         self.assertEqual(len([each for each in page if each.attrs.get("id") == "example-open"]), 1)
 
     def test_the_put_away_is_the_last_of_the_rows_buttons(self):
         """The reader's Dismiss is a button as the others are, read, reached and
-        drawn after them, on the row and in its copy alike."""
+        drawn after them."""
 
         from hq.platform.application.pages import PageAction
 
@@ -64,12 +57,8 @@ class RowControlsTests(SimpleTestCase):
             with self.subTest(actions=len(given)):
                 html = _table(row, actions=given, away=away)
                 (cell,) = [each for each in _leaving(html) if each.tag == "td"]
-                (copy,) = _copies(html)
-                for holder in (cell, copy):
-                    shown = [
-                        each.words for each in all_elements(html) if holder in each.ancestors and "btn" in each.classes
-                    ]
-                    self.assertEqual(shown, ["Open", "Dismiss"] if given else ["Dismiss"])
+                shown = [each.words for each in all_elements(html) if cell in each.ancestors and "btn" in each.classes]
+                self.assertEqual(shown, ["Open", "Dismiss"] if given else ["Dismiss"])
 
     def test_what_a_row_offers_only_when_open_moves_to_its_open_line(self):
         html = _table(_ROW)
@@ -78,10 +67,10 @@ class RowControlsTests(SimpleTestCase):
         self.assertNotIn(cell, later.ancestors)
         self.assertTrue(any("row-detail" in each.classes for each in later.ancestors))
 
-    def test_a_column_of_choices_never_leaves_and_is_never_copied(self):
-        """A choice a reader makes is the row's value: a copy would send it
-        twice, so its column stays whatever rank its heading gives it, the
-        words that stand where a row has no choice included."""
+    def test_a_column_of_choices_never_leaves(self):
+        """A choice a reader makes is the row's value, so its column stays
+        whatever rank its heading gives it, the words that stand where a row
+        has no choice included."""
 
         rows = (
             '<tr><td>Example</td><td><select name="example"><option>One</option></select></td></tr>'
@@ -91,7 +80,6 @@ class RowControlsTests(SimpleTestCase):
             with self.subTest(head=head):
                 html = _table(rows, head='{% table_heading "Name" gutter=True %}' + head)
                 self.assertEqual(_leaving(html), [])
-                self.assertEqual(_copies(html), [])
                 self.assertEqual(
                     [each.attrs.get("data-drop") for each in all_elements(html) if each.tag == "td"], [None] * 4
                 )

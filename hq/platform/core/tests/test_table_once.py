@@ -1,6 +1,6 @@
-"""A region that fills (`table_region ... fills=True`) writes each cell of a
-row once, and the bytes a row and a page with no rows draw hold to their
-budgets (docs/Design.md, Opening a row moves no column)."""
+"""A table region writes each cell of a row once, and the bytes a row and a
+page with no rows draw hold to their budgets (docs/Design.md, Opening a row
+moves no column)."""
 
 import re
 
@@ -12,7 +12,7 @@ from hq.platform.application.markup_testing import all_elements, with_class
 
 from .signed_in_case import _AuthedTestCase
 
-# The bytes a row of `test_a_filled_rows_bytes_hold_to_their_budget`'s table
+# The bytes a row of `test_a_rows_bytes_hold_to_their_budget`'s table
 # may draw, its cells and their marks written once.
 ROW_BYTES = 1_600
 # The bytes a signed-in page of a list with no rows may draw: the page's
@@ -24,45 +24,56 @@ def _render(source: str, context: dict | None = None) -> str:
     return Template(source).render(Context(context or {}))
 
 
-class FillingRegionTests(SimpleTestCase):
-    def test_a_region_that_fills_writes_each_cell_once(self):
-        """A region that fills draws no copy of a cell on a row's open line:
-        the row's own cells are what tables.js fills it from, through the one
-        frame the region draws. A row whose held cell holds a button keeps its
-        copies, since a clone would be a second control, and says so."""
+class RowWrittenOnceTests(SimpleTestCase):
+    def test_a_row_writes_each_cell_once(self):
+        """A region draws no copy of a cell on a row's open line: the row's
+        own cells are what tables.js fills it from, through the one frame the
+        region draws. A block the row moves there is drawn there alone."""
 
         source = (
-            '{% table_region "Things" fills=True %}<table class="data-table"><thead><tr>'
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>'
             '{% table_heading "Name" gutter=True %}{% table_heading "Note" drop=1 %}'
             '{% table_heading "State" "status" %}{% table_heading "Act" hidden=True css="actions-col" %}'
             "</tr></thead><tbody>"
-            '<tr data-probe="plain"><td>A <span class="narrow-more"><b data-probe="narrow">n</b></span>'
+            '<tr><td>A <span class="narrow-more"><b data-probe="narrow">n</b></span>'
             '<div class="row-below" data-label="Also"><i data-probe="below">x</i></div></td>'
             '<td><i data-probe="dropped">said</i></td>'
             '<td>Up <span class="row-more"><i data-probe="more">since</i></span></td>'
-            '<td><a href="/x">Open</a></td></tr>'
-            '<tr data-probe="pressed"><td>B</td><td><button type="button" data-probe="press">Go</button></td>'
-            "<td>Up</td><td>–</td></tr>"
+            '<td><a href="/x" data-probe="act">Open</a></td></tr>'
             "</tbody></table>{% endtable_region %}"
         )
         html = _render(source)
         found = all_elements(html)
         probes = [each.attrs["data-probe"] for each in found if "data-probe" in each.attrs]
 
-        for once in ("narrow", "below", "dropped", "more"):
-            self.assertEqual(probes.count(once), 1, once)
-        self.assertEqual(probes.count("press"), 2)
+        self.assertEqual(sorted(probes), ["act", "below", "dropped", "more", "narrow"])
         self.assertEqual(html.count("<template data-open-line"), 1)
         # Its rows' lines are drawn only as they open, so the table says a row
         # can open, which keeps the gutter.
         (table,) = [each for each in found if each.tag == "table"]
         self.assertIn("data-rows-can-open", table.attrs)
-        rows = {each.attrs["data-probe"]: each for each in found if each.tag == "tr" and "data-probe" in each.attrs}
-        self.assertNotIn("data-filled", rows["plain"].attrs)
-        self.assertIn("data-filled", rows["pressed"].attrs)
-        self.assertEqual(with_class(html, "row-controls"), [])
+        (below,) = [each for each in found if each.attrs.get("data-probe") == "below"]
+        self.assertTrue(any("row-detail" in up.classes for up in below.ancestors))
 
-    def test_a_filled_rows_bytes_hold_to_their_budget(self):
+    def test_a_cell_held_back_holds_no_control(self):
+        """A cell its row's open line copies holds no button or field, which
+        the copy would draw twice: it stands in place, or moves there whole."""
+
+        held = {
+            "a ranked column": '<td><button type="button">Go</button></td>',
+            "a part only the open line shows": '<td>Up <span class="row-more"><select><option>a</option></select></span></td>',
+        }
+        for name, cell in held.items():
+            with self.subTest(name):
+                source = (
+                    '{% table_region "Things" %}<table class="data-table"><thead><tr>'
+                    '{% table_heading "Name" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>'
+                    f"<tr><td>A</td>{cell}</tr></tbody></table>{{% endtable_region %}}"
+                )
+                with self.assertRaisesMessage(ValueError, "holds no control"):
+                    _render(source)
+
+    def test_a_rows_bytes_hold_to_their_budget(self):
         """Bytes per row of a table like the connections list, whose rows hold
         a ranked column, a list's rest and a block beneath: a number load does
         not move, so it holds the cut of writing each cell once."""
@@ -79,7 +90,7 @@ class FillingRegionTests(SimpleTestCase):
         )
         rows = 20
         source = (
-            '{% table_region "Things" fills=True %}<table class="data-table"><thead><tr>'
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>'
             '{% table_heading "Connection" "identifier" gutter=True %}{% table_heading "Reads" drop=2 %}'
             '{% table_heading "Reaches" drop=1 %}{% table_heading "State" "status" %}'
             '{% table_heading "Actions" hidden=True css="actions-col" %}</tr></thead><tbody>'

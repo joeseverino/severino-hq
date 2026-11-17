@@ -56,18 +56,19 @@
     return String(left).localeCompare(String(right), undefined, { numeric: true });
   };
 
-  // In a region that fills (`table_region ... fills=True`), the server writes
-  // each cell once, and the row's open line takes its entries from the row as
-  // it first opens: each cell of a ranked column (its `data-drop` copied, so
-  // the stylesheet still says when it shows) and each cell holding what only
-  // the open line shows (`row-more`, `line-rest`, shown at every width), under
-  // its column's name, cloned from the region's `data-open-line` frame with
-  // no id the row already draws. A row the server filled says so
-  // (`data-filled`).
+  // The server writes each cell once (table_cells), and a row's open line
+  // takes what the row holds back from the row as it first opens: each cell
+  // of a ranked column (its `data-drop` copied, so the stylesheet still says
+  // when it shows) and each cell holding a part only the open line shows
+  // (`row-more`, `line-rest`; `data-holds`, shown at every width, what the
+  // row's line already shows of it boxed as `data-row-shows`), under its
+  // column's name, cloned from the region's `data-open-line` frame with no id
+  // the row already draws.
+  const HELD = ".row-more, .line-rest";
   const heldBack = (cell) =>
     !cell.hasAttribute("data-blank") &&
     !cell.hasAttribute("colspan") &&
-    (cell.hasAttribute("data-drop") || Boolean(cell.querySelector(".row-more, .line-rest")));
+    (cell.hasAttribute("data-drop") || Boolean(cell.querySelector(HELD)));
   const columnName = (row, cell) => {
     if (cell.dataset.label) return cell.dataset.label;
     const heading = row.closest("table").tHead?.rows;
@@ -84,23 +85,41 @@
     }
     return "";
   };
+  const filled = new WeakSet();
   const fill = (row) => {
-    const region = row.closest(".table-scroll[data-fills]");
-    if (!region || row.hasAttribute("data-filled")) return;
-    row.toggleAttribute("data-filled", true);
+    const region = row.closest(".table-scroll") || row;
+    const frameOf = region.querySelector("template[data-open-line]");
+    if (!frameOf || filled.has(row)) return;
+    filled.add(row);
     const held = [...row.cells].filter(heldBack);
     if (!held.length) return;
-    const line = region.querySelector("template[data-open-line]").content.firstElementChild.cloneNode(true);
+    const line = frameOf.content.firstElementChild.cloneNode(true);
     const list = line.querySelector(".row-columns");
     const frame = list.firstElementChild;
+    const shows = frame.querySelector("[data-row-shows]");
+    shows.remove();
     frame.remove();
     held.forEach((cell) => {
       const entry = frame.cloneNode(true);
-      if (cell.dataset.drop && !cell.querySelector(".row-more, .line-rest")) entry.dataset.drop = cell.dataset.drop;
+      const holds = Boolean(cell.querySelector(HELD));
+      if (cell.dataset.drop) entry.dataset.drop = cell.dataset.drop;
+      entry.toggleAttribute("data-holds", holds);
       entry.querySelector("dt").textContent = columnName(row, cell);
       const value = entry.querySelector("dd");
+      let box = null;
       [...cell.childNodes].forEach((node) => {
-        if (!node.matches?.("[data-row-toggle]")) value.append(node.cloneNode(true));
+        if (node.matches?.("[data-row-toggle]")) return;
+        const copy = node.cloneNode(true);
+        if (!holds || node.matches?.(HELD) || node.querySelector?.(HELD)) {
+          value.append(copy);
+          box = null;
+          return;
+        }
+        if (!box) {
+          box = shows.cloneNode();
+          value.append(box);
+        }
+        box.append(copy);
       });
       // A copy names no row and draws no id twice.
       value.querySelectorAll("[id]").forEach((each) => each.removeAttribute("id"));
@@ -121,6 +140,11 @@
     if (drawn) drawn.prepend(...list.children);
     else detail.cells[0].append(list);
   };
+  // A row the server draws open (its editor open) is filled as it arrives,
+  // with the page or in the region that answered, before it is painted.
+  const fillOpen = (root) => root.querySelectorAll(".data-table > tbody > tr.is-expanded").forEach(fill);
+  fillOpen(document);
+  document.addEventListener("hq:fragment", (event) => fillOpen(event.target));
 
   // A row opens to all it holds: a column its region let go, a value cut at
   // its column, a part that waits for it. How it shows them is the

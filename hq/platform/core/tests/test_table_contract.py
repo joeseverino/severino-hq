@@ -442,13 +442,14 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(toggle.ancestors[-1].tag, "td")
 
     def test_only_a_cut_cell_with_a_long_line_is_clamped(self):
-        """A value with a long line is held to a few lines; a status is never
-        held, and a short line or a blank cell is not."""
+        """A value with a long line is held to a few lines where its row
+        opens; a status is never held, and a short line, a blank cell or a
+        row with no toggle to show it whole is not."""
 
         long = "A sentence long enough to stand <em>several</em> lines tall in a narrow column"
         lines = "Two lines, each of them short<br>and the second one as short"
         source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
             '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
             f'<tr><td data-col="name">{long}</td><td data-col="status">{long}</td><td data-col="long">{long}</td></tr>'
             f'<tr><td>b</td><td>Up</td><td data-col="lines">{lines}</td></tr>'
@@ -459,9 +460,10 @@ class TableTagTests(SimpleTestCase):
         clamped = [each.ancestors[-1].attrs.get("data-col") for each in found if "cell-clamp" in each.classes]
         self.assertEqual(clamped, ["name", "long"])
         # An open row releases its clamp in place, so the value is never
-        # copied to the open line; on a wide line the title holds it, so no
-        # row opens for it there.
+        # copied to the open line.
         self.assertFalse([each for each in found if each.tag == "dl"])
+        closed = all_elements(_render(source.replace(" gutter=True", "")))
+        self.assertEqual([each for each in closed if "cell-clamp" in each.classes], [])
         self.assertFalse(any("data-below" in each.attrs for each in found if each.tag == "tr"))
 
     def test_a_long_value_and_its_heading_are_marked_long_whatever_its_kind(self):
@@ -503,10 +505,10 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(boxed, ["name", "proxy"])
 
     def test_a_row_that_holds_something_back_has_its_line_beneath(self):
-        """After a row is the line its toggle opens: its controls, the blocks
-        it keeps beneath itself, then each labeled block under its label and a
-        copy of each cell that holds something back, the copy saying when it
-        shows: where its column has left, or in a narrow box."""
+        """After a row is the line its toggle opens: the blocks it keeps
+        beneath itself, then each labeled block under its label. What a cell
+        holds back is copied there by tables.js as the row opens, so the
+        server draws no copy of a cell."""
 
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
@@ -532,9 +534,8 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(cell.attrs["colspan"], "5")
         self.assertEqual([each.words for each in beneath if "row-below" in each.classes], ["tall", "x"])
         entries = [each for each in beneath if each.tag == "div" and each.ancestors[-1].tag == "dl"]
-        said = {entry.words for entry in entries if not {"data-drop", "data-narrow"} & set(entry.attrs)}
-        self.assertEqual(said, {"Also x"})
-        self.assertEqual(len([each for each in beneath if "row-controls" in each.classes]), 1)
+        self.assertEqual([entry.words for entry in entries], ["Also x"])
+        self.assertEqual([each for each in beneath if each.words == "Go"], [])
 
     def test_each_part_of_a_cell_is_marked_with_its_role(self):
         """The region marks what a part of a cell is, so the stylesheet keys

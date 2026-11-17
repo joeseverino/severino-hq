@@ -89,7 +89,7 @@ TABLES = (
 
 # What a table promises past what `TABLES` reads: a group's heading spans its
 # table, the heading row sticks, and a value its cell cuts on a closed row
-# carries its whole text as its cell's title. What breaks one, each named once.
+# offers the row's toggle, which shows it whole. What breaks one, each named once.
 TABLE_PROMISES = """(scroll) => {
   const found = new Set();
   const text = (el) => el.textContent.replace(/\\s+/g, ' ').trim();
@@ -106,13 +106,14 @@ TABLE_PROMISES = """(scroll) => {
     const sticks = (el) => el && getComputedStyle(el).position === 'sticky';
     if (head && !sticks(head.parentElement) && ![...head.children].every(sticks)) found.add(`${name}: its heading row does not stick`);
     for (const row of table.querySelectorAll(':scope > tbody > tr:not(.is-expanded):not([data-row-detail])')) {
+      const opens = [...row.querySelectorAll('[aria-expanded]')].some((toggle) => toggle.checkVisibility());
       for (const cell of row.querySelectorAll(':scope > [data-kind]')) {
         if (!cell.checkVisibility()) continue;
         const parts = [cell, ...cell.querySelectorAll('*')].filter((el) => el.checkVisibility());
         const cut = parts.some((el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1);
         const said = text(cell);
-        if (cut && said && !(cell.title || '').replace(/\\s+/g, ' ').includes(said.slice(0, 24))) {
-          found.add(`${name}: ${said.slice(0, 24)} is cut with no title holding it whole`);
+        if (cut && said && !opens) {
+          found.add(`${name}: ${said.slice(0, 24)} is cut in a row that does not open`);
         }
       }
     }

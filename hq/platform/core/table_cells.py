@@ -22,7 +22,7 @@ _OFF_LINE = frozenset({"visually-hidden", "row-below", "row-more", "narrow-only"
 # words (`data-long`): it wraps, never to fewer than a line of words, and its
 # column shares the room whatever its kind (tables.css); one of a kind that
 # may be cut is held to a few lines (`cell-clamp`, cuts.css), and its row,
-# opened in a narrow box, shows it whole.
+# opened, shows it whole.
 LONG = 48
 # The characters of the longest value of such a kind a column holds whole on
 # its line, up to its share (`cell-short`, tables.css), counted generously: a
@@ -30,8 +30,8 @@ LONG = 48
 # port, a host, a mailbox or a project's name is no longer; a longer one wraps,
 # never to fewer than a line of words, as a long one does.
 SHORT = 32
-# The kinds whose values wrap and may be clamped, each saying its whole value
-# in its title; the others (a status, a figure, a control) keep their line,
+# The kinds whose values wrap and may be clamped, whole where their row opens;
+# the others (a status, a figure, a control) keep their line,
 # and their column is as wide as it, unless one of its values is long.
 _CUT_KINDS = frozenset({"name", "prose", "identifier"})
 _HELD_KINDS = frozenset({"status", "numeric", "control"})
@@ -41,7 +41,6 @@ _HELD = frozenset({"row-more", "line-rest", "narrow-more"})
 # How many widths of its region a table's columns leave at, one rule each in
 # tables.css.
 RANKS = 6
-_ID = re.compile(r"""\sid\s*=\s*(["'])[^"']*\1""")
 
 # The tags that end a line of a cell.
 _LINE_ENDS = frozenset({"br", "div", "p", "li", "dt", "dd"})
@@ -102,8 +101,7 @@ class _Cell:
     # spaces collapsed.
     line: int = 0
     longest: int = 0
-    # Its words on the row's line: a heading's name its column's cells by,
-    # a cut cell's say its whole value (`title`).
+    # Its words on the row's line: a heading's name its column's cells by.
     text: list[str] = field(default_factory=list)
     controls: bool = False
     parts: list[_Part] = field(default_factory=list)
@@ -156,15 +154,10 @@ class _Row:
 
 @dataclass(slots=True)
 class LineEntry:
-    """A block of a row's open line: its label, what it shows (an element
-    ``whole``, else a cell's content), and the marks that say when it shows
-    (``data-drop``, ``data-narrow``; none for at every width). One with no
-    label is the row's controls, drawn as a line of their own."""
+    """A labeled block a row moves to its open line: its label and its span."""
 
-    name: str | None
+    name: str
     span: Span
-    whole: bool = True
-    marks: str = ""
 
 
 class Cells(HTMLParser):
@@ -172,14 +165,17 @@ class Cells(HTMLParser):
     and what the stylesheet is to read off it. Only the region's own tables: a
     table inside a cell is that cell's content, and says something."""
 
-    def __init__(self, *, sorts: bool = True, fills: bool = False) -> None:
+    def __init__(self, *, sorts: bool = True) -> None:
         super().__init__(convert_charrefs=True)
-        # Whether its tables' rows may sort on the page at all, and whether a
-        # row's open line is filled from its own cells as it opens (tables.js).
+        # Whether its tables' rows may sort on the page at all.
         self.sorts = sorts
-        self.fills = fills
-        # Whether a row of the table being read can open (`data-rows-can-open`).
+        # Whether a row of the table being read can open
+        # (`data-rows-can-open`), and whether a row of the region's tables
+        # holds back a cell tables.js copies onto its open line.
         self.opens = False
+        self.held = False
+        # Whether the row being marked has its own toggle.
+        self.toggled = False
         self.tables = 0
         # How many rows each of the region's own tables holds outside its head.
         self.bodies: list[int] = []
@@ -403,7 +399,7 @@ class Cells(HTMLParser):
     def _mark_table(self) -> None:
         """What each cell says of itself that its heading cannot: whether it is
         blank and whether its whole column is, its kind and the width its
-        column leaves at, and a cut cell its whole value; a group's span; and
+        column leaves at, and where a long one is clamped; a group's span; and
         each row's open line."""
 
         heads = [row.cells for row in self.rows if row.section == "thead"]
@@ -434,8 +430,8 @@ class Cells(HTMLParser):
         kept |= controls
         # A column a row fills in a field in holds the rows' values, each
         # standing under its column's name once its table stacks. A column of
-        # the rows' controls leaves a narrow box for a copy on each row's open
-        # line, unless it holds such a field: a copy would send its value twice.
+        # the rows' controls leaves a narrow box, shown in place as its row
+        # opens, unless it holds such a field, which is the row's value.
         valued = {place for row in records for place, cell in _placed(row) if cell.fields}
         leaving = controls - valued
         ranked = {at: rank for at, rank in drops.items() if at not in kept | empty}
@@ -455,6 +451,9 @@ class Cells(HTMLParser):
             if row.group:
                 self._span(row, width)
                 continue
+            # A value is clamped only where its row's toggle opens it whole.
+            toggle_cell = None if gutter is None else _at_place(row.cells, gutter)
+            self.toggled = toggle_cell is not None and not toggle_cell.folds
             self._mark_cells(row, kinds, named, empty, levels, leaving, valued, names)
             if row.section == "thead":
                 self._mark_long_heads(row, longs)
@@ -462,7 +461,7 @@ class Cells(HTMLParser):
             if gutter is not None and row.section != "thead":
                 self._gutter(row, gutter)
             if row.section == "tbody" and row.end:
-                self._detail(row, width, leaving, names, levels)
+                self._detail(row, width, leaving, levels)
         if self.opens:
             self.marks.setdefault(self.table_at, []).append(" data-rows-can-open")
 
@@ -508,8 +507,8 @@ class Cells(HTMLParser):
     ) -> None:
         """What each cell says of itself: blank, its whole column blank, the
         width its column leaves at (a column of the rows' controls leaves in
-        a narrow box, `data-narrow`), and in the body its kind, a cut cell's
-        whole value and the name it stands under once its table stacks
+        a narrow box, `data-narrow`), and in the body its kind, its clamp
+        and the name it stands under once its table stacks
         (`data-label`; none for the cell naming the row, nor for the row's
         controls unless their column holds the rows' fields)."""
 
@@ -545,11 +544,9 @@ class Cells(HTMLParser):
             marks.append(" data-long")
         words = kind in _CUT_KINDS or (kind == "control" and not cell.controls)
         if body and words and not cell.says_nothing:
-            said = " ".join("".join(cell.text).split())
-            if said and "title" not in cell.attrs:
-                marks.append(f' title="{html.escape(said)}"')
-            if _long(cell) and cell.closed:
-                self.clamps.append((cell.opened, cell.value_end))
+            if _long(cell):
+                if self.toggled and cell.closed:
+                    self.clamps.append((cell.opened, cell.value_end))
             # A fold's toggle is drawn before its head's value, which the
             # value's span (ended at a toggle) would leave out.
             elif cell.longest <= SHORT and cell.closed and not cell.folds:
@@ -566,61 +563,40 @@ class Cells(HTMLParser):
             for start in cell.names:
                 self.roles.setdefault(start, set()).add("name")
 
-    def _detail(self, row: _Row, width: int, leaving: set[int], names: list[str], levels: dict[int, int]) -> None:
-        """The row's open line: its controls where they leave the row, the blocks it moves there (its editor first,
-        then each block it keeps beneath itself and its buttons past the
-        first few), then an entry for each cell that holds something back,
-        under its column's name. A cell's entry is a copy of what it says:
-        shown at every width for a part the row never shows, and otherwise
-        only where its column has left (`data-drop`) or a narrow box has let
-        its part go (`data-narrow`). A clamped value is never copied: an open
-        row releases its clamp in place (cuts.css).
-
-        A region that ``fills`` writes no copy: tables.js fills the line from
-        the row's own cells as it opens, and a narrow box shows the row's
-        controls and `narrow-more` parts in place, where it stacks the row.
-        Only a row drawn open, or one whose held cells hold a button or a
-        field, which a copy would send twice, keeps its copies, and says so
-        (`data-filled`)."""
+    def _detail(self, row: _Row, width: int, leaving: set[int], levels: dict[int, int]) -> None:
+        """The row's open line as the server draws it: the blocks it moves
+        there (its editor first, then each block it keeps beneath itself and
+        its buttons past the first few), each labeled one under its label.
+        What a cell holds back (its column left, `data-drop`; a part only the
+        open line shows, `row-more` or `line-rest`) is written once, in the
+        cell: tables.js copies it onto the line as the row opens, and a
+        narrow box shows the row's controls and `narrow-more` parts in place.
+        So a cell that holds something back holds no control, which a copy
+        would draw twice."""
 
         blocks: list[Span] = []
         entries: list[LineEntry] = []
-        held: list[_Cell] = []
         always = False
         for at, cell in _placed(row):
             if "colspan" in cell.attrs or not cell.closed:
                 continue
-            # The row's controls leave it in a narrow box, as a column does,
-            # for a copy on its open line.
-            if at in leaving and not cell.says_nothing and not self.fills:
-                entries.insert(0, LineEntry(None, (cell.opened, cell.value_end), whole=False, marks=" data-narrow"))
             # The row's editor leads its line, moved there: its ids are its own.
             editors = [span for _, span in _finished(cell, "editor")]
             blocks[:0] = editors
             moved = [*_finished(cell, "below"), *_finished(cell, "later")]
             self.cuts += [((start, 0), (end, None)) for start, end in [*editors, *(span for _, span in moved)]]
             blocks += [span for label, span in moved if not label]
-            always = always or bool(moved)
-            shown = bool(cell.holds & {"row-more", "line-rest"})
-            narrow = "narrow-more" in cell.holds and not self.fills
-            if not cell.says_nothing and (shown or at in levels or narrow):
-                when = "" if shown else f' data-drop="{levels[at]}"' if at in levels else ""
-                when += " data-narrow" if narrow and not shown else ""
-                label = names[at] if 0 <= at < len(names) else ""
-                entries.append(LineEntry(label, (cell.opened, cell.value_end), whole=False, marks=when))
-                held.append(cell)
-                always = always or shown
             entries += [LineEntry(label, span) for label, span in moved if label]
-        drawn_open = any(_finished(cell, "editor") for cell in row.cells)
-        # A row of a region that fills can open for what it holds in its own
-        # cells: its controls and `narrow-more` parts in a narrow box too.
-        narrows = any(at in leaving or "narrow-more" in cell.holds for at, cell in _placed(row))
-        self.opens = self.opens or (self.fills and bool(held or narrows))
-        if self.fills and held:
-            if drawn_open or any(cell.presses or cell.fields for cell in held):
-                self.marks.setdefault(row.start, []).append(" data-filled")
-            else:
-                entries = [entry for entry in entries if entry.whole]
+            shown = bool(cell.holds & {"row-more", "line-rest"}) and not cell.says_nothing
+            if (shown or at in levels) and not cell.says_nothing:
+                if cell.presses or cell.fields:
+                    raise ValueError(
+                        "A cell that holds something back for its row's open line holds no control: "
+                        "it stands in place or moves there whole (row-later, row-below)."
+                    )
+                self.held = True
+            always = always or bool(moved) or shown
+            self.opens = self.opens or shown or at in levels or at in leaving or "narrow-more" in cell.holds
         if always:
             self.marks.setdefault(row.start, []).append(" data-below")
         if blocks or entries:
@@ -643,13 +619,6 @@ def _long(cell: _Cell) -> bool:
     (``data-long``): what it says wraps, and its column shares the room."""
 
     return cell.longest > LONG and not cell.says_nothing
-
-
-def without_ids(markup: str) -> str:
-    """``markup`` with every element's id left off: a copy of a cell on its
-    row's open line draws no id the row already draws."""
-
-    return _ID.sub("", markup)
 
 
 def _classes(attrs: dict[str, str | None]) -> list[str]:

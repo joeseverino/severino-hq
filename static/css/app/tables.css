@@ -256,69 +256,80 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 
 /* A ranked column (`data-drop`, table_cells: 1 for a table's first rank,
    leaving at the widest) leaves while its region is narrower than its rank's
-   width; its copy on each row's open line shows instead, and the row offers
-   its toggle. A column with nothing in any row is not drawn
-   (`data-blank-column`). */
+   width; its copy on each row's open line (tables.js) shows instead, and the
+   row offers its toggle. A copy of a cell that also holds a part only the
+   open line shows (`data-holds`) shows at every width, and what the row's
+   line shows of it (`data-row-shows`) only once its column has left. A
+   column with nothing in any row is not drawn (`data-blank-column`). */
 .data-table > * > tr > [data-blank-column] { display: none; }
-.row-columns > :is([data-drop], [data-narrow]) { display: none; }
+.row-columns > [data-drop]:not([data-holds]), .row-columns > :not([data-drop]) [data-row-shows] { display: none; }
 /* A panel of entries that each wait for their column to leave is drawn only once one of them shows (below), so an open line never holds an empty panel. */
-.row-columns:not(:has(> :not([data-drop], [data-narrow]))) { display: none; }
+.row-columns:not(:has(> :not([data-drop]:not([data-holds])))) { display: none; }
 @container table-region (width < 24rem) {
   .data-table > * > tr > [data-drop="6"] { display: none; }
   .data-table:has(> thead > tr:last-child > [data-drop="6"]) { --gone-6: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="6"] ~ [data-drop="6"]) { --gone-6: 2; }
   :is(.row-columns > [data-drop="6"], .row-columns:has(> [data-drop="6"]), .data-table > tbody > tr:has(> [data-drop="6"]:not([data-blank])) .row-expand) { display: grid; }
 }
+@container table-region (width >= 24rem) { .row-columns > [data-drop="6"] [data-row-shows] { display: none; } }
 @container table-region (width < 32rem) {
   .data-table > * > tr > [data-drop="5"] { display: none; }
   .data-table:has(> thead > tr:last-child > [data-drop="5"]) { --gone-5: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="5"] ~ [data-drop="5"]) { --gone-5: 2; }
   :is(.row-columns > [data-drop="5"], .row-columns:has(> [data-drop="5"]), .data-table > tbody > tr:has(> [data-drop="5"]:not([data-blank])) .row-expand) { display: grid; }
 }
+@container table-region (width >= 32rem) { .row-columns > [data-drop="5"] [data-row-shows] { display: none; } }
 @container table-region (width < 40rem) {
   .data-table > * > tr > [data-drop="4"] { display: none; }
   .data-table:has(> thead > tr:last-child > [data-drop="4"]) { --gone-4: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="4"] ~ [data-drop="4"]) { --gone-4: 2; }
   :is(.row-columns > [data-drop="4"], .row-columns:has(> [data-drop="4"]), .data-table > tbody > tr:has(> [data-drop="4"]:not([data-blank])) .row-expand) { display: grid; }
 }
+@container table-region (width >= 40rem) { .row-columns > [data-drop="4"] [data-row-shows] { display: none; } }
 @container table-region (width < 48rem) {
   .data-table > * > tr > [data-drop="3"] { display: none; }
   .data-table:has(> thead > tr:last-child > [data-drop="3"]) { --gone-3: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="3"] ~ [data-drop="3"]) { --gone-3: 2; }
   :is(.row-columns > [data-drop="3"], .row-columns:has(> [data-drop="3"]), .data-table > tbody > tr:has(> [data-drop="3"]:not([data-blank])) .row-expand) { display: grid; }
 }
+@container table-region (width >= 48rem) { .row-columns > [data-drop="3"] [data-row-shows] { display: none; } }
 @container table-region (width < 56rem) {
   .data-table > * > tr > [data-drop="2"] { display: none; }
   .data-table:has(> thead > tr:last-child > [data-drop="2"]) { --gone-2: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="2"] ~ [data-drop="2"]) { --gone-2: 2; }
   :is(.row-columns > [data-drop="2"], .row-columns:has(> [data-drop="2"]), .data-table > tbody > tr:has(> [data-drop="2"]:not([data-blank])) .row-expand) { display: grid; }
 }
+@container table-region (width >= 56rem) { .row-columns > [data-drop="2"] [data-row-shows] { display: none; } }
 @container table-region (width < 64rem) {
   .data-table > * > tr > [data-drop="1"] { display: none; }
   .data-table:has(> thead > tr:last-child > [data-drop="1"]) { --gone-1: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="1"] ~ [data-drop="1"]) { --gone-1: 2; }
   :is(.row-columns > [data-drop="1"], .row-columns:has(> [data-drop="1"]), .data-table > tbody > tr:has(> [data-drop="1"]:not([data-blank])) .row-expand) { display: grid; }
 }
+@container table-region (width >= 64rem) { .row-columns > [data-drop="1"] [data-row-shows] { display: none; } }
 
 /* A narrow box: what a cell says only on a wide line (`narrow-more`) waits
    for its row's open line, what stands in for the columns that left
    (`narrow-only`, a few words in the naming cell) shows, what is on a page of
    its own (`wide-only`, a table of marks' older periods) leaves outright,
-   and rows get the room a control needs. The rows' controls leave as a
-   column does (`data-narrow`, table_cells), for their copy on each row's open
-   line, where they stand at a target's size. */
-.data-table .narrow-only, .row-detail .row-controls { display: none; }
+   and rows get the room a control needs. The rows' controls leave a table
+   that stacks as a column does (`data-narrow`, table_cells), and its open
+   row shows them and its `narrow-more` parts in place, the controls side by
+   side at a target's size. */
+.data-table .narrow-only { display: none; }
 @container table-region (width < 36rem) {
   .data-table > tbody { --row-pad: var(--space-6); }
-  .data-table [data-kind] .narrow-more, .data-table .wide-only, .data-table > * > tr > [data-narrow] { display: none; }
+  .data-table [data-kind] .narrow-more, .data-table .wide-only { display: none; }
   .data-table .narrow-only { display: inline; }
-  :is(.row-columns > [data-narrow], .row-columns:has(> [data-narrow]), .data-table > tbody > tr:has(> [data-narrow]:not([data-blank]), > [data-kind] .narrow-more, .cell-clamp) .row-expand) { display: grid; }
-  .row-detail .row-controls { display: flex; --control-compact: var(--target-min); }
-  /* A region that fills (tables.js) copies neither: its stacked open row shows its controls and `narrow-more` parts in place, the controls side by side at a target's size. */
-  .table-scroll[data-fills] > .data-table > tbody > tr.is-expanded {
-    & [data-kind] .narrow-more { display: inline; }
-    & > [data-narrow]:not([data-blank]) { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); --control-compact: var(--target-min); white-space: normal; }
-    & > [data-narrow] > * + * { margin-inline-start: 0; }
+  .data-table > tbody > tr:has(> [data-kind] .narrow-more) .row-expand { display: grid; }
+  .table-scroll:not([data-chart]) > .data-table:not([data-marks]) {
+    & > * > tr > [data-narrow] { display: none; }
+    & > tbody > tr:has(> [data-narrow]:not([data-blank])) .row-expand { display: grid; }
+    & > tbody > tr.is-expanded {
+      & [data-kind] .narrow-more { display: inline; }
+      & > [data-narrow]:not([data-blank]) { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); --control-compact: var(--target-min); white-space: normal; }
+      & > [data-narrow] > * + * { margin-inline-start: 0; }
+    }
   }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
 }
@@ -365,12 +376,13 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* The server draws a toggle in every row that can open; it shows where the row holds something back: at any width (`data-below`, table_cells: a clamped value, a part the row never shows, a block or buttons moved to its open line), where a column of it has left or a narrow box has let a part go (above), and on an open row. */
 .data-table .row-expand { display: none; }
 .data-table > tbody > tr:is([data-below], .is-expanded) .row-expand { display: grid; }
-/* What a row shows only on its open line is never drawn on the row, and the face that stands in for it there (`row-less`) is not drawn on the line. */
+/* What a row shows only on its open line is never drawn on the row, and the face that stands in for it there (`row-less`) is not drawn on the line. A value its clamp holds (`cell-clamp`, `table-clamp`, cuts.css) opens its row at any width, which releases it in place. */
+.data-table > tbody > tr:has(.cell-clamp, .table-clamp) .row-expand { display: grid; }
 .data-table [data-kind] :is(.row-more, .line-rest), .row-detail .row-less { display: none; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row can open, so names share one edge. */
 .data-table > tbody > tr > .row-gutter { position: relative; }
-/* A table of a region that fills says a row of it can open (`data-rows-can-open`, table_cells), since its open lines are drawn only as they open. */
-.data-table:is([data-rows-can-open], :has(> tbody > tr.row-detail, .row-fold, .cell-clamp)) { --row-inset: var(--row-gutter); }
+/* A table says a row of it can open (`data-rows-can-open`, table_cells), since a row's open line is drawn only as it opens unless it holds a block the server moved there. */
+.data-table:is([data-rows-can-open], :has(> tbody > tr.row-detail, .row-fold, .cell-clamp, .table-clamp)) { --row-inset: var(--row-gutter); }
 .data-table > * > tr > .row-gutter { padding-inline-start: var(--row-inset, var(--space-6)); }
 .data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--space-3); inset-block-start: calc(var(--row-pad) - var(--space-1)); }
 /* A column of a row's controls (`actions-col`, a public class) holds them on one line. */
@@ -384,9 +396,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .row-detail > td > * { contain: inline-size; margin-block: 0 var(--row-pad); }
 .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-5); }
 .data-table .row-detail:hover { background: none; }
-/* A row's buttons moved or copied there stand side by side, wrapping as the line asks. */
-.row-detail .row-later { display: flex; }
-.row-detail :is(.row-later, .row-controls) { flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
+/* A row's buttons moved there stand side by side, wrapping as the line asks. */
+.row-detail .row-later { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
 /* An entry: its label in a column as wide as the labels, its labels wrapping past two fifths of the line, what it shows beside it in the rest of the row, on a panel. */
 .row-columns {
   display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6); margin: 0;

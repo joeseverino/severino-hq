@@ -354,13 +354,14 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 for row in rows.all():
                     self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
                     # One Dismiss is shown: at the row's end, or in a narrow box
-                    # on the row's open line, a press away (tables.css).
+                    # once the row opens, in place, a press away (tables.css).
                     shown = row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count()
                     if width == PHONE_SCREEN[0]:
                         self.assertEqual(shown, 0)
                         line = row.locator("xpath=following-sibling::tr[1][@data-row-detail]")
                         row.locator(SELECTORS["row_toggle"]).click()
-                        self.assertEqual(line.locator('.row-controls button[name="key"] >> visible=true').count(), 1)
+                        self.assertEqual(row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count(), 1)
+                        self.assertEqual(line.locator("button >> visible=true").count(), 0)
                         row.locator(SELECTORS["row_toggle"]).click()
                     else:
                         self.assertEqual(shown, 1)
@@ -722,10 +723,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.open("ask-actions-probe", width)
                 narrow = width == PHONE_SCREEN[0]
                 if narrow:
-                    # In a narrow box the row's actions stand side by side on
-                    # its open line (tables.css), which wraps as it must.
+                    # In a narrow box the row's actions stand side by side in
+                    # place once it opens (tables.css), wrapping as they must.
                     self.page.locator(SELECTORS["row_toggle"]).click()
-                    button = self.page.locator(".row-detail .row-controls [data-ask-button]")
+                    button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
                 else:
                     button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
                 remove = self.page.get_by_role("link", name="Remove")
@@ -1514,20 +1515,20 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_a_cut_value_reads_whole_where_its_row_opens_or_a_wide_box_titles_it(self):
         """A cut value is shown whole by its row opening, or outside a narrow
-        box by its title on hover, which the server gives every cut value
-        that has none; touch has no hover, so in a narrow box only an opening row
-        shows it, and a cut there in a row that cannot open is found. A cut
-        that draws no ellipsis (a clamp's counts) is found at any width,
-        title or not, since nothing tells a reader there is more to hover
-        for; a name's chip in a row's muted line draws its own, and a narrow
-        box breaks it whole. A cut with no title outside a narrow box is the
-        survey's plant."""
+        box by a title its template gives it; the region clamps a value only
+        in a row that opens, so it titles none. Touch has no hover, so in a
+        narrow box only an opening row shows it, and a cut there in a row that
+        cannot open is found. A cut that draws no ellipsis (a clamp's counts)
+        is found at any width, title or not, since nothing tells a reader
+        there is more to hover for; a name's chip in a row's muted line draws
+        its own, and a narrow box breaks it whole. A cut with no title in a
+        row that does not open is the survey's plant."""
 
         self.pages = {**self.pages, "cut-probe": probe(CUT_TABLE, **CUT_VALUES)}
         rows = ("untitled", "titled", "opens", "clamped", "inline", "unmarked", "chip")
         for width, expected in {
             PHONE_SCREEN[0]: {"untitled", "titled", "clamped", "inline", "unmarked"},
-            1280: {"unmarked"},
+            1280: {"untitled", "clamped", "inline", "unmarked"},
         }.items():
             with self.subTest(width=width):
                 self.open("cut-probe", width)

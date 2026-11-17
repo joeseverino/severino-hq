@@ -281,16 +281,15 @@ a table of marks, which keep their grid. *Gate:* `tables` in the layout
 survey, which fails a stacked cell drawn without its column's name, and
 `values named`, which fails a stacked field's column drawn without it.
 
-**A row's controls leave a narrow box for its open line.** The region marks
-every cell of a column of the rows' controls, its heading included,
-`data-narrow`: a row's actions, or a column of kind `control`. In a narrow box
-that column leaves as a ranked column does, and each row's open line shows a
-copy of its controls (`.row-controls`), side by side at a target's size and
+**A row's controls wait in a narrow box for its row to open.** The region
+marks every cell of a column of the rows' controls, its heading included,
+`data-narrow`: a row's actions, or a column of kind `control`. In a narrow box,
+where the table stacks, that column leaves as a ranked column does, and an
+open row shows its controls in place, side by side at a target's size and
 wrapping where the line is full. The row's toggle is how a reader reaches
-them. The copy draws no id (`table_cells.without_ids`), so none is drawn
-twice. A field a reader fills in (a select) is the row's value: a copy would
-send it twice, so a column holding one never leaves, and in a cell it fills
-its cell and gives way with its column. The reader's way to set a row aside
+them, and no control is ever drawn twice. A field a reader fills in (a select)
+is the row's value, so a column holding one never leaves, and in a cell it
+fills its cell and gives way with its column. The reader's way to set a row aside
 (`row_actions put_away=`, the queue's Dismiss) is the last of its buttons,
 drawn quiet. *Gates:* the survey's `row actions beside squeezed words` and
 `row actions behind the toggle`, and `test_row_controls.py`.
@@ -330,26 +329,27 @@ class of the page's:
   links weigh more.
 
 **Opening a row moves no column.** An open row keeps its cells as they were,
-but for a clamp in a narrow box, which it releases in place. What it holds
-back stands on the line the server draws after it (`tr.row-detail`,
-`table_tags._detail_row`), whose content asks its columns for no width: its
-controls where they left it, the blocks it moves there, then an entry for
-each cell that holds something back, a copy under its column's name. A copy
-says when it shows: where its column has left (`data-drop`), in a narrow box
-(`data-narrow`: a `narrow-more` part), or always (a part the row never
-shows). So every column keeps its edges and every other row its height. *Gate:*
+but for a clamp, which it releases in place, and, where the table stacks, its
+controls and `narrow-more` parts, which it shows in place. What it holds back
+stands on the line drawn after it (`tr.row-detail`), whose content asks its
+columns for no width: the blocks the server moves there, then an entry for
+each cell that holds something back, under its column's name. So every
+column keeps its edges and every other row its height. *Gate:*
 `test_opening_a_row_moves_no_column_and_no_other_row`.
 
-A region that fills (`table_region ... fills=True`) writes each cell once.
-The browser's table layout cannot set a cell on a line beneath its row, so
-the line still shows a copy, but tables.js makes it as the row first opens.
-It clones each held cell into an entry of the region's one frame
-(`template[data-open-line]`), keeps its `data-drop` mark and draws no id twice.
-In a narrow box, where the row stacks, its controls and `narrow-more` parts
-show in place instead. Only a row drawn open, or one whose held cell holds a
-button or a field, keeps the server's copies (`data-filled`). *Gates:*
-`test_a_region_that_fills_writes_each_cell_once`, and the byte budgets
-`ROW_BYTES` and `CHROME_BYTES` in `test_table_fills.py`.
+The server writes each cell once. The browser's table layout cannot set a
+cell on a line beneath its row, so tables.js copies what the row holds back
+onto that line as the row first opens (or as it arrives drawn open), from the
+one frame the region draws (`template[data-open-line]`): each cell of a
+ranked column, shown where its column has left (`data-drop`), and each cell
+holding a part only the open line shows (`row-more`, `line-rest`), shown
+always, what the row's line already shows of it only once its column has
+left (`data-row-shows`). A copy draws no id twice. A cell held back holds no
+control, which a copy would draw twice: the region refuses one, so a button
+stands in place or moves whole (`row-later`, `row-below`). *Gates:*
+`test_table_once.py`: `test_a_row_writes_each_cell_once`,
+`test_a_cell_held_back_holds_no_control`, and the byte budgets `ROW_BYTES`
+and `CHROME_BYTES`.
 
 - A `row-below` block, which the row's line never shows, and the row's editor
   are moved into a line the server draws after the row (`tr.row-detail`,
@@ -375,10 +375,10 @@ it, last in the row's cell under the heading that keeps the gutter
 a toggle written by hand there is refused. Only a table with no headings to
 name its gutter draws its own (`{% row_toggle %}`), last in its cell, outside
 the cell's clamp and its copy. It shows only where opening the row shows
-something now: an entry whose column has left or whose narrow box holds, a
-`row-later` or `row-below` part, a part the row never shows, a clamp in a
-narrow box, or a fold. A value held by its clamp on a wide line is whole in
-its cell's title there, so it opens no row on a wide line.
+something now: a cell whose column has left, controls or a `narrow-more` part
+in a narrow box, a `row-later` or `row-below` part, a part the row never
+shows, a clamp, or a fold. A value its clamp holds is whole only where its
+row opens, so the row opens at any width.
 
 A run of short parts in a cell (a project's technologies, what a connection
 reads or reaches) is `{% line_list values as value %}…{% endline_list %}`, with
@@ -439,7 +439,9 @@ layout survey's `cut and closed`, `cut when open` and `cut beside room`.
 
 A long value in a cell (a line past `table_cells.LONG`) wraps and is held to
 its third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole
-value in its cell's title (written by the server). Only words are held: each
+value where its row opens, at any width. A row with no toggle (a table with
+no gutter heading, a fold's head) clamps nothing, so its value wraps whole,
+and no cell carries its value again as a title. Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
 toggle beside them stays whole. A value of words of 32 characters at most
 (`table_cells.SHORT`: an address and its port, a host, a project's name) is
