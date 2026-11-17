@@ -380,8 +380,8 @@ name its gutter draws its own (`{% row_toggle %}`), last in its cell, outside
 the cell's clamp and its copy. It shows only where opening the row shows
 something now: a cell whose column has left, controls or a `narrow-more` part
 in a narrow box, a `row-later` or `row-below` part, a part the row never
-shows, a clamp, or a fold. A value its clamp holds is whole only where its
-row opens, so the row opens at any width.
+shows, a clamp in a narrow box, or a fold. A wide box clamps nothing, so
+a row owes no toggle there for a long value.
 
 A run of short parts in a cell (a project's technologies, what a connection
 reads or reaches) is `{% line_list values as value %}…{% endline_list %}`, with
@@ -440,9 +440,10 @@ beside its declaration.
 *Gate:* `lint:css` (`cutText` in `tools/lint/stylelint.config.mjs`), and the
 layout survey's `cut and closed`, `cut when open` and `cut beside room`.
 
-A long value in a cell (a line past `table_cells.LONG`) wraps and is held to
-its third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole
-value where its row opens, at any width. A row with no toggle (a table with
+A long value in a cell (a line past `table_cells.LONG`) wraps, and in a
+narrow box is held to its third line by a clamp with its mark (`.cell-clamp`,
+cuts.css), its whole value where its row opens; a wide box holds it whole,
+and a description's `table-clamp` likewise. A row with no toggle (a table with
 no gutter heading, a fold's head) clamps nothing, so its value wraps whole,
 and no cell carries its value again as a title. Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a

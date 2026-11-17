@@ -323,6 +323,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table [data-kind] .narrow-more, .data-table .wide-only { display: none; }
   .data-table .narrow-only { display: inline; }
   .data-table > tbody > tr:has(> [data-kind] .narrow-more) .row-expand { display: grid; }
+  /* A value its clamp holds here (`cell-clamp`, `table-clamp`, cuts.css) opens its row, which releases it in place. */
+  .data-table > tbody > tr:has(.cell-clamp, .table-clamp) .row-expand { display: grid; }
   .table-scroll:not([data-chart]) > .data-table:not([data-marks]) {
     & > * > tr > [data-narrow] { display: none; }
     & > tbody > tr:has(> [data-narrow]:not([data-blank])) .row-expand { display: grid; }
@@ -374,11 +376,10 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 
 /* ── A row's toggle and its open line ───────────────────────────── */
 
-/* The server draws a toggle in every row that can open; it shows where the row holds something back: at any width (`data-below`, table_cells: a clamped value, a part the row never shows, a block or buttons moved to its open line), where a column of it has left or a narrow box has let a part go (above), and on an open row. */
+/* The server draws a toggle in every row that can open; it shows where the row holds something back: at any width (`data-below`, table_cells: a part the row never shows, a block or buttons moved to its open line), where a column of it has left or a narrow box has let a part go (above), and on an open row. */
 .data-table .row-expand { display: none; }
 .data-table > tbody > tr:is([data-below], .is-expanded) .row-expand { display: grid; }
-/* What a row shows only on its open line is never drawn on the row, and the face that stands in for it there (`row-less`) is not drawn on the line. A value its clamp holds (`cell-clamp`, `table-clamp`, cuts.css) opens its row at any width, which releases it in place. */
-.data-table > tbody > tr:has(.cell-clamp, .table-clamp) .row-expand { display: grid; }
+/* What a row shows only on its open line is never drawn on the row, and the face that stands in for it there (`row-less`) is not drawn on the line. */
 .data-table [data-kind] :is(.row-more, .line-rest), .row-detail .row-less { display: none; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row can open, so names share one edge. */
 .data-table > tbody > tr > .row-gutter { position: relative; }

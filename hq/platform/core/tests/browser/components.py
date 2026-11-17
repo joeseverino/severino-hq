@@ -1493,7 +1493,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         something in it, a part of a list it folds, a run of parts with a rest
         past the ones that size its column, or in a narrow box a value longer
         than a line of its column, as the server marks it, which a wide box
-        shows whole in its cell's title (cuts.css). A dash in a dropped column says
+        holds whole, unclamped (cuts.css). A dash in a dropped column says
         nothing, screen-reader text is clipped to a pixel by design and a
         decoration is hidden from assistive technology: none is content a row
         withholds. Nothing is measured: the server and the region decide.

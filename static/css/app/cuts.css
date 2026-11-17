@@ -86,34 +86,37 @@
 /* What a row's status says in a word, after its mark, and light. */
 .menu-item-note { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* A long value in a table's cell (`cell-clamp`, table_cells) wraps and is
-   held to its third line, with its mark; its row opens at any width
-   (tables.css), which releases the clamp in place. Only words are held: each part of words in it
-   (`data-cell`) is clamped on its own, so a mark or a toggle beside them
-   stays whole, and a cell of no such part is clamped whole. A part the row
-   is read by (`cell-whole`: what its buttons decide) is never held. WebKit lays a
-   value's boxes out past the clamp, so the box holds three lines too. A
-   column's copy on the open line is whole, so nothing there is clamped. */
-.cell-clamp:not(:has([data-cell]), .row-detail *) { display: -webkit-box; }
-.cell-clamp:not(.row-detail *) [data-cell]:not([data-cell] *, .cell-whole) { display: -webkit-inline-box; vertical-align: top; }
-.cell-clamp:not(:has([data-cell]), .row-detail *), .cell-clamp:not(.row-detail *) [data-cell]:not([data-cell] *, .cell-whole) {
-  -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; max-block-size: 3lh; overflow: hidden;
-  /* Each of its lines is one of its own line-heights tall, so three of them
-     fill the box; one that holds something to press has lines a target tall. */
-  &:has(a[href], [tabindex]) { line-height: var(--target-min); }
-  & * { line-height: inherit; }
-  &:is(.is-expanded *) { -webkit-line-clamp: none; line-clamp: none; max-block-size: none; }
+/* A long value in a table's cell (`cell-clamp`, table_cells) wraps and, in
+   a narrow box, is held to its third line, with its mark; its row offers its
+   toggle there (tables.css), and opening it releases the clamp in place. A
+   wide box holds it whole, so its row owes no toggle for it. Only words are
+   held: each part of words in it (`data-cell`) is clamped on its own, so a
+   mark or a toggle beside them stays whole, and a cell of no such part is
+   clamped whole. A part the row is read by (`cell-whole`: what its buttons
+   decide) is never held. WebKit lays a value's boxes out past the clamp, so
+   the box holds three lines too. A column's copy on the open line is whole,
+   so nothing there is clamped. */
+@container table-region (width < 36rem) {
+  .cell-clamp:not(:has([data-cell]), .row-detail *) { display: -webkit-box; }
+  .cell-clamp:not(.row-detail *) [data-cell]:not([data-cell] *, .cell-whole) { display: -webkit-inline-box; vertical-align: top; }
+  .cell-clamp:not(:has([data-cell]), .row-detail *), .cell-clamp:not(.row-detail *) [data-cell]:not([data-cell] *, .cell-whole) {
+    -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; max-block-size: 3lh; overflow: hidden;
+    /* Each of its lines is one of its own line-heights tall, so three of them
+       fill the box; one that holds something to press has lines a target tall. */
+    &:has(a[href], [tabindex]) { line-height: var(--target-min); }
+    & * { line-height: inherit; }
+    &:is(.is-expanded *) { -webkit-line-clamp: none; line-clamp: none; max-block-size: none; }
+  }
+  /* A pill in a held value is one box of one line, cut at its own end: a pill of several lines would stand across the clamp's foot. Its open row, released, wraps it inside its own paint. */
+  .cell-clamp:not(.row-detail *) :is(.pill, .tag) {
+    display: inline-block; vertical-align: top; max-inline-size: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    &:is(.is-expanded *) { white-space: normal; overflow-wrap: anywhere; overflow: visible; }
+  }
+  /* A list inside a clamp uses its inline line boxes. A flex item's padded
+     rows can cross the clamp's last line and leave half a glyph visible. */
+  .cell-clamp .line-list { display: inline; }
+  .cell-clamp .tag { padding-block: 0; }
 }
-/* A pill in a held value is one box of one line, cut at its own end: a pill of several lines would stand across the clamp's foot. Laid out as a table it is no wider than the line its long cell keeps (tables.css), so it never widens its column; its open row, released, wraps it inside its own paint at that width. */
-.cell-clamp:not(.row-detail *) :is(.pill, .tag) {
-  display: inline-block; vertical-align: top; max-inline-size: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  @container table-region (width >= 36rem) { max-inline-size: min(var(--row-words), var(--share)); }
-  &:is(.is-expanded *) { white-space: normal; overflow-wrap: anywhere; overflow: visible; }
-}
-/* A list inside a clamp uses its inline line boxes. A flex item's padded
-   rows can cross the clamp's last line and leave half a glyph visible. */
-.cell-clamp .line-list { display: inline; }
-.cell-clamp .tag { padding-block: 0; }
 /* An identifier (a hash, a key, a host) or a row's name (its own part, never
    its cell's other words) may break anywhere, so one with no break in it
    asks its column for no more than a letter: the table still gives each
@@ -190,10 +193,13 @@
    nothing, so no second, unmarked cut lands on the title's last glyph. */
 .month-item > span { overflow: hidden; text-overflow: ellipsis; }
 
-/* A description under a row's name: two lines at most, as wide as its
-   column lets it be; it holds out for its longest word, so its column gives
-   way with the others. Its row opens at any width, which shows it whole. */
-.table-clamp:not(.row-detail *, .is-expanded *) { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: 2; line-clamp: 2; }
+/* A description under a row's name: in a narrow box two lines at most, as
+   wide as its column lets it be, its row opening there to show it whole
+   (tables.css); a wide box holds it whole. It holds out for its longest
+   word, so its column gives way with the others. */
+@container table-region (width < 36rem) {
+  .table-clamp:not(.row-detail *, .is-expanded *) { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: 2; line-clamp: 2; }
+}
 
 /* The command center: a result's title and what it says, one line each,
    two on a phone. */
