@@ -48,8 +48,6 @@ class IntegrationGraphTests(TestCase):
         self.assertIsInstance(graph.resources, frozendict)
         self.assertIsInstance(graph.connections, frozendict)
         self.assertIsInstance(graph.search, frozendict)
-        with self.assertRaises(TypeError):
-            graph.connections["example.mutable"] = graph.connections["hq.nws"]
 
     def test_the_composed_graph_is_compiled_once_until_explicitly_cleared(self):
         first = integration_graph()

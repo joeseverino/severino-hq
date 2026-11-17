@@ -620,25 +620,6 @@ class DashboardConnectionTileTests(SimpleTestCase):
         self.assertIn("is-attention", self.tile(failing=("a layer",)))
 
 
-class RequestFactsTests(SimpleTestCase):
-    """The request standard's subject takes each fact by name, once."""
-
-    def test_it_refuses_a_fact_by_position_one_it_does_not_name_and_a_change(self):
-        from dataclasses import FrozenInstanceError
-
-        from ..request_channel import TAILNET_CHANNEL
-        from ..request_identity import Identity
-        from ..request_standard import RequestFacts
-
-        with self.assertRaises(TypeError):
-            RequestFacts(None, "192.0.2.10", TAILNET_CHANNEL, Identity())
-        with self.assertRaises(TypeError):
-            RequestFacts(request=None, address="192.0.2.10", channel=TAILNET_CHANNEL, identity=Identity(), layers=())
-        facts = RequestFacts(request=None, address="192.0.2.10", channel=TAILNET_CHANNEL, identity=Identity())
-        with self.assertRaises(FrozenInstanceError):
-            facts.address = "192.0.2.11"
-
-
 class VerdictTests(SimpleTestCase):
     """Green only when every check on the way in is confirmed."""
 

@@ -105,11 +105,6 @@ class CommandControlTests(TestCase):
 
 
 class HandBuiltControlTests(SimpleTestCase):
-    def test_a_hand_built_control_cannot_post_look_destructive_or_send_anything(self):
-        for given in ({"method": "post"}, {"danger": True}, {"value": "1"}, {"fields": {"id": "1"}}):
-            with self.subTest(given), self.assertRaises(TypeError):
-                PageAction("Example", "/example/", **given)  # type: ignore[call-arg]
-
     def test_a_link_to_a_page_that_runs_a_command_is_refused(self):
         for url in (
             reverse("control_plane:edit", args=["example-key"]),

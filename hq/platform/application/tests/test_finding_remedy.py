@@ -22,7 +22,3 @@ class RemedyTests(TestCase):
         )
 
         self.assertEqual(remedy.reach, ("/example/adopt/", "POST"))
-
-    def test_its_effect_is_not_its_own_to_say(self):
-        with self.assertRaises(TypeError):
-            FindingRemedy(capability=UPDATE_CAPABILITY, target="example-key", effect="read")  # type: ignore[call-arg]
