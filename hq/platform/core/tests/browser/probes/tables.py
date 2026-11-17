@@ -89,17 +89,27 @@ TABLES = (
 }"""
 )
 
+# A table as a finding names it: its region's name, which only a region that
+# scrolls carries, else its first heading with words (a tick-box's says none).
+TABLE_NAME = """
+const tableName = (region, table) => (region.getAttribute('aria-label')
+  || [...table.querySelectorAll('th')].map((th) => th.textContent.replace(/\\s+/g, ' ').trim()).find(Boolean)
+  || 'a table with no headings').slice(0, 24);
+"""
+
 
 # What a table promises past what `TABLES` reads: a group's heading spans its
 # table and the heading row sticks. What breaks one, each named once. A value
 # cut in a closed row is `CUT_AND_CLOSED`'s.
-TABLE_PROMISES = """(scroll) => {
+TABLE_PROMISES = (
+    "(scroll) => {"
+    + TABLE_NAME
+    + """
   const found = new Set();
-  const text = (el) => el.textContent.replace(/\\s+/g, ' ').trim();
   for (const region of document.querySelectorAll('main ' + scroll)) {
     const table = region.querySelector(':scope > table');
     if (!table || !table.checkVisibility()) continue;
-    const name = (region.getAttribute('aria-label') || text(table.querySelector('th') || table)).slice(0, 24);
+    const name = tableName(region, table);
     const width = table.getBoundingClientRect().width;
     for (const cell of table.querySelectorAll(':scope > tbody > tr > [colspan]')) {
       if (cell.checkVisibility() && cell.getBoundingClientRect().width < width - 2) found.add(`${name}: a cell across its row spans less`);
@@ -111,6 +121,7 @@ TABLE_PROMISES = """(scroll) => {
   }
   return [...found];
 }"""
+)
 
 # The first table on a page as a phone lays it out: whether it runs past its
 # box, where each showing column starts and how wide it is, how tall each record's row is, how
@@ -135,13 +146,18 @@ PHONE_TABLE = """(scroll) => {
 
 # Every table that is wider than the box it scrolls in, and for each table
 # that has row toggles, how many different left edges its rows' names start on.
-TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' + scroll)]
-  .filter((box) => box.checkVisibility() && !box.closest('details:not([open])'))
-  .map((box) => [box, box.querySelector(':scope > table')])
-  .filter(([box, table]) => table && table.querySelector('tbody td')
-    && table.getBoundingClientRect().width > box.clientWidth + 1)
-  .map(([box, table]) => (box.getAttribute('aria-label') || table.querySelector('th')?.textContent || '').trim().slice(0, 24)
-    + ' +' + Math.round(table.getBoundingClientRect().width - box.clientWidth))"""
+TABLES_THAT_DO_NOT_FIT = (
+    "(scroll) => {"
+    + TABLE_NAME
+    + """
+  return [...document.querySelectorAll('main ' + scroll)]
+    .filter((box) => box.checkVisibility() && !box.closest('details:not([open])'))
+    .map((box) => [box, box.querySelector(':scope > table')])
+    .filter(([box, table]) => table && table.querySelector('tbody td')
+      && table.getBoundingClientRect().width > box.clientWidth + 1)
+    .map(([box, table]) => `${tableName(box, table)} +${Math.round(table.getBoundingClientRect().width - box.clientWidth)}`);
+}"""
+)
 
 
 # A table region's layout at this width, as a value that changes only where the
