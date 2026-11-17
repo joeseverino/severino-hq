@@ -147,24 +147,3 @@ class ResourceTests(TestCase):
         with self.assertRaises(Exception) as caught:
             get_resource("containers", "example-box:nothing", principal=self.principal())
         self.assertIn("NotFound", type(caught.exception).__name__)
-
-
-class AttentionTests(TestCase):
-    def test_reach_over_a_machine_is_one_finding_per_container_and_hardening_is_not_one(self):
-        from ..findings import estate_findings
-        from ..security import cli_principal
-
-        estate()
-        inventory(
-            "portainer.runtime",
-            [
-                runtime("web", privileged=True, user=""),
-                runtime("kuma", privileged=True, user=""),
-            ],
-        )
-
-        found = estate_findings(principal=cli_principal(), rule="container-hardening")
-
-        self.assertEqual(sorted(finding.part for finding in found), ["kuma", "web"])
-        self.assertTrue(all("runs privileged" in finding.title for finding in found))
-        self.assertFalse(any("root" in finding.title for finding in found))

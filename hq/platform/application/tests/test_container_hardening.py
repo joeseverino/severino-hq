@@ -302,13 +302,6 @@ class FindingHelpTests(TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertEqual(page.context["resource"].key, "example-box-web")
 
-    def test_a_marked_container_leaves_the_item(self):
-        estate()
-        declare("web", holds_docker_socket=True)
-        inventory("portainer.runtime", [runtime("web", **{**KEPT, "mounts": [SOCKET]})])
-
-        self.assertNotIn(("container-hardening", "web"), self.items())
-
     def test_every_other_reach_item_links_its_container_to_its_compose_change(self):
         """The detector's own read link stands beside the machine's own."""
 

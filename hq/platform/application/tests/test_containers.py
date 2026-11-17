@@ -238,60 +238,6 @@ class StandingTests(TestCase):
                 self.assertNotIn("sudo rule", said)
                 self.assertNotIn("helper", said)
 
-    def test_many_advisories_are_one_thing_to_do(self):
-        estate(advisories=[HIGH, {**HIGH, "id": "GHSA-high-2"}, {**HIGH, "id": "GHSA-high-3"}])
-
-        with exposed(OPEN):
-            self.assertEqual(len(queued(ADVISORY)), 1)
-
-    def test_an_advisory_no_release_fixes_yet_is_said_not_raised(self):
-        estate(advisories=[HIGH], app_tags=("v1.2.0",))
-
-        with exposed(OPEN):
-            (advisory,) = queued(ADVISORY)
-
-        self.assertEqual(advisory.severity, "attention")
-        self.assertIn("no release fixes it yet", advisory.title)
-
-    def test_an_advisory_is_as_urgent_as_what_reaches_it(self):
-        estate(advisories=[HIGH])
-
-        def status():
-            (advisory,) = queued(ADVISORY)
-            return advisory.severity, advisory.explanation
-
-        with exposed(OPEN):
-            opened = status()
-        with exposed(PRIVATE):
-            private = status()
-        # No routing kind is read here, so HQ does not know what reaches it.
-        unknown = status()
-        with mock.patch("hq.platform.application.paths.reads_every_route", return_value=True):
-            unrouted = status()
-
-        self.assertEqual(opened[0], "serious")
-        self.assertIn("Open to the internet as app.example.com", opened[1])
-        self.assertEqual(private[0], "attention")
-        # A gap in what HQ read is not evidence nothing reaches it.
-        self.assertEqual(unknown[0], "serious")
-        self.assertIn("Not known who can reach it", unknown[1])
-        # Nothing routes to it, and HQ read everything that could: information.
-        self.assertEqual(unrouted[0], "neutral")
-        self.assertIn("Not reachable", unrouted[1])
-
-    def test_nothing_known_asks_for_nothing(self):
-        estate(app_tags=("v1.2.0",))
-        inventory(
-            "registry.image",
-            [
-                {"image": "ghcr.io/example/app", "tags": ["v1.2.0"], "read_at": timezone.now().isoformat()},
-                {"image": "docker.io/example/web", "tags": ["1.0.0"], "read_at": timezone.now().isoformat()},
-                {"image": "docker.io/example/kuma", "tags": ["1"], "read_at": timezone.now().isoformat()},
-            ],
-        )
-
-        self.assertEqual(queued(), ())
-
 
 class ToneTests(TestCase):
     """Each fact's tone, decided where the fact is built."""

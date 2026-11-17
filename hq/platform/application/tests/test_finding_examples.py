@@ -37,7 +37,6 @@ LOOPBACK = ("127.0.0.1", "::1")
 # examples of its own; the list only shrinks.
 UNWALKED = frozenset(
     {
-        "container_findings",
         "contradiction_findings",
         "controller_findings",
         "posture",
