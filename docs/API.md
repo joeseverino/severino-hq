@@ -571,11 +571,10 @@ freshness policy.
 
 ### Compatibility policy
 
-The path is the semantic major version. Additive fields may join an existing
-version; removing a field, tightening accepted input, or changing retry
-semantics requires a new path. Version 2 is the only contract and requires
-durable idempotency for state changes. HQ has no outside clients, so a new
-version replaces the old one rather than running beside it.
+Version 2 is the only contract and requires durable idempotency for state
+changes. HQ keeps no older shape beside the current one: a change that removes
+a field, tightens accepted input or changes retry semantics moves every caller
+in the same change, and the committed document shows it in review.
 
 ### Errors
 
@@ -752,29 +751,6 @@ Resource filters emit individual query parameters; an unknown one is refused
 
 `mise run lint:openapi` installs the locked Redocly from `tools/lint` and
 validates every description against the specification.
-
-`mise run lint:openapi-breaking` compares `hq-api.openapi.json` with the base's
-copy (fast's base; in CI the commit the change lands on) through oasdiff. It
-fails on each change that breaks a client: a removed path, operation or
-response field, a parameter or request field made required, a narrowed enum, a
-changed type. Each line it prints is oasdiff's account of one break. A
-deliberate break is admitted in `hq/platform/api/hq-api.breaking-exemptions.md`
-by one of two kinds of line, each followed by `Reason:` and why clients can
-take it; a line with no reason fails the gate:
-
-- the printed line itself, copied in, which goes to oasdiff's `--err-ignore`
-  and admits that one change of that one operation, since oasdiff matches it
-  by its exact path, operation and text;
-- `<check-id> info`, which goes to oasdiff's `--severity-levels` and lowers
-  every change that check finds to info, so one line admits a correction made
-  across many operations (a narrowing the server already refused, a loose
-  schema made precise). The gate prints how many changes each one lowered.
-
-The gate hands oasdiff only the lines the release adds, those not on main
-where the branch left it, so a line already on main admits nothing, and any
-change may delete it. A branch stacked on another lands with it as one
-release, so a line the earlier branch added admits the later one's breaks too. The controller's two documents are left out, since both of their
-ends ship in one image.
 
 ### The document
 

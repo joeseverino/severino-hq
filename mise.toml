@@ -136,14 +136,6 @@ version = "0.7.5"
 lazy = true
 lazy_bins = ["otel-tui"]
 
-# Compares the machine API's document with its base's and names each change
-# that breaks a client (lint:openapi-breaking). Not in mise's registry. Lazy:
-# only that gate runs it.
-[tools."github:oasdiff/oasdiff"]
-version = "1.38.0"
-lazy = true
-lazy_bins = ["oasdiff"]
-
 # Each Go binary's bytes by package and module, read from its own symbol and
 # line tables (audit:dependency-weight). Not in mise's registry, so named by its
 # aqua package. Lazy, as age is.
