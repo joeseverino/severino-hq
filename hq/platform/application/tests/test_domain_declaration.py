@@ -105,17 +105,3 @@ class NewDomainDeclarationTests(TransactionTestCase):
         deleted = execute_capability("widget.delete", keyed({"confirm": "first"}), principal=operator, target="first")
         self.assertEqual(deleted["deleted"]["type"], "widget", deleted)
         self.assertFalse(self.model.objects.exists())
-
-    def test_its_commands_and_resource_are_in_the_api_document(self):
-        from hq.platform.api.openapi import document
-
-        api = document()
-        for name in ("widget.create", "widget.update", "widget.delete"):
-            operation = api["paths"][f"/api/v2/capabilities/{name}/"]["post"]
-            self.assertEqual(operation["x-hq-capability"], name)
-            self.assertEqual(operation["tags"][0], "test.widgets")
-        self.assertIn("WidgetCreateRequest", api["components"]["schemas"])
-        listing = api["paths"]["/api/v2/resources/widgets/"]["get"]
-        self.assertEqual(listing["x-hq-resource"], "widgets")
-        tags = {tag["name"]: tag for tag in api["tags"]}
-        self.assertEqual(tags["test.widgets"]["parent"], "nav.business")

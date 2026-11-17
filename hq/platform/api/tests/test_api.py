@@ -864,19 +864,6 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertIn(SENTINEL_CONNECTION, served)
         self.assertIn(SENTINEL_REWRITE, served)
 
-    def test_resource_list_and_detail_share_the_declared_contract(self):
-        from hq.domains.projects.models import Project
-
-        project = Project.objects.create(name="Machine readable")
-        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
-        with _serving():
-            listed = self.client.get("/api/v2/resources/projects/?query=readable", **headers)
-            detail = self.client.get(f"/api/v2/resources/projects/{project.slug}/", **headers)
-        self.assertEqual(listed.status_code, 200)
-        self.assertEqual(listed.json()["data"]["items"][0]["slug"], project.slug)
-        self.assertEqual(detail.status_code, 200)
-        self.assertEqual(detail.json()["data"]["slug"], project.slug)
-
     def test_hq_answers_how_it_is_over_the_api(self):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving():

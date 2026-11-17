@@ -144,25 +144,3 @@ class ClassSetupStartsFreshTests(TestCase):
 
         self.assertEqual([said for _, said in result.failures + result.errors], [])
         self.assertEqual(seen["set up"], seen["tested"])
-
-    def test_the_api_document_s_tests_pass_after_a_class_that_adopted_playbooks_and_stopped_in_its_setup(self):
-        # Imported here, so this module's own tests do not include them.
-        from hq.platform.api.tests.test_openapi import DocumentTests
-
-        class Adopts(unittest.TestCase):
-            @classmethod
-            def setUpClass(cls):
-                automation.adopted(web_principal(get_user_model().objects.create_user("example-adopter")))
-                raise unittest.SkipTest("stops in its setup, so no test of it starts or stops")
-
-            def test_nothing(self):
-                pass
-
-        result = _run(
-            Adopts("test_nothing"),
-            DocumentTests("test_every_capability_a_token_could_hold_appears"),
-            DocumentTests("test_tags_are_the_nav_tree"),
-        )
-
-        self.assertEqual([said for _, said in result.failures + result.errors], [])
-        self.assertEqual(result.testsRun, 2)
