@@ -92,7 +92,7 @@ class RefreshTests(TestCase):
 
     def test_a_refused_request_leaves_its_key_free_for_the_corrected_one(self):
         refused = self.ask(connection_ref="no-such-connection", idempotency_key="refresh-once")
-        self.assertEqual(refused["error"]["code"], "invalid_input")
+        self.assertEqual(refused["error"]["code"], "not_found")
         self.assertFalse(IdempotencyRecord.objects.exists())
 
         self.assertTrue(self.ask(every_connection=True, idempotency_key="refresh-once")["ok"])

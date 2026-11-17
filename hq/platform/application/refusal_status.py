@@ -24,7 +24,7 @@ from hq.platform.core.errors import UpstreamUnavailable
 from .answer_fields import Outcome, Pinned
 from .input_errors import django_refusal, pydantic_refusal
 from .projection import QueryRefusal
-from .record_errors import HostRefusal
+from .record_errors import NOT_FOUND, HostRefusal
 from .security import AuthorizationError, InsufficientScope, Principal
 lazy from .approvals import RefusedHold
 lazy from .denials import record_denial
@@ -92,7 +92,7 @@ CODES = {
     # The operator's standing rule refuses this client. Like a missing grant,
     # no change to the request gets it through.
     "denied_by_policy": _code(403, "the operator's rule refuses this client", Door.CAPABILITY),
-    "not_found": _code(404, "the record it names is not there", Door.RESOURCE, Door.CAPABILITY),
+    NOT_FOUND: _code(404, "the record it names is not there", Door.RESOURCE, Door.CAPABILITY),
     "unknown_resource": _code(404, "HQ has no list by that name", Door.RESOURCE),
     # The resource exists, and has no list or detail to read.
     "unsupported_operation": _code(405, "that list has nothing of that kind to read", Door.RESOURCE),
@@ -384,7 +384,10 @@ def _mapped(exc: Exception, name: str) -> Refusal:
         return Refusal("invalid_input", refused.message, refused.details)
     if isinstance(exc, DjangoValidationError):
         refused = django_refusal(name, exc)
-        return Refusal("invalid_input", refused.message, refused.details)
+        # Only fields naming records that are not there: the call names a missing record.
+        codes = [code for named in refused.details.values() for code in named]
+        missing = bool(codes) and all(code == NOT_FOUND for code in codes)
+        return Refusal(NOT_FOUND if missing else "invalid_input", refused.message, refused.details)
     if isinstance(exc, InvalidResourceInput):
         # The pydantic error list describing the request sent, beside what the kind takes.
         return Refusal("invalid_input", exc.reason, exc.details)

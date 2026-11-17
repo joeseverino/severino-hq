@@ -15,6 +15,7 @@ from typing import Any, get_args
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError as DjangoValidationError
 from pydantic_core.core_schema import ErrorType
 
+from .record_errors import NOT_FOUND
 from .ui import ended
 
 # How many problems the sentence names before pointing at ``details``.
@@ -45,6 +46,7 @@ _DJANGO_REASONS = {
     "invalid_choice": "is not one of the allowed choices",
     "unique": "is already taken",
     "unique_together": "is already taken",
+    NOT_FOUND: "names nothing HQ has",
 }
 
 

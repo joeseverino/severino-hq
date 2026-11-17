@@ -48,7 +48,7 @@ from .command_fields import Choices, Describe, Names
 from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import requested
 from .moments import duration
-from .record_errors import Sentence
+from .record_errors import NOT_FOUND, Sentence
 from .security import Principal
 from .tone import Tone
 from .ui import ended
@@ -610,7 +610,7 @@ def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
     if len(named) > 1:
         raise ValidationError(dict.fromkeys(named, "Name one of connection_ref, kind or every_connection."))
     if ref and not connection_providers(ref):
-        raise ValidationError({"connection_ref": ValidationError("No such connection.", code="invalid_choice")})
+        raise ValidationError({"connection_ref": ValidationError("No such connection.", code=NOT_FOUND)})
     return (ref, kind) if named else None
 
 

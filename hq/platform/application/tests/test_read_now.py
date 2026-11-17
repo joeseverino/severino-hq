@@ -122,11 +122,11 @@ class RefusalTests(TestCase):
     def setUp(self):
         connect("example-tailnet", "tailscale")
 
-    def test_an_unknown_connection_is_refused(self):
+    def test_an_unknown_connection_is_not_found(self):
         result = execute_capability(READ_NOW, {"connection_ref": "no-such-connection"}, principal=cli_principal())
 
         self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "invalid_input")
+        self.assertEqual(result["error"]["code"], "not_found")
         self.assertFalse(ReadRequest.objects.exists())
 
     def test_an_unknown_kind_is_refused(self):
@@ -180,7 +180,7 @@ class WebTests(TestCase):
             reverse("control_plane:read_now"), form_keyed({"connection_ref": "no-such-connection"}), follow=True
         )
 
-        self.assertContains(response, "connection_ref is not one of the allowed choices.")
+        self.assertContains(response, "connection_ref names nothing HQ has.")
         self.assertFalse(ReadRequest.objects.exists())
 
     def test_the_payload_is_the_inverse_of_the_link(self):

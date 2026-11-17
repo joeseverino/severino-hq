@@ -623,7 +623,10 @@ at its path (`rules[0].scope is not a known field`), and its `input_schema` is
 closed at the same levels; only a part its type declares open takes any key.
 `details` holds the structured list the sentence was built from, under the same
 rule: `type`, `loc` and `msg` for a schema error, field names and error codes
-for a domain one, and no submitted value in either. A resource's read
+for a domain one, and no submitted value in either. A field that names a
+record HQ does not have (a `type:key` reference, a connection) is refused with
+its own code `not_found`, and a call whose only refusals are those is a 404
+`not_found` with the same `details`. A resource's read
 (`InvalidResourceInput` in `hq/platform/application/resources.py`, the one
 place every door's refusal is raised) puts that list under `details.errors`,
 beside `details.filters`, what the kind's list narrows by, and `details.next`,
