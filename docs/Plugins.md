@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=17,
+    api_version=18,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -924,6 +924,9 @@ dataclass or a TypedDict, and a bound on a field (a length, a range) is an
 It also retires a region's `room=` and a list's `table_room`: the browser
 sizes every column. And it retires `Principal.require`'s `capability=`
 keyword: it takes any number of capabilities, by position.
+`PLUGIN_API_VERSION` 18 exports `NonEmpty` and `RequiredText` from
+`hq_sdk.capabilities`: a field that must hold something says so through them,
+never `min_length=1`, and its schema says `minLength` (`minItems`).
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body

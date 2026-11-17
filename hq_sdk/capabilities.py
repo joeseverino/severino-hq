@@ -9,7 +9,7 @@ from hq.platform.application.capabilities import (
     describe_capabilities,
     execute_capability,
 )
-from hq.platform.application.command_fields import Choices, Describe, Names, Refers
+from hq.platform.application.command_fields import Choices, Describe, Names, NonEmpty, Refers, RequiredText
 from hq.platform.application.contracts import Effect
 from hq.platform.application.integration_specs import ON_ITS_PAGE, CommandAbout, CommandFact, Kept, keeps
 from hq.platform.application.record_errors import InputError
@@ -39,8 +39,10 @@ __all__ = [
     "InputError",
     "Kept",
     "Names",
+    "NonEmpty",
     "Principal",
     "Refers",
+    "RequiredText",
     "as_sent",
     "capability_registry",
     "cli_principal",
