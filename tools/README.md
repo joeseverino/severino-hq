@@ -21,7 +21,8 @@ and the ast-grep rule `tools-imported-only-by-tools` refuses an import of
 The top level holds the credential minting (`credentials.py`) and the
 permission lists it and its tests read, `audit:image`'s reader of a built
 image (`audit_image.py`), `audit:supports`'s asker of the gates' engines
-(`audit_supports.py`), and `lint:sdk-breaking`, which holds `hq_sdk` to
+(`audit_supports.py`), `audit:tests`'s reader of each test's coverage
+(`audit_tests.py`), and `lint:sdk-breaking`, which holds `hq_sdk` to
 its base's extensions (`sdk_breaking.py`).
 
 Language: shell (POSIX sh) for a short pipeline of other programs; Python for

@@ -140,9 +140,9 @@ class MapArtifactTests(SimpleTestCase):
     def test_ci_keeps_the_map_where_fast_fetches_it(self):
         """fast finds CI's map by the artifact's name, and reads from it the file fast:map writes."""
 
-        uploads = [
-            (step["with"]["name"], step["with"]["path"])
+        uploads = {
+            step["with"]["name"]: step["with"]["path"]
             for step in steps(jobs(workflow("ci.yml"))["map"])
             if step.get("uses", "").startswith("actions/upload-artifact@")
-        ]
-        self.assertEqual(uploads, [(chain.MAP_ARTIFACT, testmap.WRITTEN.as_posix())])
+        }
+        self.assertEqual(uploads.get(chain.MAP_ARTIFACT), testmap.WRITTEN.as_posix())

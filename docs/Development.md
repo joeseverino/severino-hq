@@ -426,15 +426,20 @@ A run runs its selection however wide it is. `--whole` runs the whole suite
 with every quick gate instead, whatever changed: the landing asks for it, and
 its pass records the tree.
 
-CI's Map job records which test modules ran each line of each Python file,
-on every push to main and on a pull request's head: coverage runs the whole
-suite with its C tracer and a context per test module, switched before the
-module's fixtures (`hq/platform/core/coverage_contexts.py`), since
-`sys.monitoring`, coverage's default core, records a line once per process
-(`mise run fast:map`). The contexts make the run much slower, so no gate
-records; nothing waits on the job, and its failure never fails CI. It keeps
-the map, coverage's own `contexts_by_lineno`, as the artifact `fast-map` of
-the commit it checked out. fast fetches through gh the map of the nearest
+CI's Map job records which tests ran each line of each Python file, on every
+push to main and on a pull request's head: coverage runs the whole suite with
+its C tracer, a context per test module switched before the module's
+fixtures and one per test switched before the test
+(`hq/platform/core/coverage_contexts.py`), since `sys.monitoring`, coverage's
+default core, records a line once per process (`mise run fast:map`). The
+contexts make the run much slower, so no gate records; nothing waits on the
+job, and its failure never fails CI. It keeps the map, coverage's own
+`contexts_by_lineno` read back by test module, as the artifact `fast-map` of
+the commit it checked out. From the same recording, `mise run audit:tests`
+names each test whose lines other tests of its app or package also cover,
+and the job keeps that report as the artifact `test-audit`: candidates to
+read before deleting a test, since two tests running the same lines may
+assert different outcomes. fast fetches through gh the map of the nearest
 commit on HEAD's first-parent history, as far back as `MAP_REACH` in
 `tools/gate/chain.py`, into `$(git rev-parse --git-common-dir)/severino/fast-line-maps/`
 (`tools/gate/testmap.py`), and says where its map came from, or that none
