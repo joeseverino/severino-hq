@@ -48,12 +48,17 @@ from .finding_steps import WrittenCheck, WrittenReason, WrittenSteps
 from .json_schemas import Written
 from .plugins import ATTENTION_ORDER
 from .record_fields import Notes, PublishedAt
+from .relationships import RelationGroup
+from .request_path import Evidence
 from .services import HQ_MARK, OBSERVED_MARK
 from .standards import INTENDED, Standing
 from .tone import Tone
 from .ui import ended
-from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE
+from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE, Blocker, UpgradeStep
 from .workflows import WrittenAction
+
+# What stands in the way of an upgrade, as ``Blocker`` says it.
+WrittenBlocker = Annotated[dict[str, Any], Written(Blocker)]
 
 # What a container row and a machine's list of its containers say alike.
 type ComposeProject = Annotated[str, Describe("The compose project it belongs to; empty for one started on its own.")]
@@ -288,16 +293,6 @@ class HopCheckPart(TypedDict):
     step: Annotated[str, Describe("What you do to settle a disagreement; empty for none.")]
 
 
-class EvidencePart(TypedDict):
-    label: Annotated[str, Describe("What the request carried, such as a header or an address.")]
-    value: Annotated[str, Describe("Its value, as the request carried it.")]
-    detail: Annotated[str, Describe("A line on what HQ makes of it; empty for none.")]
-    role: Annotated[
-        str,
-        Describe("For an address the request was forwarded through: `judged`, `proxy` or `ignored`; else empty."),
-    ]
-
-
 class CheckPart(TypedDict):
     id: Annotated[str, Describe("The check's stable id, such as `edge` or `tailnet-lock`.")]
     label: Annotated[str, Describe("What is true when it is met, in words.")]
@@ -397,7 +392,12 @@ class HopRow(TypedDict):
             Describe(f"Whether what the request showed here agrees with what was read. {_WALKED}"),
         ]
     ]
-    evidence: NotRequired[Annotated[list[EvidencePart], Describe(f"What the request carried at the hop. {_WALKED}")]]
+    evidence: NotRequired[
+        Annotated[
+            list[Annotated[dict[str, Any], Written(Evidence)]],
+            Describe(f"What the request carried at the hop. {_WALKED}"),
+        ]
+    ]
     layers: NotRequired[
         Annotated[list[CheckPart], Describe(f"The checks of the request standard decided at the hop. {_WALKED}")]
     ]
@@ -645,11 +645,6 @@ class ImageAt(TypedDict):
     ]
 
 
-class BlockerPart(TypedDict):
-    id: Annotated[str, Describe("What stands in the way, as a stable id an agent can act on, such as `mounts-unread`.")]
-    reason: Annotated[str, Describe("What stands in the way, in a sentence.")]
-
-
 UpgradeRow = TypedDict(
     "UpgradeRow",
     {
@@ -669,7 +664,7 @@ UpgradeRow = TypedDict(
         ],
         "from": Annotated[ImageAt, Describe("The image it runs now.")],
         "to": Annotated[ImageAt, Describe("The image the upgrade would move it to.")],
-        "blockers": Annotated[list[BlockerPart], Describe("Each reason it cannot go ahead yet; empty when none.")],
+        "blockers": Annotated[list[WrittenBlocker], Describe("Each reason it cannot go ahead yet; empty when none.")],
     },
 )
 
@@ -694,12 +689,6 @@ class MountPart(TypedDict):
     read_only: Annotated[bool, Describe("Whether the container may only read it.")]
 
 
-class UpgradeStepPart(TypedDict):
-    id: Annotated[str, Describe("The step's stable id.")]
-    label: Annotated[str, Describe("The step, in a few words.")]
-    detail: Annotated[str, Describe("What the step does, in a sentence.")]
-
-
 class UpgradeRecord(UpgradeRow):
     """One upgrade whole: what it fixes and introduces, its data, and the steps it would take."""
 
@@ -719,13 +708,15 @@ class UpgradeRecord(UpgradeRow):
         Describe("What would show the new version works, such as its health check; empty when nothing would."),
     ]
     not_automatic: Annotated[
-        list[BlockerPart],
+        list[WrittenBlocker],
         Describe(
             "Why it would not apply on its own, though an operator may approve it. Every blocker comes first, "
             "then the bar a patch must clear."
         ),
     ]
-    steps: Annotated[list[UpgradeStepPart], Describe("The steps an upgrade would take, in order.")]
+    steps: Annotated[
+        list[Annotated[dict[str, Any], Written(UpgradeStep)]], Describe("The steps an upgrade would take, in order.")
+    ]
 
 
 class ZoneMemberPart(TypedDict):
@@ -779,19 +770,6 @@ class DomainRecord(DomainRow):
     insights: Annotated[list[InsightPart], Describe("What HQ makes of the domain.")]
 
 
-class RelationshipPart(TypedDict):
-    entity: WrittenLink
-    source: Annotated[WrittenLink | None, Describe("The reading it came from; null when nothing says.")]
-    observed_at: ObservedAt | None
-    stale: Annotated[bool, Describe("Whether the reading it came from is out of date.")]
-
-
-class RelationGroupPart(TypedDict):
-    phrase: Annotated[str, Describe("What each relationship in it says from the node, such as `runs on`.")]
-    rank: Annotated[int, Describe("Where the group falls in page order, lowest first.")]
-    items: Annotated[list[RelationshipPart], Describe("The other end of each relationship it holds.")]
-
-
 class JoinedReadingPart(TypedDict):
     kind: Annotated[str, Describe("The reading's type, such as `adguard.client`.")]
     label: Annotated[str, Describe("The reading's name, as a page heads it.")]
@@ -804,7 +782,10 @@ class RelationshipsRecord(TypedDict):
 
     node: Annotated[str, Describe("The id of the node asked about, such as `machine:<name>` or `zone:<domain>`.")]
     focus_url: Annotated[str, Describe("The map centered on the node.")]
-    groups: Annotated[list[RelationGroupPart], Describe("Its relationships, grouped by what each says from the node.")]
+    groups: Annotated[
+        list[Annotated[dict[str, Any], Written(RelationGroup)]],
+        Describe("Its relationships, grouped by what each says from the node."),
+    ]
     readings: Annotated[list[JoinedReadingPart], Describe("The readings joined to the node.")]
     unreadable: Annotated[list[str], Describe("The readings about the node that could not be read, in words.")]
 

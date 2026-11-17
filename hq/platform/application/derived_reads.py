@@ -289,22 +289,7 @@ def get_relationships(node: str, *, principal: Principal) -> dict[str, Any]:
     return {
         "node": found.node_id,
         "focus_url": found.focus_url,
-        "groups": [
-            {
-                "phrase": group.phrase,
-                "rank": group.rank,
-                "items": [
-                    {
-                        "entity": as_written(item.entity),
-                        "source": as_written(item.source) if item.source else None,
-                        "observed_at": _moment(item.observed_at),
-                        "stale": item.stale,
-                    }
-                    for item in group.items
-                ],
-            }
-            for group in found.groups
-        ],
+        "groups": [as_written(group) for group in found.groups],
         "readings": readings,
         "unreadable": list(found.unreadable),
     }
@@ -365,10 +350,7 @@ def serialize_hop(hop: Any) -> dict[str, Any]:
             "detail": hop.check.detail,
             "step": hop.check.step,
         },
-        "evidence": [
-            {"label": item.label, "value": item.value, "detail": item.detail, "role": item.role}
-            for item in hop.evidence
-        ],
+        "evidence": [as_written(item) for item in hop.evidence],
         "layers": [serialize_check(result) for result in hop.checks],
     }
 

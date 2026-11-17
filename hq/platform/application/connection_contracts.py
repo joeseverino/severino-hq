@@ -9,9 +9,12 @@ plain records, so a declaration costs the declaring module nothing.
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
+
+from pydantic import ConfigDict, with_config
 
 from .contracts import Effect
+from .describe import Describe
 from .display_words import as_members
 from .security import Requires
 from .tone import Tone
@@ -73,23 +76,25 @@ class ConnectionAbility:
         object.__setattr__(self, "effect", Effect(self.effect))
 
 
+@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class ConnectionLink:
     """A safe relationship from a connection to something HQ can name."""
 
-    label: str
-    url: str = ""
+    label: Annotated[str, Describe("What it is, by name.")]
+    url: Annotated[str, Describe("Its page; empty for none.")] = ""
     # Explicit identity for a ManagedResource dependency. A rendered label is
     # presentation and must never become a join key by coincidence.
-    resource_key: str = ""
+    resource_key: Annotated[str, Describe("The key of HQ's record it is; empty when it is none.")] = ""
 
 
+@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class ConnectionFact:
     """A small provider-owned fact that is useful in a generic connection row."""
 
-    label: str
-    value: str
+    label: Annotated[str, Describe("What the fact is about, in a few words.")]
+    value: Annotated[str, Describe("The fact, as the connection reported it.")]
 
 
 @dataclass(frozen=True, slots=True)

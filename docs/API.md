@@ -908,9 +908,12 @@ definitions are written out where they are used, without titles or descriptions
 answer by it as it comes, and a field the answer gains must not break the
 client. Only a type declared with `extra="forbid"` is closed (`get_findings`'),
 so a field its serializer adds fails the output-shape tests until it is
-declared. A part the application writes from a dataclass
-(`json_schemas.Written`, a topology node or a finding's operator steps) is
-typed whole in the API document and left an object in the tool's shape. The
+declared. A part the application writes whole from a dataclass
+(`json_schemas.Written`, a topology node, a hop's link or a finding's operator
+steps) is typed whole in the API document, every field it writes required, and
+left an object in the tool's shape. `json_schemas.as_written` writes it, so a
+field the type leaves out (`Field(exclude=True)`) and a `computed_field` it
+adds are written as the document says. The
 SDK's client checks a success against the schema and never a refusal. So
 `test_output_shapes.py` calls every tool both ways on the showcase's data and
 checks each answer with the client's own validator. It holds each success, its

@@ -5071,7 +5071,7 @@
         ],
         "type": "object"
       },
-      "BlockerPart": {
+      "Blocker": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -6632,18 +6632,36 @@
         ],
         "type": "object"
       },
-      "ConnectionLinkPart": {
+      "ConnectionFact": {
         "additionalProperties": false,
+        "description": "A small provider-owned fact that is useful in a generic connection row.",
+        "properties": {
+          "label": {
+            "description": "What the fact is about, in a few words.",
+            "type": "string"
+          },
+          "value": {
+            "description": "The fact, as the connection reported it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ConnectionLink": {
+        "additionalProperties": false,
+        "description": "A safe relationship from a connection to something HQ can name.",
         "properties": {
           "label": {
             "description": "What it is, by name.",
             "type": "string"
           },
           "resource_key": {
+            "default": "",
             "description": "The key of HQ's record it is; empty when it is none.",
             "type": "string"
           },
           "url": {
+            "default": "",
             "description": "Its page; empty for none.",
             "type": "string"
           }
@@ -6712,7 +6730,7 @@
           "dependencies": {
             "description": "What the connection depends on.",
             "items": {
-              "$ref": "#/components/schemas/ConnectionLinkPart"
+              "$ref": "#/components/schemas/ConnectionLink"
             },
             "type": "array"
           },
@@ -6733,7 +6751,7 @@
           "facts": {
             "description": "What the connection reported of itself.",
             "items": {
-              "$ref": "#/components/schemas/FactPart"
+              "$ref": "#/components/schemas/ConnectionFact"
             },
             "type": "array"
           },
@@ -6859,7 +6877,7 @@
           "targets": {
             "description": "What the connection points at.",
             "items": {
-              "$ref": "#/components/schemas/ConnectionLinkPart"
+              "$ref": "#/components/schemas/ConnectionLink"
             },
             "type": "array"
           },
@@ -10162,10 +10180,12 @@
         ],
         "type": "object"
       },
-      "EvidencePart": {
+      "Evidence": {
         "additionalProperties": false,
+        "description": "One thing the request itself carried, at the hop it belongs to.",
         "properties": {
           "detail": {
+            "default": "",
             "description": "A line on what HQ makes of it; empty for none.",
             "type": "string"
           },
@@ -10174,6 +10194,7 @@
             "type": "string"
           },
           "role": {
+            "default": "",
             "description": "For an address the request was forwarded through: `judged`, `proxy` or `ignored`; else empty.",
             "type": "string"
           },
@@ -10787,20 +10808,6 @@
           },
           "state": {
             "description": "How the records behind it stand: `good`, `attention` or `serious`; empty when none supplies it.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "FactPart": {
-        "additionalProperties": false,
-        "properties": {
-          "label": {
-            "description": "What the fact is about, in a few words.",
-            "type": "string"
-          },
-          "value": {
-            "description": "The fact, as the connection reported it.",
             "type": "string"
           }
         },
@@ -11420,7 +11427,7 @@
           "evidence": {
             "description": "What the request carried at the hop. Present only on a hop the calling request walked.",
             "items": {
-              "$ref": "#/components/schemas/EvidencePart"
+              "$ref": "#/components/schemas/Evidence"
             },
             "type": "array"
           },
@@ -15194,65 +15201,6 @@
         ],
         "type": "object"
       },
-      "PartOfReading": {
-        "additionalProperties": false,
-        "description": "The part of a type a sweep could not read, and the permissions it needs.",
-        "properties": {
-          "label": {
-            "description": "The part, in words.",
-            "type": "string"
-          },
-          "name": {
-            "description": "The part's name among its type's parts; empty for the whole type.",
-            "type": "string"
-          },
-          "provider": {
-            "description": "The service whose credential reads the part, where it is not its type's own; else empty.",
-            "type": "string"
-          },
-          "requires": {
-            "description": "The permissions reading the part needs, as the service names them.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "PartRefusalPart": {
-        "additionalProperties": false,
-        "properties": {
-          "address": {
-            "description": "The machine's address, when it was refused on a machine; else empty.",
-            "type": "string"
-          },
-          "connection_ref": {
-            "description": "The connection it was refused to; empty for none.",
-            "type": "string"
-          },
-          "kind": {
-            "description": "The type the refused part belongs to.",
-            "type": "string"
-          },
-          "part": {
-            "$ref": "#/components/schemas/PartOfReading"
-          },
-          "reason": {
-            "description": "The service's words for the refusal; empty for none.",
-            "type": "string"
-          },
-          "refusal": {
-            "description": "How it was refused, `credential`, `permission`, `address` or `network`; empty when the cause is unknown.",
-            "type": "string"
-          },
-          "scope": {
-            "description": "What it was refused on, such as a zone, a hostname or a machine; empty for all of it.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "PathRecord": {
         "additionalProperties": false,
         "description": "The path a request for a hostname takes, hop by hop on each route.",
@@ -15723,8 +15671,9 @@
         },
         "type": "object"
       },
-      "PolicyNamePart": {
+      "PolicyName": {
         "additionalProperties": false,
+        "description": "One name as a policy writes it, and the entity it stands for if any.",
         "properties": {
           "link": {
             "anyOf": [
@@ -15736,6 +15685,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "description": "The machine it stands for; null when it names none HQ knows."
           },
           "text": {
@@ -15750,7 +15700,7 @@
           "destinations": {
             "description": "Each of its destinations, with the machine it stands for.",
             "items": {
-              "$ref": "#/components/schemas/PolicyNamePart"
+              "$ref": "#/components/schemas/PolicyName"
             },
             "type": "array"
           },
@@ -15764,7 +15714,7 @@
           "sources": {
             "description": "Each of its sources, with the machine it stands for.",
             "items": {
-              "$ref": "#/components/schemas/PolicyNamePart"
+              "$ref": "#/components/schemas/PolicyName"
             },
             "type": "array"
           },
@@ -17262,6 +17212,34 @@
         ],
         "type": "object"
       },
+      "ReadingPart": {
+        "additionalProperties": false,
+        "description": "One part a reading is read in, and the permissions that part needs.",
+        "properties": {
+          "label": {
+            "description": "The part, in words.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The part's name among its type's parts; empty for the whole type.",
+            "type": "string"
+          },
+          "provider": {
+            "default": "",
+            "description": "The service whose credential reads the part, where it is not its type's own; else empty.",
+            "type": "string"
+          },
+          "requires": {
+            "default": [],
+            "description": "The permissions reading the part needs, as the service names them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "ReadingRecord": {
         "additionalProperties": false,
         "description": "One type of reading with the records it holds, as its schema admits them.",
@@ -17718,6 +17696,44 @@
         "description": "HQ's sentence for the refusal, naming no value the request carried.",
         "type": "string"
       },
+      "RefusedPart": {
+        "additionalProperties": false,
+        "description": "One part of one kind that a sweep could not read, and on what.",
+        "properties": {
+          "address": {
+            "default": "",
+            "description": "The machine's address, when it was refused on a machine; else empty.",
+            "type": "string"
+          },
+          "connection_ref": {
+            "default": "",
+            "description": "The connection it was refused to; empty for none.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "The type the refused part belongs to.",
+            "type": "string"
+          },
+          "part": {
+            "$ref": "#/components/schemas/ReadingPart"
+          },
+          "reason": {
+            "default": "",
+            "description": "The service's words for the refusal; empty for none.",
+            "type": "string"
+          },
+          "refusal": {
+            "description": "How it was refused, `credential`, `permission`, `address` or `network`; empty when the cause is unknown.",
+            "type": "string"
+          },
+          "scope": {
+            "default": "",
+            "description": "What it was refused on, such as a zone, a hostname or a machine; empty for all of it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Registration": {
         "additionalProperties": false,
         "description": "The domain's registration as last read: when it runs out and whether it renews.",
@@ -17737,13 +17753,13 @@
         },
         "type": "object"
       },
-      "RelationGroupPart": {
+      "RelationGroup": {
         "additionalProperties": false,
         "properties": {
           "items": {
             "description": "The other end of each relationship it holds.",
             "items": {
-              "$ref": "#/components/schemas/RelationshipPart"
+              "$ref": "#/components/schemas/Relationship"
             },
             "type": "array"
           },
@@ -17758,8 +17774,9 @@
         },
         "type": "object"
       },
-      "RelationshipPart": {
+      "Relationship": {
         "additionalProperties": false,
+        "description": "One thing a node is related to, who says so, and when they last read it.",
         "properties": {
           "entity": {
             "$ref": "#/components/schemas/EntityLink"
@@ -17772,7 +17789,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "default": null
           },
           "source": {
             "anyOf": [
@@ -17784,9 +17802,11 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "description": "The reading it came from; null when nothing says."
           },
           "stale": {
+            "default": false,
             "description": "Whether the reading it came from is out of date.",
             "type": "boolean"
           }
@@ -17804,7 +17824,7 @@
           "groups": {
             "description": "Its relationships, grouped by what each says from the node.",
             "items": {
-              "$ref": "#/components/schemas/RelationGroupPart"
+              "$ref": "#/components/schemas/RelationGroup"
             },
             "type": "array"
           },
@@ -19280,7 +19300,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/PolicyNamePart"
+                  "$ref": "#/components/schemas/PolicyName"
                 },
                 "type": "array"
               },
@@ -19325,7 +19345,7 @@
           "parts": {
             "description": "Its parts that were refused while the rest read.",
             "items": {
-              "$ref": "#/components/schemas/PartRefusalPart"
+              "$ref": "#/components/schemas/RefusedPart"
             },
             "type": "array"
           },
@@ -20512,7 +20532,13 @@
           "source",
           "target",
           "kind",
-          "label"
+          "label",
+          "status",
+          "source_kind",
+          "detail",
+          "observed_at",
+          "entities",
+          "facet"
         ],
         "type": "object"
       },
@@ -20685,7 +20711,29 @@
           "id",
           "kind",
           "label",
-          "subtitle"
+          "subtitle",
+          "name",
+          "summary",
+          "status",
+          "status_label",
+          "detail",
+          "url",
+          "kind_key",
+          "provider",
+          "connection_ref",
+          "controller_id",
+          "observed_at",
+          "declared_revision",
+          "observed_revision",
+          "reason",
+          "managed",
+          "on_demand",
+          "unconfirmed_fields",
+          "facts",
+          "pageviews",
+          "visits",
+          "actions",
+          "read_capabilities"
         ],
         "type": "object"
       },
@@ -21172,7 +21220,7 @@
           "not_automatic": {
             "description": "Why it would not apply on its own, though an operator may approve it. Every blocker comes first, then the bar a patch must clear.",
             "items": {
-              "$ref": "#/components/schemas/BlockerPart"
+              "$ref": "#/components/schemas/Blocker"
             },
             "type": "array"
           },
@@ -21198,7 +21246,7 @@
           "steps": {
             "description": "The steps an upgrade would take, in order.",
             "items": {
-              "$ref": "#/components/schemas/UpgradeStepPart"
+              "$ref": "#/components/schemas/UpgradeStep"
             },
             "type": "array"
           },
@@ -21275,7 +21323,7 @@
           "blockers": {
             "description": "Each reason it cannot go ahead yet; empty when none.",
             "items": {
-              "$ref": "#/components/schemas/BlockerPart"
+              "$ref": "#/components/schemas/Blocker"
             },
             "type": "array"
           },
@@ -21311,7 +21359,7 @@
         ],
         "type": "object"
       },
-      "UpgradeStepPart": {
+      "UpgradeStep": {
         "additionalProperties": false,
         "properties": {
           "detail": {

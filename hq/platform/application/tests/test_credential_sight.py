@@ -485,7 +485,7 @@ class CredentialSightPageTests(TestCase):
 class PartReasonTests(SimpleTestCase):
     def test_refusals_with_one_reason_are_one_line_naming_each_part_and_where(self):
         from hq.domains.control_plane.observations import ReadingPart
-        from hq.domains.control_plane.reading_parts import PartRefusal
+        from hq.domains.control_plane.reading_parts import RefusedPart
 
         from ..credential_sight import PARTIAL, Sight
 
@@ -493,16 +493,16 @@ class PartReasonTests(SimpleTestCase):
         scanning, rules = ReadingPart("scanning", "Code scanning alerts"), ReadingPart("rules", "Branch rules")
         parts = (
             *(
-                PartRefusal(kind="example", part=part, refusal="", reason=off, scope=f"example/{repository}")
+                RefusedPart(kind="example", part=part, refusal="", reason=off, scope=f"example/{repository}")
                 for repository in ("app", "site")
                 for part in (scanning, rules)
             ),
-            PartRefusal(kind="example", part=rules, refusal="", reason="GitHub timed out", scope="example/app"),
-            PartRefusal(
+            RefusedPart(kind="example", part=rules, refusal="", reason="GitHub timed out", scope="example/app"),
+            RefusedPart(
                 kind="example", part=scanning, refusal="", scope="example/web",
                 reason="GitHub 404 for /repos/example/web/code-scanning/alerts?state=open",
             ),
-            PartRefusal(
+            RefusedPart(
                 kind="example", part=rules, refusal="", scope="example/web",
                 reason="GitHub 404 for /repos/example/web/rules/branches/main",
             ),
@@ -525,13 +525,13 @@ class PartReasonTests(SimpleTestCase):
     def test_a_bare_status_is_said_as_what_it_means_to_the_connection_that_read(self):
         from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
         from hq.domains.control_plane.observations import ReadingPart
-        from hq.domains.control_plane.reading_parts import PartRefusal
+        from hq.domains.control_plane.reading_parts import RefusedPart
 
         provider, label = next(iter(CONNECTION_LABELS.items()))
         part = ReadingPart("rules", "Branch rules", provider=provider)
 
         def said(reason: str) -> str:
-            return PartRefusal(kind="example", part=part, refusal="", reason=reason, scope="example/app").said
+            return RefusedPart(kind="example", part=part, refusal="", reason=reason, scope="example/app").said
 
         self.assertEqual(said("the service answered 404"), f"hidden from HQ's {label}")
         self.assertEqual(said("Example 403 for /repos/example/app/rules"), f"closed to HQ's {label}")

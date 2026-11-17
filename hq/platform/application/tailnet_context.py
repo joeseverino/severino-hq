@@ -148,7 +148,7 @@ class TailnetContext:
 
 
 def _names(names: tuple[PolicyName, ...]) -> list[dict[str, Any]]:
-    return [{"text": name.text, "link": as_written(name.link) if name.link else None} for name in names]
+    return [as_written(name) for name in names]
 
 
 def _rule(item: NamedRule, *, ports: bool = False) -> dict[str, Any]:

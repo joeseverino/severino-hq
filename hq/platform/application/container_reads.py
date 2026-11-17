@@ -9,6 +9,7 @@ what it would take to change it. Nothing here derives a fact.
 from collections.abc import Callable
 from typing import Any
 
+from .json_schemas import as_written
 from .projection import projection_scope, window
 from .record_errors import RecordNotFound
 lazy from .containers import containers
@@ -184,9 +185,6 @@ def get_container(address: str) -> dict[str, Any]:
 
 
 def serialize_plan(plan: Any) -> dict[str, Any]:
-    def blockers(items):
-        return [{"id": item.id, "reason": item.reason} for item in items]
-
     def advisories(items):
         return [{key: item.get(key, "") for key in ("id", "severity", "summary", "url")} for item in items]
 
@@ -211,9 +209,9 @@ def serialize_plan(plan: Any) -> dict[str, Any]:
         "stateful": plan.stateful,
         "data": [dict(mount) for mount in plan.data],
         "verified_by": list(plan.verified_by),
-        "blockers": blockers(plan.blockers),
-        "not_automatic": blockers(plan.not_automatic),
-        "steps": [{"id": step.id, "label": step.label, "detail": step.detail} for step in plan.steps],
+        "blockers": [as_written(item) for item in plan.blockers],
+        "not_automatic": [as_written(item) for item in plan.not_automatic],
+        "steps": [as_written(step) for step in plan.steps],
     }
 
 

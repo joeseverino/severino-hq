@@ -10,17 +10,19 @@ from typing import Annotated, Any, TypedDict
 
 from pydantic import ConfigDict, with_config
 
-from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
+from hq.domains.control_plane.provider_adapters.contracts import REFUSALS
+from hq.domains.control_plane.reading_parts import RefusedPart
 
 from . import finding_steps, findings
 from .answer_fields import AsRead, ObservedAt
 from .connection_catalog import AUTHORITY_LABELS, EVIDENCE_LABELS
-from .connection_contracts import CREDENTIAL_MODELS, GRANT_MODELS
+from .connection_contracts import CREDENTIAL_MODELS, GRANT_MODELS, ConnectionFact, ConnectionLink
 from .connection_lifecycle import Lifecycle
 from .connection_reach import NETWORK_LABELS
 from .credential_sight import STATE_LABELS
 from .describe import Describe, listed
 from .json_schemas import Written
+from .policy_links import PolicyName
 from .resource_records import WrittenLink
 from .tone import Tone
 from .ui import ended
@@ -45,29 +47,6 @@ class CredentialRow(TypedDict):
     ]
 
 
-class PartOfReading(TypedDict):
-    """The part of a type a sweep could not read, and the permissions it needs."""
-
-    name: Annotated[str, Describe("The part's name among its type's parts; empty for the whole type.")]
-    label: Annotated[str, Describe("The part, in words.")]
-    requires: Annotated[list[str], Describe("The permissions reading the part needs, as the service names them.")]
-    provider: Annotated[
-        str, Describe("The service whose credential reads the part, where it is not its type's own; else empty.")
-    ]
-
-
-class PartRefusalPart(TypedDict):
-    kind: Annotated[str, Describe("The type the refused part belongs to.")]
-    part: PartOfReading
-    refusal: Annotated[str, Describe(f"How it was refused, {listed(FAILURES)}; empty when the cause is unknown.")]
-    reason: Annotated[str, Describe("The service's words for the refusal; empty for none.")]
-    scope: Annotated[
-        str, Describe("What it was refused on, such as a zone, a hostname or a machine; empty for all of it.")
-    ]
-    connection_ref: Annotated[str, Describe("The connection it was refused to; empty for none.")]
-    address: Annotated[str, Describe("The machine's address, when it was refused on a machine; else empty.")]
-
-
 class SightPart(TypedDict):
     kind: Annotated[str, Describe("The reading or record type it could read.")]
     label: Annotated[str, Describe("The type it could read, in words.")]
@@ -84,7 +63,10 @@ class SightPart(TypedDict):
     ]
     refusal: Annotated[str, Describe(f"How the service refused the read, {listed(REFUSALS)}; empty when it did not.")]
     permissions: Annotated[list[str], Describe("The permissions `requires` names, one each.")]
-    parts: Annotated[list[PartRefusalPart], Describe("Its parts that were refused while the rest read.")]
+    parts: Annotated[
+        list[Annotated[dict[str, Any], Written(RefusedPart)]],
+        Describe("Its parts that were refused while the rest read."),
+    ]
     remedy: Annotated[str, Describe("What would let HQ read all of it; empty when nothing is missing.")]
 
 
@@ -109,16 +91,15 @@ class PolicyCounts(TypedDict):
     tests: Annotated[int, Describe("How many tests the policy holds.")]
 
 
-class PolicyNamePart(TypedDict):
-    text: Annotated[str, Describe("A name as the policy writes it, such as a tag, a group or an address.")]
-    link: Annotated[WrittenLink | None, Describe("The machine it stands for; null when it names none HQ knows.")]
+# A name in the tailnet policy, as ``PolicyName`` says it.
+WrittenName = Annotated[dict[str, Any], Written(PolicyName)]
 
 
 class SettingPart(TypedDict):
     label: Annotated[str, Describe("The setting, in words.")]
     value: Annotated[str, Describe("Its value, as a page shows it.")]
     machines: Annotated[
-        list[PolicyNamePart] | None, Describe("The machines its value names; null for a value that names none.")
+        list[WrittenName] | None, Describe("The machines its value names; null for a value that names none.")
     ]
 
 
@@ -128,8 +109,8 @@ class SettingPart(TypedDict):
 class PolicyRulePart(TypedDict):
     src: Annotated[list[str], Describe("Its sources, as the policy writes them.")]
     dst: Annotated[list[str], Describe("Its destinations, as the policy writes them.")]
-    sources: Annotated[list[PolicyNamePart], Describe("Each of its sources, with the machine it stands for.")]
-    destinations: Annotated[list[PolicyNamePart], Describe("Each of its destinations, with the machine it stands for.")]
+    sources: Annotated[list[WrittenName], Describe("Each of its sources, with the machine it stands for.")]
+    destinations: Annotated[list[WrittenName], Describe("Each of its destinations, with the machine it stands for.")]
 
 
 class GrantPortPart(TypedDict):
@@ -229,15 +210,8 @@ class ConnectionStandingRow(TypedDict):
     open_problems: Annotated[int, Describe("How many open problems about the connection the reader may see.")]
 
 
-class FactPart(TypedDict):
-    label: Annotated[str, Describe("What the fact is about, in a few words.")]
-    value: Annotated[str, Describe("The fact, as the connection reported it.")]
-
-
-class ConnectionLinkPart(TypedDict):
-    label: Annotated[str, Describe("What it is, by name.")]
-    url: Annotated[str, Describe("Its page; empty for none.")]
-    resource_key: Annotated[str, Describe("The key of HQ's record it is; empty when it is none.")]
+# What a connection depends on or points at, as ``ConnectionLink`` says it.
+WrittenConnectionLink = Annotated[dict[str, Any], Written(ConnectionLink)]
 
 
 class AbilityPart(TypedDict):
@@ -337,13 +311,15 @@ class ConnectionStandingRecord(ConnectionStandingRow):
         Describe("Whether the service reported the credential's permissions, so an empty `granted_scopes` means none."),
     ]
     granted_scopes: Annotated[list[str], Describe("The permissions the credential carries, as the service names them.")]
-    facts: Annotated[list[FactPart], Describe("What the connection reported of itself.")]
+    facts: Annotated[
+        list[Annotated[dict[str, Any], Written(ConnectionFact)]], Describe("What the connection reported of itself.")
+    ]
     actions: Annotated[
         list[WrittenAction],
         Describe("What the reader may do to the connection, each already checked against the reader's permissions."),
     ]
-    dependencies: Annotated[list[ConnectionLinkPart], Describe("What the connection depends on.")]
-    targets: Annotated[list[ConnectionLinkPart], Describe("What the connection points at.")]
+    dependencies: Annotated[list[WrittenConnectionLink], Describe("What the connection depends on.")]
+    targets: Annotated[list[WrittenConnectionLink], Describe("What the connection points at.")]
     reads: Annotated[list[ReadPart], Describe("What its credential reads.")]
     changes: Annotated[list[AbilityPart], Describe("What its credential may change.")]
     family_label: Annotated[str, Describe("The connection type's name, in words.")]

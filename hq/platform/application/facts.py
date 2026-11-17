@@ -17,7 +17,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS, ObservationSpec
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
 from hq.domains.control_plane.providers import PROVIDERS, read_record
-from hq.domains.control_plane.reading_parts import PartRefusal, refused_parts
+from hq.domains.control_plane.reading_parts import RefusedPart, refused_parts
 lazy from hq.domains.control_plane.models import ProviderInventory
 
 from .entity_links import kind_label
@@ -437,10 +437,10 @@ def inventory_could_join(kind: str, subject: Subject) -> bool:
     )
 
 
-def part_refusals(kinds: Iterable[str] | None = None) -> tuple[PartRefusal, ...]:
+def part_refusals(kinds: Iterable[str] | None = None) -> tuple[RefusedPart, ...]:
     """Every part refused on a connected snapshot that otherwise read."""
 
-    def load() -> tuple[PartRefusal, ...]:
+    def load() -> tuple[RefusedPart, ...]:
         return tuple(
             refused
             for rows in _stored().values()
@@ -455,13 +455,13 @@ def part_refusals(kinds: Iterable[str] | None = None) -> tuple[PartRefusal, ...]
     )
 
 
-def refusals_about(subject: Subject, kinds: Iterable[str] | None = None) -> tuple[PartRefusal, ...]:
+def refusals_about(subject: Subject, kinds: Iterable[str] | None = None) -> tuple[RefusedPart, ...]:
     """The refused parts that could hide something about ``subject``."""
 
     return tuple(refused for refused in part_refusals(kinds) if _refusal_about(refused, subject))
 
 
-def _refusal_about(refused: PartRefusal, subject: Subject) -> bool:
+def _refusal_about(refused: RefusedPart, subject: Subject) -> bool:
     if not refused.scope:
         spec = OBSERVATIONS.get(refused.kind)
         if spec is not None:

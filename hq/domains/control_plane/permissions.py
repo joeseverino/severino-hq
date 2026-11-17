@@ -11,7 +11,7 @@ A member is a ``str``, so a reader joins, sorts and compares it as one.
 """
 
 from enum import StrEnum
-from typing import Self
+from typing import Any, Self
 
 
 class Permission(StrEnum):
@@ -19,6 +19,13 @@ class Permission(StrEnum):
 
     # How the provider's API names it: what a minting task asks for.
     api: str
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, schema: Any, handler: Any) -> dict[str, Any]:
+        # A field of any provider's permission is its text: this base table
+        # has no members of its own to list.
+        said: dict[str, Any] = handler(schema) if cls.__members__ else {"type": "string"}
+        return said
 
     @classmethod
     def _member(cls, shown: str, api: str) -> Self:

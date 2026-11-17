@@ -9,9 +9,10 @@ the one projection the connection page, the API and MCP read.
 import re
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from django.utils.text import capfirst
+from pydantic import ConfigDict, with_config
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
@@ -19,6 +20,7 @@ from hq.domains.control_plane.providers import PROVIDERS, operator_label
 from hq.platform.application.labels import dotted
 from hq.platform.core.network import IGNORED, JUDGED, PROXY, split_host_port
 
+from .describe import Describe
 from .entity_links import entity_link
 from .path_model import Hop, HopSource, Route, ServicePath, last_machine
 from .paths import hq_path, why_unread
@@ -81,15 +83,18 @@ class HopCheck:
 _ROLE_TONES = {JUDGED: Tone.GOOD, IGNORED: Tone.SERIOUS}
 
 
+@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class Evidence:
     """One thing the request itself carried, at the hop it belongs to."""
 
-    label: str
-    value: str
-    detail: str = ""
-    # For an address in the forwarded chain: judged, proxy or ignored.
-    role: str = ""
+    label: Annotated[str, Describe("What the request carried, such as a header or an address.")]
+    value: Annotated[str, Describe("Its value, as the request carried it.")]
+    detail: Annotated[str, Describe("A line on what HQ makes of it; empty for none.")] = ""
+    role: Annotated[
+        str,
+        Describe("For an address the request was forwarded through: `judged`, `proxy` or `ignored`; else empty."),
+    ] = ""
 
     @property
     def tone(self) -> Tone:

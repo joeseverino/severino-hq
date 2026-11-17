@@ -28,13 +28,15 @@ import copy
 import functools
 import re
 from collections.abc import Iterable, Mapping
+from datetime import datetime
 from types import get_original_bases
-from typing import Any, TypedDict, is_typeddict, override
+from typing import Annotated, Any, TypedDict, is_typeddict, override
 
-from pydantic import GetCoreSchemaHandler, TypeAdapter
+from pydantic import GetCoreSchemaHandler, PlainSerializer, TypeAdapter
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE, GenerateJsonSchema, JsonRef, JsonSchemaMode, JsonSchemaValue
 from pydantic_core import core_schema
 
+from .answer_fields import ObservedAt
 from .labels import field_label
 
 # Where a schema's own definitions are, as Pydantic refers to them.
@@ -106,6 +108,18 @@ class PublishedSchema(GenerateJsonSchema):
     @override
     def dataclass_schema(self, schema: core_schema.DataclassSchema) -> JsonSchemaValue:
         return _untitled(super().dataclass_schema(schema), schema["cls"])
+
+    @override
+    def field_is_required(
+        self,
+        field: core_schema.ModelField | core_schema.DataclassField | core_schema.TypedDictField,
+        total: bool,
+    ) -> bool:
+        # A dataclass is written whole (``as_written``, ``asdict``), so every
+        # field it publishes is in each answer, one at its default too.
+        if self.mode == "serialization" and field["type"] == "dataclass-field":
+            return field.get("serialization_exclude_if") is None
+        return super().field_is_required(field, total)
 
     @override
     def generate_inner(self, schema: Any) -> JsonSchemaValue:
@@ -328,6 +342,12 @@ def as_written(value: Any) -> dict[str, Any]:
 @functools.cache
 def _writer(kind: type) -> TypeAdapter[Any]:
     return TypeAdapter(kind)
+
+
+# When a dataclass a ``Written`` part types last read its source, written as
+# ``ObservedAt`` says, as every answer writes a moment. An alias by assignment,
+# so the field refers to ``ObservedAt`` itself.
+ObservedMoment = Annotated[datetime, PlainSerializer(datetime.isoformat, return_type=ObservedAt, when_used="json")]
 
 
 def json_schema(

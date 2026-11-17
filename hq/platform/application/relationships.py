@@ -9,13 +9,16 @@ relationship: an edge is either in the graph or not on the page.
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import ConfigDict, with_config
 
 from hq.domains.control_plane.observations import OBSERVATIONS
 
+from .describe import Describe
 from .entity_links import EntityLink, entity_link, node_link
 from .facts import readings, unreadable_labels
+from .json_schemas import ObservedMoment
 from .moments import moment
 from .security import Principal
 from .tone import Tone
@@ -24,21 +27,23 @@ from .topology_model import RELATIONS, TopologyEdge, relation_rank
 lazy from .action_links import topology_url
 
 
+@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class Relationship:
     """One thing a node is related to, who says so, and when they last read it."""
 
     entity: EntityLink
-    source: EntityLink | None = None
-    observed_at: datetime | None = None
-    stale: bool = False
+    source: Annotated[EntityLink | None, Describe("The reading it came from; null when nothing says.")] = None
+    observed_at: ObservedMoment | None = None
+    stale: Annotated[bool, Describe("Whether the reading it came from is out of date.")] = False
 
 
+@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class RelationGroup:
-    phrase: str
-    rank: int
-    items: tuple[Relationship, ...]
+    phrase: Annotated[str, Describe("What each relationship in it says from the node, such as `runs on`.")]
+    rank: Annotated[int, Describe("Where the group falls in page order, lowest first.")]
+    items: Annotated[tuple[Relationship, ...], Describe("The other end of each relationship it holds.")]
 
     @property
     def bare(self) -> bool:
