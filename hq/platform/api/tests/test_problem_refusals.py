@@ -6,6 +6,7 @@ from django.test import TestCase, override_settings
 
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
+from hq.platform.application.tests.writers import runbook
 
 from ..testing import ContractClient
 from .tokens import ISSUER, RESOURCE, _serving, _token
@@ -46,12 +47,12 @@ class ProblemRefusalTests(TestCase):
     def test_a_docs_sync_with_a_bad_record_is_400_with_each_problem(self):
         response = self.post(
             "documentation.sync",
-            {"manifest": [{"title": "No ID"}]},
+            {"manifest": [{key: value for key, value in runbook("").items() if key != "doc_id"}]},
             "sync_documentation",
         )
 
         self.assertEqual(response.status_code, 400, response.content)
         error = response.json()["error"]
         self.assertEqual(error["code"], "invalid_input")
-        self.assertEqual(error["details"], [{"doc_id": "", "errors": ["missing doc_id"]}])
+        self.assertIn("doc_id", {problem["loc"][-1] for problem in error["details"]})
         self.assertFalse(DocumentationRecord.objects.exists())

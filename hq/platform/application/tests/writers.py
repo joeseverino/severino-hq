@@ -336,6 +336,21 @@ def keyed(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     return {**(payload or {}), "idempotency_key": f"example-{secrets.token_hex(8)}"}
 
 
+def runbook(doc_id: str) -> dict[str, str]:
+    """A manifest entry the importer takes, for a test whose subject is not the
+    entry (a documentation sync's schema refuses one missing a field)."""
+
+    return {
+        "doc_id": doc_id,
+        "title": "Example",
+        "doc_type": "runbook",
+        "status": "active",
+        "system": "Example service",
+        "environment": "other",
+        "sensitivity": "internal",
+    }
+
+
 def drawn_key(response: HttpResponse, attribute: str, value: str | None = None) -> str:
     """The retry key the page drew in its one write form carrying ``attribute``
     (equal to ``value`` when given), as a browser posts it."""

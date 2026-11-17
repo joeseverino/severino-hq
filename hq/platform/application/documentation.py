@@ -1,14 +1,19 @@
 """Documentation synchronization use case shared by web, MCP, and CLI."""
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import date
 from functools import partial
-from typing import Annotated, Any, Literal, TypedDict, final
+from typing import Annotated, Any, Literal, NotRequired, Required, TypeAliasType, TypedDict, final
 
-from pydantic import ConfigDict, Field, with_config
+from pydantic import ConfigDict, Field
 
+from hq.domains.docs_index import frontmatter_schema
 from hq.domains.docs_index.importer import (
+    CONTENT_DOC_TYPE,
+    CONTENT_FILLED,
+    CONTENT_PRESENT,
     import_manifest_data,
     validate_manifest_data,
 )
@@ -18,12 +23,12 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
 from .answer_fields import CallMessage
-from .command_fields import Describe, Names
+from .command_fields import Describe, Names, NonEmpty
 from .entity_links import EntityLink, entity_link
 from .labels import plural
 from .projection import listing
 from .record_errors import PolicyError, RecordNotFound
-from .record_fields import Notes, PublishedAt, RecordId, one_of
+from .record_fields import PublishedAt, RecordId, one_of
 from .record_saves import Held, Link, linked_saver
 from .references import Mention, Mentions
 from .refusal_status import RefusalEnvelope, refuse
@@ -145,40 +150,126 @@ type LastReviewed = Annotated[date | None, Describe("When the doc last changed i
 type DocNotes = Annotated[str, Describe("Index notes only. No runbook text or secrets.")]
 
 
-# The vault's manifest copies a doc's frontmatter as it is written, so any
-# field may be absent or null, and a key HQ does not read is passed over; the
-# importer holds each entry to the frontmatter schema, so a choice takes any text.
-@with_config(ConfigDict(extra="allow"))
-class ManifestEntry(TypedDict, total=False):
-    """One doc of the vault's manifest: its frontmatter, its path, and what it relates to."""
+# A manifest entry's fields, each as the vault's manifest copies it from a
+# doc's frontmatter: a field the importer requires is sent filled, any other
+# may be absent or null, and a key HQ does not read is passed over. A field
+# its record's command already types is that type, and a doc's id and type
+# are each shape's own.
+_DOC_ID_SAID = Describe("The doc's ID in the vault.")
+_DOC_TYPE_SAID = Describe("What type of doc it is.")
+_ENTRY_FIELDS: dict[str, tuple[Any, Describe] | TypeAliasType] = {
+    "doc_id": (str, _DOC_ID_SAID),
+    "title": (str, Describe("The doc's title.")),
+    "doc_type": (str, _DOC_TYPE_SAID),
+    "system": (str, Describe("The system or service the doc is about.")),
+    "environment": DocEnvironment,
+    "status": DocStatus,
+    "sensitivity": DocSensitivity,
+    "path": (str, Describe("Where the doc is in the vault, which `obsidian_path` stands in for.")),
+    "obsidian_path": (str, Describe("Its path in the vault.")),
+    "github_path": (str, Describe("Its path in a repository.")),
+    "external_url": (str, Describe("Where it is published outside HQ.")),
+    "last_reviewed": (date, Describe("When the doc last changed in the vault.")),
+    "published_at": (date, Describe("When it was published.")),
+    "notes": DocNotes,
+    "related_projects": (list[str], Describe("The slugs of the projects the doc is about.")),
+    "related_assets": (list[str], Describe("The slugs of the assets the doc is about.")),
+    "content_type": (str, Describe("For site content, what it is on the site, such as `portfolio_article` or `page`.")),
+    "slug": (str, Describe("For site content, the slug of the item it mirrors to.")),
+    "published": (bool, Describe("For site content, whether it is live on the site.")),
+    "topic": (str, Describe("For site content, what it is about, in a line.")),
+    "description": (str, Describe("For site content, its description, which `topic` stands in for.")),
+    "excerpt": (str, Describe("For site content, its excerpt, read where it has no description.")),
+    "tags": (list[str], Describe("The doc's tags.")),
+    "technologies": (list[str], Describe("For site content, what it was built with, read as its tags.")),
+}
+# A vault doc's id begins with one of the vault's prefixes; a content entry's
+# belongs to the site, so it need only hold something. A prefix's hyphen is
+# left bare, since a schema's pattern refuses one escaped outside a class.
+_PREFIXES = "|".join(re.sub(r"[^\w-]", r"\\\g<0>", prefix) for prefix in frontmatter_schema.DOC_ID_PREFIXES)
+_VAULT_DOC_ID = rf"^\s*(?:{_PREFIXES})"
 
-    doc_id: DocId | None
-    title: DocumentationTitle | None
-    doc_type: Annotated[str | None, Describe("What type of doc it is, as its frontmatter writes it.")]
-    system: Annotated[str | None, Describe("The system or service the doc is about.")]
-    system_service: Annotated[str | None, Describe("The same as `system`, under the name HQ stores it by.")]
-    environment: Annotated[str | None, Describe("Where that system runs, as its frontmatter writes it.")]
-    status: Annotated[str | None, Describe("Where the doc stands, as its frontmatter writes it.")]
-    sensitivity: Annotated[str | None, Describe("Who may read it, as its frontmatter writes it.")]
-    path: Annotated[str | None, Describe("Where the doc is in the vault, which `obsidian_path` stands in for.")]
-    obsidian_path: ObsidianPath | None
-    github_path: GithubPath | None
-    external_url: ExternalUrl | None
-    last_reviewed: LastReviewed | None
-    published_at: PublishedAt | None
-    notes: Notes | None
-    related_projects: Annotated[list[str] | None, Describe("The slugs of the projects the doc is about.")]
-    related_assets: Annotated[list[str] | None, Describe("The slugs of the assets the doc is about.")]
-    content_type: Annotated[
-        str | None, Describe("For site content, what it is on the site, such as `portfolio_article` or `page`.")
-    ]
-    slug: Annotated[str | None, Describe("For site content, the slug of the item it mirrors to.")]
-    published: Annotated[bool | None, Describe("For site content, whether it is live on the site.")]
-    topic: Annotated[str | None, Describe("For site content, what it is about, in a line.")]
-    description: Annotated[str | None, Describe("For site content, its description, which `topic` stands in for.")]
-    excerpt: Annotated[str | None, Describe("For site content, its excerpt, read where it has no description.")]
-    tags: Annotated[list[str] | None, Describe("The doc's tags.")]
-    technologies: Annotated[list[str] | None, Describe("For site content, what it was built with, read as its tags.")]
+
+# Each field's type, by the component name the document writes it under once.
+_ENTRY_TYPES: dict[str, TypeAliasType] = {}
+
+
+def _entry_type(field: str, value: Any, word: str) -> TypeAliasType:
+    """A manifest field's named type, which each shape taking it alike refers
+    to; one a shape narrows is named with that shape's ``word``."""
+
+    camel = "".join(part.title() for part in field.split("_"))
+    for name in (f"Manifest{camel}", f"Manifest{word}{camel}"):
+        named = _ENTRY_TYPES.setdefault(name, TypeAliasType(name, value))
+        if named.__value__ == value:
+            return named
+    raise ValueError(f"the manifest field {field} has two {word} types")
+
+
+def _entry_shape(name: str, doc: str, *, word: str, doc_type: Any, doc_id: Any, content: Any) -> Any:
+    """One shape of a manifest entry the importer takes: the frontmatter
+    schema's required fields filled, each choice one of its set, and what
+    ``content`` says of the entry's ``content_type``: ``True`` for site
+    content, which carries what it mirrors to, ``""`` for a doc that is not."""
+
+    filled = {*frontmatter_schema.REQUIRED_FIELDS, *(("content_type", *CONTENT_FILLED) if content is True else ())}
+    present = set(CONTENT_PRESENT) if content is True else set()
+    shape: dict[str, Any] = {}
+    for field, declared in _ENTRY_FIELDS.items():
+        typed = {"doc_type": doc_type, "doc_id": doc_id}.get(field)
+        if typed is None and isinstance(declared, TypeAliasType):
+            typed = declared
+        elif typed is None:
+            kind, described = declared
+            rules: tuple[Any, ...] = (NonEmpty(),) if kind in (str, list[str]) and field in filled else ()
+            if field == "content_type" and content == "":
+                kind = Literal[""]
+            typed = _entry_type(field, Annotated[kind, *rules, described], word)
+        if field in filled:
+            shape[field] = Required[typed]
+        elif field in present:
+            shape[field] = Required[typed | None]
+        else:
+            shape[field] = NotRequired[typed | None]
+    entry: Any = TypedDict(name, shape)  # type: ignore[misc]  # built from the frontmatter schema
+    entry.__doc__ = doc
+    entry.__pydantic_config__ = ConfigDict(extra="allow")
+    return entry
+
+
+type ManifestDocType = Annotated[one_of(sorted(frontmatter_schema.DOC_TYPES - {CONTENT_DOC_TYPE})), _DOC_TYPE_SAID]
+type ManifestArticleDocType = Annotated[one_of([CONTENT_DOC_TYPE.value]), _DOC_TYPE_SAID]
+type ManifestVaultDocId = Annotated[str, Field(pattern=_VAULT_DOC_ID), _DOC_ID_SAID]
+type ManifestSiteDocId = Annotated[str, Field(pattern=r"\S"), _DOC_ID_SAID]
+type ManifestEntry = Annotated[
+    (
+        _entry_shape(
+            "ManifestDoc",
+            "A doc of the vault's manifest: its frontmatter, its path, and what it relates to.",
+            word="",
+            doc_type=ManifestDocType,
+            doc_id=ManifestVaultDocId,
+            content=None,
+        )
+        | _entry_shape(
+            "ManifestDraft",
+            "A public article's draft in the vault, which no site item mirrors.",
+            word="Draft",
+            doc_type=ManifestArticleDocType,
+            doc_id=ManifestVaultDocId,
+            content="",
+        )
+        | _entry_shape(
+            "ManifestContent",
+            "Site content: a public article the site item of its slug mirrors.",
+            word="Site",
+            doc_type=ManifestArticleDocType,
+            doc_id=ManifestSiteDocId,
+            content=True,
+        )
+    ),
+    Describe("A doc of the manifest, in the shape its doc type and content take."),
+]
 
 
 @dataclass(frozen=True, slots=True)

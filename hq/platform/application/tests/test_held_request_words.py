@@ -17,7 +17,7 @@ from ..capabilities import capability_registry, execute_capability
 from ..integration_specs import capability_schema
 from ..projects import DEPENDENCY_UPDATES
 from ..security import Capability, Principal
-from .writers import keyed
+from .writers import keyed, runbook
 
 # What a Python dump of a dict or a list leaves in the text.
 DUMPED = ("{", "[", "'")
@@ -54,7 +54,7 @@ class HeldRequestWordsTests(TestCase):
             "documentation.sync",
             keyed(
                 {
-                    "manifest": [{"doc_id": f"rb-example-{index}", "title": "Example"} for index in range(4)],
+                    "manifest": [runbook(f"rb-example-{index}") for index in range(4)],
                     "prune_orphans": True,
                     "confirm_prune": True,
                 }

@@ -50,7 +50,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.services import CONTAINER_KIND
-from hq.platform.application.tests.writers import keyed
+from hq.platform.application.tests.writers import keyed, runbook
 from hq.platform.core import seeds
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.browser.gate import answered
@@ -714,7 +714,7 @@ def _held():
         keyed(
             {
                 "manifest": [
-                    {"doc_id": f"rb-an-example-runbook-with-a-long-name-{index}", "title": "An example runbook"}
+                    {**runbook(f"rb-an-example-runbook-with-a-long-name-{index}"), "title": "An example runbook"}
                     for index in range(12)
                 ],
                 "prune_orphans": True,

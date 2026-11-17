@@ -397,6 +397,7 @@ sources = [
   "**/*.py",
   "docs/Shared-UI.md",
   "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
   # The frames and partials its tables read; an extension's
   # check derives the rest of the template contract as it runs.
   "templates/page.html",
@@ -431,6 +432,7 @@ sources = [
   "**/*.py",
   "hq/platform/api/hq-api.openapi.json",
   "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
@@ -452,6 +454,7 @@ tags = ["fast", "derived"]
 sources = [
   "**/*.py",
   "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
   "controller/api/**",
   "hq/config/controller-connections.json",
   "deploy/systemd/severino-hq-secrets.timer",
@@ -476,6 +479,7 @@ sources = [
   "**/*.py",
   "docs/Connections.md",
   "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
@@ -498,6 +502,7 @@ sources = [
   "**/*.py",
   "docs/Posture.md",
   "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
@@ -520,6 +525,7 @@ sources = [
   "**/*.py",
   "hq/platform/application/hq-procedure.schema.json",
   "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",

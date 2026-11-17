@@ -15,7 +15,7 @@ from hq.platform.application.domains import domain_attention_items
 from hq.platform.application.markup_testing import select, within
 from hq.platform.application.read_models import recent_activity
 from hq.platform.application.security import Capability, Principal, cli_principal
-from hq.platform.application.tests.writers import keyed
+from hq.platform.application.tests.writers import keyed, runbook
 from hq.platform.core import append_only
 from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
@@ -183,9 +183,7 @@ class HeldChangeGroupTests(TestCase):
     def test_a_held_change_is_grouped_as_waiting_for_approval(self):
         CapabilityRule.objects.create(subject="example-agent", capability="documentation.sync", rule="approve")
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION}))
-        held = execute_capability(
-            "documentation.sync", keyed({"manifest": [{"doc_id": "rb-example", "title": "Example"}]}), principal=agent
-        )
+        held = execute_capability("documentation.sync", keyed({"manifest": [runbook("rb-example")]}), principal=agent)
 
         (item,) = [item for item in domain_attention_items() if item["finding"].subject == str(held["approval"]["id"])]
 

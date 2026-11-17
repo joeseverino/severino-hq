@@ -203,13 +203,12 @@ class DashboardQueueTests(TestCase):
         from hq.platform.application.attention import waiting_for_approval
         from hq.platform.application.capabilities import execute_capability
         from hq.platform.application.security import Capability, Principal
-        from hq.platform.application.tests.writers import keyed
+        from hq.platform.application.tests.writers import keyed, runbook
 
         CapabilityRule.objects.create(subject="example-agent", capability="documentation.sync", rule="approve")
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION}))
-        held = execute_capability(
-            "documentation.sync", keyed({"manifest": [{"doc_id": "rb-example", "title": "Example"}]}), principal=agent
-        )["approval"]["id"]
+        asked = execute_capability("documentation.sync", keyed({"manifest": [runbook("rb-example")]}), principal=agent)
+        held = asked["approval"]["id"]
         approve = reverse("control_plane:approval_decide", kwargs={"approval_id": held, "decision": "approve"})
 
         def dashboard(findings, reader=None):
