@@ -299,7 +299,7 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
   };
 
   const open = () => {
-    if (typeof dialog?.showModal !== "function") return false;
+    if (!dialog) return false;
     if (!dialog.open) dialog.showModal();
     input.setAttribute("aria-expanded", "true");
     input.focus();
@@ -616,7 +616,7 @@ document.addEventListener("click", (event) => {
     (!event.target.closest("a, button, input, select, label, [popover]") &&
       event.target.closest("[data-attention-item]")?.querySelector("[data-origin]"));
   const panel = pill && document.getElementById(pill.dataset.origin);
-  if (!panel || !panel.showPopover) return;
+  if (!panel) return;
   event.preventDefault();
   panel.showPopover();
 });

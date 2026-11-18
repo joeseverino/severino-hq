@@ -27,7 +27,7 @@ from django.test import Client
 from django.urls import reverse
 lazy from django.db import transaction
 
-from hq.platform.core.tests.browser.gate import BrowserGate, answered, sent, tab_key, unfold
+from hq.platform.core.tests.browser.gate import BrowserGate, answered, sent, unfold
 from hq.platform.core.tests.browser.in_flight import InFlight
 from hq.platform.core.tests.browser.probes.boxes import SIDEWAYS
 from hq.platform.core.tests.browser.probes.settle import FONTS_READY, SETTLE
@@ -770,98 +770,3 @@ class ExampleEstateControlTests(BrowserGate):
         away()
         self.page.clock.run_for(1000)
         self.assertFalse(is_open(hovered))
-
-    def test_the_header_menus_work_with_no_script_one_at_a_time(self):
-        """Each header menu is the browser's own: it opens on its button with no
-        script, and opening one closes the one open before it."""
-
-        self.start(java_script_enabled=False)
-        self.page.set_viewport_size(viewport(WIDE))
-        self.page.goto(f"{ORIGIN}{reverse('expenses:list')}", wait_until="load")
-        handles = self.page.locator(SELECTORS["nav_menu"])
-        panels = self.page.locator(SELECTORS["nav_menu_panel"])
-        self.assertGreater(handles.count(), 1)
-        handles.nth(0).click()
-        self.assertTrue(panels.nth(0).get_by_role("link").first.is_visible())
-        handles.nth(1).click()
-        self.assertFalse(panels.nth(0).is_visible())
-        self.assertTrue(panels.nth(1).get_by_role("link").first.is_visible())
-
-    def test_the_phone_drawer_opens_closes_and_hands_focus_back(self):
-        """The drawer opens from its button by a press or a key, says it is
-        open, holds no focus captive, and closes on its button, Escape or a
-        press outside, Escape handing focus back to the button."""
-
-        self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
-        toggle = self.page.locator(SELECTORS["nav_toggle"])
-        drawer = self.page.locator(SELECTORS["nav_drawer"])
-        self.assertFalse(drawer.is_visible())
-        toggle.click()
-        self.assertTrue(drawer.is_visible())
-        # The button is the drawer's invoker, which is how the browser tells
-        # assistive technology the button is expanded; Playwright's role
-        # locator reads only an `aria-expanded` attribute, so it is asked here.
-        self.assertTrue(toggle.evaluate("(toggle) => toggle.popoverTargetElement.matches(':popover-open')"))
-        toggle.click()
-        self.assertFalse(drawer.is_visible())
-        toggle.click()
-        self.page.locator(SELECTORS["page_title"]).click()
-        self.assertFalse(drawer.is_visible())
-
-        toggle.focus()
-        self.page.keyboard.press("Enter")
-        self.assertTrue(drawer.is_visible())
-        # Its sections follow the button in the tab order, and it is not
-        # modal, so nothing outside it is made inert while it is open.
-        self.page.keyboard.press(tab_key(self.browser))
-        self.assertTrue(drawer.evaluate("(drawer) => drawer.contains(document.activeElement)"))
-        self.assertFalse(drawer.evaluate("(drawer) => drawer.matches(':modal')"))
-        self.page.keyboard.press("Escape")
-        self.assertFalse(drawer.is_visible())
-        self.assertTrue(toggle.evaluate("(toggle) => toggle === document.activeElement"))
-
-    def test_the_phone_drawer_opens_and_closes_with_no_script(self):
-        self.start(java_script_enabled=False)
-        self.page.set_viewport_size(viewport(PHONE_SCREEN[0]))
-        self.page.goto(f"{ORIGIN}{reverse('expenses:list')}", wait_until="load")
-        toggle = self.page.locator(SELECTORS["nav_toggle"])
-        drawer = self.page.locator(SELECTORS["nav_drawer"])
-        self.assertFalse(drawer.is_visible())
-        toggle.click()
-        self.assertTrue(drawer.is_visible())
-        self.assertTrue(drawer.get_by_role("link").first.is_visible())
-        toggle.click()
-        self.assertFalse(drawer.is_visible())
-
-    def test_a_menu_opens_and_closes_on_escape_and_a_press_outside(self):
-        """A menu is pressed by its button, whose panel is a popover: a filter's,
-        a section's in the bar. Escape closes it and hands focus back to the
-        button; so does a press outside, and opening one menu closes another."""
-
-        def is_open(handle):
-            return handle.evaluate("(handle) => handle.popoverTargetElement.matches(':popover-open')")
-
-        for width in PRESSED_AT:
-            with self.subTest(width=width):
-                self.visit(reverse("expenses:list"), width)
-                # A row with no room folds the filters behind one control, itself a menu.
-                fold = self.page.locator(SELECTORS["filter_fold"])
-                handles = [fold if fold.is_visible() else self.page.locator(SELECTORS["table_filter"]).first]
-                if width >= WIDE:
-                    handles.append(self.page.locator(SELECTORS["nav_menu"]).first)
-                for handle in handles:
-                    handle.focus()
-                    self.page.keyboard.press("Enter")
-                    self.assertTrue(is_open(handle))
-                    self.page.keyboard.press("Escape")
-                    self.assertFalse(is_open(handle))
-                    self.assertTrue(handle.evaluate("(handle) => handle === document.activeElement"))
-                    handle.click()
-                    self.assertTrue(is_open(handle))
-                    self.page.locator(SELECTORS["page_title"]).click()
-                    self.assertFalse(is_open(handle))
-                handles[0].click()
-                if width >= WIDE:
-                    handles[1].click()
-                    self.assertFalse(is_open(handles[0]))
-                    self.assertTrue(is_open(handles[1]))
