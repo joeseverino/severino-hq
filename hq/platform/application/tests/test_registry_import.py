@@ -126,10 +126,6 @@ class ValidationTests(TestCase):
             "appears twice",
         )
 
-    def test_an_unknown_field_is_refused(self):
-        result = self.assert_refused({"projects": [{"slug": "example", "name": "A", "hostname": "example.com"}]})
-        self.assertEqual([problem["loc"] for problem in result["error"]["details"]], [["projects", 0, "hostname"]])
-
     def test_a_bad_choice_is_refused_before_anything_is_written(self):
         result = self.assert_refused(
             {

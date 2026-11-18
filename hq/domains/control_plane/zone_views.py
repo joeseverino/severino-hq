@@ -220,7 +220,7 @@ class ZonePinView(View):
         refused(request, execute_posted(request, PIN, {"kind": DOMAIN, "key": name}))
         # Checked, not trusted: a destination arriving in a form post is a
         # request, and an unchecked one redirects wherever it likes.
-        return redirect(safe_next(request) or reverse("zones:index"))
+        return redirect(safe_next(request, fallback=reverse("zones:index")))
 
 
 def _pin_action(zone) -> PageAction | None:

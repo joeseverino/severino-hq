@@ -88,6 +88,6 @@ the connections can see.
 - `Documentation=` in `deploy/systemd/*`: the repository URL.
 - The outbound `User-Agent` strings in
   `hq/domains/content/content_sync.py` and `controller/providers/glance.go`.
-- [`policy/plugin-admission-v1.json`](../policy/plugin-admission-v1.json):
-  `host`.
+- [`tools/pipeline/admission_policy.py`](../tools/pipeline/admission_policy.py):
+  `host`, then `mise run fix`, which writes `policy/plugin-admission-v1.json`.
 - [`LICENSE`](../LICENSE): the copyright holder.

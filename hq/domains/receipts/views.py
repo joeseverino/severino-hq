@@ -7,7 +7,6 @@ media URL. The ``ReceiptFileView`` streams the file only to authenticated users.
 from functools import cached_property
 from pathlib import Path
 from typing import override
-from urllib.parse import urlencode
 
 from django.db.models import Count
 from django.http import FileResponse, Http404
@@ -31,6 +30,7 @@ from hq.platform.application.money import money
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD, file_taken, serialize_receipt
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
+from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.application.writes import CapabilityFormMixin, CommandFormPage, RecordDeleteMixin
 from hq.platform.core.templatetags.value_tags import breakable
@@ -173,9 +173,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
             return ctx
 
         # With no match, a new expense starts from what the receipt says.
-        ctx["new_expense"] = (
-            f"{reverse('expenses:create')}?{urlencode({'vendor': receipt.vendor, 'cost': receipt.amount})}"
-        )
+        ctx["new_expense"] = with_query(reverse("expenses:create"), {"vendor": receipt.vendor, "cost": receipt.amount})
         # Find potential expenses with the same vendor or same amount.
         potential_expenses = Expense.objects.annotate(receipt_count=Count("receipts")).filter(receipt_count=0)
 

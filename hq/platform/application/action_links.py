@@ -10,7 +10,6 @@ a projection never advertises authority its principal does not hold.
 from collections.abc import Iterable, Mapping
 from dataclasses import MISSING, dataclass, fields
 from typing import Any, Protocol
-from urllib.parse import urlencode
 
 from django.urls import NoReverseMatch
 
@@ -19,6 +18,7 @@ from hq.platform.application.routes import reverse
 from .contracts import Effect, route_url
 from .security import Principal
 from .ui import counted
+from .url_query import with_query
 from .workflow_contracts import ActionLink
 lazy from . import capabilities, outbound_work
 lazy from .pages import command_reach
@@ -105,7 +105,7 @@ def command_url(name: str, target: str = "", *, kinds: Iterable[str] = (), **que
         for each in (value if isinstance(value, tuple) else (value,))
         if each
     ]
-    return f"{url}?{urlencode(params)}" if params else url
+    return with_query(url, params)
 
 
 def command_action(
@@ -139,7 +139,7 @@ def command_action(
         url, answers_get = command_reach(capability, target, variant)
         method = "GET" if answers_get else "POST"
         if url and query:
-            url = f"{url}{'&' if '?' in url else '?'}{urlencode(query)}"
+            url = with_query(url, query)
     return _built(
         name=name,
         # ``variant`` picks one of the words the command declares for its
@@ -221,7 +221,7 @@ def read_now_link(
     return command_action(
         "read_now",
         READ_NOW_CAPABILITY,
-        f"{destination}?{urlencode(params)}" if params else destination,
+        with_query(destination, params),
         method="POST",
         target=connection_ref or kind,
         variant="all" if every_connection else "",
@@ -260,7 +260,7 @@ def topology_url(
         params["depth"] = depth
     if lens:
         params["lens"] = lens
-    return f"{topology}?{urlencode(params)}#{fragment}"
+    return with_query(topology, params, fragment=fragment)
 
 
 @dataclass(frozen=True, slots=True)
@@ -311,10 +311,9 @@ def action_with_return(action: ActionLink, route_name: str) -> ActionLink:
     destination = route_url(route_name)
     if not destination or not action.url:
         return action
-    separator = "&" if "?" in action.url else "?"
     return _built(
         **{field.name: getattr(action, field.name) for field in fields(action) if field.name != "url"},
-        url=f"{action.url}{separator}{urlencode({'next': destination})}",
+        url=with_query(action.url, {"next": destination}),
     )
 
 

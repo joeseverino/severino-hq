@@ -1,0 +1,7 @@
+{% comment %}
+A fact in a table cell as a line, drawn by the cell_line tag. Its first line is
+its words (`line`, value_tags.cell_line) or the markup it encloses, and the
+quiet line under it (`.cell-detail`, figures.css) is a line of its own with no
+break written between them. Its options are its Part's (value_tags,
+docs/Shared-UI.md).
+{% endcomment %}{% if line %}{{ line|safe }}{% else %}<span class="cell-line"{% if lines == 1 %} data-lines="1"{% endif %}>{{ content|safe }}</span>{% endif %}{% if detail %}{% muted css="cell-detail" %}{{ detail|safe }}{% endmuted %}{% endif %}

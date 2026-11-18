@@ -10,10 +10,10 @@ of one: use _activity_calendar.html for what actually happened on given dates.
   <ol class="week-plan">
     {% for day in plan.days %}
       <li class="week-plan-day{% if day.planned %} is-planned{% endif %}">
-        <span class="week-plan-label" aria-hidden="true">{{ day.label|breakable }}</span>
+        <span class="week-plan-label eyebrow" aria-hidden="true">{{ day.label|breakable }}</span>
         <span class="week-plan-mark">
           <span class="visually-hidden">{{ day.full_label|breakable }}: {{ day.detail|default:"nothing scheduled"|breakable }}</span>
-          {% for slot in day.slots %}<i class="chart-series-{{ slot }}" aria-hidden="true"></i>{% endfor %}
+          {% for slot in day.slots %}<i class="swatch series-{{ slot }}" aria-hidden="true"></i>{% endfor %}
         </span>
         {% if day.note %}<span class="week-plan-note" aria-hidden="true">{{ day.note|breakable }}</span>{% endif %}
       </li>

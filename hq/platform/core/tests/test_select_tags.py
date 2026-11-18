@@ -61,7 +61,7 @@ class SelectTagTests(SimpleTestCase):
         toned = _render('{% select "rule" options tone="good" %}')
 
         self.assertEqual(elements(plain, "select")[0].classes, frozenset())
-        self.assertLessEqual({"toned", "toned-good"}, elements(toned, "select")[0].classes)
+        self.assertLessEqual({"toned", "tone-good"}, elements(toned, "select")[0].classes)
 
     def test_a_choice_that_narrows_leads_with_any_of_its_dimension_chosen_by_default(self):
         html = _render('{% select "kind" kinds chosen=kind every="type" %}', kinds=(("host", "Host"),), kind=None)

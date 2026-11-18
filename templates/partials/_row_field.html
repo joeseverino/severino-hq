@@ -9,7 +9,7 @@ control has a name and an id of its own. Its label names it for a screen
 reader alone, since the column's heading names it on the page; its help is
 kept for the control to name, and its errors stand under it.
 {% endcomment %}
-<div class="field compact{% if field.errors %} has-errors{% endif %}">
+<div class="field compact{% if field.errors %} has-errors tone-serious{% endif %}">
   <label class="visually-hidden" for="{{ field.id_for_label }}">{{ field.label|breakable }}</label>
   {{ field }}
   {% if field.help_text %}<p class="visually-hidden"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text|breakable }}</p>{% endif %}

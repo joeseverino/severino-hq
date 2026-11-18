@@ -249,9 +249,32 @@ SMALL_TARGETS = (
 
 
 OVERLAPS = (
-    "() => {"
+    "(floating) => {"
     + DESCRIBE
     + """
+  // What a reader sees of an item is what it draws: its words and the boxes
+  // of what it holds to press or fill in, else its own box, so two items
+  // whose boxes cross are judged by what each draws there. A dialog or a
+  // popover it holds is drawn in the top layer, over the page by design, so
+  // none of what that shows is the item's.
+  const pressed = 'img, svg, canvas, video, iframe, input, select, textarea, button, a.btn, .pill';
+  const own = (el, part) => { const layer = part.closest(floating); return !layer || layer === el || !el.contains(layer); };
+  const drawn = (el) => {
+    const rects = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim() || !node.parentElement.checkVisibility() || !own(el, node.parentElement)) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      rects.push(...range.getClientRects());
+    }
+    for (const part of el.querySelectorAll(pressed)) if (part.checkVisibility() && own(el, part)) rects.push(part.getBoundingClientRect());
+    return rects.length ? rects : [el.getBoundingClientRect()];
+  };
+  const cross = (ra, rb) => [
+    Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left),
+    Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top),
+  ];
   const found = [];
   for (const parent of document.querySelectorAll('main *')) {
     const display = getComputedStyle(parent).display;
@@ -262,9 +285,13 @@ OVERLAPS = (
       for (let j = i + 1; j < items.length; j += 1) {
         const [a, , ra] = items[i];
         const [b, , rb] = items[j];
-        const x = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
-        const y = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
-        if (x > 1 && y > 1) found.push(`${describe(a)} overlaps ${describe(b)} by ${Math.round(x)}x${Math.round(y)}px`);
+        const [x, y] = cross(ra, rb);
+        if (x <= 1 || y <= 1) continue;
+        const inA = drawn(a);
+        const inB = drawn(b);
+        const worst = inA.flatMap((da) => inB.map((db) => cross(da, db))).filter(([dx, dy]) => dx > 1 && dy > 1)
+          .sort((m, n) => n[0] * n[1] - m[0] * m[1])[0];
+        if (worst) found.push(`${describe(a)} overlaps ${describe(b)} by ${Math.round(worst[0])}x${Math.round(worst[1])}px`);
       }
     }
   }
@@ -443,7 +470,7 @@ CHECKS = {
     "sideways": Check(
         (SIDEWAYS, SELECTORS["sideways"]), reader_sees="content past the page's edge or clipped out of its box"
     ),
-    "overlaps": Check(OVERLAPS, reader_sees="one box drawn over another"),
+    "overlaps": Check((OVERLAPS, SELECTORS["floating"]), reader_sees="one box drawn over another"),
     "into a neighbor": Check(INTO_A_NEIGHBOR, reader_sees="what a box holds drawn over the box beside it"),
     "small targets": Check(
         (SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN, SELECTORS["floating"]]),

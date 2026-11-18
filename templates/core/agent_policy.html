@@ -6,20 +6,15 @@ the heading, then what the rules below allow and what they held or refused.
 {% endcomment %}
 {% if agents_paused %}{% firstof "Every agent call is refused." as said %}{% else %}{% firstof "" as said %}{% endif %}
 {% section "Access" lede=said id="agent-access" %}
-  {% url 'core:audit_list' as audit_url %}
+  {% url 'core:audit_list' as audit_url %}{% with_query audit_url awaiting=1 as held_url %}{% with_query audit_url action="denied" as refused_url %}
   {% facts layout="inline" %}
     {% if rule_count == 1 %}{% fact "rule" value=rule_count %}{% else %}{% fact "rules" value=rule_count %}{% endif %}
-    {% if awaiting_count %}{% fact "held for approval" value=awaiting_count url=audit_url|add:"?awaiting=1" %}{% endif %}
-    {% fact "refused in the last day" value=refused_count url=audit_url|add:"?action=denied" %}
+    {% if awaiting_count %}{% fact "held for approval" value=awaiting_count url=held_url %}{% endif %}
+    {% fact "refused in the last day" value=refused_count url=refused_url %}
   {% endfacts %}
 {% aside %}
-  {% url 'agent_access' as agent_access_url %}
   {% if agents_paused %}{% status "Paused" tone="attention" dot=True %}{% else %}{% status "Allowed" tone="good" dot=True %}{% endif %}
-  {% if agents_paused %}
-    {% words "agent.access.set" "off" as resume %}{% button resume agent_access_url post=True name="paused" value="0" look="primary" %}
-  {% else %}
-    {% words "agent.access.set" "on" as pause %}{% button pause agent_access_url post=True name="paused" value="1" %}
-  {% endif %}
+  {% if access_action %}{% include "partials/_page_action.html" with action=access_action only %}{% endif %}
 {% endsection %}
 
 {% comment %}
@@ -91,12 +86,12 @@ it is not blocked, since removal never lifts a block.
                 {% if standing.missing %}<p data-missing>Not granted: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {% if standing.missing|length == 1 %}it{% else %}them{% endif %} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again. {% entity client_setup|outside label="Client setup" %}</p>{% endif %}
               </div>
             </th>
-            <td data-sort="{{ standing.in_force|length }}">{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}{% if standing.beyond_role %}<br>{% muted %}{{ standing.beyond_role|length|breakable }} beyond its person's role{% endmuted %}{% endif %}{% if standing.missing %}<br>{% status standing.missing|length "not granted" tone="attention" pill=False %}{% endif %}</td>
+            <td data-sort="{{ standing.in_force|length }}">{% stack_list %}<li>{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}</li>{% if standing.beyond_role %}<li>{% muted %}{{ standing.beyond_role|length|breakable }} beyond its person's role{% endmuted %}</li>{% endif %}{% if standing.missing %}<li>{% status standing.missing|length "not granted" tone="attention" pill=False %}</li>{% endif %}{% endstack_list %}</td>
             <td>{{ identity.last_seen|when:"ago" }}</td>
             <td data-sort="{{ activity.changes }}">
-              {{ activity.changes|counted:"change" }}
-              {% if activity.refused %}<br>{% status activity.refused|measured:"refused" tone="attention" pill=False %}{% if activity.limited == activity.refused %} {% muted %}for calling too much{% endmuted %}{% elif activity.limited %} {% muted %}{{ activity.limited|breakable }} for calling too much{% endmuted %}{% endif %}{% endif %}
-              {% with streams=standing.streams %}{% if streams.full %}<br>{% status streams.open "of" streams.cap|counted:"stream" "open" tone="attention" pill=False data_streams="full" %} {% muted %}so another is refused{% endmuted %}{% endif %}{% endwith %}
+              {% stack_list %}<li>{{ activity.changes|counted:"change" }}</li>
+              {% if activity.refused %}<li>{% status activity.refused|measured:"refused" tone="attention" pill=False %}{% if activity.limited == activity.refused %} {% muted %}for calling too much{% endmuted %}{% elif activity.limited %} {% muted %}{{ activity.limited|breakable }} for calling too much{% endmuted %}{% endif %}</li>{% endif %}
+              {% with streams=standing.streams %}{% if streams.full %}<li>{% status streams.open "of" streams.cap|counted:"stream" "open" tone="attention" pill=False data_streams="full" %} {% muted %}so another is refused{% endmuted %}</li>{% endif %}{% endwith %}{% endstack_list %}
             </td>
             {% row_actions actions %}
           </tr>
@@ -184,10 +179,10 @@ approved, and a block stops that device alone.
                 </div>
                 {% endif %}{% endwith %}
               </th>
-              <td>{% status device.label tone=device.tone %}{% if device.waits_for %}<br>{% muted %}For {{ device.waits_for|breakable }}{% endmuted %}{% endif %}</td>
+              <td>{% stack_list %}<li>{% status device.label tone=device.tone %}</li>{% if device.waits_for %}<li>{% muted %}For {{ device.waits_for|breakable }}{% endmuted %}</li>{% endif %}{% endstack_list %}</td>
               <td>{{ device.first_seen|when:"ago" }}</td>
               <td>{{ device.last_seen|when:"ago" }}</td>
-              <td data-sort="{{ device.calls }}">{{ device.calls|counted:"call" }}{% if device.refused %}<br>{% status device.refused|measured:"refused" tone="attention" pill=False %}{% endif %}</td>
+              <td data-sort="{{ device.calls }}">{% stack_list %}<li>{{ device.calls|counted:"call" }}</li>{% if device.refused %}<li>{% status device.refused|measured:"refused" tone="attention" pill=False %}</li>{% endif %}{% endstack_list %}</td>
               {% row_actions actions %}
             </tr>
           {% endfor %}
@@ -229,8 +224,10 @@ carries the device permission stands as them. Only theirs, never anybody else's.
   {% else %}
     {% include "partials/_empty_state.html" with message="None registered." %}
   {% endif %}
-  {% words "agent.device.set" "on" as device_verb %}
-  {% include "partials/_form.html" with form=device_form action=device_url next=request.get_full_path verb=device_verb %}
+  {% if device_form %}
+    {% words "agent.device.set" "on" as device_verb %}
+    {% include "partials/_form.html" with form=device_form action=device_url next=request.get_full_path verb=device_verb %}
+  {% endif %}
 {% endsection %}
 
 {% comment %}
@@ -261,7 +258,7 @@ change. Asked for when opened: asking takes the server's SDK into the process.
             {% for item in offer.items %}
               <tr>
                 <th scope="row">
-                  <code>{{ item.name|breakable }}</code>{% if item.reads_only %}<br>{% muted %}Reads only{% endmuted %}{% endif %}
+                  {% cell_line %}<code>{{ item.name|breakable }}</code>{% detail %}{% if item.reads_only %}Reads only{% endif %}{% endcell_line %}
                   {% for paragraph in item.more %}<p class="row-below">{{ paragraph|code_spans }}</p>{% endfor %}
                 </th>
                 <td class="cell-data">{% if item.title %}<strong>{{ item.title|breakable }}</strong> {% endif %}{{ item.summary|code_spans }}</td>
@@ -287,9 +284,14 @@ change. Asked for when opened: asking takes the server's SDK into the process.
 {% endsection %}
 
 {% comment %}
-The rules, one form over their tables (core/_policy_rules.html). The part
+The rules, one form over their tables (core/_policy_rules.html) for whoever
+may save them, and the tables alone, read as they hold, for anyone else. The part
 the fold asks for when opened is drawn here, by its name on this page.
 {% endcomment %}
 {% partialdef every_rule %}{% include "core/_every_rule.html" %}{% endpartialdef %}
-{% include "partials/_form.html" with form=form table_body="core/_policy_rules.html" verb="Save changes" bar=True hooks="data-policy" %}
+{% if rules_settable %}
+  {% include "partials/_form.html" with form=form table_body="core/_policy_rules.html" verb="Save changes" bar=True hooks="data-policy" %}
+{% else %}
+  {% include "core/_policy_rules.html" %}
+{% endif %}
 {% endblock %}

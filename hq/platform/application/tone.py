@@ -15,7 +15,7 @@ class Tone(StrEnum):
 
     Every surface that shows state draws from it, so a state means the same
     thing and looks the same wherever it is rendered: the stylesheet keys on
-    each value (``data-tone``, ``toned-<tone>``). Reserved: a tone never
+    each value (``data-tone``, ``tone-<tone>``). Reserved: a tone never
     doubles as a categorical series color, and is always drawn with its own
     words, so state is never carried by color alone. A thing nothing has read
     is neutral: no fifth tone says "unknown".

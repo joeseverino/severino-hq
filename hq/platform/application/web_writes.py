@@ -31,10 +31,11 @@ from django.http import HttpRequest, HttpResponse
 lazy from django.forms import BaseForm
 lazy from django.utils.html import format_html
 
-lazy from hq.platform.core.templatetags.action_tags import post_button_markup
+lazy from hq.platform.core.templatetags.action_tags import offer_markup
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
-from .capabilities import Ran, run_capability
+from . import capabilities
+from .capabilities import Ran, as_documented, run_capability
 from .forms import file_as_sent
 from .idempotency import (
     KEY,
@@ -64,11 +65,13 @@ def run_posted(
     target: str | int | None = None,
     expected_updated_at: str | None = None,
 ) -> Ran:
-    """Run ``name`` as the signed-in person, under the key their form posted."""
+    """Run ``name`` as the signed-in person, under the key their form posted,
+    with what the form sent as text read in the command's types (``as_documented``)."""
 
+    spec = capabilities.capability_spec(name)
     return run_capability(
         name,
-        payload,
+        payload if spec is None else as_documented(spec.command_type, payload),
         principal=web_principal(request.user),
         target=target,
         expected_updated_at=expected_updated_at,
@@ -137,14 +140,7 @@ def _said(refusal: Refusal, principal: Principal | None) -> str:
     said = format_html('{} <a href="{}">{}</a>', breakable(held.sentence), held.href, breakable(held.link))
     if held.cancel is None:
         return said
-    cancel = held.cancel
-    return format_html(
-        "{} {}",
-        said,
-        post_button_markup(
-            cancel.label, cancel.url, name=cancel.field, value=cancel.value, css=f"{cancel.css} compact"
-        ),
-    )
+    return format_html("{} {}", said, offer_markup(held.cancel, look=f"{held.cancel.look} compact"))
 
 
 def refusal_response(answer: dict[str, Any]) -> HttpResponse:

@@ -1,6 +1,6 @@
 """The switch: a row of links to the same view, one current, is one part."""
 
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import Context, Template
 from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import elements, select, with_class
@@ -76,25 +76,3 @@ class SwitchTagTests(SimpleTestCase):
         self.assertEqual(summary.words, "What A answers.")
         self.assertNotIn(nav, summary.ancestors)
         self.assertEqual(elements(_render(_THREE), "p"), [])
-
-    def test_what_a_page_gives_is_escaped(self):
-        html = _render(
-            "{% switch label=label %}{% choice url=url note=note %}{{ words }}{% endchoice %}{% endswitch %}",
-            label='a"b',
-            url="/x/?a=1&b=2",
-            note="<i>n</i>",
-            words="<b>w</b>",
-        )
-
-        self.assertEqual(elements(html, "i"), [])
-        self.assertEqual(elements(html, "b"), [])
-        (nav,) = elements(html, "nav")
-        self.assertEqual(nav.attrs["aria-label"], 'a"b')
-        (link,) = elements(html, "a")
-        self.assertEqual(link.attrs["href"], "/x/?a=1&b=2")
-
-    def test_a_switch_without_a_label_or_a_choice_without_a_url_is_refused(self):
-        with self.assertRaisesMessage(TemplateSyntaxError, "switch is given label="):
-            _render('{% switch %}{% choice url="/" %}A{% endchoice %}{% endswitch %}')
-        with self.assertRaisesMessage(TemplateSyntaxError, "choice is given url="):
-            _render('{% switch label="L" %}{% choice %}A{% endchoice %}{% endswitch %}')

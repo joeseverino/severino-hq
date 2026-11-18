@@ -527,6 +527,14 @@ sources = [
   "static/fonts/**",
   "static/css/**",
   "tools/__init__.py",
+  "tools/derived.py",
+  "hq/__init__.py",
+  "hq/platform/__init__.py",
+  "hq/platform/core/__init__.py",
+  "hq/platform/core/tests/__init__.py",
+  "hq/platform/core/tests/task.py",
+  "tests/__init__.py",
+  "tests/mise_tasks.py",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -540,6 +548,38 @@ vars = { writes = "static/fonts/inter/inter-variable-latin.woff2" }
 # The subsetter reads the fix flag itself.
 run = "uv run python -m tools.fonts.subset"
 
+["lint:drift-admission-policy"]
+description = "The admission policy names the PLUGIN_API_VERSION the host speaks"
+hide = true
+tags = ["fast", "derived"]
+sources = [
+  "policy/plugin-admission-v1.json",
+  "tools/pipeline/admission_policy.py",
+  "tools/pipeline/plugin_identity.py",
+  "tools/pipeline/__init__.py",
+  "tools/__init__.py",
+  "tools/derived.py",
+  "hq/__init__.py",
+  "hq/platform/__init__.py",
+  "hq/platform/core/__init__.py",
+  "hq/platform/core/tests/__init__.py",
+  "hq/platform/core/tests/task.py",
+  "tests/__init__.py",
+  "tests/mise_tasks.py",
+  "hq/platform/application/plugins.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+vars = { writes = "policy/plugin-admission-v1.json" }
+# The writer reads the fix flag itself.
+run = "uv run python -m tools.pipeline.admission_policy"
+
 ["lint:drift-gitattributes"]
 description = ".gitattributes marks linguist-generated each file a task declares it writes"
 hide = true
@@ -547,6 +587,12 @@ tags = ["fast", "derived"]
 sources = [
   ".gitattributes",
   "tools/gitattributes.py",
+  "tools/derived.py",
+  "hq/__init__.py",
+  "hq/platform/__init__.py",
+  "hq/platform/core/__init__.py",
+  "hq/platform/core/tests/__init__.py",
+  "hq/platform/core/tests/task.py",
   "tools/__init__.py",
   "tests/__init__.py",
   "tests/mise_tasks.py",

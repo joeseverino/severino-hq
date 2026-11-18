@@ -7,11 +7,12 @@ from urllib.parse import parse_qs, unquote, urlsplit
 lazy from dataclasses import replace
 
 from django import template
+from django.template.base import token_kwargs
 from django.template.context import RequestContext
 from django.template.loader import render_to_string
 from django.utils import dateformat, timezone
 from django.utils.html import conditional_escape, format_html
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeData, mark_safe
 lazy from django.conf import settings
 
 from hq.platform.application.describe import Describe
@@ -35,7 +36,7 @@ from hq.platform.application.moments import (
 from hq.platform.application.money import money as _money
 from hq.platform.application.printable import admitted
 from hq.platform.application.ui import MISSING, counted as _counted, measured as _measured, no_value
-from hq.platform.core.template_parts import Option, Part, slotted
+from hq.platform.core.template_parts import Option, Part, SlotsNode, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
 from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
@@ -219,7 +220,7 @@ def _dated_mark(value: date):
         "" if value.year == this_year() else format_html('<span class="timeline-year">{}</span>', breakable(value.year))
     )
     return format_html(
-        '<span class="timeline-month">{}</span><span class="timeline-day">{}</span>{}',
+        '<span class="eyebrow">{}</span><span class="timeline-day">{}</span>{}',
         breakable(dateformat.format(value, "M")),
         breakable(value.day),
         year,
@@ -429,14 +430,13 @@ def entity(
     return format_html('<span data-entity="{}">{}</span>', link.kind_label, label)
 
 
-@register.simple_tag
 def cell_line(text, url="", *, lines=2):
     """One fact in a table cell written as a line (``.cell-line``), a link when
     ``url`` is given: its names held as ``breakable`` holds them. The line asks
     for its whole length around the box that cuts it (``.cut``, figures.css),
     and a cut one reads whole as any cut value does (tables.js, ``markCut``).
     It takes two lines at most, or one (``lines=1``) for a fact that keeps its
-    row as tall as its neighbors."""
+    row as tall as its neighbors. ``{% cell_line text=... %}`` draws it."""
 
     drawn = breakable(text)
     # A name brings its own box; words are cut by the line's box.
@@ -451,6 +451,65 @@ def cell_line(text, url="", *, lines=2):
     if url:
         return format_html('<a class="cell-line"{} href="{}">{}</a>', one, url, inside)
     return format_html('<span class="cell-line"{}>{}</span>', one, inside)
+
+
+def _cell_line_frame(_name: str, given: dict) -> dict:
+    """The partial's variables: the first line drawn from ``text`` when the
+    tag stands alone (the markup it encloses otherwise), and the second line's
+    words held as ``breakable`` holds them unless they are markup already."""
+
+    text, detail = given["text"], given["detail"]
+    line = cell_line(text, given["url"], lines=given["lines"]) if text not in ("", None) else ""
+    below = detail if isinstance(detail, SafeData) else breakable(detail) if detail not in ("", None) else ""
+    return {"line": line, "lines": given["lines"], "detail": below}
+
+
+CELL_LINE = Part(
+    name="cell_line",
+    classes=("cell-line", "cell-detail"),
+    partial="partials/_cell_line.html",
+    parts=("content", "detail"),
+    about=(
+        "A fact in a table cell as a line of its own, and the words said quietly on the line under it: "
+        "given `text=` it encloses nothing, its words a link to `url=`; a line of markup is its block, "
+        "its second line after `{% detail %}`. A second line that is a status, code or a link is a "
+        "`{% stack_list %}` item."
+    ),
+    options={
+        "text": Option(about="Its words, which make it one tag with no end."),
+        "url": Option(about="The page its words link to."),
+        "detail": Option(about="The words of the line under it, said quietly."),
+        "lines": Option(
+            default=2, choices=(1, 2), about="The lines its first line may take: one keeps its row as tall as the rest."
+        ),
+    },
+    bare_with="text",
+    shape=_cell_line_frame,
+    public=True,
+    example='{% cell_line %}{% entity "machine"|entity_of:"example-host-01" %}{% detail %}Docker host{% endcell_line %}',
+)
+
+
+@register.tag(name="cell_line")
+def compile_cell_line(parser, token) -> SlotsNode:
+    bits = token.split_contents()[1:]
+    given = token_kwargs(list(bits), parser)
+    if len(given) != len(bits) or not CELL_LINE.admits(set(given)):
+        raise template.TemplateSyntaxError(CELL_LINE.refused())
+    if CELL_LINE.bare_with in given:
+        return SlotsNode(CELL_LINE, {}, given)
+    if "url" in given:
+        raise template.TemplateSyntaxError("cell_line url= links its text=; a line of markup holds its own link")
+    content = parser.parse(("detail", "endcell_line"))
+    parts = {"content": content, "detail": template.NodeList()}
+    if parser.next_token().contents == "detail":
+        parts["detail"] = parser.parse(("endcell_line",))
+        parser.delete_first_token()
+    return SlotsNode(CELL_LINE, parts, given)
+
+
+# The template contract reads a tag's parameters from what it wraps.
+compile_cell_line.__wrapped__ = CELL_LINE  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
 
 
 def _viewer(context):

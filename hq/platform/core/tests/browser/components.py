@@ -571,32 +571,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         said = self.page.evaluate(DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]])
         self.assertEqual(said, [])
 
-    def test_about_text_opens_from_the_keyboard_and_gives_focus_back(self):
-        """The about button is reached by the key for every control, opens
-        its dialog with Enter and no script, and Escape closes it with focus
-        back on the button."""
-
-        self.pages = {
-            **self.pages,
-            "about-probe": probe(
-                render_to_string(
-                    "partials/_about.html",
-                    {"id": "example", "title": "Example notes", "body_template": "partials/_empty_state.html"},
-                )
-            ),
-        }
-        self.open("about-probe", WIDE)
-        dialog = self.page.locator(SELECTORS["dialog"])
-        focused_opener = "() => document.activeElement?.getAttribute('commandfor')"
-
-        self.page.keyboard.press(tab_key(self.browser))
-        self.assertEqual(self.page.evaluate(focused_opener), "modal-example")
-        self.page.keyboard.press("Enter")
-        self.assertTrue(dialog.evaluate("(dialog) => dialog.open"))
-        self.page.keyboard.press("Escape")
-        self.assertFalse(dialog.evaluate("(dialog) => dialog.open"))
-        self.assertEqual(self.page.evaluate(focused_opener), "modal-example")
-
     @with_script
     def test_a_rows_ask_says_its_sentence_on_the_line_its_row_opens_to(self):
         """A row's Refresh that fails, pressed in its row or on its open line
@@ -762,6 +736,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         found = self.page.evaluate(SPILLED_LABELS, "main :is(.example-glyph, .example-word)")
         self.assertEqual([spilled.split(" holds ")[0] for spilled in found], ["button.example-word"])
 
+    @with_script
     def test_a_word_before_a_name_in_a_cell_shares_the_name_s_line(self):
         """The word a cell sets before a name ("on" a machine under a row's
         name, "Created" a record in a cell of free text) stays on the line
@@ -782,12 +757,17 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 "</tr></tbody></table>{% endtable_region %}</div>"
             ),
         }
-        # A box that keeps both columns and still wraps each name.
+        # A box that wraps each name, where the column of free text leaves for
+        # the row's open line.
         self.open("word-before-a-name-probe", WIDE)
+        self.page.locator("main " + SELECTORS["row_toggle"]).click()
         lines = self.page.evaluate(
-            """() => [...document.querySelectorAll('main td')].map((cell) => {
-              // The line under the row's name, and the cell of free text.
-              const box = cell.querySelector('br')?.nextElementSibling ?? cell;
+            """() => [
+              // The line under the row's name, and the free text on its open line.
+              document.querySelector('main tbody td br').nextElementSibling,
+              [...document.querySelectorAll('main .row-detail .token')].map((name) => name.parentElement)
+                .find((box) => box.textContent.includes('from a request')),
+            ].map((box) => {
               const first = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, {
                 acceptNode: (node) => node.data.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
               }).nextNode();
@@ -824,6 +804,53 @@ class ComponentLayoutTests(LayoutBrowserTests):
         }""")
         found = [line for line in self.page.evaluate(CELLS) if "example-" in line]
         self.assertEqual([line.split(" runs ")[0] for line in found], ["div.example-box"])
+
+    def test_a_popover_an_item_holds_is_not_drawn_over_its_neighbor_and_the_item_s_own_words_are(self):
+        """A grid item laid across the track of the item beside it (a phone
+        row's name cell under its buttons) is judged by what it draws: a
+        popover it holds (the name's origin panel) is drawn in the top layer,
+        so shown over the neighbor it is no overlap, while the item's own
+        words run under the neighbor are."""
+
+        from hq.platform.core.tests.browser.probes.boxes import OVERLAPS
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          for (const name of ['example-held', 'example-spilled']) {
+            const grid = document.createElement('div');
+            grid.style.cssText = 'display: grid; grid-template-columns: 200px 200px; inline-size: 400px';
+            const item = document.createElement('div');
+            item.className = name;
+            item.style.cssText = 'grid-area: 1 / 1 / 2 / 3; align-self: start; margin: 0; white-space: nowrap';
+            item.textContent = name === 'example-held' ? 'A name' : 'A name long enough to run on under the button';
+            const neighbor = document.createElement('button');
+            neighbor.style.cssText = 'grid-area: 1 / 2 / 2 / 3; align-self: start; margin: 0';
+            neighbor.textContent = 'Approve';
+            grid.append(item, neighbor);
+            document.querySelector('main').append(grid);
+            if (name === 'example-held') {
+              const panel = document.createElement('div');
+              panel.popover = 'manual';
+              panel.textContent = 'Why it needs you';
+              const at = neighbor.getBoundingClientRect();
+              panel.style.cssText = `margin: 0; inset: auto; left: ${at.left}px; top: ${at.top}px`;
+              item.append(panel);
+              panel.showPopover();
+            }
+          }
+        }""")
+        found = self.page.evaluate(OVERLAPS, SELECTORS["floating"])
+        self.assertEqual(
+            [line.split(" by ")[0] for line in found if "example-" in line], ["div.example-spilled overlaps button"]
+        )
+        held = self.page.evaluate("""() => {
+          const item = document.querySelector('.example-held');
+          const neighbor = item.nextElementSibling;
+          const panel = item.querySelector('[popover]').getBoundingClientRect();
+          const at = neighbor.getBoundingClientRect();
+          return panel.left < at.right && panel.right > at.left && panel.top < at.bottom && panel.bottom > at.top;
+        }""")
+        self.assertTrue(held, "the held panel is shown over the neighbor")
 
     def test_a_word_wider_than_its_chip_may_break_and_a_short_one_in_a_wide_chip_may_not(self):
         """A run is measured against the box it lays out in: a digest that

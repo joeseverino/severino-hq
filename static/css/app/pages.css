@@ -43,11 +43,11 @@
 .topology-node-list { padding-block-end: var(--space-6); }
 .topology-lane:not(:has(.topology-node:not([hidden]))) { display: none; }
 .topology-node-list > * { break-inside: avoid; }
-.topology-kind-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.topology-kind-mark { background: var(--muted); }
 .topology-kind-controller { background: var(--topology-controller); }
 .topology-kind-connection { background: var(--accent-2); }
 .topology-kind-ability { background: var(--topology-ability); }
-.topology-kind-resource { background: var(--ok); }
+.topology-kind-resource { background: var(--topology-resource); }
 .topology-kind-target { background: var(--topology-target); }
 .topology-kind-dependency { background: var(--muted-2); }
 .topology-node-list > * + * { margin-top: var(--space-3); }
@@ -58,7 +58,7 @@
 .topology-node {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
   gap: 1px var(--space-3); padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--line); border-left: 3px solid var(--toned);
+  border: 1px solid var(--line); border-left: 3px solid var(--tone-mark);
   border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-sm);
   cursor: pointer; scroll-margin-top: var(--topology-lane-head);
   transition: border-color 100ms ease, box-shadow 100ms ease, opacity 100ms ease;
@@ -73,12 +73,12 @@
 .topology-node-select {
   grid-column: 2; grid-row: 2;
   display: inline-flex; align-items: center; gap: var(--space-1); min-height: 28px;
-  padding: 0 var(--space-2); border-radius: 999px; color: var(--muted); text-decoration: none;
+  padding: 0 var(--space-2); border-radius: var(--radius-pill); color: var(--muted); text-decoration: none;
 }
 .topology-node-select::after { content: "\203A" / ""; font-size: var(--text-sm); line-height: 1; }
 .topology-node-select:hover, .topology-node-select:focus-visible, .topology-node-select[aria-current] { color: var(--accent); }
 .topology-node-degree {
-  min-width: 20px; padding: var(--space-1) var(--space-2); border-radius: 999px; background: var(--surface-2);
+  min-width: 20px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); background: var(--surface-2);
   color: inherit; font-size: var(--text-3xs); text-align: center; font-variant-numeric: tabular-nums;
 }
 .topology-detail {
@@ -157,20 +157,18 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
 }
 .ask.ask-quiet[hidden] { display: none; }
 /* The dot's size, which a page's note keeps room for beside its words (cuts.css). */
-.visit-status, .visit-slot { --visit-dot: 6px; }
+.visit-status, .visit-slot { --mark-size: 6px; }
 .visit-status { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; overflow-wrap: anywhere; }
-/* A dot before what it says, in the tone of how the read stands: moving
+/* A dot before what it says, in the tone its note carries (ask.js): moving
    while it is read, the way a live reading does (connection.css). A page's
-   note stands apart from its ask, so it reads the state off the form it
-   names. */
+   note stands apart from its ask, so it reads whether the read is under way
+   off the form it names. */
 .visit-status:not(:empty)::before {
-  content: ""; display: inline-block; inline-size: var(--visit-dot); block-size: var(--visit-dot);
-  margin-inline-end: var(--space-4); border-radius: 50%; vertical-align: .1em;
+  content: "" / ""; margin-inline-end: var(--space-4); vertical-align: .1em;
   background: var(--muted-2);
 }
+.visit-status:is(.tone-good, .tone-attention, .tone-serious)::before { background: var(--tone-mark); }
 .visit-status:is(.ask[aria-busy="true"] > *, :root:has(.ask[aria-busy="true"] > #page-visit) [form="page-visit"])::before { background: var(--accent); animation: conn-pulse 1.8s ease-in-out infinite; }
-.visit-status:is(.ask[data-ask-state="done"] > *, :root:has(.ask[data-ask-state="done"] > #page-visit) [form="page-visit"])::before { background: var(--ok); }
-.visit-status:is(.ask[data-ask-state="failed"] > *, :root:has(.ask[data-ask-state="failed"] > #page-visit) [form="page-visit"])::before { background: var(--danger); }
 /* An ask: a button and how the work it asked for stands (partials/_ask.html).
    It lays nothing out of its own, so its button stands wherever a button
    does. What it says takes a line under the row the button stands in, as
@@ -205,7 +203,9 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
   .ask-why { display: inline; overflow-wrap: anywhere; }
 }
 .ask-elapsed { font-variant-numeric: tabular-nums; }
-.ask[data-ask-state="failed"] .ask-note { color: var(--danger); }
+/* A note that says the work went wrong is in its tone; one that went well
+   stays quiet. */
+.ask-note:is(.tone-attention, .tone-serious) { color: var(--tone-mark); }
 /* Busy keeps the button focusable, so it is marked rather than disabled. */
 .ask [aria-disabled="true"],
 form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity: .6; }

@@ -21,7 +21,7 @@ held request writes nothing and queues nothing by design.
 {% if awaiting_approval %}
   {% notice tone="warning" title=awaiting_approval|length|counted:"change waiting for your approval,changes waiting for your approval" %}
     <p>Requested by {% for who in awaiting_approval %}{% with mark=forloop.last|then:".|;" %}{{ who.words|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Nothing is written or queued yet.</p>
-    {% url 'core:audit_list' as audit_url %}<p>{% button "Review and decide" audit_url|add:"?awaiting=1" look="compact primary" %}</p>
+    {% url 'core:audit_list' as audit_url %}{% with_query audit_url awaiting=1 as held_url %}<p>{% button "Review and decide" held_url look="compact primary" %}</p>
   {% endnotice %}
 {% endif %}
 
@@ -59,8 +59,7 @@ declaration's machinery: the controller's actions are the buttons above, and
           {% for consumer in display_consumers %}
             <tr>
               <td>
-                <strong>{% if consumer.url %}<a href="{{ consumer.url }}">{{ consumer.name|breakable }}</a>{% else %}{{ consumer.name|breakable }}{% endif %}</strong>
-                <br>{% muted %}through {% entity "connection"|entity_of:consumer.connection_ref %}{% endmuted %}
+                {% cell_line %}<strong>{% if consumer.url %}<a href="{{ consumer.url }}">{{ consumer.name|breakable }}</a>{% else %}{{ consumer.name|breakable }}{% endif %}</strong>{% detail %}through {% entity "connection"|entity_of:consumer.connection_ref %}{% endcell_line %}
               </td>
               <td>{% for domain in consumer.display_domains %}{% entity "service"|entity_of:domain mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</td>
             </tr>
@@ -222,13 +221,12 @@ certificate, so the relation reads from both ends.
               <td><strong>{{ publication.target|breakable }}</strong></td>
               <td>
                 {% if publication.detail %}
-                  {% status "Not saved" tone="serious" %}
-                  <br>{% muted %}{{ publication.detail|breakable }}{% endmuted %}
+                  {% stack_list %}<li>{% status "Not saved" tone="serious" %}</li><li>{% muted %}{{ publication.detail|breakable }}{% endmuted %}</li>{% endstack_list %}
                 {% elif publication.written %}
-                  {% status "Saved" tone="good" %}
+                  {% stack_list %}<li>{% status "Saved" tone="good" %}</li>
                   {% if publication.fields or publication.material == "written" %}
-                    <br>{% muted %}{% if publication.material == "written" %}certificate, key{% if publication.fields %}, {% endif %}{% endif %}{% for field in publication.fields %}{{ field|lower|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}
-                  {% endif %}
+                    <li>{% muted %}{% if publication.material == "written" %}certificate, key{% if publication.fields %}, {% endif %}{% endif %}{% for field in publication.fields %}{{ field|lower|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}</li>
+                  {% endif %}{% endstack_list %}
                 {% else %}
                   {% status "Already up to date" tone="good" %}
                 {% endif %}
@@ -256,7 +254,7 @@ one thing worth doing then is reading what it was. The certificate's link only w
 saying a thing cannot be done yet is a status report filed in the wrong place.
 {% endcomment %}
 {% muted element="p" %}
-  <a class="subtle-link" href="{% url 'core:audit_list' %}?about={{ resource.key|urlencode }}">Audit log</a>{% dot %}<a class="subtle-link" href="{% url 'control_plane:report_download' resource.key %}">Download JSON</a>{% if resource.status.certificate_pem %}{% dot %}<a class="subtle-link" href="{% url 'control_plane:certificate_download' resource.key %}">Download PEM</a>
+  {% url 'core:audit_list' as audit_url %}<a class="subtle-link" href="{% with_query audit_url about=resource.key %}">Audit log</a>{% dot %}<a class="subtle-link" href="{% url 'control_plane:report_download' resource.key %}">Download JSON</a>{% if resource.status.certificate_pem %}{% dot %}<a class="subtle-link" href="{% url 'control_plane:certificate_download' resource.key %}">Download PEM</a>
   {% endif %}
 {% endmuted %}
 

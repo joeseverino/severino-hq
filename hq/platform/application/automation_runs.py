@@ -10,7 +10,6 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, make_dataclass, replace
 from functools import lru_cache, partial
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
-from urllib.parse import urlencode
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
 from django.db import transaction
@@ -19,6 +18,7 @@ from django.utils.text import get_text_list
 from pydantic import AfterValidator, Field, StrictStr, StringConstraints
 
 from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
+from hq.platform.application.url_query import with_query
 from hq.platform.core.digests import digest
 lazy from hq.domains.control_plane.models import (
     ApprovalRequest,
@@ -756,7 +756,7 @@ def about(manifest: OperationManifest, principal: Principal) -> CommandAbout:
         CommandFact("Adopted commit", manifest.revision[:SHORT_REVISION]),
         CommandFact("Playbook file", manifest.playbook),
     )
-    every = f"{reverse('jobs:list')}?{urlencode({'kind': capability_name(manifest.id)})}"
+    every = with_query(reverse("jobs:list"), {"kind": capability_name(manifest.id)})
     sections = (
         _held_runs(manifest, principal),
         recent_work(recent_runs(manifest.id), by_machine=False, more_url=every, principal=principal),

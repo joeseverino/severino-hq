@@ -43,3 +43,15 @@ class CalendarIntervalBoundsTests(TestCase):
                 except ValidationError:
                     held = False
                 self.assertEqual(said, held)
+
+    def test_a_title_says_exactly_what_its_model_refuses(self):
+        field = fields(capability_schema(capability_registry()["calendar.entry.create"]))["title"]
+        for title in ("", " ", "\t", "\x00", " \x00a", "a\x00", " a ", "x" * 160, "x" * 161):
+            with self.subTest(title=title):
+                said = Draft202012Validator(field).is_valid(title)
+                try:
+                    Entry(title=title, starts_on=date(2026, 7, 1)).full_clean()
+                    held = True
+                except ValidationError as error:
+                    held = "title" not in error.message_dict
+                self.assertEqual(said, held)

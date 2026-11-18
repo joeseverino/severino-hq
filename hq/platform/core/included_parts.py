@@ -22,9 +22,9 @@ CHART = _part(
     "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from "
     "`hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`.",
     *("bar-chart", "chart-axis", "chart-band-*", "chart-category", "chart-cats", "chart-dot", "chart-frame"),
-    *("chart-frame-dense", "chart-grid", "chart-hit", "chart-labels", "chart-legend", "chart-line", "chart-line-*"),
+    *("chart-frame-dense", "chart-grid", "chart-hit", "chart-labels", "chart-legend", "chart-line"),
     *("chart-mark", "chart-mark-label", "chart-path", "chart-path-frame", "chart-path-marker", "chart-path-scale"),
-    *("chart-path-segment", "chart-scroll", "chart-series-*", "chart-tick", "chart-trend", "line-chart"),
+    *("chart-path-segment", "chart-scroll", "chart-tick", "chart-trend", "line-chart", "series-*"),
     pieces=("partials/_chart_legend.html", "partials/_chart_path.html"),
     public=True,
 )
@@ -41,7 +41,7 @@ MONTH_GRID = _part(
     *("is-*", "is-all-day", "is-compact", "is-end", "is-gap", "is-outside", "is-past", "is-selected", "is-start"),
     *("is-today", "is-weekend", "month-date", "month-day", "month-day-head", "month-grid", "month-item"),
     *("month-item-dot", "month-mark", "month-more", "month-of", "month-span", "month-week", "month-weekday"),
-    "series-*",
+    draws=(CHART,),
     example='{% section "Example month" %}{% include "partials/_month_grid.html" %}{% endsection %}',
 )
 WEEK_PLAN = _part(
@@ -83,7 +83,7 @@ READING_AGE = _part(
 PATH_HOPS = _part(
     "path_hops",
     "The hops a request takes to a service, each with the proof HQ holds of it.",
-    *("hop-body", "hop-icon", "hop-label", "hop-proof-key", "is-attention", "is-proven", "is-unknown"),
+    *("hop-body", "hop-icon", "hop-label", "hop-proof-key", "is-unknown"),
     *("path-proof-note", "request-path", "route"),
 )
 RESOLUTION_WORKFLOW = _part(
@@ -130,7 +130,7 @@ PARTS = (
         "activity_calendar",
         "One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`.",
         *("activity-calendar", "calendar-controls", "calendar-date", "calendar-day", "calendar-dot"),
-        *("calendar-key-missed", "calendar-legend", "calendar-marks", "calendar-period", "calendar-weekday"),
+        *("calendar-legend", "calendar-marks", "calendar-period", "calendar-weekday"),
         *("is-filler", "is-missed"),
         draws=(CHART, MONTH_GRID, WEEK_PLAN),
         public=True,
@@ -163,8 +163,8 @@ PARTS = (
     _part(
         "calendar_sources",
         "The calendar's sources, each a toggle with its color swatch.",
-        *("calendar-source", "calendar-source-failure", "calendar-source-note", "calendar-sources", "calendar-swatch"),
-        draws=(MONTH_GRID,),
+        *("calendar-source", "calendar-source-failure", "calendar-source-note", "calendar-sources"),
+        draws=(CHART, MONTH_GRID),
     ),
     _part(
         "certificate_mark",
@@ -198,7 +198,7 @@ PARTS = (
         "connection_peering",
         "The connection page's peering of you, the link and HQ.",
         *("conn-carriage", "conn-carriage-*", "conn-headline", "conn-link", "conn-link-*", "conn-link-line"),
-        *("conn-peer", "conn-peer-name", "conn-peer-role", "conn-peering", "conn-peering-frame", "conn-row-note"),
+        *("conn-peer", "conn-peer-name", "conn-peering", "conn-peering-frame", "conn-row-note"),
         "conn-sub",
     ),
     _part(
@@ -358,7 +358,7 @@ PARTS = (
         partial="projects/_repository_postures.html",
         about="Each repository's checks as a meter of those met.",
         classes=(
-            *("is-met", "is-unmet", "posture-access", "posture-meter", "posture-meter-break", "posture-repo-name"),
+            *("posture-access", "posture-meter", "posture-meter-break", "posture-repo-name"),
             *("posture-repos", "posture-score"),
         ),
         draws=(MONTH_GRID,),

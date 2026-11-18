@@ -8,6 +8,7 @@ from dataclasses import dataclass, fields as dataclass_fields, is_dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Any, TypeAliasType, Union, get_args, get_origin, is_typeddict
 
+from django.db.models import BigIntegerField
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from .contracts import Effect
@@ -27,18 +28,32 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class TargetKind:
-    """How a declared target binds to and is coerced for a capability."""
+    """How a declared target binds to and is coerced for a capability, and
+    the pattern a text target of the kind matches whole, which every door
+    refuses the rest by and the API document states."""
 
     keyword: str
     coerce: Callable[[Any], Any]
+    pattern: str = ""
 
+
+# What an integer target may be sent as besides a number: the digits of an
+# id, a digit fewer than the most a record's id may be, so every one is an id
+# the number form takes.
+INTEGER_TARGET = rf"^[1-9][0-9]{{0,{len(str(BigIntegerField.MAX_BIGINT)) - 2}}}$"
+
+# A client the identity provider registered. A client known only by a Client
+# ID Metadata Document is named by a URL, which this refuses, so one opt-in
+# covering every such client can never reach a person's standing.
+REGISTERED_CLIENT_ID = r"^[A-Za-z0-9._-]+$"
 
 # One declaration drives spec validation, handler binding and request coercion.
 TARGET_KINDS: dict[str, TargetKind] = {
     "slug": TargetKind("current_slug", str),
     "doc_id": TargetKind("current_doc_id", str),
-    "integer": TargetKind("current_id", int),
+    "integer": TargetKind("current_id", int, INTEGER_TARGET),
     "key": TargetKind("current_key", str),
+    "client_id": TargetKind("current_client_id", str, REGISTERED_CLIENT_ID),
 }
 
 
@@ -73,8 +88,8 @@ def command_schema(command_type: type) -> dict[str, Any]:
 # request fingerprint names, so a key never replays across contracts.
 CURRENT_API_VERSION = 2
 
-# The one retry field every capability that changes or queues something takes,
-# the header that is its other spelling, and the one shape both hold to.
+# The one retry field every capability that changes or queues something takes
+# over MCP, the header the machine API takes it in, and the one shape both hold to.
 IDEMPOTENCY_FIELD = "idempotency_key"
 IDEMPOTENCY_HEADER = "Idempotency-Key"
 IDEMPOTENCY_KEY_LENGTH = 128
@@ -89,10 +104,9 @@ IDEMPOTENCY_KEY_SCHEMA: dict[str, Any] = {
 IDEMPOTENCY_FIELD_SCHEMA: dict[str, Any] = {
     **IDEMPOTENCY_KEY_SCHEMA,
     "description": (
-        f"One key per logical change, kept when it is retried: a repeat returns the first result instead of "
-        f"acting again. It is sent as the payload's `{IDEMPOTENCY_FIELD}` or the `{IDEMPOTENCY_HEADER}` header; "
-        "a change needs one of the two, and is refused `idempotency_key_required` with neither. Only the host's "
-        "shell is not asked."
+        "One key per logical change, kept when it is retried: a repeat returns the first result instead of "
+        "acting again. A change sent without one is refused `idempotency_key_required`; only the host's shell "
+        "is not asked."
     ),
 }
 
@@ -428,6 +442,26 @@ def typed_keys(kind: type) -> tuple[str, ...]:
 
 
 @dataclass(frozen=True, slots=True)
+class ListRead:
+    """A resource's list read, declared whole: the reader that answers it,
+    the query it takes, the TypedDict one item is whole (``fields=*``), and
+    the keys each item keeps when the caller names none, so a page costs what
+    it shows (every key of ``item`` where it names none). A list answers only
+    its item's keys, and the API document types each item by it."""
+
+    # It may come from an extension, so its result is checked at the call
+    # (application.resources) rather than trusted from the annotation.
+    reader: Callable[..., object]
+    query: type[BaseModel]
+    item: type
+    fields: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.fields and is_typeddict(self.item):
+            object.__setattr__(self, "fields", typed_keys(self.item))
+
+
+@dataclass(frozen=True, slots=True)
 class ResourceSpec(Requires):
     """One declaration of a readable domain and every operation it supports."""
 
@@ -435,10 +469,8 @@ class ResourceSpec(Requires):
     label: str
     summary: str
     required_capability: Capability | str | tuple[Capability | str, ...]
-    # Handlers may come from an extension, so their result is checked at the
-    # call (application.resources) rather than trusted from the annotation.
-    list_handler: Callable[..., object] | None = None
-    list_query_type: type[BaseModel] | None = None
+    listing: ListRead | None = None
+    # Like a list's handler, checked at the call.
     detail_handler: Callable[..., object] | None = None
     identifier: str | None = None
     # A type, or one an ``Annotated`` bounds (``RecordId``).
@@ -452,15 +484,5 @@ class ResourceSpec(Requires):
     # The handlers also take ``principal=``: the answer depends on what the
     # caller may see, not only on whether it may read the resource.
     pass_principal: bool = False
-    # The TypedDict one item of a list read is whole (``fields=*``): a list
-    # answers only its keys, and the API document types each item by it.
-    item_type: type | None = None
-    # The fields each item keeps when the caller names none, so a page costs
-    # what it shows; every key of ``item_type`` where the spec names none.
-    list_fields: tuple[str, ...] = ()
     # The TypedDict a read of one record answers.
     record_type: type | None = None
-
-    def __post_init__(self) -> None:
-        if self.item_type is not None and not self.list_fields and is_typeddict(self.item_type):
-            object.__setattr__(self, "list_fields", typed_keys(self.item_type))

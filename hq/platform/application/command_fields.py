@@ -12,8 +12,10 @@ are plain values rather than pydantic's ``Field``, so a module that declares
 a command loads no validation library at startup.
 """
 
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from datetime import date
 from typing import TYPE_CHECKING, Annotated, Any, TypeAliasType, get_args, get_origin, get_type_hints
 
 from django.core.exceptions import ValidationError
@@ -201,6 +203,28 @@ class Upload:
 
     def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
         return {**handler(schema), UPLOAD: True}
+
+
+_ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+@dataclass(frozen=True, slots=True)
+class IsoDay:
+    """A day sent as the ISO 8601 date its schema's ``format: date`` says.
+    Pydantic would read a number, or a text of digits, as a Unix time."""
+
+    def __get_pydantic_core_schema__(self, source: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
+        return core_schema.no_info_before_validator_function(_iso_day, handler(source))
+
+
+def _iso_day(value: object) -> object:
+    if isinstance(value, date) or (isinstance(value, str) and _ISO_DAY.fullmatch(value)):
+        return value
+    raise PydanticCustomError("date_parsing", "Input should be an ISO 8601 date, YYYY-MM-DD")
+
+
+# The type of every day a caller sends.
+Day = Annotated[date, IsoDay()]
 
 
 # A delete's confirmation: the identifier of what it deletes, sent again, so

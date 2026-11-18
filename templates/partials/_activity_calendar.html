@@ -11,8 +11,8 @@ can be linked to directly and works without JavaScript.
   <div class="calendar-legend">
     {% if calendar.series %}
       <div class="chart-legend" aria-label="Legend">
-        {% for series in calendar.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label|breakable }}</span>{% endfor %}
-        <span><i class="calendar-key-missed" aria-hidden="true"></i>Missed</span>
+        {% for series in calendar.series %}<span><i class="swatch series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label|breakable }}</span>{% endfor %}
+        <span><i class="swatch calendar-dot is-missed" aria-hidden="true"></i>Missed</span>
       </div>
     {% endif %}
     {% if calendar.kept %}<span class="count">{{ calendar.kept|measured:"planned days kept" }}</span>{% endif %}
@@ -24,7 +24,7 @@ can be linked to directly and works without JavaScript.
     <caption class="visually-hidden">{% if calendar.period_label %}{{ calendar.title|breakable:"," }} {{ calendar.period_label|breakable:"." }}{% else %}{{ calendar.title|breakable:"." }}{% endif %} {{ calendar.description|breakable }}</caption>
     <thead>
       <tr>
-        {% for day in calendar.weeks.0 %}<th scope="col" class="calendar-weekday"><span aria-hidden="true">{{ day.when|when:"initials" }}</span><span class="visually-hidden">{{ day.when|when:"weekday" }}</span></th>{% endfor %}
+        {% for day in calendar.weeks.0 %}<th scope="col" class="calendar-weekday eyebrow"><span aria-hidden="true">{{ day.when|when:"initials" }}</span><span class="visually-hidden">{{ day.when|when:"weekday" }}</span></th>{% endfor %}
       </tr>
     </thead>
     <tbody>
@@ -39,9 +39,9 @@ can be linked to directly and works without JavaScript.
                 {% comment %}Without this a screen reader gets a grid of bare numbers.{% endcomment %}
                 <span class="visually-hidden">{{ day.when|when_text:"day" }}: {{ day.detail|default:"nothing logged"|breakable }}</span>
                 <span class="calendar-marks" aria-hidden="true">
-                  {% for slot in day.slots %}<i class="calendar-dot chart-series-{{ slot }}"></i>{% endfor %}
-                  {% if day.state == "missed" %}<i class="calendar-dot is-missed"></i>{% endif %}
-                  {% if day.state == "planned" %}<i class="calendar-dot is-planned"></i>{% endif %}
+                  {% for slot in day.slots %}<i class="swatch calendar-dot series-{{ slot }}"></i>{% endfor %}
+                  {% if day.state == "missed" %}<i class="swatch calendar-dot is-missed"></i>{% endif %}
+                  {% if day.state == "planned" %}<i class="swatch calendar-dot is-planned"></i>{% endif %}
                 </span>
               </td>
             {% endif %}

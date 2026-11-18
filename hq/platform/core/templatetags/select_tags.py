@@ -48,6 +48,6 @@ def select(name, options, chosen=None, label="", id="", tone="", every="", submi
         "id": id,
         "label": label,
         "choices": [(str(value or ""), words, str(value or "") == chosen) for value, words in options],
-        "classes": f"toned toned-{tone}" if tone else "",
+        "classes": f"toned tone-{tone}" if tone else "",
         "submit_on_change": submit_on_change,
     }

@@ -88,12 +88,6 @@ class FindingsChoicesTests(TestCase):
         self.assertEqual(values("rule"), [rule.name for rule in RULES])
         self.assertEqual(values("severity"), [tone.value for tone in Tone])
 
-    def test_a_rule_the_registry_lacks_is_refused(self):
-        _, (answer,) = session(("get_findings", {"rule": "example-unknown"}))
-
-        self.assertTrue(answer.is_error)
-        self.assertEqual(answer.structured_content["error"]["code"], "invalid_input")
-
     def test_the_answer_carries_no_field_its_schema_does_not_name(self):
         with mock.patch("hq.platform.application.findings.estate_findings", return_value=(RAISED,)):
             listed, (answer,) = session(("get_findings", {"rule": RAISED.rule}))

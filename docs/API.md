@@ -418,11 +418,11 @@ renders, and a parity test holds the two equal.
 Every list and detail read takes `fields`, a field mask in the AIP-161
 convention: `?fields=observed_at,items.waiting` over HTTP, a list of paths to
 the MCP tools and the SDK. Absent, a detail read returns the whole record. A
-list read keeps each item to its kind's `list_fields`, declared once on its
-`ResourceSpec` and named by `describe_resources` as the list's `fields`, so a
-page costs what it shows. `*` alone keeps the whole item: the keys of the
-list's `item_type`, which is the only shape a list answers and the one the
-document types its items by. Selection happens after authorization.
+list read keeps each item to its kind's list fields, declared once on its
+`ResourceSpec`'s `ListRead` and named by `describe_resources` as the list's
+`fields`, so a page costs what it shows. `*` alone keeps the whole item: the
+keys of the list's item type, which is the only shape a list answers and the
+one the document types its items by. Selection happens after authorization.
 
 | Path | Selects |
 |---|---|
@@ -600,7 +600,8 @@ names one the caller could not list. For a resource name HQ does not serve
 sent as a resource's name (`cloudflare.dns_record`) is answered with
 `details.next` the `infrastructure` list narrowed by that `kind`, and a type of
 reading (`adguard.client`) its read from `readings`. `details.field` is the
-argument to send (`payload.idempotency_key`, `target`). `details.scope` is the
+argument to send (`Idempotency-Key` on the API, `payload.idempotency_key` over
+MCP, `target`). `details.scope` is the
 permission an `insufficient_scope` refusal needed: the token lacks it and its
 person holds it. Granting it to the client in the identity provider and signing
 in again gets the call through. The 403's `WWW-Authenticate` repeats it as
@@ -630,6 +631,8 @@ paths, expected types and declared choices, never a value the request carried.
 A field a command does not have is refused at any depth, as `extra_forbidden`
 at its path (`rules[0].scope is not a known field`), and its `input_schema` is
 closed at the same levels; only a part its type declares open takes any key.
+A value in a JSON type its `input_schema` does not give it is refused the same
+way, never read as another (`0` for `false`, `"3"` for `3`).
 `details` holds the structured list the sentence was built from, under the same
 rule: `type`, `loc` and `msg` for a schema error, field names and error codes
 for a domain one, and no submitted value in either. A field that names a
@@ -668,13 +671,14 @@ refusals, and those are one audit row an agent a minute, with their count.
 
 Every capability whose effect is not `read` requires a retry key from every
 caller but a person's browser and the host's shell (an agent, a person's own
-device, an interface added later): an `Idempotency-Key` header, or
-`idempotency_key` in the payload. Generate one opaque key per
-logical operation, and keep it unchanged when retrying that operation. A change
-sent without one is refused with `400 idempotency_key_required`, after
+device, an interface added later). The API takes it in the `Idempotency-Key`
+header, which the document requires on each change's own path, and refuses one
+in the payload as a field the command does not have. MCP, whose tool calls carry
+no headers, takes it as `idempotency_key` in the payload. Generate one opaque
+key per logical operation, and keep it unchanged when retrying that operation.
+A change sent without one is refused with `400 idempotency_key_required`, after
 authority, so a client that may not run it is told that instead. A malformed
-key, or a header and a payload field naming two different keys, is
-`400 invalid_idempotency_key`.
+key is `400 invalid_idempotency_key`.
 
 HQ stores the actor, canonical request hash and response in the same database
 transaction as the domain write. A retry therefore receives the committed
@@ -694,18 +698,19 @@ Domain-level idempotency remains useful. It protects imports arriving through
 web, CLI, or MCP, while this contract protects a client that did not receive
 the first response.
 
-The key is one key, however it arrives. The header and the payload field are
-two spellings of it, and every interface reads and keeps it in one place,
-`run_capability` in `hq/platform/application/capabilities.py`. A key belongs to
-its actor, so the same key with the same request replays whether it came by
-the API or by MCP. Each capability whose effect is not `read` accepts an
-optional `idempotency_key` in its payload, and its `input_schema` says so. The
-field is declared once, from the capability's effect, so no command rejects it
-and the schema requires it of nobody; the browser and the shell may still run
-a change without one. Its shape and the header's name are declared once
-(`IDEMPOTENCY_KEY_SCHEMA` in `integration_specs.py`), so the OpenAPI document's
-payload field and header are one schema, `IdempotencyKey`, the shape the key is
-validated by.
+Every interface reads and keeps the key in one place, `run_capability` in
+`hq/platform/application/capabilities.py`. A key belongs to its actor, so the
+same key with the same request replays whether it came by the API or by MCP.
+Over MCP each capability whose effect is not `read` accepts an optional
+`idempotency_key` in its payload, and its `input_schema` says so; the API's
+request schemas and its catalog leave the field out. The field is declared
+once, from the capability's effect, so no command rejects it and the schema
+requires it of nobody; the browser and the shell may still run a change without
+one. Its shape is declared once (`IDEMPOTENCY_FIELD_SCHEMA` in
+`integration_specs.py`), so the OpenAPI document's header and MCP's payload
+field are one schema, `IdempotencyKey`, the shape the key is validated by. The
+generic `/capabilities/{name}/` path runs reads too, so it takes the header
+without requiring it.
 
 | Caller | Its key |
 |---|---|

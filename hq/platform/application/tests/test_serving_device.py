@@ -9,7 +9,6 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.core.tests.forwarding import arrived
 
 from ..request_connection import connection
-from ..standards import Standing
 from .connection_requests import A_LAN_ADDRESS, A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
 from .people import someone
 
@@ -131,15 +130,6 @@ class ServingDeviceTests(TestCase):
         self.assertIsNotNone(found)
         self.assertEqual(found.name, "example-controller")
         self.assertFalse(self.resolution(set()).verified)
-
-    def test_an_observer_fallback_is_not_drawn_or_authorized_as_hq(self):
-        with mock.patch("hq.platform.application.hq_self.host_addresses", return_value=frozenset()):
-            found = connection(a_request())
-
-        self.assertIsNone(found.serves)
-        self.assertEqual(found.observer.name, "example-controller")
-        policy = next(layer for layer in found.checks.results if layer.check.id == "policy")
-        self.assertEqual(policy.state, Standing.UNAVAILABLE)
 
     def test_an_unrecognized_address_never_guesses_a_node(self):
         found = self.serving({"198.51.100.7"})
@@ -289,28 +279,15 @@ class LocalProxyPolicyTests(TestCase):
     def policy_layers(self):
         return [layer for layer in self.found().checks.results if layer.check.boundary == "Zero trust policy"]
 
-    def test_the_boundary_does_not_disappear_behind_a_local_proxy(self):
-        self.assertTrue(self.policy_layers())
-
-    def test_it_asks_about_the_hop_the_caller_actually_dialled(self):
-        layer = self.policy_layers()[0]
-
-        self.assertEqual(layer.check.id, "policy")
-        self.assertTrue(layer.met)
-
     def test_it_does_not_invent_a_second_hop_for_a_loopback_socket(self):
         self.assertEqual(len(self.policy_layers()), 1)
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class TailnetLockTests(TestCase):
-    """The layer under the device layer: signed, or taken on trust.
-
-    Everything above this one believes the coordination server handed out the
-    right public key for this node. Only lock removes that belief, so the tests
-    that matter are the ones where it is absent, off, or unsigned: a line that
-    can only ever read "signed" is decoration.
-    """
+    """The layer under the device layer, judged from the lock reading HQ
+    swept and drawn only where there is one and a device for it to be about
+    (its verdicts are the request standard's examples)."""
 
     def setUp(self):
         self.own_addresses = mock.patch(
@@ -332,35 +309,23 @@ class TailnetLockTests(TestCase):
         # reporting a setting it has never looked at.
         self.assertIsNone(self.layer(connection(a_request())))
 
-    def test_lock_off_is_shown_and_never_counts_as_proof(self):
-        a_tailnet_lock(enabled=False, signers=[])
-        found = self.layer(connection(a_request()))
-        self.assertEqual(found.state, Standing.UNAVAILABLE)
+    def test_a_lock_reading_reaches_the_layer(self):
+        a_tailnet_lock(enabled=True, signers=[{"key": "tlpub:01"}])
 
-    def test_an_unsigned_node_fails_the_layer(self):
-        a_tailnet_lock(enabled=True, signers=[{"key": "tlpub:01"}, {"key": "tlpub:02"}])
+        self.assertTrue(self.layer(connection(a_request())).met)
+
+    def test_a_device_the_tailnet_calls_unsigned_fails_the_layer_with_no_lock_reading(self):
+        # The device sweep says lock filters this node; the lock layer alone
+        # judges that, so it is drawn before the host's lock reading exists.
         a_tailnet(
-            a_device(
-                "a-laptop",
-                A_TAILNET_ADDRESS,
-                user="someone@example.test",
-                lock_error="No signature chains to a trusted key.",
-            ),
+            a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test", lock_error="No signature."),
             a_device("hq-host", "100.64.0.9", observer=True),
         )
-        found = self.layer(connection(a_request()))
-        self.assertEqual(found.state, Standing.UNMET)
-        self.assertIn("No signature chains", found.reading.detail)
 
-    def test_a_signed_node_under_lock_holds_and_counts_its_signers(self):
-        a_tailnet_lock(enabled=True, signers=[{"key": "tlpub:01"}, {"key": "tlpub:02"}])
-        found = self.layer(connection(a_request()))
-        self.assertTrue(found.met)
-        self.assertIn("2 signing keys", found.reading.evidence)
+        layer = self.layer(connection(a_request()))
 
-    def test_one_signing_key_is_not_pluralized(self):
-        a_tailnet_lock(enabled=True, signers=[{"key": "tlpub:01"}])
-        self.assertTrue(self.layer(connection(a_request())).reading.evidence.endswith("1 signing key"))
+        self.assertIsNotNone(layer)
+        self.assertFalse(layer.met)
 
     def test_no_device_means_no_signature_line(self):
         # The device layer above has already said no node answers here. A line

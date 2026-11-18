@@ -11,7 +11,7 @@ from django.template.loader import render_to_string
 from django.test import Client
 from django.urls import reverse
 
-from hq.platform.application.pages import PageVisit
+from hq.platform.application.pages import PageAction, PageVisit
 from hq.platform.core.tests.browser.gate import BrowserGate, answered, sent
 from hq.platform.core.tests.browser.probes.settle import SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -193,18 +193,17 @@ _PROBE_STATE = """(failure) => ({
 _ROWS = """{% load action_tags %}{% if said %}<ul class="messages"><li class="msg">{{ said }}</li></ul>{% endif %}
 <p data-probe="other">{{ other }}</p>
 {% for line in lines %}<p>An example line {{ line }}.</p>{% endfor %}
-<ul class="list-rows" data-probe="rows">{% for row in rows %}<li data-row="{{ row }}"><span>Example {{ row }}</span>
-{% with url="/probe-rows/"|add:row|add:"/" %}
-{% button "\u2191" url post=True value="up" css="icon-link" title="Move up" disabled=forloop.first %}
-{% button "\u2193" url post=True value="down" css="icon-link" title="Move down" disabled=forloop.last %}
-{% button "\u00d7" url post=True value="delete" css="icon-link" title="Delete" %}
-{% endwith %}</li>{% endfor %}</ul>
+<ul class="list-rows" data-probe="rows">{% for row in rows %}<li data-row="{{ row.key }}"><span>Example {{ row.key }}</span>
+{% button "\u2191" offer=row.up look="glyph" title="Move up" disabled=forloop.first %}
+{% button "\u2193" offer=row.down look="glyph" title="Move down" disabled=forloop.last %}
+{% button "\u00d7" offer=row.delete look="glyph" title="Delete" %}
+</li>{% endfor %}</ul>
 <div id="probe-aside" data-fragment><span data-probe="aside">{{ aside }}</span>
-{% button "Mark" "/probe-rows/aside/" post=True value="mark" %}</div>
-{% button "Quiet" "/probe-rows/quiet/" post=True value="quiet" %}
-{% button "Broken" "/probe-rows/broken/" post=True value="broken" %}
-{% button "Refused" "/probe-rows/refused/" post=True value="refused" %}
-{% button "Declined" "/probe-rows/declined/" post=True value="declined" %}
+{% button "Mark" offer=presses.mark %}</div>
+{% button "Quiet" offer=presses.quiet %}
+{% button "Broken" offer=presses.broken %}
+{% button "Refused" offer=presses.refused %}
+{% button "Declined" offer=presses.declined %}
 <a data-probe="link" href="/probe-rows/?again=1">Again</a>
 <form method="post" action="/probe-rows/plain/"><button data-probe="plain">Send</button></form>
 {% for line in lines %}<p>An example line after {{ line }}.</p>{% endfor %}"""
@@ -241,14 +240,30 @@ def _posted(request):
     return dict(parse_qsl(body))
 
 
+def offer_of(url, value=""):
+    """A press as an offer carries it, for a page drawn without HQ's commands."""
+
+    return PageAction._built(label=value, url=url, method="post", value=value)
+
+
+def _row(key):
+    url = f"/probe-rows/{key}/"
+    return {"key": key, **{way: offer_of(url, way) for way in ("up", "down", "delete")}}
+
+
 def _rows_pages(frame):
     """The rows page in each state a press leaves it, in ``frame``'s page."""
+
+    # Each press of the page's own, by what it sends, at where it posts.
+    where = {"mark": "aside", "quiet": "quiet", "broken": "broken", "refused": "refused", "declined": "declined"}
+    presses = {sent: offer_of(f"/probe-rows/{path}/", sent) for sent, path in where.items()}
 
     def draw(order, **values):
         content = Template(_ROWS).render(
             Context(
                 {
-                    "rows": list(order),
+                    "rows": [_row(key) for key in order],
+                    "presses": presses,
                     "lines": range(40),
                     "other": "An example part beside the rows.",
                     "aside": "Not marked",

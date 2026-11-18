@@ -8,6 +8,7 @@ from django import template
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.standards import Standing
 from hq.platform.core.template_parts import Option, Part, slotted
+from hq.platform.core.templatetags.status_tags import tone_class
 
 register = template.Library()
 
@@ -17,8 +18,10 @@ def rung_frame(_name: str, given: dict) -> dict:
     unavailable unless given, and its disclosure's attributes, opened when
     ``open`` and each ``data_*`` option."""
 
+    state = Standing(given["state"] or Standing.UNAVAILABLE)
     return {
-        "state": given["state"] or Standing.UNAVAILABLE,
+        "state": state,
+        "tone": tone_class(state.tone),
         "kind": given["kind"] or "",
         "evidence": given["evidence"] or "",
         "attributes": html_attributes(

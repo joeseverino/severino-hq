@@ -867,7 +867,7 @@ class BrowserGate(SimpleTestCase):
             return None
         if found is not None:
             said = json.dumps(new.get(rule, []) if isinstance(json.loads(said), list) else new, indent=1)
-        if command := self.rerun(params):
+        if command := self.rerun(params, new):
             said += f"\n\nFound again by: {command}"
         if len(value.args) == 1 and str(value) == value.args[0]:
             value.args = (said,)
@@ -875,11 +875,12 @@ class BrowserGate(SimpleTestCase):
             print(said)
         return kind, value, trace
 
-    def rerun(self, params):
+    def rerun(self, params, checks=()):
         """The `dev:look` that draws a failed subtest's page as it was drawn
         and judges it by the same rule, when the subtest names a page the look
-        draws: the engine, the width, script, the palette, what was opened and
-        what was laid over it. A subtest that names no rule is judged by every
+        draws: the engine, the width, script, the palette, what was opened (a
+        check found with every disclosure open or a popover shown, as
+        ``opened`` names it, included) and what was laid over it. A subtest that names no rule is judged by every
         check the gates hold (``survey``)."""
 
         if not self.looked_at or "page" not in params or self.context is None:
@@ -890,7 +891,11 @@ class BrowserGate(SimpleTestCase):
             f"--engine {self.browser.browser_type.name}",
             *(["--no-script"] if not self.runs_script else []),
             *(["--dark"] if params.get("scheme") == "dark" else []),
-            *(["--open"] if params.get("disclosures") == "open" else []),
+            *(
+                ["--open"]
+                if params.get("disclosures") == "open" or any(c.endswith((" shown", ", opened")) for c in checks)
+                else []
+            ),
             *(["--expand"] if params.get("rows") == "open" else []),
             *([f"--css {shlex.quote(' '.join(' '.join(self.laid).split()))}"] if self.laid else []),
             f"--widths {width}",

@@ -4,7 +4,6 @@ Registered on the calendar's host domain, so web, API and MCP read the same
 declarations without a central list naming the calendar.
 """
 
-from datetime import date
 from typing import Annotated, TypedDict
 
 from pydantic import Field
@@ -27,10 +26,11 @@ from .calendar_entries import (
     choose_source,
     save_entry,
 )
+from .command_fields import Day
 from .contracts import Effect
 from .deletion import DeleteCommand, delete_calendar_entry
 from .describe import Describe, listed
-from .integration_specs import CapabilitySpec, ResourceSpec
+from .integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from .record_fields import Notes
 from .records import EDIT, KEPT
 from .resources import BoundedQuery, limit_words
@@ -45,7 +45,7 @@ type AgendaLimit = Annotated[
 
 
 class AgendaQuery(BoundedQuery):
-    start: date | None = Field(default=None, description="The first day the span covers; absent, today.")
+    start: Day | None = Field(default=None, description="The first day the span covers; absent, today.")
     days: int = Field(
         default=14, ge=1, le=calendar_entries.AGENDA_DAYS, description="How many days the span covers, from start."
     )
@@ -160,10 +160,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Calendar",
             "Everything on the calendar over a span of days, and your own events.",
             Capability.READ_CALENDAR,
-            calendar_entries.list_agenda,
-            AgendaQuery,
-            calendar_entries.get_entry,
-            "uid",
+            listing=ListRead(calendar_entries.list_agenda, AgendaQuery, AgendaItem),
+            detail_handler=calendar_entries.get_entry,
+            identifier="uid",
             search=SearchDefinition(
                 "calendar",
                 Entry,
@@ -173,7 +172,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="title",
             ),
             web_route="calendar:month",
-            item_type=AgendaItem,
             record_type=EntryRecord,
         ),
     )

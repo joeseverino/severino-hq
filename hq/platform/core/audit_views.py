@@ -2,7 +2,6 @@
 
 from functools import cached_property
 from typing import override
-from urllib.parse import urlencode
 lazy from datetime import datetime, time, timedelta
 
 from django.core.exceptions import ValidationError
@@ -28,6 +27,7 @@ from hq.platform.application.tables import (
     TableToggle,
     UncountedPaginator,
 )
+from hq.platform.application.url_query import with_query
 lazy from hq.platform.application.approvals import AUDIT_LABEL, awaiting_ids
 lazy from hq.platform.application.automation_adoption import procedures as adopted_procedures
 lazy from hq.platform.application.automation_sources import adopted_revision, decisions, of_audit_entry, playbook_rows
@@ -264,7 +264,7 @@ def _subject(event: AuditLog) -> str:
 def about_url(key: str) -> str:
     """The log narrowed to one record's whole story (``?about=``)."""
 
-    return f"{reverse('core:audit_list')}?{urlencode({ABOUT: key})}"
+    return with_query(reverse("core:audit_list"), {ABOUT: key})
 
 
 def _cause(event: AuditLog) -> tuple[str, str] | None:
@@ -341,7 +341,7 @@ class AuditLogDetailView(PageMixin, DetailView):
         # What happened, and to what kind of thing, as the event's heading.
         context["event_heading"] = dotted(event.get_action_display(), event.object_type and event.type_label)
         context["changes"] = approval_review.ChangePreview(
-            label="Changes", rows=change_rows(metadata.get("changes")), lines=()
+            label="Changes", rows=change_rows(metadata.get("changes")), lines=(), made=True
         )
         # The operation's name and id are one fact, stated in its own row.
         context["operation"] = operation_words(event)

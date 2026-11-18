@@ -72,8 +72,15 @@ OPERATION_LIST = "rest-of-operation"
 
 # The columns of every table of history (``partials/_history_table.html``),
 # the audit log's among them: each heading and its column's css. ``WHO`` is
-# the column a reader who may not read the audit log is not shown.
-COLUMNS = (("Type", ""), ("Time", "date-col key-col"), ("User", "optional-col"), ("Action", ""), ("Message", ""))
+# the column a reader who may not read the audit log is not shown. Action
+# stands only in a wide box, since a narrow row says it in its name.
+COLUMNS = (
+    ("Type", ""),
+    ("Time", "date-col key-col"),
+    ("User", "optional-col"),
+    ("Action", "wide-only"),
+    ("Message", ""),
+)
 WHO = "User"
 
 # Where an entry was recorded, as the audit page filters by it.

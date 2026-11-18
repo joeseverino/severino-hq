@@ -15,7 +15,8 @@
 /* A head is one short line, and stays so: what one of its controls says is
    said over the head's reading line (ask.js, partials/_ask.html), in the room the words the
    server drew there keep, hidden and not removed, and cut to their width,
-   whole in its title. A failure says its sentence in the danger tone. */
+   whole in its title. A failure says its sentence in its note's tone, which
+   the line takes while it speaks for the work (ask.js). */
 .page-head [data-reading-age][data-ask-said] { position: relative; color: transparent; }
 .page-head [data-reading-age][data-ask-said] * { visibility: hidden; }
 .page-head [data-reading-age][data-ask-said]::after {
@@ -23,7 +24,7 @@
   color: var(--muted); visibility: visible;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.page-head [data-reading-age][data-ask-state="failed"]::after { color: var(--danger); }
+.page-head [data-reading-age][data-ask-said]:is(.tone-attention, .tone-serious)::after { color: var(--tone-mark); }
 /* A page's note ends the head's first line (page.css), and a script fills it
    once the page is drawn. It stands in a slot as wide as its unseen struts
    (_visit_refresh.html), each a sentence HQ writes word for word with the
@@ -43,7 +44,7 @@
   & > .strut { display: contents; }
   & > .strut::after {
     content: attr(data-strut); display: block; grid-area: 1 / 1; visibility: hidden; block-size: 0; overflow: hidden;
-    padding-inline: calc(var(--visit-dot) + var(--space-4)) var(--space-2); white-space: nowrap;
+    padding-inline: calc(var(--mark-size) + var(--space-4)) var(--space-2); white-space: nowrap;
   }
   & > .visit-status {
     grid-area: 1 / 1;
@@ -60,21 +61,10 @@
 .user-menu > button {
   display: flex;
   width: 100%;
-  min-height: 0;
-  box-shadow: none;
   flex-flow: row-reverse wrap;
   place-content: flex-start center;
   align-items: stretch;
   gap: 0 var(--space-3);
-  height: var(--control-size);
-  padding: 0 var(--space-5);
-  border: 1px solid var(--bar-control-line);
-  border-radius: var(--radius-sm);
-  background: var(--bar-control-bg);
-  color: var(--ink-2);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  font-weight: 500;
   white-space: nowrap; overflow: hidden;
 }
 /* The name asks for only a few characters of the line and takes what there
@@ -117,24 +107,21 @@
   .cell-clamp .line-list { display: inline; }
   .cell-clamp .tag { padding-block: 0; }
 }
-/* An identifier (a hash, a key, a host) or a row's name (its own part, never
-   its cell's other words) may break anywhere, so one with no break in it
-   asks its column for no more than a letter: the table still gives each
-   column its whole line when the box holds it. A pill, a state in words,
-   breaks only inside a word wider than its column, as prose does
-   (tables.css), so its column holds its words whole. */
-.data-table > tbody > tr > [data-kind="identifier"],
-.data-table > tbody > tr > * :is(code:not(.cell-whole), .token, [data-cell~="name"]) { overflow-wrap: anywhere; }
+/* A hash or a key, which has no break in it, may break anywhere, so it asks
+   its column for no more than a letter. A name or a host breaks only at its
+   words and the breaks it is drawn with, so its column asks for its longest
+   word and another column gives way first. */
+.data-table > tbody > tr > * :is(code:not(.cell-whole), .token) { overflow-wrap: anywhere; }
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }
-/* A link on a line of its own in a name or a sentence is text of its
-   lines, its target as tall as its line (figures.css) by its padding: an
-   inline box is its face's glyph box tall, never less than 1.2em. A button
-   (`.btn`) is a target already, drawn as every button is (page.css), so
-   none of these reach it. */
-.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"]) a:not(.btn):is(:has(+ br), br + *) {
-  display: inline; padding-block: calc((var(--target-min) - 1.2em) / 2);
+/* A link on one of a cell's lines (a stack list's item, a cell line) is
+   text of its line, its target as tall as the line (figures.css) by its
+   padding: an inline box is its face's glyph box tall, never less than
+   1.2em. A button (`.btn`) is a target already, drawn as every button is
+   (page.css), so none of these reach it. */
+.data-table > tbody > tr > td :is(.stack-list > li, .cell-line, .cell-detail) a[href]:not(.btn) {
+  padding-block: calc((var(--target-min) - 1.2em) / 2);
 }
 /* A box a reader presses or tabs to is a target tall, as a link on a line of its own is (figures.css); a short value's box (`cell-short`, tables.css) is the cell's own. */
 .data-table > tbody > tr > [data-kind="identifier"] > :is(a[href], [tabindex]):not(.btn),
@@ -149,7 +136,7 @@
 /* A link alone in its cell is a box of its own a target tall, no wider than the cell: alone, it wraps as it would inline. */
 .data-table > tbody > tr > td:not([data-kind="identifier"]) > a[href]:not(.btn):only-child,
 .data-table > tbody > tr > td:not([data-kind="identifier"]) > .cell-short:only-child > a[href]:not(.btn):only-child { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
-/* A fact on one line of its own (`{% cell_line lines=1 %}`). */
+/* A fact on one line of its own (`{% cell_line text=... lines=1 %}`). */
 .data-table > tbody > tr > td .cell-line[data-lines="1"] { display: block; }
 .data-table > tbody > tr > td .cell-line[data-lines="1"] :is(.token, .whole, .part) { display: inline; max-inline-size: none; }
 /* A control's label is the control's to cut, as one line at its end: its words (`button_words`, one box) are cut where the control ends, a part among them text of that line so the cut lands inside it; a part alone, longer than the control, is held to it and cut there, set on the line by its top since a box that clips takes its bottom edge as its baseline. */
@@ -173,7 +160,7 @@
   height: 1.25rem;
   margin: 0 calc(-1 * var(--space-2)) var(--space-1);
   padding: 0 var(--space-3);
-  background: color-mix(in srgb, var(--source) 22%, var(--surface));
+  background: color-mix(in srgb, var(--slot) 22%, var(--surface));
   color: var(--ink);
   font-size: var(--text-2xs);
   font-weight: 600;

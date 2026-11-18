@@ -11,8 +11,11 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.platform.application import roles
+from hq.platform.application.markup_testing import elements
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.test_runner import no_default_role
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..record_errors import PolicyError
@@ -220,6 +223,22 @@ class RemovalWebTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "deletes the live record")
         self.assertFalse(OperationRequest.objects.exists())
+
+    def test_the_reason_is_asked_only_beside_the_press_that_sends_it(self):
+        from hq.platform.application.adoption_testing import managing_everything
+
+        managing_everything()
+        url = reverse("control_plane:remove", kwargs={"key": "app-dns"})
+        for role, offered in ((roles.Role.OPERATOR, True), (roles.Role.VIEWER, False)):
+            with self.subTest(role), no_default_role():
+                user = get_user_model().objects.create_user(username=f"example-{role}")
+                roles.assign(user, role)
+                self.client.force_login(user)
+                page = self.client.get(url)
+
+                reasons = [each for each in elements(page, "input") if each.attrs.get("name") == "reason"]
+                presses = [each for each in elements(page, "button") if each.attrs.get("formaction") == url]
+                self.assertEqual((bool(reasons), bool(presses)), (offered, offered))
 
     def test_confirming_queues_removal_without_dropping_the_row(self):
         from hq.platform.application.adoption_testing import managing_everything

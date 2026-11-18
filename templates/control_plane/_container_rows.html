@@ -1,4 +1,3 @@
-{% load nav_tags %}
 {% comment %}
 One table of containers, used for the ones on show and the ones folded
 away, named by `label`. Included twice rather than written twice, so a column added to one
@@ -35,7 +34,7 @@ cannot go missing from the other.
               A one-service compose file names the project after the service, so
               printing both says one thing twice.
               {% endcomment %}
-              {% if container.stack and container.stack != container.name %}<br>{% muted %}{{ container.stack|breakable }}{% endmuted %}{% endif %}
+              {% stack_list %}{% if container.stack and container.stack != container.name %}<li>{% muted %}{{ container.stack|breakable }}{% endmuted %}</li>{% endif %}{% endstack_list %}
             </td>
             {% with standing=standings|dictkey:container.name %}<td>{% if standing %}<code class="cell-whole" tabindex="0" data-tip="{{ container.image }}">{{ standing.label|breakable }}</code>{% else %}<code class="cell-whole">{{ container.image_label|breakable }}</code>{% endif %}</td>{% endwith %}
             {% with standing=standings|dictkey:container.name %}{% if standing %}{% include "control_plane/_container_standing.html" %}{% else %}<td>{% empty_value %}</td><td>{% empty_value %}</td>{% endif %}{% endwith %}

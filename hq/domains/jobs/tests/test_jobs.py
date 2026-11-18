@@ -495,7 +495,7 @@ class JobsListRunsTests(TestCase):
         found = [row for row in page.context["object_list"] if row.source == "run"]
 
         self.assertTrue(found)
-        self.assertContains(page, f"pill-{Job.State.RUNNING.tone}")
+        self.assertContains(page, f"tone-{Job.State.RUNNING.tone}")
 
     def test_a_machine_s_runs_are_listed_by_its_name(self):
         from hq.platform.core.example_estate.names import MACHINE

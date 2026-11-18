@@ -43,7 +43,7 @@ func TestAnAddressResolvesNamesAndKeepsAddresses(t *testing.T) {
 func TestPortainerCoverage(t *testing.T) {
 	coverage := New(runtime.Environment{}, supplied(), &fakeHTTP{}).Coverage()
 	want := map[string][]string{
-		"actions": {"portainer.container:restart", "portainer.container:start", "portainer.container:stop", "portainer.stack:delete", "portainer.stack:reconcile"},
+		"actions": {"portainer.container:restart", "portainer.container:start", "portainer.container:stop"},
 		"readers": {"portainer.compose_project", "portainer.container", "portainer.environment", "portainer.image", "portainer.network", "portainer.runtime", "portainer.volume"},
 		"probes":  {"portainer"},
 	}

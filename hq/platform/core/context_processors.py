@@ -7,6 +7,7 @@ lazy from hq.platform.application.appearance import Theme, theme_for
 lazy from hq.platform.application.pages import offering_for
 lazy from hq.platform.application.request_channel import channel_for_request
 lazy from hq.platform.application.request_identity import signed_in
+lazy from hq.platform.application.ui import button_classes
 
 
 def site(_request):
@@ -77,7 +78,9 @@ def nav(request):
             or bool(nav_item.namespace and namespace == nav_item.namespace)
         )
 
-    return {"nav_entries": entries}
+    # The bar's controls are buttons of the bar look, though each holds markup
+    # of its own (a mark, a count, a picture) that the button tag cannot.
+    return {"nav_entries": entries, "bar_button": button_classes("bar")}
 
 
 def auth_config(_request):

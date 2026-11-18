@@ -11,7 +11,7 @@ internet, a lookup of the address it crosses from.
 <div class="conn-peering-frame">
   <div class="conn-peering {{ connection.tone|tone_class }}">
     <div class="conn-peer">
-      <span class="conn-peer-role">You</span>
+      <span class="eyebrow">You</span>
       {% if connection.peer_label and connection.machine_url %}
         <a class="conn-peer-name" href="{{ connection.machine_url }}">{{ connection.peer_label|breakable }}</a>
       {% elif connection.peer_label %}
@@ -32,7 +32,7 @@ internet, a lookup of the address it crosses from.
       {% endif %}
     </div>
     <div class="conn-peer">
-      <span class="conn-peer-role">HQ</span>
+      <span class="eyebrow">HQ</span>
       {% if connection.serves_url %}
         <a class="conn-peer-name" href="{{ connection.serves_url }}">{{ connection.serves.label|default:connection.host|breakable }}</a>
       {% else %}
@@ -44,7 +44,7 @@ internet, a lookup of the address it crosses from.
   </div>
 </div>
 
-{% partialdef carriage %}<div class="conn-carriage conn-carriage-{{ peering.id }}">
+{% partialdef carriage %}<div class="conn-carriage conn-carriage-{{ peering.id }}{% if peering.tone %} {{ peering.tone|tone_class }}{% endif %}">
   <strong>{{ peering.label|breakable }}</strong>
   {% if peering.public %}
     {% comment %}
@@ -52,8 +52,8 @@ internet, a lookup of the address it crosses from.
     {% endcomment %}<details data-peering-detail>
       <summary>
         About <code>{{ peering.address|breakable }}</code>
-      </summary>
-      <div data-fragment="{% url 'tool_public_address' %}?address={{ peering.address|urlencode }}"
+      </summary>{% url 'tool_public_address' as lookup_url %}
+      <div data-fragment="{% with_query lookup_url address=peering.address %}"
            data-fragment-load
            data-fragment-failure="Lookup failed.">
         {% muted element="p" %}Loading…{% endmuted %}

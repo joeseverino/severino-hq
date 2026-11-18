@@ -14,7 +14,7 @@ from ..capabilities import CapabilitySpec, describe_capabilities, execute_capabi
 from ..connections import ConnectionSpec, describe_connections
 from ..integration_testing import override_integration_graph
 from ..integrations import compile_integration_graph
-from ..resources import EmptyQuery, ResourceSpec, describe_resources, list_resource
+from ..resources import EmptyQuery, ListRead, ResourceSpec, describe_resources, list_resource
 from ..security import (
     DEVICE_INTERFACE,
     INTERNAL_INTERFACE,
@@ -43,9 +43,7 @@ def _resource(name: str, capability: str) -> ResourceSpec:
         "Example records",
         "Example records.",
         capability,
-        list_handler=lambda: {"items": [], "count": 0},
-        list_query_type=EmptyQuery,
-        item_type=_ExampleRecord,
+        listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, _ExampleRecord),
     )
 
 

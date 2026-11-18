@@ -30,9 +30,8 @@ four domains behind a click and then need a second one to go anywhere.
 {% if not zone.managed %}
   {% notice tone="warning" %}
     <p>HQ shows its records but will not change them.</p>
-    {% if zone.adopt_token %}
-      {% url 'zones:adopt' zone.zone as adopt_url %}
-      <p>{% button "Manage domain" adopt_url post=True name="token" value=zone.adopt_token look="primary" %}</p>
+    {% if zone.adopt %}
+      <p>{% include "partials/_page_action.html" with action=zone.adopt only %}</p>
     {% elif zone.observed_only %}
       {% muted element="p" %}HQ can read this domain, but the credential it reads with cannot change it.{% endmuted %}
     {% endif %}
@@ -85,7 +84,7 @@ the zone at the top of the page.
   (``zones.adopt_discovered_records``).
   {% endcomment %}
   {% if zone.managed and public_dns_enabled %}
-    {% with zone_name=zone.zone|urlencode %}{% button "Add record" create_url|add:"?kind="|add:record_kind|add:"&zone="|add:zone_name look="primary" %}{% endwith %}
+    {% with_query create_url kind=record_kind zone=zone.zone as add_url %}{% button "Add record" add_url look="primary" %}
   {% endif %}
 {% endsection %}
 

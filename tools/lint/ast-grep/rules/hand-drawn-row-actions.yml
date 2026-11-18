@@ -1,8 +1,9 @@
 # A row's actions are the row actions part, drawn from hq_sdk.pages.PageAction,
 # which draws the row's cell, so every row's verbs stand alike. A cell holds
-# them by hand when it holds a {% button %} drawn as a button (given no
-# css=, which draws a control that is not one). No fix: the part reads the
-# row's declared actions.
+# them by hand when it holds a {% button %} drawn as a button with words: a
+# glyph (look="glyph": a row's order, its mark, a link out) is the row's own
+# control, and css= draws a control that is not a button. The part itself
+# draws the cell. No fix: the part reads the row's declared actions.
 id: hand-drawn-row-actions
 language: html
 severity: error
@@ -10,6 +11,8 @@ message: A row's actions drawn by hand, where the row actions part draws them.
 note: Write {% row_actions actions %} from hq_sdk.pages.PageAction, which draws the row's cell.
 files:
   - "**/templates/**/*.html"
+ignores:
+  - "**/templates/partials/_row_actions.html"
 rule:
   kind: element
   all:
@@ -23,4 +26,4 @@ rule:
         kind: text
         regex: '\{%\s*button\b'
         not:
-          regex: '\{%\s*button\b[^%]*\bcss='
+          regex: '\{%\s*button\b[^%]*\b(css=|look="([^"]*\s)?glyph[\s"])'

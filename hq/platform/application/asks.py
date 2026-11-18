@@ -19,6 +19,7 @@ from django.shortcuts import redirect
 from django.utils import timezone
 from django.views import View
 
+from hq.platform.application.url_query import with_query
 lazy from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 lazy from hq.domains.control_plane.providers import registry_label
 lazy from hq.domains.control_plane.reading_parts import WHOLE, refused_parts
@@ -115,6 +116,12 @@ class Standing:
         return self.word or standing_word(self.state)
 
     @property
+    def tone(self) -> str:
+        """The tone its label is colored in, the one the page and the script draw; "" while idle."""
+
+        return standing_tone(self.state, self.label)
+
+    @property
     def seconds(self) -> int:
         if self.since is None:
             return 0
@@ -131,7 +138,7 @@ class Standing:
         return {
             "state": self.state,
             "label": self.label,
-            "tone": standing_tone(self.state, self.label),
+            "tone": self.tone,
             "live": self.live,
             "note": self.note,
             "seconds": self.seconds,
@@ -335,7 +342,7 @@ def read_status_url(kinds: Iterable[str], asked: datetime, *, connection_ref: st
     """Where a page follows a read of ``kinds`` (none: every kind) asked for at ``asked``."""
 
     token = watch_token({"read": sorted(set(kinds)), "ref": connection_ref, "asked": asked.isoformat()})
-    return f"{reverse('control_plane:read_status')}?watch={token}"
+    return with_query(reverse("control_plane:read_status"), {"watch": token})
 
 
 def _untried(asked: datetime) -> Standing:

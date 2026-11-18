@@ -359,7 +359,7 @@
     );
   };
 
-  window.navigation?.addEventListener("navigate", (event) => {
+  window.navigation.addEventListener("navigate", (event) => {
     if (!answersInPlace(event)) return;
     const url = event.destination.url;
     // Focus stays on what was pressed and the page where it was read; a
@@ -378,7 +378,7 @@
       const form = input.isConnected
         ? input.form
         : document.querySelector("[data-table-toolbar]");
-      if (form) window.navigation?.navigate(tableUrl(form), { history: "replace", info: TABLE });
+      if (form) window.navigation.navigate(tableUrl(form), { history: "replace", info: TABLE });
     }, 250);
   });
 

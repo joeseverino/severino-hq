@@ -37,17 +37,14 @@
   .posture-meter { flex: 0 1 auto; min-width: 0; display: flex; gap: var(--space-1); cursor: default; }
   .posture-access { flex: 1 1 12rem; min-width: 0; color: var(--muted); font-size: var(--text-sm); }
   .posture-access .icon { color: var(--muted-2); vertical-align: -0.15em; }
-  .posture-access .is-unmet { color: var(--danger); }
   /* Fixed segments right after the name, the shared checks first, so one
      check sits in the same column on every row and a gap reads straight
      down the list; the score follows, as wide as it says. */
   .posture-meter span { flex: 0 1 1.6rem; min-width: 0.4rem; height: 0.6rem; border-radius: 2px; background: var(--line); }
   .posture-meter .posture-meter-break { flex: 0 0 var(--space-6); background: none; }
-  .posture-meter .is-met { background: var(--ok); }
-  .posture-meter .is-unmet { background: var(--danger); }
+  .posture-meter :is(.tone-good, .tone-serious) { background: var(--tone-mark); }
   .posture-score { flex: none; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
-  .posture-score.is-met { color: var(--ok); }
-  .posture-score.is-unmet { color: var(--danger); }
+  :is(.posture-score, .posture-access .tone-serious) { color: var(--tone-mark); }
 
   /* An age or a count that reads wrong split across two lines. */
   .nowrap { white-space: nowrap; }

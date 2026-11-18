@@ -110,9 +110,7 @@ def _reads_a_kind(serves: Callable[[ResourceSpec], bool]) -> Callable[[Principal
 
 
 RUNS_A_CAPABILITY = Some(_runs_a_capability, "may run no capability")
-READS_A_LIST = Some(
-    _reads_a_kind(lambda spec: bool(spec.list_handler and spec.list_query_type)), "may list no kind of record"
-)
+READS_A_LIST = Some(_reads_a_kind(lambda spec: spec.listing is not None), "may list no kind of record")
 READS_A_RECORD = Some(
     _reads_a_kind(lambda spec: bool(spec.detail_handler and spec.identifier)), "may read no kind of record"
 )

@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"os/exec"
@@ -116,17 +117,10 @@ func (v *renovation) outcome(t *testing.T) DependencyRun {
 		t.Fatal("no outcome was recorded")
 	}
 	var outcome DependencyRun
-	if err := strictJSON(data, &outcome); err != nil {
+	if err := jsonv2.Unmarshal(data, &outcome, jsonv2.RejectUnknownMembers(true)); err != nil {
 		t.Fatal(err)
 	}
-	var keys map[string]json.RawMessage
-	if err := json.Unmarshal(data, &keys); err != nil {
-		t.Fatal(err)
-	}
-	if err := exactKeys(keys, "version", "started_at", "finished_at", "runs"); err != nil {
-		t.Error(err)
-	}
-	if outcome.Version != 1 || outcome.StartedAt.IsZero() || outcome.FinishedAt.Before(outcome.StartedAt) {
+	if outcome.Version != 1 || outcome.StartedAt.IsZero() || outcome.FinishedAt.Before(outcome.StartedAt) || outcome.Runs == nil {
 		t.Errorf("outcome %s", data)
 	}
 	return outcome

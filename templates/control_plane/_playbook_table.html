@@ -23,7 +23,7 @@ its command's page; one the commit brings has no page yet.
       <tr{% if row.change %} data-change="{{ row.change }}"{% endif %}>
         <td>{% if row.url %}<a href="{{ row.url }}">{{ row.title|breakable }}</a>{% else %}{{ row.title|breakable }}{% endif %}</td>
         <td>{{ row.effect|or_empty }}</td>
-        <td>{% for host in row.hosts %}{% entity "machine"|entity_of:host %}{% if not forloop.last %}<br>{% endif %}{% empty %}{{ row.anywhere|or_empty }}{% endfor %}</td>
+        <td>{% stack_list %}{% for host in row.hosts %}<li>{% entity "machine"|entity_of:host %}</li>{% empty %}<li>{{ row.anywhere|or_empty }}</li>{% endfor %}{% endstack_list %}</td>
         <td>{{ row.access|or_empty }}</td>
         {% if deciding %}
           <td>{% change_status row.change %}</td>

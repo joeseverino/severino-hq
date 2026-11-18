@@ -272,6 +272,8 @@ def _attested(pinned, image, source, released):
             "revision": hexed("revision", pinned, length=40),
             "builder": "https://github.com/actions/runner",
             "finished_at": stamp(released + timedelta(days=1)),
+            # A package URL, whose qualifier keeps the digest's colon as written.
+            # ast-grep-ignore: query-added-by-with-query
             "materials": [f"pkg:docker/alpine@3.20?digest={digest('alpine', '3.20')}"],
         },
         "read_at": stamp(timedelta(hours=3)),

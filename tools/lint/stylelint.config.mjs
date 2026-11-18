@@ -61,14 +61,30 @@ const readingMeasure = {
 // itself (a form's fields, a band's cells) says so in a disable comment.
 const autoGrid = /\brepeat\(\s*auto-(fit|fill)\b/i;
 const flowGrid = { "/./": [`/${autoGrid.source}/i`] };
+// A capsule's ends (a pill, a chip, a tag, a switch, a track) are as round as
+// its box is tall, which is --radius-pill. A corner rounder than the --radius
+// steps, written as a literal, is that fact written again.
+const capsuleRadius = {
+  "/^border(-[a-z]+)*-radius$/": ["/(?<![-\\w.])(\\d{3,}|[1-9]\\d)(\\.\\d+)?px|(?<![-\\w.])[\\d.]+r?em\\b/"],
+};
+// An open popover is one floating panel, drawn by base.css's `:popover-open`
+// rule, so no other rule casts the shadow of a panel over the page.
+const floatingShadow = { "box-shadow": ["/var\\(--shadow-pop\\)/"] };
 // One list holds every disallowed value, so its message tells an auto grid, a
-// cut and a measure from the rest.
-const disallowedValues = (keys) => [
-  { ...keys, ...flowGrid },
+// cut and a measure from the rest. Every sheet's list holds the capsule's, and
+// every sheet's but base.css's the floating panel's.
+const disallowedValues = (keys, { floating = true } = {}) => [
+  { ...keys, ...flowGrid, ...capsuleRadius, ...(floating ? floatingShadow : {}) },
   {
     message: (property, value) =>
-      autoGrid.test(value)
+      matches(paletteTone, property) && new RegExp(paletteTone["/^.+$/"][0].slice(1, -1)).test(value)
+        ? `"${property}: ${value}" picks a tone's palette: give the element its state's tone class (\`tone_class\`) and read the role it sets (--tone-mark, --tone-ink, --tone-bg, --tone-tint, --tone-wash, --tone-line)`
+        : matches(floatingShadow, property) && /--shadow-pop/.test(value)
+        ? `"${property}: ${value}" draws a floating panel of its own: an open popover is the panel base.css's \`:popover-open\` rule draws, so lay it out and leave its frame`
+        : autoGrid.test(value)
         ? `"${property}: ${value}" lays out its own auto-fit grid: a run of sibling sections or cards is the flow (\`.section-flow\`, docs/Design.md); a part that lays out something else inside itself says so in a disable comment`
+        : matches(capsuleRadius, property)
+        ? `"${property}: ${value}" rounds a corner with a literal: a capsule's ends are var(--radius-pill), a card's corners var(--radius) or var(--radius-sm)`
         : matches(cutText, property)
         ? `"${property}: ${value}" cuts text outside cuts.css: move the whole rule to static/css/app/cuts.css, since a selector is styled in one sheet (test_a_selector_is_styled_in_one_place); a box that clips something other than text says why in a disable comment`
         : matches(readingMeasure, property)
@@ -89,19 +105,26 @@ const strandedMark =
   "/(?<!\\\\[0-9a-f]{1,6}) (?:[·•→←↗›‹»«]|\\\\0*(?:b7|2022|2192|2190|2197|203a|2039|bb|ab)(?![0-9a-f]))/i";
 const unspokenContent = { "/^content$/": [`/^\\s*(["'])(?:(?!\\1).)+\\1\\s*$/`, strandedMark] };
 
-// Capitals are for a kicker over a group (`.eyebrow`), never a value's name,
-// a state or a tag, which are said in sentence case (docs/Design.md). A rule
-// that sets a kicker's case says what it heads in a disable comment.
+// A part draws a state in the roles its tone class sets (tokens.css, "Tones"),
+// so no rule picks a tone's palette itself: the button's destructive look,
+// which is no state, is the one other reader.
+const paletteTone = {
+  "/^.+$/": ["/var\\(--(ok|warn|danger)(?![-\\w])|var\\(--tone-(positive|caution|critical|severe|info|neutral|special)-/"],
+};
+// What every component sheet holds its values to; the button's sheet leaves out
+// the tones' palette.
+const buttonSheet = { ...literalFontSize, ...spacingLiteral, ...systemColor, ...unspokenContent, ...cutText, ...readingMeasure };
+const everySheet = { ...buttonSheet, ...paletteTone };
+
+// Capitals are for a kicker over a group, never a value's name, a state or a
+// tag, which are said in sentence case (docs/Design.md). The kicker is one
+// rule, `.eyebrow`, the only one that may set a text's case: a part that heads
+// a group writes the class.
 const caseProperties = ["text-transform", "font-variant-caps"];
-const disallowedProperties = (properties) => [
-  properties,
-  {
-    message: (property) =>
-      caseProperties.includes(property)
-        ? `"${property}" changes a text's case: capitals are for a kicker over a group, so say it in sentence case, or say in a disable comment what the kicker heads`
-        : `Disallowed property "${property}"`,
-  },
-];
+const caseOutsideKicker = { "/^(?!\\.eyebrow$)/": caseProperties };
+const caseMessage = (selector, property) =>
+  `"${property}" changes a text's case in "${selector}": capitals are the kicker's, so write the \`eyebrow\` class on what heads a group, or say it in sentence case`;
+const disallowedProperties = (properties) => [properties, { message: (property) => `Disallowed property "${property}"` }];
 // A reader who asks for less motion gets it from one rule in base.css, which
 // stops every transition and animation, so a part never writes its own. A
 // part that draws something else in place of a motion says so in a disable
@@ -135,9 +158,9 @@ const primitives = [
     names: String.raw`(?:\.(?:data-table|row-detail|row-columns)(?![-\w])|(?<![-\w.#])(?:table|caption|thead|tbody|tfoot|tr|td|th)(?![-\w]))`,
     sheets: ["base", "cuts", "figures", "tables", "surfaces"],
     parts: [
-      "btn", "button-words", "cell-clamp", "cell-controls", "cell-line", "cell-part", "cell-short", "cell-whole", "cut", "external-link", "icon-link", "is-expanded", "line-list", "line-rest", "line-run", "muted",
+      "btn", "button-words", "cell-clamp", "cell-controls", "cell-detail", "cell-line", "cell-part", "cell-short", "cell-whole", "cut", "external-link", "is-expanded", "line-list", "line-rest", "line-run", "muted",
       "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
-      "row-editor", "row-expand", "row-fold", "row-less", "row-more", "select-column", "strut", "table-clamp", "table-scroll", "tag", "token", "visually-hidden", "whole",
+      "row-editor", "row-expand", "row-fold", "row-less", "row-more", "select-column", "stack-list", "strut", "table-clamp", "table-scroll", "tag", "token", "visually-hidden", "whole",
     ],
   },
   { name: "button", classes: "btn", sheets: ["page"] },
@@ -244,21 +267,18 @@ export default {
       { message: "A rule keyed on data-theme paints a chosen theme apart from the system's: write the color as a light-dark() token in tokens.css" },
     ],
     "function-disallowed-list": [`/^(${colorFunctions})$/i`],
-    "declaration-property-value-disallowed-list": disallowedValues({
-      ...literalFontSize,
-      ...spacingLiteral,
-      ...systemColor,
-      ...unspokenContent,
-      ...cutText,
-      ...readingMeasure,
-    }),
+    "declaration-property-value-disallowed-list": disallowedValues(everySheet),
     // A face that arrives late and is swapped in moves every line it sets, so
     // each is shown only if it is ready for the first paint. Its file is
     // preloaded beside the stylesheet so it usually is (StyleContractTests).
     "at-rule-property-required-list": { "font-face": ["font-display"] },
     "declaration-property-value-allowed-list": { "font-display": ["optional"] },
-    "property-disallowed-list": disallowedProperties(caseProperties),
-    "rule-selector-property-disallowed-list": { [`/${inTable}/`]: boxWidth },
+    "rule-selector-property-disallowed-list": [
+      // The first key a selector matches decides, so a table's selector is
+      // held to the kicker's rule too.
+      { [`/${inTable}/`]: [...boxWidth, ...caseProperties], ...caseOutsideKicker },
+      { message: (selector, property) => (caseProperties.includes(property) ? caseMessage(selector, property) : `Disallowed property "${property}" for selector "${selector}"`) },
+    ],
     "selector-disallowed-list": selectorRule([], () => childInIsMessage),
   },
   overrides: [
@@ -266,7 +286,7 @@ export default {
       // The table primitive sizes what a table holds.
       files: tablePrimitive,
       rules: {
-        "rule-selector-property-disallowed-list": null,
+        "rule-selector-property-disallowed-list": [caseOutsideKicker, { message: caseMessage }],
         "selector-disallowed-list": selectorRule(
           cellRoles,
           (selector) =>
@@ -276,9 +296,17 @@ export default {
     },
     ...restyledBySheet,
     {
+      // The button's sheet draws the destructive look, which is no state.
+      files: [sheet("page")],
+      rules: { "declaration-property-value-disallowed-list": disallowedValues(buttonSheet) },
+    },
+    {
       // The one sheet that answers a reader who asks for less motion.
       files: [sheet("base")],
-      rules: { "media-feature-name-disallowed-list": mediaFeatures(["prefers-color-scheme"]) },
+      rules: {
+        "media-feature-name-disallowed-list": mediaFeatures(["prefers-color-scheme"]),
+        "declaration-property-value-disallowed-list": disallowedValues(everySheet, { floating: false }),
+      },
     },
     {
       // The tokens layer is where colors are written.
@@ -296,7 +324,7 @@ export default {
       // The one sheet that cuts text.
       files: [cuts],
       rules: {
-        "declaration-property-value-disallowed-list": disallowedValues({ ...literalFontSize, ...spacingLiteral, ...systemColor, ...unspokenContent, ...readingMeasure }),
+        "declaration-property-value-disallowed-list": disallowedValues({ ...literalFontSize, ...spacingLiteral, ...systemColor, ...unspokenContent, ...readingMeasure, ...paletteTone }),
       },
     },
     {
@@ -306,6 +334,7 @@ export default {
       rules: {
         "function-disallowed-list": [`/^(${colorFunctions}|color-mix)$/i`],
         "property-disallowed-list": disallowedProperties([...caseProperties, "font-family"]),
+        "rule-selector-property-disallowed-list": null,
         "declaration-property-value-disallowed-list": disallowedValues({
           "/(^|-)font-size$/": ["/^[\\d.]/"],
           ...spacingLiteral,

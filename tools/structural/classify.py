@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 CONSTRUCTORS = {
+    "hq.platform.application.integration_specs.ListRead",
     "hq.platform.application.integration_specs.ResourceSpec",
     "hq.platform.application.search_contracts.SearchDefinition",
 }

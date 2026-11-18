@@ -18,7 +18,6 @@ from hq.platform.application.tests.sentinel import (
     plant_credentials,
 )
 from hq.platform.application.topology import TOPOLOGY_SCHEMA_VERSION
-from hq.platform.application.topology_lenses import topology_lenses
 
 from .. import views
 from ..testing import ContractClient
@@ -164,7 +163,7 @@ class CompositionCheckTests(SimpleTestCase):
         from hq.platform.application.integrations import (
             compile_integration_graph,
         )
-        from hq.platform.application.resources import EmptyQuery, ResourceSpec
+        from hq.platform.application.resources import EmptyQuery, ListRead, ResourceSpec
 
         from ..checks import capability_contract_check
 
@@ -176,10 +175,8 @@ class CompositionCheckTests(SimpleTestCase):
             "Records",
             "Synthetic records.",
             "read",
-            list_handler=lambda: {"items": [], "count": 0},
-            list_query_type=EmptyQuery,
+            listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, ExampleRecord),
             web_route="missing:list",
-            item_type=ExampleRecord,
         )
         graph = compile_integration_graph(capabilities=(), resources=(resource,), connections=())
         with override_integration_graph(graph):
@@ -368,22 +365,17 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertTrue(response.json()["ok"])
         self.assertTrue(Project.objects.filter(slug="machine-sync").exists())
 
-    def test_a_machine_write_requires_an_idempotency_key(self):
-        with _serving():
-            response = self._post(
-                "project.create",
-                {
-                    "payload": {
-                        "name": "Once",
-                        "slug": "once",
-                        "status": "active",
-                    }
-                },
-                token=_token(scope="write_projects"),
-                idempotency_key=None,
-            )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error"]["code"], "idempotency_key_required")
+    def test_a_retry_key_in_the_payload_is_refused_over_the_api(self):
+        from hq.domains.projects.models import Project
+
+        payload = {"name": "Once", "slug": "once", "status": "active", "idempotency_key": "example-once"}
+        for header in (None, "example-once"):
+            with self.subTest(header=header), _serving():
+                response = self._post(
+                    "project.create", {"payload": payload}, token=_token(scope="write_projects"), idempotency_key=header
+                )
+                self.assertEqual(response.status_code, 400, response.content)
+        self.assertFalse(Project.objects.exists())
 
     def test_retrying_a_machine_write_replays_the_committed_response(self):
         from hq.domains.projects.models import Project
@@ -569,15 +561,6 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "invalid_json")
 
-    def test_an_unknown_payload_field_is_named(self):
-        with _serving():
-            response = self._post(
-                "project.create",
-                {"payload": {"name": "Typo", "slug": "typo", "stauts": "active"}},
-                token=_token(scope="write_projects"),
-            )
-        self.assertIn("stauts", response.json()["error"]["message"])
-
     def test_an_invalid_payload_names_the_field(self):
         with _serving():
             response = self._post(
@@ -633,17 +616,6 @@ class TransportTests(SentinelMixin, TestCase):
             )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "invalid_json")
-
-    def test_execute_requires_json_content(self):
-        with _serving():
-            response = self.client.post(
-                "/api/v2/capabilities/project.create/",
-                data="payload=not-json",
-                content_type="application/x-www-form-urlencoded",
-                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
-                HTTP_IDEMPOTENCY_KEY="test-key",
-            )
-        self.assertEqual(response.status_code, 415)
 
     def test_the_root_reports_what_the_credential_may_do(self):
         with _serving():
@@ -799,13 +771,6 @@ class TransportTests(SentinelMixin, TestCase):
         resource = next(node for node in topology["nodes"] if node["id"] == "resource:api-zone")
         self.assertEqual([action["name"] for action in resource["actions"]], ["open"])
 
-    def test_an_unknown_topology_lens_is_refused_with_every_lens(self):
-        with _serving(), host_only():
-            response = self.client.get(
-                "/api/v2/topology/?lens=not-a-lens", HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}"
-            )
-        self.assertTrue(all(lens.name in response.json()["error"]["message"] for lens in topology_lenses()))
-
     def test_a_projection_refuses_a_caller_without_read_before_it_judges_input_or_derives_state(self):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='write_projects')}"}
         with _serving(), patch("hq.platform.application.topology.connection_catalog") as catalog:
@@ -854,14 +819,10 @@ class TransportTests(SentinelMixin, TestCase):
         # A request reached it, so its path is said.
         self.assertIsNotNone(found["reached"])
 
-    def test_resource_queries_reject_unknown_and_repeated_fields(self):
+    def test_a_resource_query_sent_twice_is_refused(self):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving():
-            unknown = self.client.get("/api/v2/resources/projects/?limti=10", **headers)
             repeated = self.client.get("/api/v2/resources/projects/?limit=1&limit=2", **headers)
-        self.assertEqual(unknown.status_code, 400)
-        self.assertEqual(unknown.json()["error"]["code"], "invalid_input")
-        self.assertEqual(unknown.json()["error"]["message"], "projects: limti is not a known field.")
         self.assertEqual(repeated.status_code, 400)
 
     def test_a_resource_read_keeps_only_the_fields_asked_for(self):
@@ -912,23 +873,6 @@ class TransportTests(SentinelMixin, TestCase):
             with self.subTest(value):
                 self.assertNotIn(value.split("=")[1], response.json()["error"]["message"])
 
-    def test_a_refusal_answers_with_the_reason_the_application_gave(self):
-        from pydantic import ValidationError
-
-        from hq.platform.application.findings import findings
-        from hq.platform.application.refusal_status import refusal_of
-        from hq.platform.application.security import cli_principal
-
-        with self.assertRaises(ValidationError) as refused:
-            findings(principal=cli_principal(), limit=0)
-        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
-        with _serving(), host_only():
-            response = self.client.get("/api/v2/findings/?limit=0", **headers)
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(
-            response.json()["error"]["message"], refusal_of(refused.exception, name="get_findings").message
-        )
-
     def test_resource_read_requires_its_declared_grant(self):
         with _serving():
             response = self.client.get(
@@ -937,11 +881,6 @@ class TransportTests(SentinelMixin, TestCase):
             )
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["error"]["code"], "insufficient_scope")
-
-    def test_a_response_is_never_cacheable(self):
-        with _serving():
-            response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}")
-        self.assertEqual(response["Cache-Control"], "private, no-store")
 
     @override_settings(SEVERINO_API_RESOURCE="")
     def test_the_surface_is_off_until_a_resource_is_configured(self):

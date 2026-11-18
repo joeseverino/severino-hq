@@ -10,7 +10,7 @@
   <td>{% muted %}{{ row.updated_at|when:"ago" }}{% endmuted %}</td>
   <td class="actions-col">
     {% present row.published_url|web_url %}
-      {% outside_link url=row.published_url css="icon-link" title="Open live page" label="Open live page" %}<span aria-hidden="true">↗</span>{% endoutside_link %}
+      {% button "↗" row.published_url look="glyph" outside=True title="Open live page" %}
     {% endpresent %}
   </td>
 {% endblock %}

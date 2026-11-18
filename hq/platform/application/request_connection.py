@@ -13,6 +13,7 @@ from datetime import datetime
 from ipaddress import ip_address
 from typing import Any
 
+from hq.domains.control_plane.names import is_hostname
 from hq.platform.core.network import split_host_port
 
 from . import tailnet
@@ -31,6 +32,7 @@ lazy from .infrastructure import declared_machines
 lazy from .locate import index_of
 lazy from .moments import ago, moment
 lazy from .tailnet_presence import tailnet_presence
+lazy from .zones import public_answers_for
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +55,12 @@ class Peering:
     @property
     def public(self) -> bool:
         return self.id == "internet"
+
+    @property
+    def tone(self) -> str:
+        """A relayed link is one to weigh: it is slower than a direct one."""
+
+        return Tone.ATTENTION if self.id == "relay" else ""
 
 
 def _peering(presence) -> Peering | None:
@@ -368,6 +376,7 @@ def request_facts(request, *, edge=None, firewall=None, principal=None) -> Reque
     declared = declared_machines()
     own = hq_service(request, catalog=connections.machines_once())
     peer_device = reported_device if untrusted_forwarding else device
+    name, _port = split_host_port(request.get_host())
     return RequestFacts(
         request=request,
         address=address,
@@ -380,6 +389,7 @@ def request_facts(request, *, edge=None, firewall=None, principal=None) -> Reque
         identity=identity_of(request, None if untrusted_forwarding else device, principal),
         host=request.get_host(),
         secure=bool(request.is_secure()),
+        public_answers=public_answers_for(name) if is_hostname(name) else (),
         forwarding=forwarding,
         known=known,
         device=device,

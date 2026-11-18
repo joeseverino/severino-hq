@@ -2,9 +2,15 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Annotated, Any, Literal, NamedTuple, TypedDict, final
+from datetime import date, time
+from decimal import Decimal
+from functools import cache
+from typing import Annotated, Any, Literal, NamedTuple, TypeAliasType, TypedDict, final, get_type_hints
+from uuid import UUID
 
-from pydantic import ConfigDict, with_config
+from jsonschema import Draft202012Validator, validators
+from jsonschema.exceptions import ValidationError as JSONSchemaError
+from pydantic import ConfigDict, TypeAdapter, ValidationError as PydanticValidationError, with_config
 
 from hq.platform.core.audit import audit_connection, audit_operation, record_event, tallied
 from hq.platform.core.models import AuditLog
@@ -30,12 +36,14 @@ from .idempotency import (
 from .integration_specs import (
     CONSENT_KEYWORD,
     IDEMPOTENCY_FIELD,
+    IDEMPOTENCY_HEADER,
     SENT_KEYWORD,
     STALE_WRITE_KEYWORD,
     TARGET_KINDS,
     CapabilitySpec,
     capability_schema,
     command_adapter,
+    command_schema,
     kept_by,
     takes_consent,
     takes_sent_fields,
@@ -260,6 +268,7 @@ def run_capability(
     target: str | int | None = None,
     expected_updated_at: str | None = None,
     idempotency_key: str | None = None,
+    key_in_payload: bool = True,
 ) -> Ran:
     """Run one capability: the one place a retry key is read, required and kept.
 
@@ -267,8 +276,9 @@ def run_capability(
     is this with the answer alone: that is the signature ``hq_sdk`` publishes to
     the extensions, while a door also hands over the key it carries beside the
     payload (the API's header, a form's hidden field) and says whether the
-    answer was replayed. A key in the payload's ``idempotency_key`` is the same
-    key sent in the command.
+    answer was replayed. A door with no place beside the payload (an MCP tool
+    call) sends the key as the payload's ``idempotency_key``; one that takes it
+    beside the payload alone says ``key_in_payload=False`` (the API's header).
     """
 
     with span(f"capability {name}", **{"hq.capability": name, "hq.interface": principal.interface}):
@@ -279,6 +289,7 @@ def run_capability(
             target=target,
             expected_updated_at=expected_updated_at,
             idempotency_key=idempotency_key,
+            key_in_payload=key_in_payload,
         )
         failed = refused(ran.answer)
         note(
@@ -296,6 +307,7 @@ def _named_run(
     target: str | int | None,
     expected_updated_at: str | None,
     idempotency_key: str | None,
+    key_in_payload: bool,
 ) -> Ran:
     spec = capability_spec(name)
     if spec is None:
@@ -314,6 +326,7 @@ def _named_run(
             target=target,
             expected_updated_at=expected_updated_at,
             sent_key=idempotency_key,
+            key_in_payload=key_in_payload,
         )
     except InvalidIdempotencyKey as exc:
         return Ran(refuse("invalid_idempotency_key", exc.reason))
@@ -339,6 +352,7 @@ def _authorized_run(
     target: str | int | None,
     expected_updated_at: str | None,
     sent_key: str | None,
+    key_in_payload: bool,
 ) -> Ran:
     """Check authority, the target, the retry key, shape and consent, then run once under the caller's key."""
 
@@ -349,15 +363,16 @@ def _authorized_run(
     refused = _target_refusal(spec, target, expected_updated_at)
     if refused is not None:
         return Ran(refused)
-    key, payload = _retry_key(spec, payload, sent_key)
+    key, payload = _retry_key(spec, payload, sent_key, key_in_payload=key_in_payload)
     if not key and key_required(spec.effect, principal):
         # A retry of a change sent without a key could act twice.
+        where = f"payload.{IDEMPOTENCY_FIELD}" if key_in_payload else f"{IDEMPOTENCY_HEADER} header"
         return Ran(
             refuse(
                 "idempotency_key_required",
-                "A capability that changes something needs an idempotency key. Send a new "
-                "payload.idempotency_key, and the same one when you retry this change.",
-                {"field": "payload.idempotency_key"},
+                f"A capability that changes something needs an idempotency key. Send a new {where}, "
+                "and the same one when you retry this change.",
+                {"field": where.removesuffix(" header")},
             )
         )
     command = validate_command(spec, payload, target)
@@ -407,20 +422,24 @@ def key_required(effect: Effect, principal: Principal) -> bool:
 KEYLESS_INTERFACES = frozenset({CLI_INTERFACE})
 
 
-def _retry_key(spec: CapabilitySpec, payload: dict[str, Any], sent: str | None) -> tuple[str, dict[str, Any]]:
+def _retry_key(
+    spec: CapabilitySpec, payload: dict[str, Any], sent: str | None, *, key_in_payload: bool
+) -> tuple[str, dict[str, Any]]:
     """``(key, payload)``: the caller's retry key, and the payload its command reads.
 
-    The key arrives beside the payload (``sent``), in it, or both alike. A read
-    takes none, so one in its payload is an unknown field. No command sees the
-    key: a retry is this runner's to answer.
+    A call's key arrives one way: beside the payload (``sent``), or, where none
+    is and the door takes one there, in it. A key in the payload otherwise, or
+    of a read, is a field the command does not have. No command sees the key:
+    a retry is this runner's to answer.
     """
 
     if not spec.effect.changes or not isinstance(payload, dict):
         return "", payload
-    keys = {_valid_key(given) for given in (sent, payload.get(IDEMPOTENCY_FIELD)) if given is not None}
-    if len(keys) > 1:
-        raise InvalidIdempotencyKey("The request sent two different idempotency keys.")
-    key = keys.pop() if keys else ""
+    if sent is not None or not key_in_payload or IDEMPOTENCY_FIELD not in payload:
+        return ("" if sent is None else _valid_key(sent)), payload
+    # A payload's key is judged whenever the field is there: a null is a key
+    # of the wrong shape, as the document declares it, never a key left out.
+    key = _valid_key(payload[IDEMPOTENCY_FIELD])
     return key, {name: value for name, value in payload.items() if name != IDEMPOTENCY_FIELD}
 
 
@@ -497,11 +516,126 @@ def validate_command(spec: CapabilitySpec, payload: dict[str, Any], target: str 
     so a rule that reads two fields reads them as the record will hold them.
     """
 
+    sent = payload
     kept = kept_by(spec) if target is not None else None
     if kept is not None:
         (current,) = _target_keyword(spec, target).values()
         payload = {**kept.read(current), **payload}
+    mistyped = _mistyped(spec.command_type, sent)
+    if mistyped:
+        raise PydanticValidationError.from_exception_data(spec.name, mistyped)
     return command_adapter(spec.command_type).validate_python(payload)
+
+
+# What Pydantic calls a value of the wrong JSON type, by the type the schema
+# gives; the first a union lists names the refusal.
+_TYPE_ERRORS = {
+    "array": "list_type",
+    "boolean": "bool_type",
+    "integer": "int_type",
+    "null": "none_required",
+    "number": "float_type",
+    "object": "dict_type",
+    "string": "string_type",
+}
+# A value a door hands HQ already parsed: the text the schema says, as Python holds it.
+_JSON_TYPES = Draft202012Validator.TYPE_CHECKER
+_SENT_TYPES = _JSON_TYPES.redefine_many(
+    {
+        "number": lambda checker, value: _JSON_TYPES.is_type(value, "number") or isinstance(value, Decimal),
+        "string": lambda checker, value: isinstance(value, str | date | time | UUID),
+    }
+)
+_Sent = validators.extend(Draft202012Validator, type_checker=_SENT_TYPES)
+
+
+@cache
+def _published(command_type: type) -> Any:
+    return _Sent(command_schema(command_type))
+
+
+def _mistyped(command_type: type, payload: Any) -> list[Any]:
+    """Each value ``payload`` sends in a JSON type its published schema does not give it.
+
+    Pydantic's lax mode, which reads a form's text, takes ``0`` for false and
+    ``"3"`` for 3; a door's payload is held to the document's types first, so
+    what the document refuses is refused. The rest Pydantic judges.
+    """
+
+    found = []
+    for error in _published(command_type).iter_errors(payload):
+        wrong = _wrong_type(error)
+        if wrong is None:
+            continue
+        wanted, held = wrong
+        first = wanted[0] if isinstance(wanted, list) else wanted
+        found.append({"type": _TYPE_ERRORS[first], "loc": tuple(held.absolute_path), "input": held.instance})
+    return found
+
+
+def as_documented(command_type: type, payload: dict[str, Any]) -> dict[str, Any]:
+    """``payload`` with each field the document's types refuse read as the command's own type reads it.
+
+    A form posts text: a weekday's checkbox sends ``"0"`` where the document
+    says an integer. The web door reads its form through this before the call,
+    so what it sends, holds for approval and records is the JSON an agent
+    would send. A field its type does not read stays as sent, for the call's
+    refusal to name.
+    """
+
+    wrong = {error["loc"][0] for error in _mistyped(command_type, payload) if error["loc"]}
+    return {
+        name: _read_as_typed(command_type, name, value) if name in wrong else value for name, value in payload.items()
+    }
+
+
+def _read_as_typed(command_type: type, name: str, value: Any) -> Any:
+    adapter = _field_adapter(command_type, name)
+    if adapter is None:
+        return value
+    try:
+        return adapter.dump_python(adapter.validate_python(value), mode="json")
+    except PydanticValidationError:
+        return value
+
+
+@cache
+def _field_adapter(command_type: type, name: str) -> TypeAdapter[Any] | None:
+    hint = get_type_hints(command_type, include_extras=True).get(name)
+    if hint is None:
+        return None
+    # Closed as the command's own validator is (``command_adapter``), so a
+    # field it would refuse is never read into one it takes.
+    alias: Any = TypeAliasType(f"{command_type.__name__}_{name}", hint)
+    return TypeAdapter(alias, config=ConfigDict(extra="forbid"))
+
+
+def _wrong_type(error: JSONSchemaError) -> tuple[Any, JSONSchemaError] | None:
+    """The JSON type ``error`` says a value should have been sent in, and the
+    error that holds the value; ``None`` for an error of another kind.
+
+    A union whose every branch is only a type (``boolean`` or ``null``) is
+    that type; a union of shapes, such as a manifest entry's, none of which
+    the value fits, is the deepest type error found when every branch finds
+    one. A branch refusing the value on another keyword alone (a number past
+    its maximum) admits its type, so Pydantic judges it.
+    """
+
+    if error.validator == "type":
+        return error.validator_value, error
+    if error.validator not in {"anyOf", "oneOf"} or not error.context:
+        return None
+    if all(branch.validator == "type" and not branch.relative_path for branch in error.context):
+        return error.context[0].validator_value, error
+    by_branch: dict[Any, list[tuple[Any, JSONSchemaError]]] = {}
+    for found in error.context:
+        wrong = _wrong_type(found)
+        by_branch.setdefault(found.relative_schema_path[0], []).extend(() if wrong is None else (wrong,))
+    if not all(by_branch.values()):
+        return None
+    return max(
+        (wrong for found in by_branch.values() for wrong in found), key=lambda wrong: len(wrong[1].absolute_path)
+    )
 
 
 # What a declaration write the consent does not admit is refused with.

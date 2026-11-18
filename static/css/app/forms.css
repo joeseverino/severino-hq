@@ -67,7 +67,7 @@
 /* A toned select (`{% select tone= %}`) says its choice in the tone's ink
    (`.toned`), and a choice that is a stand, not the neutral default, is
    edged in it too. */
-select.toned:not(.toned-neutral) { border-color: currentColor; }
+select.toned:not(.tone-neutral) { border-color: currentColor; }
 /* Never shorter than a few lines, however little is in it (`field-sizing`). */
 .field textarea { resize: vertical; min-height: 80px; }
 /* A field shown only when another field's value calls for it: data-when names
@@ -92,18 +92,18 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
    label past the edge. */
 .field input[type=checkbox], .field input[type=radio] { width: auto; }
 .check-row input { flex: 0 0 auto; margin-top: var(--space-1); }
-.field.has-errors input, .field.has-errors textarea, .field.has-errors select { border-color: var(--danger); }
+.field.has-errors input, .field.has-errors textarea, .field.has-errors select { border-color: var(--tone-mark); }
 /* Django renders errors as a plain `<ul class="errorlist">`, unstyled by
    default. */
 .errorlist {
   margin: var(--space-2) 0 0;
   display: grid;
   gap: var(--space-1);
-  color: var(--danger);
+  color: var(--tone-mark);
   font-size: var(--text-xs);
   font-weight: 600;
 }
-.errors { color: var(--danger); margin: var(--space-2) 0 0; padding-left: var(--space-8); font-size: var(--text-sm); }
+.errors { color: var(--tone-mark); margin: var(--space-2) 0 0; padding-left: var(--space-8); font-size: var(--text-sm); }
 /* Choice cards (`ChoiceCards`, hq.platform.application.forms): each answer
    a card of its radio, its few words and what choosing it does, side by side
    while each keeps a readable width. The label reaches over its card, so
@@ -307,7 +307,6 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
   margin: 0;
   padding: var(--space-3) var(--space-4) var(--space-2);
   background: color-mix(in srgb, var(--ground) 94%, transparent);
-  color: var(--muted);
 }
 .command-center-option {
   display: grid;
@@ -376,7 +375,7 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
    last, which a row aligned on baselines (an opened row's panel) would lift
    over the rows above, as base.css does for an identifier, and where an
    engine has no `baseline-source` it sits on its last line's baseline. */
-.tag { display: inline-block; padding: 1px var(--space-4); margin-inline-end: var(--space-2); background: var(--bg-tint); border-radius: 999px; font-size: var(--text-2xs); color: var(--ink-2); baseline-source: first; }
+.tag { display: inline-block; padding: 1px var(--space-4); margin-inline-end: var(--space-2); background: var(--bg-tint); border-radius: var(--radius-pill); font-size: var(--text-2xs); color: var(--ink-2); baseline-source: first; }
 /* The margin parts a chip from the next; the last has none to part, so it takes the whole of its line, and a value in it is cut only past its cell's edge. */
 .tag:last-child { margin-inline-end: 0; }
 
@@ -385,10 +384,10 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
 .command-confirm {
   padding: var(--space-6) var(--space-7);
   /* A callout, like .notice: inside a surface its tint and its bar, not a frame. */
-  border: var(--surface-border, 1px solid var(--warn));
-  border-left: 3px solid var(--warn);
+  border: var(--surface-border, 1px solid var(--tone-mark));
+  border-left: 3px solid var(--tone-mark);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--warn) 7%, var(--surface));
+  background: color-mix(in srgb, var(--tone-mark) 7%, var(--surface));
 }
 /* A command and its copy button, which sits in its corner rather than on a
    line of its own; the command leaves room for it. */
@@ -476,7 +475,6 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
   padding: var(--space-5);
   max-block-size: 70dvh;
   overflow: auto; overscroll-behavior: contain;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow-pop);
 }
 .filter-bar-choices:popover-open > .toggle-set { flex-wrap: wrap; }
 .filter-bar-choices:popover-open > .filter-bar-send { margin-inline-start: auto; }

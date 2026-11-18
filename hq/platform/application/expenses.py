@@ -1,7 +1,6 @@
 """Expense commands shared by web, MCP, and CLI."""
 
 from dataclasses import dataclass
-from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any
 
@@ -12,16 +11,17 @@ from hq.domains.expenses.models import DEFAULT_CATEGORY, EXPENSE_CATEGORY_CHOICE
 from .assets import PaymentMethod
 from .business_use import BusinessUseShare
 from .card_items import Kpi
-from .command_fields import Describe, Names, Refers
+from .command_fields import Day, Describe, Names, Refers
 from .money import money
 from .projection import iso
 from .record_fields import Notes, TotalCost, one_of
 from .record_saves import Held, Link, linked_saver
 from .sensitivity import SAFE_SENSITIVITIES
+from .url_query import with_query
 
 # An expense's fields as its command writes them and its row reads them back, each said once.
 _CATEGORY = one_of(EXPENSE_CATEGORY_CHOICES)
-type ExpenseDate = Annotated[date, Describe("When it was spent.")]
+type ExpenseDate = Annotated[Day, Describe("When it was spent.")]
 type ExpenseVendor = Annotated[str, Describe("Who was paid.")]
 type ExpenseItem = Annotated[str, Describe("What was bought.")]
 type ExpenseCategory = Annotated[_CATEGORY, Describe("What type of expense it is.")]
@@ -111,7 +111,7 @@ def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTota
 
     def narrowed_to(category: str) -> str:
         kept["category"] = category
-        return f"?{kept.urlencode()}"
+        return with_query("", kept)
 
     return totals, tuple(
         Kpi(

@@ -92,7 +92,7 @@ class RowWrittenOnceTests(SimpleTestCase):
             '<td>{{% line_list reads as read list="dot-list" %}}<li>{{{{ read }}}} <span class="muted row-more">2</span>'
             "</li>{{% endline_list %}}</td>"
             '<td><a href="/example/host/">example-host</a></td>'
-            '<td><span class="toned toned-good">Working</span><span class="muted row-more"><br>Full access</span></td>'
+            '<td><span class="toned tone-good">Working</span><span class="muted row-more"><br>Full access</span></td>'
             '<td><a class="btn compact" href="/example/{n}/edit/">Edit</a></td></tr>'
         )
         rows = 20

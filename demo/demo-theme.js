@@ -50,7 +50,7 @@
     return asked.get("q") ? "search" : "filter";
   };
   // Where this document really came from, before its address is put back.
-  window.hqDemo = { key, kindOf, routes, nearest: nearestOf, searchKey, served: location.pathname, unanswered: "", answeredAs: "" };
+  window.hqDemo = { key, kindOf, routes, nearest: nearestOf, searchKey, served: location.pathname, unanswered: "", answeredAs: "", leaving: false };
 
   const address = document.querySelector('meta[name="hq-demo-address"]')?.content;
   if (address) {
@@ -76,6 +76,8 @@
     const asked = here.pathname === "/search/" ? here.searchParams.get("q") : "";
     const target = found.variants[key(here, found)] || (asked ? found.variants[searchKey(asked, found)] : "");
     if (target) {
+      // Read by demo.js, which then asks for nothing on a page being left.
+      window.hqDemo.leaving = true;
       try { sessionStorage.setItem("hq-demo-asked", here.pathname + here.search); } catch { /* private window */ }
       location.replace(target + here.hash);
       return;

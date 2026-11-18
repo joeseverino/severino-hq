@@ -28,6 +28,7 @@ lazy from hq.platform.application.pages import PageAction, offered_now
 lazy from hq.platform.application.ui import button_classes
 lazy from hq.platform.core.template_parts import Part, slotted
 lazy from hq.platform.core.templatetags.value_tags import (
+    OUTSIDE_LINK,
     _request,
     arrow as onward_arrow,
     breakable,
@@ -116,20 +117,60 @@ def remedies(context, actions):
     ]
 
 
-def post_button_markup(
-    label, url, *, name="action", value="", css="btn", title="", disabled=False, pressed=None, hit=False, shared=True
-):
-    """The button ``button`` draws with ``post``, for Python that builds a page's
-    markup: posting through the shared form, or the one form it stands in
-    (``shared=False``)."""
+def offer_markup(offer, *, look=""):
+    """The button ``button`` draws for ``offer``, for Python that builds a
+    page's markup."""
 
+    return _posting(offer.label, offer, classes=button_classes(look or offer.look))
+
+
+def _posting(label, offer, *, classes, title="", disabled=False, pressed=None, hit=False, context=None):
+    """The one way HQ writes a button that posts: what ``offer`` sends, to
+    where it sends it, through the shared form, or as a form of its own where
+    it sends ``fields`` besides its own field. The shared form carries only
+    the button's field; a form of its own returns to the page it was pressed
+    on unless its fields name a ``next``."""
+
+    if not isinstance(offer, PageAction) or offer.method != "post":
+        raise template.TemplateSyntaxError(
+            "A button posts only what an offer sends: PageAction.command, or a RowOrder's or RowMark's press."
+        )
+    button = _post_button(
+        label,
+        offer.url,
+        name=offer.field,
+        value=offer.value,
+        css=classes,
+        title=title or offer.title,
+        disabled=disabled or offer.disabled,
+        pressed=pressed,
+        hit=hit,
+        shared=not offer.fields,
+    )
+    if not offer.fields:
+        return button
+    if context is None:
+        raise ValueError(f"{offer.label} sends fields of its own, so it is drawn in a template, as a form.")
+    request = _request(context)
+    sent = {"next": request.get_full_path(), **offer.fields}
+    with context.push(csrf_token=get_token(request)):
+        token = write_token(context)
+    return (
+        format_html('<form method="post" action="{}" class="post-form">', offer.url)
+        + token
+        + format_html_join("", '<input type="hidden" name="{}" value="{}">', sent.items())
+        + button
+        + mark_safe("</form>")
+    )
+
+
+def _post_button(label, url, *, name, value, css, title, disabled, pressed, hit, shared):
     # A button of words is named by them, so its title only describes it; a
     # glyph (an arrow, a star) says nothing aloud and is named by its title.
     # A toggle (`pressed`, true or false) says aloud which way it stands. A
     # control drawn smaller than a target asks for its hit area (`hit`,
     # page.css).
-    glyph = not any(character.isalnum() for character in str(label))
-    attributes = {"name": name, "value": value, "title": title, "aria-label": title if glyph else ""}
+    attributes = {"name": name, "value": value, "title": title, "aria-label": title if _glyph(label) else ""}
     if pressed is not None:
         attributes["aria-pressed"] = "true" if pressed else "false"
     return format_html(
@@ -149,8 +190,17 @@ def post_button_markup(
 BUTTON_ATTRIBUTES = frozenset({"popovertarget", "command", "commandfor", "aria_haspopup", "hidden"})
 
 
-def _button_words(label, icon="", count=None, onward=False):
+def _glyph(label):
+    """Whether ``label`` is a glyph (an arrow, a star), which says nothing aloud."""
+
+    return not any(character.isalnum() for character in str(label))
+
+
+def _button_words(label, icon="", count=None, onward=False, *, unseen=False):
+    # A glyph button with an icon shows the icon alone; its words name it.
     words = button_words(label)
+    if unseen and icon:
+        words = format_html('<span class="visually-hidden">{}</span>', words)
     if onward:
         words = format_html("{}{}", words, mark_safe(onward_arrow()))  # noqa: S308 - the arrow tag's own markup
     if icon:
@@ -165,20 +215,20 @@ def _button_words(label, icon="", count=None, onward=False):
 def button(
     context,
     label: Annotated[Any, Describe("Its words.")],
-    url: Annotated[Any, Describe("Where it leads, or with `post` where it posts.")] = "",
+    url: Annotated[Any, Describe("Where it leads.")] = "",
     *,
-    post: Annotated[bool, Describe("Posts to its url.")] = False,
+    outside: Annotated[bool, Describe("Its url is a page outside HQ, opened as every outside link is.")] = False,
+    offer: Annotated[Any, Describe("A `PageAction` that posts, which it sends: where, its field and the rest.")] = None,
     submit: Annotated[bool, Describe("Sends its own form.")] = False,
     look: Annotated[str, Describe("How it looks, its words from `ui.BUTTON_LOOKS`.")] = "",
     css: Annotated[str, Describe("Classes in place of its look, for a control not drawn as a button.")] = "",
     title: Annotated[Any, Describe("Its `title`, read where it stands.")] = "",
     disabled: Annotated[bool, Describe("Neither a link nor a form, kept in the tab order.")] = False,
     current: Annotated[bool, Describe("It names the page being drawn.")] = False,
-    name: Annotated[str, Describe("The field it sends.")] = "",
+    name: Annotated[str, Describe("The field its form's own sends.")] = "",
     value: Annotated[Any, Describe("That field's value.")] = "",
     pressed: Annotated[bool | None, Describe("A toggle, and which way it stands.")] = None,
     hit: Annotated[bool, Describe("Drawn smaller than a target, so it asks for its hit area.")] = False,
-    fields: Annotated[Any, Describe("What a posting one sends besides its own field, as a form of its own.")] = None,
     modal: Annotated[str, Describe("The dialog a link opens where script runs.")] = "",
     icon: Annotated[str, Describe("The icon its words open with.")] = "",
     count: Annotated[Any, Describe("A count of what it holds, after its words.")] = None,
@@ -188,59 +238,58 @@ def button(
     ],
 ):
     """Every control that looks like a button, and the only thing that writes
-    one: a link to ``url``; with ``post``, one that posts to it; with
-    ``submit``, its form's own; with neither and no ``url``, one a script or
-    the platform acts on (``data_*``, ``BUTTON_ATTRIBUTES``). Its words may
+    one: a link to ``url``; with an ``offer``, one that posts what it sends;
+    with ``submit``, its form's own; with neither and no ``url``, one a script
+    or the platform acts on (``data_*``, ``BUTTON_ATTRIBUTES``). Its words may
     open with an ``icon``, close with a ``count`` of what it holds, or end
     with the ``arrow`` of a link onward. ``look`` is how
-    it looks (``ui.BUTTON_LOOKS``); ``css`` stands in for the button's look
-    on a control that is not drawn as one (an icon, a pin). Disabled or the
+    it looks (``ui.BUTTON_LOOKS``); the ``glyph`` look shows its ``icon``
+    alone, its words heard and unseen. ``css`` stands in for the button's look
+    on a control that is not drawn as one (a pin). ``outside`` leads out of HQ
+    as ``{% outside_link %}`` does. Disabled or the
     page it names (``current``), it is neither a link nor a form, and stays in
-    the tab order so its title is read where it stands. A posting one's
-    ``fields``, what it sends besides its own field, make it a form of its
-    own, since the shared form carries only the button's field; it then
-    returns to the page it was pressed on unless they name a ``next``. Its
-    token is the request's, which an ``{% include ... only %}`` keeps when it
-    drops the context processors' values."""
+    the tab order so its title is read where it stands.
 
+    A page posts only through an offer, which is built where the rule that
+    would refuse its press is read (``PageAction.command``), so no page shows
+    a press its reader may not make. Its token is the request's, which an
+    ``{% include ... only %}`` keeps when it drops the context processors'
+    values."""
+
+    posts = offer is not None
     if css and look:
         raise template.TemplateSyntaxError("button takes look= or css=, not both")
-    if post + submit + bool(current) > 1 or (post and not url) or ((submit or current) and url):
+    if posts + submit + bool(current) > 1 or ((posts or submit or current) and url):
         raise template.TemplateSyntaxError(
-            "button posts to a url (post=True), sends its form (submit=True), names this page (current=True), "
+            "button posts an offer (offer=), sends its form (submit=True), names this page (current=True), "
             "or links to a url"
         )
-    # A posting button is drawn by `post_button_markup`, which carries no hooks.
+    # A posting button sends what its offer says, and carries no hooks.
     unknown = sorted(
-        key for key in attributes if post or (not key.startswith("data_") and key not in BUTTON_ATTRIBUTES)
+        key for key in attributes if posts or (not key.startswith("data_") and key not in BUTTON_ATTRIBUTES)
     )
+    if posts and (name or value != ""):
+        unknown += ["name", "value"]
+    if outside and (not url or attributes or modal):
+        raise template.TemplateSyntaxError("button leads outside (outside=True) to a url, with no hooks or modal")
     if unknown:
         raise template.TemplateSyntaxError(f"button takes no {', '.join(unknown)}")
     try:
         classes = css or button_classes(look)
     except ValueError as error:
         raise template.TemplateSyntaxError(str(error)) from error
-    if post:
-        options = {"name": name or "action", "value": value, "css": classes, "title": title}
-        options |= {"disabled": disabled, "pressed": pressed}
-        if not fields:
-            return post_button_markup(label, url, hit=hit, **options)
-        request = _request(context)
-        sent = {"next": request.get_full_path(), **fields}
-        with context.push(csrf_token=get_token(request)):
-            token = write_token(context)
-        return (
-            format_html('<form method="post" action="{}" class="post-form">', url)
-            + token
-            + format_html_join("", '<input type="hidden" name="{}" value="{}">', sent.items())
-            + post_button_markup(label, url, hit=hit, shared=False, **options)
-            + mark_safe("</form>")
+    if posts:
+        return _posting(
+            label, offer, classes=classes, title=title, disabled=disabled, pressed=pressed, hit=hit, context=context
         )
-    words = _button_words(label, icon, count, arrow)
+    words = _button_words(label, icon, count, arrow, unseen="glyph" in look.split())
     named = {"class": classes, "title": title} | {key.replace("_", "-"): val for key, val in attributes.items()}
     if (disabled and not submit) or current:
         state = {"role": "button", "aria-disabled": "true", "tabindex": "0"} if disabled else {"aria-current": "page"}
         return format_html("<span{}>{}</span>", html_attributes(named | state), words)
+    if outside:
+        named = {"css": classes, "title": title, "label": title if _glyph(label) else "", "content": words}
+        return mark_safe(render_to_string(OUTSIDE_LINK, {"url": url, **named}).strip())  # noqa: S308 - the outside link part's own markup
     if url:
         return format_html("<a{}>{}</a>", html_attributes({"href": url, "data-modal-open": modal} | named), words)
     kind = {"type": "submit" if submit else "button", "name": name, "value": value, "disabled": bool(disabled)}
@@ -401,7 +450,7 @@ slotted(
         ),
         function=button,
         public=True,
-        example='{% button "Restart" url post=True look="primary" %}',
+        example='{% button restart.label offer=restart look="primary" %}',
     ),
     library=register,
 )

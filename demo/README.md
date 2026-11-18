@@ -114,10 +114,9 @@ so Scalar does not offer GitHub Pages as one.
 
 ## What the checks hold (`demo/check.py`)
 
-- Every address a page links or a script reads is a file in the demo. An
-  example the Design page draws in a shadow root links where it links in HQ
-  (nowhere, for its synthetic `/example/` addresses), so it is held only to
-  what it loads.
+- Every address a page links or a script reads is a file in the demo, the
+  examples the Design page draws in shadow roots included, and so is every
+  address an example's form would send a press to.
 - Next and Prev under a list, filtered or not, open a saved copy, up to the
   sixth page.
 - Every address with a query a page links opens a saved copy, and so does

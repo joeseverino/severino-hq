@@ -44,17 +44,17 @@ reading; nothing here calls GitHub.
   {% endfacts %}
   {% with rules=repo.rules environment=repo.production_environment %}
   {% facts %}
-    {% fact "Dependency updates" %}<span id="updates-state" data-updates-state>{% if project.dependency_updates %}On{% with pulls=repo.update_pulls|length %}, {% if pulls %}<a href="#updates">{{ pulls|counted:"open update,open updates" }}</a>{% else %}none open{% endif %}{% endwith %}{% else %}Off{% endif %}
+    {% fact "Dependency updates" %}<div id="updates-state" data-updates-state>{% if project.dependency_updates %}On{% with pulls=repo.update_pulls|length %}, {% if pulls %}<a href="#updates">{{ pulls|counted:"open update,open updates" }}</a>{% else %}none open{% endif %}{% endwith %}{% else %}Off{% endif %}
       {% include "projects/_updates_run.html" with run=updates_run asked=run_asked %}
-    </span>{% endfact %}
+    </div>{% endfact %}
     {% if posture.measured %}
-      {% fact "Repository settings" %}<span class="prose"><a href="{% url 'posture' %}">{{ posture.met|breakable }} of {{ posture.measured|counted:"check passes,checks pass" }}</a> ({% if repo.private %}private{% else %}public{% endif %} repo rules){% if posture.unmet %}<br>{% for result in posture.unmet %}{% status result.check.unmet tone="attention" pill=False %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</span>{% endfact %}
+      {% fact "Repository settings" %}<span class="prose"><a href="{% url 'posture' %}">{{ posture.met|breakable }} of {{ posture.measured|counted:"check passes,checks pass" }}</a> ({% if repo.private %}private{% else %}public{% endif %} repo rules)</span>{% if posture.unmet %}{% dot_list %}{% for result in posture.unmet %}<li>{% status result.check.unmet tone="attention" pill=False %}</li>{% endfor %}{% enddot_list %}{% endif %}{% endfact %}
     {% endif %}
     {% if rules %}
       {% fact "Changes to "|add:repo.default_branch %}
         {% if rules.pull_request %}Need a pull request{% if rules.reviews %} with {{ rules.reviews|counted:"approval" }}{% endif %}{% else %}Need no pull request{% endif %}
         and {{ rules.required_checks|length|counted:"passing check,passing checks" }}{% if rules.required_checks %} ({{ rules.required_checks|join:", "|breakable:")." }}{% else %}.{% endif %}{% if rules.blocks_force_push %} Force-push is blocked.{% endif %}
-        {% if repo.unrequired_checks %}<br>{% status "Run on pull requests but not required:" repo.unrequired_checks|join:", " tone="attention" pill=False %}{% endif %}
+        {% if repo.unrequired_checks %}{% stack_list %}<li>{% status "Run on pull requests but not required:" repo.unrequired_checks|join:", " tone="attention" pill=False %}</li>{% endstack_list %}{% endif %}
       {% endfact %}
     {% elif "branch_rules" in repo.refused %}
       {% fact "Changes to "|add:repo.default_branch %}{% muted %}GitHub does not offer branch rules for this repository's plan.{% endmuted %}{% endfact %}

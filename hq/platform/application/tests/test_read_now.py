@@ -144,11 +144,6 @@ class RefusalTests(TestCase):
         self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(ReadRequest.objects.exists())
 
-    def test_an_unknown_field_is_refused(self):
-        result = execute_capability(READ_NOW, {"connection": "x"}, principal=cli_principal())
-
-        self.assertEqual(result["error"]["code"], "invalid_input")
-
     def test_a_reader_may_not_ask(self):
         reader = Principal("reader", "test", frozenset({Capability.READ}))
 
@@ -180,7 +175,7 @@ class WebTests(TestCase):
             reverse("control_plane:read_now"), form_keyed({"connection_ref": "no-such-connection"}), follow=True
         )
 
-        self.assertContains(response, "connection_ref names nothing HQ has.")
+        self.assertIn("connection_ref names nothing HQ has.", text(response.content.decode()))
         self.assertFalse(ReadRequest.objects.exists())
 
     def test_the_payload_is_the_inverse_of_the_link(self):

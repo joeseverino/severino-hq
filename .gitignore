@@ -1,5 +1,8 @@
 # Node tooling
 node_modules/
+# The tree-sitter grammars Vale reads code with, which `vale sync` installs
+# from the Vale release mise.lock pins (setup:lint-tools).
+/tools/lint/vale/styles/config/grammars/
 
 # Python
 __pycache__/

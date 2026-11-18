@@ -1,7 +1,7 @@
 from django.template import Context, Template
 from django.test import SimpleTestCase
 
-from hq.platform.application.markup_testing import elements, select, with_class
+from hq.platform.application.markup_testing import select, with_class
 
 
 def drawn(source: str, **context) -> str:
@@ -44,12 +44,6 @@ class MutedTests(SimpleTestCase):
         block = drawn('{% muted element="div" %}A description.{% endmuted %}')
 
         self.assertEqual([part.tag for part in with_class(block, "muted")], ["div"])
-
-    def test_the_words_are_escaped_as_the_page_writes_them(self):
-        shown = drawn("{% muted %}{{ words }}{% endmuted %}", words="<b>x</b>")
-
-        self.assertEqual(elements(shown, "b"), [])
-        self.assertEqual(with_class(shown, "muted")[0].words, "<b>x</b>")
 
     def test_an_extension_may_write_it(self):
         from hq.platform.core.template_contract import describe

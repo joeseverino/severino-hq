@@ -109,7 +109,7 @@ SELECTORS = {
         " label:has(select, input:is([type=checkbox], [type=radio]))"
     ),
     # Everything pressed: a button, a link drawn as one, a disclosure's handle.
-    "control": "button, .btn, .icon-link, summary",
+    "control": "button, .btn, summary",
     # Everything a pointer presses: a link, a form's control, a disclosure,
     # and whatever else takes focus.
     "target": "a[href], button, summary, select, textarea, input:not([type=hidden]), [tabindex]:not([tabindex='-1'])",

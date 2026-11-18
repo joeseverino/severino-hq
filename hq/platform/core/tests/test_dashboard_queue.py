@@ -121,7 +121,7 @@ class DashboardQueueTests(TestCase):
         for path, shown in (("/", False), ("/action-items/", True)):
             with self.subTest(path=path):
                 marks = [
-                    mark for mark in with_class(self.client.get(path), "is-mark") if "pill-serious" in mark.classes
+                    mark for mark in with_class(self.client.get(path), "is-mark") if "tone-serious" in mark.classes
                 ]
                 self.assertTrue(marks)
                 self.assertEqual(any("visually-hidden" not in mark.classes for mark in marks), shown)

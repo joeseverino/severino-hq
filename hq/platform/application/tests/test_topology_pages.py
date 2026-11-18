@@ -204,14 +204,14 @@ class TopologyPageTests(TestCase):
             enabled=False,
         )
         ManagedResource.objects.create(
-            key="example-stack",
-            kind="portainer.stack",
-            spec={"name": "example-stack", "host": "example-host"},
+            key="example-authority",
+            kind="pki.authority",
+            spec={"name": "Example Root"},
         )
 
         response = self.body("resource:behind-name")
         disabled = self.body("resource:disabled-name")
-        unswept = self.body("resource:example-stack")
+        unswept = self.body("resource:example-authority")
 
         # A comparison, not two raw revision numbers.
         self.assertNotIn("evision", text(response))

@@ -12,7 +12,7 @@ switches and theme they set, and the places and verbs of their session.
   served by HQ (`application/avatars.py`).
   {% endcomment %}
   {% with avatar=request.session.avatar %}
-  <button type="button" popovertarget="user-menu" aria-labelledby="user-name">
+  <button type="button" class="{{ bar_button }}" popovertarget="user-menu" aria-labelledby="user-name">
     {% if avatar %}
     <img class="user-avatar" src="{% url 'avatar' avatar %}" alt="" width="22" height="22" decoding="async">
     {% else %}

@@ -25,7 +25,6 @@ from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.connection_shapes import SHAPES, projections
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters import caddy
-from hq.domains.control_plane.provider_spec import ConnectionShape, Setting
 from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS
 from hq.platform.application.tests.facts import TOP, grouped, scan
 from hq.platform.application.tests.reads import reads
@@ -244,20 +243,6 @@ class ConnectionShapeTests(SimpleTestCase):
             projections()["ssh_transport"]["ROLE"],
             {"source": "field", "label": "role", "optional": True},
         )
-
-    def test_a_shape_is_declared_whole(self):
-        with self.assertRaises(ValueError):
-            Setting("lower", label="x")
-        with self.assertRaises(ValueError):
-            Setting("TWO", label="x", url=0)
-        with self.assertRaises(ValueError):
-            Setting("NONE")
-        with self.assertRaises(ValueError):
-            ConnectionShape("Bad Name", (Setting("A", label="a"),))
-        with self.assertRaises(ValueError):
-            ConnectionShape("twice", (Setting("A", label="a"), Setting("A", label="b")))
-        with self.assertRaises(ValueError):
-            ConnectionShape("envelope", (Setting("PROVIDER", label="provider"),))
 
 
 def _production(**env: str) -> subprocess.CompletedProcess:

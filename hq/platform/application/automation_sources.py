@@ -30,6 +30,7 @@ from pydantic import (
     ValidationError,
 )
 
+from hq.platform.application.url_query import with_query
 lazy from hq.domains.control_plane import models
 lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
 lazy from hq.platform.core.audit import audited_labels
@@ -202,7 +203,7 @@ def _source(consented: Consented) -> ManagedResource:
 def scan_status_url(operation_id: str) -> str:
     """Where a page follows one scan, signed so it reports on nothing else."""
 
-    return f"{reverse('control_plane:playbooks_status')}?watch={asks.watch_token({'scan': operation_id})}"
+    return with_query(reverse("control_plane:playbooks_status"), {"watch": asks.watch_token({"scan": operation_id})})
 
 
 def _scan_asked(operation: OperationRequest, *, queued: bool) -> OperationAsked:

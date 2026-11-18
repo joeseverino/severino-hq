@@ -1,10 +1,40 @@
-"""Links that remember where they were followed from."""
+"""Links that carry a query: what they ask, or where they were followed from."""
 
-from urllib.parse import quote, urlencode, urlsplit, urlunsplit
+from typing import Annotated, Any
 
 from django import template
 
+from hq.platform.application.describe import Describe
+from hq.platform.application.url_query import with_query
+from hq.platform.core.template_parts import Part, slotted
+
 register = template.Library()
+
+
+def query_added(
+    url: Annotated[str, Describe("The address, which may hold a query of its own.")],
+    **query: Annotated[Any, Describe("Each name=value added to it.")],
+) -> str:
+    """``url`` with each ``name=value`` given added to its own query, encoded."""
+
+    return with_query(url, query)
+
+
+# A tag rather than a filter: a filter takes one argument, and an address
+# asks for one value or several, read from the page, which the tag encodes.
+slotted(
+    Part(
+        name="with_query",
+        about=(
+            "An address with a query added to its own, each value encoded: written where it stands, or kept "
+            "with `as` for the part that links it."
+        ),
+        function=query_added,
+        public=True,
+        example='{% with_query "/example/" kind="host" as hosts_url %}{% button "Hosts" hosts_url %}',
+    ),
+    library=register,
+)
 
 
 @register.filter
@@ -17,12 +47,7 @@ def returning_to(url: str, origin: str) -> str:
     redirect uses it: a query parameter is not evidence of anything.
     """
 
-    if not origin:
-        return url
-    parts = urlsplit(str(url))
-    query = f"{parts.query}&" if parts.query else ""
-    query += urlencode({"next": str(origin)}, quote_via=quote)
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+    return with_query(url, {"next": str(origin)}) if origin else url
 
 
 @register.filter

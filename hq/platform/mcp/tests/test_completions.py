@@ -4,7 +4,7 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 from mcp import Client, types
 
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.resources import EmptyQuery
 from hq.platform.application.security import Capability, Principal
 
@@ -27,11 +27,9 @@ def _kind():
         "Example records",
         "Records an extension declares.",
         "example_read",
-        _listing,
-        EmptyQuery,
-        lambda name: {"name": name},
-        "name",
-        item_type=ExampleRecord,
+        listing=ListRead(_listing, EmptyQuery, ExampleRecord),
+        detail_handler=lambda name: {"name": name},
+        identifier="name",
     )
 
 

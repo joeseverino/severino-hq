@@ -16,12 +16,14 @@ from typing import Any
 
 from django.utils import timezone
 
+from hq.platform.application.url_query import with_query
 lazy from hq.platform.application.routes import reverse
 
 from .entity_links import link_url
 lazy from . import domains
-lazy from .calendar_entries import own_sources
+lazy from .calendar_entries import CHOOSE_SOURCE, own_sources
 lazy from .moments import month as month_name, weekday
+lazy from .pages import PageAction
 
 logger = logging.getLogger("severino.calendar")
 
@@ -173,6 +175,12 @@ class SourceView:
     # Why it could not be read this time, or blank.
     failure: str = ""
 
+    @property
+    def choice(self) -> PageAction | None:
+        """The press that shows it, or hides it while shown, for a reader who may choose."""
+
+        return PageAction.command(CHOOSE_SOURCE, self.id, field="shown", value="0" if self.shown else "1")
+
 
 @dataclass(frozen=True, slots=True)
 class Placed:
@@ -307,13 +315,15 @@ class CalendarDayView:
 def month_url(month: date, day: date | None = None) -> str:
     """A month, with ``day`` open beside it."""
 
-    return f"{reverse('calendar:month')}?month={month:%Y-%m}{f'&day={day.isoformat()}' if day else ''}"
+    return with_query(
+        reverse("calendar:month"), {"month": f"{month:%Y-%m}", **({"day": day.isoformat()} if day else {})}
+    )
 
 
 def new_entry_url(day: date) -> str:
     """The form for a new entry, on ``day``."""
 
-    return f"{reverse('calendar:entry_new')}?on={day.isoformat()}"
+    return with_query(reverse("calendar:entry_new"), {"on": day.isoformat()})
 
 
 # ----- Sources ----------------------------------------------------------------

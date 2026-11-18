@@ -32,6 +32,7 @@ from .record_fields import Notes
 from .record_saves import Held, as_sent, found, held, written
 from .security import Principal, person
 from .ui import counted, ended
+from .url_query import with_query
 lazy from . import calendar
 lazy from .calendar_specs import EntryRecord
 lazy from .record_answers import EntrySaved
@@ -166,7 +167,7 @@ def occurrence(entry: Entry, day: date) -> CalendarEvent:
         starts=starts,
         ends=ends,
         detail=dotted(entry.location, repeat_label(entry)),
-        url=f"{reverse('calendar:month')}?day={day.isoformat()}&entry={entry.uid}",
+        url=with_query(reverse("calendar:month"), {"day": day.isoformat(), "entry": entry.uid}),
     )
 
 

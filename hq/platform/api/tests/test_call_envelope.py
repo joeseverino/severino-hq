@@ -5,9 +5,11 @@ import json
 
 from django.test import TestCase, override_settings
 from jsonschema import Draft202012Validator
+from pydantic import ValidationError
 
 from hq.platform.application.call_envelope import ENVELOPE
 from hq.platform.application.capabilities import describe_capabilities
+from hq.platform.application.integration_specs import TARGET_KINDS
 from hq.platform.application.security import cli_principal
 
 from .. import views
@@ -24,11 +26,12 @@ def _schema(name):
     return views.request_schema(spec)
 
 
-def _envelope(name):
-    """``name``'s request schema, any object taken as its command: what the envelope itself allows."""
-
-    schema = _schema(name)
-    return Draft202012Validator({**schema, "properties": {**schema["properties"], "payload": {"type": "object"}}})
+def _held(target, kind) -> bool:
+    try:
+        ENVELOPE.validate_python({"target": target}, context={"target_kind": kind})
+    except ValidationError:
+        return False
+    return True
 
 
 @override_settings(
@@ -64,15 +67,19 @@ class CallEnvelopeTests(TestCase):
         self.assertEqual(response.json()["error"]["code"], "invalid_input")
         self.assertNotIn(SECRET, response.content.decode())
 
-    def test_an_integer_target_may_be_its_digits(self):
-        validator = _envelope("expense.update")
-        for target in (7, "7"):
+    def test_a_target_is_held_to_exactly_what_its_kind_says(self):
+        sent = ("", "7", "07", "example-phone", "two words", "https://agent.example.com/client.json")
+        for kind in TARGET_KINDS:
+            schema = views.request_schema({"input_schema": {"type": "object"}, "target": kind})
+            for target in (*sent, *((7,) if kind == "integer" else ())):
+                with self.subTest(kind=kind, target=target):
+                    said = Draft202012Validator(schema).is_valid({"target": target})
+                    self.assertEqual(said, _held(target, kind))
+
+    def test_a_client_id_the_provider_could_not_have_registered_is_refused(self):
+        for target in ("https://agent.example.com/client.json", "two words"):
             with self.subTest(target=target):
-                self.assertTrue(validator.is_valid({"payload": {}, "target": target}))
-                self.assertEqual(
-                    ENVELOPE.validate_python({"target": target}, context={"target_kind": "integer"})["target"],
-                    target,
-                )
+                self.assertFalse(_held(target, "client_id"))
 
     def test_a_time_as_written_reaches_the_capability(self):
         written = "2026-11-02T14:30:00.123456+00:00"

@@ -9,7 +9,7 @@ that stay named on one line under it, and the line diff of what would not
 parse. An empty preview draws nothing.
 """
 
-from typing import Any
+from typing import Any, NamedTuple
 
 from django import template
 from django.utils.safestring import SafeString
@@ -18,39 +18,59 @@ from django.utils.text import slugify
 from hq.platform.application.payload_words import ChangeRow
 from hq.platform.application.tone import Tone
 from hq.platform.core.templatetags.status_tags import status_pill
+lazy from hq.platform.application.approval_review import ChangeGroup, ChangePreview
 
 register = template.Library()
 
-# What a record that comes or goes whole says on its row when it has no summary.
-_WHOLE_WORDS = {"added": "New", "removed": "Removed"}
 
-# What a row's kind of change is called in its Status column, and its tone:
-# what comes is good news, what moves asks attention, what goes is serious.
-_KINDS = {"added": ("New", Tone.GOOD), "changed": ("Changed", Tone.ATTENTION), "removed": ("Removed", Tone.SERIOUS)}
+class _Kind(NamedTuple):
+    made: str
+    held: str
+    tone: Tone
+
+
+# What a row's kind of change is called: as a change made says it, and as one
+# held for approval says what it would do. Its tone: what comes is good news,
+# what moves asks attention, what goes is serious. A record that comes or goes
+# whole with no summary of its own says the same on its row.
+_KINDS = {
+    "added": _Kind("New", "Would add", Tone.GOOD),
+    "changed": _Kind("Changed", "Would change", Tone.ATTENTION),
+    "removed": _Kind("Removed", "Would remove", Tone.SERIOUS),
+}
+
+
+def _words(kind: str, preview: ChangePreview | None) -> str:
+    """What ``kind`` is called in ``preview``: what it did once made, else
+    what approving it would do, as a table of no preview is held too."""
+
+    said = _KINDS[kind]
+    return said.made if preview is not None and preview.made else said.held
 
 
 @register.simple_tag
-def change_status(kind: str) -> SafeString:
+def change_status(kind: str, preview: ChangePreview | None = None) -> SafeString:
     """A row's kind of change (``ChangeRow.change``) as the status its
-    Status column says, each kind in its own tone."""
+    Status column says in ``preview``, each kind in its own tone."""
 
-    word, tone = _KINDS.get(kind, ("", ""))
-    return status_pill(word, tone=tone) if word else SafeString("")
+    if kind not in _KINDS:
+        return SafeString("")
+    return status_pill(_words(kind, preview), tone=_KINDS[kind].tone)
 
 
-def _head(group: Any) -> ChangeRow:
+def _head(group: ChangeGroup, preview: ChangePreview) -> ChangeRow:
     """The one row of a record that changes: its name, and for one that comes
     or goes whole what it is (its summary) on the side it is on."""
 
     if not group.whole:
         return ChangeRow(label=group.label, before="", after="", change="changed")
-    words = group.summary.after if group.summary is not None else _WHOLE_WORDS[group.whole]
+    words = group.summary.after if group.summary is not None else _words(group.whole, preview)
     added = group.whole == "added"
     return ChangeRow(label=group.label, before="" if added else words, after=words if added else "", change=group.whole)
 
 
 @register.inclusion_tag("partials/_change_table.html")
-def change_table(preview: Any) -> dict[str, Any]:
+def change_table(preview: ChangePreview) -> dict[str, Any]:
     """The table of ``preview``: what belongs to no record, then each record
     that changes, one row with its fields folded under it by the id its fold
     is named by. A record that comes or goes ``whole`` says its change on its
@@ -64,7 +84,7 @@ def change_table(preview: Any) -> dict[str, Any]:
             folds = f"change-{slugify(preview.label)}-{slugify(group.label)}"
             bodies.append(
                 {
-                    "head": _head(group),
+                    "head": _head(group, preview),
                     "rows": group.rows,
                     "folds": folds,
                     "whole": group.whole,

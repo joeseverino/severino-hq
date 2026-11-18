@@ -131,7 +131,7 @@ class PageTests(TestCase):
         # Its state is HQ's health, never its mode.
         (state,) = select(response, "title", "Answering this request.")
         self.assertEqual(state.words, "Up")
-        self.assertIn("pill-good", state.classes)
+        self.assertIn("tone-good", state.classes)
         self.assertNotIn("Read-only", [element.words for element in all_elements(response)])
         self.assertContains(response, "hq.example.com")
         self.assertContains(response, reverse("control_plane:machine", kwargs={"name": "example-host"}))

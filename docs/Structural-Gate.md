@@ -61,7 +61,7 @@ on a diff, in CI and `mise run lint`.
 A module-level undecorated Python function has no runtime arguments and
 exactly one return statement. Its returned tree contains only constants,
 names, attribute references, tuples, and calls to the imported
-ResourceSpec/SearchDefinition contract constructors. Relative imports are
+ResourceSpec/ListRead/SearchDefinition contract constructors. Relative imports are
 resolved.
 
 Constructor rebinding, lists and dicts, operators, control flow, starred

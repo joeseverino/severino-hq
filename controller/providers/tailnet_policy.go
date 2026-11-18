@@ -39,41 +39,15 @@ func policyDocument(raw []byte) (tailnetPolicyDocument, error) {
 	return tailnetPolicyDocument(raw), nil
 }
 
-type tailnetPolicyView struct {
-	Groups    map[string][]string  `json:"groups"`
-	TagOwners map[string][]string  `json:"tagOwners"`
-	Hosts     map[string]string    `json:"hosts"`
-	Grants    []tailnetPolicyGrant `json:"grants"`
-	SSH       []tailnetPolicySSH   `json:"ssh"`
-	NodeAttrs []struct {
-		Target []string `json:"target"`
-		Attr   []string `json:"attr"`
-		App    struct {
-			Connectors []struct {
-				Name       string   `json:"name"`
-				Connectors []string `json:"connectors"`
-				Domains    []string `json:"domains"`
-			} `json:"tailscale.com/app-connectors"`
-		} `json:"app"`
-	} `json:"nodeAttrs"`
-}
+// appConnectorsAttr is the nodeAttrs app capability that declares app
+// connectors.
+const appConnectorsAttr = "tailscale.com/app-connectors"
 
-type tailnetPolicyGrant struct {
-	Src []string `json:"src"`
-	Dst []string `json:"dst"`
-	IP  []string `json:"ip"`
-}
-
-type tailnetPolicySSH struct {
-	Action string   `json:"action"`
-	Src    []string `json:"src"`
-	Dst    []string `json:"dst"`
-	Users  []string `json:"users"`
-}
-
-// view reads the parts HQ looks at; a part of the wrong shape is an error.
-func (d tailnetPolicyDocument) view() (tailnetPolicyView, error) {
-	return decodeAs[tailnetPolicyView](d, "the policy does not have the shape HQ reads")
+// view reads the document as the official client's policy type, the one its
+// own PolicyFile.Get decodes the same answer into; a part of the wrong shape
+// is an error.
+func (d tailnetPolicyDocument) view() (tsapi.ACL, error) {
+	return decodeAs[tsapi.ACL](d, "the policy does not have the shape HQ reads")
 }
 
 // tests is the document's tests verbatim, or [] when it has none.
@@ -342,10 +316,13 @@ func (c tailnetClient) tailnetPart(ctx context.Context, path string) (map[string
 	return decodeTailnet[map[string]json.RawMessage](raw, "/"+path)
 }
 
-func appConnectors(policy tailnetPolicyView) []TailnetAppConnector {
+func appConnectors(policy tsapi.ACL) []TailnetAppConnector {
 	found := []TailnetAppConnector{}
 	for _, attr := range policy.NodeAttrs {
-		for _, declared := range attr.App.Connectors {
+		for _, declared := range attr.App[appConnectorsAttr] {
+			if declared == nil {
+				continue
+			}
 			found = append(found, TailnetAppConnector{Name: declared.Name, Connectors: sortedCopy(declared.Connectors), Domains: sortedCopy(declared.Domains)})
 		}
 	}
@@ -358,7 +335,7 @@ const funnelAttr = "funnel"
 
 // funnelTargets is every target a nodeAttrs entry gives the funnel attribute,
 // sorted. None is the answer that keeps the tailnet off the internet.
-func funnelTargets(policy tailnetPolicyView) []string {
+func funnelTargets(policy tsapi.ACL) []string {
 	found := map[string]bool{}
 	for _, attr := range policy.NodeAttrs {
 		if slices.Contains(attr.Attr, funnelAttr) {
@@ -432,7 +409,7 @@ func (r *Registry) tailnetPolicyInventory(ctx context.Context) ([]any, error) {
 	}
 	grants := []TailnetGrant{}
 	for _, grant := range policy.Grants {
-		grants = append(grants, TailnetGrant{Src: sortedCopy(grant.Src), Dst: sortedCopy(grant.Dst), IP: sortedCopy(grant.IP)})
+		grants = append(grants, TailnetGrant{Src: sortedCopy(grant.Source), Dst: sortedCopy(grant.Destination), IP: sortedCopy(grant.IP)})
 	}
 	serviceRecords := []TailnetService{}
 	for _, service := range services.VIPServices {
@@ -440,7 +417,7 @@ func (r *Registry) tailnetPolicyInventory(ctx context.Context) ([]any, error) {
 	}
 	sshRules := []TailnetSSHRule{}
 	for _, rule := range policy.SSH {
-		sshRules = append(sshRules, TailnetSSHRule{Action: rule.Action, Src: sortedCopy(rule.Src), Dst: sortedCopy(rule.Dst), Users: sortedCopy(rule.Users)})
+		sshRules = append(sshRules, TailnetSSHRule{Action: rule.Action, Src: sortedCopy(rule.Source), Dst: sortedCopy(rule.Destination), Users: sortedCopy(rule.Users)})
 	}
 
 	return []any{TailscalePolicyRecord{

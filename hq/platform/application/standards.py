@@ -26,6 +26,13 @@ class Standing(StrEnum):
     UNMET = "unmet"
     UNAVAILABLE = "unavailable"
 
+    @property
+    def tone(self) -> Tone:
+        """The tone a rung of a check ladder is drawn in: a check that cannot
+        be read is one to look at, never a fault."""
+
+        return {Standing.MET: Tone.GOOD, Standing.UNMET: Tone.SERIOUS, Standing.UNAVAILABLE: Tone.ATTENTION}[self]
+
 
 # A result, not a standing: a check failed on purpose, for a declared reason.
 INTENDED = "intended"
@@ -85,6 +92,15 @@ class Reading:
 
 
 @dataclass(frozen=True, slots=True)
+class Break:
+    """A change to a standard's kept record that fails its check together with
+    the checks named in ``also``, whose judgment rests on the same fact."""
+
+    change: Mapping[str, Any]
+    also: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Check:
     id: str
     label: str
@@ -110,9 +126,10 @@ class Check:
     boundary: str = field(default="", kw_only=True)
     mechanism: str = field(default="", kw_only=True)
     # Its examples, for a check of a standard that has them (``Examples``):
-    # changes to the kept record it alone fails (none for a check that is only
-    # ever met or not read), and changes it still meets.
-    breaks: tuple[Mapping[str, Any], ...] | None = field(default=None, kw_only=True)
+    # changes to the kept record it alone fails, or fails with the checks a
+    # ``Break`` names (none for a check that is only ever met or not read), and
+    # changes it still meets.
+    breaks: tuple[Mapping[str, Any] | Break, ...] | None = field(default=None, kw_only=True)
     keeps: tuple[Mapping[str, Any], ...] = field(default=(), kw_only=True)
 
     @property
@@ -130,7 +147,8 @@ class Examples:
     shows itself in its example: the record of a subject that meets every
     check, those of one nothing was read for, and how a subject is built from
     a record. Each check's ``breaks`` and ``keeps`` change the kept record,
-    and one test walks them all."""
+    and one test walks them all. A record's ``settings`` are the Django
+    settings it is measured under, for a check that reads them."""
 
     checks: tuple[Check, ...]
     subject: Callable[[Mapping[str, Any]], Any]
@@ -140,10 +158,14 @@ class Examples:
     # (commands, a change to paste) or told why not.
     fixed: Callable[[Any, Check], bool] | None = None
 
-    def of(self, change: Mapping[str, Any]) -> Any:
-        """The subject of the kept record with ``change`` laid over it."""
+    def __post_init__(self) -> None:
+        if undeclared := [check.id for check in self.checks if check.breaks is None]:
+            raise ValueError(f"declare what breaks each check, or () where nothing can: {', '.join(undeclared)}")
 
-        return self.subject(_laid(self.kept, change))
+    def record(self, change: Mapping[str, Any]) -> dict[str, Any]:
+        """The kept record with ``change`` laid over it."""
+
+        return _laid(self.kept, change)
 
 
 def _laid(record: Mapping[str, Any], change: Mapping[str, Any]) -> dict[str, Any]:

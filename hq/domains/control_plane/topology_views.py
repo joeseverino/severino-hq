@@ -4,7 +4,6 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, override
-from urllib.parse import urlencode
 
 from django.http import Http404
 from django.views.generic import TemplateView
@@ -27,6 +26,7 @@ from hq.platform.application.topology_lenses import (
 )
 from hq.platform.application.topology_model import RELATIONS, TopologyTrace, observable, relation_rank
 from hq.platform.application.ui import counted
+from hq.platform.application.url_query import with_query
 
 # What a lane of the map is called, and what one card in it is counted as. A
 # node kind with no entry here takes its noun from the node kind registry.
@@ -120,8 +120,7 @@ def _held(kind: str, count: int) -> str:
 def _reset_url(lens_name: str) -> str:
     """The map with no trace, keeping the view it was seen through."""
 
-    query = f"?{urlencode({'lens': lens_name})}" if lens_name else ""
-    return f"{reverse('control_plane:topology')}{query}#map"
+    return with_query(reverse("control_plane:topology"), {"lens": lens_name} if lens_name else None, fragment="map")
 
 
 class TopologyView(PageMixin, TemplateView):
@@ -190,7 +189,7 @@ class TopologyView(PageMixin, TemplateView):
             topology_shown=lanes.shown,
             topology_total=lanes.left_out + lanes.shown,
             topology_held=lanes.held,
-            topology_more=f"{reverse('control_plane:topology')}?{urlencode({'lens': EVERYTHING})}#map",
+            topology_more=with_query(reverse("control_plane:topology"), {"lens": EVERYTHING}, fragment="map"),
             topology_views=_views(),
             topology_view=view,
             active_lens=active_lens,
@@ -336,8 +335,10 @@ class TopologyView(PageMixin, TemplateView):
                     "hop": hops.get(node.id),
                     "focus_url": cls._focus_link(node.id, lens_name),
                     "body_url": (
-                        f"{reverse('control_plane:topology_node')}?"
-                        + urlencode({"node": node.id, **({"lens": lens_name} if lens_name else {})})
+                        with_query(
+                            reverse("control_plane:topology_node"),
+                            {"node": node.id, **({"lens": lens_name} if lens_name else {})},
+                        )
                     ),
                     "inbound_url": cls._trace_url(node.id, "inbound", lens_name),
                     "outbound_url": cls._trace_url(node.id, "outbound", lens_name),

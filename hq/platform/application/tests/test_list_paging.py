@@ -113,7 +113,7 @@ class EveryCursorIsIssuedTests(TestCase):
         paged = {
             name
             for name, spec in resource_registry().items()
-            if spec.list_query_type and PAGE_FIELD in spec.list_query_type.model_fields
+            if spec.listing and PAGE_FIELD in spec.listing.query.model_fields
         }
         rows = tuple({"id": n, "name": f"Example {n}", "email": "a@example.com", "status": "new"} for n in range(3))
         self.assertTrue(paged)

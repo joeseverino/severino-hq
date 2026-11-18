@@ -13,7 +13,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
-from demo.examples import own, split
+from demo.examples import examples, own
 from demo.serve import serving
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDTHS
@@ -25,6 +25,9 @@ OUT = Path(os.environ.get("HQ_DEMO_OUT") or Path(__file__).resolve().parents[1] 
 _POLICY = re.compile(r'<meta http-equiv="Content-Security-Policy" content="([^"]*)">')
 _SCRIPT = re.compile(r"<script\b[^>]*>", re.IGNORECASE)
 _ADDRESS = re.compile(r'(?:href|src|data-[\w-]+-url)="(/[^"#?]*)')
+# Where a form sends a press. A page's own form posts nowhere in the demo,
+# since its scripts answer the press, but they never reach an example's.
+_SENDS = re.compile(r'\s(?:action|formaction)="(/[^"#?]*)')
 # The main pages, including the one with cards to dismiss.
 _VISITED = ("/", "/hq/", "/infrastructure/findings/", "/action-items/", "/infrastructure/", "/connection/")
 # What a healthy homelab never says on its dashboard.
@@ -256,14 +259,12 @@ class DemoSiteTests(unittest.TestCase):
         cls.origin = cls.enterClassContext(serving(OUT))
 
     def test_every_address_a_page_names_is_in_the_demo(self):
-        # An example the Design page draws in a shadow root links where it
-        # links in HQ, nowhere for its synthetic addresses; what it loads (a
-        # sheet, an image) is held as the page's own addresses are.
+        # The examples the Design page draws in shadow roots included, and
+        # where each of their forms would send a press.
         missing = set()
         for page in OUT.rglob("*.html"):
-            mine, examples = split(page.read_text(encoding="utf-8"))
-            loaded = [address for address in _ADDRESS.findall(examples) if address.startswith("/static/")]
-            for address in [*_ADDRESS.findall(mine), *loaded]:
+            text = page.read_text(encoding="utf-8")
+            for address in [*_ADDRESS.findall(text), *_SENDS.findall(examples(text))]:
                 if not _exists(unescape(address)):
                     missing.add(f"{page.relative_to(OUT)} -> {address}")
         self.assertEqual(sorted(missing)[:20], [])
@@ -342,8 +343,8 @@ class DemoSiteTests(unittest.TestCase):
                 if (
                     "approved by" in shown
                     and "Finished" in shown
-                    and "pill-good" in tones
-                    and "pill-serious" not in tones
+                    and "tone-good" in tones
+                    and "tone-serious" not in tones
                 ):
                     approved.append(run)
         self.assertTrue(approved, "a playbook's runs hold one approved and finished")
@@ -372,9 +373,11 @@ class DemoSiteTests(unittest.TestCase):
                         if opener.is_visible():
                             opener.click()
                     name, value = choice.get_attribute("name"), choice.get_attribute("value")
-                    choice.check()
+                    # Answered in place from the saved copy, the page busy until it lands.
+                    with page.expect_response(lambda response: "/__q/" in response.url):
+                        choice.check()
                     page.wait_for_url(re.compile(rf"[?&]{re.escape(name)}="))
-                    page.wait_for_load_state("networkidle")
+                    page.wait_for_function("() => !document.querySelector('main[aria-busy]')")
                     self.assertEqual(page.locator("#content > .messages").count(), 0, "the filter was saved")
                     ticked = page.locator(f'[data-table-toolbar] input[name="{name}"][value="{value}"]')
                     self.assertTrue(ticked.is_checked(), "the copy shows the filter it answers")
@@ -533,7 +536,13 @@ class DemoSiteTests(unittest.TestCase):
             uncaught = Uncaught(page, lambda: at[0])
             page.on("console", lambda message: message.type == "error" and errors.append(f"{at[0]}: {message.text}"))
             page.on("request", lambda request: request.url.startswith(self.origin) or elsewhere.append(request.url))
-            for path in dict.fromkeys([*_VISITED, *_sample()]):
+            # A request cut off is one a page asked for and threw away: the
+            # page demo-theme.js leaves for an address's saved copy asks for none.
+            page.on("requestfailed", lambda request: errors.append(f"{at[0]}: {request.url} {request.failure}"))
+            # Every address with a query is opened through the one saved-copy
+            # lookup in demo-theme.js, so one of them stands for all.
+            queried = min(json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))["variants"])
+            for path in dict.fromkeys([*_VISITED, *_sample(), queried]):
                 at[0] = path
                 page.goto(self.origin + path, wait_until="networkidle")
                 if path not in _VISITED:

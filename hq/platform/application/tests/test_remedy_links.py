@@ -225,8 +225,12 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
             with self.subTest(page=page):
                 # A control is a page action or a remedy; the view's own
                 # address, its query too, is its state and never one of them.
+                # The site header's controls lead to the same places on every
+                # page, so only the page's own are read.
                 controls = [
-                    link.attrs["href"] for link in elements(self.client.get(page), "a") if "btn" in link.classes
+                    link.attrs["href"]
+                    for link in elements(self.client.get(page), "a")
+                    if "btn" in link.classes and any(above.tag == "main" for above in link.ancestors)
                 ]
                 self.assertNotIn(page, controls)
 

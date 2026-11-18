@@ -1,4 +1,5 @@
-"""For an extension's Django views: name the capability a person must hold to open one."""
+"""For an extension's Django views: name the capability a person must hold to open one, and add a
+query to an address one links."""
 
 from collections.abc import Callable
 from typing import Concatenate
@@ -6,6 +7,8 @@ from typing import Concatenate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpRequest, HttpResponseBase
+
+from hq.platform.application.url_query import with_query
 
 View = Callable[Concatenate[HttpRequest, ...], HttpResponseBase]
 
@@ -38,4 +41,4 @@ class CapabilityRequiredMixin(LoginRequiredMixin):
     required_capability = ""
 
 
-__all__ = ["CapabilityRequiredMixin", "capability_required"]
+__all__ = ["CapabilityRequiredMixin", "capability_required", "with_query"]

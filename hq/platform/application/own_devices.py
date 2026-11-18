@@ -11,8 +11,9 @@ from django.db import DatabaseError, transaction
 from hq.platform.core.models import OwnDevice
 
 from .command_fields import Describe
+from .integration_specs import REGISTERED_CLIENT_ID
 from .linked_accounts import SIGN_IN, linked_login
-from .record_errors import InputError, PolicyError
+from .record_errors import PolicyError
 from .security import Principal, person
 
 logger = logging.getLogger("severino.agents")
@@ -20,10 +21,8 @@ logger = logging.getLogger("severino.agents")
 
 SET_OWN_DEVICE = "agent.device.set"
 
-# A client the identity provider registered. A client known only by a Client
-# ID Metadata Document is named by a URL, which this refuses, so one opt-in
-# covering every such client can never reach a person's standing.
-REGISTERED_CLIENT_ID = re.compile(r"[A-Za-z0-9._-]+")
+# A client id the identity provider could have registered, as a token names it.
+REGISTERED = re.compile(REGISTERED_CLIENT_ID)
 
 
 def registered(client_id: str, person_key: str) -> bool:
@@ -34,7 +33,7 @@ def registered(client_id: str, person_key: str) -> bool:
     closed: a registry that cannot be read leaves the token an agent's.
     """
 
-    if not person_key or not REGISTERED_CLIENT_ID.fullmatch(client_id):
+    if not person_key or not REGISTERED.fullmatch(client_id):
         return False
     try:
         return OwnDevice.objects.filter(
@@ -68,16 +67,14 @@ class OwnDeviceSet(TypedDict):
     registered: Annotated[bool, Describe("Whether the client is one of your own devices now.")]
 
 
-def set_own_device(command: OwnDeviceCommand, *, principal: Principal, current_key: str) -> OwnDeviceSet:
+def set_own_device(command: OwnDeviceCommand, *, principal: Principal, current_client_id: str) -> OwnDeviceSet:
     """Register a client as the signed-in person's device, or remove it. Set, not toggled.
 
     Only for the person doing it: nobody registers a device for someone else.
     """
 
     user = person(principal)
-    client = current_key.strip()
-    if not REGISTERED_CLIENT_ID.fullmatch(client):
-        raise InputError("A device's client id is the one Pocket ID registered: letters, digits, . _ or -.")
+    client = current_client_id
     with transaction.atomic():
         held = OwnDevice.objects.select_for_update().filter(user=user, client_id=client).first()
         if (held is not None) == command.registered:

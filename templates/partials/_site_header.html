@@ -22,7 +22,7 @@ costs a pointer nothing.
     closes any other, and in the open drawer it opens beside the drawer,
     which stays open around it.
     {% endcomment %}
-    <button type="button" class="nav-toggle" popovertarget="primary-navigation" aria-label="Menu">
+    <button type="button" class="{{ bar_button }} nav-toggle" popovertarget="primary-navigation" aria-label="Menu">
       {% include "partials/_icon.html" with name="menu" only %}
     </button>
     <nav class="primary-nav" id="primary-navigation" aria-label="Sections" popover>
@@ -60,12 +60,12 @@ costs a pointer nothing.
     is a link to the search page. With nothing to type into here there is no
     focus to return to it and nothing to expand over its neighbors.
     {% endcomment %}
-    <a class="global-search" href="{% url 'search' %}" aria-labelledby="search-label search-key" data-command-center-open aria-haspopup="dialog" aria-controls="modal-command-center">
+    <a class="{{ bar_button }} global-search" href="{% url 'search' %}" aria-labelledby="search-label search-key" data-command-center-open aria-haspopup="dialog" aria-controls="modal-command-center">
       {% include "partials/_icon.html" with name="search" only %}
       <span class="search-label" id="search-label">Find anything</span>
       <kbd class="search-key keyboard-only" id="search-key" aria-hidden="true">⌘K</kbd>
     </a>
-    <a class="action-badge" href="{% url 'action_items' %}" title="Needs you">
+    <a class="{{ bar_button }} action-badge" href="{% url 'action_items' %}" title="Needs you">
       {% include "partials/_icon.html" with name="bell" only %}
       {% comment %}
       The queue spans every installed domain, so a page that has not counted

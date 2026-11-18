@@ -10,7 +10,7 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from functools import cache
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
 from django.urls import NoReverseMatch
 from pydantic import (
@@ -34,7 +34,7 @@ lazy from hq.platform.application.moments import moment
 
 from .glance_shapes import GlanceObservation
 from .names import in_zone
-from .observations.contract import ReadingPart
+from .observations.contract import ReadingPart, ServiceFacet
 from .permissions import Permission
 
 
@@ -255,24 +255,17 @@ def origin_is_authoritative(provider: ProviderSpec) -> bool:
     return provider.answers is None
 
 
-# The facets a service is assembled from, in the order a request meets them: a
-# name has to resolve, something has to answer for it, and the TLS it answers
-# with has to cover it.
-#
-# Declared here beside the providers rather than wherever services are composed,
-# because a provider names the facet it supplies. A provider added later joins
-# the service view by declaring one, and nothing else holds a list of what can
-# participate.
-# The order columns are rendered in, and the order a name is wired in: something
-# has to run before ingress can reach it, and ingress before a certificate
-# secures it.
-SERVICE_FACETS: tuple[tuple[str, str], ...] = (
-    ("runtime", "Container"),
-    ("dns", "DNS"),
-    ("proxy", "Proxy"),
-    ("certificate", "Certificate"),
+# Each facet a service is assembled from, with its column's label, in
+# ``ServiceFacet``'s order; a facet without a label fails as this loads.
+_FACET_LABELS: dict[ServiceFacet, str] = {
+    "runtime": "Container",
+    "dns": "DNS",
+    "proxy": "Proxy",
+    "certificate": "Certificate",
+}
+SERVICE_FACETS: tuple[tuple[ServiceFacet, str], ...] = tuple(
+    (facet, _FACET_LABELS[facet]) for facet in get_args(ServiceFacet)
 )
-SERVICE_FACET_IDS = frozenset(facet for facet, _ in SERVICE_FACETS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,7 +287,7 @@ class NameContext:
     swept: bool = False
     # Where this name is already served, as "host:port", declared or observed.
     # The host half is whatever the provider calls the machine, which for a
-    # container stack is the machine's name rather than an address.
+    # route can be the machine's name rather than an address.
     origin: str = ""
     # The same place, as something on the network can actually reach it. A
     # proxy seeded with a machine name is seeded with something nginx cannot
@@ -340,7 +333,7 @@ class ProviderSpec:
     # saying how to read the hostnames out of a *resolved* spec. A provider that
     # names neither simply does not appear there, so nothing needs an exclusion
     # list to keep it out.
-    facet: str = ""
+    facet: ServiceFacet | Literal[""] = ""
     hostnames: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
     # Whether this provider *covers* hostnames rather than declaring them.
     # Declaring brings a service into existence: something has to name it
@@ -378,10 +371,6 @@ class ProviderSpec:
     # within the minute. The page that takes the edit is the only place that
     # can say so beforehand, and a provider is the only thing that knows.
     change_effects: tuple[tuple[str, str], ...] = ()
-    # What a person approving a change to this kind must be told about the
-    # declaration it would write: a sentence per thing in it that reaches
-    # further than the kind's name suggests. Shown on the approval card.
-    review_warnings: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
     # What a change from one declaration of this kind to another does, in the
     # words a person reads first (what it opens, a check it drops), or "" when
     # nothing needs saying ahead of the field-by-field change. It heads that
@@ -606,15 +595,12 @@ class ProviderSpec:
     parts: tuple[ReadingPart, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.facet and self.facet not in SERVICE_FACET_IDS:
-            raise ValueError(
-                f"{self.kind!r} names an unknown part of a service, "
-                f"{self.facet!r}; expected one of {sorted(SERVICE_FACET_IDS)}."
-            )
         if (self.covers or self.hostnames or self.origin) and not self.facet:
             raise ValueError(
                 f"{self.kind!r} describes hostnames but names no part of a service, so nothing would ever read them."
             )
+        if self.facet and self.hostnames is None:
+            raise ValueError(f"{self.kind!r} supplies {self.facet!r} but says no way to read its spec's hostnames.")
         # The form prints each effect under the field it names, and a name no
         # field has prints nowhere.
         fields = self.spec_type.model_fields if issubclass(self.spec_type, BaseModel) else {}

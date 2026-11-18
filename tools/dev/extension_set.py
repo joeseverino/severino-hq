@@ -95,6 +95,8 @@ class Pick:
     said: str
     # Each repository composed at a commit of its history rather than as it stands: its root and that commit.
     at: tuple[tuple[str, str], ...] = ()
+    # Each repository composed from another worktree of it, as that stands: its root and that worktree.
+    stood: tuple[tuple[str, str], ...] = ()
 
     @property
     def named(self) -> dict[str, str]:
@@ -209,6 +211,56 @@ def snapshot(top: Path, commit: str, packages: list[str]) -> Path:
     return folder
 
 
+def branches(top: Path) -> dict[str, Path | None]:
+    """Every local branch of the repository ``top`` is in, with the worktree checked out on it, if any."""
+
+    trees: dict[str, Path] = {}
+    tree = None
+    for line in (_git(top, "worktree", "list", "--porcelain") or "").splitlines():
+        if line.startswith("worktree "):
+            tree = Path(line.removeprefix("worktree "))
+        elif line.startswith("branch refs/heads/") and tree is not None and tree.is_dir():
+            trees[line.removeprefix("branch refs/heads/")] = tree
+    names = (_git(top, "for-each-ref", "--format=%(refname)", "refs/heads") or "").split()
+    return {name.removeprefix("refs/heads/"): trees.get(name.removeprefix("refs/heads/")) for name in names}
+
+
+def default_branch(top: Path) -> str:
+    """The branch ``top``'s repository merges into: its remote's HEAD, else the one git names a new repository's."""
+
+    if head := (_git(top, "symbolic-ref", "--short", "refs/remotes/origin/HEAD") or "").strip():
+        return head.split("/", 1)[-1]
+    return (_git(top, "config", "--get", "init.defaultBranch") or "").strip() or "master"
+
+
+def landing(host: Path, carried: set[str], default: str) -> str | None:
+    """The branch of ``carried`` the host tree at ``host`` lands on, or None where it is ``default`` or unsure.
+
+    Its own branch where ``carried`` holds it, else the host branch it is nearest (fewest commits of its own
+    off it, then fewest of the branch's it lacks), as a worktree made from that branch is. A tie with
+    ``default``, or between two, is no landing: CI composes a branch only for a pull request into the default.
+    A detached tree lands nowhere: it is a gate's copy of one commit (test --at, the second machine's), whose
+    set was picked where it was sent from."""
+
+    if not (own := (_git(host, "symbolic-ref", "-q", "--short", "HEAD") or "").strip()):
+        return None
+    if own in carried:
+        return None if own == default else own
+    hosts = {
+        name.removeprefix("refs/heads/")
+        for name in (_git(host, "for-each-ref", "--format=%(refname)", "refs/heads") or "").split()
+    }
+    apart: dict[str, tuple[int, ...]] = {}
+    for name in sorted((carried | {default}) & hosts):
+        counts = (_git(host, "rev-list", "--left-right", "--count", f"HEAD...refs/heads/{name}") or "").split()
+        if len(counts) == 2:
+            apart[name] = tuple(map(int, counts))
+    if not apart:
+        return None
+    nearest = [name for name, distance in apart.items() if distance == min(apart.values())]
+    return nearest[0] if len(nearest) == 1 and nearest[0] != default else None
+
+
 @dataclass(frozen=True)
 class _Package:
     source: str
@@ -228,22 +280,75 @@ def _package(source: str) -> _Package | None:
     return _Package(source, root, Path(top.strip()) if top else root, required_api(manifest_file(root).read_text()))
 
 
+def _required_in(root: Path) -> int | None:
+    try:
+        return required_api(manifest_file(root).read_text())
+    except OSError, SystemExit:
+        return None
+
+
+@dataclass(frozen=True)
+class _Coordinated:
+    """A repository composed from its branch named as the host's: where each source moved, and why."""
+
+    moved: dict[str, str]
+    said: str
+    at: tuple[str, str] | None = None
+    stood: tuple[str, str] | None = None
+
+
+def _coordinated(host: Path, top: Path, mine: list[_Package], api: int) -> _Coordinated | None:
+    """``mine``, the packages of ``top``'s repository, from its branch named as the one the host tree at
+    ``host`` lands on, as CI's composition builds an extension's branch of the host branch's name
+    (tools/pipeline/coordinated-branches.sh); None where the repository carries no such branch."""
+
+    known = branches(top)
+    if (branch := landing(host, set(known), default_branch(top))) is None:
+        return None
+    relative = [package.root.relative_to(top).as_posix() for package in mine]
+    common = (_git(top, "rev-parse", "--path-format=absolute", "--git-common-dir") or "").strip()
+    named = f"branch {branch} of {Path(common).parent.name if common else top.name}"
+    if (tree := known[branch]) is None:
+        commit = (_git(top, "rev-parse", "--verify", f"refs/heads/{branch}^{{commit}}") or "").strip()
+        base = snapshot(top, commit, relative)
+        whence = f"{named} at {commit[:12]}"
+    else:
+        base = tree
+        whence = f"{named} as it stands in {tree}"
+    required = {_required_in(base / path) for path in relative}
+    other = sorted(str(each) for each in required if each != api)
+    refused = f" (it requires API {', '.join(other)}, which this host refuses)" if other else ""
+    return _Coordinated(
+        {
+            package.source: str(base / path / Path(package.source).name)
+            for package, path in zip(mine, relative, strict=True)
+        },
+        f"{whence}, the branch named as the one HQ lands on, as CI composes it{refused}",
+        (str(top), commit) if tree is None else None,
+        (str(top), str(tree)) if tree is not None and tree != top else None,
+    )
+
+
 def pick(
     speaks: Callable[[], int],
     where: str,
     *,
     before: int | None = None,
     as_they_stand: bool = True,
+    host: Path | None = None,
     environ: Mapping[str, str] = os.environ,
 ) -> Pick:
     """The set ``environ`` names, as the host at ``where``, which ``speaks`` the plugin API it returns,
     can load it.
 
-    Each package is asked the API it requires. Where every one requires ``api`` and ``as_they_stand``,
-    the trees named are composed as they stand, uncommitted work included. Otherwise each repository's
-    newest commit whose manifests all require ``api``, made before ``before`` when given, is composed
-    instead, unpacked under SNAPSHOTS. Where it has none, no extension is composed, since the host
-    refuses a package of another API."""
+    Where ``host`` is the host's tree and a package's repository carries a branch named as the one that
+    tree lands on, that branch is composed, as CI composes a coordinated change: the worktree checked out
+    on it as it stands, else the branch's commit, unpacked under SNAPSHOTS. Each other package is asked
+    the API it requires. Where every one requires ``api`` and ``as_they_stand``, the trees named are
+    composed as they stand, uncommitted work included. Otherwise each repository's newest commit whose
+    manifests all require ``api``, made before ``before`` when given, is composed instead, unpacked under
+    SNAPSHOTS. Where it has none, no extension is composed, since the host refuses a package of another
+    API."""
 
     plugins = tuple(each for each in environ.get("HQ_LOCAL_PLUGINS", "").split(",") if each)
     sources = tuple(each for each in environ.get("HQ_LOCAL_PYTHONPATH", "").split(":") if each)
@@ -251,22 +356,29 @@ def pick(
         return Pick((), (), ALONE)
     api = speaks()
     packages = {source: found for source in sources if (found := _package(source))}
-    apart: dict[Path, list[_Package]] = {}
-    for package in packages.values():
-        if package.required != api or not as_they_stand:
-            apart.setdefault(package.top, []).append(package)
     if not sources:
         return Pick((), plugins, f"Extensions composed: {', '.join(plugins)}, from the host's own tree")
-    if not apart:
+    moved: dict[str, str] = {}
+    froms = []
+    at = []
+    stood = []
+    apart: dict[Path, list[_Package]] = {}
+    for top in dict.fromkeys(package.top for package in packages.values()):
+        mine = [package for package in packages.values() if package.top == top]
+        if host is not None and (coordinated := _coordinated(host, top, mine, api)):
+            moved |= coordinated.moved
+            froms.append(coordinated.said)
+            at.extend([coordinated.at] if coordinated.at else [])
+            stood.extend([coordinated.stood] if coordinated.stood else [])
+        elif behind := [package for package in mine if package.required != api or not as_they_stand]:
+            apart[top] = behind
+    if not apart and not froms:
         return Pick(
             sources,
             plugins,
             f"Extensions composed from: {', '.join(sources)} (HQ_LOCAL_PYTHONPATH; one on the command line"
             " composes another tree)",
         )
-    moved: dict[str, str] = {}
-    froms = []
-    at = []
     for top, behind in apart.items():
         mine = [package for package in packages.values() if package.top == top]
         relative = [package.root.relative_to(top).as_posix() for package in mine]
@@ -294,13 +406,17 @@ def pick(
         plugins,
         f"{said}: {', '.join(chosen)}",
         tuple(at),
+        tuple(stood),
     )
 
 
 def for_tree(tree: Path, environ: Mapping[str, str] = os.environ) -> Pick:
-    """The set a step composes for the host checked out at ``tree``."""
+    """The set a step composes for the host checked out at ``tree``: an extension's branch named as the
+    one the tree lands on where its repository carries one, as CI composes it."""
 
-    return pick(lambda: int(plugin_api_version(tree)), str(tree), before=moved_past(tree, "HEAD"), environ=environ)
+    return pick(
+        lambda: int(plugin_api_version(tree)), str(tree), before=moved_past(tree, "HEAD"), host=tree, environ=environ
+    )
 
 
 def at_commit(commit: str, environ: Mapping[str, str] = os.environ) -> Pick:

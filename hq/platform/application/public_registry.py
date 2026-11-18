@@ -30,6 +30,7 @@ from hq.domains.control_plane.observations.public_registry import (
     UPSTREAM_KIND,
     VULNERABILITY_KIND,
 )
+from hq.platform.application.url_query import with_query
 lazy from hq.domains.control_plane.models import ProviderInventory
 lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND as PULLED_KIND
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
@@ -367,7 +368,7 @@ def _upstream_pages(repository: str) -> tuple[Any, Any]:
     a page it does not have."""
 
     try:
-        releases = get(f"/repos/{repository}/releases?per_page={UPSTREAM_RELEASES}", missing_ok=True)
+        releases = get(with_query(f"/repos/{repository}/releases", {"per_page": UPSTREAM_RELEASES}), missing_ok=True)
         advisories = get(f"/repos/{repository}/security-advisories?state=published&per_page=100", missing_ok=True)
     except GitHubReadError as exc:
         raise LookupUnavailable(str(exc)) from exc

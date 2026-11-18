@@ -53,7 +53,7 @@ OUTSIDE = {
         '{% card %}{% section "A" %}B{% aside %}C{% endsection %}{% aside %}C{% endcard %}\n'
         "{% aside %}D\n"
         '{% card css="nowrap invented-card" %}{% endcard %}{% card css=chosen %}{% endcard %}\n'
-        '{% button "Go" url post=True css="invented-button" %}\n{% table_heading "A" css="invented-note" %}\n'
+        '{% button "Go" url css="invented-button" %}\n{% table_heading "A" css="invented-note" %}\n'
         '{% facts %}{% fact "A" value=n %}{% detail %}B{% endfacts %}'
     ),
     "templatetags/example_tags.py": (

@@ -60,13 +60,12 @@ uptime and how the request came.
         {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7"|breakable:"," }}</code> production runs <code>{{ release.deployed|slice:":7"|breakable }}</code>
         {% elif release.behind is False %}In production: <code>{{ release.head|slice:":7"|breakable }}</code>
         {% else %}{% muted %}Not read{% endmuted %}{% endif %}
-        <br>{% entity repository.url|outside label=repository.name %}{% muted %}{% dot %}{% include "partials/_reading_age.html" with reading=repository.reading only %}{% endmuted %}
-      </span>{% endfact %}
+      </span>{% detail %}{% dot_list %}<li>{% entity repository.url|outside label=repository.name %}</li><li>{% include "partials/_reading_age.html" with reading=repository.reading only %}</li>{% enddot_list %}{% endfact %}
     {% endwith %}{% endif %}
     {% if release.image %}
     {% fact "Image" %}
         <code title="{{ release.image }}">{{ container.standing.image.short|breakable }}</code>{% if release.digest %} {% muted tip=release.digest %}pinned by digest{% endmuted %}{% endif %}
-        {% if release.built %}<br>{% muted %}Built {{ release.built|when:"ago" }}{% endmuted %}{% endif %}
+    {% detail %}{% if release.built %}Built {{ release.built|when:"ago" }}{% endif %}
     {% endfact %}
     {% fact "Signature" %}{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}{% muted %}{% include "partials/_reading_age.html" with unread=release.signed_unread only %}{% endmuted %}{% endif %}{% endfact %}
     {% fact "Vulnerabilities" %}<span class="prose">{% if release.vulnerabilities_unread %}{% muted %}{% include "partials/_reading_age.html" with unread=release.vulnerabilities_unread only %}{% endmuted %}{% else %}{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} {% muted %}{{ release.vulnerabilities_note|breakable }}{% endmuted %}{% endif %}{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</span>{% endfact %}
@@ -159,7 +158,7 @@ row in the flow.
           <tr>
             <td>
               {{ row.label|breakable }}
-              {% if row.reasons %}{% stack_list %}{% for reason in row.reasons %}<li>{% muted %}{{ reason|breakable }}{% endmuted %}</li>{% endfor %}{% endstack_list %}{% elif row.remedy %}<br>{% muted %}{{ row.remedy|breakable }}{% endmuted %}{% elif row.error and not row.read %}<br>{% muted %}{{ row.error|breakable }}{% endmuted %}{% endif %}
+              {% stack_list %}{% for reason in row.reasons %}<li>{% muted %}{{ reason|breakable }}{% endmuted %}</li>{% empty %}{% if row.remedy %}<li>{% muted %}{{ row.remedy|breakable }}{% endmuted %}</li>{% elif row.error and not row.read %}<li>{% muted %}{{ row.error|breakable }}{% endmuted %}</li>{% endif %}{% endfor %}{% endstack_list %}
             </td>
             <td>{% if row.stale %}<strong>Out of date</strong>{% elif row.read and row.state == "readable" %}{{ row.state_label|breakable }}{% else %}<strong>{{ row.state_label|breakable }}</strong>{% endif %}</td>
             <td>{% comment %}

@@ -9,7 +9,7 @@ plain records, so a declaration costs the declaring module nothing.
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Literal, get_args
 
 from .contracts import Effect
 from .describe import Describe
@@ -34,11 +34,12 @@ if TYPE_CHECKING:
 #
 # Left blank, the ability has declared nothing, and HQ says so rather than
 # calling it authorized because nobody asked.
-GRANT_MODELS = ("scoped", "coarse", "none")
+GrantModel = Literal["scoped", "coarse", "none"]
+GRANT_MODELS: tuple[str, ...] = get_args(GrantModel)
 
 # How an instance's credential was observed, from the same vocabulary, plus
 # ``rejected`` for one the provider refused.
-CREDENTIAL_MODELS = (*GRANT_MODELS, "rejected")
+CREDENTIAL_MODELS: tuple[str, ...] = (*GRANT_MODELS, "rejected")
 # A credential HQ holds but cannot classify: a controller's report of a
 # provider HQ no longer models. Said rather than left blank, so no reader has
 # to guess what an empty value meant.
@@ -57,9 +58,10 @@ class ConnectionAbility:
     # Given as its value's string too, as an extension may write it.
     effect: Effect = Effect.READ
     required_scopes: tuple[str, ...] = ()
-    # One of GRANT_MODELS, or blank. Required scopes imply ``scoped``; the other
-    # two are how an ability says, truthfully, that no scope check can exist.
-    grant: str = ""
+    # Blank, or how authority is proven. Required scopes are ``scoped``; the
+    # other two are how an ability says, truthfully, that no scope check can
+    # exist.
+    grant: GrantModel | Literal[""] = ""
     capability: str = ""
     # Resource kinds this ability governs. The relation is explicit because an
     # ability name describes what a connection can do; it is not inherently a
@@ -72,6 +74,10 @@ class ConnectionAbility:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "effect", Effect(self.effect))
+        if self.grant not in ("", *GRANT_MODELS):
+            raise ValueError(f"Ability {self.name!r} has grant {self.grant!r}, none of {', '.join(GRANT_MODELS)}.")
+        if self.grant and (self.grant == "scoped") != bool(self.required_scopes):
+            raise ValueError(f"Ability {self.name!r} lists required scopes exactly when its grant is scoped.")
 
 
 @dataclass(frozen=True, slots=True)

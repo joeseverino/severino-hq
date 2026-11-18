@@ -33,22 +33,13 @@ type portainerSnapshot struct {
 	ContainerCount        *int64 `json:"ContainerCount"`
 }
 
-// portainerStack is one stack from GET /stacks, which answers each stack whole,
-// its Env included, so reconcile compares the environment without a request of
-// its own.
+// portainerStack is one stack from GET /stacks.
 type portainerStack struct {
-	ID          int64             `json:"Id"`
-	Name        string            `json:"Name"`
-	EndpointID  int64             `json:"EndpointId"`
-	Status      int               `json:"Status"`
-	EntryPoint  string            `json:"EntryPoint"`
-	ProjectPath string            `json:"ProjectPath"`
-	Env         []portainerEnvVar `json:"Env"`
-}
-
-// portainerStackFile is GET /stacks/{id}/file.
-type portainerStackFile struct {
-	StackFileContent string `json:"StackFileContent"`
+	Name        string `json:"Name"`
+	EndpointID  int64  `json:"EndpointId"`
+	Status      int    `json:"Status"`
+	EntryPoint  string `json:"EntryPoint"`
+	ProjectPath string `json:"ProjectPath"`
 }
 
 // dockerContainer is one item of GET /containers/json.

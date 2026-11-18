@@ -9,7 +9,6 @@ and resource its registry's entry, and the tag tree the domain registry's.
 
 import json
 import re
-from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from http import HTTPStatus
 from pathlib import Path
@@ -23,7 +22,6 @@ from hq.platform.application.field_masks import FIELD_PATH_PATTERN, WHOLE_RECORD
 from hq.platform.application.held_answer import HELD, AwaitingApproval
 from hq.platform.application.integration_specs import (
     FIELD_MASK,
-    IDEMPOTENCY_FIELD,
     IDEMPOTENCY_FIELD_SCHEMA,
     IDEMPOTENCY_HEADER,
     PAGE_FIELD,
@@ -152,7 +150,11 @@ class _Builder:
         # leads somewhere writes out its own response, the links beside the
         # same schema: a Reference Object takes no other field (OpenAPI 3.2.0,
         # section 4.23).
-        ran = {"description": "Success.", "content": _json_content({"$ref": self.components.add(name, schema)})}
+        ran = {
+            "description": "Success.",
+            "headers": self.answered(),
+            "content": _json_content({"$ref": self.components.add(name, schema)}),
+        }
         success = {**ran, "links": links} if links else self.component("responses", self.responses, name, ran)
         responses: dict[str, Any] = {"200": success}
         if held is not None:
@@ -170,6 +172,7 @@ class _Builder:
         schema = {**envelope, "properties": {**envelope["properties"], "data": data}}
         response = {
             "description": "Accepted: held for approval in HQ. Nothing has happened yet.",
+            "headers": self.answered(),
             "content": _json_content(schema),
         }
         if links := self.links(answering=kind):
@@ -195,44 +198,57 @@ class _Builder:
         if waits:
             error["required"] = [*detail["required"], "retry_after"]
         self.components.add(schema, {**envelope, "properties": {**envelope["properties"], "error": error}})
-        response: dict[str, Any] = {
-            "description": f"{HTTPStatus(status).phrase}.",
-            "content": _json_content({"$ref": SCHEMAS + schema}),
-        }
+        headers = self.answered()
         if status == HTTPStatus.UNAUTHORIZED:
-            response["headers"] = {
-                "WWW-Authenticate": {
-                    "description": "How to authenticate.",
-                    "schema": {"type": "string", "const": views.REALM},
-                }
+            headers["WWW-Authenticate"] = {
+                "description": "How to authenticate.",
+                "required": True,
+                "schema": {"type": "string", "const": views.REALM},
             }
         if "insufficient_scope" in codes:
             # One component every 403 that can answer the code shares.
-            response["headers"] = {
-                "WWW-Authenticate": self.component(
-                    "headers",
-                    self.headers,
-                    _pascal("insufficient_scope") + _pascal("WWW-Authenticate"),
-                    {
-                        "description": (
-                            'On `insufficient_scope`: `Bearer` with `error="insufficient_scope"` and `scope`, the '
-                            "permission `error.details.scope` names (RFC 6750 section 3.1)."
-                        ),
-                        "schema": {"type": "string"},
-                    },
-                )
-            }
+            headers["WWW-Authenticate"] = self.component(
+                "headers",
+                self.headers,
+                _pascal("insufficient_scope") + _pascal("WWW-Authenticate"),
+                {
+                    "description": (
+                        'On `insufficient_scope`: `Bearer` with `error="insufficient_scope"` and `scope`, the '
+                        "permission `error.details.scope` names (RFC 6750 section 3.1)."
+                    ),
+                    "schema": {"type": "string"},
+                },
+            )
         if later:
-            response["headers"] = {
-                "Retry-After": {
-                    "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
-                    "required": waits,
-                    "schema": {"type": "integer", "minimum": 1},
-                }
+            headers["Retry-After"] = {
+                "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
+                "required": waits,
+                "schema": {"type": "integer", "minimum": 1},
             }
+        response: dict[str, Any] = {
+            "description": f"{HTTPStatus(status).phrase}.",
+            "headers": headers,
+            "content": _json_content({"$ref": SCHEMAS + schema}),
+        }
         if self.responses.setdefault(name, response) != response:
             raise OpenAPIError(f"Two responses claim the component name {name!r}.")
         return name
+
+    def answered(self) -> dict[str, Any]:
+        """The headers every answer carries: an answer for one bearer is stored by no cache."""
+
+        return {
+            "Cache-Control": self.component(
+                "headers",
+                self.headers,
+                "CacheControl",
+                {
+                    "description": "Operational data read with a bearer credential, correct only for the caller.",
+                    "required": True,
+                    "schema": {"type": "string", "const": views.ANSWER_CACHE_CONTROL},
+                },
+            )
+        }
 
     @staticmethod
     def component(section: str, held: dict[str, Any], name: str, value: dict[str, Any]) -> dict[str, Any]:
@@ -273,7 +289,11 @@ class _Builder:
                 _list_id(resource), {f"query.{PAGE_FIELD}": f"$response.body#/data/next/{PAGE_FIELD}", **parameters}
             )
         record = spec.record_type
-        carried = spec.list_fields if listed else (typed_keys(record) if record is not None else ())
+        carried = (
+            (spec.listing.fields if spec.listing else ())
+            if listed
+            else (typed_keys(record) if record is not None else ())
+        )
         identifier = spec.identifier
         if spec.detail_handler is None or identifier not in carried:
             return found
@@ -369,22 +389,15 @@ class _Builder:
                 ),
             )
 
-    def retry_key(self, request: dict[str, Any]) -> dict[str, Any]:
-        """``request`` with its payload's retry key the one shared schema the header's is."""
-
-        payload = request["properties"]["payload"]
-        declared = payload.get("properties", {}).get(IDEMPOTENCY_FIELD)
-        if declared is None:
-            return request
-        if declared != IDEMPOTENCY_FIELD_SCHEMA:
-            raise OpenAPIError(f"A payload's {IDEMPOTENCY_FIELD} is not the retry key's one shape.")
-        shared = {"$ref": self.components.add(IDEMPOTENCY_KEY, dict(IDEMPOTENCY_FIELD_SCHEMA))}
-        properties = {**payload["properties"], IDEMPOTENCY_FIELD: shared}
-        return {**request, "properties": {**request["properties"], "payload": {**payload, "properties": properties}}}
-
     # Expansions: one templated operation for the route itself, then one
     # concrete path per registry entry it serves. OpenAPI matches a concrete
     # path before its template.
+
+    def retry_key(self, *, required: bool) -> dict[str, Any]:
+        """The header a change's retry key is sent in, the one way the machine API takes it."""
+
+        schema = {"$ref": self.components.add(IDEMPOTENCY_KEY, dict(IDEMPOTENCY_FIELD_SCHEMA))}
+        return {"name": IDEMPOTENCY_HEADER, "in": "header", "required": required, "schema": schema}
 
     def capability_paths(self, template: str, method: str, view: Any) -> None:
         generic = self.components.hoist(views.request_schema({"input_schema": {"type": "object"}, "target": None}))
@@ -395,19 +408,17 @@ class _Builder:
             view,
             _camel(view.__name__),
             self.tags.use(API_TAG),
-            # A parameter cannot depend on the path's name, so the key is said
-            # here as every change's own operation says it: taken, never required.
+            # A parameter cannot depend on the path's name, and this path runs
+            # reads too, so here the key every change's own operation requires
+            # is taken, never required.
             parameters=[
                 _named("capability", [spec["name"] for spec in self.capabilities], "call"),
-                {"$ref": f"#/components/parameters/{IDEMPOTENCY_KEY}"},
+                self.retry_key(required=False),
             ],
             requestBody=_body(generic),
         )
         registry = capability_registry()
-        requests = {
-            spec["name"]: self.retry_key(self.components.hoist(views.request_schema(spec)))
-            for spec in self.capabilities
-        }
+        requests = {spec["name"]: self.components.hoist(views.request_schema(spec)) for spec in self.capabilities}
         # A target several capabilities take in the same words is written once,
         # as the component named for the first of them.
         targets: dict[str, list[str]] = {}
@@ -429,19 +440,19 @@ class _Builder:
                         "properties": {**requests[name]["properties"], "target": shared},
                     }
         # A command several capabilities take in one shape is the component
-        # named for its type; one taken in a shape of its own (an update's
-        # shows no defaults) stays in its body.
-        shapes: dict[str, Counter[str]] = {}
+        # named for the type of the first of them, so commands of different
+        # types written alike (two taking no field but the retry key, which
+        # travels in its header) share it too; one taken in a shape of its own
+        # (an update's shows no defaults) stays in its body.
+        shapes: dict[str, list[str]] = {}
         for name, request in requests.items():
-            said = json.dumps(request["properties"]["payload"], sort_keys=True)
-            shapes.setdefault(registry[name].command_type.__name__, Counter())[said] += 1
+            shapes.setdefault(json.dumps(request["properties"]["payload"], sort_keys=True), []).append(name)
         for spec in self.capabilities:
             name = spec["name"]
             request = requests[name]
-            command = registry[name].command_type.__name__
             payload = request["properties"]["payload"]
-            if shapes[command][json.dumps(payload, sort_keys=True)] > 1:
-                shared = {"$ref": self.components.add(command, payload)}
+            if len(takers := shapes[json.dumps(payload, sort_keys=True)]) > 1:
+                shared = {"$ref": self.components.add(registry[takers[0]].command_type.__name__, payload)}
                 request = {**request, "properties": {**request["properties"], "payload": shared}}
             # Capabilities taking one body share its schema, each under its own name.
             first = self.requests.setdefault(json.dumps(request, sort_keys=True), f"{_pascal(name)}Request")
@@ -809,12 +820,7 @@ def document() -> dict[str, Any]:
             "parameters": dict(
                 sorted(
                     {
-                        IDEMPOTENCY_KEY: {
-                            "name": IDEMPOTENCY_HEADER,
-                            "in": "header",
-                            "required": False,
-                            "schema": {"$ref": builder.components.add(IDEMPOTENCY_KEY, dict(IDEMPOTENCY_FIELD_SCHEMA))},
-                        },
+                        IDEMPOTENCY_KEY: builder.retry_key(required=True),
                         **builder.parameters,
                         "Fields": _mask({"type": "string", "pattern": FIELD_PATH_PATTERN}),
                     }.items()

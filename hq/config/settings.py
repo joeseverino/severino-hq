@@ -442,6 +442,7 @@ TEMPLATES = [
                 "hq.platform.core.templatetags.select_tags",
                 "hq.platform.core.templatetags.ladder_tags",
                 "hq.platform.core.templatetags.run_tags",
+                "hq.platform.core.templatetags.nav_tags",
             ],
         },
     },

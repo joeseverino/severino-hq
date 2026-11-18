@@ -156,44 +156,53 @@ class RaisesTests(SimpleTestCase):
 class ExamplesTests(TestCase):
     """Every standard decided from its subject alone, walked through its
     examples: the kept record meets every check, one nothing was read for
-    fails none, each check's breaks fail it alone at its seriousness with its
-    fix written out where the standard writes one, and each of its keeps
-    meets it."""
+    fails none, each check's breaks fail it (and the checks a ``Break`` names)
+    at its seriousness with its fix written out where the standard writes one,
+    and each of its keeps meets it."""
 
     def test_every_example_of_every_standard(self):
-        from .. import connection_security, container_standard, github_posture, supply_chain
+        from django.test import override_settings
+
+        from .. import connection_security, container_standard, github_posture, request_standard, supply_chain
+        from ..standards import Break
 
         for examples in (
             container_standard.EXAMPLES,
             github_posture.EXAMPLES,
             supply_chain.EXAMPLES,
             connection_security.EXAMPLES,
+            request_standard.EXAMPLES,
         ):
-            for check in examples.checks:
-                with self.subTest(check=check.id):
-                    self.assertIsNotNone(check.breaks, "it declares what breaks it, or () where nothing can")
+
+            def measured(record, examples=examples):
+                with override_settings(**record.get("settings", {})):
+                    return measure(examples.subject(record), examples.checks)
+
             with self.subTest(kept=examples.checks[0].id):
-                found = measure(examples.subject(examples.kept), examples.checks)
+                found = measured(examples.kept)
                 self.assertEqual({result.state for result in found.results}, {Standing.MET})
             for record in examples.unread:
                 with self.subTest(unread=record):
-                    found = measure(examples.subject(record), examples.checks)
+                    found = measured(record)
                     unread = [result for result in found.results if result.state == Standing.UNAVAILABLE]
                     self.assertEqual(found.unmet, ())
                     self.assertTrue(unread)
                     self.assertTrue(all((result.tone, result.icon) == (Tone.NEUTRAL, "clock") for result in unread))
             for check in examples.checks:
-                for change in check.breaks or ():
+                for broken in check.breaks or ():
+                    change, also = (broken.change, broken.also) if isinstance(broken, Break) else (broken, ())
                     with self.subTest(check=check.id, breaks=change):
-                        subject = examples.of(change)
-                        unmet = measure(subject, examples.checks).unmet
-                        self.assertEqual([result.check.id for result in unmet], [check.id])
-                        self.assertEqual(unmet[0].tone, Tone.SERIOUS if check.serious else Tone.ATTENTION)
+                        record = examples.record(change)
+                        unmet = measured(record).unmet
+                        self.assertEqual(sorted(result.check.id for result in unmet), sorted((check.id, *also)))
+                        (own,) = (result for result in unmet if result.check is check)
+                        self.assertEqual(own.tone, Tone.SERIOUS if check.serious else Tone.ATTENTION)
                         if examples.fixed:
+                            subject = examples.subject(record)
                             self.assertTrue(examples.fixed(subject, check), "its fix is written out, or why not")
                 for change in check.keeps:
                     with self.subTest(check=check.id, keeps=change):
-                        found = measure(examples.of(change), examples.checks)
+                        found = measured(examples.record(change))
                         self.assertEqual((found.state_of(check.id), found.unmet), (Standing.MET, ()))
 
 

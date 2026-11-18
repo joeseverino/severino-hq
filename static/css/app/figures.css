@@ -43,9 +43,9 @@
    box, no wider than its cell, so a sentence it holds is never drawn as two
    pills. */
 .data-table > tbody > tr > :not([data-kind="status"]) .pill { white-space: normal; max-inline-size: 100%; }
-/* Links one to a line in a cell are a target apart (`--target-min`): each line that tall, and the link's box with it. */
-.data-table td :is(a, .cell-line):is(:has(+ br), br + *) { line-height: var(--target-min); }
-.data-table td a:not([data-entity], .cell-line):is(:has(+ br), br + *) { display: inline-block; }
+/* A cell line's quiet second line (`{% cell_line %}`) is a line of its own under the first; either line that holds something to press is a target tall. */
+.cell-detail { display: block; }
+:is(.cell-line:has(+ .cell-detail), .cell-line + .cell-detail):is(a[href], :has(a[href], [tabindex])) { line-height: var(--target-min); }
 /* Anywhere else the box the filter puts in a name is no box, and in a link a part is text, as in the link's token (base.css). */
 .cut { display: contents; }
 :is(td, th) [data-entity] > .token > .cut > .whole { display: contents; }
@@ -123,7 +123,16 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* A legend after the drawing it keys stands apart from it; one that opens what holds it (a figure's head, the row over a calendar's days) takes its place from that. */
 .chart-legend:not(:first-child) { margin-block: var(--space-6) var(--space-1); }
 .chart-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
-.chart-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; }
+/* A mark: a dot for a state or a kind, a key (`swatch-key`, square) for a series
+   or a category, one size wherever it stands, colored by its slot or what its
+   part sets. A part that draws one writes the class; one drawn as generated
+   content is named here. */
+.swatch, .swatch-key, .toned-dot::before, .month-item::before, .visit-status:not(:empty)::before, .brand::before {
+  display: inline-block; flex: none;
+  inline-size: var(--mark-size, 8px); block-size: var(--mark-size, 8px);
+  border-radius: 50%; background: var(--slot, currentColor);
+}
+.swatch-key, .brand::before { border-radius: 2px; }
 /* `.chart-scroll` has no rule on purpose: a chart has no floor, so there is nothing to scroll, and an end label hangs into the card's padding. */
 /* Fills the card at a height this sheet decides: its parts are rectangles and rules, so `preserveAspectRatio="none"` stretches them truthfully, the labels are HTML so no type stretches, and a floor could only ever turn into a scrollbar. */
 .bar-chart {
@@ -132,12 +141,18 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
   height: 214px;
 }
 
-/* Series fills: an undefined custom property makes `fill` invalid and SVG falls back to black, so every one here is defined in :root (the :root-variable test checks). */
-.chart-series-1 { fill: var(--series-1); background: var(--series-1); }
-.chart-series-2 { fill: var(--series-2); background: var(--series-2); }
-.chart-series-3 { fill: var(--series-3); background: var(--series-3); }
-.chart-series-4 { fill: var(--series-4); background: var(--series-4); }
-.chart-series-5 { fill: var(--series-5); background: var(--series-5); }
+/* A series' color is one custom property its slot's class sets, so a bar, a line, a dot, a calendar's mark and a swatch all read it the same way. Each is a token defined in :root, since an undefined one makes `fill` invalid and SVG falls back to black. */
+.series-1 { --slot: var(--series-1); }
+.series-2 { --slot: var(--series-2); }
+.series-3 { --slot: var(--series-3); }
+.series-4 { --slot: var(--series-4); }
+.series-5 { --slot: var(--series-5); }
+.series-6 { --slot: var(--series-6); }
+.series-7 { --slot: var(--series-7); }
+.series-8 { --slot: var(--series-8); }
+.series-9 { --slot: var(--series-9); }
+.series-10 { --slot: var(--series-10); }
+.bar-chart rect, .allocation rect { fill: var(--slot); }
 /* A 2px surface gap between stacked segments, so adjacent fills read as separate marks; also carries the CVD relief for close hues. */
 .bar-chart rect { stroke: var(--surface); stroke-width: 2; paint-order: stroke; transition: opacity .08s ease; }
 /* A line chart borrows the bar chart's box rather than restating it, so two charts stacked share an axis position. */
@@ -155,12 +170,8 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .line-chart .chart-grid,
 .line-chart .chart-mark { vector-effect: non-scaling-stroke; }
 .chart-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-/* Strokes, not fills: `.chart-series-N` sets `fill`, which draws a line's path as a blob. A dot on the line takes its stroke too. */
-.chart-line-1 { stroke: var(--series-1); }
-.chart-line-2 { stroke: var(--series-2); }
-.chart-line-3 { stroke: var(--series-3); }
-.chart-line-4 { stroke: var(--series-4); }
-.chart-line-5 { stroke: var(--series-5); }
+/* A line, its trend and its dots are stroked in their series' color. */
+.line-chart :is(.chart-line, .chart-trend, .chart-dot) { stroke: var(--slot); }
 /* Dashed and thinner than its series, so a fitted line reads as an estimate. */
 .chart-trend { fill: none; stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .65; }
 /* A point in a stretched drawing (the line chart, a figure's trend) is a zero-length line: its round cap, under a stroke that does not scale, is a true circle however far x and y are scaled apart, where a <circle> draws as an oval. */
@@ -179,7 +190,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
    a kicker for each direction. The whole row is the link, so walking the
    graph is one click per hop. */
 .relation-list { display: grid; gap: var(--space-1); }
-.relation-list > .eyebrow { margin: var(--space-2) 0 0; }
+.relation-list > .eyebrow { display: block; margin: var(--space-2) 0 0; }
 .relation-list > ul { display: grid; gap: var(--space-1); }
 /* One edge: the link to the other end on its own line, then each value it
    carries on a line of its own with its kind and age. */
@@ -222,7 +233,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .link-chips a {
   display: inline-flex; align-items: center; gap: var(--space-3);
   padding: var(--space-2) var(--space-6);
-  border: 1px solid var(--line); border-radius: 999px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
   background: var(--surface); color: var(--ink-2); font-size: var(--text-sm); font-weight: 500;
 }
 .link-chips a:is(:hover, :focus-visible) { border-color: var(--line-strong); color: var(--ink); text-decoration: none; }
@@ -232,46 +243,50 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
    breaks only between the two, the arrow going with the second. The parts
    share their first baseline, whatever face and size a page sets its chips in
    and whatever wraps after it; beside chips the arrow is set in their face. */
-.change { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) .35em; max-width: 100%; }
-.change-to { display: flex; align-items: baseline; column-gap: .35em; }
+.change { --change-gap: .35em; display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--change-gap); max-width: 100%; }
+.change-to { display: flex; align-items: baseline; column-gap: var(--change-gap); }
 .change > *, .change-to > * { min-width: 0; }
 .change-arrow { flex: none; color: var(--muted-2); font-weight: 400; }
 .change:has(> code) .change-arrow { font-family: var(--font-mono); font-size: .88em; }
-/* A name that is one box leaves a break after it, so its link lays name and arrow out as one row: the name gives way, the arrow stays. In a cell a name's token is text (base.css), whose parts would each be an item of the row, so a table lays out its own names. */
-.external-link:not(td *, th *):has(> .token[data-sole]), td .external-link:has(> code:only-child) { display: inline-flex; align-items: baseline; max-width: 100%; }
-:is(.external-link:not(td *, th *):has(> .token[data-sole]), td .external-link:has(> code:only-child)) > * { min-width: 0; }
-/* A chip that wraps is as wide as its line, so in a link the chip and its token run inline, a chip on each line, and the arrow follows the last. */
-.external-link:not(td *, th *) > code,
+/* Held in a cell's clamp (cuts.css), on its row or its open line, the value before it is laid in the clamp's own lines, whose count a flex box and its blocks would escape; what it changes to stays one box of one line, set apart from the words before it by the part's own gap, which ends the value's last line so a wrapped one starts flush. Opening the row keeps these boxes, so it moves no column. */
+.cell-clamp :is(.change, .change > :not(.change-to)) { display: inline; }
+.cell-clamp .change > :not(.change-to) { margin-inline-end: var(--change-gap); }
+.cell-clamp .change-to { display: inline-flex; vertical-align: top; max-inline-size: 100%; }
+/* A chip in a cell is a box of its own, which would leave a break after it, so its link lays chip and arrow out as one row: the chip gives way, the arrow stays. */
+td .external-link:has(> code:only-child) { display: inline-flex; align-items: baseline; max-width: 100%; }
+td .external-link:has(> code:only-child) > * { min-width: 0; }
+/* A box that wraps is as wide as its line, so the arrow after it would stand alone at the line's end. In a link a name (its sole token) and a chip run inline instead, their parts set on each line, and the arrow follows the last word. */
+.external-link:not(td *, th *) > :is(code, .token[data-sole]),
 .external-link:not(td *, th *) > code > .token { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 /* Each line of such a chip draws its padding, so a part on a line of its own takes the line less the chip's two sides. A part longer than that wraps inside its own box, which the chip's ground reaches only if the box paints it too. */
 .external-link:not(td *, th *) > code .whole { max-width: calc(100% - 2 * var(--space-2)); }
 .external-link:not(td *, th *) > code :is(.token, .cut, .whole) { background: inherit; border-radius: inherit; }
 
 /* A band of facts (`{% facts layout="band" %}`): the few figures that sum up a page or a part, each a cell drawn as a figure is: its label, its mark before it, over its value over its detail. `size="large"` sets the values as a page's headline figures. */
-/* Its cells are counted into whole rows (`data-band`, above) at a narrower floor than an insight's, so a long detail wraps in its cell and never takes a row for the cell alone. Each cell is its own stack, top-aligned, its value right under its label. In a frame with more in it (a section's body, a card that holds more than the band) the facts stand apart by gaps and draw no edges, the frame's padding their inset, as a card's figures do. */
+/* Its cells are counted into whole rows (`data-band`, above) at a narrower floor than an insight's, so a long detail wraps in its cell and never takes a row for the cell alone. Each cell is its own stack, top-aligned, its value right under its label. The band draws no box and no edges of its own: its facts stand apart by gaps, the frame's padding (a card, a section's body) their inset, as a card's figures do. */
 .facts-band {
   --band-floor: 6.5rem;
+  --band-row-gap: var(--space-6);
+  --band-column-gap: var(--space-12);
+  --band-rules: none;
   display: grid;
   margin: 0 0 var(--stack-gap);
+  /* With no edges there is no rim to clip, and a hovered fact's tint reaches into the gap. */
+  overflow: visible;
   /* A container's width is its frame's, never its facts', so in a flex row (a card that lays out its parts in one) it would size to nothing; it takes a line of its own there instead. */
   container: band / inline-size;
   flex: 1 1 100%;
 }
-/* The band draws no box of its own: a box is the card around it. A card holding the band alone is its frame and nothing more, so its facts keep their own padding and edges. Anywhere else (a section's body, a card that holds more, the page's ground) the facts stand apart by gaps with no edges, their words at the content's edge. Weightless (`:where`), so a size that spaces its facts its own way says so in a rule of one class more. */
-.card:not(.section-body):has(> .facts-band:only-child) { padding: 0; }
-.facts-band:where(:not(.card:not(.section-body) > :only-child)) { --band-row-gap: var(--space-6); --band-column-gap: var(--space-12); --band-rules: none; overflow: visible; }
 .facts-band > .fact {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-4) var(--space-6);
 }
-.facts-band:where(:not(.card:not(.section-body) > :only-child)) > .fact { padding: 0; }
 /* A band of facts beside a page's title (the dashboard's glance) stands on the page's ground: beside the title while its facts fit there, on a line of its own under it, from the page's edge, where not. */
 :is(.page-head, .page-title-row) > :has(> .facts-band) { flex: 1 1 32rem; min-width: 0; }
 .page-head .facts-band { margin-block: 0; }
-/* There each reading stands at the middle of its column, so the readings spread through the room beside the greeting rather than crowding it; under 24rem they are a list (surfaces.css). */
+/* There each reading stands at the middle of its column, so the readings spread through the room beside the greeting rather than crowding it; under 24rem they stand two to a row from the page's edge. */
 @container band (width >= 24rem) { .page-head .facts-band > .fact { justify-self: center; } }
 /* What names a value is sentence case in the muted voice; capitals are for a kicker over a group (`.eyebrow`), never a value's name. Its mark is quieter than its words, and a label too long for its cell wraps beside its mark, never under it. */
 .facts-band dt { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; color: var(--muted); font-size: var(--text-xs); }
@@ -280,11 +295,9 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .band-icon .icon { flex: none; width: 14px; height: 14px; margin-top: 1px; color: var(--muted-2); }
 /* The value's line is a target tall (`--target-min`) whatever it holds, and a link in it is a box of that line's height set by its top, so a linked value is a target and stands on the line an unlinked one does, a zero beside a count of 13 alike. A word longer than its line breaks where it overflows (`break-word`), which leaves the fact's least width at its longest word: `anywhere` would size it to a letter, splitting a count from its noun. */
 .facts-band > .fact > dd { margin: 0; }
-.facts-band .fact-value { min-width: 0; color: var(--ink); font-size: var(--text-2xl); font-weight: 650; letter-spacing: -.018em; line-height: max(var(--target-min), 1.2em); font-feature-settings: "tnum"; overflow-wrap: break-word; }
-.facts-band .fact-value :is(a:not(.figure-dot), [tabindex]) { display: inline-block; vertical-align: top; }
-/* A link in a value is the value's own ink, so a link never reads as a tone: only a toned fact's value is colored. It stands alone, so it is underlined only under the pointer and the focus, its fact tinted (below). */
-.facts-band .fact-value a:not(.figure-dot) { min-inline-size: var(--target-min); color: inherit; text-decoration: none; }
-.facts-band .fact-value a:not(.figure-dot):is(:hover, :focus-visible) { text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: .18em; }
+.facts-band .fact-value { min-width: 0; color: var(--ink); font-size: var(--text-lg); font-weight: 650; letter-spacing: -.018em; line-height: max(var(--target-min), 1.3em); font-feature-settings: "tnum"; overflow-wrap: break-word; }
+/* A linked value is a link's color, so the figures that open something read as such; a toned fact's takes its tone (below). */
+.facts-band .fact-value :is(a:not(.figure-dot), [tabindex]) { display: inline-block; min-inline-size: var(--target-min); vertical-align: top; }
 /* Code in a value is an identifier, set a size under the figure beside it, at one line of its size so it stays inside the value's line. */
 .facts-band .fact-value :is(code, kbd, samp) { font-size: .78em; letter-spacing: 0; line-height: 1; }
 /* What a figure counts, said after it (`<small>`), in the label's voice. */
@@ -296,10 +309,9 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .fact-figure > .figure-dots { flex: 1 1 0; contain: inline-size; }
 /* Dots set in rows (past four, surfaces.css) cannot wrap, so they keep their own width, which fits the narrowest cell, and take the line under the value where that is all the room left. */
 .facts-band .fact-figure > .figure-dots:has(> :nth-child(5)) { flex: none; contain: none; }
-.facts-band .fact:is(.tone-good, .tone-attention, .tone-serious) :is(.band-icon .icon, .fact-value) { color: var(--tone-ink); }
-/* A linked fact tints under the pointer and the focus on its value, ; in a frame the tint reaches into the gap as a shadow, so nothing moves. */
-.facts-band > .fact:has(> .fact-value a:is(:hover, :focus-visible)) { background: var(--surface-2); }
-.facts-band:where(:not(.card:not(.section-body) > :only-child)) > .fact:has(> .fact-value a:is(:hover, :focus-visible)) { border-radius: var(--radius-sm); box-shadow: 0 0 0 var(--space-3) var(--surface-2); }
+.facts-band .fact:is(.tone-good, .tone-attention, .tone-serious) :is(.band-icon .icon, .fact-value, .fact-value a:not(.figure-dot)) { color: var(--tone-ink); }
+/* A linked fact tints under the pointer and the focus on its value, the tint reaching into the gap as a shadow, so nothing moves. */
+.facts-band > .fact:has(> .fact-value a:is(:hover, :focus-visible)) { border-radius: var(--radius-sm); background: var(--surface-2); box-shadow: 0 0 0 var(--space-3) var(--surface-2); }
 /* Under the value, running words: its lines are the ones its markup declares, small print (`<small>`, a `detail=` given as lines), read by their color. A flex or grid box would make each run of words between two elements a row of its own. */
 .facts-band .fact-detail { min-width: 0; margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
 .facts-band .fact-detail > small { display: block; font-size: inherit; }
@@ -308,11 +320,12 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .fact-detail :is(a, [tabindex]) { display: inline-block; line-height: var(--target-min); }
 /* A figure that counts nothing is quiet, so the figures that count something are read first. */
 .facts-band .fact.is-zero .fact-value { color: var(--muted-2); font-weight: 500; }
-/* A headline figure (`is-large`, `is-lead`) sets its value to its cell, at most a headline's size, so a long amount in a narrow cell is smaller rather than past its edge. */
+/* Headline figures (`is-large`, `is-lead`) take a wider floor, so a phone's band holds them two to a row and three stand in a row only once the band is about 360px wide; three columns are cramped below that. Each sets its value to its cell, between the band's value size and a headline's, so a long amount in a narrow cell is smaller rather than past its edge. */
+.facts-band:is(.is-large, .is-lead) { --band-floor: 7rem; }
 .facts-band:is(.is-large, .is-lead) > .fact { container: figure / inline-size; }
-.facts-band:is(.is-large, .is-lead) .fact-value { font-size: clamp(var(--text-sm), 15cqi, var(--text-4xl)); }
+.facts-band:is(.is-large, .is-lead) .fact-value { font-size: clamp(var(--text-lg), 15cqi, var(--text-4xl)); }
 /* Headline figures led by the first: of four, the lead takes a row of its own over the other three (`data-band`, above), larger and in the accent, a rule under it; the three stand closer, so a phone's three columns keep room for their figures. */
-.facts-band.is-lead:where(:not(.card:not(.section-body) > :only-child)) { --band-column-gap: var(--space-6); }
+.facts-band.is-lead { --band-column-gap: var(--space-6); }
 .facts-band.is-lead:has(> .fact:nth-child(4):last-child) > .fact:first-child { grid-column: 1 / -1; padding-block-end: var(--space-8); border-block-end: 1px solid var(--line-2); }
 .facts-band.is-lead:has(> .fact:nth-child(4):last-child) > .fact:first-child .fact-value { color: var(--accent); font-size: var(--text-display); letter-spacing: -.04em; line-height: 1.1; }
 .facts-band.is-lead:has(> .fact:nth-child(4):last-child) > .fact:first-child .figure-trend { height: 40px; }
@@ -328,7 +341,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .fact-open:is(:hover, :focus-visible) { text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: .18em; }
 .facts-band > .fact:has(> .fact-value > .fact-open:is(:hover, :focus-visible), :popover-open) { background: var(--bg-tint); }
 /* The panel: what the figure stands for, read in place, its head over it and its foot under it. */
-.fact-panel { display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); font-size: var(--text-sm); font-weight: 400; letter-spacing: normal; line-height: 1.4; text-align: start; }
+.fact-panel { display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); font-size: var(--text-sm); font-weight: 400; letter-spacing: normal; line-height: 1.4; text-align: start; }
 .fact-panel > p { margin: 0; color: var(--muted); font-size: var(--text-xs); }
 .fact-panel-head { display: grid; gap: 1px; font-size: var(--text-xs); color: var(--muted); }
 .fact-panel-head strong { color: var(--ink); font-size: var(--text-sm); }
@@ -367,18 +380,15 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 
 /* With the line set's paint, which each symbol of img/icons.svg inherits through its <use> unless it says its own. */
 .icon { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-/* The bar's marks, drawn from the set at the size each control sets them
-   (the menu's, the badge's and the search dialog's set by their own rules). */
-.nav-group-label > .icon { width: 9px; height: 6px; stroke: var(--muted); }
-.nav-group > button:has(+ :popover-open) .nav-group-label > .icon { transform: rotate(180deg); }
-.global-search > .icon { width: 15px; height: 15px; stroke-width: 2; }
-.user-menu > button > .icon { width: 15px; stroke: var(--muted); stroke-width: 1.8; transition: stroke .12s ease; }
-.user-menu > button:is(:hover, :has(+ :popover-open)) > .icon { stroke: var(--ink); }
 /* Each control is its own POST, so its own form, laid inline so the actions row does not stack them as blocks. */
 .page-actions form { margin: 0; display: inline-flex; }
 
 /* A stack list ({% stack_list %}): items read down, each its parts inline. */
 .stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; }
+/* In a table's cell its items are the cell's own lines, read at the row's rhythm: one that opens the cell starts on the row's first line, and one that holds something to press is a target tall, so links one to a line are a target apart. Each wraps as its cell does, so a state's lines keep theirs as the state does (tables.css), where a list's items in a cell otherwise wrap. */
+.data-table td .stack-list { gap: 0; margin: 0; }
+.data-table td .stack-list > li { text-wrap-mode: inherit; }
+.data-table td .stack-list > li:has(a[href], [tabindex]) { line-height: var(--target-min); }
 /* A raw answer kept for the open row scrolls inside it rather than lengthening it. */
 .row-below > pre { max-block-size: 18rem; }
 

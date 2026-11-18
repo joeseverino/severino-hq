@@ -1,0 +1,16 @@
+# A line of its own under another is a part's: a cell's quiet second line is
+# the cell line's detail, and lines read down (a status and what follows it,
+# links one to a line, a fact's several values) are a stack list's items, so
+# each is spaced, wrapped and made a target alike. A <br> splits text no part
+# draws. Read by the tag's name, so <br>, <br/> and <BR> alike. No fix: the
+# lines become the part's.
+id: hand-drawn-line-break
+language: html
+severity: error
+message: A line broken by hand with <br>, where the cell line or the stack list part draws the lines.
+note: Write {% cell_line %}first line{% detail %}quiet second line{% endcell_line %}, or {% stack_list %}<li>...</li><li>...</li>{% endstack_list %} for lines read down.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: tag_name
+  regex: '^(?i:br)$'

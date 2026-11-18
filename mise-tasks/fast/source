@@ -3,6 +3,7 @@
 #MISE hide=true
 #MISE extends="django"
 #MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
+#MISE depends=["setup:lint-tools"]
 #USAGE arg "[labels]..." var=#true help="The source checks fast selected"
 
 # They start no browser and finish in seconds, so a refusal is printed before

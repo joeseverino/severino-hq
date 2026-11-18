@@ -226,8 +226,8 @@ def apart(blocks: list[Block], index: int, held: set[str]) -> str:
 
 
 # A name's prefix where the source builds the rest in: a template's or an
-# f-string's interpolation (`pill-{{ tone }}`, `pill-${tone}`), or a join
-# (`"pill-" + tone`). Kept with its hyphen, which no whole word ends with.
+# f-string's interpolation (`tone-{{ tone }}`, `tone-${tone}`), or a join
+# (`"tone-" + tone`). Kept with its hyphen, which no whole word ends with.
 _BUILT = re.compile(r"([\w-]*\w-)(?:\{|\$\{|[\"']\s*[+%])")
 _QUOTED = re.compile(r"\"[^\"]*\"|'[^']*'")
 _CLASS = re.compile(r"\.(-?[_a-zA-Z][\w-]*)")
@@ -257,7 +257,7 @@ def source_words(root: Path) -> frozenset[str]:
 
 def written(name: str, words: frozenset[str]) -> bool:
     """Whether the source can write ``name``: whole, by a prefix it is built
-    from (``pill-`` before a tone), or a data attribute as a dataset key or a
+    from (``tone-`` before a tone), or a data attribute as a dataset key or a
     Python keyword."""
 
     if name in words or any(word.endswith("-") and name.startswith(word) for word in words):

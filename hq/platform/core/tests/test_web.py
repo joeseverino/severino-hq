@@ -223,6 +223,14 @@ class AuthGateTests(TestCase):
         response = self.client.get("/accounts/login/")
         self.assertIn(reverse("oidc_authentication_init"), hrefs(response))
 
+    @override_settings(SEVERINO_OIDC_ENABLED=True)
+    def test_single_sign_on_carries_the_page_asked_for_whole(self):
+        asked = "/audit/?awaiting=1&action=denied"
+        response = self.client.get("/accounts/login/", {"next": asked})
+        self.assertIn(
+            f"{reverse('oidc_authentication_init')}?next=%2Faudit%2F%3Fawaiting%3D1%26action%3Ddenied", hrefs(response)
+        )
+
 
 class SecurityBoundaryTests(TestCase):
     def test_an_audit_row_names_who_the_bound_request_signed_in(self):

@@ -11,14 +11,22 @@ from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
 from ..integrations import integration_graph
-from ..resources import EmptyQuery, ResourceSpec, describe_resources, get_resource, list_resource, resource_registry
+from ..resources import (
+    EmptyQuery,
+    ListRead,
+    ResourceSpec,
+    describe_resources,
+    get_resource,
+    list_resource,
+    resource_registry,
+)
 from ..security import Principal, operator_capabilities
 
 OPERATOR = Principal("example-operator", "test", operator_capabilities())
 
 
 def _declaring():
-    return {name: spec for name, spec in resource_registry().items() if spec.list_handler}
+    return {name: spec for name, spec in resource_registry().items() if spec.listing}
 
 
 class ListFieldTests(TestCase):
@@ -35,9 +43,9 @@ class ListFieldTests(TestCase):
                 page = list_resource(name, {}, principal=OPERATOR)
                 held = {key for item in page["items"] for key in item}
 
-                self.assertLessEqual(held, set(spec.list_fields))
+                self.assertLessEqual(held, set(spec.listing.fields))
                 # An item's NotRequired field may be absent from every item.
-                required = spec.item_type.__required_keys__ & set(spec.list_fields)
+                required = spec.listing.item.__required_keys__ & set(spec.listing.fields)
                 if page["items"]:
                     self.assertLessEqual(required, held, "a required field no item holds")
 
@@ -47,7 +55,7 @@ class ListFieldTests(TestCase):
             whole = list_resource(name, {}, principal=OPERATOR, fields=["*"])
             with self.subTest(name=name):
                 self.assertEqual(
-                    [{key: item[key] for key in item if key in spec.list_fields} for item in whole["items"]],
+                    [{key: item[key] for key in item if key in spec.listing.fields} for item in whole["items"]],
                     page["items"],
                 )
                 # A kind whose rows are not its records may list none by its identifier.
@@ -71,7 +79,7 @@ class ListFieldTests(TestCase):
 
         for name, spec in _declaring().items():
             with self.subTest(name=name):
-                self.assertEqual(described[name]["operations"]["list"]["fields"], list(spec.list_fields))
+                self.assertEqual(described[name]["operations"]["list"]["fields"], list(spec.listing.fields))
 
 
 class _ExampleRecord(TypedDict):
@@ -83,35 +91,13 @@ def _rows(**_):
 
 
 class ListFieldRegistrationTests(SimpleTestCase):
-    def test_list_fields_without_a_list_or_repeated_or_dotted_are_refused(self):
-        for list_fields in (("name", "name"), ("parts.name",), ("",)):
-            invalid = ResourceSpec(
-                "example.records",
-                "Records",
-                "Example records.",
-                "example.read",
-                _rows,
-                EmptyQuery,
-                item_type=_ExampleRecord,
-                list_fields=list_fields,
-            )
+    def test_fields_repeated_or_dotted_are_refused(self):
+        for fields in (("name", "name"), ("parts.name",), ("",)):
+            listing = ListRead(_rows, EmptyQuery, _ExampleRecord, fields=fields)
+            invalid = ResourceSpec("example.records", "Records", "Example records.", "example.read", listing)
             with (
-                self.subTest(list_fields=list_fields),
+                self.subTest(fields=fields),
                 mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(invalid,)),
-                self.assertRaisesRegex(ImproperlyConfigured, "list_fields"),
+                self.assertRaisesRegex(ImproperlyConfigured, "fields"),
             ):
                 integration_graph()
-        unlisted = ResourceSpec(
-            "example.records",
-            "Records",
-            "Example records.",
-            "example.read",
-            detail_handler=lambda identifier: {},
-            identifier="slug",
-            list_fields=("slug",),
-        )
-        with (
-            mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(unlisted,)),
-            self.assertRaisesRegex(ImproperlyConfigured, "list_fields"),
-        ):
-            integration_graph()

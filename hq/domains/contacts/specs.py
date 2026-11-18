@@ -14,7 +14,7 @@ from hq.platform.application.contact_submissions import (
 from hq.platform.application.contracts import Effect
 from hq.platform.application.deletion import DeleteCommand
 from hq.platform.application.describe import Describe
-from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
+from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from hq.platform.application.record_fields import RecordId
 from hq.platform.application.records import DELETE
 from hq.platform.application.resources import STATUS_FILTER, TEXT_FILTER, BoundedQuery
@@ -124,13 +124,13 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Contact submissions",
             "The messages sent through the site's contact form, as HQ last read them, each with its review.",
             Capability.MANAGE_CONTACTS,
-            contact_submissions.list_contact_submissions,
-            ContactSubmissionQuery,
-            contact_submissions.get_contact_submission,
-            "id",
-            RecordId,
+            listing=ListRead(
+                contact_submissions.list_contact_submissions, ContactSubmissionQuery, ContactSubmissionRow
+            ),
+            detail_handler=contact_submissions.get_contact_submission,
+            identifier="id",
+            identifier_type=RecordId,
             web_route="contacts:list",
-            item_type=ContactSubmissionRow,
             record_type=ContactSubmissionRow,
         ),
     )

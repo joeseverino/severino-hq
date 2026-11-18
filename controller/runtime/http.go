@@ -243,13 +243,8 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	if strings.Contains(responseContentType, "text/html") || strings.Contains(responseContentType, "application/xhtml+xml") || bytes.HasPrefix(bytes.TrimSpace(data), []byte("<")) {
 		return nil, response.Header, &ProviderError{Message: "address answered with a web page, not the API; use the service's direct API address", Failure: FailureClassAddress}
 	}
-	var result json.RawMessage
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&result); err != nil {
+	if !json.Valid(data) {
 		return nil, response.Header, &ProviderError{Message: "the service returned invalid JSON"}
 	}
-	if err := decoder.Decode(new(json.RawMessage)); err != io.EOF {
-		return nil, response.Header, &ProviderError{Message: "the service returned invalid JSON"}
-	}
-	return result, response.Header, nil
+	return data, response.Header, nil
 }

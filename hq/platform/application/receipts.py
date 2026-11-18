@@ -3,7 +3,6 @@
 import base64
 import hashlib
 from dataclasses import dataclass
-from datetime import date as Date
 from decimal import Decimal
 from typing import Annotated, Any, TypedDict
 
@@ -20,7 +19,7 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.receipts.specs import ReceiptRow
 
-from .command_fields import Describe, Names, RequiredText, Upload, stored_in
+from .command_fields import Day, Describe, Names, RequiredText, Upload, stored_in
 from .integration_specs import Kept, keeps
 from .projection import iso
 from .record_errors import RecordNotFound
@@ -52,7 +51,7 @@ type ReceiptAsset = Annotated[
 @dataclass(frozen=True, slots=True)
 class ReceiptMetadataCommand:
     vendor: Annotated[str, Describe("Who issued the receipt.")] = ""
-    date: Annotated[Date | None, Describe("The date on the receipt.")] = None
+    date: Annotated[Day | None, Describe("The date on the receipt.")] = None
     amount: Annotated[Decimal, Describe("The amount it shows.")] = Decimal("0.00")
     notes: Notes = ""
     related_expense: ReceiptExpense = None

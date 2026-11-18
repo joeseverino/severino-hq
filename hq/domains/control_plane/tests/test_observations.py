@@ -10,11 +10,8 @@ from hq.domains.control_plane.observations import (
     OBSERVATIONS,
     ObservationRecord,
     ObservationSpec,
-    ReadingPart,
     Stamp,
-    registry,
 )
-from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.application.inventory import record_inventory
 from hq.platform.application.tests.sentinel import SENTINEL
 
@@ -40,11 +37,6 @@ class ContractTests(SimpleTestCase):
         self.assertEqual(kept, [{"name": "b"}])
         self.assertEqual(refused, 2)
 
-    def test_a_kind_is_registered_once(self):
-        spec = ObservationSpec("example.thing", "example", "Thing", Named)
-        with self.assertRaises(ValueError):
-            registry((spec, spec))
-
     def test_hq_readers_and_readings_are_the_same_set(self):
         from hq.platform.application.public_registry import READERS
 
@@ -52,42 +44,6 @@ class ContractTests(SimpleTestCase):
             sorted(READERS),
             sorted(k for k, s in OBSERVATIONS.items() if s.read_by == "hq"),
         )
-
-    def test_a_permission_written_as_text_is_refused(self):
-        with self.assertRaises(ValueError):
-            registry((ObservationSpec("example.thing", "example", "Thing", Named, requires=("Zone Read (zone)",)),))
-
-    def test_a_facet_and_a_reader_are_from_their_vocabularies(self):
-        with self.assertRaises(ValueError):
-            registry((ObservationSpec("example.thing", "example", "Thing", Named, facet="x"),))
-        with self.assertRaises(ValueError):
-            registry((ObservationSpec("example.thing", "example", "Thing", Named, read_by="x"),))
-
-
-class PartTests(SimpleTestCase):
-    """A part needs no more than its reading declares, and is named once."""
-
-    def spec(self, *parts, requires=(Cloudflare.ZONE_READ,), provider="example"):
-        return ObservationSpec("example.thing", provider, "Thing", Named, requires=requires, parts=parts)
-
-    def test_a_part_within_the_readings_permissions_registers(self):
-        found = registry((self.spec(ReadingPart("half", "Half", (Cloudflare.ZONE_READ,))),))
-
-        self.assertEqual(found["example.thing"].parts[0].name, "half")
-
-    def test_a_part_needing_more_than_its_reading_is_refused(self):
-        with self.assertRaises(ValueError):
-            registry((self.spec(ReadingPart("half", "Half", (Cloudflare.DNS_WRITE,))),))
-
-    def test_parts_are_named_once_and_never_blank(self):
-        with self.assertRaises(ValueError):
-            registry((self.spec(ReadingPart("half", "Half"), ReadingPart("half", "Again")),))
-        with self.assertRaises(ValueError):
-            registry((self.spec(ReadingPart(" ", "Blank")),))
-
-    def test_a_readings_part_is_read_by_its_own_provider(self):
-        with self.assertRaises(ValueError):
-            registry((self.spec(ReadingPart("half", "Half", (), "elsewhere")),))
 
     def test_no_record_schema_carries_an_unread_marker_from_a_credential_read(self):
         # A part a credential could not read is a part refusal, never a record

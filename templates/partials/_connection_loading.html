@@ -8,4 +8,4 @@ taken over, which the script reads as its window.
 <div class="conn-pending" data-fragment="{% url 'connection' %}" data-fragment-name="connection" data-fragment-load data-fragment-failure="Could not check your connection." data-fragment-fallback="{% url 'connection' %}" aria-busy="true">
   {% muted element="p" %}Checking your connection…{% endmuted %}
 </div>
-{% partialdef frame %}<template data-rtt-live><span class="conn-live"><span class="conn-pulse"></span><strong></strong><span class="conn-samples"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></span></template>{% endpartialdef %}
+{% partialdef frame %}<template data-rtt-live><span class="conn-live"><span class="swatch conn-pulse tone-good"></span><strong></strong><span class="conn-samples"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></span></template>{% endpartialdef %}

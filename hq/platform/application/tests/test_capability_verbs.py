@@ -15,6 +15,7 @@ EXEMPT = {
     "dashboard.machine.select": "its button is on the machine's page, the 'on' of a switch, so it leaves the machine out",
     "infrastructure.resource.adopt": "its button stands beside the record it acts on, so it leaves the record out",
     "infrastructure.service.adopt": "its button stands in the service's row, so it leaves the service out",
+    "infrastructure.zone.adopt": "its button stands under the domain it acts on, so it leaves HQ out",
     "tailnet.reach.allow": "its button is on the certificate's page and says where the change lands",
     "action_item.set_aside": "its button is a queue row's, where Dismiss is the word a row is put away with",
     "action_item.restore": "its button is a dismissed row's, which Restore puts back in the queue",

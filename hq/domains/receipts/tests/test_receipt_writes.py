@@ -230,17 +230,15 @@ class FormRefusalTests(_ReceiptForms):
         self.assertUnchanged()
 
     def test_a_file_a_receipt_cannot_be_is_refused_on_the_form(self):
-        for post in (self.create, self.edit):
-            for content_type, content, said in (
-                ("text/html", b"markup", "A receipt cannot be this type of file."),
-                ("image/png", b"x" * (validation.MAX_RECEIPT_BYTES + 1), "The limit is 15 MB."),
-            ):
-                with self.subTest(form=post.__name__, content_type=content_type):
-                    response = post(file=a_new_file(content_type, content))
+        """The type stands for every file rule, whose words ReceiptFileRuleTests holds."""
 
-                    self.assertEqual(response.status_code, 200)
-                    self.assertTrue(response.context["form"].has_error("file"))
-                    self.assertIn(said, text(response))
+        for post in (self.create, self.edit):
+            with self.subTest(form=post.__name__):
+                response = post(file=a_new_file("text/html", b"markup"))
+
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.context["form"].has_error("file"))
+                self.assertIn("A receipt cannot be this type of file.", text(response))
         self.assertUnchanged()
 
     def test_the_capabilitys_refusal_is_said_on_the_form(self):

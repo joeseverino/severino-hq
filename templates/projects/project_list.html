@@ -1,10 +1,10 @@
 {% extends "list_page.html" %}
 {% block row %}
-  <td><strong>{% entity row|record label=row.name %}</strong>{% if row.slug != row.name|slugify %}<br>{% muted %}{{ row.slug|breakable }}{% endmuted %}{% endif %}</td>
+  <td>{% cell_line %}<strong>{% entity row|record label=row.name %}</strong>{% detail %}{% if row.slug != row.name|slugify %}{{ row.slug|breakable }}{% endif %}{% endcell_line %}</td>
   <td>{% status row.state %}</td>
-  <td>{% if row.repository_url %}{% if row.dependency_updates %}{% status "On" tone="good" %}{% else %}{% muted %}Off{% endmuted %}{% endif %}{% with pulls=row.repository.update_pulls|length %}{% if pulls %}<br>{% entity row|record:"updates" label=pulls|counted:"open update,open updates" %}{% endif %}{% endwith %}{% endif %}{% if row.repository.open_alerts %}<br>{% status row.repository.open_alerts|counted:"open alert,open alerts" tone="attention" pill=False %}{% endif %}</td>
+  <td>{% stack_list %}{% if row.repository_url %}<li>{% if row.dependency_updates %}{% status "On" tone="good" %}{% else %}{% muted %}Off{% endmuted %}{% endif %}</li>{% with pulls=row.repository.update_pulls|length %}{% if pulls %}<li>{% entity row|record:"updates" label=pulls|counted:"open update,open updates" %}</li>{% endif %}{% endwith %}{% endif %}{% if row.repository.open_alerts %}<li>{% status row.repository.open_alerts|counted:"open alert,open alerts" tone="attention" pill=False %}</li>{% endif %}{% endstack_list %}</td>
   <td>{% line_list row.tech_list as t %}{% status t chip=True %}{% endline_list %}</td>
-  <td>{% muted %}{% if row.pushed_at %}Pushed {{ row.pushed_at|when:"ago" }}{% elif row.repository_url %}Not read yet{% endif %}{% if row.repository.failing %}<br>{% status "Checks failing" tone="serious" %}{% endif %}{% endmuted %}</td>
+  <td>{% stack_list %}<li>{% muted %}{% if row.pushed_at %}Pushed {{ row.pushed_at|when:"ago" }}{% elif row.repository_url %}Not read yet{% endif %}{% endmuted %}</li>{% if row.repository.failing %}<li>{% status "Checks failing" tone="serious" %}</li>{% endif %}{% endstack_list %}</td>
   <td>{% muted %}{{ row.updated_at|when:"ago" }}{% endmuted %}</td>
   {% row_actions row.row_actions %}
 {% endblock %}

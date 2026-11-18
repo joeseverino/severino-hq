@@ -11,6 +11,8 @@ from typing import Any, override
 
 from django.core.exceptions import ValidationError
 from django.db import DEFAULT_DB_ALIAS, models
+from django.db.models.functions import Cast, Length, Trim
+from django.db.models.lookups import GreaterThan
 
 
 class Rule(models.CheckConstraint):  # noqa: PLW1641 - unhashable, as Django's CheckConstraint is, since both compare by value
@@ -20,13 +22,19 @@ class Rule(models.CheckConstraint):  # noqa: PLW1641 - unhashable, as Django's C
     with a check constraint behind them (``application.business_use``). Added to
     a table with rows, its migration fails on a row that breaks it, so
     ``manage.py constraint_preflight`` counts those first.
+
+    ``pattern`` is, for a rule about the one text column ``field``, what a
+    value matches exactly when the row keeps the rule, so the command that
+    writes the column refuses the rest and its schema says so
+    (``stored_columns.stored_rules``).
     """
 
-    def __init__(self, *, field: str = "", **kwargs: Any) -> None:
+    def __init__(self, *, field: str = "", pattern: str = "", **kwargs: Any) -> None:
         if not kwargs.get("violation_error_message"):
             raise ValueError("A rule says what it requires in violation_error_message.")
         super().__init__(**kwargs)
         self.field = field
+        self.pattern = pattern
 
     @override
     def validate(self, model, instance, exclude=None, using=DEFAULT_DB_ALIAS) -> None:
@@ -43,12 +51,14 @@ class Rule(models.CheckConstraint):  # noqa: PLW1641 - unhashable, as Django's C
         path, args, kwargs = super().deconstruct()
         if self.field:
             kwargs["field"] = self.field
+        if self.pattern:
+            kwargs["pattern"] = self.pattern
         return path, args, kwargs
 
     @override
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Rule):
-            return self.field == other.field and super().__eq__(other)
+            return self.field == other.field and self.pattern == other.pattern and super().__eq__(other)
         return super().__eq__(other)
 
 
@@ -60,6 +70,19 @@ def one_of(field: str, choices: type[models.Choices], name: str) -> Rule:
         name=name,
         violation_error_message=f"Must be one of: {', '.join(map(str, choices.values))}.",
         field=field,
+    )
+
+
+def has_text(field: str, name: str, message: str) -> Rule:
+    """The rule that the text ``field`` holds a character besides spaces."""
+
+    # Counted in bytes, since SQLite counts a text's characters only up to its first NUL.
+    return Rule(
+        condition=models.Q(GreaterThan(Length(Cast(Trim(field), models.BinaryField())), 0)),
+        name=name,
+        violation_error_message=message,
+        field=field,
+        pattern="[^ ]",
     )
 
 

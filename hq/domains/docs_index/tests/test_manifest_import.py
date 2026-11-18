@@ -5,9 +5,11 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
+from pydantic import ValidationError
 
+from hq.platform.application.capabilities import command_spec, validate_command
 from hq.platform.application.documentation import MAX_MANIFEST_ITEMS, SYNC
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import Capability, Principal
@@ -85,3 +87,14 @@ class ManifestImportViewTests(TestCase):
         self.assertContains(response, "Manifest exceeds the")
         self.assertContains(response, "safety limit.")
         self.assertFalse(DocumentationRecord.objects.exists())
+
+
+class ManifestTypeTests(SimpleTestCase):
+    def test_an_entry_field_sent_in_a_json_type_its_schema_does_not_give_is_refused(self):
+        spec = command_spec(SYNC)
+        validate_command(spec, {"manifest": [ENTRY]})
+        for field, sent in (("published", 0), ("published", "true"), ("published_at", 0), ("tags", "ops")):
+            with self.subTest(field=field, sent=sent), self.assertRaises(ValidationError) as refused:
+                validate_command(spec, {"manifest": [{**ENTRY, field: sent}]})
+
+            self.assertEqual([error["loc"] for error in refused.exception.errors()], [("manifest", 0, field)])

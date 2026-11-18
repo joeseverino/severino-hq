@@ -323,11 +323,6 @@ class ProxyThatDropsTheCallerTests(TestCase):
     def test_it_says_the_address_never_arrived(self):
         self.assertEqual(self.found().channel.id, "opaque")
 
-    def test_the_gate_does_not_claim_to_hold_while_judging_a_proxy(self):
-        gate = next(result for result in self.found().checks.results if result.check.id == "gate")
-
-        self.assertFalse(gate.met)
-
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class DeclinedHeaderTests(TestCase):

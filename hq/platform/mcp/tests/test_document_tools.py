@@ -83,11 +83,11 @@ class DocumentToolTests(SimpleTestCase):
         with patch("hq.platform.mcp.declarations.HANDLERS", (example_undescribed,)), self.assertRaises(ValueError):
             tool_contract()
 
-    def test_unknown_and_invalid_arguments_never_invoke_execution(self):
+    def test_invalid_arguments_never_invoke_execution(self):
         execute = AsyncMock()
         with patch("hq.platform.mcp.binding.sync_to_async", return_value=execute):
             tool = bind_tools()["recent_activity"]
-        for arguments in ({"limit": "2"}, {"limit": True}, {"limit": None}, {"unknown": 1}):
+        for arguments in ({"limit": "2"}, {"limit": True}, {"limit": None}):
             with self.subTest(arguments=arguments), self.assertRaises(ValueError):
                 async_to_sync(tool.call)(arguments)
         execute.assert_not_awaited()

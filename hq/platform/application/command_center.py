@@ -2,9 +2,9 @@
 
 import re
 from dataclasses import dataclass
-from urllib.parse import urlencode
 
 from hq.domains.control_plane.names import normalized_hostname
+from hq.platform.application.url_query import with_query
 
 from .action_links import command_url
 from .capabilities import CapabilitySpec
@@ -243,12 +243,12 @@ def _resource_url(spec: ResourceSpec) -> str:
 
 def _lens_url(name: str) -> str:
     base = route_url("control_plane:topology")
-    return f"{base}?{urlencode({'lens': name})}" if base else ""
+    return with_query(base, {"lens": name}) if base else ""
 
 
 def _finding_url(name: str) -> str:
     base = route_url("control_plane:findings")
-    return f"{base}?{urlencode({'rule': name})}" if base else ""
+    return with_query(base, {"rule": name}) if base else ""
 
 
 def _live_connection_url(group, connection) -> str:

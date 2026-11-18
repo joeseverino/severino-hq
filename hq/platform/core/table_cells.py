@@ -39,8 +39,9 @@ _HELD_KINDS = frozenset({"status", "numeric", "control"})
 # (`row-more`, a list's rest), or once a narrow box lets it go (`narrow-more`).
 _HELD = frozenset({"row-more", "line-rest", "narrow-more"})
 # How many widths of its region a table's columns leave at, one rule each in
-# tables.css.
-RANKS = 6
+# tables.css, the narrowest wider than a narrow box (36rem), so a narrow box
+# holds only the columns a row keeps.
+RANKS = 4
 # The width below every rank's (20rem, tables.css), where a row's state, which
 # stands while any other column can, moves to its open line too.
 STATES_LEAVE = RANKS + 1
@@ -225,8 +226,7 @@ class Cells(HTMLParser):
         self.roles: dict[tuple[int, int], set[str]] = {}
         # The content of each cell a box of the region's own holds, by the
         # box's class: a long one held to a few lines (`cell-clamp`), a short
-        # one held whole up to its column's share (`cell-short`), and a row's
-        # controls held to theirs (`cell-controls`).
+        # one held whole up to its column's share (`cell-short`).
         self.boxes: dict[str, list[Span]] = {}
         # Each row's open line: where it goes, how many columns it spans, the
         # blocks it shows whole and the entries it names.
@@ -455,51 +455,51 @@ class Cells(HTMLParser):
         counted = heads[-1] if heads else max((row.cells for row in records), key=len, default=[])
         if (columns := min(COUNTED, sum(index not in empty for index in range(len(counted))))) > 1:
             self.marks.setdefault(self.table_at, []).append(f' data-columns="{columns}"')
+        # Of those, the ones a narrow box does not draw (`wide-only`), which
+        # its share is not counted over.
+        wide = {at for at, cell in enumerate(heads[-1] if heads else []) if "wide-only" in _classes(cell.attrs)}
+        if columns > 1 and (narrow := min(columns - 1, len(wide - empty))):
+            self.marks.setdefault(self.table_at, []).append(f' data-wide-columns="{narrow}"')
         drops, gutter = _columns(heads[-1] if heads else [])
         # The columns no heading's rank takes away: what a row is (a cell said
         # by its pills alone; a pill beside a value is a note on it), what it
         # does (its controls, a field a reader fills in, a button), and words
         # every row must show (`key-col`). Controls never leave, since the
         # open line copies what leaves, where a control would be drawn twice.
-        # A state stands while any other column can, and goes to the open
-        # line only below every rank's width (`STATES_LEAVE`), where the name
-        # and the controls take the row. Key-cols leave after every other column and together, at
-        # the widest rank any of them would take, since one side of a change
-        # without the other says nothing.
-        states = {place for row in records for place, cell in _placed(row) if place != named and cell.states}
-        keys = {at for at, cell in enumerate(heads[-1] if heads else []) if "key-col" in _classes(cell.attrs)}
+        # A key (`key-col`, or the closing figure of a table that marks none)
+        # never leaves. A state (a cell said by its pills, or any under a
+        # heading of kind `status` that declares no rank) stands while any other column can, and
+        # goes to the open line only below every rank's width
+        # (`STATES_LEAVE`), where the name, the keys and the controls take
+        # the row.
+        heading = heads[-1] if heads else []
+        # A heading of kind `status` decides: with no rank its column is a
+        # state, and with one it leaves by it, whatever its cells hold, though
+        # never before another ranked column (`declared`).
+        statuses = {at for at, cell in enumerate(heading) if cell.attrs.get("data-kind") == "status" and at != named}
+        declared = statuses & set(drops)
+        states = {place for row in records for place, cell in _placed(row) if place != named and cell.states} - declared
+        states |= statuses - declared
+        keys = set(_keys([(kinds.get(at, ""), _classes(cell.attrs)) for at, cell in enumerate(heading)]))
         does = {place for row in records for place, cell in _placed(row) if cell.fields}
         does |= {place for row in records for place, _ in _row_controls(row, kinds, named)}
         pressed = {place for row in records for place, cell in _placed(row) if cell.presses}
         kept = states | keys | does
-        if states - empty:
-            # A state keeps its line however long, so its table counts one
-            # more column beyond its own when it shares out a narrow box's
-            # room (`data-states`, tables.css).
-            self.marks.setdefault(self.table_at, []).append(" data-states")
-        ranked = {at: rank for at, rank in drops.items() if at not in kept | empty}
+        ranked = {at: rank for at, rank in drops.items() if at not in kept | empty | declared}
         # Each rank is a width of the region (tables.css), counted from the
         # widest: a table's first rank leaves at the widest, and its others
-        # each at the next width down. Nothing is measured, so a column may
-        # leave a box that could still hold it.
+        # each at the next width down, the ranks past the last width leaving
+        # with it. Nothing is measured, so a column may leave a box that could
+        # still hold it.
         order = sorted(set(ranked.values()))
-        if len(order) > RANKS:
-            raise ValueError(f"A table's columns leave in at most {RANKS} ranks.")
-        levels = {at: order.index(rank) + 1 for at, rank in ranked.items()}
+        levels = {at: min(RANKS, order.index(rank) + 1) for at, rank in ranked.items()}
         if heads:
-            levels |= _narrow_levels(
-                heads[-1],
-                kinds,
-                kept | pressed | empty | {named} | set(drops),
-                keys - states - does - pressed - empty - {named},
-                after=len(order),
-            )
-            # A state keeps its line however long, so it takes a column's
-            # room: beside one, every other column leaves a rank sooner.
-            if states - empty:
-                levels = {at: max(1, level - 1) for at, level in levels.items()}
-            levels |= dict.fromkeys(states - empty - {named}, STATES_LEAVE)
-        wide = {at for at, cell in enumerate(heads[-1] if heads else []) if "wide-only" in _classes(cell.attrs)}
+            levels |= _narrow_levels(heading, kinds, kept | pressed | empty | {named} | set(drops), after=len(order))
+            levels |= dict.fromkeys(states - keys - does - pressed - empty - {named}, STATES_LEAVE)
+        # A ranked status leaves with the last column that leaves before every
+        # state does, so a row never shows a spare column without its status.
+        last = max((level for level in levels.values() if level <= RANKS), default=1)
+        levels |= dict.fromkeys(declared - kept - empty, last)
         self.opens = False
         self.cuts += [cell.drop for row in self.rows if row.section == "thead" for cell in row.cells if cell.drop]
         if not (self.sorts and _sorts(records)):
@@ -596,12 +596,6 @@ class Cells(HTMLParser):
             # value's span (ended at a toggle) would leave out.
             elif cell.longest <= SHORT and cell.closed and not cell.folds:
                 self._box(cell, kind, "cell-short")
-        # A row's controls, more than one, keep their line up to their share
-        # and past it wrap between them, so no row of buttons holds its table
-        # wider than its region (tables.css).
-        controls = kind == "control" and cell.controls and len(cell.tops) > 1
-        if body and controls and not cell.fields and cell.closed:
-            self._box(cell, kind, "cell-controls")
         return marks
 
     def _box(self, cell: _Cell, kind: str, mark: str) -> None:
@@ -741,32 +735,36 @@ def leaving_order(columns: Sequence[tuple[str, Sequence[str]]]) -> list[int]:
     row, a ``key-col``, a column of the row's controls, or the closing figure
     of a table that marks no key."""
 
-    keyed = any("key-col" in classes for _, classes in columns)
-    last = len(columns) - 1
+    keys = _keys(columns)
 
     def spare(index: int, kind: str, classes: Sequence[str]) -> bool:
-        closing_figure = not keyed and index == last and kind == "numeric"
-        return index > 0 and "key-col" not in classes and not closing_figure and kind != "control"
+        return index > 0 and index not in keys and kind != "control"
 
     far_first = [index for index in reversed(range(len(columns))) if spare(index, *columns[index])]
     return sorted(far_first, key=lambda index: "optional-col" not in columns[index][1])
 
 
-def _narrow_levels(
-    heading: list[_Cell], kinds: dict[int, str], kept: set[int], keys: set[int], *, after: int
-) -> dict[int, int]:
+def _keys(columns: Sequence[tuple[str, Sequence[str]]]) -> list[int]:
+    """The places of the columns every row keeps, each by its kind and its
+    classes: its ``key-col`` ones, or with none the closing figure, the last
+    column before the row's controls when it holds a number."""
+
+    if keys := [index for index, (_, classes) in enumerate(columns) if "key-col" in classes]:
+        return keys
+    closing = next((index for index in reversed(range(len(columns))) if columns[index][0] != "control"), None)
+    return [closing] if closing and columns[closing][0] == "numeric" else []
+
+
+def _narrow_levels(heading: list[_Cell], kinds: dict[int, str], kept: set[int], *, after: int) -> dict[int, int]:
     """The levels of the columns a table's headings rank none for: each
     column a row can do without (`leaving_order`) leaves at the narrowest
     widths, after every ranked one (``after`` levels), the first to go at the
-    widest of them and the last below the narrowest rank's width, so a table
-    stands whole until a narrow box and is never wider than its region there.
-    The ``keys`` go last, all at the first of the levels they would take."""
+    widest of them and the last at the narrowest rank's width, so a table
+    stands whole until a narrow box and keeps only what a row keeps there."""
 
     columns = [(kinds.get(at, ""), _classes(cell.attrs)) for at, cell in enumerate(heading)]
-    spare = [at for at in leaving_order(columns) if at not in kept] + sorted(keys, reverse=True)
-    levels = {at: min(RANKS, max(after + 1, RANKS - len(spare) + place)) for place, at in enumerate(spare, 1)}
-    together = min((levels[at] for at in keys), default=RANKS)
-    return levels | dict.fromkeys(keys, together)
+    spare = [at for at in leaving_order(columns) if at not in kept]
+    return {at: min(RANKS, max(after + 1, RANKS - len(spare) + place)) for place, at in enumerate(spare, 1)}
 
 
 def _columns(heading: list[_Cell]) -> tuple[dict[int, int], int | None]:

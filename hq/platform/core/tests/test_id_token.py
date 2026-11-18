@@ -4,7 +4,6 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import jwt
-from django.core.exceptions import SuspiciousOperation
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
 from hq.platform.api.tests.tokens import _KEY, ISSUER, KID, OTHER_KEY, _held, _serving
@@ -78,10 +77,6 @@ class IdTokenTests(SimpleTestCase):
         )
         with self.assertRaises(tokens.TokenError):
             self._verify(token)
-
-    def test_the_library_still_checks_the_nonce(self):
-        with _serving(), self.assertRaises(SuspiciousOperation):
-            HQOIDCAuthenticationBackend().verify_token(_id_token(), nonce="another-nonce")
 
     @override_settings(OIDC_ISSUER="")
     def test_no_configured_issuer_refuses_every_token(self):

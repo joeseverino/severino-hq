@@ -14,6 +14,7 @@ from typing import Any
 
 from django.urls import resolve
 
+from hq.platform.application.url_query import with_query
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS, CONNECTION_LABELS
 lazy from hq.domains.control_plane.models import ProviderConnection
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
@@ -45,7 +46,7 @@ def readers(names: Iterable[str]) -> tuple[str, ...]:
 def setup_url(provider: str) -> str:
     """The Connections page, opened at how to connect ``provider``."""
 
-    return f"{reverse('control_plane:connections')}?setup={provider}#setup-{provider}"
+    return with_query(reverse("control_plane:connections"), {"setup": provider}, fragment=f"setup-{provider}")
 
 
 def remedy(names: Iterable[str]) -> Remedy | None:

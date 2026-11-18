@@ -23,7 +23,7 @@ from django.test import SimpleTestCase
 from pydantic import Field, WithJsonSchema
 
 from hq.platform.application.command_fields import Describe
-from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
+from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import compile_integration_graph
 from hq.platform.application.json_schemas import json_schemas
@@ -203,6 +203,16 @@ class ExampleNoteCommand:
     note: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class ExampleSync:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ExampleRefresh:
+    pass
+
+
 def _example_write(command: ExampleCommand, *, principal) -> dict:
     return {"ok": True}
 
@@ -292,6 +302,28 @@ class DescribedOnceTests(SimpleTestCase):
         self.assertEqual(len(targets), 1)
         self.assertIn("$ref", json.loads(targets.pop()))
 
+    def test_commands_of_two_types_taking_no_field_write_their_empty_command_once(self):
+        # Each change's only field is its retry key, which travels in its
+        # header, so both bodies hold the same empty command; one is targeted
+        # so the two bodies differ around it.
+        specs = (
+            CapabilitySpec(
+                "example.vehicle.sync", "Example sync.", "remote_write", "example.write", ExampleSync, _example_write
+            ),
+            CapabilitySpec(
+                "example.vehicle.refresh",
+                "Example refresh.",
+                "remote_write",
+                "example.write",
+                ExampleRefresh,
+                _example_targeted,
+                "key",
+                target_help="The vehicle's key",
+            ),
+        )
+        with override_integration_graph(compile_integration_graph(capabilities=specs, resources=(), connections=())):
+            described_once(openapi.document())
+
     def test_lists_inheriting_one_query_write_its_shared_parameters_once(self):
         # Two lists the way extensions declare them, each with a query that
         # inherits the ranked list's limit.
@@ -309,7 +341,11 @@ class DescribedOnceTests(SimpleTestCase):
 
         specs = tuple(
             ResourceSpec(
-                f"example.{kind}", kind.title(), f"Example {kind}.", "example.read", rows, query, item_type=ExampleRow
+                f"example.{kind}",
+                kind.title(),
+                f"Example {kind}.",
+                "example.read",
+                listing=ListRead(rows, query, ExampleRow),
             )
             for kind, query in (("notes", ExampleNoteQuery), ("tasks", ExampleTaskQuery))
         )

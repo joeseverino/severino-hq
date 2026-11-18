@@ -85,3 +85,99 @@ class ExtensionSetTests(SimpleTestCase):
         self.assertEqual(resolved(), written)
         chosen = "example_beta.plugin:plugin"
         self.assertEqual(resolved(HQ_LOCAL_PLUGINS=chosen), {**written, "HQ_LOCAL_PLUGINS": chosen})
+
+
+class CoordinatedBranchTests(SimpleTestCase):
+    """A host tree landing on a branch its extension repository also carries composes that branch, as CI does."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.work = Path(directory.name).resolve()
+        snapshots = mock.patch("tools.dev.extension_set.SNAPSHOTS", self.work / "snapshots")
+        snapshots.start()
+        self.addCleanup(snapshots.stop)
+        # The host speaks API 2 on main and on pass/x; the tree asked is a worker's branch made from pass/x.
+        self.host = self.work / "host"
+        (self.host / "hq/platform/application").mkdir(parents=True)
+        self.git(self.host, "init", "-q", "-b", "main")
+        self.commit(self.host, "hq/platform/application/plugins.py", "PLUGIN_API_VERSION = 2\n")
+        self.git(self.host, "switch", "-q", "-c", "pass/x")
+        self.commit(self.host, "notes.txt", "coordinated\n")
+        self.git(self.host, "switch", "-q", "-c", "worker")
+        # The checkout named stands on main at API 1, and no commit of its history declares API 2.
+        self.extensions = self.work / "extensions"
+        self.extensions.mkdir()
+        self.git(self.extensions, "init", "-q", "-b", "main")
+        self.commit(self.extensions, "packages/alpha/pyproject.toml", '[project]\nname = "example-alpha"\n')
+        self.declare(self.extensions, 1, "main")
+        self.git(self.extensions, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.git(self.extensions, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+        self.git(self.extensions, "branch", "pass/x")
+        self.coordinated = self.work / "coordinated"
+        self.git(self.extensions, "worktree", "add", "-q", str(self.coordinated), "pass/x")
+        self.declare(self.coordinated, 2, "branch")
+        self.environ = {
+            "HQ_LOCAL_PLUGINS": "example_alpha.plugin:plugin",
+            "HQ_LOCAL_PYTHONPATH": str(self.extensions / "packages/alpha/src"),
+        }
+
+    @staticmethod
+    def git(root: Path, *args: str) -> str:
+        isolated = {
+            **os.environ,
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_AUTHOR_NAME": "test",
+            "GIT_AUTHOR_EMAIL": "test@example.com",
+            "GIT_COMMITTER_NAME": "test",
+            "GIT_COMMITTER_EMAIL": "test@example.com",
+        }
+        done = subprocess.run(["git", "-C", str(root), *args], env=isolated, capture_output=True, text=True, check=True)
+        return done.stdout.strip()
+
+    def commit(self, root: Path, path: str, text: str) -> None:
+        (root / path).parent.mkdir(parents=True, exist_ok=True)
+        (root / path).write_text(text)
+        self.git(root, "add", "-A")
+        self.git(root, "commit", "-q", "--no-verify", "-m", path)
+
+    def declare(self, root: Path, api: int, word: str) -> None:
+        self.commit(
+            root,
+            "packages/alpha/src/example_alpha/plugin.py",
+            f'# {word}\nplugin = PluginManifest(id="example.alpha", api_version={api})\n',
+        )
+
+    def picked(self):
+        from tools.dev.extension_set import for_tree
+
+        return for_tree(self.host, environ=self.environ)
+
+    def imported(self, source: str) -> str:
+        return (Path(source) / "example_alpha" / "plugin.py").read_text()
+
+    def test_the_worktree_on_the_branch_is_composed_as_it_stands(self):
+        manifest = self.coordinated / "packages/alpha/src/example_alpha/plugin.py"
+        manifest.write_text(f"# uncommitted\n{manifest.read_text()}")
+        picked = self.picked()
+        self.assertEqual(picked.sources, (str(self.coordinated / "packages/alpha/src"),))
+        self.assertIn("# uncommitted", self.imported(picked.sources[0]))
+        self.assertIn("pass/x", picked.said)
+        self.assertEqual(picked.stood, ((str(self.extensions), str(self.coordinated)),))
+
+    def test_a_branch_no_worktree_holds_is_composed_at_its_commit(self):
+        self.git(self.extensions, "worktree", "remove", "--force", str(self.coordinated))
+        picked = self.picked()
+        self.assertEqual(len(picked.sources), 1)
+        self.assertIn("# branch", self.imported(picked.sources[0]))
+        self.assertIn("pass/x", picked.said)
+        self.assertEqual(picked.at, ((str(self.extensions), self.git(self.extensions, "rev-parse", "pass/x")),))
+
+    def test_a_tree_landing_on_the_default_branch_or_detached_keeps_the_named_set(self):
+        for switch in (("-c", "from-main", "main"), ("--detach", "pass/x")):
+            with self.subTest(switch=switch):
+                self.git(self.host, "switch", "-q", *switch)
+                picked = self.picked()
+                self.assertNotIn("pass/x", picked.said)
+                self.assertFalse(any(source.startswith(str(self.coordinated)) for source in picked.sources))

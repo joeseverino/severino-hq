@@ -2,7 +2,6 @@
 
 import logging
 from typing import get_origin
-from urllib.parse import urlencode
 
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -28,6 +27,7 @@ from hq.platform.application.resource_capabilities import CREATE_CAPABILITY
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next
 from hq.platform.application.tone import Tone
+from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.core import secrets
 
@@ -91,7 +91,7 @@ class ResourceFormView(View):
                         ListRow(
                             title=provider["label"],
                             detail=provider["summary"],
-                            url=f"{reverse('control_plane:create')}?{urlencode({'kind': provider['kind']})}",
+                            url=with_query(reverse("control_plane:create"), {"kind": provider["kind"]}),
                             status=Tone.ATTENTION if provider["public_effect"] else "",
                             badge="Visible on the internet" if provider["public_effect"] else "",
                         )

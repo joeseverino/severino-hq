@@ -6,7 +6,7 @@ from typing import TypedDict
 
 from django.test import SimpleTestCase
 
-from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
+from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from hq.platform.application.outbound_work import OutboundWork
 from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.plugins import NavigationGroup, NavigationItem
@@ -56,7 +56,11 @@ def _trails():
         "example.walk.create", "Log a walk.", "remote_write", "example.trails.write", _Nothing, _run, label="Log a walk"
     )
     rows = ResourceSpec(
-        "example.walks", "Walks", "Every walk logged.", Capability.READ, _rows, _ExampleQuery, item_type=_ExampleRow
+        "example.walks",
+        "Walks",
+        "Every walk logged.",
+        Capability.READ,
+        listing=ListRead(_rows, _ExampleQuery, _ExampleRow),
     )
     work = OutboundWork(
         name="example.trails.sync",
@@ -84,9 +88,7 @@ def _summits():
         "Reached",
         "Every summit reached.",
         Capability.READ,
-        _rows,
-        _ExampleQuery,
-        item_type=_ExampleRow,
+        listing=ListRead(_rows, _ExampleQuery, _ExampleRow),
     )
     return manifest, replace(integration, resources=lambda: (rows,))
 

@@ -18,6 +18,7 @@ from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, HttpResponse
 from django.urls import URLPattern, reverse
 from django.views.decorators.csrf import csrf_exempt
+from jsonschema import Draft202012Validator
 from pydantic import (
     BaseModel,
     Field,
@@ -38,7 +39,7 @@ from hq.platform.application.agent_access import AgentRefusal
 from hq.platform.application.agent_limits import Limited
 from hq.platform.application.answer_fields import Outcome, Pinned
 from hq.platform.application.approvals import is_held
-from hq.platform.application.call_envelope import ENVELOPE_SCHEMA, INTEGER_TARGET, read_body
+from hq.platform.application.call_envelope import ENVELOPE_SCHEMA, read_body
 from hq.platform.application.capabilities import (
     CapabilitiesVersion,
     CapabilityDescription,
@@ -53,8 +54,10 @@ from hq.platform.application.findings import Findings, FindingsQuery, findings a
 from hq.platform.application.held_answer import AwaitingApproval
 from hq.platform.application.integration_specs import (
     CURRENT_API_VERSION,
+    IDEMPOTENCY_FIELD,
     IDEMPOTENCY_HEADER,
     RESERVED_QUERY_FIELD,
+    TARGET_KINDS,
     CapabilitySpec,
     answer_type,
 )
@@ -188,6 +191,11 @@ class CapabilityRequestCatalog(TypedDict):
     capabilities: Annotated[list[CapabilityEntry], Describe("Each capability asked for that you can run from here.")]
 
 
+# Operational data reached with a bearer credential: correct nowhere but
+# the client that asked for it.
+ANSWER_CACHE_CONTROL = "private, no-store"
+
+
 def _json(payload: Mapping[str, Any], *, status: int = 200) -> HttpResponse:
     # A response body, which no fingerprint compares, and which fails on a
     # value JSON has no form for rather than writing its str.
@@ -197,9 +205,7 @@ def _json(payload: Mapping[str, Any], *, status: int = 200) -> HttpResponse:
         content_type="application/json",
         status=status,
     )
-    # Operational data reached with a bearer credential: correct nowhere but
-    # the client that asked for it.
-    response["Cache-Control"] = "private, no-store"
+    response["Cache-Control"] = ANSWER_CACHE_CONTROL
     return response
 
 
@@ -265,15 +271,26 @@ def _target(kind: str, words: str) -> dict[str, Any]:
 
     # An id is the envelope's own (``RecordId``), whose definition the body's schema carries.
     number = ENVELOPE_SCHEMA["properties"]["target"]["anyOf"][0]
+    pattern = TARGET_KINDS[kind].pattern
+    text: dict[str, Any] = {"type": "string", **({"pattern": pattern} if pattern else {"minLength": 1})}
     schema: dict[str, Any] = (
-        {"oneOf": [number, {"type": "string", "pattern": INTEGER_TARGET}], "examples": [42]}
+        {"oneOf": [number, text], "examples": [42]}
         if kind == "integer"
-        else {"type": "string", "minLength": 1, "examples": [f"example-{kind.replace('_', '-')}"]}
+        else {**text, "examples": [f"example-{kind.replace('_', '-')}"]}
     )
     return {
         **schema,
         "description": f"{words.rstrip('.')}: its {'id' if kind == 'integer' else kind.replace('_', ' ')}.",
     }
+
+
+def _over_http(command: Mapping[str, Any]) -> dict[str, Any]:
+    """``command``'s schema as this API takes it: its retry key in the header, never the payload."""
+
+    if IDEMPOTENCY_FIELD not in command.get("properties", {}):
+        return dict(command)
+    properties = {name: field for name, field in command["properties"].items() if name != IDEMPOTENCY_FIELD}
+    return {**command, "properties": properties}
 
 
 def request_schema(spec: Mapping[str, Any]) -> dict[str, Any]:
@@ -283,7 +300,7 @@ def request_schema(spec: Mapping[str, Any]) -> dict[str, Any]:
     # schema is nested under ``payload`` those refs still resolve from the
     # document root, so hoist its definitions into the envelope root instead
     # of publishing a schema that only looks valid for flat commands.
-    command = {key: value for key, value in spec["input_schema"].items() if key != "$defs"}
+    command = {key: value for key, value in _over_http(spec["input_schema"]).items() if key != "$defs"}
     properties = dict(ENVELOPE_SCHEMA["properties"])
     envelope_payload = properties["payload"]
     # The command's own words say more than the envelope's, where it has them.
@@ -496,13 +513,14 @@ def capabilities(request: APIRequest) -> HttpResponse:
 
     # `?name=` narrows to a capability or a dotted prefix of whole segments,
     # and `?resource=` to the capabilities acting on that resource.
-    described = describe_capabilities(principal=request.principal, **_narrowing(request, capability_query()))
+    described = describe_capabilities(principal=request.principal, **_judged(request, capability_query()))
     specs: list[CapabilityDescription] = described["capabilities"]
     catalog: CapabilityRequestCatalog = {
         "schema_version": described["schema_version"],
         "capabilities": [
             {
                 **spec,
+                "input_schema": _over_http(spec["input_schema"]),
                 "idempotency_key_required": key_required(Effect(spec["effect"]), request.principal),
                 "request_schema": request_schema(spec),
             }
@@ -603,6 +621,24 @@ def _narrowing(request: APIRequest, query_fields: QueryFields) -> dict[str, Any]
             continue
         (raw,) = sent
         values[field] = int(raw) if _counts(schema) and _COUNT.fullmatch(raw) else raw
+    return values
+
+
+class _UndeclaredValue(QueryRefusal):
+    """A declared parameter sent with a value its schema does not take."""
+
+
+def _judged(request: APIRequest, query_fields: QueryFields) -> dict[str, Any]:
+    """The declared query parameters, each held to the schema the document gives it.
+
+    The capability catalog has no query model of its own to judge them, so an
+    empty or malformed value is refused here rather than read as one left out.
+    """
+
+    values = _narrowing(request, query_fields)
+    for field, value in values.items():
+        if not Draft202012Validator(query_fields[field]).is_valid(value):
+            raise _UndeclaredValue(f"Query field {field!r} holds a value it does not take.")
     return values
 
 
@@ -857,6 +893,7 @@ def execute(request: APIRequest, name: str) -> HttpResponse:
         target=envelope.get("target"),
         expected_updated_at=envelope.get("expected_updated_at"),
         idempotency_key=request.headers.get(IDEMPOTENCY_HEADER),
+        key_in_payload=False,
     )
     if result.get("ok", False):
         data = {key: value for key, value in result.items() if key != "ok"}

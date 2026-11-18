@@ -231,6 +231,12 @@ class PolicyCell:
     def tone(self) -> str:
         return RULE_TONES.get(self.rule, Tone.NEUTRAL)
 
+    @property
+    def words(self) -> str:
+        """The chosen option's words, for a reader who may not change it."""
+
+        return dict(self.options).get(self.rule or "", "")
+
 
 @dataclass(frozen=True, slots=True)
 class Row:

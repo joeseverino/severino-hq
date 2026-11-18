@@ -299,16 +299,13 @@ class LineChartTests(TestCase):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm", marks=((date(2025, 1, 1), "Old"),))
         self.assertEqual(chart.marks, ())
 
-    def test_the_line_is_stroked_rather_than_filled(self):
+    def test_the_line_and_its_trend_carry_their_series_slot(self):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm", trend=True)
         rendered = render_to_string("partials/_chart.html", {"chart": chart})
-        # `.chart-series-N` sets `fill`, which would render the path as a
-        # filled blob. Lines use the stroke classes.
         paths = elements(rendered, "path")
         self.assertEqual(len(paths), 2)
         for path in paths:
-            self.assertIn("chart-line-1", path.classes)
-            self.assertFalse({name for name in path.classes if name.startswith("chart-series-")})
+            self.assertIn("series-1", path.classes)
         self.assertTrue(with_class(rendered, "chart-trend"))
         self.assertIn("View chart data", text(rendered))
         self.assertEqual(elements(rendered, "title"), [])

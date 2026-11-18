@@ -13,7 +13,6 @@ import re
 from collections.abc import Mapping
 from typing import Annotated, Any, NotRequired, TypedDict, cast
 
-from django.db.models import BigIntegerField
 from pydantic import (
     AfterValidator,
     BeforeValidator,
@@ -30,27 +29,23 @@ from pydantic import (
 from pydantic_core import PydanticKnownError
 
 from .command_fields import RequiredText
-from .integration_specs import CapabilitySpec
+from .integration_specs import TARGET_KINDS, CapabilitySpec
 from .json_schemas import json_schema
 from .moments import moment
 from .record_fields import RecordId
 from .refusal_status import Refusal, refusal_of
 
-# What an integer target may be sent as besides a number: the digits of an
-# id, a digit fewer than the most a record's id may be, so every one is an id
-# the number form takes.
-INTEGER_TARGET = rf"^[1-9][0-9]{{0,{len(str(BigIntegerField.MAX_BIGINT)) - 2}}}$"
-_INTEGER_DIGITS = re.compile(INTEGER_TARGET)
-
 
 def _as_its_kind(value: str | int, info: ValidationInfo) -> str | int:
-    """``value``, refused where the capability's target is an integer and it is text of anything but an id's digits."""
+    """``value``, refused where it is text its capability's target kind has a pattern for and does not match."""
 
-    kind = (info.context or {}).get("target_kind")
-    if kind == "integer" and isinstance(value, str) and not _INTEGER_DIGITS.fullmatch(value):
-        # Pydantic's own type, whose fixed words name the kind; a validator's own text is never shown.
+    kind = TARGET_KINDS.get((info.context or {}).get("target_kind") or "")
+    if kind is None or not kind.pattern or not isinstance(value, str) or re.fullmatch(kind.pattern, value):
+        return value
+    # Pydantic's own types, whose fixed words name the kind; a validator's own text is never shown.
+    if kind.coerce is int:
         raise PydanticKnownError("int_parsing")
-    return value
+    raise PydanticKnownError("string_pattern_mismatch", {"pattern": kind.pattern})
 
 
 def _whole(value: Any) -> Any:

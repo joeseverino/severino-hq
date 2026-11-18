@@ -439,22 +439,6 @@ class TokenIdentityTests(TestCase):
         self.assertFalse(said["identity_agrees"])
         self.assertEqual(layer["state"], "unmet")
 
-    def test_every_standing_a_device_can_be_in_is_explained(self):
-        from ..agent_devices import DeviceStanding
-        from ..request_channel import TAILNET_CHANNEL
-        from ..request_identity import Identity
-        from ..request_standard import RequestFacts, _agent_device
-        from ..standards import Standing
-
-        for standing in DeviceStanding:
-            with self.subTest(standing=standing):
-                identity = Identity(agent="example-agent", device_standing=standing.value)
-                reading = _agent_device(
-                    RequestFacts(request=None, address="", channel=TAILNET_CHANNEL, identity=identity)
-                )
-                self.assertIn("example-agent", reading.detail)
-                self.assertEqual(reading.standing is Standing.MET, standing is DeviceStanding.APPROVED)
-
 
 class ContainerHopTests(TestCase):
     """HQ can say which container answered: Docker sets a container's

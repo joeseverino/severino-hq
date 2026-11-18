@@ -72,6 +72,16 @@
     control.querySelector("[data-ask-note]") ||
     [...control.querySelectorAll("form")].flatMap((form) => [...form.elements]).find((field) => field.matches("[data-ask-note]"));
 
+  // A note and a label take the state's tone class, as the server draws them
+  // (`tone_class`, work_runs.TONES), and no color of their own.
+  const retone = (element, tone) => {
+    const toned = [...element.classList].filter((name) => name.startsWith("tone-"));
+    element.classList.remove(...toned);
+    if (tone) element.classList.add(`tone-${tone}`);
+  };
+  const toneOf = (element) =>
+    [...(element?.classList ?? [])].find((name) => name.startsWith("tone-"))?.slice("tone-".length) ?? "";
+
   const say = (control, text, word = "") => {
     const note = noteOf(control);
     if (!note) return;
@@ -132,7 +142,10 @@
     if (!line) return;
     const state = control.dataset.askState;
     const said = state === "failed" ? text || word : state === "idle" ? "" : document.body.dataset.askRefreshing;
-    line.dataset.askState = state;
+    // Speaking for the work, the line takes its note's tone; speaking for its
+    // reading again, the tone the server drew it with.
+    if (!("drawnTone" in line.dataset)) line.dataset.drawnTone = toneOf(line);
+    retone(line, said ? (state === "failed" ? toneOf(noteOf(control)) : "") : line.dataset.drawnTone);
     if (said) {
       line.dataset.askSaid = said;
       line.title = said;
@@ -213,14 +226,16 @@
       if (standing.live) button.setAttribute("aria-disabled", "true");
       else button.removeAttribute("aria-disabled");
     });
+    // Toned first, so the head's line echoing the note takes its new tone.
+    const note = noteOf(control);
+    if (note) retone(note, standing.tone || "");
     say(control, standing.note || "", standing.label || "");
     tick(control);
     const label = control.querySelector("[data-ask-label]");
     if (label && standing.label) {
       label.textContent = standing.label;
-      // Its pill takes the state's tone with its word (work_runs.TONES).
-      const toned = [...label.classList].find((name) => name.startsWith("pill-"));
-      if (toned && standing.tone) label.classList.replace(toned, `pill-${standing.tone}`);
+      // A pill always has a tone, so an answer with none leaves it its own.
+      if (standing.tone) retone(label, standing.tone);
     }
     const bar = control.querySelector("[data-ask-bar]");
     if (bar) {
@@ -251,6 +266,7 @@
       const offered = frame("template[data-ask-newer]");
       offered.querySelector("a").href = window.location.href;
       note.replaceChildren(offered);
+      retone(note, "");
       note.hidden = false;
       note.closest(".visually-hidden")?.classList.remove("visually-hidden");
       control.dataset.askState = "idle";

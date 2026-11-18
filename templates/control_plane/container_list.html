@@ -61,12 +61,12 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
                   {% endif %}
                 </div>
               </td>
-              <td>{% if plan %}{{ plan.change_label|breakable }}<br>{% muted %}risk {{ plan.risk|breakable }}{% endmuted %}{% else %}{% include "partials/_empty_state.html" with message="No newer release" inline=True %}{% endif %}</td>
-              <td>{% if plan.fixes %}{% status "Vulnerable" tone=standing.serious|yesno:"serious,attention" %}<br>{% comment %}
+              <td>{% if plan %}{% cell_line %}{{ plan.change_label|breakable }}{% detail %}risk {{ plan.risk|breakable }}{% endcell_line %}{% else %}{% include "partials/_empty_state.html" with message="No newer release" inline=True %}{% endif %}</td>
+              <td>{% if plan.fixes %}{% stack_list %}<li>{% status "Vulnerable" tone=standing.serious|yesno:"serious,attention" %}</li><li>{% comment %}
               the mark follows the image's standing, which no one value holds
               <!-- ast-grep-ignore: hand-drawn-missing-value -->
-              {% endcomment %}{% muted %}the change fixes {{ plan.fixes|length|counted:"advisory,advisories" }}{% endmuted %}{% elif standing.state == "vulnerable" %}{% status "Vulnerable" tone=standing.serious|yesno:"serious,attention" %}{% else %}{% empty_value %}{% endif %}</td>
-              <td><span class="prose">{% for item in group.containers %}<a href="{{ item.url }}">{{ item.running.name|breakable }}</a> {% muted %}on {{ item.machine.name|breakable }}{% endmuted %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</span></td>
+              {% endcomment %}{% muted %}the change fixes {{ plan.fixes|length|counted:"advisory,advisories" }}{% endmuted %}</li>{% endstack_list %}{% elif standing.state == "vulnerable" %}{% status "Vulnerable" tone=standing.serious|yesno:"serious,attention" %}{% else %}{% empty_value %}{% endif %}</td>
+              <td>{% stack_list %}{% for item in group.containers %}<li class="prose"><a href="{{ item.url }}">{{ item.running.name|breakable }}</a> {% muted %}on {{ item.machine.name|breakable }}{% endmuted %}</li>{% endfor %}{% endstack_list %}</td>
             </tr>
           {% endwith %}{% endfor %}
         </tbody>
@@ -94,17 +94,15 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
         {% for item in containers %}{% with standing=item.standing %}
           <tr>
             <td>
-              <strong><a href="{{ item.url }}">{{ item.running.name|breakable }}</a></strong>
-              <br>{% muted %}on {% entity item.machine.link %}{% endmuted %}
+              {% cell_line %}<strong><a href="{{ item.url }}">{{ item.running.name|breakable }}</a></strong>{% detail %}on {% entity item.machine.link %}{% endcell_line %}
             </td>
             <td>
-              <code class="cell-whole">{{ standing.image.short|breakable }}</code>
-              <br>{% muted %}{% if standing.tag %}{{ standing.tag|breakable }}{% else %}no version tag{% endif %}{% if standing.pinned %}{% dot %}<span tabindex="0" data-tip="Locked to {{ standing.image.digest|slice:':19' }}…">locked</span>{% else %}{% dot %}<span tabindex="0" data-tip="It runs whatever the tag pointed at when it was pulled.">tag only</span>{% endif %}{% if standing.built %}{% dot %}built {{ standing.built|when_text:"ago" }}{% endif %}{% endmuted %}
+              {% cell_line %}<code class="cell-whole">{{ standing.image.short|breakable }}</code>{% detail %}{% if standing.tag %}{{ standing.tag|breakable }}{% else %}no version tag{% endif %}{% if standing.pinned %}{% dot %}<span tabindex="0" data-tip="Locked to {{ standing.image.digest|slice:':19' }}…">locked</span>{% else %}{% dot %}<span tabindex="0" data-tip="It runs whatever the tag pointed at when it was pulled.">tag only</span>{% endif %}{% if standing.built %}{% dot %}built {{ standing.built|when_text:"ago" }}{% endif %}{% endcell_line %}
             </td>
             {% include "control_plane/_container_standing.html" %}
             {% with posture=item.posture %}<td class="optional-col">{% if posture.serious %}{% status "Can control its machine" tone="serious" pill=False tip=posture.serious_unmet %}{% elif posture.unmet %}<span tabindex="0" data-tip="{% for result in posture.unmet %}{{ result.check.unmet }}&#10;{% endfor %}">{{ posture.unmet|length }} to fix</span>{% elif posture.measured %}{% muted %}{% if posture.met == posture.measured %}All {{ posture.measured|measured:"pass" }}{% else %}{{ posture.met|breakable }} of {{ posture.measured|measured:"pass" }}{% endif %}{% endmuted %}{% endif %}</td>{% endwith %}
-            <td class="optional-col">{% for hostname in item.serves %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
-            <td>{% if not item.running.state.running %}{% status item.running.state %}<br>{% endif %}<span class="cell-part">{{ item.uptime|default:item.running.status|breakable }}{% if item.running.check %}{% muted %},{% endmuted %}{% endif %}</span>{% if item.running.check %} {% muted css="cell-part" title=item.running.check.said|capfirst %}{{ item.running.check|breakable }}{% endmuted %}{% endif %}</td>
+            <td class="optional-col">{% stack_list %}{% for hostname in item.serves %}<li>{% entity "service"|entity_of:hostname %}</li>{% endfor %}{% endstack_list %}</td>
+            <td>{% stack_list %}{% if not item.running.state.running %}<li>{% status item.running.state %}</li>{% endif %}<li><span class="cell-part">{{ item.uptime|default:item.running.status|breakable }}{% if item.running.check %}{% muted %},{% endmuted %}{% endif %}</span>{% if item.running.check %} {% muted css="cell-part" title=item.running.check.said|capfirst %}{{ item.running.check|breakable }}{% endmuted %}{% endif %}</li>{% endstack_list %}</td>
           </tr>
         {% endwith %}{% endfor %}
       </tbody>

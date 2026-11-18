@@ -56,7 +56,7 @@ class RecordFieldTests(TestCase):
                 with self.subTest(command=name, field=field):
                     resource = resources.get(declared["resource"])
                     self.assertIsNotNone(resource)
-                    self.assertIsNotNone(resource.list_handler)
+                    self.assertIsNotNone(resource.listing)
                     self.assertTrue(declared.get("key") or resource.identifier)
 
     def test_refresh_offers_connections_and_reading_types_to_choose(self):

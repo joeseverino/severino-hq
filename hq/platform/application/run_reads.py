@@ -20,7 +20,7 @@ from .automation_manifest import DottedName
 from .automation_runs import CORRELATION_LONGEST, CORRELATION_PATTERN, capability_name
 from .command_fields import RequiredText
 from .describe import Describe, listed
-from .integration_specs import ResourceSpec
+from .integration_specs import ListRead, ResourceSpec
 from .projection import iso, keyset_page
 from .record_errors import RecordNotFound
 from .resource_records import AskedAt
@@ -185,12 +185,10 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Playbook runs",
             "Every run of a playbook: its machines, who asked and approved it, its state and each task's outcome.",
             Capability.READ,
-            list_runs,
-            RunQuery,
-            get_run,
-            "operation_id",
+            listing=ListRead(list_runs, RunQuery, RunRow),
+            detail_handler=get_run,
+            identifier="operation_id",
             web_route="jobs:list",
-            item_type=RunRow,
             record_type=RunRecord,
         ),
     )

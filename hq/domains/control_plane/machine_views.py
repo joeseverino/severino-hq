@@ -38,9 +38,10 @@ lazy from hq.platform.application.containers import on_machine
 lazy from hq.platform.application.docker_sections import docker_line
 lazy from hq.platform.application.page_relations import for_machine
 lazy from hq.platform.application.request_channel import forwarding_of
+lazy from hq.platform.application.resource_operations import ACTION_CAPABILITY
 lazy from hq.platform.application.tailnet import declaration, may_reach, ports, proposed_grant
 
-from .models import ManagedResource
+from .models import ManagedResource, OperationRequest
 from .names import normalized_hostname
 from .provider_adapters.declarations import MACHINE_KIND
 from .provider_adapters.portainer import CONTAINER_KIND
@@ -75,6 +76,21 @@ def policy_edit(key: str) -> PageAction | None:
 
     resource = ManagedResource.objects.filter(key=key).first() if key else None
     return offered_changes([resource])[key].edit(key) if resource is not None else None
+
+
+def _route_approval(device: ManagedResource | None) -> PageAction | None:
+    """The press that approves the routes a machine advertises, through its
+    tailnet device, unusable with the reason its connection gives."""
+
+    allowed = (
+        resource_capabilities(device, running=()).actions.get(OperationRequest.Action.APPROVE_ROUTES)
+        if device is not None
+        else None
+    )
+    if allowed is None:
+        return None
+    refusal = "" if allowed.enabled else allowed.reason
+    return PageAction.command(ACTION_CAPABILITY[OperationRequest.Action.APPROVE_ROUTES], device.key, refused=refusal)
 
 
 def whatif_context(request, default: str = "", *, target_default: str | None = None) -> dict:
@@ -236,10 +252,7 @@ class MachineDetailView(PageMixin, TemplateView):
         device = (
             ManagedResource.objects.filter(key=found.route_approval_key).first() if found.route_approval_key else None
         )
-        context["route_approval"] = (
-            resource_capabilities(device, running=()).actions.get("approve-routes") if device is not None else None
-        )
-        context["route_approval_off"] = bool(context["route_approval"] and not context["route_approval"].enabled)
+        context["approve_routes"] = _route_approval(device)
         # What else HQ can say about this machine, from a registry rather than
         # from this view. A band appears because a resolver produced one, so
         # what HQ learns next reaches the page without either being edited.

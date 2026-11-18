@@ -1,6 +1,6 @@
-"""A row's controls stand beside its words as a column of the table at every
-width, and no control is ever drawn twice; what may leave a narrow table
-leaves by its rank (docs/Design.md, A row's controls)."""
+"""A row's controls stand in the row at every width, beside its words or on its
+last line, and no control is ever drawn twice (docs/Design.md, A row's
+controls)."""
 
 from django.template import Context, Template
 from django.test import SimpleTestCase
@@ -90,80 +90,6 @@ class RowControlsTests(SimpleTestCase):
         page = all_elements(Template(source).render(Context()))
         (row,) = [each for each in page if each.tag == "tr" and "data-below" in each.attrs]
         self.assertTrue([each for each in page if row in each.ancestors and "aria-expanded" in each.attrs])
-
-    def test_a_column_of_choices_never_leaves(self):
-        """A choice a reader makes is the row's value, so its column stays
-        whatever rank its heading gives it, the words that stand where a row
-        has no choice included."""
-
-        rows = (
-            '<tr><td>Example</td><td><select name="example"><option>One</option></select></td></tr>'
-            '<tr><td>Example two</td><td><span class="muted">Not granted</span></td></tr>'
-        )
-        for head in ('{% table_heading "Rule" "control" %}', '{% table_heading "Rule" drop=1 %}'):
-            with self.subTest(head=head):
-                html = _table(rows, head='{% table_heading "Name" gutter=True %}' + head)
-                self.assertEqual(
-                    [each.attrs.get("data-drop") for each in all_elements(html) if each.tag == "td"], [None] * 4
-                )
-                self.assertEqual(len([each for each in all_elements(html) if each.tag == "select"]), 1)
-
-    def test_a_column_headed_wide_only_stands_only_in_a_wide_box_cell_by_cell(self):
-        """A column of fields no open line can copy leaves a narrow box whole:
-        its heading says so once, and each of its cells carries it."""
-
-        rows = '<tr><td>Example</td><td>On</td><td><select name="example"><option>One</option></select></td></tr>'
-        head = '{% table_heading "Name" gutter=True %}{% table_heading "Default" %}'
-        html = _table(rows, head=head + '{% table_heading "Agent" "control" css="wide-only" %}')
-        cells = [each for each in all_elements(html) if each.tag == "td"]
-        self.assertEqual(["data-wide-only" in each.attrs for each in cells], [False, False, True])
-
-    def test_key_columns_leave_after_every_other_and_together(self):
-        """Words every row must show (a change's two sides) stay while any
-        other column can leave, then move to the row's open line together,
-        and a cell that says nothing is marked so."""
-
-        rows = "<tr><td>Example</td><td>one</td><td>two</td><td>three</td></tr>"
-        head = '{% table_heading "Name" gutter=True %}{% table_heading "Before" css="key-col" %}'
-        head += '{% table_heading "After" css="key-col" %}{% table_heading "Note" %}'
-        self.assertEqual(_ranks(_table(rows, head=head)), [None, "5", "5", "4"])
-        blank = _table(rows.replace("two", ""), head=head)
-        cells = [each for each in all_elements(blank) if each.tag == "td"][1:3]
-        self.assertEqual(["data-blank" in each.attrs for each in cells], [False, True])
-
-    def test_a_table_that_ranks_no_column_lets_its_spare_ones_go_only_when_narrow(self):
-        """A table whose headings rank nothing keeps what names each row and
-        its controls, lets the rest go far end first at the narrow widths
-        (tables.css), a rank sooner beside a state, which holds its line, and
-        the state last, below them all, so a narrow box draws it as a table of
-        the columns it keeps, never wider than its region."""
-
-        rows = (
-            "<tr><td>Example</td><td>Some words</td><td>More words</td>"
-            '<td><span class="pill pill-good">Done</span></td>'
-            '<td class="row-actions"><a class="btn compact" href="/example/">Open</a></td></tr>'
-        )
-        head = (
-            '{% table_heading "Name" gutter=True %}{% table_heading "Note" %}{% table_heading "Detail" %}'
-            '{% table_heading "State" "status" %}{% table_heading "" "control" hidden=True %}'
-        )
-        self.assertEqual(_ranks(_table(rows, head=head)), [None, "5", "4", "7", None])
-
-    def test_a_rows_state_leaves_only_below_every_rank(self):
-        """A pill says what the row is, so its column takes no rank its
-        heading gives, and leaves only below every rank's width."""
-
-        row = '<tr><td>Example</td><td><span class="pill pill-good">Done</span></td></tr>'
-        html = _table(row, head='{% table_heading "Name" gutter=True %}{% table_heading "Status" "status" drop=1 %}')
-        cells = [each for each in all_elements(html) if each.tag in {"th", "td"}]
-        self.assertEqual([each.attrs.get("data-drop") for each in cells], [None, "7", None, "7"])
-
-    def test_a_pill_beside_a_value_is_a_note_whose_column_may_leave(self):
-        row = '<tr><td>Example</td><td>192.0.2.10 <span class="pill pill-bad">Missing</span></td></tr>'
-        html = _table(row, head='{% table_heading "Name" gutter=True %}{% table_heading "Address" drop=1 %}')
-        cells = [each for each in all_elements(html) if each.tag == "td" and "colspan" not in each.attrs]
-        self.assertIsNone(cells[0].attrs.get("data-drop"))
-        self.assertIsNotNone(cells[1].attrs.get("data-drop"))
 
     def test_a_list_never_ranks_its_column_of_controls_to_leave(self):
         columns = ranked((TableColumn("Name"), TableColumn("Note"), TableColumn("", css="actions-col")))

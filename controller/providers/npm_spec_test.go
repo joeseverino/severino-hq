@@ -8,19 +8,9 @@ import (
 	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
 )
 
-type keySet map[string]bool
-
-func (k keySet) list() []string {
-	out := []string{}
-	for key := range k {
-		out = append(out, key)
-	}
-	return out
-}
-
 // jsonKeys is the set of JSON field names a struct declares.
-func jsonKeys(t reflect.Type) keySet {
-	keys := keySet{}
+func jsonKeys(t reflect.Type) map[string]bool {
+	keys := map[string]bool{}
 	for field := range t.Fields() {
 		if name, _, _ := strings.Cut(field.Tag.Get("json"), ","); name != "" && name != "-" {
 			keys[name] = true
@@ -29,30 +19,13 @@ func jsonKeys(t reflect.Type) keySet {
 	return keys
 }
 
-// The npm readers pick fields out of NPM's records by name; every name has to
-// exist on the vendored spec's model of that record.
-func TestNPMRecordFieldsExistInTheVendoredSpec(t *testing.T) {
-	reads := []struct {
-		model reflect.Type
-		keys  []string
-	}{
-		{reflect.TypeFor[npmapi.ProxyHostObject](), []string{"id", "domain_names", "forward_scheme", "forward_host", "forward_port", "ssl_forced", "http2_support", "allow_websocket_upgrade", "caching_enabled", "block_exploits", "access_list_id", "advanced_config", "hsts_enabled", "hsts_subdomains", "trust_forwarded_proto", "enabled", "certificate_id", "locations", "meta"}},
-		{reflect.TypeFor[npmapi.CertificateObject](), []string{"id", "nice_name", "provider", "domain_names", "expires_on"}},
-		{reflect.TypeFor[npmapi.RedirectionHostObject](), []string{"id", "domain_names", "forward_scheme", "forward_domain_name", "forward_http_code", "preserve_path", "ssl_forced", "certificate_id", "enabled"}},
-		{reflect.TypeFor[npmapi.DeadHostObject](), []string{"id", "domain_names", "certificate_id", "ssl_forced", "enabled"}},
-		{reflect.TypeFor[npmapi.StreamObject](), []string{"id", "incoming_port", "forwarding_host", "forwarding_port", "tcp_forwarding", "udp_forwarding", "enabled"}},
-		{reflect.TypeFor[npmapi.AccessListObject](), []string{"id", "name", "satisfy_any", "pass_auth"}},
-		// expand=items,clients adds these as their own models.
-		{reflect.TypeFor[npmapi.AccessClients]().Elem(), []string{"directive", "address"}},
-		{reflect.TypeFor[npmapi.AccessItems]().Elem(), []string{"username"}},
-		{reflect.TypeFor[npmapi.CreateProxyHostJSONBody](), jsonKeys(reflect.TypeFor[npmProxyHostRequest]()).list()},
-	}
-	for _, read := range reads {
-		known := jsonKeys(read.model)
-		for _, key := range read.keys {
-			if !known[key] {
-				t.Errorf("%s has no field %q in the vendored NPM spec", read.model.Name(), key)
-			}
+// The proxy host writer sends a request struct of its own; every field it
+// names has to exist on the vendored spec's request body.
+func TestNPMProxyHostRequestFieldsExistInTheVendoredSpec(t *testing.T) {
+	known := jsonKeys(reflect.TypeFor[npmapi.CreateProxyHostJSONBody]())
+	for key := range jsonKeys(reflect.TypeFor[npmProxyHostRequest]()) {
+		if !known[key] {
+			t.Errorf("the vendored NPM spec's proxy host request has no field %q", key)
 		}
 	}
 }

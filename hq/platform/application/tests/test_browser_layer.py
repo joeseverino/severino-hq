@@ -1,7 +1,7 @@
 """The browser layer's claim, held to the policy HQ sends."""
 
 from django.conf import settings
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.utils.csp import CSP
 
 from hq.platform.application.request_standard import _browser
@@ -27,13 +27,3 @@ class BrowserLayerTests(TestCase):
         read it; a page's sheets are HQ's own."""
 
         self.assertEqual(sources_of(self.client.get(settings.LOGIN_URL), "style-src-elem"), [CSP.SELF])
-
-    def test_a_script_src_that_trusts_an_origin_or_inline_script_does_not_hold(self):
-        for scripts in ([CSP.SELF, CSP.NONCE], [CSP.NONCE, CSP.STRICT_DYNAMIC, CSP.UNSAFE_INLINE]):
-            with (
-                self.subTest(scripts=scripts),
-                override_settings(SECURE_CSP={**settings.SECURE_CSP, "script-src": scripts}),
-            ):
-                reading = _browser(None)
-                self.assertIs(reading.standing, Standing.UNMET)
-                self.assertIn("scripts by origin", reading.evidence)

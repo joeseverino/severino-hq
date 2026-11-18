@@ -2,6 +2,7 @@
 #MISE description="Every line of text lint:prose's wording rules read (a page's words, a template's attributes and tag literals, Python's shown strings, what an agent or a client's author reads), at its file and line, as Vale and plain_words read it; reach for it to review or count the shown text; read-only"
 #MISE hide=true
 #MISE extends="audit"
+#MISE depends=["setup:lint-tools", "setup:sandbox"]
 #USAGE flag "--by-file" help="Instead, how many lines each file holds, most first, then the total"
 
 # plain_words reads the tree lint:prose reads, through Vale's own views and

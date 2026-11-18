@@ -10,10 +10,10 @@
    as a plain pill instead of an unstyled one. */
 .pill {
   display: inline-flex; align-items: center; gap: var(--space-2);
-  padding: 1px var(--space-4); border-radius: 999px; font-size: var(--text-2xs); font-weight: 500;
-  background: var(--tone-bg, var(--tone-neutral-bg));
-  color: var(--tone-ink, var(--tone-neutral-ink));
-  border: 1px solid var(--tone-line, var(--tone-neutral-line));
+  padding: 1px var(--space-4); border-radius: var(--radius-pill); font-size: var(--text-2xs); font-weight: 500;
+  background: var(--tone-bg);
+  color: var(--tone-ink);
+  border: 1px solid var(--tone-line);
   letter-spacing: .01em;
   /* A pill is one short state; it never wraps. */
   white-space: nowrap;
@@ -25,10 +25,7 @@
 
 /* A record list row's category as its color (`ListRow.category`), before
    its title; the row says the category in words too. */
-.cat-dot {
-  width: 7px; height: 7px; border-radius: 2px; display: inline-block; flex-shrink: 0;
-  background: var(--muted-2);
-}
+.cat-dot { background: var(--muted-2); }
 .cat-dot.cat-homelab { background: var(--cat-homelab); }
 .cat-dot.cat-automation { background: var(--cat-automation); }
 .cat-dot.cat-wordpress_security { background: var(--cat-wordpress-security); }
@@ -106,7 +103,7 @@
 
 /* How old the reading behind it is: quiet while current, in the attention
    tone once out of date. */
-.reading-age.is-stale { color: var(--tone-caution-ink); }
+.reading-age.is-stale { color: var(--tone-ink); }
 /* The reason it cannot be done from here, and what can be pressed, in a row's
    opened line and on an insight card. */
 .attention-reason { margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
@@ -114,8 +111,6 @@
 .attention-actions form { margin: 0; }
 /* The pages that help look into it: quiet links, the topology's as icons. */
 .attention-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: var(--space-3) 0 0; font-size: var(--text-xs); }
-.attention-links .icon-link { min-width: 0; width: 1.6rem; height: 1.6rem; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); }
-.attention-links .icon-link:is(:hover, :focus-visible) { color: var(--ink); background: var(--surface-2); }
 /* What raised an item, opened from its urgency: a small modal over the page,
    titled with the item it explains. */
 .modifier-held [data-origin] { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; outline: 1px solid var(--tone-line, var(--line)); outline-offset: 1px; }
@@ -131,8 +126,7 @@
 .pill.is-mark { padding: 0 var(--space-3); font-size: var(--text-xs); line-height: 1.5; font-weight: 600; }
 /* A row dismissed in place (app.js): its title, quiet, and the way back, the button that posts its key (action_tags.triage). */
 [data-attention-item][data-dismissed] > .row-gutter > :not(.row-line),
-[data-attention-item][data-dismissed] > .row-actions > :not(button[name="key"], .cell-controls),
-[data-attention-item][data-dismissed] > .row-actions > .cell-controls > :not(button[name="key"]),
+[data-attention-item][data-dismissed] > .row-actions > :not(button[name="key"]),
 [data-attention-item][data-dismissed] .pill.is-mark { display: none; }
 [data-attention-item][data-dismissed] [data-attention-title] { color: var(--muted); font-weight: 400; }
 [data-attention-item][data-dismissed] [data-attention-title]::before { content: "Dismissed: " / "Dismissed: "; }

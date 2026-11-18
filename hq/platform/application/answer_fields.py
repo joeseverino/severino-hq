@@ -9,7 +9,7 @@ it is a leaf that loads neither HQ nor pydantic at import, so a leaf contract
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from .describe import Describe
 
@@ -41,8 +41,9 @@ class DateTime:
 
 type Outcome = Annotated[bool, Describe("Whether HQ did what was asked: true beside `data`, false beside `error`.")]
 # Where nothing has read it yet a use says how, by its own type: ``ObservedAt |
-# None`` for null, a default of "" for empty.
+# None`` for null, ``ObservedAt | NotRead`` for empty.
 type ObservedAt = Annotated[str, DateTime(), Describe("When it was last read from its source, an ISO 8601 date-time.")]
+type NotRead = Annotated[Literal[""], Describe("Empty: nothing has read it.")]
 type UpdatedAt = Annotated[str, DateTime(), Describe("When it last changed in HQ, an ISO 8601 date-time.")]
 # The one sentence a write says of what it did: every door carries it, and a
 # page shows it once the write runs (``web_writes.said``).

@@ -784,7 +784,7 @@ ENTRIES = {
         ' css="example" data_example="example"'
         ' lede="An example lede, the line that says what the section holds." %}'
         "<p>An example line of prose in the frame.</p>"
-        '{% aside %}<span class="pill pill-neutral">Example state</span>'
+        '{% aside %}<span class="pill tone-neutral">Example state</span>'
         ' <a class="btn ghost compact" href="/example/">Example action</a>{% endsection %}'
     ),
     # Reference text behind an info button in a section's body (partials/_about.html).
@@ -955,7 +955,7 @@ ENTRIES = {
     "part/section-in-card": Entry(
         "{% card %}<p>An example line about the card.</p>"
         '{% section "Example preview" count=2 %}<p>An example line in the inner section.</p>'
-        '{% aside %}<span class="pill pill-neutral">Example state</span>{% endsection %}{% endcard %}'
+        '{% aside %}<span class="pill tone-neutral">Example state</span>{% endsection %}{% endcard %}'
     ),
     # Muted words as a line beside a value and as a paragraph under it.
     "part/muted-beside-a-value": Entry(
@@ -1400,12 +1400,12 @@ ENTRIES = {
         "{% endfacts %}{% endsection %}",
         {"hosts": Dots.of(3, 5), "runs": _runs()},
     ),
-    # A range beside its unit, and a phrase, in a cell held narrow, as three
-    # figures to a row on a phone hold it: each wraps, its lines clear of each other.
+    # A range beside its unit, and a phrase, in a cell held narrow, as the
+    # three under a lead hold it on a phone: each wraps, its lines clear of each other.
     # The values come as a view hands them, so the filter reads them as text:
     # a literal in a template is already markup, which it passes as it is.
     "part/facts-band-wrapped": Entry(
-        '<div style="inline-size: 110px">{% facts layout="band" size="large" %}'
+        '<div style="inline-size: 80px">{% facts layout="band" size="large" %}'
         '{% fact "Example range" value=range %}{% fact "Example phrase" value=phrase %}'
         "{% endfacts %}</div>",
         {"range": "10.5–12.5 mi", "phrase": "up to 2 a week"},
@@ -2428,7 +2428,9 @@ ENTRIES |= {
     "part/allocation": Entry(context=ENTRIES["part/allocation-legend"].context),
     "part/ask": Entry(context={"ask": ENTRIES["part/ask-states"].context["idle"]}),
     "part/attention-list": Entry(context={"entries": [], "empty": "No example decision waits."}),
-    "part/button": Entry(context={"url": "/example/restart/"}),
+    "part/button": Entry(
+        context={"restart": PageAction._built(label="Restart", url="/example/restart/", method="post")}
+    ),
     "part/certificate-mark": Entry(
         context={"certificate": Certificate("Proxy", name="app.example.com", issuer="Example CA")}
     ),

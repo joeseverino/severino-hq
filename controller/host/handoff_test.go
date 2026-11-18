@@ -203,6 +203,26 @@ func writeHandoff(t *testing.T, out string, edit func(run, top map[string]any)) 
 	}
 }
 
+// The contract names every key a handoff holds, each once: one left out or
+// given twice is refused, as one the contract does not name is.
+func TestAHandoffWithAKeyLeftOutOrGivenTwiceIsRefused(t *testing.T) {
+	documents := map[string][]byte{}
+	for _, key := range []string{"version", "runs"} {
+		documents["no "+key] = handoffDocument(t, func(_, top map[string]any) { delete(top, key) })
+	}
+	for _, key := range []string{"owner", "repositories", "token", "expires_at"} {
+		documents["a run with no "+key] = handoffDocument(t, func(run, _ map[string]any) { delete(run, key) })
+	}
+	valid := handoffDocument(t, nil)
+	documents["the token twice"] = bytes.Replace(valid, []byte(`"token":`), []byte(`"token":"ghs_other","token":`), 1)
+	documents["the version twice"] = bytes.Replace(valid, []byte(`{"runs":`), []byte(`{"version":1,"runs":`), 1)
+	for name, data := range documents {
+		if _, err := ParseHandoff(data); err == nil {
+			t.Errorf("%s was taken: %s", name, data)
+		}
+	}
+}
+
 func TestAPassThatLeavesNoHandoffSpoolsNothing(t *testing.T) {
 	l := newLaunch(t)
 	var stderr bytes.Buffer

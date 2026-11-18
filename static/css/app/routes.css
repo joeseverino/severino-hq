@@ -1,5 +1,5 @@
-/* Routes and connections: a route's hops, the connections table, messages,
-   the dashboard's links, and the header at narrow widths. */
+/* Routes and connections: a route's hops, the connections table, messages
+   and the dashboard's links. */
 
 @layer components {
 
@@ -30,7 +30,7 @@
 .request-path li:first-child::before { top: 50%; }
 .request-path li:last-child::before { bottom: 50%; }
 .request-path li:only-child::before { display: none; }
-.request-path li.is-attention::before { background: var(--tone-critical-tint); }
+.request-path li.tone-serious::before { background: var(--tone-tint); }
 .request-path .hop-icon {
   position: relative;
   display: grid; place-items: center;
@@ -81,12 +81,12 @@
 .cert-mark.is-pending { color: var(--muted-2); }
 /* A hop this very request was proven to pass through: its icon in the positive
    tone, its reason on hover; the evidence is the connection page's. */
-.request-path li.is-proven .hop-icon,
-.hop-proof-key { background: linear-gradient(var(--tone-positive-bg) 0 0), var(--surface); color: var(--ok); }
+.request-path li.tone-good .hop-icon,
+.hop-proof-key { background: linear-gradient(var(--tone-bg) 0 0), var(--surface); color: var(--tone-mark); }
 .path-proof-note { display: flex; align-items: center; gap: var(--space-4); margin: var(--space-4) 0 0; color: var(--muted); font-size: var(--text-sm); }
 .hop-proof-key { display: grid; flex-shrink: 0; place-items: center; width: 20px; height: 20px; border-radius: var(--radius-sm); font-size: var(--text-sm); }
 .request-path li.is-unknown .hop-icon { background: linear-gradient(var(--line-2) 0 0), var(--surface); color: var(--muted-2); }
-.request-path li.is-attention .hop-icon { background: linear-gradient(var(--tone-critical-tint) 0 0), var(--surface); color: var(--danger); }
+.request-path li.tone-serious .hop-icon { background: linear-gradient(var(--tone-tint) 0 0), var(--surface); color: var(--tone-mark); }
 /* A note with the names in it as links. */
 .linked-text { white-space: pre-line; overflow-wrap: anywhere; }
 kbd {
@@ -140,93 +140,5 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 .card[data-alone] > h1 { font-size: var(--text-2xl); margin-bottom: var(--space-9); }
 .card[data-alone] > p > .btn:only-child { display: block; margin-top: var(--space-2); }
 .card[data-alone] > p:last-child { margin-top: var(--space-8); }
-
-/* ── Responsive ─────────────────────────────────────────────────── */
-
-/* Sections behind one control. Below this width the bar cannot hold every
-   section beside the brand and the account chip, and a second row is not the
-   answer: it spends chrome on every page before any of them begins. The
-   collapsed search above buys the headroom that keeps this width low; past it
-   the sections move into a panel that opens on tap.
-
-   The panel is the nav's popover (base.html): the browser opens it in the top
-   layer, under the sticky header and over the page, and a press outside it or
-   Escape closes it. Open, it is the panel at any width, so a window widened
-   with it open still shows a panel until it is dismissed. */
-@media (max-width: 1080px) {
-  /* Matches the collapsed search button and the account chip exactly, so it
-     reads as the same kind of control as the ones beside it. */
-  .nav-toggle { display: inline-flex; grid-area: toggle; align-items: center; justify-content: center;
-    inline-size: var(--control-size); block-size: var(--control-size);
-    border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm);
-    background: var(--bar-control-bg); color: var(--ink-2);
-  }
-  .nav-toggle > svg { width: 15px; height: 12px; }
-  .nav-toggle:hover { border-color: var(--bar-control-line); background: var(--bar-control-bg-hover); }
-  .nav-toggle:focus:not(:focus-visible) { outline: none; }
-  .primary-nav { display: none; grid-area: auto; }
-}
-.primary-nav:popover-open {
-  display: flex;
-  position: fixed;
-  inset: calc(var(--site-header-height) - 2px) 12px auto auto;
-  min-width: 190px;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 1px;
-  padding: var(--space-2);
-  max-height: calc(100dvh - var(--site-header-height) - 12px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-pop);
-}
-.primary-nav:popover-open > a,
-.primary-nav:popover-open .nav-group-button {
-  min-height: 44px;
-  padding: var(--space-4) var(--space-5);
-  font-size: var(--text-md);
-}
-.primary-nav:popover-open .nav-group-button { display: flex; inline-size: 100%; }
-/* A section's own links fly out beside the list, level with its row: a
-   popover is drawn over the page, never in the list's flow. The list is
-   anchored to the right edge, so the room is to its left; a screen with
-   none there takes them below the row. They hang from the row down or up
-   from it, on the side with more height, and a section taller than that
-   side is held to it and scrolls, so every link of a long section low on a
-   short screen can be reached: the pattern of the spec's own example for
-   `position-try-order`. */
-.primary-nav:popover-open .nav-group-panel {
-  position-area: inline-start span-block-end;
-  position-try-fallbacks: --nav-panel-down-scrolling, inline-start span-block-start, --nav-panel-up-scrolling, block-end span-inline-start;
-  position-try-order: most-block-size;
-  overflow-y: auto;
-  margin: 0 var(--space-3) 0 0;
-  min-width: 168px;
-}
-@position-try --nav-panel-down-scrolling { position-area: inline-start span-block-end; max-block-size: 100%; }
-@position-try --nav-panel-up-scrolling { position-area: inline-start span-block-start; max-block-size: 100%; }
-.primary-nav:popover-open .nav-group-panel a {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-}
-
-@media (max-width: 860px) {
-  /* The person's control is a square mark like search and the bell beside it:
-     the name is in its menu, and a phone's one row has no room to repeat it.
-     Its track is squared here, beside the rules that square it, which sit in
-     the components layer to beat page.css. */
-  .site-header { --header-user: var(--control-size); gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
-  .user-menu > button { width: var(--control-size); padding: 0; }
-  /* Gone, the name still names the button (its aria-labelledby). */
-  .user-menu .user-name { display: none; }
-  .brand { font-size: var(--text-md); }
-  /* The sections live in the toggle's panel from 1080px down, so the bar stays
-     a single row here and needs no wrapping rules of its own. */
-  .primary-nav a { white-space: nowrap; padding: var(--space-3) var(--space-5); font-size: var(--text-sm); }
-}
 
 }

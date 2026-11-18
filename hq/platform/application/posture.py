@@ -120,6 +120,9 @@ SIGN_IN = Check(
     holds="Every session starts with single sign-on.",
     boundary="Human identity",
     mechanism="HQ's sign-in settings",
+    # Changes to the request standard's kept request (``request_standard``),
+    # the one standard of its two with examples, as for the two below.
+    breaks=({"settings": {"AUTHENTICATION_BACKENDS": ["django.contrib.auth.backends.ModelBackend"]}},),
 )
 
 
@@ -238,6 +241,7 @@ EDGE = Check(
     hop="ingress",
     boundary="Reverse proxy edge",
     mechanism="The proxy's access list",
+    breaks=({"edge": Reading.unmet("Any address")},),
 )
 FIREWALL = Check(
     "host-firewall",
@@ -251,6 +255,7 @@ FIREWALL = Check(
     hop="machine",
     boundary="Network",
     mechanism="The host firewall's rule for HQ's port",
+    breaks=({"firewall": Reading.unmet("By address")},),
 )
 # Of HQ's standard, and of the connections standard (``connection_security``).
 SCOPE = Check(

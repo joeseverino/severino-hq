@@ -17,6 +17,7 @@ from ..report_testing import bridged
 from ..resources import (
     EmptyQuery,
     InvalidResourceInput,
+    ListRead,
     ResourceSpec,
     describe_resources,
     get_resource,
@@ -59,10 +60,8 @@ class ResourceExecutionTests(TestCase):
             "Example records",
             "Synthetic plugin records.",
             Capability.READ,
-            list_handler=lambda: {"items": [], "count": 0},
-            list_query_type=EmptyQuery,
+            listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, _ExampleRecord),
             web_route="missing:list",
-            item_type=_ExampleRecord,
         )
         installed = plugin_resource_specs()
         with mock.patch(
@@ -87,12 +86,6 @@ class ResourceExecutionTests(TestCase):
                 "checks": (),
             },
         )
-
-    def test_unknown_filters_are_rejected_before_the_handler(self):
-        with self.assertRaises(InvalidResourceInput) as refused:
-            list_resource("projects", {"limti": 10}, principal=READ)
-
-        self.assertEqual(refused.exception.reason, "projects: limti is not a known field.")
 
     def test_infrastructure_kinds_filter_before_the_shared_page_bound(self):
         # Rows of other kinds come first, so a bound taken before the filter
@@ -226,11 +219,9 @@ NESTED = ResourceSpec(
     "Nested",
     "Synthetic records with collections inside.",
     Capability.READ,
-    lambda: {"items": [_nested(None), {"name": "flat"}], "count": 2},
-    EmptyQuery,
-    _nested,
-    "name",
-    item_type=_ExampleRecord,
+    listing=ListRead(lambda: {"items": [_nested(None), {"name": "flat"}], "count": 2}, EmptyQuery, _ExampleRecord),
+    detail_handler=_nested,
+    identifier="name",
 )
 
 
@@ -304,9 +295,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             "Duplicate",
             "Must fail before an adapter silently wins by ordering.",
             Capability.READ,
-            list_handler=_no_rows,
-            list_query_type=EmptyQuery,
-            item_type=_ExampleRecord,
+            listing=ListRead(_no_rows, EmptyQuery, _ExampleRecord),
         )
         with (
             mock.patch(
@@ -314,20 +303,6 @@ class ResourceRegistrationTests(SimpleTestCase):
                 return_value=(duplicate,),
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "Duplicate resource name"),
-        ):
-            integration_graph()
-
-    def test_incomplete_list_contract_fails_at_registry_construction(self):
-        invalid = ResourceSpec(
-            "example.records",
-            "Records",
-            "A deliberately incomplete plugin contract.",
-            "example.read",
-            list_handler=_no_rows,
-        )
-        with (
-            mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(invalid,)),
-            self.assertRaisesRegex(ImproperlyConfigured, "handler and query together"),
         ):
             integration_graph()
 
@@ -346,9 +321,7 @@ class ResourceRegistrationTests(SimpleTestCase):
                 "Records",
                 "A query that takes the selection's name.",
                 Capability.READ,
-                list_handler=lambda **_: {"items": [], "count": 0},
-                list_query_type=query,
-                item_type=_ExampleRecord,
+                listing=ListRead(lambda **_: {"items": [], "count": 0}, query, _ExampleRecord),
             )
             with (
                 self.subTest(query=query.__name__),
@@ -357,16 +330,33 @@ class ResourceRegistrationTests(SimpleTestCase):
             ):
                 integration_graph()
 
+    def test_a_query_open_to_any_filter_fails_at_registry_construction(self):
+        from pydantic import BaseModel
+
+        class Open(BaseModel):
+            status: str = ""
+
+        spec = ResourceSpec(
+            "example.records",
+            "Records",
+            "A query that drops a filter it does not declare.",
+            Capability.READ,
+            listing=ListRead(lambda **_: {"items": [], "count": 0}, Open, _ExampleRecord),
+        )
+        with (
+            mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(spec,)),
+            self.assertRaisesRegex(ImproperlyConfigured, "must refuse a filter it does not declare"),
+        ):
+            integration_graph()
+
     def test_nested_django_namespaces_are_valid_web_routes(self):
         nested = ResourceSpec(
             "example.records",
             "Records",
             "A nested plugin route.",
             Capability.READ,
-            list_handler=lambda: {"items": [], "count": 0},
-            list_query_type=EmptyQuery,
+            listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, _ExampleRecord),
             web_route="example:records:list",
-            item_type=_ExampleRecord,
         )
         installed = plugin_resource_specs()
         with mock.patch(

@@ -12,7 +12,7 @@ from typing import Annotated
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink as TopologyAction
-from .answer_fields import ObservedAt
+from .answer_fields import NotRead, ObservedAt
 from .describe import Describe, listed
 from .entity_links import EntityLink
 from .json_schemas import ObservedMoment
@@ -151,7 +151,7 @@ class TopologyNode:
     # observation and says nothing about its age, so a thing observed once
     # and never again reads healthy forever. This is the fact that
     # distinguishes the two.
-    observed_at: ObservedAt = ""
+    observed_at: ObservedAt | NotRead = ""
     # What was asked for, and what was last confirmed back. Between them the
     # whole of triage: equal means a reconcile already ran against this exact
     # declaration, so a difference the world still shows is the declaration
@@ -246,7 +246,7 @@ class TopologyEdge:
         Describe("The type of reading the relationship rests on; empty for one HQ's records state."),
     ] = ""
     detail: Annotated[str, Describe("What its reading names, in a few words; empty without a reading.")] = ""
-    observed_at: ObservedAt = ""
+    observed_at: ObservedAt | NotRead = ""
     entities: Annotated[
         tuple[EntityLink, ...],
         Describe("Each record its reading stands for, as a link; empty without a reading."),

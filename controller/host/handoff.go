@@ -1,11 +1,10 @@
 package host
 
 import (
-	"bytes"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"io/fs"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
 )
 
@@ -71,70 +71,64 @@ var (
 )
 
 // ParseHandoff is data as a Handoff when it has exactly the shape the
-// contract names: every key it names and no other, spelled as named, every
-// repository under its own run's owner, each owner once.
+// contract names: no key it does not name, each spelled as named and given
+// once, every repository under its own run's owner, each owner once. A key
+// left out decodes to its zero value, which every check below refuses.
 func ParseHandoff(data []byte) (Handoff, error) {
-	var top map[string]json.RawMessage
-	if err := strictJSON(data, &top); err != nil {
-		return Handoff{}, err
-	}
-	if err := exactKeys(top, "version", "runs"); err != nil {
-		return Handoff{}, err
-	}
 	var h Handoff
-	if err := strictJSON(top["version"], &h.Version); err != nil || h.Version != handoffV1 {
+	err := jsonv2.Unmarshal(data, &h, jsonv2.RejectUnknownMembers(true))
+	// Learned before anything is checked, so a refused run's token is struck
+	// too, a run decoded before the decoder stopped included.
+	for _, run := range h.Runs {
+		mask.Learn(run.Token)
+	}
+	if err != nil {
+		// The decoder's error quotes the sender's text, which root's log
+		// never repeats.
+		return Handoff{}, errors.New("the handoff does not have the shape the contract names")
+	}
+	if h.Version != handoffV1 {
 		return Handoff{}, errors.New("the handoff is not version 1")
 	}
-	var runs []map[string]json.RawMessage
-	if err := strictJSON(top["runs"], &runs); err != nil || len(runs) == 0 {
+	if len(h.Runs) == 0 {
 		return Handoff{}, errors.New("the handoff names no runs")
 	}
 	owners := map[string]bool{}
-	for i, raw := range runs {
-		run, err := parseRun(raw)
-		if err != nil {
+	for i, run := range h.Runs {
+		if err := checkRun(run); err != nil {
 			return Handoff{}, fmt.Errorf("run %d: %w", i, err)
 		}
 		if owners[strings.ToLower(run.Owner)] {
 			return Handoff{}, fmt.Errorf("run %d: its owner has a run already", i)
 		}
 		owners[strings.ToLower(run.Owner)] = true
-		h.Runs = append(h.Runs, run)
 	}
 	return h, nil
 }
 
-func parseRun(raw map[string]json.RawMessage) (HandoffRun, error) {
-	var run HandoffRun
-	if err := exactKeys(raw, "owner", "repositories", "token", "expires_at"); err != nil {
-		return run, err
+func checkRun(run HandoffRun) error {
+	if run.ExpiresAt.IsZero() {
+		return errors.New("it names no expiry")
 	}
-	for key, target := range map[string]any{"owner": &run.Owner, "repositories": &run.Repositories, "token": &run.Token, "expires_at": &run.ExpiresAt} {
-		if err := strictJSON(raw[key], target); err != nil {
-			return run, fmt.Errorf("%s is not what the contract names", key)
-		}
-	}
-	// Learned before it is checked, so a refused run's token is struck too.
-	mask.Learn(run.Token)
 	if len(run.Owner) > ownerLimit || !githubOwner.MatchString(run.Owner) {
-		return run, errors.New("the owner is not a GitHub account name")
+		return errors.New("the owner is not a GitHub account name")
 	}
 	if len(run.Repositories) == 0 {
-		return run, errors.New("it names no repositories")
+		return errors.New("it names no repositories")
 	}
 	for _, repository := range run.Repositories {
 		owner, name, _ := strings.Cut(repository, "/")
 		if owner != run.Owner || !githubName.MatchString(name) || name == "." || name == ".." {
-			return run, errors.New("a repository is not one of its owner's")
+			return errors.New("a repository is not one of its owner's")
 		}
 	}
 	if sorted := slices.Sorted(slices.Values(run.Repositories)); len(slices.Compact(sorted)) != len(run.Repositories) {
-		return run, errors.New("a repository is named twice")
+		return errors.New("a repository is named twice")
 	}
 	if !tokenShape.MatchString(run.Token) {
-		return run, errors.New("its token is empty or not one printable line")
+		return errors.New("its token is empty or not one printable line")
 	}
-	return run, nil
+	return nil
 }
 
 // Fresh is whether every token is still alive and was minted for this run:
@@ -144,35 +138,6 @@ func (h Handoff) Fresh(now time.Time) error {
 		if !run.ExpiresAt.After(now) || run.ExpiresAt.After(now.Add(TokenLife+clockSkew)) {
 			return fmt.Errorf("run %d: its token does not expire within the next hour", i)
 		}
-	}
-	return nil
-}
-
-// strictJSON decodes exactly one value, and nothing after it.
-func strictJSON(data []byte, target any) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return errors.New("trailing data after the value")
-	}
-	return nil
-}
-
-// exactKeys holds an object to exactly the keys named, as spelled: the
-// decoder alone would take any casing of a known key and ignore a missing one.
-// The refusal names only the keys wanted: the keys sent are the sender's text,
-// which root's log never repeats.
-func exactKeys(object map[string]json.RawMessage, keys ...string) error {
-	got := make([]string, 0, len(object))
-	for key := range object {
-		got = append(got, key)
-	}
-	slices.Sort(got)
-	want := slices.Sorted(slices.Values(keys))
-	if !slices.Equal(got, want) {
-		return fmt.Errorf("the keys are not exactly %v", want)
 	}
 	return nil
 }

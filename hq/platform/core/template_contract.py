@@ -97,8 +97,8 @@ CLASSES = (
     "eyebrow",
     "finding",
     "ghost",
+    "glyph",
     "help",
-    "icon-link",
     "inline",
     "key-col",
     "keyboard-only",
@@ -118,8 +118,14 @@ CLASSES = (
     "section-foot",
     "split",
     "subtle-link",
+    "swatch",
+    "swatch-key",
     "table-scroll",
     "tight-col",
+    "tone-attention",
+    "tone-good",
+    "tone-neutral",
+    "tone-serious",
     "two-col",
     "visually-hidden",
     "whole",
@@ -152,7 +158,7 @@ def _words(value: str) -> Iterator[str]:
     """The class names in one attribute, ``\\0`` marking a variable and ``\\1`` a tag.
 
     A variable is decided at render time, so a word joined to one is built
-    (``pill-{{ tone }}``, named ``pill-*``). A tag only chooses which words
+    (``tone-{{ tone }}``, named ``tone-*``). A tag only chooses which words
     are written, so it ends the word before it and starts the one after,
     unless a hyphen joins the word across it (``tone-{% if a %}ok{% endif %}``),
     which is built too.

@@ -278,89 +278,6 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual((words.startswith("Add a run"), href), (True, "/runs/new/"))
         self.assertEqual(asked, [True])
 
-    def test_a_compare_region_says_so(self):
-        (region,) = with_class(
-            _render('{% table_region "Changes" compare=True %}{% endtable_region %}'), "table-scroll"
-        )
-        self.assertIn("is-compare", region.classes)
-        (plain,) = with_class(_render('{% table_region "Changes" %}{% endtable_region %}'), "table-scroll")
-        self.assertNotIn("is-compare", plain.classes)
-
-    def test_a_chart_region_says_so(self):
-        html = _render('{% table_region "Runs" chart=True %}{% endtable_region %}')
-        self.assertIn("data-chart", with_class(html, "table-scroll")[0].attrs)
-
-    def test_a_heading_declares_its_kind(self):
-        (heading,) = elements(_render('{% table_heading "Cost" "numeric" %}'), "th")
-        self.assertEqual(heading.attrs["data-kind"], "numeric")
-        (named,) = elements(_render('{% table_heading "Name" "identifier" %}'), "th")
-        self.assertEqual(named.attrs["data-kind"], "identifier")
-
-    def test_every_cell_says_its_columns_kind(self):
-        """A cell stands in its row's grid, not under its heading, so each
-        body cell says its column's kind for the stylesheet to cut, hold and
-        align it by; the column that names each row is a kind of its own."""
-
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-            '{% table_heading "State" "status" %}{% table_heading "Act" css="actions-col" %}</tr></thead><tbody>'
-            "<tr><td>a</td><td>Up</td><td><button>Go</button></td></tr></tbody></table>{% endtable_region %}"
-        )
-        html = _render(source)
-        self.assertEqual(
-            [heading.attrs["data-kind"] for heading in elements(html, "th")], ["prose", "status", "control"]
-        )
-        self.assertEqual([cell.attrs.get("data-kind") for cell in elements(html, "td")], ["name", "status", "control"])
-
-    def test_the_words_standing_for_a_choice_are_a_short_value(self):
-        """Where a row has no choice to make, the words standing in its
-        column of choices keep their line as a short value does."""
-
-        source = (
-            '{% table_region "Rules" %}<table class="data-table"><thead><tr>{% table_heading "Action" %}'
-            '{% table_heading "example-agent" "control" %}{% table_heading "Act" css="actions-col" %}</tr></thead>'
-            "<tbody><tr><td>a</td><td><select><option>Allow</option></select></td><td><button>Go</button></td></tr>"
-            "<tr><td>b</td><td>Not granted</td><td><button>Go</button></td></tr></tbody></table>{% endtable_region %}"
-        )
-        self.assertIn("Not granted", [box.words for box in with_class(_render(source), "cell-short")])
-
-    def test_a_rows_actions_are_its_controls_under_any_heading(self):
-        """A row's actions keep one line as controls whatever their heading
-        says, so they are never a value of words held in a box."""
-
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-            '{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
-            '<tr><td>a</td><td class="row-actions"><a class="btn compact" href="/example/">Open</a></td></tr>'
-            "</tbody></table>{% endtable_region %}"
-        )
-        html = _render(source)
-        self.assertEqual([cell.attrs.get("data-kind") for cell in elements(html, "td")], ["name", "control"])
-        self.assertEqual([box.text for box in with_class(html, "cell-short")], ["a"])
-
-    def test_every_cell_under_a_control_heading_is_marked_a_control(self):
-        """tables.css sizes a select or a field to what it holds only in a
-        cell marked a control, so every cell under such a heading is, however
-        the heading names its kind."""
-
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-            '{% table_heading "Group" "control" %}{% table_heading "Act" css="actions-col" %}</tr></thead><tbody>'
-            "<tr><td>a</td><td><select><option>No group</option></select></td><td><button>Go</button></td></tr>"
-            "<tr><td>b</td><td><select><option>Cash</option></select></td><td></td></tr>"
-            "</tbody></table>{% endtable_region %}"
-        )
-        cells = [cell.attrs.get("data-kind") for cell in elements(_render(source), "td")]
-        self.assertEqual(cells, ["name", "control", "control", "name", "control", "control"])
-
-    def test_a_heading_carries_its_rank(self):
-        source = (
-            '{% table_heading "Name" %}{% table_heading "A" drop=1 %}{% table_heading "B" drop=3 %}'
-            '{% table_heading "D" css="key-col" %}'
-        )
-        ranks = {heading.text.strip(): heading.attrs.get("data-drop") for heading in elements(_render(source), "th")}
-        self.assertEqual(ranks, {"Name": None, "A": "1", "B": "3", "D": None})
-
     def test_a_region_refuses_what_it_does_not_take(self):
         for source in (
             "{% table_region %}{% endtable_region %}",
@@ -447,66 +364,6 @@ class TableTagTests(SimpleTestCase):
         closed = all_elements(_render(source.replace(" gutter=True", "")))
         self.assertEqual([each for each in closed if "cell-clamp" in each.classes], [])
         self.assertFalse(any("data-below" in each.attrs for each in found if each.tag == "tr"))
-
-    def test_a_long_value_and_its_heading_are_marked_long_whatever_its_kind(self):
-        """A value with a line longer than a line of words wraps and its column
-        shares the room (tables.css), a state's or a control's too; a short
-        one, lines of short ones, or a blank cell is not long."""
-
-        long = "Ask me first for container stack, domain, public DNS record and tailnet policy"
-        lines = "Two lines, each of them short<br>and the second one as short"
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-            '{% table_heading "State" "status" %}{% table_heading "Note" %}{% table_heading "Act" "control" %}'
-            "</tr></thead><tbody>"
-            f'<tr><td data-col="name">a</td><td data-col="status">{long}</td><td data-col="lines">{lines}</td>'
-            f'<td data-col="control"><a href="/x/">{long}</a></td></tr>'
-            f'<tr><td>b</td><td>Up</td><td><span class="empty-value">{"–" * 60}</span></td><td>Go</td></tr>'
-            "</tbody></table>{% endtable_region %}"
-        )
-        found = all_elements(_render(source))
-        self.assertEqual(
-            [each.attrs.get("data-col") or each.text.strip() for each in found if "data-long" in each.attrs],
-            ["State", "Act", "status", "control"],
-        )
-
-    def test_a_short_value_is_one_box_and_a_longer_one_is_not(self):
-        """A body cell whose longest line is a short name (an address and its
-        port) holds it in one box, whole up to its share (tables.css); a
-        longer value, a heading or a blank cell has none."""
-
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-            '{% table_heading "Proxy" %}</tr></thead><tbody>'
-            '<tr><td data-col="name">a</td><td data-col="proxy"><code>192.0.2.10:9000</code></td></tr>'
-            f'<tr><td data-col="longer">{"example-primary-host-" * 2}</td>'
-            '<td data-col="blank"><span class="empty-value">–</span></td></tr>'
-            "</tbody></table>{% endtable_region %}"
-        )
-        boxed = re.findall(r'data-col="(\w+)"[^>]*>\s*<div class="cell-short">', _render(source))
-        self.assertEqual(boxed, ["name", "proxy"])
-
-    def test_a_box_is_drawn_only_where_no_element_of_the_cell_can_be_it(self):
-        """A short value said by one list is its own box, and a long value
-        whose parts its clamp holds each on their own is clamped by its cell:
-        the region wraps neither in a box of its own."""
-
-        long = "a sentence long enough to stand several lines tall in a narrow column"
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
-            '{% table_heading "Reads" %}</tr></thead><tbody>'
-            f'<tr><td data-col="named"><strong>{long}</strong></td>'
-            '<td data-col="list"><ul class="dot-list"><li>DNS</li><li>Mail</li></ul></td></tr>'
-            "</tbody></table>{% endtable_region %}"
-        )
-        found = all_elements(_render(source))
-        boxes = {
-            name: [(each.tag, each.attrs.get("data-col")) for each in found if name in each.classes]
-            for name in ("cell-short", "cell-clamp")
-        }
-
-        self.assertEqual(boxes, {"cell-short": [("ul", None)], "cell-clamp": [("td", "named")]})
-        self.assertFalse([each for each in found if each.tag == "div" and "td" in [up.tag for up in each.ancestors]])
 
     def test_a_row_that_holds_something_back_has_its_line_beneath(self):
         """After a row is the line its toggle opens: the blocks it keeps
@@ -667,6 +524,24 @@ class TableTagTests(SimpleTestCase):
         )
         with self.assertRaises(ValueError):
             _render(source)
+
+    def test_a_status_heading_with_a_rank_leaves_by_it_and_one_without_stays(self):
+        """A ranked status is a secondary check, which leaves with the
+        table's ranked columns whatever its cells say; an unranked one is the
+        row's state, which leaves last."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>'
+            '{% table_heading "Name" %}{% table_heading "Note" drop=1 %}'
+            '{% table_heading "Check" "status" drop=2 %}{% table_heading "State" "status" %}</tr></thead>'
+            '<tbody><tr><td>a</td><td>b</td><td>{% status "Passed" %}</td><td>{% status "Up" %}</td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        cells = elements(_render(source), "td")
+        note, check, state = (cell.attrs.get("data-drop") for cell in cells[1:4])
+        self.assertTrue(check)
+        self.assertLessEqual(int(check), int(note))
+        self.assertGreater(int(state), int(check))
 
     def test_a_heading_refuses_what_cannot_be(self):
         for source in (

@@ -1,20 +1,18 @@
-"""An agent's change without a retry key is refused on every capability, at both doors an agent calls.
+"""An agent's change over MCP without a retry key is refused on every capability.
 
 Walked from the registry, so a capability added later is held to it the day it
-lands: a retry of a keyless change would act twice.
+lands: a retry of a keyless change would act twice. The machine API's header is
+required by its document, which the property suite holds.
 """
-
-import json
 
 from django.test import TestCase, override_settings
 
+from hq.platform.api.tests.tokens import ISSUER, RESOURCE
 from hq.platform.application import tokens
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.security import AuthorizationError, Capability
 from hq.platform.mcp import services
 from hq.platform.mcp.identity import set_principal
-
-from .tokens import ISSUER, RESOURCE, _serving, _token
 
 
 def _scope(spec) -> str:
@@ -45,25 +43,6 @@ class UnkeyedWriteTests(TestCase):
                 # Refused for authority first, which no key changes.
                 continue
             yield name, spec, scope, principal
-
-    def test_every_change_through_the_api_without_its_header_is_refused(self):
-        walked = 0
-        with _serving():
-            for name, spec, scope, _principal in self._runnable("api"):
-                # A target of the capability's kind, so only the missing key is wrong.
-                target = "1" if spec.target_kind == "integer" else "example"
-                body = {"payload": {}, **({"target": target} if spec.target_kind else {})}
-                response = self.client.post(
-                    f"/api/v2/capabilities/{name}/",
-                    data=json.dumps(body),
-                    content_type="application/json",
-                    HTTP_AUTHORIZATION=f"Bearer {_token('example-agent', scope=scope)}",
-                )
-                with self.subTest(capability=name):
-                    self.assertEqual(response.status_code, 400)
-                    self.assertEqual(response.json()["error"]["code"], "idempotency_key_required")
-                walked += 1
-        self.assertTrue(walked)
 
     def test_every_change_through_mcp_without_a_key_is_refused(self):
         walked = 0

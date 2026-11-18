@@ -29,6 +29,7 @@ from .security import AuthorizationError, InsufficientScope, Principal
 lazy from .approvals import RefusedHold
 lazy from .denials import record_denial
 lazy from .integration_specs import CapabilitySpec, takes_stale_write_token
+lazy from .refusal_pointers import RefusalPointers
 lazy from .resources import InvalidResourceInput, ResourceError
 
 logger = logging.getLogger("severino.capabilities")
@@ -247,17 +248,43 @@ type RefusalCode = Annotated[
 type RefusalMessage = Annotated[
     str, Field(description="HQ's sentence for the refusal, naming no value the request carried.")
 ]
+
+
+class NextCall(TypedDict):
+    """A call that gets past a refusal: an MCP tool and its arguments, which
+    the machine API serves as the route of that name."""
+
+    tool: Annotated[str, Field(description="The MCP tool's name.")]
+    arguments: Annotated[dict[str, Any], Field(description="The tool's arguments, as its input schema names them.")]
+
+
+class InputProblem(TypedDict):
+    """One field that was wrong and why, as Pydantic reports it."""
+
+    type: Annotated[str, Field(description="Pydantic's error type.")]
+    loc: Annotated[list[str | int], Field(description="Where in the request it is.")]
+    msg: Annotated[str, Field(description="Pydantic's sentence for it.")]
+
+
+class RecordProblem(TypedDict):
+    """One record of a document HQ refused, and why."""
+
+    errors: Annotated[list[str], Field(description="Each problem the record has.")]
+    doc_id: NotRequired[Annotated[str, Field(description="The doc it is, for a vault sync.")]]
+    kind: NotRequired[Annotated[str, Field(description="The kind of record it is.")]]
+    index: NotRequired[Annotated[int, Field(description="Its place among the records of its kind, from 0.")]]
+    slug: NotRequired[Annotated[str, Field(description="The slug it names.")]]
+
+
 type RefusalDetails = Annotated[
-    Any,
-    Field(
-        description=(
-            "What gets past the refusal, where something does: `next`, the call that finds what was "
-            "missing; `closest`, the read of each record or list named nearest the one asked for; "
-            "`field`, the argument to send; `scope`, the permission to grant the token's client; for "
-            "`invalid_input`, each field that was wrong and why, which a list or record read puts under "
-            "`errors`, beside the `filters` its list takes."
-        )
-    ),
+    RefusalPointers
+    | Annotated[list[InputProblem], Field(description="For `invalid_input`, each field that was wrong and why.")]
+    | Annotated[
+        dict[str, list[str]],
+        Field(description="For `invalid_input` or `not_found`, each field a record refused, with its error codes."),
+    ]
+    | Annotated[list[RecordProblem], Field(description="Each record of a document refused.")],
+    Field(description="What gets past the refusal, where something does."),
 ]
 type RetryAfter = Annotated[
     int, Field(ge=1, description="Whole seconds until asking again can succeed; the `Retry-After` header repeats it.")
@@ -284,7 +311,7 @@ class Refusal:
 
     code: str
     message: str
-    details: Any = None
+    details: RefusalDetails | None = None
     # Seconds until asking again can succeed, for a refusal that says "later".
     retry_after: int | None = None
 
@@ -331,7 +358,7 @@ class Refusal:
         return {"ok": False, "error": error}
 
 
-def refuse(code: str, message: str, details: Any = None) -> dict[str, Any]:
+def refuse(code: str, message: str, details: RefusalDetails | None = None) -> dict[str, Any]:
     """A refusal's envelope, built where the refusal is decided."""
 
     return Refusal(code, message, details).answer()
@@ -343,7 +370,7 @@ def refused(answer: Mapping[str, object]) -> TypeIs[RefusalEnvelope]:
     return answer.get("ok") is False
 
 
-def next_call(tool: str, **arguments: Any) -> dict[str, Any]:
+def next_call(tool: str, **arguments: Any) -> NextCall:
     """The call that gets past a refusal, as a refusal's ``details.next`` carries it:
     an MCP tool and its arguments, which the machine API serves as the route of that name."""
 

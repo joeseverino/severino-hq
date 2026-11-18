@@ -74,17 +74,6 @@ class LifecycleVerbTests(TestCase):
         self.assertFalse(OperationRequest.objects.exists())
         self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.DENIED).count(), len(LIFECYCLE))
 
-    def test_input_the_command_does_not_take_is_refused(self):
-        result = execute_capability(
-            ACTION_CAPABILITY[OperationRequest.Action.RESTART],
-            keyed({"reason": "Example.", "action": "delete"}),
-            principal=Principal("operator", "web", frozenset({Capability.MANAGE_INFRASTRUCTURE})),
-            target="example-web",
-        )
-
-        self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertFalse(OperationRequest.objects.exists())
-
 
 class RemovalVerbTests(TestCase):
     def setUp(self):

@@ -14,7 +14,7 @@ from django.urls import reverse
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.models import ProviderConnection
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_STACK_KIND
+from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import all_elements, hrefs, text
@@ -25,7 +25,7 @@ from ..connection_catalog import AUTHORITY_LABELS, CONTROLLER_CONNECTIONS, conne
 from ..connections import connection_readings, connections_for, reachable_through
 from ..derivation_testing import frozen
 from ..derivations import counting
-from ..provider_choices import container_stack, zone
+from ..provider_choices import container, zone
 from ..report_testing import bridged, report_connections
 from ..security import cli_principal
 from .sentinel import CONNECTION, SentinelMixin, plant_credentials
@@ -145,7 +145,7 @@ class DerivationTests(TestCase):
         self.assertTrue(named)
         self.assertLessEqual(named, set(CONNECTION_KINDS))
 
-    def test_where_a_stack_can_run_is_what_a_portainer_reaches(self):
+    def test_where_a_container_can_run_is_what_a_portainer_reaches(self):
         """A machine is a place to run something because a Portainer holds it.
 
         Read from the connection rather than from containers found on it, so a
@@ -155,7 +155,7 @@ class DerivationTests(TestCase):
 
         sweep(A_PORTAINER)
 
-        choices = container_stack(NameContext())
+        choices = container(NameContext())
         self.assertEqual(
             [value for value, _ in choices["host"]],
             ["a-cloud-host", "a-docker-host"],
@@ -208,8 +208,8 @@ class DerivationTests(TestCase):
             A_PORTAINER,
         )
 
-        refs = [ref for ref, _ in container_stack(NameContext())["connection_ref"]]
-        labels = dict(container_stack(NameContext())["connection_ref"])
+        refs = [ref for ref, _ in container(NameContext())["connection_ref"]]
+        labels = dict(container(NameContext())["connection_ref"])
         self.assertEqual(refs, ["a-portainer", "a-broken-one"])
         self.assertIn("(unreachable)", labels["a-broken-one"])
 
@@ -217,7 +217,7 @@ class DerivationTests(TestCase):
         """And the fields stay typeable. An empty menu is a smaller failure
         than one that cannot describe what already exists."""
 
-        self.assertEqual(container_stack(NameContext())["host"], ())
+        self.assertEqual(container(NameContext())["host"], ())
         self.assertEqual(connections_for("portainer"), ())
 
 
@@ -233,7 +233,7 @@ class ConnectionPageTests(SentinelMixin, TestCase):
 
         self.assertContains(response, "a-portainer")
         self.assertContains(response, "a-cloud-host")
-        self.assertContains(response, PROVIDERS[CONTAINER_STACK_KIND].label)
+        self.assertContains(response, PROVIDERS[CONTAINER_KIND].label)
 
     def test_the_controller_observed_family_leads_the_inventory(self):
         sweep(A_PORTAINER, A_DNS_TOKEN)
@@ -265,7 +265,7 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         reading the sweep counts is named once, in one set of words, and a kind
         the credential may change but no sweep reads is under "Changes"."""
 
-        sweep(A_PORTAINER)
+        sweep(A_DNS_TOKEN)
 
         response = self.client.get(reverse("control_plane:connections"))
 
@@ -273,10 +273,10 @@ class ConnectionPageTests(SentinelMixin, TestCase):
             row
             for _purpose, rows in response.context["connections"].purposes
             for row in rows
-            if row.instance.connection_ref == "a-portainer"
+            if row.instance.connection_ref == "cloudflare-dns"
         ]
         page = all_elements(response)
-        (tr,) = [element for element in page if element.tag == "tr" and "a-portainer" in element.attrs.get("id", "")]
+        (tr,) = [element for element in page if element.tag == "tr" and "cloudflare-dns" in element.attrs.get("id", "")]
         reads_cell = [element for element in page if element.tag == "td" and element.ancestors[-1:] == (tr,)][1]
 
         # Every item of the cell's lists, a read past the first few in the
@@ -303,8 +303,8 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         self.assertTrue(named)
         self.assertEqual(sorted(named), sorted(sight.label for sight in row.sight.sights))
         self.assertEqual(len(named), sum(count for count, _state in row.sight.tally))
-        self.assertIn(PROVIDERS[CONTAINER_STACK_KIND].label, changes)
-        self.assertNotIn(PROVIDERS[CONTAINER_STACK_KIND].label, named)
+        self.assertIn(PROVIDERS["tls.certificate"].label, changes)
+        self.assertNotIn(PROVIDERS["tls.certificate"].label, named)
 
     def test_the_page_never_carries_a_secret(self):
         plant_credentials()
@@ -419,9 +419,6 @@ class OfferTests(TestCase):
         self.assertEqual(facets["certificate"].unavailable, ())
 
 
-REDEFINE = f"?kind={CONTAINER_STACK_KIND}&amp;hostname=probe.invalid"
-
-
 def _certificate_and_dns(hostname):
     from ..naming import name_context
     from ..service_facets import ServiceFacet
@@ -450,17 +447,9 @@ class SeedTests(TestCase):
             },
         )
         ManagedResource.objects.create(
-            key="probe-stack",
-            kind="portainer.stack",
-            spec={
-                "connection_ref": "a-portainer",
-                "host": "a-docker-host",
-                "name": "probe",
-                "compose": "services: {}",
-                "environment": [],
-                "hostnames": ["probe.invalid"],
-                "port": 8099,
-            },
+            key="probe-route",
+            kind="caddy.route",
+            spec={"connection_ref": "an-edge", "domain": "probe.invalid", "upstream": "a-docker-host:8099"},
         )
 
     def test_a_proxy_points_at_what_already_serves_the_name(self):
@@ -501,7 +490,7 @@ class SeedTests(TestCase):
             for name in ("probe.invalid", "other.invalid", "third.invalid"):
                 naming.name_context(name)
 
-        # Only the stack has a provider that serves or covers a name.
+        # Only the route has a provider that serves or covers a name.
         self.assertEqual(resolve.call_count, 1)
 
     def test_outside_a_request_nothing_is_kept_between_asks(self):
@@ -544,12 +533,7 @@ class SeedTests(TestCase):
 
 
 class AdoptionSafetyTests(TestCase):
-    """HQ offers to take on a container only when that would not build a second.
-
-    A container started by compose on the machine has no Portainer stack. A
-    declaration built as though it did would ask
-    Portainer to stand up its own copy of something already serving.
-    """
+    """HQ offers to watch any container it finds serving a name."""
 
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
@@ -622,23 +606,8 @@ class AdoptionSafetyTests(TestCase):
         )
         return self.client.get(reverse("control_plane:service", kwargs={"hostname": "probe.invalid"}))
 
-    def test_a_container_portainer_did_not_create_cannot_be_redefined(self):
-        response = self._service_page(portainer_managed=False)
-
-        self.assertNotContains(response, REDEFINE)
-
-    def test_one_portainer_created_can_be_redefined(self):
-        response = self._service_page(portainer_managed=True)
-
-        self.assertContains(response, REDEFINE)
-
     def test_either_way_it_can_be_watched(self):
-        """Defining and cycling are different claims.
-
-        Docker will start, stop and restart any container; Portainer will only
-        redefine one it made. Refusing both because it cannot do the second
-        would leave every container running today with no controls at all.
-        """
+        """Docker starts, stops and restarts any container, whichever made it."""
 
         for created_by_portainer in (True, False):
             with self.subTest(portainer_managed=created_by_portainer):

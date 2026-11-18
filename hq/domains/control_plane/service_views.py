@@ -314,7 +314,7 @@ class ServicePinView(View):
         if not name:
             raise Http404("No such service.")
         refused(request, execute_posted(request, self.capability, self.payload(name)))
-        return redirect(safe_next(request) or reverse("control_plane:services"))
+        return redirect(safe_next(request, fallback=reverse("control_plane:services")))
 
 
 class ServiceMoveView(ServicePinView):

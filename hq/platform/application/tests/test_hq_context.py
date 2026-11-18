@@ -518,13 +518,6 @@ class ResourceTests(TestCase):
         self.assertIsNone(found["signed"])
         self.assertEqual(found["signed_unread"], refused)
 
-    def test_unknown_filters_are_refused(self):
-        from ..resources import InvalidResourceInput, list_resource
-        from ..security import cli_principal
-
-        with self.assertRaises(InvalidResourceInput):
-            list_resource("hq", {"limit": 1}, principal=cli_principal())
-
 
 class CadencedWorkTests(TestCase):
     """The page's scheduled work: derived from the declarations and their jobs."""

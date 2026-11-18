@@ -35,6 +35,8 @@ FORGET_AFTER = timedelta(days=30)
 # The capabilities a person sets items aside, and brings them back, through.
 SET_ASIDE = "action_item.set_aside"
 RESTORE = "action_item.restore"
+# Set-aside's mode that takes every row a part of the queue shows.
+ALL = "all"
 AUDIT_LABEL = "Needs you"
 # The longest key an item has, and the longest revision a row names.
 ITEM_KEY_LENGTH = 200

@@ -109,9 +109,8 @@ last done to it is read before its parts.
         set, so there is one control rather than one per route, and it
         appears only when something is actually waiting on it.
         {% endcomment %}
-        {% if machine.presence.unapproved_routes and route_approval %}
-          {% url 'control_plane:approve_routes' machine.route_approval_key as approve_url %}
-          {% button "Approve routes" approve_url post=True title=route_approval.reason disabled=route_approval_off %}
+        {% if machine.presence.unapproved_routes and approve_routes %}
+          {% include "partials/_page_action.html" with action=approve_routes only %}
         {% endif %}
       {% endfact %}
     {% endif %}
@@ -132,7 +131,7 @@ last done to it is read before its parts.
   heading of its own, because it is asked about this machine.
   {% endcomment %}
   {% if device_names %}
-    {% url 'control_plane:tailnet' as tailnet_url %}{% with source=asked.source|urlencode target=asked.target|urlencode %}{% button "Policy test" tailnet_url|add:"?source="|add:source|add:"&target="|add:target modal="whatif" %}{% endwith %}
+    {% url 'control_plane:tailnet' as tailnet_url %}{% with_query tailnet_url source=asked.source target=asked.target as asked_url %}{% button "Policy test" asked_url modal="whatif" %}
   {% endif %}
 {% endsection %}
 </div>

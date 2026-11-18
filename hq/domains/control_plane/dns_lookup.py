@@ -8,7 +8,7 @@ address. No credential travels with it, which is why it runs here.
 """
 
 import json
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlsplit
 
 import httpx2
 from django.conf import settings
@@ -22,6 +22,7 @@ from hq.platform.application.http_read import UNREACHABLE, fetch, redirect_targe
 from hq.platform.application.reach import public_host
 from hq.platform.application.security import Capability
 from hq.platform.application.tone import Tone
+from hq.platform.application.url_query import with_query
 from hq.platform.core.errors import UpstreamUnavailable
 lazy from hq.platform.application.entity_links import https_url
 
@@ -192,7 +193,7 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
 def resolve(path: str, params: dict[str, str], *, timeout: int | None = None) -> dict:
     """Ask the public resolver. ``path`` is a literal chosen by the caller."""
 
-    url = f"{_base('SEVERINO_LOOKUP_ENDPOINT')}/{path.lstrip('/')}?{urlencode(params)}"
+    url = with_query(f"{_base('SEVERINO_LOOKUP_ENDPOINT')}/{path.lstrip('/')}", params)
     return _get(url, timeout=timeout, accept="application/json")
 
 

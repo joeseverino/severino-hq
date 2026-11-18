@@ -8,7 +8,7 @@ from mcp import Client
 from pydantic import Field, create_model
 
 from hq.domains.projects.models import Project
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.resources import BoundedQuery
 from hq.platform.application.security import Capability, Principal
 
@@ -45,9 +45,7 @@ def _example_kind():
         "Example records",
         "Records an extension declares.",
         "read",
-        lambda **_: {},
-        query,
-        item_type=ExampleRecord,
+        listing=ListRead(lambda **_: {}, query, ExampleRecord),
     )
 
 
@@ -88,11 +86,11 @@ class FiltersInTheDescriptionTests(TestCase):
 
         named = dict(part.split(" by ", 1) for part in description.split("Filters: ", 1)[1].split("; "))
         for spec in registry.values():
-            if spec.list_query_type is None:
+            if spec.listing is None:
                 continue
             with self.subTest(kind=spec.name):
                 said = named[f"`{spec.name}`"]
-                for field in spec.list_query_type.model_fields:
+                for field in spec.listing.query.model_fields:
                     # Paging is the tool's own arguments, never a filter a kind is named by.
                     (self.assertNotIn if field in {"limit", "cursor"} else self.assertIn)(f"`{field}`", said)
         self.assertIn("`shade`", named[f"`{KIND}`"])

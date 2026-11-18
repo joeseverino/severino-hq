@@ -4,7 +4,7 @@
 #MISE extends="django"
 #MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
 #MISE output="prefix"
-#MISE depends=["fast:source {{ get_env(name='HQ_FAST_SOURCE', default='') }}"]
+#MISE depends=["fast:source {{ get_env(name='HQ_FAST_SOURCE', default='') }}", "setup:lint-tools"]
 #USAGE flag "--parallel <workers>" default="auto" help="Test workers per suite"
 #USAGE flag "--map <data>" help="Measure which tests ran each line into this coverage data file, for fast's map and audit:tests (fast:map, tools/gate/testmap.py)"
 #USAGE arg "[labels]..." var=#true help="The test labels fast selected"

@@ -6,7 +6,7 @@ from pydantic import Field, create_model
 
 from hq.platform.application import analytics
 from hq.platform.application.describe import Describe, listed
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.resources import TopQuery, one_of
 from hq.platform.application.security import Capability
 from hq.platform.application.ui import ended
@@ -47,9 +47,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Analytics",
             "What the published site was asked for, by any breakdown HQ records.",
             Capability.READ,
-            analytics.list_analytics,
-            AnalyticsQuery,
+            listing=ListRead(analytics.list_analytics, AnalyticsQuery, Breakdown),
             web_route="analytics:overview",
-            item_type=Breakdown,
         ),
     )

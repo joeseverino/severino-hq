@@ -11,11 +11,11 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
-lazy from urllib.parse import urlencode
 
 from hq.platform.core.audit import last_activity
 from hq.platform.core.models import AuditLog
 lazy from hq.platform.application.routes import reverse
+lazy from hq.platform.application.url_query import with_query
 
 from .action_links import read_now_link
 from .cadence import forced_reads
@@ -111,7 +111,7 @@ class ConnectionRow:
     @property
     def problems_url(self) -> str:
         about = entity_link("connection", self.instance.label).url
-        return f"{reverse('action_items')}?{urlencode({'about': about})}" if self.problems else ""
+        return with_query(reverse("action_items"), {"about": about}) if self.problems else ""
 
     @property
     def reads(self) -> tuple[Read, ...]:

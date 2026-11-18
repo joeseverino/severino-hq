@@ -16,7 +16,7 @@ from collections.abc import Callable, Iterable, Mapping
 from copy import copy
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlsplit
 from weakref import WeakKeyDictionary
 
 from django.core.exceptions import ImproperlyConfigured
@@ -27,6 +27,7 @@ from .asks import Ask
 from .fragments import FragmentMixin
 from .tone import Tone
 from .ui import PageNavigation, button_classes
+from .url_query import with_query
 lazy from .action_links import command_url
 lazy from .capabilities import command_spec
 lazy from .contracts import Effect
@@ -95,6 +96,8 @@ class PageAction:
     # and so travels in the body, or the ``next`` it returns to. Such an
     # action is a form of its own, so it never stands inside another.
     fields: Mapping[str, str] = dataclasses.field(default_factory=dict, init=False, hash=False)
+    # The press on the command's own confirmation, loud where it destroys.
+    confirms: bool = dataclasses.field(default=False, init=False)
 
     @classmethod
     def command(
@@ -110,6 +113,7 @@ class PageAction:
         value: str = "",
         fields: Mapping[str, str] | None = None,
         modal: PageDialog | str = "",
+        confirms: bool = False,
     ) -> PageAction | None:
         """The control that runs the command ``name`` on ``target``, or None
         when the person the page is for may not run it.
@@ -124,20 +128,21 @@ class PageAction:
         first values). One that opens its view's form may open it in a
         dialog instead (``modal``). It is drawn unusable, saying why, while the command
         would be refused for ``target`` (``refused``, else the work's own).
+        The press on the confirmation that view draws ``confirms``: it posts
+        there.
         """
 
-        spec = command_spec(name)
-        request = current_request()
-        if request is not None and not offering_for(request).runs(spec):
+        if not runs_here(name):
             return None
+        spec = command_spec(name)
         subject = "" if isinstance(target, Mapping) else str(target)
         sends = dict(fields or {})
         url, answers_get = command_reach(name, target, variant)
         # A press that sends something posts it; one that sends nothing opens
         # the page its view draws, or posts to a view that draws none.
-        posts = bool(value or sends) or not answers_get
+        posts = confirms or bool(value or sends) or not answers_get
         if query:
-            url = f"{url}{'&' if '?' in url else '?'}{urlencode(query, doseq=True)}"
+            url = with_query(url, query)
         if field in sends:
             raise ValueError(f"A POST action's button sends {field!r}; its fields cannot send it too.")
         if modal and posts:
@@ -155,6 +160,7 @@ class PageAction:
             value=value,
             fields=sends,
             modal=modal,
+            confirms=confirms,
         )
 
     @classmethod
@@ -213,12 +219,13 @@ class PageAction:
     def look(self) -> str:
         """How its button looks (``ui.BUTTON_LOOKS``)."""
 
+        # Quiet: a head's destructive action is the rarest thing on the page
+        # and should not be its loudest. Its confirmation is loud.
+        danger = ("danger",) if self.confirms else ("ghost", "danger")
         return " ".join(
             (
                 *(("primary",) if self.primary else ()),
-                # Quiet: a head's destructive action is the rarest thing on the
-                # page and should not be its loudest. Its confirmation is loud.
-                *(("ghost", "danger") if self.danger else ()),
+                *(danger if self.danger else ()),
             )
         )
 
@@ -231,8 +238,7 @@ def _reached_by(name: str, target: str, mode: str) -> str:
     """The address a row's control for the command ``name`` posts to, or ""
     when the person the page is for may not run it."""
 
-    request = current_request()
-    if request is not None and not offering_for(request).runs(command_spec(name)):
+    if not runs_here(name):
         return ""
     return command_reach(name, target, mode)[0]
 
@@ -261,6 +267,12 @@ class RowMark:
     def title(self) -> str:
         return f"Remove {self.name} from {self.among}" if self.on else f"Add {self.name} to {self.among}"
 
+    @property
+    def press(self) -> PageAction:
+        """The one press that sets or clears it, as the button draws it."""
+
+        return _pressed("★" if self.on else "☆", self.url, title=self.title)
+
 
 @dataclass(frozen=True, slots=True)
 class RowOrder:
@@ -282,12 +294,21 @@ class RowOrder:
         return cls(url, target, up, down) if url and (up or down) else None
 
     @property
-    def up_title(self) -> str:
-        return f"Move {self.name} up"
+    def presses(self) -> tuple[PageAction, ...]:
+        """Its presses, up then down, each where the row has a neighbor that way."""
 
-    @property
-    def down_title(self) -> str:
-        return f"Move {self.name} down"
+        ways = (("↑", "up", self.up), ("↓", "down", self.down))
+        return tuple(
+            _pressed(glyph, self.url, title=f"Move {self.name} {way}", field="direction", value=way)
+            for glyph, way, there in ways
+            if there
+        )
+
+
+def _pressed(label: str, url: str, *, title: str, field: str = "action", value: str = "") -> PageAction:
+    """A row's own press on the address its command reached (``_reached_by``)."""
+
+    return PageAction._built(label=label, url=url, title=title, method="post", field=field, value=value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -780,6 +801,16 @@ def offered_now(url: str | Promise) -> bool:
 
     request = current_request()
     return request is None or offering_for(request)(url)
+
+
+def runs_here(name: str) -> bool:
+    """Whether the person the request being answered is for may run the
+    command ``name``: a page draws its control, or the form that sends it,
+    only then. Outside a request nothing is withheld; the command still
+    refuses whoever runs it."""
+
+    request = current_request()
+    return request is None or offering_for(request).runs(command_spec(name))
 
 
 # One Offering for each request, so its reader's principal is built once for

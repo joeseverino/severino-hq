@@ -26,7 +26,7 @@ def _statuses(html, section: str) -> list[tuple[str, str]]:
     the outcomes in a run's evidence beneath it."""
 
     return [
-        (element.words, next(name for name in element.classes if name.startswith("pill-")))
+        (element.words, next(name for name in element.classes if name.startswith("tone-")))
         for element in within(html, "id", section)
         if "pill" in element.classes and not any("row-below" in a.classes for a in (*element.ancestors, element))
     ]
@@ -77,14 +77,14 @@ class AutomationRunPageTests(TestCase):
         html = self.page(reverse("command", args=[RUN]))
 
         self.assertTrue(self.runs["command"])
-        self.assertEqual(_statuses(html, "runs"), [(run.word, f"pill-{run.tone}") for run in self.runs["command"]])
+        self.assertEqual(_statuses(html, "runs"), [(run.word, f"tone-{run.tone}") for run in self.runs["command"]])
         self.assertEqual(_more(html, "runs", reverse("jobs:list")), {"kind": [RUN]})
 
     def test_a_machine_s_page_lists_the_runs_that_acted_on_it(self):
         html = self.page(reverse("control_plane:machine", kwargs={"name": MACHINE}))
 
         self.assertTrue(self.runs["machine"])
-        self.assertEqual(_statuses(html, "runs"), [(run.word, f"pill-{run.tone}") for run in self.runs["machine"]])
+        self.assertEqual(_statuses(html, "runs"), [(run.word, f"tone-{run.tone}") for run in self.runs["machine"]])
         self.assertEqual(_more(html, "runs", reverse("jobs:list")), {"host": [MACHINE]})
         flushes = [run for run in self.runs["machine"] if run.kind == RUN]
         self.assertTrue(flushes)

@@ -14,7 +14,7 @@ from mcp.shared.exceptions import MCPError
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.projects.models import Project
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.resources import EmptyQuery, resource_registry
 from hq.platform.application.security import Principal, agent_principal, mcp_principal
@@ -156,7 +156,13 @@ class NamedServedReadTests(TestCase):
 
     def test_a_resource_gone_since_the_tools_were_bound_names_the_catalog_and_the_catalog_answers(self):
         kind = ResourceSpec(
-            KIND, "Example", "Records.", "read", _listing, EmptyQuery, _record, "name", item_type=ExampleRecord
+            KIND,
+            "Example",
+            "Records.",
+            "read",
+            listing=ListRead(_listing, EmptyQuery, ExampleRecord),
+            detail_handler=_record,
+            identifier="name",
         )
         host = resource_registry()
 
@@ -169,7 +175,7 @@ class NamedServedReadTests(TestCase):
         self.assertTrue(catalog["resources"])
 
     def test_a_resource_with_no_listing_names_its_record_read_and_the_record_read_answers(self):
-        kind = ResourceSpec(KIND, "Example", "Records.", "read", None, EmptyQuery, _record, "name")
+        kind = ResourceSpec(KIND, "Example", "Records.", "read", detail_handler=_record, identifier="name")
 
         with served(with_kind(kind)) as server:
             refused = self._on(server, "list_resource", {"name": KIND})
@@ -182,7 +188,13 @@ class NamedServedReadTests(TestCase):
 
     def test_a_resource_with_no_detail_view_names_its_listing_and_the_listing_answers(self):
         kind = ResourceSpec(
-            KIND, "Example", "Records.", "read", _listing, EmptyQuery, None, "name", item_type=ExampleRecord
+            KIND,
+            "Example",
+            "Records.",
+            "read",
+            listing=ListRead(_listing, EmptyQuery, ExampleRecord),
+            detail_handler=None,
+            identifier="name",
         )
 
         with served(with_kind(kind)) as server:
@@ -212,12 +224,10 @@ def _example_records(owner_of):
         "Example",
         "Records.",
         "read",
-        listing,
-        EmptyQuery,
-        detail,
-        "name",
+        listing=ListRead(listing, EmptyQuery, ExampleRecord),
+        detail_handler=detail,
+        identifier="name",
         pass_principal=True,
-        item_type=ExampleRecord,
     )
 
 

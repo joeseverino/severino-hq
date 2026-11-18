@@ -176,6 +176,12 @@ class BreakableTests(SimpleTestCase):
     def test_a_hyphenated_part_is_kept_whole(self):
         self.assertEqual(wholes(breakable("sudo /usr/severino-hq/bin")), ["severino-hq/"])
 
+    def test_a_snake_case_name_breaks_as_an_identifier(self):
+        """A name joined by underscores is an identifier, which a cell may
+        break inside, as it breaks a hyphenated one."""
+
+        self.assertIn('class="token"', str(breakable("an example_name")))
+
     def test_a_part_of_a_phrase_is_its_own_box_and_a_name_alone_is_not(self):
         self.assertEqual(boxed(breakable("restart example-web now")), ["example-web"])
         self.assertEqual(boxed(breakable("example-web")), [])
@@ -222,6 +228,7 @@ class BreakableTests(SimpleTestCase):
             ("$12.00 each", "$12.00 each"),
             ("10.5–12.5 mi", "12.5 mi"),
             ("at 4.2 m/s", "4.2 m/s"),
+            ("dst tag:server, ip *", "ip *"),
         ):
             with self.subTest(phrase=phrase):
                 drawn = re.sub(r"<[^>]*>", "", str(breakable(phrase)))

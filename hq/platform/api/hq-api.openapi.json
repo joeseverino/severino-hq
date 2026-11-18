@@ -2,6 +2,14 @@
   "$self": "/api/v2/openapi.json",
   "components": {
     "headers": {
+      "CacheControl": {
+        "description": "Operational data read with a bearer credential, correct only for the caller.",
+        "required": true,
+        "schema": {
+          "const": "private, no-store",
+          "type": "string"
+        }
+      },
       "InsufficientScopeWWWAuthenticate": {
         "description": "On `insufficient_scope`: `Bearer` with `error=\"insufficient_scope\"` and `scope`, the permission `error.details.scope` names (RFC 6750 section 3.1).",
         "schema": {
@@ -1106,7 +1114,7 @@
       "IdempotencyKey": {
         "in": "header",
         "name": "Idempotency-Key",
-        "required": false,
+        "required": true,
         "schema": {
           "$ref": "#/components/schemas/IdempotencyKey"
         }
@@ -2406,7 +2414,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "AnyCallBadRequest": {
         "content": {
@@ -2416,7 +2429,12 @@
             }
           }
         },
-        "description": "Bad Request."
+        "description": "Bad Request.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "AnyCallNotFound": {
         "content": {
@@ -2426,7 +2444,12 @@
             }
           }
         },
-        "description": "Not Found."
+        "description": "Not Found.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ApprovalWithdrawnSuccess": {
         "content": {
@@ -2436,7 +2459,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "AskedAnswerSuccess": {
         "content": {
@@ -2446,7 +2474,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "AssetSavedSuccess": {
         "content": {
@@ -2456,7 +2489,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "AwaitingApprovalAccepted": {
         "content": {
@@ -2481,6 +2519,11 @@
           }
         },
         "description": "Accepted: held for approval in HQ. Nothing has happened yet.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        },
         "links": {
           "getApprovalsV2": {
             "operationId": "getApprovalsV2",
@@ -2498,7 +2541,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "CapabilityRequestCatalogSuccess": {
         "content": {
@@ -2508,7 +2556,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ChangeConflict": {
         "content": {
@@ -2518,7 +2571,12 @@
             }
           }
         },
-        "description": "Conflict."
+        "description": "Conflict.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ChangeForbidden": {
         "content": {
@@ -2530,6 +2588,9 @@
         },
         "description": "Forbidden.",
         "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          },
           "WWW-Authenticate": {
             "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
           }
@@ -2543,7 +2604,12 @@
             }
           }
         },
-        "description": "Not Found."
+        "description": "Not Found.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ChangeTooManyRequests": {
         "content": {
@@ -2555,6 +2621,9 @@
         },
         "description": "Too Many Requests.",
         "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          },
           "Retry-After": {
             "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
             "required": false,
@@ -2573,7 +2642,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ConnectionCatalogSuccess": {
         "content": {
@@ -2583,7 +2657,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ConnectionStandingRecordSuccess": {
         "content": {
@@ -2593,7 +2672,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ContactDeletedSuccess": {
         "content": {
@@ -2603,7 +2687,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ContactReviewedSuccess": {
         "content": {
@@ -2613,7 +2702,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ContainerRecordSuccess": {
         "content": {
@@ -2623,7 +2717,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ContentSavedSuccess": {
         "content": {
@@ -2633,7 +2732,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ControllerSweepRequestedSuccess": {
         "content": {
@@ -2643,7 +2747,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "CredentialRecordSuccess": {
         "content": {
@@ -2653,7 +2762,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "DashboardMachineSetSuccess": {
         "content": {
@@ -2663,7 +2777,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "DashboardSettingsSavedSuccess": {
         "content": {
@@ -2673,7 +2792,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "DependencyUpdatesSetSuccess": {
         "content": {
@@ -2683,7 +2807,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "DocumentationSavedSuccess": {
         "content": {
@@ -2693,7 +2822,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "DocumentationSyncedSuccess": {
         "content": {
@@ -2703,7 +2837,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "DomainRecordSuccess": {
         "content": {
@@ -2713,7 +2852,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "EmptyGroupsRemovedSuccess": {
         "content": {
@@ -2723,7 +2867,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "EntrySavedSuccess": {
         "content": {
@@ -2733,7 +2882,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "EstateFigurePageSuccess": {
         "content": {
@@ -2743,7 +2897,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ExpenseSavedSuccess": {
         "content": {
@@ -2753,7 +2912,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "FindingsSuccess": {
         "content": {
@@ -2763,7 +2927,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "Forbidden": {
         "content": {
@@ -2775,6 +2944,9 @@
         },
         "description": "Forbidden.",
         "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          },
           "WWW-Authenticate": {
             "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
           }
@@ -2788,7 +2960,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "HopRowPageSuccess": {
         "content": {
@@ -2798,7 +2975,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "HqImportedSuccess": {
         "content": {
@@ -2808,7 +2990,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "HqSyncedSuccess": {
         "content": {
@@ -2818,7 +3005,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "InternalServerError": {
         "content": {
@@ -2828,7 +3020,12 @@
             }
           }
         },
-        "description": "Internal Server Error."
+        "description": "Internal Server Error.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "InvalidInput": {
         "content": {
@@ -2838,7 +3035,12 @@
             }
           }
         },
-        "description": "Bad Request."
+        "description": "Bad Request.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ItemsActedOnSuccess": {
         "content": {
@@ -2848,7 +3050,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "MachineRecordSuccess": {
         "content": {
@@ -2858,7 +3065,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ManagedResourceRecordSuccess": {
         "content": {
@@ -2868,7 +3080,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "MatchPageSuccess": {
         "content": {
@@ -2878,7 +3095,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "MethodNotAllowed": {
         "content": {
@@ -2888,7 +3110,12 @@
             }
           }
         },
-        "description": "Method Not Allowed."
+        "description": "Method Not Allowed.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "NameLookedUpSuccess": {
         "content": {
@@ -2898,7 +3125,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "NotFound": {
         "content": {
@@ -2908,7 +3140,12 @@
             }
           }
         },
-        "description": "Not Found."
+        "description": "Not Found.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ObservedAcceptedSuccess": {
         "content": {
@@ -2918,7 +3155,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "OpenapiSuccess": {
         "content": {
@@ -2928,7 +3170,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "OperationAskedDeclarationForgottenSuccess": {
         "content": {
@@ -2938,7 +3185,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "OperationAskedSuccess": {
         "content": {
@@ -2948,7 +3200,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "PanelsRefreshRequestedSuccess": {
         "content": {
@@ -2958,7 +3215,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "PathRecordSuccess": {
         "content": {
@@ -2968,7 +3230,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "PinToggledSuccess": {
         "content": {
@@ -2978,7 +3245,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "PinsChangedSuccess": {
         "content": {
@@ -2988,7 +3260,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "PlaybookRecordSuccess": {
         "content": {
@@ -2998,7 +3275,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ProblemPageSuccess": {
         "content": {
@@ -3008,7 +3290,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ProfileReadRequestedSuccess": {
         "content": {
@@ -3018,7 +3305,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ProjectSavedSuccess": {
         "content": {
@@ -3028,7 +3320,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ReadConflict": {
         "content": {
@@ -3038,7 +3335,12 @@
             }
           }
         },
-        "description": "Conflict."
+        "description": "Conflict.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ReadForbidden": {
         "content": {
@@ -3050,6 +3352,9 @@
         },
         "description": "Forbidden.",
         "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          },
           "WWW-Authenticate": {
             "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
           }
@@ -3063,7 +3368,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ReceiptSavedSuccess": {
         "content": {
@@ -3073,7 +3383,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "RecordDeletedSuccess": {
         "content": {
@@ -3083,7 +3398,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "RelationshipsRecordSuccess": {
         "content": {
@@ -3093,7 +3413,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "RequestTooLarge": {
         "content": {
@@ -3103,7 +3428,12 @@
             }
           }
         },
-        "description": "Content Too Large."
+        "description": "Content Too Large.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ResourceCatalogSuccess": {
         "content": {
@@ -3113,7 +3443,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ResourceCollectionSuccess": {
         "content": {
@@ -3123,7 +3458,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ResourceReadMethodNotAllowed": {
         "content": {
@@ -3133,7 +3473,12 @@
             }
           }
         },
-        "description": "Method Not Allowed."
+        "description": "Method Not Allowed.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ResourceReadNotFound": {
         "content": {
@@ -3143,7 +3488,12 @@
             }
           }
         },
-        "description": "Not Found."
+        "description": "Not Found.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ResourceRecordAnswerSuccess": {
         "content": {
@@ -3153,7 +3503,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ResourceSavedSuccess": {
         "content": {
@@ -3163,7 +3518,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "RootDataSuccess": {
         "content": {
@@ -3173,7 +3533,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "RunRecordSuccess": {
         "content": {
@@ -3183,7 +3548,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ScanResultSuccess": {
         "content": {
@@ -3193,7 +3563,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ServiceAdoptedSuccess": {
         "content": {
@@ -3203,7 +3578,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ServiceRecordSuccess": {
         "content": {
@@ -3213,7 +3593,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ServiceUnavailable": {
         "content": {
@@ -3223,7 +3608,12 @@
             }
           }
         },
-        "description": "Service Unavailable."
+        "description": "Service Unavailable.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "SourcesChosenSuccess": {
         "content": {
@@ -3233,7 +3623,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "TailnetPageSuccess": {
         "content": {
@@ -3243,7 +3638,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "TargetedChangeBadRequest": {
         "content": {
@@ -3253,7 +3653,12 @@
             }
           }
         },
-        "description": "Bad Request."
+        "description": "Bad Request.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ThemeSetSuccess": {
         "content": {
@@ -3263,7 +3668,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "TooManyRequests": {
         "content": {
@@ -3275,6 +3685,9 @@
         },
         "description": "Too Many Requests.",
         "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          },
           "Retry-After": {
             "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
             "required": true,
@@ -3293,7 +3706,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "Unauthorized": {
         "content": {
@@ -3305,8 +3723,12 @@
         },
         "description": "Unauthorized.",
         "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          },
           "WWW-Authenticate": {
             "description": "How to authenticate.",
+            "required": true,
             "schema": {
               "const": "Bearer realm=\"Severino HQ\"",
               "type": "string"
@@ -3322,7 +3744,12 @@
             }
           }
         },
-        "description": "Not Found."
+        "description": "Not Found.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "UnsupportedMediaType": {
         "content": {
@@ -3332,7 +3759,12 @@
             }
           }
         },
-        "description": "Unsupported Media Type."
+        "description": "Unsupported Media Type.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "UntargetedChangeBadRequest": {
         "content": {
@@ -3342,7 +3774,12 @@
             }
           }
         },
-        "description": "Bad Request."
+        "description": "Bad Request.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "UntargetedReadBadRequest": {
         "content": {
@@ -3352,7 +3789,12 @@
             }
           }
         },
-        "description": "Bad Request."
+        "description": "Bad Request.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "UpgradeRecordSuccess": {
         "content": {
@@ -3362,7 +3804,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "VisitRefreshedSuccess": {
         "content": {
@@ -3372,7 +3819,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "WorkRequestedSuccess": {
         "content": {
@@ -3382,7 +3834,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       },
       "ZoneAdoptedSuccess": {
         "content": {
@@ -3392,7 +3849,12 @@
             }
           }
         },
-        "description": "Success."
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
       }
     },
     "schemas": {
@@ -3701,9 +4163,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "keys": {
                 "description": "The set-aside items to bring back into the queue.",
                 "items": {
@@ -3776,9 +4235,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "keys": {
                 "description": "Items to set aside as the queue holds them now.",
                 "items": {
@@ -4193,9 +4649,6 @@
             "additionalProperties": false,
             "description": "The theme to draw your pages in.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "theme": {
                 "description": "The theme to draw your pages in.",
                 "enum": [
@@ -4249,9 +4702,6 @@
               "approval_id": {
                 "description": "The held request to withdraw. The `approval.id` its held answer carried.",
                 "type": "string"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               }
             },
             "required": [
@@ -4405,9 +4855,6 @@
               "tools": "Tools",
               "training": "Training"
             }
-          },
-          "idempotency_key": {
-            "$ref": "#/components/schemas/IdempotencyKey"
           },
           "infrastructure": {
             "$ref": "#/components/schemas/AssetInfrastructure",
@@ -4849,9 +5296,6 @@
                   "training": "Training"
                 }
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "infrastructure": {
                 "$ref": "#/components/schemas/AssetInfrastructure",
                 "maxLength": 300
@@ -4984,9 +5428,6 @@
             "additionalProperties": false,
             "description": "The run to cancel, by its operation id.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "operation_id": {
                 "description": "The run to cancel. Its `operation.id`, from the answer that queued it, or its held request's `operation` once approved.",
                 "type": "string"
@@ -5014,9 +5455,6 @@
             "additionalProperties": false,
             "description": "A Refresh takes nothing but why it was asked: the repository is the\nhost's configuration.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "reason": {
                 "default": "",
                 "description": "Why it is refreshed, kept with the scan.",
@@ -5228,9 +5666,6 @@
                   "It cannot end before it starts."
                 ]
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "interval": {
                 "$ref": "#/components/schemas/CalendarEntryInterval",
                 "default": 1
@@ -5275,7 +5710,8 @@
               "title": {
                 "$ref": "#/components/schemas/CalendarEntryTitle",
                 "maxLength": 160,
-                "minLength": 1
+                "minLength": 1,
+                "pattern": "[^ ]"
               },
               "weekdays": {
                 "$ref": "#/components/schemas/CalendarEntryWeekdays",
@@ -5421,9 +5857,6 @@
                   "It cannot end before it starts."
                 ]
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "interval": {
                 "$ref": "#/components/schemas/CalendarEntryInterval"
               },
@@ -5462,7 +5895,8 @@
               "title": {
                 "$ref": "#/components/schemas/CalendarEntryTitle",
                 "maxLength": 160,
-                "minLength": 1
+                "minLength": 1,
+                "pattern": "[^ ]"
               },
               "weekdays": {
                 "$ref": "#/components/schemas/CalendarEntryWeekdays",
@@ -5507,9 +5941,6 @@
             "additionalProperties": false,
             "description": "One calendar source, and whether the month shows it.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "shown": {
                 "description": "Whether the month shows it.",
                 "type": "boolean"
@@ -5580,7 +6011,7 @@
                 "type": "null"
               }
             ],
-            "description": "What names the record it acts on: `slug`, `doc_id`, `integer` or `key`; null for a command that takes none."
+            "description": "What names the record it acts on: `slug`, `doc_id`, `integer`, `key` or `client_id`; null for a command that takes none."
           },
           "target_help": {
             "description": "What to send as the target, in a sentence; empty for none.",
@@ -7181,9 +7612,6 @@
               "assigned_to": {
                 "$ref": "#/components/schemas/Assignee"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "status": {
                 "$ref": "#/components/schemas/ReviewStatus"
               }
@@ -7593,9 +8021,6 @@
                   "video": "Video"
                 }
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
                 "default": "",
@@ -7985,9 +8410,6 @@
                   "service_page": "Service page",
                   "video": "Video"
                 }
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
@@ -8382,9 +8804,6 @@
             "additionalProperties": false,
             "description": "Whether the machine's telemetry is shown on the dashboard.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "selected": {
                 "description": "Whether the dashboard shows this machine's telemetry.",
                 "type": "boolean"
@@ -8461,11 +8880,7 @@
       "DashboardRefreshCommand": {
         "additionalProperties": false,
         "description": "A refresh names nothing: which panels it asks for is HQ's to work out.",
-        "properties": {
-          "idempotency_key": {
-            "$ref": "#/components/schemas/IdempotencyKey"
-          }
-        },
+        "properties": {},
         "type": "object"
       },
       "DashboardSettingsSaved": {
@@ -8509,9 +8924,6 @@
             "additionalProperties": false,
             "description": "Where the weather is read for, and what the glance strip calls its panels.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "infrastructure_label": {
                 "default": "",
                 "description": "What the infrastructure panel is called.",
@@ -8714,19 +9126,6 @@
         },
         "type": "object"
       },
-      "DeclaredPortainerStackSpec": {
-        "properties": {
-          "kind": {
-            "const": "portainer.stack",
-            "description": "What type of record it is.",
-            "type": "string"
-          },
-          "spec": {
-            "$ref": "#/components/schemas/PortainerStackSpec"
-          }
-        },
-        "type": "object"
-      },
       "DeclaredSourceSpec": {
         "properties": {
           "kind": {
@@ -8815,9 +9214,6 @@
         "properties": {
           "confirm": {
             "$ref": "#/components/schemas/Confirm"
-          },
-          "idempotency_key": {
-            "$ref": "#/components/schemas/IdempotencyKey"
           }
         },
         "required": [
@@ -9080,9 +9476,6 @@
                 "default": "",
                 "maxLength": 400,
                 "title": "GitHub path"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "last_reviewed": {
                 "$ref": "#/components/schemas/LastReviewed",
@@ -9451,9 +9844,6 @@
                 "default": false,
                 "title": "Confirm the delete"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "manifest": {
                 "description": "The documentation records to sync, one per doc.",
                 "items": {
@@ -9603,9 +9993,6 @@
                 "$ref": "#/components/schemas/GithubPath",
                 "maxLength": 400,
                 "title": "GitHub path"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "last_reviewed": {
                 "$ref": "#/components/schemas/LastReviewed"
@@ -10336,9 +10723,6 @@
               "date": {
                 "$ref": "#/components/schemas/ExpenseDate"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "item": {
                 "$ref": "#/components/schemas/ExpenseItem",
                 "maxLength": 200,
@@ -10686,9 +11070,6 @@
               },
               "date": {
                 "$ref": "#/components/schemas/ExpenseDate"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "item": {
                 "$ref": "#/components/schemas/ExpenseItem",
@@ -11137,9 +11518,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "login": {
                 "description": "The GitHub login whose profile to read.",
                 "type": "string"
@@ -11585,9 +11963,6 @@
                 "description": "Check the import without saving anything.",
                 "type": "boolean"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "projects": {
                 "description": "Projects to import, each laid over the one of its slug.",
                 "items": {
@@ -11669,9 +12044,6 @@
                 "default": false,
                 "title": "Confirm the delete"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "manifest": {
                 "description": "The records to sync, one per entry.",
                 "items": {
@@ -11738,7 +12110,7 @@
         "type": "object"
       },
       "IdempotencyKey": {
-        "description": "One key per logical change, kept when it is retried: a repeat returns the first result instead of acting again. It is sent as the payload's `idempotency_key` or the `Idempotency-Key` header; a change needs one of the two, and is refused `idempotency_key_required` with neither. Only the host's shell is not asked.",
+        "description": "One key per logical change, kept when it is retried: a repeat returns the first result instead of acting again. A change sent without one is refused `idempotency_key_required`; only the host's shell is not asked.",
         "examples": [
           "7d9f3c2e-4b1a-4e8f-9a6d-0c5b2e1f8a73"
         ],
@@ -12140,9 +12512,6 @@
                 "description": "Read every connection now.",
                 "type": "boolean"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "kind": {
                 "$ref": "#/components/schemas/SweptKind",
                 "default": "",
@@ -12198,9 +12567,6 @@
                 "description": "The hostname whose record to adopt.",
                 "type": "string"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "key": {
                 "default": "",
                 "description": "The key the managed record is stored under; blank derives one.",
@@ -12253,10 +12619,6 @@
               {
                 "$ref": "#/components/schemas/DeclaredGitHubDeliverySpec",
                 "title": "Declared git hub delivery spec"
-              },
-              {
-                "$ref": "#/components/schemas/DeclaredPortainerStackSpec",
-                "title": "Declared portainer stack spec"
               },
               {
                 "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
@@ -12317,9 +12679,6 @@
                 "default": true,
                 "description": "Whether HQ keeps the live record as it expects.",
                 "type": "boolean"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "key": {
                 "$ref": "#/components/schemas/ManagedResourceKey",
@@ -12460,10 +12819,6 @@
                 "title": "Declared git hub delivery spec"
               },
               {
-                "$ref": "#/components/schemas/DeclaredPortainerStackSpec",
-                "title": "Declared portainer stack spec"
-              },
-              {
                 "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
                 "title": "Declared portainer container spec"
               },
@@ -12522,9 +12877,6 @@
                 "description": "Whether HQ keeps the live record as it expects.",
                 "type": "boolean"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "key": {
                 "$ref": "#/components/schemas/ManagedResourceKey",
                 "maxLength": 180,
@@ -12576,9 +12928,6 @@
                 "x-hq-records": {
                   "resource": "services"
                 }
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               }
             },
             "required": [
@@ -12603,9 +12952,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "token": {
                 "description": "The token HQ gave the live domain when it read it.",
                 "type": "string"
@@ -12624,6 +12970,40 @@
         },
         "required": [
           "payload"
+        ],
+        "type": "object"
+      },
+      "InputProblem": {
+        "additionalProperties": false,
+        "description": "One field that was wrong and why, as Pydantic reports it.",
+        "properties": {
+          "loc": {
+            "description": "Where in the request it is.",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "msg": {
+            "description": "Pydantic's sentence for it.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Pydantic's error type.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "loc",
+          "msg"
         ],
         "type": "object"
       },
@@ -13389,7 +13769,6 @@
           "tls.uploaded_certificate",
           "npm.proxy_host",
           "github.delivery",
-          "portainer.stack",
           "portainer.container",
           "tailscale.device",
           "tailscale.policy",
@@ -13418,7 +13797,6 @@
           "npm.proxy_host": "Proxy host",
           "pki.authority": "Certificate authority",
           "portainer.container": "Container",
-          "portainer.stack": "Container stack",
           "tailscale.device": "Tailnet device",
           "tailscale.policy": "Tailnet policy",
           "tls.certificate": "TLS certificate",
@@ -14256,6 +14634,24 @@
         ],
         "type": "object"
       },
+      "MissingConnection": {
+        "additionalProperties": false,
+        "properties": {
+          "machine": {
+            "description": "The machine the runner cannot reach.",
+            "type": "string"
+          },
+          "profile": {
+            "description": "The login the playbook runs as.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "machine",
+          "profile"
+        ],
+        "type": "object"
+      },
       "MountPart": {
         "additionalProperties": false,
         "properties": {
@@ -14506,6 +14902,25 @@
         ],
         "type": "object"
       },
+      "NextCall": {
+        "additionalProperties": false,
+        "description": "A call that gets past a refusal: an MCP tool and its arguments, which\nthe machine API serves as the route of that name.",
+        "properties": {
+          "arguments": {
+            "description": "The tool's arguments, as its input schema names them.",
+            "type": "object"
+          },
+          "tool": {
+            "description": "The MCP tool's name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "arguments"
+        ],
+        "type": "object"
+      },
       "NextPage": {
         "description": "Where the page after a list's is read from.",
         "properties": {
@@ -14553,6 +14968,11 @@
           "error"
         ],
         "type": "object"
+      },
+      "NotRead": {
+        "const": "",
+        "description": "Empty: nothing has read it.",
+        "type": "string"
       },
       "Notes": {
         "description": "Anything else worth keeping.",
@@ -14750,9 +15170,6 @@
         "additionalProperties": false,
         "description": "The command: the fields its input schema names.",
         "properties": {
-          "idempotency_key": {
-            "$ref": "#/components/schemas/IdempotencyKey"
-          },
           "reason": {
             "default": "",
             "description": "Why it is done, kept with the operation it queues.",
@@ -15303,9 +15720,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "keys": {
                 "description": "Every pin of that type, in order.",
                 "items": {
@@ -15355,9 +15769,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "key": {
                 "description": "Which pin.",
                 "pattern": "\\S",
@@ -15407,9 +15818,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "key": {
                 "description": "The one to pin or unpin.",
                 "pattern": "\\S",
@@ -15510,6 +15918,31 @@
         "required": [
           "ok",
           "data"
+        ],
+        "type": "object"
+      },
+      "PlaybookAdmits": {
+        "additionalProperties": false,
+        "description": "What a playbook is written for.",
+        "properties": {
+          "hosts": {
+            "description": "The machines it names.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "target_kinds": {
+            "description": "The kinds of record it runs against.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "target_kinds",
+          "hosts"
         ],
         "type": "object"
       },
@@ -15836,102 +16269,6 @@
         ],
         "type": "object"
       },
-      "PortainerStackEnvVar": {
-        "additionalProperties": false,
-        "description": "One environment variable a stack is deployed with.",
-        "properties": {
-          "name": {
-            "description": "The variable's name.",
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "value": {
-            "default": "",
-            "description": "The variable's value.",
-            "maxLength": 4000,
-            "title": "Value",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "type": "object"
-      },
-      "PortainerStackSpec": {
-        "additionalProperties": false,
-        "description": "A compose stack Portainer deploys on one machine.",
-        "properties": {
-          "compose": {
-            "description": "The docker compose file, as it would be on disk.",
-            "minLength": 1,
-            "title": "Compose file",
-            "type": "string"
-          },
-          "connection_ref": {
-            "description": "The Portainer environment this runs in.",
-            "maxLength": 160,
-            "minLength": 1,
-            "title": "Portainer",
-            "type": "string"
-          },
-          "environment": {
-            "description": "Values the compose file reads. Keep secrets in 1Password.",
-            "items": {
-              "$ref": "#/components/schemas/PortainerStackEnvVar"
-            },
-            "title": "Environment",
-            "type": "array"
-          },
-          "host": {
-            "description": "The machine the stack runs on.",
-            "maxLength": 160,
-            "minLength": 1,
-            "title": "Runs on",
-            "type": "string"
-          },
-          "hostnames": {
-            "description": "Hostnames that reach this stack from outside, if any.",
-            "items": {
-              "type": "string"
-            },
-            "title": "Serves",
-            "type": "array"
-          },
-          "name": {
-            "description": "Lowercase and hyphenated. Used as the compose project name.",
-            "maxLength": 120,
-            "minLength": 1,
-            "pattern": "^[a-z0-9][a-z0-9-]*$",
-            "title": "Stack name",
-            "type": "string"
-          },
-          "port": {
-            "anyOf": [
-              {
-                "maximum": 65535,
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "The port on the machine. Needed only for host-network containers. Published ports are read from the running container.",
-            "title": "Answers on port"
-          }
-        },
-        "required": [
-          "connection_ref",
-          "host",
-          "name",
-          "compose"
-        ],
-        "type": "object"
-      },
       "PresencePart": {
         "additionalProperties": false,
         "properties": {
@@ -16237,9 +16574,6 @@
             "default": "",
             "format": "textarea"
           },
-          "idempotency_key": {
-            "$ref": "#/components/schemas/IdempotencyKey"
-          },
           "name": {
             "$ref": "#/components/schemas/ProjectName",
             "maxLength": 160,
@@ -16355,11 +16689,7 @@
           "payload": {
             "additionalProperties": false,
             "description": "A run of every opted-in repository now.",
-            "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              }
-            },
+            "properties": {},
             "type": "object"
           }
         },
@@ -16379,9 +16709,6 @@
             "properties": {
               "dependency_updates": {
                 "$ref": "#/components/schemas/DependencyUpdates"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               }
             },
             "required": [
@@ -16526,11 +16853,7 @@
           "payload": {
             "additionalProperties": false,
             "description": "What is acted on is the target; there is nothing else to say.",
-            "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              }
-            },
+            "properties": {},
             "type": "object"
           },
           "target": {
@@ -16731,9 +17054,6 @@
               "description": {
                 "$ref": "#/components/schemas/ProjectDescription",
                 "format": "textarea"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "name": {
                 "$ref": "#/components/schemas/ProjectName",
@@ -17609,9 +17929,6 @@
                 ],
                 "description": "The date on the receipt."
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
                 "format": "textarea"
@@ -17687,6 +18004,39 @@
         ],
         "type": "object"
       },
+      "RecordProblem": {
+        "additionalProperties": false,
+        "description": "One record of a document HQ refused, and why.",
+        "properties": {
+          "doc_id": {
+            "description": "The doc it is, for a vault sync.",
+            "type": "string"
+          },
+          "errors": {
+            "description": "Each problem the record has.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "index": {
+            "description": "Its place among the records of its kind, from 0.",
+            "type": "integer"
+          },
+          "kind": {
+            "description": "The kind of record it is.",
+            "type": "string"
+          },
+          "slug": {
+            "description": "The slug it names.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "errors"
+        ],
+        "type": "object"
+      },
       "RecordSlug": {
         "description": "Its address in HQ, unique among records of its type: what its page and its links name it by.",
         "type": "string"
@@ -17703,11 +18053,132 @@
         "type": "string"
       },
       "RefusalDetails": {
-        "description": "What gets past the refusal, where something does: `next`, the call that finds what was missing; `closest`, the read of each record or list named nearest the one asked for; `field`, the argument to send; `scope`, the permission to grant the token's client; for `invalid_input`, each field that was wrong and why, which a list or record read puts under `errors`, beside the `filters` its list takes."
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/RefusalPointers",
+            "title": "Refusal pointers"
+          },
+          {
+            "description": "For `invalid_input`, each field that was wrong and why.",
+            "items": {
+              "$ref": "#/components/schemas/InputProblem"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "For `invalid_input` or `not_found`, each field a record refused, with its error codes.",
+            "type": "object"
+          },
+          {
+            "description": "Each record of a document refused.",
+            "items": {
+              "$ref": "#/components/schemas/RecordProblem"
+            },
+            "type": "array"
+          }
+        ],
+        "description": "What gets past the refusal, where something does.",
+        "title": "Refusal details"
       },
       "RefusalMessage": {
         "description": "HQ's sentence for the refusal, naming no value the request carried.",
         "type": "string"
+      },
+      "RefusalPointers": {
+        "description": "What gets past a refusal, each part where the refusal has it: `next`\nis the call that finds what was missing, `holding` the run in the way,\n`operation` the one the refused change asked for, and `admits` what the\nplaybook refused is written for.",
+        "properties": {
+          "admits": {
+            "$ref": "#/components/schemas/PlaybookAdmits"
+          },
+          "closest": {
+            "description": "The read of each record or list named nearest the one asked for.",
+            "items": {
+              "$ref": "#/components/schemas/NextCall"
+            },
+            "type": "array"
+          },
+          "errors": {
+            "description": "Each field of a list or record read that was wrong.",
+            "items": {
+              "$ref": "#/components/schemas/InputProblem"
+            },
+            "type": "array"
+          },
+          "field": {
+            "description": "The argument to send.",
+            "type": "string"
+          },
+          "filters": {
+            "description": "What the resource's list narrows by.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "holding": {
+            "$ref": "#/components/schemas/OperationItem"
+          },
+          "identifier": {
+            "description": "The field the resource's records are addressed by.",
+            "type": "string"
+          },
+          "machines": {
+            "description": "The machines the run in the way is on.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "missing": {
+            "description": "Each machine the runner has no connection to.",
+            "items": {
+              "$ref": "#/components/schemas/MissingConnection"
+            },
+            "type": "array"
+          },
+          "next": {
+            "$ref": "#/components/schemas/NextCall"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/OperationItem"
+          },
+          "playbook": {
+            "description": "The playbook of the run in the way.",
+            "type": "string"
+          },
+          "refused": {
+            "description": "Each machine, or each reason, refused.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "description": "The permission to grant the token's client.",
+            "type": "string"
+          },
+          "shared": {
+            "description": "The machines asked for that the run in the way holds.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unknown": {
+            "description": "Each host named that is no machine HQ knows.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       },
       "RefusedPart": {
         "additionalProperties": false,
@@ -19634,7 +20105,6 @@
           "portainer.image",
           "portainer.network",
           "portainer.runtime",
-          "portainer.stack",
           "portainer.volume",
           "registry.address",
           "registry.digest",
@@ -19701,7 +20171,6 @@
           "portainer.image": "Docker image",
           "portainer.network": "Docker network",
           "portainer.runtime": "Container settings",
-          "portainer.stack": "Container stack",
           "portainer.volume": "Volumes and mounts",
           "registry.address": "Address owner",
           "registry.digest": "Image signatures",
@@ -20528,7 +20997,14 @@
             "type": "string"
           },
           "observed_at": {
-            "$ref": "#/components/schemas/ObservedAt",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObservedAt"
+              },
+              {
+                "$ref": "#/components/schemas/NotRead"
+              }
+            ],
             "default": ""
           },
           "source": {
@@ -20643,7 +21119,14 @@
             "type": "string"
           },
           "observed_at": {
-            "$ref": "#/components/schemas/ObservedAt",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObservedAt"
+              },
+              {
+                "$ref": "#/components/schemas/NotRead"
+              }
+            ],
             "default": ""
           },
           "observed_revision": {
@@ -21517,9 +22000,6 @@
             "additionalProperties": false,
             "description": "The page that was opened: what it is about, and which one.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "name": {
                 "description": "Which one.",
                 "type": "string"
@@ -22523,6 +23003,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getRunsV2": {
                 "operationId": "getRunsV2",
@@ -26779,7 +27264,12 @@
             }
           },
           {
-            "$ref": "#/components/parameters/IdempotencyKey"
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/IdempotencyKey"
+            }
           }
         ],
         "requestBody": {
@@ -27278,6 +27768,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "listActionItemsV2": {
                 "operationId": "listActionItemsV2",
@@ -27521,6 +28016,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "assetDeleteV2": {
                 "operationId": "assetDeleteV2",
@@ -27615,6 +28115,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "assetDeleteV2": {
                 "operationId": "assetDeleteV2",
@@ -27723,6 +28228,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "listCalendarV2": {
                 "operationId": "listCalendarV2",
@@ -27797,6 +28307,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "calendarEntryDeleteV2": {
                 "operationId": "calendarEntryDeleteV2",
@@ -27873,6 +28388,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getConnectionsV2": {
                 "operationId": "getConnectionsV2",
@@ -28032,6 +28552,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "contactSubmissionDeleteV2": {
                 "operationId": "contactSubmissionDeleteV2",
@@ -28124,6 +28649,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "contactSubmissionDeleteV2": {
                 "operationId": "contactSubmissionDeleteV2",
@@ -28204,6 +28734,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getContainersV2": {
                 "operationId": "getContainersV2",
@@ -28360,6 +28895,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "contentDeleteV2": {
                 "operationId": "contentDeleteV2",
@@ -28454,6 +28994,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "contentDeleteV2": {
                 "operationId": "contentDeleteV2",
@@ -28530,6 +29075,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getCredentialsV2": {
                 "operationId": "getCredentialsV2",
@@ -28679,6 +29229,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "documentationDeleteV2": {
                 "operationId": "documentationDeleteV2",
@@ -28773,6 +29328,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "documentationDeleteV2": {
                 "operationId": "documentationDeleteV2",
@@ -28855,6 +29415,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getDomainsV2": {
                 "operationId": "getDomainsV2",
@@ -29082,6 +29647,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "listExpensesV2": {
                 "operationId": "listExpensesV2",
@@ -29199,7 +29769,7 @@
             "required": false,
             "schema": {
               "maxLength": 2000,
-              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|portainer\\.stack|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|portainer\\.stack|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
+              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
               "type": "string"
             },
             "style": "form"
@@ -29216,7 +29786,6 @@
                 "tls.uploaded_certificate",
                 "npm.proxy_host",
                 "github.delivery",
-                "portainer.stack",
                 "portainer.container",
                 "tailscale.device",
                 "tailscale.policy",
@@ -29256,6 +29825,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "certificateRenewV2": {
                 "description": "Only for a record whose `kind` is `tls.certificate`.",
@@ -29475,6 +30049,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getMachinesV2": {
                 "operationId": "getMachinesV2",
@@ -29606,6 +30185,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getPlaybookScansV2": {
                 "operationId": "getPlaybookScansV2",
@@ -29729,6 +30313,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getPlaybooksV2": {
                 "operationId": "getPlaybooksV2",
@@ -29891,6 +30480,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getProjectsV2": {
                 "operationId": "getProjectsV2",
@@ -29999,6 +30593,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "projectDeleteV2": {
                 "operationId": "projectDeleteV2",
@@ -30121,6 +30720,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getReadingsV2": {
                 "operationId": "getReadingsV2",
@@ -30271,6 +30875,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "listReceiptsV2": {
                 "operationId": "listReceiptsV2",
@@ -30513,6 +31122,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getRunsV2": {
                 "operationId": "getRunsV2",
@@ -30772,6 +31386,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getServicesV2": {
                 "operationId": "getServicesV2",
@@ -30953,6 +31572,11 @@
               }
             },
             "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
             "links": {
               "getUpgradesV2": {
                 "operationId": "getUpgradesV2",

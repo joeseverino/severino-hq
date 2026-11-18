@@ -1,8 +1,12 @@
 #!/bin/sh
-#MISE description="Install the lint tools tools/lint pins: axe-core, ESLint, Redocly, Stylelint"
+#MISE description="Install the lint tools tools/lint pins: axe-core, ESLint, Redocly, Stylelint, and the grammars Vale reads code with"
 #MISE hide=true
-#MISE sources=["tools/lint/package-lock.json"]
-#MISE outputs=["tools/lint/node_modules/.package-lock.json"]
+#MISE sources=["tools/lint/package-lock.json", "tools/lint/vale/.vale.ini", "mise.lock"]
+#MISE outputs=["tools/lint/node_modules/.package-lock.json", "tools/lint/vale/styles/config/grammars/go.wasm"]
 set -eu
 
 npm --prefix tools/lint ci
+# Each grammar the sections of .vale.ini imply, from the release of the Vale
+# mise.lock pins. Without one, Vale reads that language's files by comment
+# delimiters alone, and a view (styles/config/views) matches nothing.
+vale --config=tools/lint/vale/.vale.ini sync

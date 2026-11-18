@@ -1,0 +1,19 @@
+id: query-added-by-with-query
+valid:
+  - 'url = with_query(reverse("jobs:list"), {"host": name})'
+  - 'url = with_query(base, {"lens": name}, fragment="map")'
+  - 'said = f"Delete {name}?"'
+  - 'pattern = rf"(?:{scheme})?{host}"'
+  - 'body = urlencode({"grant_type": "client_credentials"})'
+  - 'path = urlunsplit(("", "", parts.path, parts.query, ""))'
+  - 'escaped = f"{{owner}}?{{repo}}"'
+invalid:
+  - 'url = f"{base}?{urlencode({''lens'': name})}"'
+  - 'url = f"{base}?{query}"'
+  - 'url = f"{list_url}?status={status}"'
+  - 'url = f"?month={month}"'
+  - 'url = f"{list_url}?category={category}&year={year}"'
+  - 'url = reverse("x") + "?" + urlencode(query)'
+  - 'url = f"{request.path}?{asked.urlencode()}#row"'
+  - 'separator = "&" if "?" in url else "?"'
+  - 'url = f"{url}{''&'' if ''?'' in url else ''?''}{urlencode(query)}"'

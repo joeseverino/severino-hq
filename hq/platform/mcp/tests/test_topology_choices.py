@@ -1,7 +1,5 @@
 """get_topology names the lenses and trace directions a model may ask by, from
-where they are declared, and refuses any other before it derives the graph."""
-
-from unittest import mock
+where they are declared; test_one_refusal_each_door refuses any other."""
 
 from django.test import TestCase
 
@@ -23,19 +21,6 @@ class TopologyChoicesTests(TestCase):
 
         self.assertEqual(_enum(properties, "lens"), [lens.name for lens in TOPOLOGY_LENSES])
         self.assertEqual(_enum(properties, "direction"), list(TRACE_DIRECTIONS))
-
-    def test_a_lens_or_direction_none_declares_is_refused_before_the_graph_is_derived(self):
-        with mock.patch("hq.platform.application.topology.derive_topology") as derived:
-            _, answers = session(
-                ("get_topology", {"lens": "example-unknown"}),
-                ("get_topology", {"focus": "resource:example", "direction": "sideways"}),
-            )
-
-        for answer in answers:
-            with self.subTest(answer=answer):
-                self.assertTrue(answer.is_error)
-                self.assertEqual(answer.structured_content["error"]["code"], "invalid_input")
-        derived.assert_not_called()
 
     def test_no_lens_answers_the_counts_and_the_lenses(self):
         _, (answer,) = session(("get_topology", {}))

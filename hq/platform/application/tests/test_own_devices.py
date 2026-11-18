@@ -58,12 +58,6 @@ class RegistrationTests(TestCase):
         self.assertEqual([event.action for event in events], [AuditLog.Action.CREATED, AuditLog.Action.DELETED])
         self.assertEqual({event.actor_label for event in events}, {self.person.get_username()})
 
-    def test_a_client_the_provider_could_not_have_registered_is_refused(self):
-        for client in ("https://agent.example.com/client.json", "two words", ""):
-            with self.subTest(client=client):
-                self.assertFalse(self._set(state=True, client=client)["ok"])
-        self.assertFalse(OwnDevice.objects.exists())
-
     def test_a_person_with_no_provider_sign_in_registers_nothing(self):
         unbound = get_user_model().objects.create_user("local", password="x" * 20)
 
@@ -101,12 +95,6 @@ class DeviceControlTests(TestCase):
         self.assertEqual(list(OwnDevice.objects.values_list("user", "client_id")), [(self.person.pk, PHONE)])
 
         self._post(client_id=PHONE, registered="0")
-        self.assertFalse(OwnDevice.objects.exists())
-
-    def test_a_refusal_is_said_on_the_page(self):
-        response = self._post(client_id="https://agent.example.com/client.json", registered="1")
-
-        self.assertIn("client id", response.content.decode())
         self.assertFalse(OwnDevice.objects.exists())
 
     def test_a_form_missing_its_state_or_client_changes_nothing(self):

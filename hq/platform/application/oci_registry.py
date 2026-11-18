@@ -17,6 +17,7 @@ import httpx2
 from .http_read import UNREACHABLE, fetch
 from .images import DOCKER_HUB, ImageRef
 from .reach import public_host
+from .url_query import with_query
 lazy from .entity_links import https_url
 
 TIMEOUT_SECONDS = 10
@@ -62,7 +63,7 @@ def tags(image: ImageRef) -> list[str]:
     """Every tag the registry lists for ``image``'s repository."""
 
     host = _API_HOST.get(image.registry, image.registry)
-    path = f"/v2/{image.repository}/tags/list?n={PAGE_SIZE}"
+    path = with_query(f"/v2/{image.repository}/tags/list", {"n": PAGE_SIZE})
     token = ""
     found: list[str] = []
     for _page in range(MAX_PAGES):
@@ -250,7 +251,7 @@ def _anonymous_token(challenge: str, image: ImageRef) -> str:
     if not https_url(realm):
         raise RegistryReadError(f"{image.name}: the registry offers no anonymous access.")
     query = {"service": fields.get("service", ""), "scope": f"repository:{image.repository}:pull"}
-    url = f"{realm}?{urllib.parse.urlencode({key: value for key, value in query.items() if value})}"
+    url = with_query(realm, {key: value for key, value in query.items() if value})
     response, raw = _request(url, "")
     if not response.is_success:
         raise RegistryPrivate(

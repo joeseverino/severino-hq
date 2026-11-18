@@ -18,12 +18,12 @@ snapshots:
       style: secondary
       start: 28
       end: 69
-  "<tr><td>{% button \"A\" \"/a/\" post=True %}</td></tr>":
+  "<tr><td>{% button \"A\" offer=press %}</td></tr>":
     labels:
-    - source: <td>{% button "A" "/a/" post=True %}</td>
+    - source: <td>{% button "A" offer=press %}</td>
       style: primary
       start: 4
-      end: 45
+      end: 41
     - source: td
       style: secondary
       start: 5
@@ -32,16 +32,16 @@ snapshots:
       style: secondary
       start: 4
       end: 8
-    - source: "{% button \"A\" \"/a/\" post=True %}"
+    - source: "{% button \"A\" offer=press %}"
       style: secondary
       start: 8
-      end: 40
-  "<tr><td>{% button \"A\" \"/a/\" post=True look=\"danger\" %}</td></tr>":
+      end: 36
+  "<tr><td>{% button \"A\" offer=press look=\"danger\" %}</td></tr>":
     labels:
-    - source: <td>{% button "A" "/a/" post=True look="danger" %}</td>
+    - source: <td>{% button "A" offer=press look="danger" %}</td>
       style: primary
       start: 4
-      end: 59
+      end: 55
     - source: td
       style: secondary
       start: 5
@@ -50,7 +50,25 @@ snapshots:
       style: secondary
       start: 4
       end: 8
-    - source: "{% button \"A\" \"/a/\" post=True look=\"danger\" %}"
+    - source: "{% button \"A\" offer=press look=\"danger\" %}"
       style: secondary
       start: 8
-      end: 54
+      end: 50
+  "<tr><td>{% button \"A\" offer=press look=\"glyphs\" %}</td></tr>":
+    labels:
+    - source: <td>{% button "A" offer=press look="glyphs" %}</td>
+      style: primary
+      start: 4
+      end: 55
+    - source: td
+      style: secondary
+      start: 5
+      end: 7
+    - source: <td>
+      style: secondary
+      start: 4
+      end: 8
+    - source: "{% button \"A\" offer=press look=\"glyphs\" %}"
+      style: secondary
+      start: 8
+      end: 50

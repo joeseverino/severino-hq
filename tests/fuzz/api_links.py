@@ -30,7 +30,6 @@ from hq.domains.projects.models import Project
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.held_answer import HELD
 from hq.platform.application.integration_specs import (
-    IDEMPOTENCY_FIELD,
     IDEMPOTENCY_HEADER,
     PAGE_FIELD,
     STALE_WRITE_KEYWORD,
@@ -202,11 +201,9 @@ class APILinkTests(InProcessAPITestCase):
                     self.scenario.__exit__(None, None, None)
 
                 def before_call(self, case: Any) -> None:
-                    # A new key for each change, the payload's own where it names one, as a client sends it.
-                    payload = case.body.get("payload") if isinstance(case.body, dict) else None
-                    if case.method.upper() == "POST" and isinstance(payload, dict):
-                        key = payload.get(IDEMPOTENCY_FIELD) or uuid.uuid4().hex
-                        case.headers = {**(case.headers or {}), IDEMPOTENCY_HEADER: key}
+                    # A new key for each change, as a client sends it: the walk keeps what each step wrote.
+                    if case.method.upper() == "POST":
+                        case.headers = {**(case.headers or {}), IDEMPOTENCY_HEADER: uuid.uuid4().hex}
 
                 def get_call_kwargs(self, case: Any) -> dict[str, Any]:
                     return {"headers": headers, "environ_overrides": LOOPBACK}

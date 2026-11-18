@@ -7,7 +7,7 @@ from pydantic import Field, create_model
 from hq.platform.application import projects
 from hq.platform.application.answer_fields import LinkedContent, LinkedDocs, LinkedExpenses, RecordSlug, UpdatedAt
 from hq.platform.application.describe import Describe
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.record_fields import PublishedUrl
 from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
 from hq.platform.application.search_contracts import SearchDefinition
@@ -97,10 +97,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Projects",
             "Projects and their safe cross-domain relationships.",
             Capability.READ,
-            projects.list_projects,
-            ProjectQuery,
-            projects.get_project,
-            "slug",
+            listing=ListRead(projects.list_projects, ProjectQuery, ProjectRow),
+            detail_handler=projects.get_project,
+            identifier="slug",
             search=SearchDefinition(
                 "projects",
                 Project,
@@ -110,7 +109,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="name",
             ),
             web_route="projects:list",
-            item_type=ProjectRow,
             record_type=ProjectRecord,
         ),
     )

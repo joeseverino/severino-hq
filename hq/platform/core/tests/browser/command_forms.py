@@ -14,6 +14,7 @@ from hq.domains.projects.models import Project
 from hq.platform.application.action_links import command_url
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.projects import DEPENDENCY_UPDATES
+from hq.platform.core.tests.browser.fragments import offer_of
 from hq.platform.core.tests.browser.gate import BrowserGate, answered
 from hq.platform.core.tests.browser.probes.settle import PAINTED
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -39,7 +40,7 @@ _SETTINGS = (
     "{% for row in rows %}<tr><td>Example account {{ row }}</td>"
     '<td><select name="group-{{ row }}" aria-label="Group"><option>No example group</option>'
     "<option>Example</option></select></td>"
-    '<td>{% button "Remove" "/example/remove/" post=True %}</td></tr>{% endfor %}'
+    '<td>{% button "Remove" offer=remove %}</td></tr>{% endfor %}'
     "</tbody></table>{% endtable_region %}"
     '{% include "partials/_form_actions.html" with verb="Save changes" bar=True only %}'
     "</form>{% endsection %}<p data-after>An example line after the settings.</p>"
@@ -112,7 +113,7 @@ class CommandFormBrowserTests(BrowserGate):
             # Where a command's post lands: a page of HQ's, which takes part
             # in the fade between pages as every page of HQ's does.
             "example/done": _page("Done", title="Done"),
-            "example/settings": _page(_SETTINGS, rows=range(1, 25)),
+            "example/settings": _page(_SETTINGS, rows=range(1, 25), remove=offer_of("/example/remove/")),
         }
 
     @override

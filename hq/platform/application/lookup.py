@@ -44,7 +44,9 @@ RECORD_TYPES = ("A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "CAA")
 
 LOOK_UP_NAME = "lookup.name.read"
 LOOK_UP_ADDRESS = "lookup.address.read"
-# Its mode where an address is shown with what HQ holds of it: read it again.
+# Its modes where an address is shown: looked up for the first time, and
+# read again beside what HQ holds of it.
+FIRST = "first"
 AGAIN = "again"
 
 

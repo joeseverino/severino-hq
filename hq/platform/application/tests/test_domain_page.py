@@ -8,7 +8,7 @@ from django.test import SimpleTestCase
 from hq.domains.control_plane.zone_views import _page_relationships, _records_lede
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.infrastructure import ResourceState
-from hq.platform.application.markup_testing import elements, select, text, texts
+from hq.platform.application.markup_testing import elements, select, text, texts, with_class
 from hq.platform.application.relationships import Relationships
 from hq.platform.application.topology_model import RelationGroup, Relationship
 from hq.platform.application.zones import Zone, ZoneRecord
@@ -158,5 +158,5 @@ class RecordTableTests(SimpleTestCase):
         rows = found.routing + found.policy
         html = self.table(*rows)
 
-        said = {row.words for row in elements(html, "span") if "narrow-only" in row.classes}
+        said = {row.words for row in with_class(html, "narrow-only")}
         self.assertEqual(said, {"10 mx1.example.net", "20 mx2.example.net"})

@@ -9,7 +9,7 @@ from django.views.generic import TemplateView, View
 
 from hq.platform.application import action_items as queue_state, fragments
 from hq.platform.application.dashboard import readable_queue, waiting
-from hq.platform.application.pages import PageMixin
+from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.tone import Tone
@@ -43,15 +43,11 @@ class ActionItemsView(PageMixin, TemplateView):
     template_name = "action_items.html"
     page_title = "Needs you"
 
-    def _aside_all_url(self, part: str) -> str:
+    def _dismiss_all(self, part: str) -> PageAction | None:
         # The filters travel in the URL, so "all" means all that are shown, of
         # the part of the queue the button stands over.
-        shown = self.request.GET.copy()
-        for name in list(shown):
-            if name not in ACTION_ITEM_FILTERS:
-                del shown[name]
-        shown["part"] = part
-        return f"{reverse('action_items_set_aside')}?{shown.urlencode()}"
+        shown = {name: self.request.GET[name] for name in ACTION_ITEM_FILTERS if name in self.request.GET}
+        return PageAction.command(queue_state.SET_ASIDE, variant=queue_state.ALL, query={**shown, "part": part})
 
     @override
     def get_context_data(self, **kwargs):
@@ -64,8 +60,8 @@ class ActionItemsView(PageMixin, TemplateView):
         query = self.request.GET.get("q", "").strip()
         about = self.request.GET.get("about", "").strip()
         context.update(
-            aside_all_url=self._aside_all_url("doing"),
-            notices_aside_url=self._aside_all_url("told"),
+            dismiss_all=self._dismiss_all("doing"),
+            dismiss_notices=self._dismiss_all("told"),
             action_groups=queue_state.by_source(doing),
             action_item_total=len(doing),
             notice_groups=queue_state.by_source(told),

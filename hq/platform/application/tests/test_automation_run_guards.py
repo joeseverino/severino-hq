@@ -9,8 +9,8 @@ left to the guard itself.
 
 from unittest.mock import patch
 
-from hq.platform.api.tests import test_unkeyed_writes
 from hq.platform.core.tests import test_command_pages
+from hq.platform.mcp.tests import test_unkeyed_writes
 
 from . import test_capability_verbs, test_command_descriptions, test_command_forms
 from .procedures import Supply, manifest
@@ -66,7 +66,6 @@ RunCapabilityCommandFormTests = walked(
 RunUnkeyedWriteTests = walked(
     test_unkeyed_writes.UnkeyedWriteTests,
     test_unkeyed_writes,
-    "test_every_change_through_the_api_without_its_header_is_refused",
     "test_every_change_through_mcp_without_a_key_is_refused",
 )
 RunEveryCommandPageTests = walked(

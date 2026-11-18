@@ -159,7 +159,7 @@ class SectionPart:
                     (
                         "section",
                         "section-fold" if self.fold else "",
-                        f"section-edge toned-{self.edge}" if self.edge else "",
+                        f"section-edge tone-{self.edge}" if self.edge else "",
                         self.css,
                     ),
                 )

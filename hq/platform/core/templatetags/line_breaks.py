@@ -31,6 +31,10 @@ _SEAM = '<span class="seam"></span>'
 # a browser breaks after a hyphen, and a name split there reads as two. A flag
 # ("-a") has nothing before its hyphen to break from.
 _INNER_HYPHEN = re.compile(r"[^-\s]-")
+# A name joined by an underscore ("infrastructure_change") is an identifier,
+# however short, with no place a browser breaks it: held as a hyphenated part
+# is, a cell cuts it rather than widen its column to its length.
+_INNER_UNDERSCORE = re.compile(r"[^\W_]_+[^\W_]")
 # A run longer than any word of a sentence (a digest, a key, a subject) has no
 # seam to wrap at, so it is held on one line as a hyphenated part is: a cell
 # cuts it at its edge rather than widening its column to fit it.
@@ -120,10 +124,10 @@ def _held(group: list[str], *, first: bool, last: bool) -> str:
 
 
 def _kept(part: str) -> bool:
-    """Whether a part is held on one line: a hyphen inside it, or a run too
-    long to be a word."""
+    """Whether a part is held on one line: a hyphen or an underscore inside
+    it, or a run too long to be a word."""
 
-    return bool(_INNER_HYPHEN.search(part)) or len(unescape(part)) > _UNBROKEN
+    return bool(_INNER_HYPHEN.search(part) or _INNER_UNDERSCORE.search(part)) or len(unescape(part)) > _UNBROKEN
 
 
 def _whole(part: str, *, boxed: bool = False) -> str:
@@ -283,10 +287,10 @@ def _line(value, *, sole: bool | None = None) -> list[str]:
 # it ("12" above "days"): a word of letters, perhaps hyphenated ("sign-ins")
 # or per another ("m/s"), or a percent sign, with the sentence's mark after it.
 _UNIT = re.compile(r"(?:[^\W\d_]+(?:-[^\W\d_]+)*(?:/[^\W\d_]+)?|%)[.,;:!?)]*")
-# A separator standing between two words ("+0.01 m / 90 days", "Spec › Hosts"),
-# which a line never opens on or holds alone: the separators the survey reads
-# as a stray.
-_SEPARATOR = re.compile(r"[·•|/›\u2013\u2014]")
+# A word of marks alone: a separator standing between two words ("+0.01 m / 90
+# days", "Spec › Hosts") or a wildcard ("ip *"), which a line never opens on or
+# holds alone, as the survey reads a stray.
+_MARKS = re.compile(r"[\W_]+")
 
 
 def _figure(word: str) -> bool:
@@ -297,11 +301,11 @@ def _figure(word: str) -> bool:
 
 def _held_back(words: list[str], at: int) -> bool:
     """Whether the word at ``at`` stays on the line of the word before it: the
-    unit or counted word after a figure, as typesetting sets them, or a
-    separator."""
+    unit or counted word after a figure, as typesetting sets them, or a word
+    of marks alone."""
 
     word = unescape(words[at])
-    return bool(_SEPARATOR.fullmatch(word) or (_figure(words[at - 2]) and _UNIT.fullmatch(word)))
+    return bool(_MARKS.fullmatch(word) or (_figure(words[at - 2]) and _UNIT.fullmatch(word)))
 
 
 def _held_places(words: list[str]) -> list[int]:

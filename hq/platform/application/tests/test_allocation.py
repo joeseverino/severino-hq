@@ -63,9 +63,11 @@ class AllocationTests(SimpleTestCase):
         for (words, _), said in zip(links(html), (("$30.00", "Cash", "30%"), ("-$70.00", "Owed", "70%")), strict=True):
             for part in said:
                 self.assertIn(part, words.split())
-        swatches = [i.attrs["class"] for i in elements(html, "i")]
-        self.assertEqual(swatches, [f"chart-series-{rect['slot']}" for rect in bar.drawn])
-        (owed,) = [span for span in within(html, "data-allocation-legend") if "toned-attention" in span.classes]
+        swatches = [
+            name for i in elements(html, "i") for name in i.attrs["class"].split() if name.startswith("series-")
+        ]
+        self.assertEqual(swatches, [f"series-{rect['slot']}" for rect in bar.drawn])
+        (owed,) = [span for span in within(html, "data-allocation-legend") if "tone-attention" in span.classes]
         self.assertEqual(owed.words, "-$70.00")
 
     def test_a_legend_part_with_no_link_or_amount_still_reads_its_share(self):

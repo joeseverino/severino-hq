@@ -179,6 +179,7 @@ class ResourceRemoveView(View):
         resource = get_object_or_404(ManagedResource, key=key)
         capabilities = resource_capabilities(resource)
         forget = capabilities.removal == "forget"
+        removal = PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant, confirms=True)
         return render(
             request,
             self.template_name,
@@ -195,10 +196,10 @@ class ResourceRemoveView(View):
                 "spec_rows": _spec_rows(resource),
                 "forget": forget,
                 "holds_records": bool(PROVIDERS[resource.kind].contains),
-                "removal_reason": RemovalReasonForm(),
+                # The reason travels with the press, so it is asked only beside it.
+                "removal_reason": RemovalReasonForm() if removal is not None else None,
                 "confirm": {
-                    "url": request.path,
-                    "label": capabilities.removal_words,
+                    "action": removal,
                     "cancel_url": resource.get_absolute_url(),
                 },
                 **page_context(
@@ -529,8 +530,9 @@ class OperationView(View):
                 # The unit that runs it, which the verb goes through.
                 "supervision": supervision(resource),
                 "confirm": {
-                    "url": request.get_full_path(),
-                    "label": label,
+                    "action": PageAction.command(
+                        ACTION_CAPABILITY[self.action], key, query=request.GET.dict(), confirms=True
+                    ),
                     "cancel_url": safe_next(request, fallback=resource.get_absolute_url()),
                 },
                 **page_context(f"{label}?", kind_label(resource.kind)),

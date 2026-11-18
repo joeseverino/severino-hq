@@ -1,8 +1,7 @@
 """Dashboard + audit-log views."""
 
 import re
-from typing import ClassVar, override
-from urllib.parse import quote, urlencode
+from typing import Any, ClassVar, override
 lazy from datetime import timedelta
 
 from django.conf import settings
@@ -15,7 +14,14 @@ from django.utils.text import capfirst
 from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
-from hq.platform.application import agent_activity, agent_devices, capability_policy, fragments, history
+from hq.platform.application import (
+    agent_access,
+    agent_activity,
+    agent_devices,
+    capability_policy,
+    fragments,
+    history,
+)
 from hq.platform.application.agent_access import REMOVE_AGENT, SET_AGENT_ACCESS, SET_AGENT_BLOCK
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.appearance import SET_THEME
@@ -26,17 +32,18 @@ from hq.platform.application.demo import DEMO_SESSION_KEY, SET_DEMO
 from hq.platform.application.denials import COALESCE_WINDOW, LABEL as DENIAL_LABEL
 from hq.platform.application.moments import moment
 from hq.platform.application.own_devices import SET_OWN_DEVICE, devices_of
-from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.pages import PageAction, PageMixin, runs_here
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.search import global_search
 from hq.platform.application.security import Capability, agent_grantable, safe_next, web_principal
 from hq.platform.application.ui import PageNavigation, PageSection, counted
+from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused, run_posted
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
 lazy from hq.platform.application.connection_catalog import connection_catalog
 lazy from hq.platform.application.hq_context import hq_context
-lazy from hq.platform.application.lookup import AGAIN, LOOK_UP_ADDRESS, stored_address
+lazy from hq.platform.application.lookup import AGAIN, FIRST, LOOK_UP_ADDRESS, stored_address
 lazy from hq.platform.application.posture import estate_posture
 lazy from hq.platform.application.request_path import request_path
 lazy from hq.platform.application.visit_refresh import worth_asking
@@ -82,7 +89,7 @@ class ThrottledLoginView(LoginView):
             # notice that it does not.
             nxt = safe_next(request)
             if nxt:
-                return redirect(f"{target}?next={quote(nxt)}")
+                return redirect(with_query(target, {"next": nxt}))
             return redirect(target)
         return super().get(request, *args, **kwargs)
 
@@ -231,6 +238,14 @@ def _offered(*actions: PageAction | None) -> tuple[PageAction, ...]:
     return tuple(action for action in actions if action is not None)
 
 
+def access_action(paused: bool) -> PageAction | None:
+    """The one control that pauses every agent, or resumes them while paused."""
+
+    if paused:
+        return PageAction.command(SET_AGENT_ACCESS, variant="off", field="paused", value="0", primary=True)
+    return PageAction.command(SET_AGENT_ACCESS, variant="on", field="paused", value="1")
+
+
 def agent_actions(standing: agent_activity.AgentStanding, here: str) -> tuple[PageAction, ...]:
     """What may be done to one agent from its row: let it back in, or block or
     remove it. Removal never lifts a block, so a blocked agent offers only that."""
@@ -332,6 +347,9 @@ class AgentPolicyView(PageMixin, TemplateView):
             if part:
                 return context
         context.update(self._rules())
+        # The rules are drawn as a form only for whoever may save them, and
+        # read as they hold for anyone else.
+        context["rules_settable"] = runs_here(capability_policy.SET_POLICY)
         context["every_read"] = part == self.EVERY_PART or "all" in self.request.GET
         if part == self.EVERY_PART:
             return context
@@ -364,8 +382,11 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["client_setup"] = agent_activity.CLIENT_SETUP
         context["placement"] = agent_devices.placement_posture()
         context["devices"] = [(device, own_device_actions(device, here)) for device in devices_of(self.request.user)]
-        context["device_form"] = OwnDeviceForm()
-        context.setdefault("form", PolicyForm())
+        context["access_action"] = access_action(agent_access.agents_paused())
+        if runs_here(SET_OWN_DEVICE):
+            context["device_form"] = OwnDeviceForm()
+        if context["rules_settable"]:
+            context.setdefault("form", PolicyForm())
         context["awaiting_count"] = len(awaiting_ids())
         context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
         return context
@@ -496,7 +517,7 @@ class SearchView(PageMixin, TemplateView):
 
         # An audit entry has no page of its own: its row opens the log at the
         # same search.
-        audit = f"{reverse('core:audit_list')}?{urlencode({'q': q})}"
+        audit = with_query(reverse("core:audit_list"), {"q": q})
         sections = [
             {
                 "id": f"scope-{SCOPE_ID.sub('-', group['scope'].lower()).strip('-')}",
@@ -530,7 +551,7 @@ class SearchView(PageMixin, TemplateView):
                         for item in contacts
                     ],
                     "more_label": "Search messages",
-                    "more_url": f"{reverse('contacts:list')}?{urlencode({'q': q})}",
+                    "more_url": with_query(reverse("contacts:list"), {"q": q}),
                 }
             )
         return sections
@@ -691,6 +712,13 @@ ADDRESS_DENIALS = RowCap(
 )
 
 
+def lookup_action(address: str, reading: Any) -> dict[str, PageAction | None]:
+    """The fragment's press that looks ``address`` up, or again beside its ``reading``."""
+
+    mode = AGAIN if reading else FIRST
+    return {"lookup": PageAction.command(LOOK_UP_ADDRESS, variant=mode, field="address", value=address)}
+
+
 class PublicAddressView(View):
     """What the public internet says about one address, as a fragment.
 
@@ -699,7 +727,7 @@ class PublicAddressView(View):
     """
 
     template_name = "core/_public_address.html"
-    runs = ((LOOK_UP_ADDRESS, AGAIN),)
+    runs = ((LOOK_UP_ADDRESS, FIRST), (LOOK_UP_ADDRESS, AGAIN))
 
     def get(self, request):
         address = request.GET.get("address", "")
@@ -710,7 +738,7 @@ class PublicAddressView(View):
         except Exception as error:  # noqa: BLE001 - every failure is said in the one refusal shape, a denial recorded
             recorded = principal if ADDRESS_DENIALS.admits(actor=principal.actor, capability=LOOK_UP_ADDRESS) else None
             context["failure"] = refusal_of(error, name=LOOK_UP_ADDRESS, principal=recorded).message
-        return render(request, self.template_name, context)
+        return render(request, self.template_name, context | lookup_action(address, context["reading"]))
 
     def post(self, request):
         if request.headers.get("X-Requested-With") != "XMLHttpRequest":
@@ -720,4 +748,4 @@ class PublicAddressView(View):
         context = {"address": address, "reading": result if result["ok"] else None}
         if not result["ok"]:
             context["failure"] = refusal_of(result).message
-        return render(request, self.template_name, context)
+        return render(request, self.template_name, context | lookup_action(address, context["reading"]))

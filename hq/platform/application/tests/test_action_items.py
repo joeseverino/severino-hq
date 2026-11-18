@@ -282,7 +282,7 @@ class PageTests(TestCase):
             )
             self.assertContains(page, "data-queue-family", count=1)
 
-            self.client.post(f"{page.context['aside_all_url']}&family={group['entries'][0]['id']}", form_keyed())
+            self.client.post(f"{page.context['dismiss_all'].url}&family={group['entries'][0]['id']}", form_keyed())
             page = self.client.get(reverse("action_items"))
 
         self.assertEqual(self.shown(page), [OTHER["label"]])
@@ -298,11 +298,11 @@ class PageTests(TestCase):
     def test_setting_all_aside_means_all_the_filters_show(self):
         page = self.client.get(reverse("action_items"), {"q": "gadget"})
         self.assertFalse(page.context["page"].actions)
-        url = urlsplit(page.context["aside_all_url"])
+        url = urlsplit(page.context["dismiss_all"].url)
         self.assertEqual(url.path, reverse("action_items_set_aside"))
         self.assertEqual(parse_qs(url.query)["q"], ["gadget"])
 
-        self.client.post(page.context["aside_all_url"], form_keyed())
+        self.client.post(page.context["dismiss_all"].url, form_keyed())
 
         self.assertEqual(self.shown(self.client.get(reverse("action_items"))), [ITEM["label"]])
         filtered = self.client.get(reverse("action_items"), {"q": "gadget"})
@@ -320,7 +320,7 @@ class PageTests(TestCase):
             # The header counts everything waiting; dismissing the notices
             # leaves what needs doing where it was.
             self.assertEqual(page.context["profile_action_count"], 2)
-            self.client.post(page.context["notices_aside_url"], form_keyed())
+            self.client.post(page.context["dismiss_notices"].url, form_keyed())
             page = self.client.get(reverse("action_items"))
             self.assertEqual(self.shown(page), [ITEM["label"]])
             self.assertEqual(page.context["notice_total"], 0)
