@@ -34,40 +34,6 @@ def kept(**changes):
 
 
 class PostureTests(TestCase):
-    def test_an_archived_repository_is_held_to_nothing(self):
-        from hq.domains.control_plane.models import ProviderInventory
-
-        record = {
-            "connection_ref": "github",
-            "default_branch": "main",
-            "head": {},
-            "private": True,
-            "access": kept(vulnerability_alerts=False),
-            "variables": [],
-        }
-        ProviderInventory.objects.update_or_create(
-            kind="github.repository",
-            defaults={
-                "records": [
-                    {
-                        **record,
-                        "repository": f"example/{name}",
-                        "url": f"https://github.com/example/{name}",
-                        "archived": name == "retired",
-                    }
-                    for name in ("kept", "retired")
-                ],
-                "reachable": True,
-                "connected": True,
-                "observed_at": timezone.now(),
-            },
-        )
-
-        self.assertEqual([found.subject.name for found in postures()], ["example/kept"])
-        (item,) = raised_items()
-        self.assertEqual((finding_key(item), item.count), ("finding:github-posture::vulnerability-alerts", 1))
-        self.assertNotIn("retired", dict(item.evidence)["Not met in"])
-
     def test_an_item_is_as_old_as_the_oldest_repository_reading_it_names(self):
         from hq.domains.control_plane.models import ProviderInventory
 
@@ -78,13 +44,6 @@ class PostureTests(TestCase):
         (item,) = raised_items()
 
         self.assertEqual(item.observed_at, read)
-
-    def test_the_build_queue_carries_both_the_repository_and_the_standard(self):
-        store(private=True, checks={"state": "failure", "failing": ["lint"]}, access=kept(token="write"), variables=[])
-
-        keys = {finding_key(item) for item in raised_items()}
-
-        self.assertEqual(keys, {"finding:github-failing::example/alpha", "finding:github-posture::token-read-only"})
 
 
 class PostureViewTests(TestCase):

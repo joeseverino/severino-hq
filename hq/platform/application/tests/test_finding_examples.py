@@ -38,7 +38,6 @@ LOOPBACK = ("127.0.0.1", "::1")
 UNWALKED = frozenset(
     {
         "controller_findings",
-        "repository_findings",
     }
 )
 
