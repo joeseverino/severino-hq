@@ -160,11 +160,11 @@
      detail and its drawing under both, so a long value or detail has the
      whole row. Asked of the band's own width, so a band in a narrow card
      reads the same as one on a phone. Small figures keep their grid, which
-     holds a dozen across at any width, a lead its figure on a row of its
-     own, and the readings beside a page's title, each a word or a number,
-     their counted rows, two to a row where four no longer fit. */
+     holds a dozen across at any width, headline figures (`is-large`,
+     `is-lead`) and the readings beside a page's title, each a word or a
+     number, their counted rows, two to a row where four no longer fit. */
   @container band (width < 24rem) {
-    .facts-band:not(.is-small, .is-lead, .page-head *) {
+    .facts-band:not(.is-small, .is-large, .is-lead, .page-head *) {
       /* The label keeps its words up to three fifths of the row and wraps past
          that, and the value never narrows past its longest run that cannot
          break (`min-content`, a count bound to its noun), so a long label never

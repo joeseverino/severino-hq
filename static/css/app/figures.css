@@ -305,9 +305,10 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .facts-band .fact-detail :is(a, [tabindex]) { display: inline-block; line-height: var(--target-min); }
 /* A figure that counts nothing is quiet, so the figures that count something are read first. */
 .facts-band .fact.is-zero .fact-value { color: var(--muted-2); font-weight: 500; }
-/* A headline figure (`is-large`, `is-lead`) sets its value to its cell, at most a headline's size, so a long amount in a narrow cell is smaller rather than past its edge. */
+/* Headline figures (`is-large`, `is-lead`) take a wider floor, so a phone's band holds them two to a row and three stand in a row only once the band is about 360px wide; three columns are cramped below that. Each sets its value to its cell, between the band's value size and a headline's, so a long amount in a narrow cell is smaller rather than past its edge. */
+.facts-band:is(.is-large, .is-lead) { --band-floor: 7rem; }
 .facts-band:is(.is-large, .is-lead) > .fact { container: figure / inline-size; }
-.facts-band:is(.is-large, .is-lead) .fact-value { font-size: clamp(var(--text-sm), 15cqi, var(--text-4xl)); }
+.facts-band:is(.is-large, .is-lead) .fact-value { font-size: clamp(var(--text-lg), 15cqi, var(--text-4xl)); }
 /* Headline figures led by the first: of four, the lead takes a row of its own over the other three (`data-band`, above), larger and in the accent, a rule under it; the three stand closer, so a phone's three columns keep room for their figures. */
 .facts-band.is-lead { --band-column-gap: var(--space-6); }
 .facts-band.is-lead:has(> .fact:nth-child(4):last-child) > .fact:first-child { grid-column: 1 / -1; padding-block-end: var(--space-8); border-block-end: 1px solid var(--line-2); }
