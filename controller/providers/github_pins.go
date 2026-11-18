@@ -1,10 +1,10 @@
 package providers
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -21,14 +21,32 @@ var (
 	githubCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	// A reusable workflow another repository holds.
 	githubCalled = regexp.MustCompile(`^[^./][^/]*/[^/]+/\.github/workflows/[^/]+\.ya?ml$`)
+	// A file whose uses: lines run: a workflow, or a local composite action's own.
+	githubUsesFile = regexp.MustCompile(`^\.github/(workflows/[^/]+|actions/[^/]+/action)\.ya?ml$`)
 )
 
-// Where the files whose uses: lines run live: each workflow, and each local
-// composite action's own action.yml.
-const (
-	githubWorkflowsDir = ".github/workflows"
-	githubActionsDir   = ".github/actions"
-)
+// githubPinsQuery is every workflow file, and each local composite action's
+// action.yml, with its text, in one GraphQL query, which spends GraphQL's
+// points rather than the installation's REST requests. A directory the
+// branch does not hold answers null: nothing in it to pin.
+const githubPinsQuery = `query($owner: String!, $name: String!, $workflows: String!, $actions: String!) {
+  repository(owner: $owner, name: $name) {
+    workflows: object(expression: $workflows) { ...files }
+    actions: object(expression: $actions) { ... on Tree { entries { object { ...files } } } }
+  }
+}
+fragment files on Tree { entries { path object { ... on Blob { text } } } }`
+
+// githubTree is a directory as the query answers it: each entry's path, and
+// its text where it is a file.
+type githubTree struct {
+	Entries []struct {
+		Path   string `json:"path"`
+		Object struct {
+			Text *string `json:"text"`
+		} `json:"object"`
+	} `json:"entries"`
+}
 
 type GitHubPin struct {
 	Path   string `json:"path"`
@@ -43,49 +61,50 @@ type githubUsesFound struct {
 	called []string
 }
 
-// listing is a directory's entries; a 404 is the repository saying it has no
-// such directory, so nothing in it to pin.
-func (g *githubRepository) listing(ctx context.Context, path, branch string) (githubapi.ContentDirectory, error) {
-	raw, err := g.raw(ctx, "/contents/"+path+"?ref="+url.QueryEscape(branch))
-	if httpStatus(err) == 404 {
-		return nil, nil
+// usesFiles is every workflow file's path and text, then every local
+// composite action's.
+func (g *githubRepository) usesFiles(ctx context.Context, branch string) ([][2]string, error) {
+	owner, name, err := githubRepositoryName(g.name)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := g.r.githubCall(ctx, g.c, http.MethodPost, githubGraphQL, []string{g.name}, githubRead, map[string]any{
+		"query":     githubPinsQuery,
+		"variables": map[string]string{"owner": owner, "name": name, "workflows": branch + ":.github/workflows", "actions": branch + ":.github/actions"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	answer, err := decodeAnswer[struct {
+		Data struct {
+			Repository *struct {
+				Workflows githubTree `json:"workflows"`
+				Actions   struct {
+					Entries []struct {
+						Object githubTree `json:"object"`
+					} `json:"entries"`
+				} `json:"actions"`
+			} `json:"repository"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}](raw, "GitHub workflow files")
+	if err == nil && (len(answer.Errors) > 0 || answer.Data.Repository == nil) {
+		err = &ProviderError{Message: fmt.Sprintf("GitHub refused the workflow files query: %+v", answer.Errors)}
 	}
 	if err != nil {
 		return nil, err
 	}
-	if !bytes.HasPrefix(bytes.TrimSpace(raw), []byte("[")) {
-		return nil, nil
+	trees := []githubTree{answer.Data.Repository.Workflows}
+	for _, action := range answer.Data.Repository.Actions.Entries {
+		trees = append(trees, action.Object)
 	}
-	return decodeAnswer[githubapi.ContentDirectory](raw, "GitHub directory "+path)
-}
-
-// usesFiles is every workflow file, then every local composite action's action.yml.
-func (g *githubRepository) usesFiles(ctx context.Context, branch string) ([]string, error) {
-	workflows, err := g.listing(ctx, githubWorkflowsDir, branch)
-	if err != nil {
-		return nil, err
-	}
-	files := []string{}
-	for _, entry := range workflows {
-		if strings.HasSuffix(entry.Path, ".yml") || strings.HasSuffix(entry.Path, ".yaml") {
-			files = append(files, entry.Path)
-		}
-	}
-	actions, err := g.listing(ctx, githubActionsDir, branch)
-	if err != nil {
-		return nil, err
-	}
-	for _, action := range actions {
-		if action.Type != githubapi.ContentDirectoryTypeDir {
-			continue
-		}
-		entries, err := g.listing(ctx, action.Path, branch)
-		if err != nil {
-			return nil, err
-		}
-		for _, entry := range entries {
-			if entry.Name == "action.yml" || entry.Name == "action.yaml" {
-				files = append(files, entry.Path)
+	files := [][2]string{}
+	for _, tree := range trees {
+		for _, entry := range tree.Entries {
+			if entry.Object.Text != nil && githubUsesFile.MatchString(entry.Path) {
+				files = append(files, [2]string{entry.Path, *entry.Object.Text})
 			}
 		}
 	}
@@ -103,16 +122,9 @@ func (g *githubRepository) workflowUses(ctx context.Context, branch string) (git
 	found := githubUsesFound{pins: []GitHubPin{}, called: []string{}}
 	resolved := map[string]string{}
 	called := map[string]bool{}
-	for _, path := range files {
-		file, err := repoGet[githubapi.ContentFile](ctx, g, "/contents/"+path+"?ref="+url.QueryEscape(branch))
-		if err != nil {
-			return githubUsesFound{}, err
-		}
-		content, err := base64.StdEncoding.DecodeString(strings.NewReplacer("\n", "", "\r", "").Replace(file.Content))
-		if err != nil {
-			return githubUsesFound{}, &ProviderError{Message: "decode GitHub file " + path, Err: err}
-		}
-		for _, match := range githubUses.FindAllStringSubmatch(string(content), -1) {
+	for _, file := range files {
+		path := file[0]
+		for _, match := range githubUses.FindAllStringSubmatch(file[1], -1) {
 			uses := match[1]
 			action, at, versioned := strings.CutLast(uses, "@")
 			if strings.HasPrefix(uses, "./") || strings.HasPrefix(uses, "docker://") || !versioned {

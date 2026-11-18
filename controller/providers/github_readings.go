@@ -197,34 +197,48 @@ func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 		return nil, err
 	}
 	held := map[string]runtime.GitHubRepositoryHeld{}
-	for _, repository := range r.Repositories.Held {
-		held[repository.Repository] = repository
+	order := map[string]int{}
+	for i, repository := range r.Repositories.Held {
+		held[repository.Repository], order[repository.Repository] = repository, i
 	}
 	// A query that failed leaves every repository unknown, so each is read
 	// in full, as far as the fuse allows.
 	fingerprints, _ := r.githubFingerprints(ctx, c, names)
 	records := make([]any, len(names))
 	failures := make([]error, len(names))
+	read := func(i int) {
+		if failures[i] = ctx.Err(); failures[i] != nil {
+			return
+		}
+		record, err := (&githubRepository{r: r, c: c, name: names[i]}).read(ctx)
+		record.Fingerprint, record.ReadAt = fingerprints[names[i]], r.Now().UTC().Format(time.RFC3339)
+		records[i], failures[i] = record, err
+	}
 	var group errgroup.Group
 	group.SetLimit(githubReadConcurrency)
+	due := []int{}
 	for i, name := range names {
 		standing, isHeld := held[name]
-		fingerprint := fingerprints[name]
-		if isHeld && !standing.Due && fingerprint != "" && fingerprint == standing.Fingerprint {
-			records[i] = githubCarried{ConnectionRef: c.ref, Repository: name, Carried: true}
+		if fingerprint := fingerprints[name]; !isHeld || fingerprint == "" || fingerprint != standing.Fingerprint {
+			group.Go(func() error { read(i); return nil })
 			continue
 		}
-		group.Go(func() error {
-			if failures[i] = ctx.Err(); failures[i] != nil {
-				return nil
-			}
-			record, err := (&githubRepository{r: r, c: c, name: name}).read(ctx)
-			record.Fingerprint, record.ReadAt = fingerprint, r.Now().UTC().Format(time.RFC3339)
-			records[i], failures[i] = record, err
-			return nil
-		})
+		records[i] = githubCarried{ConnectionRef: c.ref, Repository: name, Carried: true}
+		if standing.Due {
+			due = append(due, i)
+		}
 	}
 	_ = group.Wait()
+	// One unchanged but due is read after what moved, one at a time in the
+	// plan's order, while the round has spent under half its ceiling; the rest
+	// stay carried and due, leaving room for the reconciles after the sweep.
+	slices.SortFunc(due, func(a, b int) int { return cmp.Compare(order[names[a]], order[names[b]]) })
+	for _, i := range due {
+		if r.GitHubSpent() >= githubSweepCeiling/2 {
+			break
+		}
+		read(i)
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

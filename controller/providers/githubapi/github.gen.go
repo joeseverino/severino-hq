@@ -429,30 +429,6 @@ func (e CodeScanningAlertRuleSummarySeverity) Valid() bool {
 	}
 }
 
-// Defines values for ContentDirectoryType.
-const (
-	ContentDirectoryTypeDir       ContentDirectoryType = "dir"
-	ContentDirectoryTypeFile      ContentDirectoryType = "file"
-	ContentDirectoryTypeSubmodule ContentDirectoryType = "submodule"
-	ContentDirectoryTypeSymlink   ContentDirectoryType = "symlink"
-)
-
-// Valid indicates whether the value is a known member of the ContentDirectoryType enum.
-func (e ContentDirectoryType) Valid() bool {
-	switch e {
-	case ContentDirectoryTypeDir:
-		return true
-	case ContentDirectoryTypeFile:
-		return true
-	case ContentDirectoryTypeSubmodule:
-		return true
-	case ContentDirectoryTypeSymlink:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for DependabotAlertSecurityAdvisorySeverity.
 const (
 	DependabotAlertSecurityAdvisorySeverityCritical DependabotAlertSecurityAdvisorySeverity = "critical"
@@ -1176,33 +1152,6 @@ type Commit struct {
 // Commit_Author defines model for Commit.Author.
 type Commit_Author struct {
 	union json.RawMessage
-}
-
-// ContentDirectory A list of directory items
-type ContentDirectory = []struct {
-	UnderscoreLinks struct {
-		Git  string `json:"git"`
-		HTML string `json:"html"`
-		Self string `json:"self"`
-	} `json:"_links"`
-	Content     string               `json:"content,omitempty"`
-	DownloadURL string               `json:"download_url"`
-	GitURL      string               `json:"git_url"`
-	HTMLURL     string               `json:"html_url"`
-	Name        string               `json:"name"`
-	Path        string               `json:"path"`
-	Sha         string               `json:"sha"`
-	Size        int                  `json:"size"`
-	Type        ContentDirectoryType `json:"type"`
-	URL         string               `json:"url"`
-}
-
-// ContentDirectoryType defines model for ContentDirectory.Type.
-type ContentDirectoryType string
-
-// ContentFile Content File
-type ContentFile struct {
-	Content string `json:"content"`
 }
 
 // DependabotAlert A Dependabot alert.

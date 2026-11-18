@@ -130,6 +130,21 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		_, _ = io.WriteString(w, `{"token":"`+token+`","expires_at":"2030-01-01T00:00:00Z"}`)
 		return
 	case req.Method == http.MethodPost && key == "/graphql":
+		variables, _ := body["variables"].(map[string]any)
+		if _, pins := variables["workflows"]; pins {
+			// The workflow files query, answered by its repository's /pins
+			// route; refused 404, the branch holds neither directory.
+			route := fmt.Sprintf("%s /repos/%s/%s/pins", host, variables["owner"], variables["name"])
+			switch code := f.status[route]; code {
+			case 0:
+				_, _ = io.WriteString(w, f.routes[route])
+			case http.StatusNotFound:
+				_, _ = io.WriteString(w, `{"data":{"repository":{"workflows":null,"actions":null}}}`)
+			default:
+				w.WriteHeader(code)
+			}
+			return
+		}
 		_, _ = io.WriteString(w, f.changeQuery(body))
 		return
 	case req.Method != http.MethodGet:
@@ -451,8 +466,8 @@ func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 // githubRepositoryRoutes is one repository with a little of everything.
 func githubRepositoryRoutes() map[string]string {
 	api := func(path string) string { return githubFakeAPI + " /repos/example/app" + path }
-	workflow := base64.StdEncoding.EncodeToString([]byte("jobs:\n  build:\n    steps:\n      - uses: actions/checkout@v4\n      - uses: \"actions/setup-go@0123456789abcdef0123456789abcdef01234567\"\n      - uses: ./.github/actions/local\n      - uses: docker://alpine:3\n  call:\n    uses: example/shared/.github/workflows/reuse.yml@main\n"))
-	composite := base64.StdEncoding.EncodeToString([]byte("runs:\n  steps:\n    - uses: actions/checkout@v4\n"))
+	workflow, _ := json.Marshal("jobs:\n  build:\n    steps:\n      - uses: actions/checkout@v4\n      - uses: \"actions/setup-go@0123456789abcdef0123456789abcdef01234567\"\n      - uses: ./.github/actions/local\n      - uses: docker://alpine:3\n  call:\n    uses: example/shared/.github/workflows/reuse.yml@main\n")
+	composite, _ := json.Marshal("runs:\n  steps:\n    - uses: actions/checkout@v4\n")
 	return map[string]string{
 		api(""): `{"full_name":"example/app","private":true,"archived":true,"html_url":"https://github.com/example/app","default_branch":"main","pushed_at":"2030-01-02T00:00:00Z","visibility":"private",
 			"security_and_analysis":{"secret_scanning":{"status":"enabled"},"advanced_security":{"status":"disabled"},"secret_scanning_push_protection":{"status":"paused"},"example_feature":{"status":"enabled"}}}`,
@@ -490,20 +505,18 @@ func githubRepositoryRoutes() map[string]string {
 			{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"test"},{"context":"lint"},{"context":"test"}]}},{"type":"non_fast_forward"},{"type":"deletion"}]`,
 		api("/environments"): `{"environments":[{"name":"production","protection_rules":[{"id":1,"type":"required_reviewers","reviewers":[{"type":"User","reviewer":{"login":"octo"}},{"type":"Team","reviewer":{"name":"ops"}}]},
 			{"id":2,"type":"wait_timer","wait_timer":5}],"deployment_branch_policy":{"protected_branches":true,"custom_branch_policies":false}},{"name":"preview"}]}`,
-		api("/actions/runners"):                                    `{"runners":[{"name":"homelab","status":"online","busy":false,"labels":[{"name":"self-hosted"},{"name":"linux"}]}]}`,
-		api("/actions/permissions"):                                `{"enabled":true,"allowed_actions":"selected","sha_pinning_required":true}`,
-		api("/actions/permissions/workflow"):                       `{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}`,
-		api("/vulnerability-alerts"):                               ``,
-		api("/collaborators?per_page=100"):                         `[{"login":"octo","role_name":"admin"}]`,
-		api("/keys?per_page=100"):                                  `[{"title":"deploy","read_only":true,"last_used":"2030-01-01T00:00:00Z","created_at":"2029-01-01T00:00:00Z"}]`,
-		api("/actions/variables?per_page=100"):                     `{"variables":[{"name":"REGION","value":"never read"}]}`,
-		api("/contents/.github/workflows?ref=main"):                `[{"name":"ci.yml","path":".github/workflows/ci.yml","type":"file"},{"name":"README.md","path":".github/workflows/README.md","type":"file"}]`,
-		api("/contents/.github/actions?ref=main"):                  `[{"name":"local","path":".github/actions/local","type":"dir"}]`,
-		api("/contents/.github/actions/local?ref=main"):            `[{"name":"action.yml","path":".github/actions/local/action.yml","type":"file"}]`,
-		api("/contents/.github/workflows/ci.yml?ref=main"):         `{"type":"file","path":".github/workflows/ci.yml","content":"` + workflow[:20] + `\n` + workflow[20:] + `"}`,
-		api("/contents/.github/actions/local/action.yml?ref=main"): `{"type":"file","path":".github/actions/local/action.yml","content":"` + composite + `"}`,
-		githubFakeAPI + " /repos/actions/checkout/commits/v4":      `{"sha":"cccc000000000000000000000000000000000000"}`,
-		githubFakeAPI + " /repos/example/shared/commits/main":      `{"sha":"dddd000000000000000000000000000000000000"}`,
+		api("/actions/runners"):                `{"runners":[{"name":"homelab","status":"online","busy":false,"labels":[{"name":"self-hosted"},{"name":"linux"}]}]}`,
+		api("/actions/permissions"):            `{"enabled":true,"allowed_actions":"selected","sha_pinning_required":true}`,
+		api("/actions/permissions/workflow"):   `{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}`,
+		api("/vulnerability-alerts"):           ``,
+		api("/collaborators?per_page=100"):     `[{"login":"octo","role_name":"admin"}]`,
+		api("/keys?per_page=100"):              `[{"title":"deploy","read_only":true,"last_used":"2030-01-01T00:00:00Z","created_at":"2029-01-01T00:00:00Z"}]`,
+		api("/actions/variables?per_page=100"): `{"variables":[{"name":"REGION","value":"never read"}]}`,
+		api("/pins"): `{"data":{"repository":{
+			"workflows":{"entries":[{"path":".github/workflows/ci.yml","object":{"text":` + string(workflow) + `}},{"path":".github/workflows/README.md","object":{"text":""}}]},
+			"actions":{"entries":[{"object":{"entries":[{"path":".github/actions/local/action.yml","object":{"text":` + string(composite) + `}}]}}]}}}}`,
+		githubFakeAPI + " /repos/actions/checkout/commits/v4": `{"sha":"cccc000000000000000000000000000000000000"}`,
+		githubFakeAPI + " /repos/example/shared/commits/main": `{"sha":"dddd000000000000000000000000000000000000"}`,
 	}
 }
 
@@ -647,10 +660,10 @@ func TestGitHubRepositoryParts(t *testing.T) {
 		failure runtime.FailureClass
 	}{
 		{"workflows it may not read are that part refused, not no pins",
-			map[string]int{"/contents/.github/workflows?ref=main": 500}, runtime.PartWorkflowPins,
+			map[string]int{"/pins": 500}, runtime.PartWorkflowPins,
 			func(r GitHubRepositoryRecord) bool { return r.Pins == nil && r.CalledWorkflows == nil }, runtime.FailureClassUnclassified},
 		{"a repository without workflows has nothing to pin",
-			map[string]int{"/contents/.github/workflows?ref=main": 404, "/contents/.github/actions?ref=main": 404}, "",
+			map[string]int{"/pins": 404}, "",
 			func(r GitHubRepositoryRecord) bool { return r.Pins != nil && len(r.Pins) == 0 }, ""},
 		{"rules a plan does not offer", map[string]int{"/rules/branches/main": 403}, runtime.PartBranchRules,
 			func(r GitHubRepositoryRecord) bool { return r.Rules == nil }, runtime.FailureClassUnclassified},
