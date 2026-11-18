@@ -12,11 +12,15 @@ order docs/Deployment.md gives it, for any operator's host.
 
 from typing import Any
 
+lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
+
 from .finding_model import Finding, FindingEstate, FindingRule, opens
 from .finding_steps import Run
 from .moments import ago
 from .security import Capability, Principal
 from .tone import Tone
+lazy from .cadence import WorkerStanding, automation_standing
+lazy from .infrastructure import declared_resources
 lazy from .problems import About, problems_by_part
 lazy from .routes import reverse
 
@@ -59,8 +63,19 @@ def worker_problems(principal: Principal) -> tuple[dict[str, Any], ...]:
     return tuple(item for _part, item in problems_by_part({RULE: About(keys=(key,))}, principal))
 
 
+def _standing() -> WorkerStanding | None:
+    """HQ's playbook worker's standing, or None for an HQ that never had a
+    playbook source and never saw a worker: nobody set automation up there,
+    so its absence is nothing to raise."""
+
+    worker = automation_standing()
+    if worker.seen_at is None and not any(resource.kind == SOURCE_KIND for resource in declared_resources()):
+        return None
+    return worker
+
+
 def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
-    worker = estate.topology.automation_worker
+    worker = _standing()
     if worker is None or not worker.cannot("refresh", now=estate.now):
         return ()
     # The page whose Refresh and runs it refuses, where its setup is shown.
@@ -101,6 +116,7 @@ RULES: tuple[FindingRule, ...] = (
         "HQ's playbook worker is not reporting",
         Tone.ATTENTION,
         _absent,
+        gathered=True,
         operator_action=(
             f"On HQ's machine, add an automation entry to {HOST_CONFIGURATION}, then run {HQ_HOST} automation as root."
         ),

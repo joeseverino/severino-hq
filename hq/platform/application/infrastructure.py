@@ -131,6 +131,12 @@ def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: s
     return {**page, "items": [serialize_resource(resource) for resource in page["items"]]}
 
 
+def declared_resources() -> tuple[ManagedResource, ...]:
+    """Every declaration, enabled or not, read once per projection and shared."""
+
+    return read_once("infrastructure.declared_resources", lambda: tuple(ManagedResource.objects.all()))
+
+
 def enabled_resources() -> tuple[ManagedResource, ...]:
     """Every enabled declaration, read once per projection and shared."""
 

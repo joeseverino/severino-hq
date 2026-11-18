@@ -20,7 +20,6 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.routes import reverse
-lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .action_links import (
@@ -39,7 +38,7 @@ from .connections import ConnectionLink, ConnectionSpec
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, node_name, record_name
-from .infrastructure import ResourceState, resource_health
+from .infrastructure import ResourceState, declared_resources, resource_health
 from .integration_validation import required_capability_names
 from .json_schemas import as_written
 from .projection import QUERY, projection_scope
@@ -71,7 +70,6 @@ from .topology_model import (
     newest_stamp,
 )
 lazy from .adoption import manages_through
-lazy from .cadence import WorkerStanding, automation_standing
 lazy from .facts import stored_snapshots
 lazy from .hq_self import serving
 lazy from .topology_estate import add_estate
@@ -478,7 +476,7 @@ def relation_graph(*, principal: Principal) -> RelationGraph:
     def build() -> RelationGraph:
         nodes: dict[str, TopologyNode] = {}
         edges: dict[str, TopologyEdge] = {}
-        resources = tuple(ManagedResource.objects.all())
+        resources = declared_resources()
         for resource in resources:
             node = _resource_node(resource)
             nodes[node.id] = node
@@ -501,7 +499,7 @@ def _relations(_principal: Principal, build: Any) -> RelationGraph:
 @derivation("estate.topology", reads=ESTATE_READS, vary=estate_variant)
 def _derive(principal: Principal) -> Topology:
     edges: dict[str, TopologyEdge] = {}
-    resources = tuple(ManagedResource.objects.all())
+    resources = declared_resources()
     nodes = _resource_nodes(resources, principal)
     # Observed facts that decide a finding, attached to the resource they are
     # about. Read once here rather than by a rule, which must cost no queries.
@@ -523,20 +521,7 @@ def _derive(principal: Principal) -> Topology:
         )
     )
     ordered_edges = tuple(sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target)))
-    return Topology(
-        ordered_nodes, ordered_edges, kinds_read=_kinds_read(), automation_worker=_automation_worker(resources)
-    )
-
-
-def _automation_worker(resources) -> WorkerStanding | None:
-    """HQ's playbook worker's standing, or None for an HQ that never had a
-    playbook source and never saw a worker: nobody set automation up there,
-    so its absence is nothing to raise."""
-
-    worker = automation_standing()
-    if worker.seen_at is None and not any(resource.kind == SOURCE_KIND for resource in resources):
-        return None
-    return worker
+    return Topology(ordered_nodes, ordered_edges, kinds_read=_kinds_read())
 
 
 def _kinds_read() -> tuple[tuple[str, datetime], ...]:
