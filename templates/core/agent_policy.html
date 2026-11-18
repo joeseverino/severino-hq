@@ -13,13 +13,8 @@ the heading, then what the rules below allow and what they held or refused.
     {% fact "refused in the last day" value=refused_count url=audit_url|add:"?action=denied" %}
   {% endfacts %}
 {% aside %}
-  {% url 'agent_access' as agent_access_url %}
   {% if agents_paused %}{% status "Paused" tone="attention" dot=True %}{% else %}{% status "Allowed" tone="good" dot=True %}{% endif %}
-  {% if agents_paused %}
-    {% words "agent.access.set" "off" as resume %}{% button resume agent_access_url post=True name="paused" value="0" look="primary" %}
-  {% else %}
-    {% words "agent.access.set" "on" as pause %}{% button pause agent_access_url post=True name="paused" value="1" %}
-  {% endif %}
+  {% if access_action %}{% include "partials/_page_action.html" with action=access_action only %}{% endif %}
 {% endsection %}
 
 {% comment %}
@@ -229,8 +224,10 @@ carries the device permission stands as them. Only theirs, never anybody else's.
   {% else %}
     {% include "partials/_empty_state.html" with message="None registered." %}
   {% endif %}
-  {% words "agent.device.set" "on" as device_verb %}
-  {% include "partials/_form.html" with form=device_form action=device_url next=request.get_full_path verb=device_verb %}
+  {% if device_form %}
+    {% words "agent.device.set" "on" as device_verb %}
+    {% include "partials/_form.html" with form=device_form action=device_url next=request.get_full_path verb=device_verb %}
+  {% endif %}
 {% endsection %}
 
 {% comment %}
@@ -287,9 +284,14 @@ change. Asked for when opened: asking takes the server's SDK into the process.
 {% endsection %}
 
 {% comment %}
-The rules, one form over their tables (core/_policy_rules.html). The part
+The rules, one form over their tables (core/_policy_rules.html) for whoever
+may save them, and the tables alone, read as they hold, for anyone else. The part
 the fold asks for when opened is drawn here, by its name on this page.
 {% endcomment %}
 {% partialdef every_rule %}{% include "core/_every_rule.html" %}{% endpartialdef %}
-{% include "partials/_form.html" with form=form table_body="core/_policy_rules.html" verb="Save changes" bar=True hooks="data-policy" %}
+{% if rules_settable %}
+  {% include "partials/_form.html" with form=form table_body="core/_policy_rules.html" verb="Save changes" bar=True hooks="data-policy" %}
+{% else %}
+  {% include "core/_policy_rules.html" %}
+{% endif %}
 {% endblock %}

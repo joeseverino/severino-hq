@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from hq.platform.application import agent_access, agent_registry, denials, roles
 from hq.platform.application.linked_accounts import SIGN_IN
-from hq.platform.application.markup_testing import elements, select, text, within
+from hq.platform.application.markup_testing import actions, elements, select, text, within
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import Capability, Principal, agent_grant, agent_grantable, agent_principal
 from hq.platform.application.tokens import DEVICE_SCOPE
@@ -89,6 +89,18 @@ class AccessTests(TestCase):
 
         self.press(button)
         self.assertFalse(agent_access.agents_paused())
+
+    def test_a_reader_who_may_change_nothing_is_offered_no_control_or_form(self):
+        with no_default_role():
+            viewer = get_user_model().objects.create_user("riley")
+        roles.assign(viewer, roles.Role.VIEWER)
+        self.client.force_login(viewer)
+        page = self.client.get(reverse("agent_policy"))
+
+        access = within(page, "id", "agent-access")
+        self.assertEqual([element for element in access if element.tag == "button"], [])
+        self.assertEqual(select(page, "data-policy"), [])
+        self.assertNotIn(reverse("own_device"), actions(page))
 
 
 class AgentRowTests(TestCase):

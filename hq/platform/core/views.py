@@ -15,7 +15,14 @@ from django.utils.text import capfirst
 from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
-from hq.platform.application import agent_activity, agent_devices, capability_policy, fragments, history
+from hq.platform.application import (
+    agent_access,
+    agent_activity,
+    agent_devices,
+    capability_policy,
+    fragments,
+    history,
+)
 from hq.platform.application.agent_access import REMOVE_AGENT, SET_AGENT_ACCESS, SET_AGENT_BLOCK
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.appearance import SET_THEME
@@ -26,7 +33,7 @@ from hq.platform.application.demo import DEMO_SESSION_KEY, SET_DEMO
 from hq.platform.application.denials import COALESCE_WINDOW, LABEL as DENIAL_LABEL
 from hq.platform.application.moments import moment
 from hq.platform.application.own_devices import SET_OWN_DEVICE, devices_of
-from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.pages import PageAction, PageMixin, runs_here
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.search import global_search
@@ -231,6 +238,14 @@ def _offered(*actions: PageAction | None) -> tuple[PageAction, ...]:
     return tuple(action for action in actions if action is not None)
 
 
+def access_action(paused: bool) -> PageAction | None:
+    """The one control that pauses every agent, or resumes them while paused."""
+
+    if paused:
+        return PageAction.command(SET_AGENT_ACCESS, variant="off", field="paused", value="0", primary=True)
+    return PageAction.command(SET_AGENT_ACCESS, variant="on", field="paused", value="1")
+
+
 def agent_actions(standing: agent_activity.AgentStanding, here: str) -> tuple[PageAction, ...]:
     """What may be done to one agent from its row: let it back in, or block or
     remove it. Removal never lifts a block, so a blocked agent offers only that."""
@@ -332,6 +347,9 @@ class AgentPolicyView(PageMixin, TemplateView):
             if part:
                 return context
         context.update(self._rules())
+        # The rules are drawn as a form only for whoever may save them, and
+        # read as they hold for anyone else.
+        context["rules_settable"] = runs_here(capability_policy.SET_POLICY)
         context["every_read"] = part == self.EVERY_PART or "all" in self.request.GET
         if part == self.EVERY_PART:
             return context
@@ -364,8 +382,11 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["client_setup"] = agent_activity.CLIENT_SETUP
         context["placement"] = agent_devices.placement_posture()
         context["devices"] = [(device, own_device_actions(device, here)) for device in devices_of(self.request.user)]
-        context["device_form"] = OwnDeviceForm()
-        context.setdefault("form", PolicyForm())
+        context["access_action"] = access_action(agent_access.agents_paused())
+        if runs_here(SET_OWN_DEVICE):
+            context["device_form"] = OwnDeviceForm()
+        if context["rules_settable"]:
+            context.setdefault("form", PolicyForm())
         context["awaiting_count"] = len(awaiting_ids())
         context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
         return context

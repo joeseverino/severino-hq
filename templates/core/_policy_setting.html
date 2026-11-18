@@ -1,5 +1,7 @@
 {% if cell.unavailable %}
   {% muted css="nowrap" data_unavailable=True %}{{ cell.unavailable|breakable }}{% endmuted %}
+{% elif not rules_settable %}
+  {% status cell.words tone=cell.tone pill=False %}
 {% else %}
   {% select cell.field cell.options chosen=cell.rule label=cell.label tone=cell.tone %}
 {% endif %}

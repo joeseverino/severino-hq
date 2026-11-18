@@ -126,10 +126,9 @@ class PageAction:
         would be refused for ``target`` (``refused``, else the work's own).
         """
 
-        spec = command_spec(name)
-        request = current_request()
-        if request is not None and not offering_for(request).runs(spec):
+        if not runs_here(name):
             return None
+        spec = command_spec(name)
         subject = "" if isinstance(target, Mapping) else str(target)
         sends = dict(fields or {})
         url, answers_get = command_reach(name, target, variant)
@@ -231,8 +230,7 @@ def _reached_by(name: str, target: str, mode: str) -> str:
     """The address a row's control for the command ``name`` posts to, or ""
     when the person the page is for may not run it."""
 
-    request = current_request()
-    if request is not None and not offering_for(request).runs(command_spec(name)):
+    if not runs_here(name):
         return ""
     return command_reach(name, target, mode)[0]
 
@@ -780,6 +778,16 @@ def offered_now(url: str | Promise) -> bool:
 
     request = current_request()
     return request is None or offering_for(request)(url)
+
+
+def runs_here(name: str) -> bool:
+    """Whether the person the request being answered is for may run the
+    command ``name``: a page draws its control, or the form that sends it,
+    only then. Outside a request nothing is withheld; the command still
+    refuses whoever runs it."""
+
+    request = current_request()
+    return request is None or offering_for(request).runs(command_spec(name))
 
 
 # One Offering for each request, so its reader's principal is built once for
