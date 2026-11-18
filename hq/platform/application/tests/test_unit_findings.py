@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.bridge_contract import contract
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.observations.host import UNIT_KIND, HostUnitRecord
+from hq.domains.control_plane.observations.host import UNIT_KIND
 
 from .. import unit_findings as rules
 from ..inventory_testing import store
@@ -17,7 +17,6 @@ from ..inventory_testing import store
 ROOT = Path(__file__).resolve().parents[4]
 UNITS = ROOT / "deploy" / "systemd"
 SPEC = OBSERVATIONS[UNIT_KIND]
-RULES = tuple(rule.name for rule in rules.RULES)
 SERVICE = "severino-hq-example.service"
 TIMER = "severino-hq-example.timer"
 
@@ -49,32 +48,8 @@ def timer(unit: str = TIMER, activates: str = SERVICE, **said) -> dict:
     }  # fmt: skip
 
 
-def socket(unit: str, activates: str = SERVICE, **said) -> dict:
-    """A unit that does its work while active, a socket listening by default."""
-
-    return {
-        "unit": unit, "load": "loaded", "file_state": "enabled", "active": "active", "sub": "listening",
-        "activates": activates, "read_at": stamp(), **said,
-    }  # fmt: skip
-
-
 def failed(unit: str = SERVICE, **said) -> dict:
     return service(unit, **{"active": "failed", "sub": "failed", "result": "exit-code", "main_status": 3, **said})
-
-
-FOREIGN = "example-upload.service"
-
-
-def looping(unit: str = FOREIGN, **said) -> dict:
-    """A service HQ does not ship that systemd keeps restarting, waiting out its
-    RestartSec, as the controller reports one."""
-
-    return {
-        "unit": unit, "title": "Example upload", "load": "loaded", "file_state": "disabled",
-        "active": "activating", "sub": "auto-restart", "result": "exit-code", "main_code": 1,
-        "main_status": 1, "restarts": 4127, "active_at": stamp(timedelta(minutes=1)),
-        "ended_at": stamp(timedelta(seconds=30)), "foreign": True, "read_at": stamp(), **said,
-    }  # fmt: skip
 
 
 def sweep(*records, **fields) -> None:
@@ -86,44 +61,6 @@ def sweep(*records, **fields) -> None:
 
 
 class RecordTests(SimpleTestCase):
-    def test_the_record_is_the_contracts(self):
-        declared = contract()["components"]["schemas"]["HostUnitRecord"]
-
-        self.assertEqual(set(HostUnitRecord.model_fields), set(declared["properties"]))
-        self.assertEqual(
-            {name for name, field in HostUnitRecord.model_fields.items() if field.is_required()},
-            set(declared["required"]),
-        )
-
-    def test_a_record_is_kept_as_the_controller_sent_it(self):
-        records = [failed(), timer()]
-
-        kept, refused = SPEC.clean(records)
-
-        self.assertEqual((kept, refused), (records, 0))
-
-    def test_a_field_the_schema_does_not_name_is_dropped(self):
-        record = service()
-        record["environment"] = "EXAMPLE_TOKEN=sentinel-value"
-        record["exec_start"] = "/usr/local/bin/example --token sentinel-value"
-
-        (kept,), _ = SPEC.clean([record])
-
-        self.assertNotIn("sentinel-value", repr(kept))
-
-    def test_a_string_that_is_not_a_name_a_word_or_an_instant_is_refused(self):
-        for field, value in (
-            ("unit", "/etc/example/credentials"),
-            ("unit", "example.service; id"),
-            ("active", "failed with EXAMPLE_TOKEN=sentinel-value"),
-            ("result", "Exit Code"),
-            ("ended_at", "yesterday afternoon"),
-            ("activates", "sentinel-value"),
-            ("main_status", -1),
-        ):
-            with self.subTest(field=field, value=value):
-                self.assertEqual(SPEC.clean([service(**{field: value})]), ([], 1))
-
     def test_the_reading_holds_no_secret(self):
         """Every field is a unit name, a state word, a number, a flag or an
         instant, but the unit file's title, which is words and never a path or

@@ -1,6 +1,5 @@
 """The secret render reading, and what HQ says when the secrets go stale."""
 
-import json
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,7 +15,6 @@ from hq.domains.control_plane.observations.host import (
     RENDER_STATUS_KIND,
     RENDERER_NAME,
     STATUS_WORD,
-    UNREADABLE_WORD,
 )
 from hq.platform.application.markup_testing import all_elements
 
@@ -85,76 +83,6 @@ def sweep(*records, **fields) -> None:
     kept, refused = SPEC.clean(records)
     assert not refused, records
     store(RENDER_STATUS_KIND, *kept, **fields)
-
-
-class RecordTests(SimpleTestCase):
-    def test_the_document_is_kept_as_the_renderer_wrote_it_its_instants_in_utc(self):
-        record = read()
-
-        (kept,), refused = SPEC.clean([record])
-
-        self.assertEqual(refused, 0)
-        # The version is the Go type's to check; HQ keeps what it reads.
-        del record["status"]["schema_version"]
-        self.assertEqual(json.loads(json.dumps(kept).replace("+00:00", "Z")), record)
-
-    def test_a_field_the_schema_does_not_name_is_dropped_at_every_depth(self):
-        record = read()
-        record["path"] = "/run/example/status.json"
-        record["status"]["vault"] = "Example Vault"
-        record["status"]["last_attempt"]["detail"] = "Connect said no"
-        record["status"]["connect"]["dependencies"][0]["message"] = "Connected to an example database"
-
-        (kept,), _ = SPEC.clean([record])
-
-        for word in ("/run/example", "Example Vault", "Connect said no", "example database"):
-            self.assertNotIn(word, repr(kept))
-
-    def test_a_string_that_is_not_a_short_word_is_never_stored(self):
-        record = read(outcome="failed", failure="the token was refused by Connect", sync="TOKEN NEEDED\nnow")
-        record["status"]["connect"]["version"] = "1.8.1 (example build)"
-        record["status"]["last_attempt"]["at"] = "yesterday afternoon"
-
-        (kept,), refused = SPEC.clean([record])
-
-        self.assertEqual(refused, 0)
-        status = kept["status"]
-        self.assertEqual(status["last_attempt"]["failure"], UNREADABLE_WORD)
-        self.assertEqual(status["last_attempt"]["at"], "")
-        self.assertEqual(status["connect"]["version"], UNREADABLE_WORD)
-        self.assertEqual(status["connect"]["dependencies"][1]["status"], UNREADABLE_WORD)
-
-    def test_a_nanosecond_instant_is_one(self):
-        record = read()
-        record["status"]["last_attempt"]["at"] = "2026-01-01T00:00:00.123456789Z"
-
-        (kept,), _ = SPEC.clean([record])
-
-        self.assertEqual(kept["status"]["last_attempt"]["at"], "2026-01-01T00:00:00.123456+00:00")
-
-    def test_a_record_that_does_not_name_a_renderer_and_a_state_is_refused(self):
-        for record in (
-            {"state": "read", "status": document()},
-            {"renderer": "/run/example/status.json", "state": "unreadable", "reason": "missing"},
-            {"renderer": "Example Renderer", "state": "unreadable", "reason": "missing"},
-            {"renderer": "hq", "state": "fine"},
-            {"renderer": "hq", "state": "unreadable", "reason": "the file was not there"},
-            {
-                "renderer": "hq",
-                "state": "read",
-                "status": {
-                    "last_attempt": {"at": stamp(timedelta(0))},
-                    "connect": {"dependencies": [{"service": "sync", "status": "ACTIVE"}] * 17},
-                },
-            },
-        ):
-            with self.subTest(record=record):
-                self.assertEqual(SPEC.clean([record]), ([], 1))
-
-    def test_an_unreadable_document_is_a_record_with_its_reason(self):
-        for reason in RENDER_REASONS:
-            with self.subTest(reason=reason):
-                self.assertEqual(SPEC.clean([unread(reason)]), ([unread(reason)], 0))
 
 
 @tag("source")

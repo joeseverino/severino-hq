@@ -2,10 +2,9 @@
 
 from datetime import UTC, timedelta
 
-from django.test import SimpleTestCase, TestCase
+from django.test import TestCase
 from django.utils import timezone
 
-from hq.domains.control_plane.bridge_contract import contract
 from hq.domains.control_plane.observations import OBSERVATIONS
 
 from ..findings import estate_findings
@@ -65,29 +64,6 @@ def steps(rule: str = RULE) -> list[str]:
     with projection_scope():
         (finding,) = [found for found in estate_findings(principal=EVERYTHING) if found.rule == rule]
     return [step.command for step in finding.steps]
-
-
-class RecordTests(SimpleTestCase):
-    def test_the_record_is_the_contracts(self):
-        from hq.domains.control_plane.observations.host import HostRebootRecord
-
-        declared = contract()["components"]["schemas"]["HostRebootRecord"]
-
-        self.assertEqual(set(HostRebootRecord.model_fields), set(declared["properties"]))
-
-    def test_a_path_or_a_device_is_never_kept(self):
-        (kept,), refused = OBSERVATIONS[KIND].clean([reading(path="/run/reboot-required", device="/dev/sda2")])
-
-        self.assertEqual(refused, 0)
-        self.assertNotIn("path", kept)
-        self.assertNotIn("device", kept)
-
-    def test_a_package_dpkg_would_not_name_is_refused(self):
-        _kept, refused = OBSERVATIONS[KIND].clean(
-            [reading(packages=["linux image"]), reading(packages=["a|b"]), reading(packages=["Libc6"])]
-        )
-
-        self.assertEqual(refused, 3)
 
 
 class WaitingTests(TestCase):

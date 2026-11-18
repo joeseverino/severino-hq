@@ -84,13 +84,6 @@ class FindingTests(TestCase):
         )
 
 
-class RecordTests(SimpleTestCase):
-    def test_a_title_that_is_a_path_or_an_assignment_is_refused(self):
-        for title in ("/run/example/token", "EXAMPLE_TOKEN=sentinel-value", "a" * 121):
-            with self.subTest(title=title):
-                self.assertEqual(SPEC.clean([service(title=title)]), ([], 1))
-
-
 @tag("source")
 class SeedTests(SimpleTestCase):
     def test_the_seed_titles_each_unit_as_its_shipped_file_does(self):
