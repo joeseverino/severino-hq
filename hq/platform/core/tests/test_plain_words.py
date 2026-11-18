@@ -43,6 +43,9 @@ def vale(files: dict[str, str]) -> list[tuple[str, int, str]]:
             check=False,
             cwd=root,
         )
+        # A warning is Vale reading less than the test asks of it, such as a
+        # language whose grammar setup:lint-tools has not installed.
+        assert not out.stderr.strip(), out.stderr
         alerts = json.loads(out.stdout or "{}")
     return sorted(
         (Path(path).name, alert["Line"], alert["Check"].split(".")[1])
