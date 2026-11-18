@@ -8,7 +8,7 @@
         {% if reading.ok %}
           {% table_region "Public records" %}
             <table class="data-table">
-              <thead><tr>{% table_heading "Type" "identifier" gutter=True %}{% table_heading "Name" "identifier" drop=1 %}{% table_heading "Answer" "identifier" %}</tr></thead>
+              <thead><tr>{% table_heading "Type" "identifier" %}{% table_heading "Name" "identifier" drop=1 %}{% table_heading "Answer" "identifier" %}</tr></thead>
               <tbody>
                 {% for answer in reading.answers %}
                   <tr>

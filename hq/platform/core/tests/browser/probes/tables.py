@@ -2,6 +2,7 @@
 
 import json
 
+from hq.platform.core.templatetags.table_tags import TABLE_REGION
 from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, PAINTED_PART
 from hq.platform.core.tests.browser.probes.shifts import PROBE_MOVES
@@ -125,9 +126,11 @@ TABLE_PROMISES = (
     + TABLE_NAME
     + """
   const found = new Set();
+  let read = 0;
   for (const region of document.querySelectorAll('main ' + scroll)) {
     const table = region.querySelector(':scope > table');
     if (!table || !table.checkVisibility()) continue;
+    read += 1;
     const name = tableName(region, table);
     const width = table.getBoundingClientRect().width;
     for (const cell of table.querySelectorAll(':scope > tbody > tr > [colspan]')) {
@@ -138,7 +141,7 @@ TABLE_PROMISES = (
     const sticks = (el) => el && getComputedStyle(el).position === 'sticky';
     if (head && !sticks(head.parentElement) && ![...head.children].every(sticks)) found.add(`${name}: its heading row does not stick`);
   }
-  return [...found];
+  return {read, found: [...found]};
 }"""
 )
 
@@ -148,12 +151,14 @@ TABLES_THAT_DO_NOT_FIT = (
     "(scroll) => {"
     + TABLE_NAME
     + """
-  return [...document.querySelectorAll('main ' + scroll)]
+  const read = [...document.querySelectorAll('main ' + scroll)]
     .filter((box) => box.checkVisibility() && !box.closest('details:not([open])'))
     .map((box) => [box, box.querySelector(':scope > table')])
-    .filter(([box, table]) => table && table.querySelector('tbody td')
-      && table.getBoundingClientRect().width > box.clientWidth + 1)
+    .filter(([, table]) => table && table.querySelector('tbody td'));
+  const found = read
+    .filter(([box, table]) => table.getBoundingClientRect().width > box.clientWidth + 1)
     .map(([box, table]) => `${tableName(box, table)} +${Math.round(table.getBoundingClientRect().width - box.clientWidth)}`);
+  return {read: read.length, found};
 }"""
 )
 
@@ -644,7 +649,9 @@ CUT_WHEN_OPEN = (
 
 # A row offers its toggle only where opening it shows something: an open row
 # whose toggle stands over a line with nothing drawn is a chevron that does
-# nothing. A group's toggle opens
+# nothing, unless in a narrow box it holds a clamp, which opening releases in
+# place (cuts.css), and whose toggle tables.css shows whether or not the
+# value overran. A group's toggle opens
 # the rows folded under it, so its line may hold nothing.
 OPENS_NOTHING = (
     "() => {"
@@ -654,6 +661,7 @@ OPENS_NOTHING = (
   for (const row of document.querySelectorAll('main table > tbody > tr.is-expanded:not(:has([data-fold-toggle]))')) {
     const line = row.nextElementSibling;
     if (!row.querySelector('[data-row-toggle]')?.checkVisibility() || row.closest('details:not([open])') || !line?.matches('.row-detail')) continue;
+    if (row.querySelector('.cell-clamp') && narrowBox(row.closest('table'))) continue;
     const drawn = [...line.querySelectorAll(':scope > td *')]
       .some((part) => part.checkVisibility() && part.getClientRects().length && box(part).height > 0);
     if (!drawn) found.push(`${describe(row)} opens a line with nothing drawn`);
@@ -672,8 +680,11 @@ UNSEEN_COLUMNS = (
   // held to its box then shares its width with columns nobody sees. A
   // stacked table has no columns to share it.
   const found = [];
+  let read = 0;
   for (const table of document.querySelectorAll('main ' + scroll + ' > table')) {
-    if (!table.checkVisibility() || getComputedStyle(table).display !== 'table') continue;
+    if (!table.checkVisibility()) continue;
+    read += 1;
+    if (getComputedStyle(table).display !== 'table') continue;
     const shown = [...table.querySelectorAll(':scope > thead > tr:last-child > th')]
       .filter((heading) => getComputedStyle(heading).display !== 'none');
     if (!shown.length) continue;
@@ -683,7 +694,7 @@ UNSEEN_COLUMNS = (
       found.push(`${describe(table)} shows ${shown.length} columns in ${Math.round(used)}px of ${Math.round(width)}px`);
     }
   }
-  return found;
+  return {read, found};
 }"""
 )
 
@@ -880,7 +891,7 @@ COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
 # them.
 ROW_TOGGLE_TABLES = """
 {% table_region "Dropping" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" gutter=True %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
+{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
 <tr data-probe="dropped"><td>Dropped</td><td>Short</td>
 <td><span style="display: inline-block; inline-size: 30rem">Something too wide for a phone to keep</span></td></tr>
 <tr data-probe="dropped-blank"><td>Blank</td><td>Short</td><td>–</td></tr>
@@ -891,14 +902,14 @@ ROW_TOGGLE_TABLES = """
 <td>a value far too long to show whole on one line of its column</td><td>–</td></tr>
 </tbody></table>{% endtable_region %}
 {% table_region "Folding" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" gutter=True %}{% table_heading "Value" css="key-col" %}</tr></thead><tbody>
+{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}</tr></thead><tbody>
 <tr data-probe="folded"><td>Folded</td>
 <td><span class="tag">One</span><span class="muted row-less">+1</span><span class="row-more"><span class="tag">Two</span></span></td></tr>
 <tr data-probe="cut-in-a-kept-gutter"><td>Name</td>
 <td>a value far too long to show whole on one line of its column</td></tr>
 </tbody></table>{% endtable_region %}
 {% table_region "Lining" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" gutter=True %}{% table_heading "Parts" css="key-col" %}</tr></thead><tbody>
+{% table_heading "Name" %}{% table_heading "Parts" css="key-col" %}</tr></thead><tbody>
 <tr data-probe="line-fits"><td>Fits</td>
 <td>{% line_list fits as part %}<span class="tag">{{ part }}</span>{% endline_list %}</td></tr>
 <tr data-probe="line-cut"><td>Cut</td>
@@ -915,9 +926,10 @@ ROW_TOGGLE_VALUES = {
 # line of its column in a row that opens, two past the line a clamp ends with an ellipsis (a block and a
 # link set in its line, as a cell's name is), one cut where no ellipsis can
 # land, a box of words around a box of its own, and a name's chip in the muted
-# line under a row's name, as a unit's page drew one, which draws its own; the
-# third stands in a table of its own whose rows open, since every row under a
-# gutter heading does, and offers its toggle for its long value. A note wider
+# line under a row's name, as a unit's page drew one, which draws its own. The
+# first table's columns all stay, so its rows hold nothing back and cannot
+# open; the third stands in a table of its own whose row opens for its long
+# value, offering its toggle. A note wider
 # than a phone puts each table in a narrow box there, where a row that cannot
 # open breaks the chip whole; a wide box shows each titled value whole on
 # hover, and a cut with no ellipsis tells no one to hover.
@@ -929,13 +941,14 @@ _CHIP = "chip-" + "-".join(["example-unit-name-long-enough-to-be-cut"] * 4) + ".
 _NOTE = '<td><span style="display: inline-block; inline-size: 30rem">A note wider than a phone</span></td>'
 CUT_TABLE = (
     '{% load value_tags %}{% table_region "Cuts" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" %}</tr></thead><tbody>'
+    '{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" css="key-col" %}'
+    "</tr></thead><tbody>"
     + "".join(
         f"<tr><td>{name.title()}</td><td>{_CUT.format(title.format(name), name)}</td>{_NOTE}</tr>"
         for name, title in (("untitled", ""), ("titled", ' title="{} value far too long to fit"'))
     )
     + '<tr><td>Clamped</td><td><div style="display: -webkit-box; -webkit-box-orient: vertical; '
-    '-webkit-line-clamp: 1; overflow: hidden; max-width: 80px">clamped value far too long to fit on its one line'
+    '-webkit-line-clamp: 1; overflow: hidden; max-width: 80px">clamped value far too long for its one line'
     f"</div></td>{_NOTE}</tr>"
     + '<tr><td>Inline</td><td><a href="#" style="display: -webkit-inline-box; -webkit-box-orient: '
     'vertical; -webkit-line-clamp: 1; overflow: hidden; max-width: 80px">inline value far too long to fit on its one '
@@ -945,8 +958,21 @@ CUT_TABLE = (
     + f'<tr><td>Chip<br><span class="muted"><code>{{{{ chip|breakable }}}}</code></span></td><td>Short</td>{_NOTE}</tr>'
     + "</tbody></table>{% endtable_region %}"
     + '{% table_region "Opening" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Name" gutter=True %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" %}</tr></thead><tbody>'
+    '{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" %}</tr></thead><tbody>'
     + f"<tr><td>Opens</td><td>opens value far too long to show whole on one line of its column</td>{_NOTE}</tr>"
+    "</tbody></table>{% endtable_region %}"
+)
+
+# Two rows whose open line draws nothing (their state has not left): one the
+# region clamps, which opening releases in place, and one with a short value.
+CLAMP_TABLE = (
+    '{% table_region "Clamps" %}<table class="data-table"><thead><tr>'
+    '{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "State" "status" %}'
+    "</tr></thead><tbody>"
+    "<tr><td>Clamped</td><td>"
+    + " ".join(["a value that runs well past the three lines its clamp holds"] * 6)
+    + '</td><td><span class="pill">Up</span></td></tr>'
+    '<tr data-probe="plain"><td>Plain</td><td>Short</td><td><span class="pill">Up</span></td></tr>'
     "</tbody></table>{% endtable_region %}"
 )
 
@@ -958,7 +984,7 @@ CUT_VALUES = {"chip": _CHIP}
 # long for the cell, which the panel has the room to show whole.
 POPOVER_IN_A_CELL = """{% load value_tags %}
 {% table_region "Origins" %}<table class="data-table"><thead><tr>
-{% table_heading "Item" gutter=True %}{% table_heading "Urgency" %}</tr></thead><tbody>
+{% table_heading "Item" %}{% table_heading "Urgency" %}</tr></thead><tbody>
 <tr><td class="row-gutter">Example item</td><td><span class="pill">Urgent</span>
 <div class="modal origin-panel" id="example-origin" popover><div class="modal-panel">{% facts %}
 {% fact "From" value=source %}{% fact "Key" %}<code>{{ key|breakable }}</code>{% endfact %}{% endfacts %}</div></div></td></tr>
@@ -993,11 +1019,13 @@ CHECKS = {
         (TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]),
         table=True,
         reader_sees="a table running past its box",
+        part=TABLE_REGION,
     ),
     "unseen columns": Check(
         (UNSEEN_COLUMNS, SELECTORS["table_scroll"]),
         table=True,
         reader_sees="a column cut off where nothing scrolls to it",
+        part=TABLE_REGION,
     ),
     "cut beside room": Check(
         (CUT_BESIDE_ROOM, SELECTORS["unseen"]), table=True, reader_sees="a value cut while its row has room to show it"
@@ -1022,6 +1050,7 @@ CHECKS = {
     "table promises": Check(
         (TABLE_PROMISES, SELECTORS["table_scroll"]),
         reader_sees="a table's heading row scrolling away, or a cell across its row stopping short",
+        part=TABLE_REGION,
     ),
     "whole parts moved by opening": Check(
         (WHOLE_PARTS_MOVED_BY_OPENING, SELECTORS["table_scroll"]),

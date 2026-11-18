@@ -1,5 +1,7 @@
 """Probes of boxes: what escapes the page, frames, overlaps, targets, the map and the chrome's insets."""
 
+from hq.platform.core.included_parts import TOPOLOGY_MAP
+from hq.platform.core.templatetags.table_tags import TABLE_REGION
 from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, PAINTED_PART
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -351,15 +353,17 @@ NARROW_FRAMES = (
     + DESCRIBE
     + """
   const found = [];
+  let read = 0;
   for (const el of document.querySelectorAll('main ' + scroll)) {
     if (!el.checkVisibility()) continue;
+    read += 1;
     const parent = el.parentElement;
     const style = getComputedStyle(parent);
     const room = parent.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const width = box(el).width;
     if (width < room - 2) found.push(`${describe(el)} in ${describe(parent)}: ${Math.round(width)}px of ${Math.round(room)}px`);
   }
-  return found;
+  return {read, found};
 }"""
 )
 
@@ -367,12 +371,13 @@ NARROW_FRAMES = (
 # The map scrolls with the page, and draws no lane with nothing in it.
 MAP = """([map, lane, node]) => {
   const box = document.querySelector(map);
-  if (!box) return [];
-  const found = [...box.querySelectorAll(lane)]
-    .filter((el) => el.checkVisibility() && !el.querySelector(node))
+  if (!box) return {read: 0, found: []};
+  const lanes = [...box.querySelectorAll(lane)].filter((el) => el.checkVisibility());
+  const found = lanes
+    .filter((el) => !el.querySelector(node))
     .map((el) => `an empty lane: ${el.textContent.trim().slice(0, 30)}`);
   if (['auto', 'scroll'].includes(getComputedStyle(box).overflowY)) found.unshift('the map scrolls inside itself');
-  return found;
+  return {read: lanes.length, found};
 }"""
 
 # The insets a sticky part sits under are the stylesheet's, never measured by a
@@ -478,11 +483,14 @@ CHECKS = {
     ),
     "cut rings": Check((CUT_RINGS, SELECTORS["target"]), reader_sees="a focus ring cut off by what holds its control"),
     "frames short of their box": Check(
-        (NARROW_FRAMES, SELECTORS["table_scroll"]), reader_sees="a table's frame ending short of the box it heads"
+        (NARROW_FRAMES, SELECTORS["table_scroll"]),
+        reader_sees="a table's frame ending short of the box it heads",
+        part=TABLE_REGION,
     ),
     "map": Check(
         (MAP, [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]]),
         reader_sees="a map scrolling inside the page, or a lane with nothing in it",
+        part=TOPOLOGY_MAP,
     ),
     "chrome insets": Check(CHROME_INSETS, reader_sees="a sticky part drawn under the header or the page's nav"),
 }

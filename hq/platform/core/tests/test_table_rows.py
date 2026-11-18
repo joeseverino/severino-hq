@@ -40,14 +40,15 @@ class TableRowTests(SimpleTestCase):
         self.assertEqual(["data-emphasized" in row.attrs for row in elements(html, "tr")], [True, False])
 
     def test_the_gutter_column_holds_each_rows_toggle(self):
-        """Under a heading that keeps the gutter, each row's cell in that
-        column stands in the gutter and ends with the row's toggle; a folded
+        """In a table whose rows can hold something back (here a ranked
+        column), each row's cell in the column that names it stands in the
+        gutter and ends with the row's toggle; a folded
         group's row keeps its own, a totals row stands in the gutter with no
         toggle, and a cell that spans the table holds none."""
 
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-            '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" gutter=True %}'
+            '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" %}'
             '{% table_heading "Note" drop=1 %}</tr></thead><tbody>'
             '<tr><td class="select-column"></td><td class="cell-data" data-probe="classed">A <b>a</b></td><td>b</td></tr>'
             '<tr><td class="select-column"></td><th scope="row" data-probe="plain">B</th><td>c</td></tr>'
@@ -77,9 +78,9 @@ class TableRowTests(SimpleTestCase):
         children = [each for each in found if each.ancestors and each.ancestors[-1] is probes["classed"]]
         self.assertIn("data-row-toggle", children[-1].attrs)
 
-    def test_a_toggle_written_in_the_gutter_is_refused(self):
+    def test_a_toggle_written_in_a_table_with_headings_is_refused(self):
         source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
             "</tr></thead><tbody><tr><td>A{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}"
         )
         with self.assertRaisesMessage(ValueError, "the region's to draw"):

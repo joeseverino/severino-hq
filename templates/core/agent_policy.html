@@ -28,7 +28,7 @@ or on the device's row below, the same form.
       <table class="data-table">
         <thead>
           <tr>
-            {% table_heading "Device" gutter=True %}
+            {% table_heading "Device" %}
             {% table_heading "Approve or block" "control" hidden=True %}
           </tr>
         </thead>
@@ -59,7 +59,7 @@ it is not blocked, since removal never lifts a block.
     <table class="data-table">
       <thead>
         <tr>
-          {% table_heading "Agent" "identifier" local_sort=True gutter=True %}
+          {% table_heading "Agent" "identifier" local_sort=True %}
           {% table_heading "Permissions" local_sort=True drop=2 %}
           {% table_heading "Last seen" "status" local_sort=True drop=3 %}
           {% table_heading "Activity" local_sort=True drop=1 %}
@@ -151,7 +151,7 @@ approved, and a block stops that device alone.
     <table class="data-table">
       <thead>
         <tr>
-          {% table_heading "Device" "identifier" gutter=True %}
+          {% table_heading "Device" "identifier" %}
           {% table_heading "Approval" "status" %}
           {% table_heading "First seen" "status" drop=2 %}
           {% table_heading "Last seen" "status" drop=3 %}
@@ -205,7 +205,7 @@ carries the device permission stands as them. Only theirs, never anybody else's.
       <table class="data-table">
         <thead>
           <tr>
-            {% table_heading "App" "identifier" local_sort=True gutter=True %}
+            {% table_heading "App" "identifier" local_sort=True %}
             {% table_heading "Registered" "status" local_sort=True %}
             {% table_heading "Remove" "control" hidden=True %}
           </tr>
@@ -248,7 +248,7 @@ change. Asked for when opened: asking takes the server's SDK into the process.
       <table class="data-table">
         <thead>
           <tr>
-            {% table_heading "Name" "identifier" gutter=True local_sort=True %}
+            {% table_heading "Name" "identifier" local_sort=True %}
             {% table_heading "Description" local_sort=True %}
           </tr>
         </thead>

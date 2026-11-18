@@ -883,11 +883,11 @@ Each column heading is `{% table_heading "Name" "identifier" %}`:
 | `drop=` | the order a narrow table lets it go in, never on the column that names the row or a `key-col` |
 | `sort=` | a list sorted on the server |
 | `local_sort=True` | a list sorted on the page, its control drawn only where the table holds two rows to sort |
-| `gutter=True` | the column whose cell in each row stands in the gutter and holds the row's toggle |
 
-The region draws each row's toggle, last in its cell under the `gutter=True`
-heading, and refuses one written there by hand; only a table with no
-headings ends its naming cell with `{% row_toggle %}`. The stylesheet shows
+Where a row can hold anything back (a column that leaves, a long value, a part
+only its open line shows), the region draws each row's toggle, last in the
+cell that names it, and refuses one written there by hand; only a table with
+no headings ends its naming cell with `{% row_toggle %}`. The stylesheet shows
 the toggle only where the row holds something back.
 
 A row edited on the page holds `{% row_editor form row.pk label="Correct
@@ -951,7 +951,9 @@ none. And it retires `ResourceSpec`'s `list_handler`, `list_query_type`,
 query, item, fields=...)`, so none of them can be declared without the
 others. It also exports `with_query` from `hq_sdk.web`, the one way an
 address gets a query, and `{% with_query url name=value as named %}` is its
-template form: `hq plugin check` refuses a query added by hand.
+template form: `hq plugin check` refuses a query added by hand. It retires
+`{% table_heading %}`'s `gutter` option too: the region keeps the gutter in
+the column that names each row wherever a row can hold anything back.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body

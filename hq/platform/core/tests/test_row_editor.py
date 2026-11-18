@@ -10,7 +10,7 @@ from hq.platform.application.markup_testing import all_elements
 
 EDITED = (
     '{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Run" "identifier" gutter=True %}{% table_heading "Miles" "numeric" %}'
+    '{% table_heading "Run" "identifier" %}{% table_heading "Miles" "numeric" %}'
     '{% table_heading "Distance check" "control" %}</tr></thead><tbody>'
     '{% for key, miles in rows %}<tr data-probe="{{ key }}"><td><strong>{{ key }}</strong></td><td>{{ miles }}</td>'
     '<td>{% row_editor form key label="Correct distance" action="/example/distance/" verb="Save distance"'

@@ -34,7 +34,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
       <table class="data-table">
         <thead>
           <tr>
-            {% table_heading "Image" "identifier" gutter=True local_sort=True %}
+            {% table_heading "Image" "identifier" local_sort=True %}
             {% table_heading "Change" drop=2 local_sort=True %}
             {% table_heading "Known" "status" drop=1 local_sort=True %}
             {% table_heading "Runs as" css="key-col" local_sort=True %}
@@ -81,7 +81,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
     <table class="data-table">
       <thead>
         <tr>
-          {% table_heading "Container" "identifier" gutter=True local_sort=True %}
+          {% table_heading "Container" "identifier" local_sort=True %}
           {% table_heading "Image" "identifier" drop=5 local_sort=True %}
           {% table_heading "Vulnerabilities" "status" drop=4 local_sort=True %}
           {% table_heading "Update" "status" drop=3 local_sort=True %}

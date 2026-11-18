@@ -17,7 +17,7 @@ _ROW = (
 
 def _table(
     rows: str,
-    head: str = '{% table_heading "Name" gutter=True %}{% table_heading "Do" "control" hidden=True drop=1 %}',
+    head: str = '{% table_heading "Name" %}{% table_heading "Do" "control" hidden=True drop=1 %}',
     **context,
 ) -> str:
     source = (
@@ -80,7 +80,7 @@ class RowControlsTests(SimpleTestCase):
 
     def test_a_row_with_no_heading_over_it_opens_to_what_it_moves(self):
         """What a row moves to its open line is reached by the row's toggle,
-        which the region draws where no heading keeps the gutter."""
+        which the region draws in its first cell in a table with no headings."""
 
         source = (
             '{% load table_tags %}{% table_region "Examples" %}<table class="data-table"><tbody>'

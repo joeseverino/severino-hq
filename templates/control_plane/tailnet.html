@@ -21,7 +21,7 @@
   {% if tailnet.grants %}
   {% table_region "Grants" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "From" gutter=True local_sort=True %}{% table_heading "To" local_sort=True %}{% table_heading "Ports" "identifier" drop=1 local_sort=True %}</tr></thead>
+      <thead><tr>{% table_heading "From" local_sort=True %}{% table_heading "To" local_sort=True %}{% table_heading "Ports" "identifier" drop=1 local_sort=True %}</tr></thead>
       <tbody>
         {% for grant in tailnet.grants %}
           <tr>
@@ -41,7 +41,7 @@
   {% if tailnet.group_rows %}
   {% table_region "Groups and tags" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "Name" "identifier" gutter=True local_sort=True %}{% table_heading "Members" "identifier" local_sort=True %}{% table_heading "Devices" drop=1 local_sort=True %}</tr></thead>
+      <thead><tr>{% table_heading "Name" "identifier" local_sort=True %}{% table_heading "Members" "identifier" local_sort=True %}{% table_heading "Devices" drop=1 local_sort=True %}</tr></thead>
       <tbody>
         {% for group in tailnet.policy.groups %}
           <tr>
@@ -81,7 +81,7 @@
     {% section "Services" count=tailnet.policy.services|length %}
     {% table_region "Tailnet services" %}
       <table class="data-table">
-        <thead><tr>{% table_heading "Service" "identifier" gutter=True local_sort=True %}{% table_heading "Answers at" "identifier" local_sort=True %}{% table_heading "Ports" "identifier" drop=2 local_sort=True %}{% table_heading "Note" drop=1 local_sort=True %}</tr></thead>
+        <thead><tr>{% table_heading "Service" "identifier" local_sort=True %}{% table_heading "Answers at" "identifier" local_sort=True %}{% table_heading "Ports" "identifier" drop=2 local_sort=True %}{% table_heading "Note" drop=1 local_sort=True %}</tr></thead>
         <tbody>
           {% for service in tailnet.policy.services %}
             <tr>
@@ -107,7 +107,7 @@
     {% section "Shell access" count=tailnet.ssh_rules|length %}
     {% table_region "Shell access" %}
       <table class="data-table">
-        <thead><tr>{% table_heading "From" gutter=True local_sort=True %}{% table_heading "To" local_sort=True %}{% table_heading "As" "identifier" drop=2 local_sort=True %}{% table_heading "Re-authenticate" "status" drop=1 local_sort=True %}</tr></thead>
+        <thead><tr>{% table_heading "From" local_sort=True %}{% table_heading "To" local_sort=True %}{% table_heading "As" "identifier" drop=2 local_sort=True %}{% table_heading "Re-authenticate" "status" drop=1 local_sort=True %}</tr></thead>
         <tbody>
           {% for row in tailnet.ssh_rules %}
             <tr>
@@ -127,7 +127,7 @@
     {% section "App connectors" count=tailnet.policy.app_connectors|length %}
     {% table_region "App connectors" %}
       <table class="data-table">
-        <thead><tr>{% table_heading "Name" "identifier" gutter=True local_sort=True %}{% table_heading "Routed by" "identifier" local_sort=True %}{% table_heading "For" "identifier" local_sort=True %}</tr></thead>
+        <thead><tr>{% table_heading "Name" "identifier" local_sort=True %}{% table_heading "Routed by" "identifier" local_sort=True %}{% table_heading "For" "identifier" local_sort=True %}</tr></thead>
         <tbody>
           {% for connector in tailnet.policy.app_connectors %}
             <tr>

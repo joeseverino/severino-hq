@@ -35,10 +35,12 @@ from hq.platform.core.tests.browser.probes.settle import (
 from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
     CELLS,
+    CLAMP_TABLE,
     COLUMNS_SHOWN,
     CUT_AND_CLOSED,
     CUT_TABLE,
     CUT_VALUES,
+    OPENS_NOTHING,
     POPOVER_IN_A_CELL,
     POPOVER_VALUES,
     ROW_TOGGLE_TABLES,
@@ -386,7 +388,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             **self.pages,
             "fold-probe": probe(
                 '{% table_region "Folding" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>'
+                '{% table_heading "Name" %}{% table_heading "Value" %}</tr></thead><tbody>'
                 '{% row_group "Example group" 1 folds="example-fold" %}'
                 '<tr id="example-cut" data-folded="example-fold"><td>Name</td>'
                 "<td>a value far too long to show whole on one line of its column</td>"
@@ -569,7 +571,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             with self.subTest(name):
                 self.assertEqual(self.page.locator(SELECTORS["dialog_opener"].format(id=name)).count(), 1)
         said = self.page.evaluate(DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]])
-        self.assertEqual(said, [])
+        self.assertEqual(said["found"], [])
 
     @with_script
     def test_a_rows_ask_says_its_sentence_on_the_line_its_row_opens_to(self):
@@ -631,7 +633,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             **self.pages,
             "ask-probe": probe(
                 '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Name" gutter=True %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
+                '{% table_heading "Name" %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
                 "<tr><td>A</td>"
                 '<td>{% include "partials/_ask.html" with ask=ask %}</td></tr></tbody></table>{% endtable_region %}'
                 "<div data-example-region><p>An example line.</p></div>"
@@ -659,7 +661,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             **self.pages,
             "ask-actions-probe": probe(
                 '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Name" gutter=True %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
+                '{% table_heading "Name" %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
                 '<tr><td>A</td><td class="row-actions">{% include "partials/_ask.html" with ask=ask %}'
                 '<a class="btn ghost compact" href="/example/remove/">Remove</a></td></tr></tbody></table>'
                 "{% endtable_region %}"
@@ -750,7 +752,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             **self.pages,
             "word-before-a-name-probe": probe(
                 '<div style="inline-size: 26rem">{% table_region "Changes" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Name" gutter=True %}{% table_heading "Change" %}</tr></thead><tbody><tr>'
+                '{% table_heading "Name" %}{% table_heading "Change" %}</tr></thead><tbody><tr>'
                 "<td><strong>example.com</strong><br>"
                 f'<span class="muted">on <a href="#" data-entity="Machine">{host}</a></span></td>'
                 f'<td class="cell-data">Created {record} from a request</td>'
@@ -1513,6 +1515,27 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertEqual(named, expected, found)
 
     @with_script
+    def test_a_row_opened_narrow_to_release_its_clamp_opens_something(self):
+        """In a narrow box an open row that holds a clamp shows its value
+        whole in place, so its toggle opens something though its line draws
+        nothing; a shown toggle over an empty line on a row with no clamp
+        opens nothing, and is found."""
+
+        self.pages = {**self.pages, "clamp-probe": probe(CLAMP_TABLE)}
+        self.open("clamp-probe", PHONE_SCREEN[0])
+        self.page.evaluate(SETTLE)
+        self.page.evaluate(
+            "() => document.querySelectorAll('main [data-row-toggle]').forEach((toggle) => toggle.click())"
+        )
+        self.assertEqual(self.page.locator("main tr.is-expanded").count(), 2)
+        self.assertEqual(self.page.evaluate(OPENS_NOTHING), [])
+        # A row that says it holds a part below shows its toggle at any width.
+        self.page.evaluate(
+            "() => document.querySelector('main tr[data-probe=\"plain\"]').setAttribute('data-below', '')"
+        )
+        self.assertEqual(len(self.page.evaluate(OPENS_NOTHING)), 1)
+
+    @with_script
     def test_a_panel_a_cell_shows_shows_its_values_whole(self):
         """A panel opened from a cell, drawn over the page, is no part of the
         column, so an identifier in it reads whole however narrow the cell."""
@@ -1722,7 +1745,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
         self.open("topology", WIDE)
         check, arg = CHECKS["map"].probe
-        self.assertEqual(self.page.evaluate(check, arg), [])
+        self.assertEqual(self.page.evaluate(check, arg)["found"], [])
         # The stylesheet hides a lane with no node in it, so the plant empties
         # the lanes of a sheet that lost that rule.
         self.page.evaluate(
@@ -1730,7 +1753,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             " el.querySelectorAll(node).forEach((each) => each.remove()); el.style.display = 'block'; })",
             arg[1:],
         )
-        self.assertTrue(self.page.evaluate(check, arg))
+        self.assertTrue(self.page.evaluate(check, arg)["found"])
 
     def test_a_short_name_is_broken_only_where_its_table_holds_it(self):
         """A short name its table holds on its line (`nowrap`) and something
@@ -1844,7 +1867,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         # every sentence now asks for its whole line.
         self.page.evaluate("() => { document.querySelector('main table').style.whiteSpace = 'nowrap'; }")
         self.page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))")
-        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"])["found"], [])
         self.assertEqual(self.page.evaluate(COLUMNS_SHOWN), shown)
 
     @with_script

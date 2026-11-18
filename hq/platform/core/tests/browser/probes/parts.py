@@ -1,5 +1,7 @@
 """Probes of a page's parts: disclosures, labels, the dashboard's readings, drawings and a check's evidence."""
 
+from hq.platform.core.included_parts import CHART, MODAL
+from hq.platform.core.templatetags.ladder_tags import CHECK_RUNG
 from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -125,9 +127,11 @@ STRANDED_EVIDENCE = (
     + DESCRIBE
     + """
   const found = [];
+  let read = 0;
   for (const el of document.querySelectorAll('main ' + evidence)) {
     const said = el.previousElementSibling;
     if (!el.checkVisibility() || !said || !said.matches(statement)) continue;
+    read += 1;
     const e = box(el);
     const s = box(said);
     const besideIt = e.top < s.bottom - 1;
@@ -135,7 +139,7 @@ STRANDED_EVIDENCE = (
       found.push(`${describe(el)}: ${Math.round(e.left - (besideIt ? s.right : s.left))}px from its statement`);
     }
   }
-  return found;
+  return {read, found};
 }"""
 )
 
@@ -218,9 +222,9 @@ LINKS_AT_REST = """([links, vendored]) => {
 # names it, so drawing a dialog without its control is a finding.
 DIALOGS_WITHOUT_OPENERS = """([dialogs, openers]) => {
   const opened = (dialog) => document.querySelector(openers.replaceAll('{id}', dialog.id.slice('modal-'.length)));
-  return [...document.querySelectorAll(dialogs)]
-    .filter((dialog) => !opened(dialog))
-    .map((dialog) => `dialog #${dialog.id} has no control that opens it`);
+  const read = [...document.querySelectorAll(dialogs)];
+  const found = read.filter((dialog) => !opened(dialog)).map((dialog) => `dialog #${dialog.id} has no control that opens it`);
+  return {read: read.length, found};
 }"""
 
 # How many lines an element's words run over: the runs of its text that share
@@ -280,11 +284,15 @@ PILLS_IN_PIECES = (
 # A chart, a trend, a bar or a calendar is drawn wherever what holds it is: a
 # drawing hidden for want of room is a figure that shows nothing, when the
 # table beside it or the line under it has the room to show it.
-UNDRAWN = """(drawings) => [...document.querySelectorAll(drawings)].filter((drawing) => {
-  const held = drawing.parentElement.getBoundingClientRect();
-  const drawn = drawing.getBoundingClientRect();
-  return held.width > 0 && held.height > 0 && (drawn.width < 1 || drawn.height < 1);
-}).map((drawing) => drawing.outerHTML.slice(0, 120))"""
+UNDRAWN = """(drawings) => {
+  const read = [...document.querySelectorAll(drawings)];
+  const found = read.filter((drawing) => {
+    const held = drawing.parentElement.getBoundingClientRect();
+    const drawn = drawing.getBoundingClientRect();
+    return held.width > 0 && held.height > 0 && (drawn.width < 1 || drawn.height < 1);
+  }).map((drawing) => drawing.outerHTML.slice(0, 120));
+  return {read: read.length, found};
+}"""
 
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
@@ -297,13 +305,16 @@ CHECKS = {
     "dialogs": Check(
         (DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]]),
         reader_sees="a dialog nothing on the page opens",
+        part=MODAL,
     ),
     "links at rest": Check(
         (LINKS_AT_REST, [SELECTORS["link"], SELECTORS["vendored"]]),
         reader_sees="a link among words told apart from them by color alone",
     ),
     "undrawn drawings": Check(
-        (UNDRAWN, SELECTORS["drawing"]), reader_sees="a chart or a calendar given room and drawing nothing"
+        (UNDRAWN, SELECTORS["drawing"]),
+        reader_sees="a chart or a calendar given room and drawing nothing",
+        part=CHART,
     ),
     "pills in pieces": Check(
         PILLS_IN_PIECES, table=True, reader_sees="one pill's words drawn as two pills, a line each"
@@ -315,6 +326,7 @@ CHECKS = {
     "evidence apart": Check(
         (STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]]),
         reader_sees="a check's evidence drawn away from its statement",
+        part=CHECK_RUNG,
     ),
     "summaries hiding": Check(
         (HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"]), reader_sees="what a fold's handle names, hidden"

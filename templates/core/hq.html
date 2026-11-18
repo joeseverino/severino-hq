@@ -86,7 +86,7 @@ row in the flow.
   {% elif work.jobs %}
     {% table_region "Jobs" %}
       <table class="data-table">
-        <thead><tr>{% table_heading "Unit" "identifier" local_sort=True gutter=True %}{% table_heading "Runs" "identifier" local_sort=True drop=3 %}{% table_heading "Last run" "status" local_sort=True drop=2 %}{% table_heading "Result" "status" css="key-col" local_sort=True %}{% table_heading "Next run" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
+        <thead><tr>{% table_heading "Unit" "identifier" local_sort=True %}{% table_heading "Runs" "identifier" local_sort=True drop=3 %}{% table_heading "Last run" "status" local_sort=True drop=2 %}{% table_heading "Result" "status" css="key-col" local_sort=True %}{% table_heading "Next run" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
         <tbody>
           {% for job in work.jobs %}
             <tr>
@@ -104,7 +104,7 @@ row in the flow.
   {% if work.scheduled %}
     {% table_region "Scheduled work" %}
       <table class="data-table">
-        <thead><tr>{% table_heading "Scheduled work" local_sort=True gutter=True %}{% table_heading "Schedule" "status" css="optional-col" local_sort=True drop=2 %}{% table_heading "Recent runs" "status" local_sort=True drop=3 %}{% table_heading "Last result" "status" css="key-col" local_sort=True %}{% table_heading "Next due" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
+        <thead><tr>{% table_heading "Scheduled work" local_sort=True %}{% table_heading "Schedule" "status" css="optional-col" local_sort=True drop=2 %}{% table_heading "Recent runs" "status" local_sort=True drop=3 %}{% table_heading "Last result" "status" css="key-col" local_sort=True %}{% table_heading "Next due" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
         <tbody>
           {% for item in work.scheduled %}
             <tr>
@@ -124,7 +124,7 @@ row in the flow.
   {% elif work.renderers %}
     {% table_region "Credentials refresh" %}
       <table class="data-table compact-table">
-        <thead><tr>{% table_heading "Credentials refresh" "identifier" local_sort=True gutter=True %}{% table_heading "Result" "status" css="key-col" local_sort=True %}{% table_heading "Tried" "status" local_sort=True drop=2 %}{% table_heading "Last confirmed current" "status" local_sort=True drop=1 %}</tr></thead>
+        <thead><tr>{% table_heading "Credentials refresh" "identifier" local_sort=True %}{% table_heading "Result" "status" css="key-col" local_sort=True %}{% table_heading "Tried" "status" local_sort=True drop=2 %}{% table_heading "Last confirmed current" "status" local_sort=True drop=1 %}</tr></thead>
         <tbody>
           {% for item in work.renderers %}
             <tr>
@@ -150,7 +150,7 @@ row in the flow.
   {% else %}
   {% table_region "Readings by connection" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "Reading" local_sort=True gutter=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}{% table_heading "Records" "numeric" local_sort=True drop=2 %}{% table_heading "Reading" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
+      <thead><tr>{% table_heading "Reading" local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}{% table_heading "Records" "numeric" local_sort=True drop=2 %}{% table_heading "Reading" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
       {% for provider, rows in sight.groups %}
       <tbody>
         {% row_group provider rows|length %}

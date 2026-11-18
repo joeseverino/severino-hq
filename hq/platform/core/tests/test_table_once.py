@@ -39,7 +39,7 @@ class RowWrittenOnceTests(SimpleTestCase):
 
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-            '{% table_heading "Name" gutter=True %}{% table_heading "Note" drop=1 %}'
+            '{% table_heading "Name" %}{% table_heading "Note" drop=1 %}'
             '{% table_heading "State" "status" %}{% table_heading "Act" hidden=True css="actions-col" %}'
             "</tr></thead><tbody>"
             '<tr><td>A <span class="narrow-more"><b data-probe="narrow">n</b></span>'
@@ -98,7 +98,7 @@ class RowWrittenOnceTests(SimpleTestCase):
         rows = 20
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-            '{% table_heading "Connection" "identifier" gutter=True %}{% table_heading "Reads" drop=2 %}'
+            '{% table_heading "Connection" "identifier" %}{% table_heading "Reads" drop=2 %}'
             '{% table_heading "Reaches" drop=1 %}{% table_heading "State" "status" %}'
             '{% table_heading "Actions" hidden=True css="actions-col" %}</tr></thead><tbody>'
             + "".join(row.format(n=n) for n in range(rows))

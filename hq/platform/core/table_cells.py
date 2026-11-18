@@ -460,7 +460,7 @@ class Cells(HTMLParser):
         wide = {at for at, cell in enumerate(heads[-1] if heads else []) if "wide-only" in _classes(cell.attrs)}
         if columns > 1 and (narrow := min(columns - 1, len(wide - empty))):
             self.marks.setdefault(self.table_at, []).append(f' data-wide-columns="{narrow}"')
-        drops, gutter = _columns(heads[-1] if heads else [])
+        drops = _drops(heads[-1] if heads else [])
         # The columns no heading's rank takes away: what a row is (a cell said
         # by its pills alone; a pill beside a value is a note on it), what it
         # does (its controls, a field a reader fills in, a button), and words
@@ -500,6 +500,13 @@ class Cells(HTMLParser):
         # state does, so a row never shows a spare column without its status.
         last = max((level for level in levels.values() if level <= RANKS), default=1)
         levels |= dict.fromkeys(declared - kept - empty, last)
+        # A table whose rows can hold anything back (a column that leaves, a
+        # value a narrow box clamps, a part only the open line shows, a fold)
+        # keeps the gutter in the column that names each row, so every such
+        # row carries the toggle that opens what left.
+        gutter = named if heads and (levels or any(_holds_back(row, kinds, named) for row in records)) else None
+        if heads and any(cell.toggled and not cell.folds for row in records for cell in row.cells):
+            raise ValueError("A row's toggle in a table with headings is the region's to draw.")
         self.opens = False
         self.cuts += [cell.drop for row in self.rows if row.section == "thead" for cell in row.cells if cell.drop]
         if not (self.sorts and _sorts(records)):
@@ -515,11 +522,11 @@ class Cells(HTMLParser):
             if row.section == "thead":
                 self._mark_long_heads(row, longs)
             self._name(row, kinds, named)
-            if gutter is not None and row.section != "thead":
+            if gutter is not None:
                 self._gutter(row, gutter)
             elif row.section == "tbody" and not any(cell.toggled for cell in row.cells) and _moves(row):
-                # What a row moves to its open line is reached by its toggle,
-                # which its first cell holds where no heading keeps the gutter.
+                # What a row of a table with no headings moves to its open
+                # line is reached by its toggle, which its first cell holds.
                 self._gutter(row, 0)
             if row.section == "tbody" and row.end:
                 self._detail(row, width, levels)
@@ -532,9 +539,9 @@ class Cells(HTMLParser):
         self._class((row.start, row.class_at), "is-expanded")
 
     def _gutter(self, row: _Row, place: int) -> None:
-        """The cell of a row in the column whose heading keeps the gutter
-        stands in the gutter, and a record's holds the toggle that opens it,
-        last in the cell."""
+        """The cell of a row in the column that keeps the gutter stands in
+        the gutter, and a record's holds the toggle that opens it, last in
+        the cell."""
 
         cell = _at_place(row.cells, place)
         if cell is None:
@@ -543,8 +550,6 @@ class Cells(HTMLParser):
             self._class((cell.start, cell.class_at), "row-gutter")
         if row.section != "tbody" or cell.folds:
             return
-        if cell.toggled:
-            raise ValueError("A row's toggle in a column whose heading keeps the gutter is the region's to draw.")
         if cell.closed is None:
             raise ValueError("A cell in the gutter closes with its own end tag, before which its toggle goes.")
         self.toggles.append((cell.closed, any(_finished(each, "editor") for each in row.cells)))
@@ -587,10 +592,9 @@ class Cells(HTMLParser):
         marks = [] if "data-kind" in cell.attrs else [f' data-kind="{kind}"']
         if body and _long(cell):
             marks.append(" data-long")
-        words = kind in _CUT_KINDS or (kind == "control" and not cell.controls)
-        if body and words and not cell.says_nothing:
+        if body and _words(cell, kind) and not cell.says_nothing:
             if _long(cell):
-                if self.toggled and cell.closed:
+                if self.toggled and cell.closed and _clamps(kind):
                     self._box(cell, kind, "cell-clamp")
             # A fold's toggle is drawn before its head's value, which the
             # value's span (ended at a toggle) would leave out.
@@ -767,13 +771,39 @@ def _narrow_levels(heading: list[_Cell], kinds: dict[int, str], kept: set[int], 
     return {at: min(RANKS, max(after + 1, RANKS - len(spare) + place)) for place, at in enumerate(spare, 1)}
 
 
-def _columns(heading: list[_Cell]) -> tuple[dict[int, int], int | None]:
-    """The rank of each column that may leave, and the one whose heading
-    keeps the gutter."""
+def _drops(heading: list[_Cell]) -> dict[int, int]:
+    """The rank of each column that may leave."""
 
-    drops = {index: int(cell.attrs["data-drop"]) for index, cell in enumerate(heading) if cell.attrs.get("data-drop")}
-    gutters = (index for index, cell in enumerate(heading) if "row-gutter" in _classes(cell.attrs))
-    return drops, next(gutters, None)
+    return {index: int(cell.attrs["data-drop"]) for index, cell in enumerate(heading) if cell.attrs.get("data-drop")}
+
+
+def _words(cell: _Cell, kind: str) -> bool:
+    """Whether the cell says words that may be cut: a value of a kind that
+    wraps, or what a cell of controls says where it holds none."""
+
+    return kind in _CUT_KINDS or (kind == "control" and not cell.controls)
+
+
+def _clamps(kind: str) -> bool:
+    """Whether a long value of the kind is held to a few lines: the name a
+    row is read by wraps whole, as a part the row is read by does
+    (`cell-whole`, cuts.css), so it never makes its row open."""
+
+    return kind != "name"
+
+
+def _holds_back(row: _Row, kinds: dict[int, str], named: int) -> bool:
+    """Whether the row can hold back from its line what its open line shows:
+    a long value a narrow box clamps, a part held for the open line, a block
+    moved there, its editor, or a fold."""
+
+    for at, cell in _placed(row):
+        if cell.folds or cell.holds & _HELD or _finished(cell, "below") or _finished(cell, "editor"):
+            return True
+        kind = _kind_at(at, kinds, named)
+        if "colspan" not in cell.attrs and cell.closed and _long(cell) and _words(cell, kind) and _clamps(kind):
+            return True
+    return False
 
 
 def _sorts(records: list[_Row]) -> bool:

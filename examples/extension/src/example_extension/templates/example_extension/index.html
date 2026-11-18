@@ -3,7 +3,7 @@
 {% section "Notes" id="example-notes" count=notes|length %}
   {% table_region "Notes" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "Note" gutter=True %}{% table_heading "Written" %}</tr></thead>
+      <thead><tr>{% table_heading "Note" %}{% table_heading "Written" %}</tr></thead>
       <tbody>
         {% for note in notes %}
         <tr>

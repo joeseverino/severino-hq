@@ -2,8 +2,8 @@
 
 ``{% table_region %}`` wraps the table in the box it fits and draws what
 follows from its headings: a figure's alignment down its column, the sort
-control only where there are rows to sort, and each row's toggle in the
-gutter. ``{% table_heading %}`` draws each column heading with its kind, its
+control only where there are rows to sort, and, where a row can hold anything
+back, each row's toggle in the cell that names it. ``{% table_heading %}`` draws each column heading with its kind, its
 drop rank and its sort control, and ``{% row_toggle %}`` draws the disclosure
 of a row in a table with no headings to say where its gutter is.
 ``{% row_select %}`` draws a row's tick-box under the heading that selects
@@ -343,7 +343,7 @@ def table_region(parser: Any, token: Any) -> RegionNode:
 
 
 # The template contract reads a tag's declaration from what it wraps.
-table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
+TABLE_REGION = table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
     name="table_region",
     about=(
         "The box a table fits, which draws what follows from its headings, and, with no rows, the one empty "
@@ -386,7 +386,6 @@ def table_heading(
     ] = None,
     hidden: Annotated[bool, Describe("The name for assistive technology only.")] = False,
     title: Annotated[str, Describe("Its `title`.")] = "",
-    gutter: Annotated[bool, Describe("Its cells stand in the gutter and hold each row's toggle.")] = False,
     select_all: Annotated[bool, Describe("The tick-box that selects every row.")] = False,
 ) -> dict[str, Any]:
     """One column heading.
@@ -410,7 +409,6 @@ def table_heading(
     check_drop(drop, css, label)
     classes = [css] if css else []
     classes += ["select-column"] if select_all else []
-    classes += ["row-gutter"] if gutter else []
     return {
         "label": label,
         "kind": kind,
@@ -513,8 +511,8 @@ def row_actions(
 
 def row_toggle() -> dict[str, Any]:
     """The toggle that opens a row to all it holds, last in the cell that names
-    the row, in a table with no headings; under a heading that keeps the gutter
-    (``gutter=True``) the region draws it. The stylesheet shows it only where
+    the row, in a table with no headings; in a table with headings the region
+    draws it. The stylesheet shows it only where
     the row has something hidden."""
 
     return {}
@@ -623,27 +621,25 @@ slotted(
     ),
     library=register,
 )
-slotted(
-    Part(
-        name="row_actions",
-        about="The cell that ends a row with what can be done to its record, each a compact control.",
-        partial="partials/_row_actions.html",
-        function=row_actions,
-        public=True,
-        example=(
-            '{% table_region "Example actions" %}<table class="data-table"><tbody><tr><td>{{ row.name }}</td>'
-            "{% row_actions row.actions %}</tr></tbody></table>{% endtable_region %}"
-        ),
-        public_classes=("row-actions",),
+ROW_ACTIONS = Part(
+    name="row_actions",
+    about="The cell that ends a row with what can be done to its record, each a compact control.",
+    partial="partials/_row_actions.html",
+    function=row_actions,
+    public=True,
+    example=(
+        '{% table_region "Example actions" %}<table class="data-table"><tbody><tr><td>{{ row.name }}</td>'
+        "{% row_actions row.actions %}</tr></tbody></table>{% endtable_region %}"
     ),
-    library=register,
+    public_classes=("row-actions",),
 )
+slotted(ROW_ACTIONS, library=register)
 slotted(
     Part(
         name="row_select",
         example=(
             '{% table_region "Example selections" %}<table class="data-table" data-selectable-table><thead><tr>'
-            '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" "identifier" gutter=True %}'
+            '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" "identifier" %}'
             '{% table_heading "State" "status" %}</tr></thead><tbody><tr>{% row_select 1 %}<td>example-01</td>'
             '<td>{% status "Online" tone="good" %}</td></tr></tbody></table>{% endtable_region %}'
         ),

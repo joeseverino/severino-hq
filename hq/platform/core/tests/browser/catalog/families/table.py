@@ -13,7 +13,7 @@ ENTRIES = {
     # What the table region derives from its headings, each in a table of its
     # own: a figure's column aligned under its heading, body and totals, with
     # no class on a cell; the sort control on a table of rows and none on a
-    # table of one; each row's toggle in the gutter column's cell, shown on a
+    # table of one; each row's toggle in the cell that names it, shown on a
     # row that holds something back.
     "table/figures": Entry(
         '{% section "Example costs" %}{% table_region "Example costs" %}<table class="data-table"><thead><tr>'
@@ -49,7 +49,7 @@ ENTRIES = {
     ),
     "table/gutter": Entry(
         '{% section "Example records 5" %}{% table_region "Example records 5" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" "identifier" gutter=True %}{% table_heading "Note" %}</tr></thead><tbody>'
+        '{% table_heading "Name" "identifier" %}{% table_heading "Note" %}</tr></thead><tbody>'
         "<tr><td><strong>example-01</strong></td><td>An example note"
         '<div class="row-below">An example line the row holds back.</div></td></tr>'
         "<tr><td><strong>example-02</strong></td><td>Another example note</td></tr></tbody></table>"
@@ -59,7 +59,7 @@ ENTRIES = {
     # each run; a cut of one is measured, and opened, by tables.js.
     "table/one-line": Entry(
         '{% section "Example runs 2" %}{% table_region "Example runs 2" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Run" "identifier" gutter=True %}{% table_heading "Asked by" %}</tr></thead><tbody>'
+        '{% table_heading "Run" "identifier" %}{% table_heading "Asked by" %}</tr></thead><tbody>'
         '<tr><td><strong>example-01</strong></td><td>{% cell_line text="example-owner, on the web" lines=1 %}</td></tr>'
         '<tr><td><strong>example-02</strong></td><td>{% cell_line text="example-agent, over MCP" lines=1 %}</td></tr>'
         "</tbody></table>{% endtable_region %}{% endsection %}"
@@ -69,7 +69,7 @@ ENTRIES = {
     # lines, each set on its row's first line.
     "table/row-actions": Entry(
         '{% section "Example messages" %}{% table_region "Example messages" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "From" "identifier" gutter=True %}{% table_heading "Note" %}'
+        '{% table_heading "From" "identifier" %}{% table_heading "Note" %}'
         '{% table_heading "Actions" css="actions-col" hidden=True %}</tr></thead><tbody>'
         "{% for row in rows %}<tr><td><strong>{{ row.0 }}</strong></td><td>{{ row.1 }}</td>"
         "{% row_actions row.2 %}</tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}",
@@ -136,7 +136,7 @@ ENTRIES = {
     # rows that do not, its links weighed and its cells tinted.
     "table/emphasized": Entry(
         '{% section "Example messages 2" %}{% table_region "Example messages 2" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "From" "identifier" gutter=True %}{% table_heading "Message" %}</tr></thead><tbody>'
+        '{% table_heading "From" "identifier" %}{% table_heading "Message" %}</tr></thead><tbody>'
         "{% for row in rows %}<tr{% row_state emphasized=row.2 %}><td>{{ row.0 }}</td>"
         '<td><a href="#">{{ row.1 }}</a></td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}',
         {"rows": (("example-01", "An example message not read yet.", True), ("example-02", "An example read.", False))},
@@ -147,7 +147,7 @@ ENTRIES = {
     "table/selectable": Entry(
         '{% section "Example assets" %}{% table_region "Example assets" %}'
         '<table class="data-table" data-selectable-table><thead><tr>'
-        '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" "identifier" gutter=True %}'
+        '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" "identifier" %}'
         '{% table_heading "State" "status" %}</tr></thead><tbody>'
         "{% for row in rows %}<tr>{% row_select row.0 %}<td>{{ row.1 }}</td>"
         '<td>{% status "Online" tone="good" %}</td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}',
@@ -159,7 +159,7 @@ ENTRIES = {
     # here, the rest wrap on lines of their own beneath the first three.
     "table/line-list": Entry(
         '{% section "Example stacks" %}{% table_region "Example stacks" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" "identifier" gutter=True %}{% table_heading "Parts" %}</tr></thead><tbody>'
+        '{% table_heading "Name" "identifier" %}{% table_heading "Parts" %}</tr></thead><tbody>'
         "{% for row in rows %}<tr><td>{{ row.0 }}</td><td>{% line_list row.1 as part %}{% status part chip=True %}"
         "{% endline_list %}</td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}",
         {
@@ -176,7 +176,7 @@ ENTRIES = {
     # breaks a name at its seams.
     "table/identifiers": Entry(
         '{% section "Example steps" %}{% table_region "Example steps" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Step" gutter=True %}{% table_heading "Name" "identifier" %}'
+        '{% table_heading "Step" %}{% table_heading "Name" "identifier" %}'
         '{% table_heading "State" "status" %}{% table_heading "Since" drop=3 %}{% table_heading "Impact" drop=2 %}'
         '{% table_heading "Read from" drop=1 %}</tr></thead><tbody>'
         '<tr><td>Proxy host</td><td><a href="/example/" data-entity="Proxy host">{{ address|breakable }}</a></td>'
@@ -190,7 +190,7 @@ ENTRIES = {
         "<td>1 day</td><td>The service stops answering at this name.</td><td>Declared in HQ</td></tr>"
         "</tbody></table>{% endtable_region %}{% endsection %}"
         '{% section "Example access" %}{% table_region "Example access" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Access list" gutter=True %}{% table_heading "Admits by" drop=3 %}'
+        '{% table_heading "Access list" %}{% table_heading "Admits by" drop=3 %}'
         '{% table_heading "Addresses" drop=2 %}{% table_heading "Logins" drop=1 %}</tr></thead><tbody>'
         "<tr><td>office only</td><td>Address rules</td><td>{{ networks|breakable }}</td>"
         "<td>{{ logins|breakable }}</td></tr></tbody></table>{% endtable_region %}{% endsection %}",

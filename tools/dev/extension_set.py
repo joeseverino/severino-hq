@@ -300,13 +300,16 @@ class _Coordinated:
 def _coordinated(host: Path, top: Path, mine: list[_Package], api: int) -> _Coordinated | None:
     """``mine``, the packages of ``top``'s repository, from its branch named as the one the host tree at
     ``host`` lands on, as CI's composition builds an extension's branch of the host branch's name
-    (tools/pipeline/coordinated-branches.sh); None where the repository carries no such branch."""
+    (tools/pipeline/coordinated-branches.sh); None where the repository carries no such branch, or where
+    ``top`` is a linked worktree, which whoever named it chose over the main checkout's default."""
 
+    common = (_git(top, "rev-parse", "--path-format=absolute", "--git-common-dir") or "").strip()
+    if common and Path(common).parent.resolve() != top.resolve():
+        return None
     known = branches(top)
     if (branch := landing(host, set(known), default_branch(top))) is None:
         return None
     relative = [package.root.relative_to(top).as_posix() for package in mine]
-    common = (_git(top, "rev-parse", "--path-format=absolute", "--git-common-dir") or "").strip()
     named = f"branch {branch} of {Path(common).parent.name if common else top.name}"
     if (tree := known[branch]) is None:
         commit = (_git(top, "rev-parse", "--verify", f"refs/heads/{branch}^{{commit}}") or "").strip()
@@ -341,8 +344,9 @@ def pick(
     """The set ``environ`` names, as the host at ``where``, which ``speaks`` the plugin API it returns,
     can load it.
 
-    Where ``host`` is the host's tree and a package's repository carries a branch named as the one that
-    tree lands on, that branch is composed, as CI composes a coordinated change: the worktree checked out
+    Where ``host`` is the host's tree, a package is named from its repository's main checkout, and the
+    repository carries a branch named as the one that tree lands on, that branch is composed, as CI
+    composes a coordinated change: the worktree checked out
     on it as it stands, else the branch's commit, unpacked under SNAPSHOTS. Each other package is asked
     the API it requires. Where every one requires ``api`` and ``as_they_stand``, the trees named are
     composed as they stand, uncommitted work included. Otherwise each repository's newest commit whose

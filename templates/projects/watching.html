@@ -25,7 +25,7 @@ would be a page about anybody.
   {% section "Starred" count=profile.watched|length %}
   {% table_region "Starred" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "Repository" local_sort=True gutter=True %}{% table_heading "Latest release" "identifier" local_sort=True drop=2 %}{% table_heading "Advisories" local_sort=True drop=1 %}{% table_heading "Starred" "status" local_sort=True %}</tr></thead>
+      <thead><tr>{% table_heading "Repository" local_sort=True %}{% table_heading "Latest release" "identifier" local_sort=True drop=2 %}{% table_heading "Advisories" local_sort=True drop=1 %}{% table_heading "Starred" "status" local_sort=True %}</tr></thead>
       <tbody>
         {% for repo in profile.watched %}
           <tr>

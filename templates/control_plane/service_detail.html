@@ -231,7 +231,7 @@ it is not what anyone opens this page to read.
 {% endcomment %}
     {% table_region "Other names" %}
       <table class="data-table">
-        <thead><tr>{% table_heading "Record" "identifier" gutter=True local_sort=True %}{% table_heading "Type" drop=2 local_sort=True %}{% table_heading "For" "identifier" drop=1 local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}</tr></thead>
+        <thead><tr>{% table_heading "Record" "identifier" local_sort=True %}{% table_heading "Type" drop=2 local_sort=True %}{% table_heading "For" "identifier" drop=1 local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}</tr></thead>
         <tbody>
           {% for alias, claim in service.alias_claims %}
             <tr>

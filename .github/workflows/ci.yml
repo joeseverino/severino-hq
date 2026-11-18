@@ -506,13 +506,18 @@ jobs:
           RUNNER_IMAGE: ${{ steps.build.outputs.runner }}
         run: |
           set -euo pipefail
+          # Each digest is the one its push reports, since GHCR may not yet
+          # answer a read of a tag it has just accepted.
+          pushed() {
+            docker push "$1" | tee /dev/stderr \
+              | sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' | tail -n 1
+          }
           # The worker's image first: Compose looks it up once the host
           # image is there (tools/pipeline/host-image.sh).
-          docker push "$RUNNER_IMAGE"
-          runner=$(docker buildx imagetools inspect "$RUNNER_IMAGE" \
-            --format '{{.Manifest.Digest}}')
-          echo "runner=${RUNNER_IMAGE%:*}@$runner" >> "$GITHUB_OUTPUT"
-          docker push "$IMAGE"
+          runner=$(pushed "$RUNNER_IMAGE")
+          echo "runner=${RUNNER_IMAGE%:*}@${runner:?the push reported no digest}" >> "$GITHUB_OUTPUT"
+          digest=$(pushed "$IMAGE")
+          echo "digest=${IMAGE%:*}@${digest:?the push reported no digest}" >> "$GITHUB_OUTPUT"
           # `latest` follows main and nothing else. A pull request publishes
           # an image so it can be checked and composed; it does not get to move
           # the tag that says what the host currently is.
@@ -520,9 +525,6 @@ jobs:
             docker tag "$IMAGE" "${IMAGE%:*}:latest"
             docker push "${IMAGE%:*}:latest"
           fi
-          digest=$(docker buildx imagetools inspect "$IMAGE" \
-            --format '{{.Manifest.Digest}}')
-          echo "digest=${IMAGE%:*}@$digest" >> "$GITHUB_OUTPUT"
       # An admitted extension wheel carries a signature naming the workflow
       # that produced it, and the composition refuses to install one that does
       # not. This signs the image those wheels are installed into, the other
@@ -535,22 +537,24 @@ jobs:
         # digest that is signed: from one source, `imagetools create
         # --prefer-index=false` pushes the bytes it fetched by digest, an index
         # or a single manifest alike, where the default wraps a single manifest
-        # in a new index. Each tag is read back and must name that digest.
-        # Only the host image carries `latest`.
+        # in a new index. The digest each push reports must be that digest;
+        # it is taken from the push itself, since GHCR may not yet answer a
+        # read of a tag it has just accepted. Only the host image carries
+        # `latest`.
         id: promote
         if: env.PROVEN != ''
         run: |
           set -euo pipefail
           promote() {
-            local proven=$1 tag resolved
+            local proven=$1 tag pushed
             shift
             for tag do
               docker buildx imagetools create --prefer-index=false \
+                --metadata-file "$RUNNER_TEMP/promote.json" \
                 --tag "${proven%@*}:$tag" "$proven"
-              resolved=$(docker buildx imagetools inspect "${proven%@*}:$tag" \
-                --format '{{.Manifest.Digest}}')
-              if [ "$resolved" != "${proven#*@}" ]; then
-                echo "::error::${proven%@*}:$tag resolves to $resolved, not ${proven#*@}"
+              pushed=$(jq -r '."containerimage.descriptor".digest' "$RUNNER_TEMP/promote.json")
+              if [ "$pushed" != "${proven#*@}" ]; then
+                echo "::error::${proven%@*}:$tag was pushed as $pushed, not ${proven#*@}"
                 exit 1
               fi
             done

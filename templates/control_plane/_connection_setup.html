@@ -37,7 +37,7 @@ connected is in one place.
               <p>In the vault HQ reads, as {{ setup.item|breakable }} with these fields:</p>
               {% table_region setup.label|add:" fields" %}
                 <table class="data-table">
-                  <thead><tr>{% table_heading "Field" "identifier" gutter=True local_sort=True %}{% table_heading "Value" "identifier" drop=2 local_sort=True %}{% table_heading "Description" css="optional-col" drop=1 local_sort=True %}</tr></thead>
+                  <thead><tr>{% table_heading "Field" "identifier" local_sort=True %}{% table_heading "Value" "identifier" drop=2 local_sort=True %}{% table_heading "Description" css="optional-col" drop=1 local_sort=True %}</tr></thead>
                   <tbody>
                     {% for field in setup.fields %}
                       <tr>
