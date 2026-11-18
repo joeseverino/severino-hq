@@ -85,7 +85,7 @@ class DashboardLinkChoiceView(View):
         # dashboard; a fetch follows it too and reads the panel out of the page
         # it gets back, so what is shown is what was stored rather than what the
         # browser believes was stored.
-        return redirect(safe_next(request) or reverse("dashboard"))
+        return redirect(safe_next(request, fallback=reverse("dashboard")))
 
 
 class DashboardView(fragments.FragmentMixin, TemplateView):

@@ -201,7 +201,7 @@ class CommandView(View):
             "result_json_open": not facts and table is None,
             "return_url": safe_next(self.request),
             # Cancel goes back where it was opened from, else to the trail's end.
-            "cancel_url": safe_next(self.request) or trail[-1][1],
+            "cancel_url": safe_next(self.request, fallback=trail[-1][1]),
             "resource_url": resource_url,
             "resource_label": resource.label if resource else "",
             "resource_open": f"Open {resource.label}" if resource else "",
@@ -331,4 +331,4 @@ class CommandView(View):
             "payload": result,
             "replayed": replayed,
         }
-        return redirect(command_url(self.spec.name, result=token, next=safe_next(request) or ""))
+        return redirect(command_url(self.spec.name, result=token, next=safe_next(request)))
