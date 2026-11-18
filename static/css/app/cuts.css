@@ -61,21 +61,10 @@
 .user-menu > button {
   display: flex;
   width: 100%;
-  min-height: 0;
-  box-shadow: none;
   flex-flow: row-reverse wrap;
   place-content: flex-start center;
   align-items: stretch;
   gap: 0 var(--space-3);
-  height: var(--control-size);
-  padding: 0 var(--space-5);
-  border: 1px solid var(--bar-control-line);
-  border-radius: var(--radius-sm);
-  background: var(--bar-control-bg);
-  color: var(--ink-2);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  font-weight: 500;
   white-space: nowrap; overflow: hidden;
 }
 /* The name asks for only a few characters of the line and takes what there

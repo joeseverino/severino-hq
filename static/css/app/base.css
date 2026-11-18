@@ -1,4 +1,4 @@
-/* Elements, the site header and the page layout, and the document's own
+/* Elements and the page layout, and the document's own
    transition between pages. */
 
 @layer base {
@@ -199,44 +199,6 @@ pre ::selection { color: var(--code-ink); }
    around the whole page. */
 .content:focus { outline: none; }
 
-/* One row, always. The sections are the header's job; the search field is the
-   part that gives way. It collapses to a button that expands back over the nav
-   on focus, so a cramped header costs a click rather than a second row, and
-   the nav is never handed less room than its own content.
-   Each part has a track of its own and the row is a control tall, so a page
-   drawn while its header is still arriving already puts each part where it
-   ends: the brand and the sections hold the start, the demo mark's
-   track takes what is left, the mark at its end, and every track past it is
-   as wide as its control whether or not the control has come. The person's
-   track is sized by the room the bar has, never by their name, which is cut
-   short past it; every breakpoint names it, so none can size it by content.
-   Each width's tracks are here; on a phone the person's track is squared
-   where its control is, beside the rule that hides the name. */
-/* One row a control tall at every width, padded and ruled: the inset a
-   sticky part below it sits under. */
-:root:has(.site-header) { --site-header-height: calc(var(--control-size) + 2 * var(--space-5) + 1px); }
-.site-header {
-  --header-user: minmax(var(--control-size), calc(4 * var(--control-size)));
-  display: grid;
-  grid-template: "brand nav demo search badge user" var(--control-size) / auto auto 1fr minmax(150px, 210px) var(--control-size) var(--header-user);
-  align-items: center;
-  column-gap: var(--space-7);
-  padding: var(--space-5) var(--space-14);
-  /* stylelint-disable-next-line hq/ground-cover -- the chrome is a surface of its own above the page, never the ground it covers */
-  background: color-mix(in srgb, var(--surface) 80%, transparent);
-  border-bottom: 1px solid var(--line);
-  position: sticky; top: 0; z-index: 10;
-  backdrop-filter: saturate(180%) blur(12px);
-}
-.brand {
-  grid-area: brand;
-  font-weight: 700; font-size: var(--text-lg); color: var(--ink);
-  letter-spacing: -.01em;
-  display: inline-flex; align-items: center; gap: var(--space-4);
-  white-space: nowrap;
-}
-.brand::before { content: "" / ""; --slot: var(--accent); }
-.brand:hover { text-decoration: none; }
 /* A popover is a panel while it is open and part of the page while it is
    not: the header's nav and a filter bar's unfolded choices are drawn in
    their row closed (base.html, forms.css). So what the browser gives every
@@ -254,61 +216,6 @@ pre ::selection { color: var(--code-ink); }
   border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--surface); box-shadow: var(--shadow-pop);
 }
-.primary-nav {
-  grid-area: nav;
-  display: flex;
-  /* Single row, deliberately: a control wrapped onto a second row would sit
-     beneath an open dropdown, where the panel covers it and swallows its
-     clicks. Grouping keeps the bar short enough that one row is enough. */
-  flex-wrap: nowrap;
-  gap: var(--space-1);
-}
-.primary-nav a {
-  color: var(--muted); font-weight: 500; font-size: var(--text-sm);
-  padding: var(--space-2) var(--space-5); border-radius: 6px;
-  white-space: nowrap;
-  transition: background .12s ease, color .12s ease;
-}
-.primary-nav > a { color: var(--muted); font-weight: 500; font-size: var(--text-sm); padding: var(--space-2) var(--space-5); border-radius: 6px; white-space: nowrap; }
-.primary-nav a:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
-.primary-nav a[aria-current] { color: var(--ink); background: var(--bg-tint); }
-
-.nav-group-label { display: inline-flex; align-items: center; gap: var(--space-2); }
-.nav-group-panel a { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); font-size: var(--text-sm); }
-
-/* Gives way before the sections do: below the breakpoint it is an icon. */
-.global-search {
-  grid-area: search;
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  height: var(--control-size);
-  padding: 0 var(--space-3) 0 var(--space-5);
-  border: 1px solid var(--bar-control-line);
-  border-radius: var(--radius-sm);
-  background: var(--bar-control-bg);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  text-decoration: none;
-}
-.global-search:hover { background: var(--bar-control-bg-hover); color: var(--ink-2); text-decoration: none; }
-.search-key { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted-2); font: inherit; font-size: var(--text-3xs); line-height: 1.6; }
-
-@media (max-width: 1280px) {
-  .site-header { grid-template-columns: auto auto 1fr var(--control-size) var(--control-size) var(--header-user); }
-  .global-search { justify-content: center; padding: 0; }
-  /* Gone, the label still names the link (its aria-labelledby). */
-  .search-label, .search-key { display: none; }
-}
-/* The sections move behind the toggle, which takes the last track; open, they
-   hang from the header on no track of their own. */
-@media (max-width: 1080px) {
-  .site-header {
-    grid-template-areas: "brand demo search badge user toggle";
-    grid-template-columns: auto 1fr var(--control-size) var(--control-size) var(--header-user) var(--control-size);
-  }
-}
-
 .inline { display: inline-flex; align-items: center; gap: var(--space-3); }
 
 /* ── Layout ─────────────────────────────────────────────────────── */

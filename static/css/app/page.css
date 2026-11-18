@@ -186,11 +186,6 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 .page-head > .btn, .page-head > form { margin-left: auto; }
 .page-head > .btn + .btn, .page-head > form + form { margin-left: 0; }
 
-/* ── Sections menu ──────────────────────────────────────────────── */
-/* The button belongs to the narrow layout only; a wide screen sets the
-   sections in the header's row (base.css). */
-.nav-toggle { display: none; }
-
 /* ── Buttons ────────────────────────────────────────────────────── */
 
 /* The push button is `.btn`, and a `<button>` with no class of its own. A
@@ -245,6 +240,12 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 /* A control among words, drawn as a link: the words alone, in their type. */
 .btn.link { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--accent); font: inherit; }
 .btn.link:hover { text-decoration: underline; }
+/* A control of the site header's bar, on the bar's own ground and as tall as
+   its row. It weighs what the push button does, so each control's rule in the
+   header's section sets its own width and padding over it. */
+.btn:where(.bar) { block-size: var(--control-size); padding: 0 var(--space-5); border-color: var(--bar-control-line); background: var(--bar-control-bg); color: var(--ink-2); box-shadow: none; }
+@media (hover: hover) { .btn:where(.bar):hover { border-color: var(--bar-control-line); background: var(--bar-control-bg-hover); color: var(--ink); } }
+.btn:where(.bar):has(+ :popover-open) { background: var(--bar-control-bg-hover); color: var(--ink); }
 /* A row of a menu (connection.css draws the panel and its rows' type): a row
    like the others, whichever look it has beside the title. Written after
    every look, so it is the one that holds. Destructive keeps only its color. */
@@ -307,6 +308,88 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 /* Each panel says how it is laid out open; closed, it is not drawn. */
 [data-menu] > [popover]:not(:popover-open) { display: none; }
 
+/* ── Site header ──────────────────────────────────────────────────
+   The bar every page opens with (partials/_site_header.html): its grid, the
+   brand, the sections and their drawer, and its controls, each a button of the
+   bar look. Each width's change is here beside the rest. */
+/* One row, always. The sections are the header's job; the search field is the
+   part that gives way. It collapses to a button that expands back over the nav
+   on focus, so a cramped header costs a click rather than a second row, and
+   the nav is never handed less room than its own content.
+   Each part has a track of its own and the row is a control tall, so a page
+   drawn while its header is still arriving already puts each part where it
+   ends: the brand and the sections hold the start, the demo mark's
+   track takes what is left, the mark at its end, and every track past it is
+   as wide as its control whether or not the control has come. The person's
+   track is sized by the room the bar has, never by their name, which is cut
+   short past it; every breakpoint names it, so none can size it by content.
+   Each width's tracks are here; on a phone the person's track is squared
+   where its control is, beside the rule that hides the name. */
+/* One row a control tall at every width, padded and ruled: the inset a
+   sticky part below it sits under. */
+:root:has(.site-header) { --site-header-height: calc(var(--control-size) + 2 * var(--space-5) + 1px); }
+.site-header {
+  --header-user: minmax(var(--control-size), calc(4 * var(--control-size)));
+  display: grid;
+  grid-template: "brand nav demo search badge user" var(--control-size) / auto auto 1fr minmax(150px, 210px) var(--control-size) var(--header-user);
+  align-items: center;
+  column-gap: var(--space-7);
+  padding: var(--space-5) var(--space-14);
+  /* stylelint-disable-next-line hq/ground-cover -- the chrome is a surface of its own above the page, never the ground it covers */
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 10;
+  backdrop-filter: saturate(180%) blur(12px);
+}
+.brand {
+  grid-area: brand;
+  font-weight: 700; font-size: var(--text-lg); color: var(--ink);
+  letter-spacing: -.01em;
+  display: inline-flex; align-items: center; gap: var(--space-4);
+  white-space: nowrap;
+}
+.brand::before { content: "" / ""; --slot: var(--accent); }
+.brand:hover { text-decoration: none; }
+.primary-nav {
+  grid-area: nav;
+  display: flex;
+  /* Single row, deliberately: a control wrapped onto a second row would sit
+     beneath an open dropdown, where the panel covers it and swallows its
+     clicks. Grouping keeps the bar short enough that one row is enough. */
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+}
+.primary-nav a {
+  color: var(--muted); font-weight: 500; font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-5); border-radius: 6px;
+  white-space: nowrap;
+  transition: background .12s ease, color .12s ease;
+}
+.primary-nav a:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
+.primary-nav a[aria-current] { color: var(--ink); background: var(--bg-tint); }
+
+.nav-group-label { display: inline-flex; align-items: center; gap: var(--space-2); }
+.nav-group-panel a { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); font-size: var(--text-sm); }
+
+/* Gives way before the sections do: below the breakpoint it is an icon. Its
+   words are a field's placeholder, quieter than the bar's other controls. */
+.global-search { grid-area: search; justify-content: start; gap: var(--space-4); padding-inline-end: var(--space-3); color: var(--muted); font-weight: normal; }
+
+@media (max-width: 1280px) {
+  .site-header { grid-template-columns: auto auto 1fr var(--control-size) var(--control-size) var(--header-user); }
+  .global-search { justify-content: center; padding: 0; }
+  /* Gone, the label still names the link (its aria-labelledby). */
+  .search-label, .search-key { display: none; }
+}
+/* The sections move behind the toggle, which takes the last track; open, they
+   hang from the header on no track of their own. */
+@media (max-width: 1080px) {
+  .site-header {
+    grid-template-areas: "brand demo search badge user toggle";
+    grid-template-columns: auto 1fr var(--control-size) var(--control-size) var(--header-user) var(--control-size);
+  }
+}
+
 /* Grouped sections: a menu per group keeps the bar to a fixed number of
    controls as sections are added, instead of overflowing behind a hidden
    scrollbar where the tail becomes unreachable. A group's button reads as
@@ -330,6 +413,97 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   min-width: 176px; display: flex; flex-direction: column; gap: 1px;
 }
 
+/* The sections' toggle belongs to the narrow layout only, where the
+   sections leave the row; it and the queue's bell are a control square. */
+.nav-toggle { display: none; }
+.nav-toggle > svg { width: 15px; height: 12px; }
+.action-badge, .nav-toggle { inline-size: var(--control-size); padding: 0; }
+/* The badge is one size whatever it counts, so the count arriving after the
+   page (a fragment on every page but the two that count it) moves nothing in
+   the bar: it is pinned to the corner, outside the flow. */
+.action-badge { position: relative; grid-area: badge; }
+.action-badge [data-action-count] { position: absolute; inset-block-start: -7px; inset-inline-end: -7px; box-sizing: border-box; min-width: 18px; height: 18px; padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-ink); font-size: var(--text-2xs); font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.action-badge svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* The bar's marks, drawn from the set at the size each control sets them
+   (the menu's, the badge's and the search dialog's set by their own rules). */
+.nav-group-label > .icon { width: 9px; height: 6px; stroke: var(--muted); }
+.nav-group > button:has(+ :popover-open) .nav-group-label > .icon { transform: rotate(180deg); }
+.global-search > .icon { width: 15px; height: 15px; stroke-width: 2; }
+.user-menu > button > .icon { width: 15px; stroke: var(--muted); stroke-width: 1.8; transition: stroke .12s ease; }
+.user-menu > button:is(:hover, :has(+ :popover-open)) > .icon { stroke: var(--ink); }
+
+/* Sections behind one control. Below this width the bar cannot hold every
+   section beside the brand and the account chip, and a second row is not the
+   answer: it spends chrome on every page before any of them begins. The
+   collapsed search above buys the headroom that keeps this width low; past it
+   the sections move into a panel that opens on tap.
+
+   The panel is the nav's popover (base.html): the browser opens it in the top
+   layer, under the sticky header and over the page, and a press outside it or
+   Escape closes it. Open, it is the panel at any width, so a window widened
+   with it open still shows a panel until it is dismissed. */
+@media (max-width: 1080px) {
+  .nav-toggle { display: inline-flex; grid-area: toggle; }
+  .nav-toggle:focus:not(:focus-visible) { outline: none; }
+  .primary-nav { display: none; grid-area: auto; }
+}
+.primary-nav:popover-open {
+  display: flex;
+  position: fixed;
+  inset: calc(var(--site-header-height) - 2px) 12px auto auto;
+  min-width: 190px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  max-height: calc(100dvh - var(--site-header-height) - 12px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.primary-nav:popover-open > a,
+.primary-nav:popover-open .nav-group-button {
+  min-height: 44px;
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-md);
+}
+.primary-nav:popover-open .nav-group-button { display: flex; inline-size: 100%; }
+/* A section's own links fly out beside the list, level with its row: a
+   popover is drawn over the page, never in the list's flow. The list is
+   anchored to the right edge, so the room is to its left; a screen with
+   none there takes them below the row. They hang from the row down or up
+   from it, on the side with more height, and a section taller than that
+   side is held to it and scrolls, so every link of a long section low on a
+   short screen can be reached: the pattern of the spec's own example for
+   `position-try-order`. */
+.primary-nav:popover-open .nav-group-panel {
+  position-area: inline-start span-block-end;
+  position-try-fallbacks: --nav-panel-down-scrolling, inline-start span-block-start, --nav-panel-up-scrolling, block-end span-inline-start;
+  position-try-order: most-block-size;
+  overflow-y: auto;
+  margin: 0 var(--space-3) 0 0;
+  min-width: 168px;
+}
+@position-try --nav-panel-down-scrolling { position-area: inline-start span-block-end; max-block-size: 100%; }
+@position-try --nav-panel-up-scrolling { position-area: inline-start span-block-start; max-block-size: 100%; }
+.primary-nav:popover-open .nav-group-panel a {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 860px) {
+  /* The person's control is a square mark like search and the bell beside it:
+     the name is in its menu, and a phone's one row has no room to repeat it.
+     Its track is squared here, beside the rules that square it. */
+  .site-header { --header-user: var(--control-size); gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
+  .user-menu > button { width: var(--control-size); padding: 0; }
+  /* Gone, the name still names the button (its aria-labelledby). */
+  .user-menu .user-name { display: none; }
+  .brand { font-size: var(--text-md); }
+  /* The sections live in the toggle's panel from 1080px down, so the bar stays
+     a single row here and needs no wrapping rules of its own. */
+  .primary-nav a { white-space: nowrap; padding: var(--space-3) var(--space-5); font-size: var(--text-sm); }
+}
+
 /* ── User menu ────────────────────────────────────────────────────
    This whole component lives after the generic button primitive in the same
    layer. A POST row and a link row therefore share `.menu-item`; their HTML
@@ -342,13 +516,6 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 /* Its track is as wide as the bar allows: a short name keeps the control to
    its own width at the bar's end, and a long one is cut to the track. */
 .user-menu { position: relative; grid-area: user; justify-self: stretch; max-width: 100%; }
-/* The badge is one size whatever it counts, so the count arriving after the
-   page (a fragment on every page but the two that count it) moves nothing in
-   the bar: it is pinned to the corner, outside the flow. */
-.action-badge { position: relative; display: inline-flex; grid-area: badge; align-items: center; justify-content: center; width: var(--control-size); height: var(--control-size); border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm); background: var(--bar-control-bg); color: var(--ink-2); text-decoration: none; }
-.action-badge [data-action-count] { position: absolute; inset-block-start: -7px; inset-inline-end: -7px; box-sizing: border-box; min-width: 18px; height: 18px; padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-ink); font-size: var(--text-2xs); font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.action-badge:hover { background: var(--bar-control-bg-hover); color: var(--ink); text-decoration: none; }
-.action-badge svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 /* Each fills the control's one line exactly, so the line after it starts
    below the control's edge and is not shown. */
 .user-menu > button > * { flex: none; height: calc(var(--control-size) - 2px); }
@@ -366,8 +533,6 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 /* The person's own picture as the control's mark. Its margins make it as tall
    as the control's one line, like everything else in it. */
 .user-menu .user-avatar { width: 22px; height: 22px; margin-block: calc((var(--control-size) - 2px - 22px) / 2); border-radius: 50%; object-fit: cover; background: var(--bg-tint); }
-.user-menu > button:hover,
-.user-menu > button:has(+ :popover-open) { border-color: var(--bar-control-line); background: var(--bar-control-bg-hover); color: var(--ink); }
 .user-menu-panel {
   display: flex;
   /* As wide as what it holds, up to a width that still fits beside the

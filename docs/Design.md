@@ -1330,7 +1330,8 @@ fill, `--muted` on a surface, `--code-muted` beside code.
 `ghost` for link-like actions that sit inline; `danger` in red text on the same
 surface as its neighbors, loud only in its confirmation; `compact` for one
 that stands in a row, a list or a head, a line tall; `link` for one among
-words, drawn as a link; `menu` for a row of a menu. `link` and `menu` draw
+words, drawn as a link; `menu` for a row of a menu; `bar` for a control of
+the site header's bar, on the bar's ground. `link` and `menu` draw
 no box, so `button_classes` drops a look that paints one beside them, and a
 destructive row keeps only its red. Every control that
 looks like a button is `{% button label url look="primary compact" %}`, the one
