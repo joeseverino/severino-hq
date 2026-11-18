@@ -360,7 +360,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table > tbody > tr:has(.cell-clamp) .row-expand { display: grid; }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
 }
-/* A table cell cannot take a line of its own, so a narrow table whose rows hold labeled controls (any but a glyph), or the narrowest one whose rows hold any, is a grid of its columns' tracks instead, each row a subgrid of them, every cell under its heading (a column that has left takes no track). A row's controls take its last line, from where its name starts, rising past no words, so the row's whole pad stands under them; a quiet button opening that line stands its compact pad and border out, so its words start at the name's edge as a bordered button's edge does. The table and its rows name their controls again, which weighs these rules above a column's own width and display. */
+/* A table cell cannot take a line of its own, so a narrow table whose rows hold labeled controls (any but a glyph), or the narrowest one whose rows hold any, is a grid of its columns' tracks instead, each row a subgrid of them, every cell under its heading (a column that has left takes no track). A row's controls take its last line, from where its name starts, rising past no words, so the row's whole pad stands under them; a quiet button opening that line stands its compact pad and border out, so its words start at the name's edge as a bordered button's edge does, and a control that wraps starts its line there too. The table and its rows name their controls again, which weighs these rules above a column's own width and display. */
 .table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] :is(a, button, [role="button"])) { --controls: icons; }
 .table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] :is(a, button, [role="button"]):not(.glyph)) { --controls: labeled; }
 /* A row of four labeled controls asks a line of their own sooner, as a table of more columns lets them leave sooner (above). */
@@ -380,7 +380,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
       grid-template-rows: repeat(4, auto);
       & > * { grid-row: 1 / -2; border-bottom-width: 0; }
       & > .select-column { grid-row: 1 / -1; border-bottom-width: 1px; }
-      & > [data-kind="control"]:not(.select-column) { --control-rise: 0px; grid-area: -2 / name / -1 / -1; border-bottom-width: 1px; padding-block-start: 0; padding-inline-start: var(--row-inset, var(--cell-pad)); text-align: start; white-space: normal; }
+      & > [data-kind="control"]:not(.select-column) { --control-rise: 0px; grid-area: -2 / name / -1 / -1; border-bottom-width: 1px; padding-block-start: 0; padding-inline-start: var(--row-inset, var(--cell-pad)); text-align: start; white-space: normal; display: flex; flex-wrap: wrap; align-content: start; gap: var(--space-3) var(--space-4); & > * + * { margin-inline-start: 0; } }
       & > [data-kind="control"]:not(.select-column) > .btn.ghost:first-child { margin-inline-start: calc(-1 * var(--space-4) - 1px); }
     }
   }
