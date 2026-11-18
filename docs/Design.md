@@ -603,7 +603,7 @@ is the button that opens the panel in place, as a menu does, and each
 facts refreshed in place as its own (`core/_dashboard_glance.html`). Under
 24rem a band reads as a list, each fact a row of its own; small figures keep
 their grid, and headline figures (`large`, `lead`) and a band beside a page's
-title their counted rows, two to a row, the head's packed close. Headline figures stand on a wider
+title their counted rows, two to a row (a phone's head: label beside value over a one-line note). Headline figures stand on a wider
 floor, so three take a row only once the band is about 360px wide, and each
 value is sized to its cell, never under the band's value size.
 

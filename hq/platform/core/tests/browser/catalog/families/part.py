@@ -2200,8 +2200,7 @@ ENTRIES = {
         {"page": Page(title="Example glance"), "page_aside": _Drawn(_GLANCE), "hours": _HOURS},
         heads_the_page=True,
     ),
-    # The same band on its own line, as a narrower head draws it, under the
-    # day the dashboard opens on and the note a visit's ask ends that line with.
+    # The same band on its own line, as a narrower head draws it, under the dashboard's day and its note.
     "part/facts-band-glance-under-the-title": Entry(
         '{% include "partials/_page_head.html" %}{% section "Example section 2" %}<p>An example line.</p>{% endsection %}',
         {
