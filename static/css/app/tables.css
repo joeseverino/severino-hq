@@ -178,7 +178,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .switch a { display: inline-flex; align-items: center; gap: var(--space-2); border-radius: var(--radius-pill); color: inherit; text-decoration: none; }
 .switch .scope-chip > [aria-hidden] { color: var(--accent); }
 .switch p { margin: var(--space-3) 0 0; }
-/* A row's controls (`{% row_actions %}`, or a cell of a column of kind `control`) stand side by side on one line, so their column is as wide as they are and the words beside them wrap first. They end at the row's end, in every row whatever its set, on the row's first line. A control stands taller than a line of words by twice `--control-rise`, which its cell takes out of its padding, so a row holding one is as tall as a row of words. */
+/* A row's controls (`{% row_actions %}`, or a cell of a column of kind `control`) stand side by side on one line, so their column is as wide as they are and the words beside them wrap first. They end at the row's end, in every row whatever its set, on the row's first line where the table has headings (below where it has none). A control stands taller than a line of words by twice `--control-rise`, which its cell takes out of its padding, so a row holding one is as tall as a row of words. */
 .data-table > tbody > tr > [data-kind="control"] {
   --control-rise: max(0px, (var(--control-compact) - 1lh) / 2); white-space: nowrap; text-align: end;
   & > :is(.btn, form) { vertical-align: top; }
@@ -189,6 +189,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   /* An ask's cell keeps the line its note stands on under its controls (below). */
   &:has(> [data-ask]) { padding-block-end: calc(var(--row-pad) + 1lh); }
 }
+/* A table with no headings is a list of rows that each say one thing (the queue's items): no column's first line to keep level with, so a row's controls stand at the middle of the words they act on. */
+.data-table:not(:has(> thead)) > tbody > tr > [data-kind="control"] { vertical-align: middle; }
 .data-table > * > tr > .select-column { inline-size: 1px; text-align: center; padding-inline: var(--space-4); }
 /* The tick-boxes' column is their box and its padding, in every engine, whose own margins around a checkbox differ. */
 .data-table > * > tr > .select-column > input { margin-inline: 0; }
@@ -210,8 +212,6 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .data-table td .pill { vertical-align: top; line-height: 1.4; }
 /* A state told by an icon and a value holds both on one line, so its column is as wide as the two and the icon never stands alone above what it marks. */
 .data-table > tbody > tr > [data-kind="status"] .toned:has(> .icon) { white-space: nowrap; }
-/* A time is one phrase; broken over two lines it doubles its row. */
-.data-table td time { white-space: nowrap; }
 /* An identifier the row is read by, among many columns, wraps at its seams with a chip on each line. */
 .data-table td code.cell-whole { display: inline; white-space: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .data-table td code.cell-whole :is(.token, .whole) { display: inline; }
@@ -360,7 +360,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table > tbody > tr:has(.cell-clamp) .row-expand { display: grid; }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
 }
-/* A table cell cannot take a line of its own, so a narrow table whose rows hold labeled controls (any but a glyph), or the narrowest one whose rows hold any, is a grid of its columns' tracks instead, each row a subgrid of them, every cell under its heading (a column that has left takes no track). A row's controls take its last line, from where its name starts. The table and its rows name their controls again, which weighs these rules above a column's own width and display. */
+/* A table cell cannot take a line of its own, so a narrow table whose rows hold labeled controls (any but a glyph), or the narrowest one whose rows hold any, is a grid of its columns' tracks instead, each row a subgrid of them, every cell under its heading (a column that has left takes no track). A row's controls take its last line, from where its name starts, rising past no words, so the row's whole pad stands under them. The table and its rows name their controls again, which weighs these rules above a column's own width and display. */
 .table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] :is(a, button, [role="button"])) { --controls: icons; }
 .table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] :is(a, button, [role="button"]):not(.glyph)) { --controls: labeled; }
 /* A row of four labeled controls asks a line of their own sooner, as a table of more columns lets them leave sooner (above). */
@@ -380,18 +380,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
       grid-template-rows: repeat(4, auto);
       & > * { grid-row: 1 / -2; border-bottom-width: 0; }
       & > .select-column { grid-row: 1 / -1; border-bottom-width: 1px; }
-      & > [data-kind="control"]:not(.select-column) { grid-area: -2 / name / -1 / -1; border-bottom-width: 1px; padding-block-start: 0; padding-inline-start: var(--row-inset, var(--cell-pad)); text-align: start; white-space: normal; }
-    }
-    /* A row whose name stands alone takes the row's width in tracks of its own, so its controls are as wide as they are, at the end of the line of notes its name ends with (`dot_list`: its date, its source). */
-    & > tbody > tr:has(> [data-kind="control"] :is(a, button, [role="button"]):not([hidden])):not(:has(> :not([data-kind="name"], [data-kind="control"], .select-column, [data-blank-column], [data-wide-only], [data-drop]:not([data-drop="5"])))) {
-      grid-template-columns: var(--lead,) [name] minmax(auto, 1fr) [after] auto;
-      & > [data-kind="name"] { grid-column: name / -1; }
-      & > [data-kind="name"]:has(> .dot-list:nth-last-child(-n + 2):not(:first-child)) {
-        grid-row: 1 / -1; border-bottom-width: 1px; display: grid; grid-template: subgrid / subgrid;
-        & > * { grid-column: 1 / -1; }
-        & > .dot-list:nth-last-child(-n + 2) { grid-area: -2 / 1; align-self: center; }
-        & ~ [data-kind="control"] { grid-column: after / -1; align-self: center; padding-block: 0; padding-inline-start: var(--cell-pad); text-align: end; }
-      }
+      & > [data-kind="control"]:not(.select-column) { --control-rise: 0px; grid-area: -2 / name / -1 / -1; border-bottom-width: 1px; padding-block-start: 0; padding-inline-start: var(--row-inset, var(--cell-pad)); text-align: start; white-space: normal; }
     }
   }
 }

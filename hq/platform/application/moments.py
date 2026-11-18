@@ -336,6 +336,7 @@ WHEN_FORMS = {
     "day": when_day,  # the day a moment fell on
     "exact": when_exact,  # "Oct 3, 2026, 9:29:15 AM CDT"
     "weekday": weekday,  # "Monday"
+    "dateline": lambda value: f"{weekday(value)}, {when_day(value)}",  # "Wednesday, Nov 18", a page's day
     "initials": weekday_initials,  # "Mo", where a column is narrow
     "month": month,  # "October 2026", the month a calendar shows
     "numeral": numeral,  # "3", the day of the month in a calendar's cell

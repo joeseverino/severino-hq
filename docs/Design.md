@@ -302,10 +302,9 @@ their own sooner) is a grid of its columns' tracks instead, each row a subgrid
 of them: the headings, the cells under them, the open line and a group's
 heading keep their place and their roles (table, row, column header, cell, in
 WebKit and Chromium), and the heading still pins. A row's labeled controls
-take its last line: at the end of the line of notes its name ends with
-(`dot_list`: its date, its source) where the name stands alone in its row,
-else on a line of their own from where its name starts, wrapping only between
-whole controls. A row of icon controls (a star, the order arrows) keeps them
+take its last line, on a line of their own from where its name starts, in
+every row alike, the row's pad under them, wrapping only between whole
+controls. A row of icon controls (a star, the order arrows) keeps them
 at its end on its first line. *Gates:* the survey's `tables` (each cell a row
 shows stands under its column's heading, and no row draws a column's label),
 `rows unruled` (a row's bottom edge is ruled, whichever cell draws it),
@@ -604,7 +603,7 @@ is the button that opens the panel in place, as a menu does, and each
 facts refreshed in place as its own (`core/_dashboard_glance.html`). Under
 24rem a band reads as a list, each fact a row of its own; small figures keep
 their grid, and headline figures (`large`, `lead`) and a band beside a page's
-title their counted rows, two to a row. Headline figures stand on a wider
+title their counted rows, two to a row, the head's packed close. Headline figures stand on a wider
 floor, so three take a row only once the band is about 360px wide, and each
 value is sized to its cell, never under the band's value size.
 
@@ -1287,6 +1286,7 @@ column needs nothing else.
 | `when:"exact"` | "Oct 3, 2026, 9:29:15 AM CDT" | the exact moment |
 | `when:"clock"` | "Oct 3, 9:29:15 AM" | a list of events, where several fall in one minute |
 | `when:"weekday"`, `"month"`, `"numeral"` | "Monday", "October 2026", "3" | a calendar |
+| `when:"dateline"` | "Wednesday, Nov 18" | the day a page opens on, over its title |
 | `when:"length"` | "5 minutes", either way from now | a wait |
 | `when:"ahead"` | "in 3 days" | a wait |
 | `{{ at\|when_text:"ago" }}` | the words of any form, as plain text | an attribute, or a table cell's line, which sorts on the first `<time>` it holds |
