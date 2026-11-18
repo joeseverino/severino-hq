@@ -96,8 +96,9 @@ if HYPOTHESIS:
             # Domains changed at AdGuard since HQ last read or wrote them.
             self.disturbed: list[str] = []
             self.last_sweep: dict | None = None
-            # When a sweep last read the kind with an answer.
+            # When a sweep last read the kind with an answer, and what it listed.
             self.answered_at = None
+            self.listed: set[str] = set()
             self.asked = 0
 
         def teardown(self):
@@ -202,12 +203,15 @@ if HYPOTHESIS:
         def look_at_findings(self):
             settled = self._settled()
             topology = derive_topology(principal=self.principal)
-            raised = [
-                (finding.rule, finding.subject)
-                for finding in derive_findings(topology, principal=self.principal)
-                if finding.rule in OWN_DOING and finding.subject in settled
-            ]
+            rules = {(finding.rule, finding.subject) for finding in derive_findings(topology, principal=self.principal)}
+            raised = [(rule, subject) for rule, subject in rules if rule in OWN_DOING and subject in settled]
             assert not raised, f"HQ raised a finding about a record it settled itself: {raised}"
+            listed = [
+                resource.spec["domain"]
+                for resource in ManagedResource.objects.filter(kind=KIND, spec__domain__in=self.listed)
+                if ("skipped-by-a-sweep", f"resource:{resource.key}") in rules
+            ]
+            assert not listed, f"HQ called missing a record its last read listed: {listed}"
             read = dict(topology.kinds_read).get(KIND)
             assert read == self.answered_at, (
                 f"the kind's read moment is {read}, its last answered read {self.answered_at}"
@@ -263,6 +267,7 @@ if HYPOTHESIS:
             report = payload.get(KIND, {})
             if report.get("ok") and not report.get("carried"):
                 self.answered_at = timezone.now()
+                self.listed = set(listed)
             adopted = bridged("inventory", payload)["adopted"]
             return multiple(*adopted)
 

@@ -34,7 +34,6 @@ from hq.platform.application.resource_capabilities import (
 )
 from hq.platform.application.resource_context import (
     controller_summary,
-    newest_reading,
     origin_machine,
     record_list,
     record_status,
@@ -242,13 +241,8 @@ class InfrastructureListView(PageMixin, ListView):
         machines = declared_machines()
         targets = delivery_targets()
         at = whereabouts(machines)
-        newest: dict[str, Any] = {}
         for resource in context["resources"]:
-            read_at = resource.last_observed_at
-            if read_at and (resource.kind not in newest or read_at > newest[resource.kind]):
-                newest[resource.kind] = read_at
-        for resource in context["resources"]:
-            resource.record_status = record_status(resource, newest=newest.get(resource.kind))
+            resource.record_status = record_status(resource)
             # Where it sends traffic, named rather than addressed, matching
             # what the resource's own page has always said.
             resource.origin_machine = origin_machine(resource, machines, at, targets)
@@ -422,7 +416,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
             capabilities.actions, lambda verb: capability_words(ACTION_CAPABILITY[verb])
         )
         derived = self.derived
-        context["status"] = record_status(self.object, health=derived.health, newest=newest_reading(self.object.kind))
+        context["status"] = record_status(self.object, health=derived.health)
         # A running container is summarized by what it runs, in its own band.
         if not (self.container and self.container["standing"]):
             context["page_aside"] = "control_plane/_record_status.html"

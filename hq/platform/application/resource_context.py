@@ -27,7 +27,6 @@ from .infrastructure import (
     RecordState,
     ResourceState,
     controller_contract,
-    enabled_resources,
     resolved_spec,
     resource_health,
     serialize_resource,
@@ -40,6 +39,7 @@ lazy from . import machines
 lazy from .approvals import pending
 lazy from .conditions import DEGRADED, DRIFTED, held_since
 lazy from .connections import connection_readings
+lazy from .facts import kinds_read
 lazy from .security import internal_principal
 lazy from .services import certificate_use
 lazy from .whereabouts import machine_link
@@ -192,9 +192,9 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
     return None
 
 
-def record_status(resource, *, health: dict[str, str] | None = None, newest: datetime | None = None) -> RecordStatus:
-    """``newest`` is the latest reading of any record of this type: a record
-    read long before it was missing from HQ's last read."""
+def record_status(resource, *, health: dict[str, str] | None = None) -> RecordStatus:
+    """Where one record stands; one last seen well before its kind's last
+    read was missing from that read."""
 
     health = health or resource_health(resource)
     fault = _fault_status(resource, health)
@@ -210,7 +210,7 @@ def record_status(resource, *, health: dict[str, str] | None = None, newest: dat
             None,
             read_at,
         )
-    if behind(read_at, newest):
+    if behind(read_at, kinds_read().get(resource.kind)):
         return RecordStatus(
             RecordState.UNSEEN,
             "Not found lately",
@@ -231,20 +231,6 @@ def record_status(resource, *, health: dict[str, str] | None = None, newest: dat
             RecordState.RECORDED, "Recorded only", "HQ only records this. Nothing is applied.", None, read_at
         )
     return RecordStatus(RecordState.UNREAD, health["label"], health["message"], None, read_at)
-
-
-def newest_reading(kind: str) -> datetime | None:
-    """When any tracked record of this type was last read, from the read a
-    page already shares (``infrastructure.enabled_resources``)."""
-
-    return max(
-        (
-            resource.last_observed_at
-            for resource in enabled_resources()
-            if resource.kind == kind and resource.last_observed_at
-        ),
-        default=None,
-    )
 
 
 @dataclass(frozen=True, slots=True)

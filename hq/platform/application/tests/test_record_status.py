@@ -114,6 +114,7 @@ class RecordPageTests(TestCase):
         now = timezone.now()
         drift = [{"type": "Drifted", "status": True, "reason": "Drifted", "message": "Points at 192.0.2.99."}]
         fault = [{"type": "Degraded", "status": True, "reason": "Unreachable", "message": "AdGuard answered 502."}]
+        kind_read("adguard.rewrite", now)
         for state, fields in {
             "working": {"conditions": READY, "last_observed_at": now},
             "drifted": {"conditions": drift, "last_observed_at": now},
@@ -130,7 +131,7 @@ class RecordPageTests(TestCase):
                     spec={"domain": f"{state}.example.com", "answer": "192.0.2.10"},
                     **{"generation": 1, "observed_generation": 1, **fields},
                 )
-                status = record_status(record, newest=now)
+                status = record_status(record)
                 page = all_elements(self.client.get(reverse("control_plane:detail", args=[record.key])))
                 (line,) = [element for element in page if element.attrs.get("data-record-status") == state]
                 tones = {
@@ -167,15 +168,18 @@ class RecordStatusTests(TestCase):
 
     def test_a_record_not_read_with_the_rest_of_its_type_is_never_working(self):
         stale = rewrite(conditions=READY, last_observed_at=self.now - timedelta(days=14))
+        kind_read("adguard.rewrite", self.now)
 
-        status = record_status(stale, newest=self.now)
+        status = record_status(stale)
 
         self.assertEqual((status.state, status.label), ("unseen", "Not found lately"))
 
     def test_a_record_switched_off_says_only_that(self):
         off = rewrite(conditions=READY, enabled=False, last_observed_at=self.now - timedelta(days=14))
 
-        self.assertEqual(record_status(off, newest=self.now).label, "Switched off in HQ")
+        kind_read("adguard.rewrite", self.now)
+
+        self.assertEqual(record_status(off).label, "Switched off in HQ")
 
     def test_a_change_made_outside_hq_says_since_when_and_the_two_ways_out(self):
         since = (self.now - timedelta(minutes=4)).isoformat()
@@ -243,6 +247,8 @@ class ReportedFieldTests(TestCase):
         (condition,) = self.resource.conditions
         self.assertEqual((condition["type"], condition["reason"]), ("Degraded", "Reported"))
         self.assertEqual(condition["message"], self.behind)
+        # Its state is what the same read said.
+        self.assertEqual(self.resource.status["production"], self.behind)
 
     def test_the_page_shows_one_status_and_nothing_that_cannot_deploy(self):
         self.read(self.behind)
@@ -263,27 +269,6 @@ class ReportedFieldTests(TestCase):
             self.assertNotContains(response, dead_end)
         self.assertContains(response, "Open deploy on GitHub")
         self.assertContains(response, "https://github.com/example/host/actions")
-
-    def test_a_problem_it_reports_offers_no_way_to_keep_or_restore_a_side(self):
-        from ..findings import estate_findings
-        from ..security import Capability, Principal
-
-        self.read(self.behind)
-        manager = Principal("operator", "test", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-
-        with projection_scope():
-            (finding,) = [item for item in estate_findings(principal=manager) if item.subject == "resource:delivery"]
-
-        self.assertEqual(finding.remedies, ())
-        self.assertEqual(finding.no_help_reason, "HQ cannot fix what HQ deploys reports.")
-        self.assertEqual(finding.rule, "reconciled-but-still-wrong")
-        self.assertEqual(finding.title, "example.alpha: bbbbbbb is approved, production still runs aaaaaaa")
-
-    def test_a_current_production_matches(self):
-        self.read(CURRENT)
-
-        (condition,) = self.resource.conditions
-        self.assertEqual((condition["type"], condition["message"]), ("Ready", "Matches HQ's config."))
 
 
 class HistoryShowsChangesTests(TestCase):

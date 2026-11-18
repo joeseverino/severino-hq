@@ -10,7 +10,6 @@ mutation that could drift from the thing it claims to represent.
 import re
 from collections import Counter
 from dataclasses import dataclass, replace
-from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import Field, StringConstraints, create_model
@@ -70,7 +69,7 @@ from .topology_model import (
     newest_stamp,
 )
 lazy from .adoption import manages_through
-lazy from .facts import stored_snapshots
+lazy from .facts import kinds_read
 lazy from .hq_self import serving
 lazy from .topology_estate import add_estate
 
@@ -199,10 +198,11 @@ def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
 
     Drift compares only fields present in both, so a field the reading omits is
     unverified rather than agreed. Fields the provider declared it cannot
-    report, and fields carrying no value, have nothing to confirm.
+    report, and fields carrying no value, have nothing to confirm. A drifted
+    record already says which fields the reading disagrees with.
     """
 
-    if not resource.last_observed_at or not isinstance(resource.status, dict):
+    if not resource.last_observed_at or not isinstance(resource.status, dict) or holding(resource.conditions, DRIFTED):
         return ()
     # A provider with no ``from_record`` cannot turn a reading into a spec, so
     # no field of that spec is ever echoed back. A certificate declares what was
@@ -521,17 +521,7 @@ def _derive(principal: Principal) -> Topology:
         )
     )
     ordered_edges = tuple(sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target)))
-    return Topology(ordered_nodes, ordered_edges, kinds_read=_kinds_read())
-
-
-def _kinds_read() -> tuple[tuple[str, datetime], ...]:
-    """When each kind was last read with an answer, from its stored snapshots."""
-
-    return tuple(
-        (kind, max(read))
-        for kind, rows in sorted(stored_snapshots().items())
-        if (read := [row.observed_at for row in rows if row.observed_at is not None])
-    )
+    return Topology(ordered_nodes, ordered_edges, kinds_read=tuple(kinds_read().items()))
 
 
 def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
