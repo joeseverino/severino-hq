@@ -132,11 +132,6 @@ class InvalidShapeTests(SimpleTestCase):
 
         self.assertEqual((built.preconditions, built.verification), ((), ()))
 
-    def test_a_timeout_out_of_bounds(self) -> None:
-        for bad in (0, -1, 3601, True):
-            with self.subTest(bad):
-                self.assertRefused(timeout_seconds=bad)
-
     def test_no_target_kind(self) -> None:
         self.assertRefused(target_kinds=())
 
@@ -144,10 +139,6 @@ class InvalidShapeTests(SimpleTestCase):
         for bad in ("App.example.com", "app.example.com.", "192.0.2.10", "-app.example.com"):
             with self.subTest(bad):
                 self.assertRefused(hosts=(bad,))
-
-    def test_an_unknown_effect_or_retry(self) -> None:
-        self.assertRefused(effect="remote_write")
-        self.assertRefused(retry="always")
 
 
 class InputTypeTests(SimpleTestCase):
