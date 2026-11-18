@@ -377,8 +377,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table > tbody > tr:has(> [data-kind] .narrow-more) .row-expand { display: grid; }
   .data-table > tbody > tr.is-expanded [data-kind] .narrow-more { display: block; contain: inline-size; }
   .data-table > tbody > tr.is-expanded [data-kind] .narrow-more > br:first-child { display: none; }
-  /* A value its clamp holds here (`cell-clamp`, `table-clamp`, cuts.css) opens its row, which releases it in place. */
-  .data-table > tbody > tr:has(.cell-clamp, .table-clamp) .row-expand { display: grid; }
+  /* A value its clamp holds here (`cell-clamp`, cuts.css) opens its row, which releases it in place. */
+  .data-table > tbody > tr:has(.cell-clamp) .row-expand { display: grid; }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
 }
 
@@ -392,7 +392,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row can open, so names share one edge. */
 .data-table > tbody > tr > .row-gutter { position: relative; }
 /* A table says a row of it can open (`data-rows-can-open`, table_cells), since a row's open line is drawn only as it opens unless it holds a block the server moved there. */
-.data-table:is([data-rows-can-open], :has(> tbody > tr.row-detail, .row-fold, .cell-clamp, .table-clamp)) { --row-inset: var(--row-gutter); }
+.data-table:is([data-rows-can-open], :has(> tbody > tr.row-detail, .row-fold, .cell-clamp)) { --row-inset: var(--row-gutter); }
 .data-table > * > tr > .row-gutter { padding-inline-start: var(--row-inset, var(--cell-pad)); }
 .data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--row-edge); inset-block-start: calc(var(--row-pad) - var(--space-1)); }
 /* A column of a row's controls (`actions-col`, a public class) holds them on one line. */

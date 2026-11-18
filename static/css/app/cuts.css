@@ -196,13 +196,6 @@
    nothing, so no second, unmarked cut lands on the title's last glyph. */
 .month-item > span { overflow: hidden; text-overflow: ellipsis; }
 
-/* A description under a row's name: in a narrow box two lines at most, as
-   wide as its column lets it be, its row opening there to show it whole
-   (tables.css); a wide box holds it whole. It holds out for its longest
-   word, so its column gives way with the others. */
-@container table-region (width < 36rem) {
-  .table-clamp:not(.row-detail *, .is-expanded *) { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: 2; line-clamp: 2; }
-}
 
 /* The command center: a result's title and what it says, one line each,
    two on a phone. */

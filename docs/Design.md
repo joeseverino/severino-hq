@@ -448,8 +448,7 @@ layout survey's `cut and closed`, `cut when open` and `cut beside room`.
 
 A long value in a cell (a line past `table_cells.LONG`) wraps, and in a
 narrow box is held to its third line by a clamp with its mark (`.cell-clamp`,
-cuts.css), its whole value where its row opens; a wide box holds it whole,
-and a description's `table-clamp` likewise. A row with no toggle (a table with
+cuts.css), its whole value where its row opens; a wide box holds it whole. A row with no toggle (a table with
 no gutter heading, a fold's head) clamps nothing, so its value wraps whole,
 and no cell carries its value again as a title. Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
@@ -472,7 +471,7 @@ as wide as it is.
 An identifier the row is read by, in a row of many columns (a container's
 image), is `code.cell-whole`, and what a row's buttons decide (a queue row's
 detail) is a `cell-whole` the clamp never holds. A value told in several parts marks each
-`cell-part`. A description cut to a preview is a `.table-clamp`.
+`cell-part`.
 
 A few words that read wrong split (an age, a hyphenated word) are one `.whole`,
 the box `|breakable` gives each part of a name, or a `.nowrap`. A line that

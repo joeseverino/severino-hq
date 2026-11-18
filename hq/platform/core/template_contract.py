@@ -118,7 +118,6 @@ CLASSES = (
     "section-foot",
     "split",
     "subtle-link",
-    "table-clamp",
     "table-scroll",
     "tight-col",
     "two-col",

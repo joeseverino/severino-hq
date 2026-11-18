@@ -208,8 +208,7 @@ SELECTORS = {
     # identifier does (cuts.css): a row's own name.
     "breaks_anywhere": '[data-cell~="name"]',
     "wraps_in_a_cell": (
-        "tr.row-detail, .row-gutter, [data-cell], .table-clamp, code.cell-whole, .btn,"
-        " .token:not(.cell-short *), [popover]"
+        "tr.row-detail, .row-gutter, [data-cell], code.cell-whole, .btn, .token:not(.cell-short *), [popover]"
     ),
     # Words said to a reader and never drawn.
     "unseen": ".visually-hidden",
