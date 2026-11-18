@@ -455,6 +455,9 @@ before either merges:
   published, signed or deployed.
 - Extensions without such a branch are reused from their verified admissions.
   The app's Contents read covers reading the branches.
+- On a checkout, every step that composes the set picks an extension's local
+  branch of the same name the same way
+  ([The extension set](Development.md#the-extension-set)).
 - Beside composing, in a job of its own, the host pull request runs its own
   `plugin:check` against every extension in the set, from its same-named branch
   or else its default branch. So a host change that breaks an extension fails

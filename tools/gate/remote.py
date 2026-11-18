@@ -246,14 +246,17 @@ def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
     # A run that composes composes this machine's extension checkout, sent as the tree is, from its clone beside
     # HQ's there; one that cannot be sent leaves the run here, never composing that machine's own. Where the
     # set this tree can load is a commit of the checkout's history (tools/dev/extension_set.py), that commit
-    # is sent, so the run there composes it as it stands.
+    # is sent, so the run there composes it as it stands; where it is another worktree of the repository (its
+    # branch named as this tree lands on), that worktree's tree is.
     extension, packages = None, ""
     if composes(task, values) and (paths := os.environ.get("HQ_LOCAL_PYTHONPATH", "")):
         top = Path(git("rev-parse", "--show-toplevel", root=Path(paths.split(":")[0]))[0])
         packages = ":".join(str(Path(path).resolve().relative_to(top)) for path in paths.split(":"))
         # The clone there is named as the repository is, which a worktree of it here is not.
         common = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir", root=top)[0])
-        picked = dict(extension_set.for_tree(ROOT).at).get(str(top)) or gate_commit(top, working_tree(top))
+        chosen = extension_set.for_tree(ROOT)
+        stands = Path(dict(chosen.stood).get(str(top), top))
+        picked = dict(chosen.at).get(str(top)) or gate_commit(stands, working_tree(stands))
         extension = (str(PurePosixPath(checkout).parent / common.parent.name), picked)
         push(top, f"{host}:{extension[0]}", [f"{extension[1]}:refs/gate/{run}"])
     argv = words(json.loads(done(["mise", "tasks", "info", "--json", task]))["usage_spec"]["cmd"], values)

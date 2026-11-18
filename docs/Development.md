@@ -664,9 +664,15 @@ Every step that composes the set (the composed suite, the dev servers and
 `image:compose`, `audit:mcp`, `audit:memory`, `audit:registry --composed` and
 `wire-pocket-id`) loads the set as one host tree can load it, picked in one
 place, `pick` in `tools/dev/extension_set.py`. A file task reaches it through
-`tools/lib/extension-set.sh`. Each package is asked the plugin API its
-manifest requires, beside the `PLUGIN_API_VERSION` of the host tree or commit
-the step runs:
+`tools/lib/extension-set.sh`. A host tree lands on its own branch, or else on
+the host branch it is nearest (the one a worktree was made from). Where a
+named checkout's repository carries a branch of that name, other than its
+default branch, that branch is composed, as CI composes a coordinated change:
+the worktree checked out on it as it stands, else the branch's commit,
+unpacked under `var/extensions/`. So a worktree of a host branch composes the
+extensions' branch of the same name whatever `mise.local.toml` names. Each
+other package is asked the plugin API its manifest requires, beside the
+`PLUGIN_API_VERSION` of the host tree or commit the step runs:
 
 - every package requires it: the trees named are composed as they stand;
 - a repository's packages require another: its newest commit on HEAD whose

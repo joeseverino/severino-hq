@@ -8,11 +8,11 @@
 #   . ./tools/lib/extension-set.sh
 #   compose_extensions
 #
-# The pick composes each package's tree as named when every package requires
-# the plugin API the host tree speaks, else the newest commit of its
-# repository that does, else no extension. Its line names what it composed,
-# since a host worktree composes the extensions' main checkouts unless
-# HQ_LOCAL_PYTHONPATH names a worktree's. A heavy task runs its body again
+# The pick composes a repository's branch named as the one the host tree lands
+# on where it carries one, as CI does; otherwise each package's tree as named
+# when every package requires the plugin API the host tree speaks, else the
+# newest commit of its repository that does, else no extension. Its line
+# names what it composed and why. A heavy task runs its body again
 # once it has the turn, with this run's environment, so the line is said once
 # per run, on stderr, where a task whose output a program reads keeps it out.
 # HQ_LOCAL_* stay as named, so a step this one starts picks for its own tree.
