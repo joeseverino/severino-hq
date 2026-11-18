@@ -189,8 +189,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   /* An ask's cell keeps the line its note stands on under its controls (below). */
   &:has(> [data-ask]) { padding-block-end: calc(var(--row-pad) + 1lh); }
 }
-/* A table with no headings is a list of rows that each say one thing (the queue's items): no column's first line to keep level with, so a row's controls stand at the middle of the words they act on. */
-.data-table:not(:has(> thead)) > tbody > tr > [data-kind="control"] { vertical-align: middle; }
+.data-table:not(:has(> thead)) > tbody > tr > [data-kind="control"] { vertical-align: middle; } /* A table with no headings is a list of rows that each say one thing (the queue's items): no column's first line to keep level with, so a row's controls stand at the middle of the words they act on. */
 .data-table > * > tr > .select-column { inline-size: 1px; text-align: center; padding-inline: var(--space-4); }
 /* The tick-boxes' column is their box and its padding, in every engine, whose own margins around a checkbox differ. */
 .data-table > * > tr > .select-column > input { margin-inline: 0; }

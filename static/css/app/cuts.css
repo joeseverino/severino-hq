@@ -25,6 +25,7 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .page-head [data-reading-age][data-ask-said]:is(.tone-attention, .tone-serious)::after { color: var(--tone-mark); }
+@container page-head (width < 30rem) { .page-head .facts-band .fact-detail .dot-list { max-block-size: 1lh; overflow-y: clip; } } /* A reading beside a phone's title says the parts of its note's run that fit one line, the rest in its panel. */
 /* A page's note ends the head's first line (page.css), and a script fills it
    once the page is drawn. It stands in a slot as wide as its unseen struts
    (_visit_refresh.html), each a sentence HQ writes word for word with the
