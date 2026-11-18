@@ -2,10 +2,8 @@
 
 The suite stores with a fast hasher first (settings.py says why), so these
 tests hold production's list as a process outside the suite loads it, and
-HQ's Argon2 class through its own methods.
-
-Argon2 is a native extension. The container gate runs this file inside the
-built image, which is where a missing or unbuildable wheel would show.
+what HQ's Argon2 class adds to Django's. That the native library hashes in
+the built image is image:verify:packages' to show.
 """
 
 import json
@@ -13,7 +11,7 @@ import subprocess
 import sys
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.hashers import check_password, identify_hasher, make_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.test import SimpleTestCase, TestCase
 
 from hq.platform.core.hashers import Argon2PasswordHasher
@@ -46,23 +44,6 @@ class ProductionHasherTests(SimpleTestCase):
 
 class Argon2HasherTests(SimpleTestCase):
     hasher = Argon2PasswordHasher()
-
-    def test_the_native_library_hashes_and_verifies(self):
-        encoded = make_password(PASSWORD, hasher="argon2")
-        self.assertIsInstance(identify_hasher(encoded), Argon2PasswordHasher)
-        self.assertTrue(check_password(PASSWORD, encoded))
-        self.assertFalse(self.hasher.must_update(encoded))
-
-    def test_a_wrong_password_does_not_verify(self):
-        self.assertFalse(check_password("wrong", make_password(PASSWORD, hasher="argon2")))
-
-    def test_a_tampered_or_unknown_hash_does_not_verify(self):
-        encoded = make_password(PASSWORD, hasher="argon2")
-        digest = encoded.rsplit("$", 1)[1]
-        tampered = encoded[: -len(digest)] + ("A" if digest[0] != "A" else "B") + digest[1:]
-        self.assertFalse(check_password(PASSWORD, tampered))
-        self.assertFalse(check_password(PASSWORD, "unknown$1$salt$hash"))
-        self.assertFalse(check_password(PASSWORD, make_password(None)))
 
     def test_a_corrupt_hash_is_a_password_that_does_not_match(self):
         for corrupt in CORRUPT:
