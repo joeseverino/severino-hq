@@ -269,7 +269,7 @@
   --series-10: light-dark(#8a8f2f, #c2c76c);
   /* A series' color, set by its `.series-N` class (a route's band by its
      `.chart-band-N`); the accent until then. */
-  --source: var(--accent);
+  --slot: var(--accent);
   --radius: 8px;
   --radius-sm: 5px;
   /* A capsule's ends: larger than any box it rounds is tall, so the corners

@@ -169,7 +169,7 @@
 /* A day gone by recedes: its words set back in --ink-3, which clears 4.5:1
    on every source's fill as words still followed must, its dots fainter. */
 .month-day.is-past :is(.month-span, .month-item) { color: var(--ink-3); }
-.month-day.is-past .month-span.is-start { border-left-color: color-mix(in srgb, var(--source) 62%, var(--surface)); }
+.month-day.is-past .month-span.is-start { border-left-color: color-mix(in srgb, var(--slot) 62%, var(--surface)); }
 .month-day.is-past .month-mark, .month-day.is-past .month-item::before { opacity: .62; }
 .month-day.is-selected { box-shadow: inset 0 0 0 2px var(--accent); }
 /* The date and the day's marks share one row, so marks take no height of
@@ -196,26 +196,26 @@
 /* A mark is a dot in its source's color: filled once done, a ring while
    planned, a ring struck through once missed. Shape carries the state, so the
    source's color stays the only color. */
-.month-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--source); }
+.month-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--slot); }
 .month-item-dot { display: none; }
-.month-mark.is-planned { background: transparent; box-shadow: inset 0 0 0 1.5px var(--source); }
+.month-mark.is-planned { background: transparent; box-shadow: inset 0 0 0 1.5px var(--slot); }
 .month-mark.is-missed {
-  background: linear-gradient(135deg, transparent 44%, var(--source) 44% 56%, transparent 56%);
-  box-shadow: inset 0 0 0 1.5px var(--source);
+  background: linear-gradient(135deg, transparent 44%, var(--slot) 44% 56%, transparent 56%);
+  box-shadow: inset 0 0 0 1.5px var(--slot);
   opacity: .6;
 }
-.month-span.is-start { margin-left: 0; border-left: 3px solid var(--source); border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.month-span.is-start { margin-left: 0; border-left: 3px solid var(--slot); border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 .month-span.is-end { margin-right: 0; border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
 .month-span.is-gap { visibility: hidden; }
 /* A title cut on its one line: its names are text the cut takes, not boxes,
    so no part of one draws past the cut, beyond the day's edge. */
 :is(.month-item > span, .month-span) :is(.token, .whole, .part) { display: contents; }
-.month-item::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--source); transform: translateY(-1px); }
-.month-item.is-planned::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--source); }
+.month-item::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--slot); transform: translateY(-1px); }
+.month-item.is-planned::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--slot); }
 .month-item time { color: var(--muted); font-variant-numeric: tabular-nums; }
 .month-item:hover > span { color: var(--accent); }
 /* All day: a filled block in its color, as a one-day bar. */
-.month-item.is-all-day { padding: 0 var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--source) 22%, var(--surface)); font-weight: 600; }
+.month-item.is-all-day { padding: 0 var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--slot) 22%, var(--surface)); font-weight: 600; }
 .month-item.is-all-day::before { content: none; }
 .month-more { display: block; color: var(--muted); font-size: var(--text-3xs); font-weight: 600; text-decoration: none; }
 .month-more:hover { color: var(--accent); }
@@ -239,8 +239,8 @@
   font-size: var(--text-sm);
   text-align: start;
 }
-.calendar-source::before { content: ""; flex: none; width: var(--check); height: var(--check); border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--source); }
-.calendar-source[aria-pressed="true"]::before { background: var(--source); }
+.calendar-source::before { content: ""; flex: none; width: var(--check); height: var(--check); border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--slot); }
+.calendar-source[aria-pressed="true"]::before { background: var(--slot); }
 .calendar-source:hover { background: var(--bg-tint); }
 .calendar-source[aria-pressed="false"] { color: var(--muted); }
 :is(.calendar-source-note, .calendar-source-failure) { padding-inline-start: calc(var(--check-inset) + var(--check) + var(--check-gap)); color: var(--muted-2); font-size: var(--text-2xs); }
@@ -251,7 +251,7 @@
 .month-grid.is-compact :is(.month-item, .month-more) { display: none; }
 .month-grid.is-compact .month-item-dot { display: inline-block; }
 /* A bar reaches across its cell's padding to meet the next, and no further. */
-.month-grid.is-compact .month-span { height: 4px; margin: 0 calc(-1 * var(--space-1)) var(--space-1); padding: 0; background: var(--source); font-size: 0; }
+.month-grid.is-compact .month-span { height: 4px; margin: 0 calc(-1 * var(--space-1)) var(--space-1); padding: 0; background: var(--slot); font-size: 0; }
 .month-grid.is-compact .month-span.is-end { margin-right: 0; }
 .month-grid.is-compact .month-span.is-start { margin-left: 0; border-left: 0; }
 /* A day drawn small is still drawn the size of a target, so its own box is
@@ -268,7 +268,7 @@
   .month-item-dot { display: inline-block; }
   .month-mark { width: 6px; height: 6px; }
   .month-day-head > .month-mark { flex: 0 1 auto; min-width: 0; }
-  .month-span { height: 4px; padding: 0; background: var(--source); font-size: 0; }
+  .month-span { height: 4px; padding: 0; background: var(--slot); font-size: 0; }
   .month-date { min-width: var(--target-min); height: var(--target-min); }
   .month-of { display: none; }
 }

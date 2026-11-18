@@ -236,7 +236,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 }
 
 /* ── Allocation ─────────────────────────────────────────────────── */
-/* Parts of one whole as a single row: a pie needs a legend and a stacked bar brings an axis; `.chart-series-N` sets `background` with `fill`, so the same thing is one color here and in a chart. */
+/* Parts of one whole as a single row: a pie needs a legend and a stacked bar brings an axis; a `.series-N` slot paints `background` and `fill` from one property, so the same thing is one color here and in a chart. */
 .allocation {
   display: block;
   inline-size: 100%;

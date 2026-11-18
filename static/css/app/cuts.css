@@ -170,7 +170,7 @@
   height: 1.25rem;
   margin: 0 calc(-1 * var(--space-2)) var(--space-1);
   padding: 0 var(--space-3);
-  background: color-mix(in srgb, var(--source) 22%, var(--surface));
+  background: color-mix(in srgb, var(--slot) 22%, var(--surface));
   color: var(--ink);
   font-size: var(--text-2xs);
   font-weight: 600;
