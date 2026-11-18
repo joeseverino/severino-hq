@@ -8,10 +8,9 @@ mode (`mise run fix`) writes it. Every other attribute is a hand-written one,
 kept in a .gitattributes in the directory it is about.
 """
 
-import os
-import sys
-
+from hq.platform.core.tests.task import usage
 from tests.mise_tasks import ROOT, mise_tasks, writes
+from tools.derived import hold
 
 PATH = ROOT / ".gitattributes"
 HEADER = """\
@@ -33,23 +32,5 @@ def render() -> str:
     return HEADER + "".join(f"/{path} linguist-generated\n" for path in declared())
 
 
-def main() -> int:
-    current = render()
-    # mise sets it from lint:drift-gitattributes's --fix.
-    if os.environ.get("usage_fix") != "true":  # noqa: SIM112 - mise names its usage variables in lower case
-        if not PATH.exists() or PATH.read_text(encoding="utf-8") != current:
-            print(
-                ".gitattributes is behind the derived files the tasks declare; "
-                "run `mise run lint:drift-gitattributes --fix` and commit the result.",
-                file=sys.stderr,
-            )
-            return 1
-        print(".gitattributes is current.")
-        return 0
-    PATH.write_text(current, encoding="utf-8")
-    print("Wrote .gitattributes.")
-    return 0
-
-
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(hold(PATH, render().encode(), "lint:drift-gitattributes", fix=usage().switch("fix")))

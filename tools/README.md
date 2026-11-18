@@ -23,7 +23,9 @@ permission lists it and its tests read, `audit:image`'s reader of a built
 image (`audit_image.py`), `audit:supports`'s asker of the gates' engines
 (`audit_supports.py`), `audit:tests`'s reader of each test's coverage
 (`audit_tests.py`), and `lint:sdk-breaking`, which holds `hq_sdk` to
-its base's extensions (`sdk_breaking.py`).
+its base's extensions (`sdk_breaking.py`), and the check-or-write every
+derived file's writer outside Django runs as its `lint:drift-*` gate
+(`derived.py`).
 
 Language: shell (POSIX sh) for a short pipeline of other programs; Python for
 anything with logic, run through `uv run`, or plain stdlib at the runner's

@@ -7,14 +7,15 @@ Inter's own release (UPSTREAM beside this file).
 """
 
 import io
-import os
 import re
-import sys
 from pathlib import Path
 
 from fontTools import subset
 from fontTools.ttLib import TTFont
 from fontTools.varLib import instancer
+
+from hq.platform.core.tests.task import usage
+from tools.derived import hold
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "tools/fonts/InterVariable.woff2"
@@ -123,23 +124,8 @@ def build() -> bytes:
     return served.getvalue()
 
 
-def main() -> int:
-    built = build()
-    name = SERVED.relative_to(ROOT)
-    # mise sets it from lint:drift-font's --fix.
-    if os.environ.get("usage_fix") != "true":  # noqa: SIM112 - mise names its usage variables in lower case
-        if not SERVED.exists() or SERVED.read_bytes() != built:
-            print(
-                f"{name} is behind its source; run `mise run lint:drift-font --fix` and commit the result.",
-                file=sys.stderr,
-            )
-            return 1
-        print(f"{name} is current.")
-        return 0
-    SERVED.write_bytes(built)
-    print(f"Wrote {name}, {len(built) / 1000:.1f} KB.")
-    return 0
-
-
 if __name__ == "__main__":
-    raise SystemExit(main())
+    built = build()
+    raise SystemExit(
+        hold(SERVED, built, "lint:drift-font", fix=usage().switch("fix"), wrote=f", {len(built) / 1000:.1f} KB")
+    )

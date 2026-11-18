@@ -508,15 +508,6 @@ class PluginContractTests(TestCase):
 class PluginContractSourceTests(SimpleTestCase):
     """What the repository states about the plugin contract."""
 
-    def test_every_statement_of_the_plugin_api_names_the_one_this_host_runs(self):
-        root = Path(__file__).resolve().parents[4]
-        policy = json.loads((root / "policy" / "plugin-admission-v1.json").read_text())
-        self.assertEqual(policy["plugin_api_version"], PLUGIN_API_VERSION)
-        for path in (*root.glob("*.md"), *root.glob("docs/*.md"), *root.glob("tests/fixtures/*/plugin.py")):
-            for found in re.findall(r"api_version=(\d+)", path.read_text()):
-                with self.subTest(path=path.name):
-                    self.assertEqual(int(found), PLUGIN_API_VERSION)
-
     def test_every_host_path_the_admission_action_reads_exists(self):
         """An extension's admission checks this repository out as ``host``."""
 

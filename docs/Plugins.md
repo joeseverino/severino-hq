@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=18,
+    api_version=...,  # the host's PLUGIN_API_VERSION, written as a number
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -328,7 +328,9 @@ The lock's inventory must equal the enabled manifests exactly. Every entry
 binds the extension ID, distribution, installed version, host API version,
 immutable source commit, wheel SHA-256 and Cordon policy SHA-256.
 
-The policy is `policy/plugin-admission-v1.json`. Admission requires:
+The policy is `policy/plugin-admission-v1.json`, written from
+`tools/pipeline/admission_policy.py` with the host's `PLUGIN_API_VERSION` by
+`mise run fix`. Admission requires:
 
 | Evidence | Produced by |
 | --- | --- |

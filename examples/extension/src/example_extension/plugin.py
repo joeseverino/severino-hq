@@ -1,6 +1,6 @@
 """The extension's one declaration, read by HQ and by the check alike."""
 
-from hq_sdk.plugin import NavigationItem, PluginIntegration, PluginManifest
+from hq_sdk.plugin import PLUGIN_API_VERSION, NavigationItem, PluginIntegration, PluginManifest
 
 
 def ready() -> bool:
@@ -20,7 +20,9 @@ plugin = PluginManifest(
     distribution="example-extension",
     source_repository="example/example-extension",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=18,
+    # The host's own constant, where an extension writes the number: this one
+    # ships in the host's tree, so it is never a wheel built for another host.
+    api_version=PLUGIN_API_VERSION,
     integration_provider="example_extension.plugin:integration",
     django_apps=("example_extension",),
     url_prefix="examples/extension/",

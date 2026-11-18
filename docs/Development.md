@@ -615,9 +615,8 @@ beside it.
 
 A file generated from a source is declared once, by the `lint:drift-*` gate
 that holds it, in `mise-tasks/lint.toml`: the gate is tagged `derived`, and its
-`vars.writes` names each file its fix mode writes whole (`vars.writes_part_of`,
-each hand-written file it writes a section of, as the SDK's table in
-`docs/Plugins.md`). `mise tasks -x --hidden --tag derived` lists them. Adding
+`vars.writes` names each file its fix mode writes whole. `mise tasks -x
+--hidden --tag derived` lists them. Adding
 one is its writer and that gate; everything else reads the declaration:
 
 - `mise run fix` (`fix:derived`) runs every derived gate's fix mode, then
