@@ -41,6 +41,9 @@ _HELD = frozenset({"row-more", "line-rest", "narrow-more"})
 # How many widths of its region a table's columns leave at, one rule each in
 # tables.css.
 RANKS = 6
+# The width below every rank's (20rem, tables.css), where a row's state, which
+# stands while any other column can, moves to its open line too.
+STATES_LEAVE = RANKS + 1
 # How many columns at most a table's share is counted over (`data-columns`),
 # one rule each in tables.css.
 COUNTED = 10
@@ -456,10 +459,11 @@ class Cells(HTMLParser):
         # The columns no heading's rank takes away: what a row is (a cell said
         # by its pills alone; a pill beside a value is a note on it), what it
         # does (its controls, a field a reader fills in, a button), and words
-        # every row must show (`key-col`). The first two never leave: a row
-        # without them no longer says what it is or does what it is for, and
-        # the open line copies what leaves, where a control would be drawn
-        # twice. Key-cols leave after every other column and together, at
+        # every row must show (`key-col`). Controls never leave, since the
+        # open line copies what leaves, where a control would be drawn twice.
+        # A state stands while any other column can, and goes to the open
+        # line only below every rank's width (`STATES_LEAVE`), where the name
+        # and the controls take the row. Key-cols leave after every other column and together, at
         # the widest rank any of them would take, since one side of a change
         # without the other says nothing.
         states = {place for row in records for place, cell in _placed(row) if place != named and cell.states}
@@ -490,6 +494,11 @@ class Cells(HTMLParser):
                 keys - states - does - pressed - empty - {named},
                 after=len(order),
             )
+            # A state keeps its line however long, so it takes a column's
+            # room: beside one, every other column leaves a rank sooner.
+            if states - empty:
+                levels = {at: max(1, level - 1) for at, level in levels.items()}
+            levels |= dict.fromkeys(states - empty - {named}, STATES_LEAVE)
         wide = {at for at, cell in enumerate(heads[-1] if heads else []) if "wide-only" in _classes(cell.attrs)}
         self.opens = False
         self.cuts += [cell.drop for row in self.rows if row.section == "thead" for cell in row.cells if cell.drop]

@@ -287,8 +287,10 @@ empty box. *Gates:* the survey's `rows unruled` and `empty panels`.
 `table-region` container query in tables.css) every ranked column has left
 for the row's open line, and what stands keeps the browser's table layout:
 the naming column, a row's state, its controls, a field it fills in and any
-`key-col`, each under its heading. *Gates:* `tables` in the layout survey,
-which fails a table not laid out as one.
+`key-col`, each under its heading. A state keeps its line, so beside one each
+other column leaves a rank sooner, and below every rank's width (20rem) the
+state goes to the open line last. *Gates:* `tables` in the layout survey,
+which fails a table not laid out as one, and the survey's `row state kept`.
 
 **A row's controls are a column of the table.** The rows' actions, or a
 column of kind `control`, stand at every width beside the row's words, every

@@ -507,9 +507,11 @@ ROWS_UNRULED = (
 )
 
 
-# What a row is (its state, a cell its pills say) and what a reader changes in it (a field)
-# never leave with a column a narrow box lets go: a row without them no
-# longer says what it is or does what it is for.
+# What a reader changes in a row (a field) never leaves with a column a narrow
+# box lets go, and what a row is (its state, a cell its pills say) leaves only
+# once no other column that can leave still stands: a row without them no
+# longer says what it is or does what it is for while a column it could
+# spare stands in their place.
 STATE_LEFT = (
     "() => {"
     + DESCRIBE
@@ -520,7 +522,8 @@ STATE_LEFT = (
     // A pill beside a value is a note on it; a cell its pills alone say is the row's state.
     const pills = [...cell.querySelectorAll('.pill')];
     const stated = pills.length && pills.map((pill) => pill.textContent).join('').replace(/\\s+/g, '') === cell.textContent.replace(/\\s+/g, '');
-    const held = cell.querySelector('select, textarea, input:not([type="hidden"])') || (stated ? pills[0] : null);
+    const spared = [...cell.parentElement.children].some((other) => other.matches('[data-drop]') && other.checkVisibility());
+    const held = cell.querySelector('select, textarea, input:not([type="hidden"])') || (stated && spared ? pills[0] : null);
     if (held) found.push(`${describe(cell)} "${(cell.dataset.label || '').slice(0, 30)}" leaves with its column, holding ${describe(held)}`);
   }
   return found;
@@ -592,8 +595,9 @@ CUT_WHEN_OPEN = (
 )
 
 
-# A row offers its toggle only where opening it shows something: an open line
-# with nothing drawn is a chevron that does nothing. A group's toggle opens
+# A row offers its toggle only where opening it shows something: an open row
+# whose toggle stands over a line with nothing drawn is a chevron that does
+# nothing. A group's toggle opens
 # the rows folded under it, so its line may hold nothing.
 OPENS_NOTHING = (
     "() => {"
@@ -602,7 +606,7 @@ OPENS_NOTHING = (
   const found = [];
   for (const row of document.querySelectorAll('main table > tbody > tr.is-expanded:not(:has([data-fold-toggle]))')) {
     const line = row.nextElementSibling;
-    if (!row.checkVisibility() || row.closest('details:not([open])') || !line?.matches('.row-detail')) continue;
+    if (!row.querySelector('[data-row-toggle]')?.checkVisibility() || row.closest('details:not([open])') || !line?.matches('.row-detail')) continue;
     const drawn = [...line.querySelectorAll(':scope > td *')]
       .some((part) => part.checkVisibility() && part.getClientRects().length && box(part).height > 0);
     if (!drawn) found.push(`${describe(row)} opens a line with nothing drawn`);

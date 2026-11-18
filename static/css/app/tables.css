@@ -40,7 +40,7 @@
   /* A column's share of its region while every column stands: the region's width over one more than the table's count of columns, read from its headings, less a cell's padding. The one more (`--spare`) is kept for what a column asks past its share (a state's line, a row's name among its controls); the narrowest box keeps two where a state stands. What a value holds whole, or the line a long one keeps, is never more than that share, so the table's columns together never ask more than their region. */
   --columns: 1;
   --spare: 1;
-  --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-6, 0) + var(--spare)) - 2 * var(--cell-pad));
+  --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-6, 0) - var(--gone-7, 0) + var(--spare)) - 2 * var(--cell-pad));
   inline-size: 100%; border-collapse: collapse;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm);
 }
@@ -300,6 +300,17 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table > tbody > tr.is-expanded:has(+ tr.row-detail > td > .row-columns > [data-drop="6"]) > * { border-bottom: 0; }
 }
 @container table-region (width >= 24rem) { .row-columns > [data-drop="6"] [data-row-shows] { display: none; } }
+/* Below every rank's width a row's state goes to its open line too (`STATES_LEAVE`, table_cells), the last to leave, so the share it took from its neighbors is theirs again. */
+@container table-region (width < 20rem) {
+  .data-table[data-states] { --spare: 1; }
+  .data-table > * > tr > [data-drop="7"] { display: none; }
+  .data-table:has(> thead > tr:last-child > [data-drop="7"]) { --gone-7: 1; }
+  .data-table:has(> thead > tr:last-child > [data-drop="7"] ~ [data-drop="7"]) { --gone-7: 2; }
+  :is(.row-columns > [data-drop="7"], .row-columns:has(> [data-drop="7"]), .data-table > tbody > tr:has(> [data-drop="7"]:not([data-blank])) .row-expand) { display: grid; }
+  .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > .row-columns > [data-drop="7"]) { display: table-row; }
+  .data-table > tbody > tr.is-expanded:has(+ tr.row-detail > td > .row-columns > [data-drop="7"]) > * { border-bottom: 0; }
+}
+@container table-region (width >= 20rem) { .row-columns > [data-drop="7"] [data-row-shows] { display: none; } }
 @container table-region (width < 32rem) {
   .data-table > * > tr > [data-drop="5"] { display: none; }
   .data-table:has(> thead > tr:last-child > [data-drop="5"]) { --gone-5: 1; }
@@ -373,9 +384,9 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 
 /* ── A row's toggle and its open line ───────────────────────────── */
 
-/* The server draws a toggle in every row that can open; it shows where the row holds something back: at any width (`data-below`, table_cells: a part the row never shows, a block or buttons moved to its open line), where a column of it has left or a narrow box has let a part go (above), and on an open row. */
+/* The server draws a toggle in every row that can open; it shows where the row holds something back: at any width (`data-below`, table_cells: a part the row never shows, a block or buttons moved to its open line), where a column of it has left or a narrow box has let a part go (above), and on an open row whose line is drawn (below), so a row opened narrow and widened offers no toggle that opens nothing. */
 .data-table .row-expand { display: none; }
-.data-table > tbody > tr:is([data-below], .is-expanded) .row-expand { display: grid; }
+.data-table > tbody > tr:is([data-below], .is-expanded:has(+ .row-detail > td > :not(.row-columns), + .row-detail > td > .row-columns > :not([data-drop]:not([data-holds])))) .row-expand { display: grid; }
 /* What a row shows only on its open line is never drawn on the row, and the face that stands in for it there (`row-less`) is not drawn on the line. */
 .data-table [data-kind] :is(.row-more, .line-rest), .row-detail .row-less { display: none; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row can open, so names share one edge. */

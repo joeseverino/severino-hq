@@ -132,9 +132,10 @@ class RowControlsTests(SimpleTestCase):
         self.assertEqual(["data-blank" in each.attrs for each in cells], [False, True])
 
     def test_a_table_that_ranks_no_column_lets_its_spare_ones_go_only_when_narrow(self):
-        """A table whose headings rank nothing keeps what names and states
-        each row and its controls, and lets the rest go far end first at the
-        narrowest widths (tables.css), so a narrow box draws it as a table of
+        """A table whose headings rank nothing keeps what names each row and
+        its controls, lets the rest go far end first at the narrow widths
+        (tables.css), a rank sooner beside a state, which holds its line, and
+        the state last, below them all, so a narrow box draws it as a table of
         the columns it keeps, never wider than its region."""
 
         rows = (
@@ -146,15 +147,16 @@ class RowControlsTests(SimpleTestCase):
             '{% table_heading "Name" gutter=True %}{% table_heading "Note" %}{% table_heading "Detail" %}'
             '{% table_heading "State" "status" %}{% table_heading "" "control" hidden=True %}'
         )
-        self.assertEqual(_ranks(_table(rows, head=head)), [None, "6", "5", None, None])
+        self.assertEqual(_ranks(_table(rows, head=head)), [None, "5", "4", "7", None])
 
-    def test_a_rows_state_never_leaves(self):
-        """A pill says what the row is, so its column takes no rank."""
+    def test_a_rows_state_leaves_only_below_every_rank(self):
+        """A pill says what the row is, so its column takes no rank its
+        heading gives, and leaves only below every rank's width."""
 
         row = '<tr><td>Example</td><td><span class="pill pill-good">Done</span></td></tr>'
         html = _table(row, head='{% table_heading "Name" gutter=True %}{% table_heading "Status" "status" drop=1 %}')
         cells = [each for each in all_elements(html) if each.tag in {"th", "td"}]
-        self.assertEqual([each.attrs.get("data-drop") for each in cells], [None] * len(cells))
+        self.assertEqual([each.attrs.get("data-drop") for each in cells], [None, "7", None, "7"])
 
     def test_a_pill_beside_a_value_is_a_note_whose_column_may_leave(self):
         row = '<tr><td>Example</td><td>192.0.2.10 <span class="pill pill-bad">Missing</span></td></tr>'
