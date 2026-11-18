@@ -1179,9 +1179,10 @@ drawn in front of an item that holds the link, never on the link itself, and
 a status tag sits beside a link, never inside it.
 
 An external link's arrow (`.external-link`) is joined to its last word by a
-no-break space. A link whose name is one box (a cut token, a chip in a table)
-lays the name and the arrow out as one row, since a line may break after any
-box.
+no-break space. A box that wraps is as wide as its line, so outside a table a
+link's name (its cut token) and its chip run inline, and the arrow follows
+the last word on its line. A chip in a table is a box, so its link lays the
+chip and the arrow out as one row, since a line may break after any box.
 
 A row of places to go (the dashboard's links, a saved copy's own pages) is
 `{% link_chips %}`, each item an `<li>` holding one link, `{% entity
