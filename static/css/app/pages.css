@@ -73,12 +73,12 @@
 .topology-node-select {
   grid-column: 2; grid-row: 2;
   display: inline-flex; align-items: center; gap: var(--space-1); min-height: 28px;
-  padding: 0 var(--space-2); border-radius: 999px; color: var(--muted); text-decoration: none;
+  padding: 0 var(--space-2); border-radius: var(--radius-pill); color: var(--muted); text-decoration: none;
 }
 .topology-node-select::after { content: "\203A" / ""; font-size: var(--text-sm); line-height: 1; }
 .topology-node-select:hover, .topology-node-select:focus-visible, .topology-node-select[aria-current] { color: var(--accent); }
 .topology-node-degree {
-  min-width: 20px; padding: var(--space-1) var(--space-2); border-radius: 999px; background: var(--surface-2);
+  min-width: 20px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); background: var(--surface-2);
   color: inherit; font-size: var(--text-3xs); text-align: center; font-variant-numeric: tabular-nums;
 }
 .topology-detail {

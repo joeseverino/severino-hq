@@ -271,6 +271,9 @@
   --source: var(--accent);
   --radius: 8px;
   --radius-sm: 5px;
+  /* A capsule's ends: larger than any box it rounds is tall, so the corners
+     meet in a half circle at either end. */
+  --radius-pill: 999px;
   /* Every square control in the header bar (the collapsed search button and
      the sections toggle), sized once so the two cannot drift apart. */
   --control-size: 34px;

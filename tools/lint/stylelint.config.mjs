@@ -61,14 +61,22 @@ const readingMeasure = {
 // itself (a form's fields, a band's cells) says so in a disable comment.
 const autoGrid = /\brepeat\(\s*auto-(fit|fill)\b/i;
 const flowGrid = { "/./": [`/${autoGrid.source}/i`] };
+// A capsule's ends (a pill, a chip, a tag, a switch, a track) are as round as
+// its box is tall, which is --radius-pill. A corner rounder than the --radius
+// steps, written as a literal, is that fact written again.
+const capsuleRadius = {
+  "/^border(-[a-z]+)*-radius$/": ["/(?<![-\\w.])(\\d{3,}|[1-9]\\d)(\\.\\d+)?px|(?<![-\\w.])[\\d.]+r?em\\b/"],
+};
 // One list holds every disallowed value, so its message tells an auto grid, a
-// cut and a measure from the rest.
+// cut and a measure from the rest. Every sheet's list holds the capsule's.
 const disallowedValues = (keys) => [
-  { ...keys, ...flowGrid },
+  { ...keys, ...flowGrid, ...capsuleRadius },
   {
     message: (property, value) =>
       autoGrid.test(value)
         ? `"${property}: ${value}" lays out its own auto-fit grid: a run of sibling sections or cards is the flow (\`.section-flow\`, docs/Design.md); a part that lays out something else inside itself says so in a disable comment`
+        : matches(capsuleRadius, property)
+        ? `"${property}: ${value}" rounds a corner with a literal: a capsule's ends are var(--radius-pill), a card's corners var(--radius) or var(--radius-sm)`
         : matches(cutText, property)
         ? `"${property}: ${value}" cuts text outside cuts.css: move the whole rule to static/css/app/cuts.css, since a selector is styled in one sheet (test_a_selector_is_styled_in_one_place); a box that clips something other than text says why in a disable comment`
         : matches(readingMeasure, property)
