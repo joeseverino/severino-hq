@@ -5,17 +5,20 @@ declared once in ``REQUEST_STANDARD``, outermost first, each with the hop of
 the path it is decided at, and measured as every standard is (``standards``).
 """
 
+from collections.abc import Mapping
 from dataclasses import KW_ONLY, dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 from django.conf import settings
+from django.utils import timezone
 from django.utils.csp import CSP
 from django.utils.text import capfirst
 
 from hq.domains.control_plane.names import is_hostname
 from hq.platform.application.labels import dotted
-from hq.platform.core.network import split_host_port
+from hq.platform.core.network import IGNORED, JUDGED, PROXY, split_host_port
 lazy from hq.domains.control_plane.providers import PROVIDERS, operator_label
 
 from . import tailnet
@@ -23,11 +26,21 @@ from .doors import approved_words
 from .freshness import PAGE_VISIT, freshness
 from .moments import expiry_words, moment
 from .posture import EDGE, FIREWALL, SIGN_IN, STANDARD, advanced
-from .request_channel import UNTRUSTED_FORWARDER, Channel, Forwarding, encryption
+from .request_channel import (
+    ELSEWHERE_CHANNEL,
+    LOOPBACK_CHANNEL,
+    NETWORK_CHANNEL,
+    OPAQUE_CHANNEL,
+    TAILNET_CHANNEL,
+    UNTRUSTED_FORWARDER,
+    Channel,
+    Forwarding,
+    encryption,
+)
 from .request_identity import SSO_LINK, Identity
-from .standards import Check, Measurement, Reading, Standing, measure
+from .request_kept import HQ_HOST, KEPT, LAPTOP, PERSON, STRANGER, via_proxy
+from .standards import Break, Check, Examples, Measurement, Reading, Standing, measure
 from .ui import counted, ended
-lazy from .zones import public_answers_for
 
 # A request whose Host is an address names nothing public DNS could answer for.
 ADDRESS_HOST = "This request used an address."
@@ -60,6 +73,8 @@ class RequestFacts:
     identity: Identity
     host: str = ""
     secure: bool = False
+    # What public DNS answers for the name in ``host``, from the zones HQ reads.
+    public_answers: tuple[str, ...] = ()
     # Who handed it to HQ, and which of them HQ trusts: decided once, read here.
     forwarding: Forwarding = field(default_factory=Forwarding)
     # The tailnet as swept, read once for every question asked of it.
@@ -139,10 +154,9 @@ def _name(facts: RequestFacts) -> Reading:
     host, _port = split_host_port(facts.host)
     if not is_hostname(host):
         return Reading.unavailable(host, detail=ADDRESS_HOST)
-    answers = public_answers_for(host)
-    if answers:
+    if facts.public_answers:
         return Reading.unmet(
-            f"{host} resolves to {', '.join(answers)}", detail="A public DNS record exists for this name."
+            f"{host} resolves to {', '.join(facts.public_answers)}", detail="A public DNS record exists for this name."
         )
     return Reading.met(host, detail="No public DNS record exists for this name in any domain HQ reads.")
 
@@ -558,6 +572,11 @@ GATE = Check(
     hop="hq",
     boundary="Application edge",
     mechanism="HQ's trusted-network setting",
+    breaks=(
+        {"settings": {"SEVERINO_ENFORCE_TRUSTED_NETWORK": False}},
+        # A chain of proxies alone names no caller, so the gate is judging a proxy.
+        Break({"channel": "opaque"}, also=("channel",)),
+    ),
 )
 TRANSPORT = Check(
     "transport",
@@ -569,6 +588,10 @@ TRANSPORT = Check(
     hop="network",
     boundary="Transport",
     mechanism="WireGuard and TLS",
+    # Only a request off the tailnet can arrive unencrypted.
+    breaks=(Break({"channel": "network", "secure": False}, also=("channel",)),),
+    # WireGuard alone encrypts a plain request on the tailnet.
+    keeps=({"secure": False},),
 )
 FORWARDER = Check(
     "forwarder",
@@ -581,6 +604,9 @@ FORWARDER = Check(
     hop="ingress",
     boundary="Forwarding identity",
     mechanism="HQ's list of trusted proxies",
+    # The caller's own X-Forwarded-For, from a peer HQ does not trust.
+    breaks=({"hops": (("192.0.2.1", IGNORED), (LAPTOP, JUDGED))},),
+    keeps=(via_proxy(),),
 )
 # How the request was let in: what the connections page answers beside the
 # connections' own checks.
@@ -598,6 +624,8 @@ PROXY_HEADERS = Check(
     hop="ingress",
     boundary="Forwarding evidence",
     mechanism="The proxy's forwarding headers",
+    breaks=(via_proxy(real_ip=STRANGER), via_proxy(scheme="http")),
+    keeps=(via_proxy(),),
 )
 
 # Each check as a request meets it rather than by importance, so reading down
@@ -615,6 +643,7 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="dns",
         boundary="Exposure",
         mechanism="Public DNS records",
+        breaks=({"public_answers": ("203.0.113.7",)},),
     ),
     EDGE,
     Check(
@@ -627,6 +656,7 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="network",
         boundary="Network",
         mechanism="The tailnet address range",
+        breaks=({"channel": "network"},),
     ),
     # Against the address claim above, because that is what it qualifies:
     # whether the packet had to arrive on the tailnet to be let in.
@@ -642,6 +672,10 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="network",
         boundary="Zero trust policy",
         mechanism="The tailnet policy",
+        breaks=({"devices": {"hq-host": {"reach": {443: ("tag:admin",)}}}},),
+        # A proxy beside HQ forwards from loopback, which the tailnet never
+        # sees: the hop the policy governs is still the caller's to HQ's node.
+        keeps=({"hops": ((LAPTOP, JUDGED), ("127.0.0.1", PROXY))},),
     ),
     Check(
         "edge-policy",
@@ -654,6 +688,8 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="network",
         boundary="Zero trust policy",
         mechanism="The tailnet policy",
+        breaks=(via_proxy(proxy_reach=("tag:admin",)),),
+        keeps=(via_proxy(),),
     ),
     Check(
         "service-policy",
@@ -666,6 +702,8 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="ingress",
         boundary="Zero trust policy",
         mechanism="The tailnet policy",
+        breaks=(via_proxy(hq_reach=("tag:admin",)),),
+        keeps=(via_proxy(),),
     ),
     Check(
         "device",
@@ -677,6 +715,17 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="device",
         boundary="Device identity",
         mechanism="The tailnet device list",
+        breaks=(
+            # Listed, and admitted to nothing until approved.
+            {"devices": {"a-laptop": {"authorized": False}}},
+            # Under lock an unsigned node is ignored by every peer.
+            Break(
+                {"devices": {"a-laptop": {"lock_error": "No signature chains to a trusted key."}}},
+                also=("tailnet-lock",),
+            ),
+            # A current reading with no device at the address.
+            {"caller": "", "identity": {"tailnet_user": ""}},
+        ),
     ),
     # Under the device claim, because it is what that claim rests on.
     Check(
@@ -690,6 +739,9 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="device",
         boundary="Device identity",
         mechanism="Tailnet lock signature",
+        breaks=(
+            Break({"devices": {"a-laptop": {"lock_error": "No signature chains to a trusted key."}}}, also=("device",)),
+        ),
     ),
     Check(
         "identity-agreement",
@@ -702,6 +754,18 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="device",
         boundary="Identity correlation",
         mechanism="The session and the tailnet device owner",
+        breaks=({"identity": {"username": "different", "email": "different@example.test"}},),
+        # Two namespaces, joined by the account single sign-on linked.
+        keeps=(
+            {
+                "identity": {
+                    "username": "operator",
+                    "email": "operator@example.test",
+                    "tailnet_user": "operator@passkey",
+                    "provider_principal": "operator@passkey",
+                }
+            },
+        ),
     ),
     Check(
         "identity-agreement",
@@ -714,6 +778,19 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="device",
         boundary="Identity correlation",
         mechanism="Device approval on the Agents page",
+        breaks=tuple(
+            {"identity": {"agent": "example-agent", "device_standing": standing}}
+            for standing in ("awaiting", "blocked", "unplaceable")
+        ),
+        keeps=(
+            {
+                "identity": {
+                    "agent": "example-agent",
+                    "device_standing": "approved",
+                    "approved_by": "example-operator",
+                }
+            },
+        ),
     ),
     FORWARDER,
     PROXY_HEADERS,
@@ -727,6 +804,7 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="network",
         boundary="Transport attestation",
         mechanism="Tailscale on the machine that read the tailnet",
+        breaks=({"observer": "a-laptop"},),
     ),
     GATE,
     SIGN_IN,
@@ -740,6 +818,10 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="hq",
         boundary="Session",
         mechanism="HQ's cookie settings",
+        breaks=(
+            {"settings": {"SESSION_COOKIE_SECURE": False}},
+            {"settings": {"SESSION_COOKIE_NAME": "sessionid"}},
+        ),
     ),
     TRANSPORT,
     Check(
@@ -752,6 +834,7 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="hq",
         boundary="Transport",
         mechanism="HTTPS redirect and HSTS",
+        breaks=({"settings": {"SECURE_SSL_REDIRECT": False}}, {"settings": {"SECURE_HSTS_SECONDS": 0}}),
     ),
     Check(
         "browser",
@@ -763,5 +846,88 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="hq",
         boundary="Browser boundary",
         mechanism="Content Security Policy",
+        breaks=(
+            {"settings": {"SECURE_CSP": {"script-src": [CSP.SELF, CSP.NONCE]}}},
+            {"settings": {"SECURE_CSP": {"script-src": [CSP.NONCE, CSP.STRICT_DYNAMIC, CSP.UNSAFE_INLINE]}}},
+            {"settings": {"SECURE_CSP": {"frame-ancestors": [CSP.SELF]}}},
+            {"settings": {"SECURE_CSP": {"require-trusted-types-for": []}}},
+        ),
+    ),
+)
+
+
+_CHANNELS = {
+    channel.id: channel
+    for channel in (TAILNET_CHANNEL, NETWORK_CHANNEL, LOOPBACK_CHANNEL, OPAQUE_CHANNEL, ELSEWHERE_CHANNEL)
+}
+
+
+def _example(record: Mapping[str, Any]) -> RequestFacts:
+    """The facts of the request ``record`` says: its devices by name, each
+    read just now unless it says when, and which of them called, forwarded,
+    serves HQ and measured the link."""
+
+    known = {
+        name: tailnet.Device(name=name, **{"observed_at": timezone.now(), **fields})
+        for name, fields in record["devices"].items()
+    }
+    return RequestFacts(
+        request=SimpleNamespace(META=dict(record["meta"])),
+        public_answers=tuple(record.get("public_answers", ())),
+        address=record["address"],
+        channel=_CHANNELS[record["channel"]],
+        identity=Identity(**record["identity"]),
+        host=record["host"],
+        secure=record["secure"],
+        forwarding=Forwarding(record["address"], tuple(record["hops"])),
+        known=known,
+        device=known.get(record["caller"]),
+        forwarder=known.get(record["forwarder"]),
+        serving=ServingDeviceResolution(
+            known.get(record["serves"]), verified=record["placed"], basis="its own address"
+        ),
+        observer=known.get(record["observer"]),
+        lock=dict(record["lock"]),
+        edge=record["edge"],
+        firewall=record["firewall"],
+    )
+
+
+_LONG_AGO = datetime(2000, 1, 1, tzinfo=UTC)
+
+EXAMPLES = Examples(
+    checks=REQUEST_STANDARD,
+    subject=_example,
+    kept=KEPT,
+    unread=(
+        # A fresh install has read no tailnet: no device is missing from one.
+        {
+            **KEPT,
+            "devices": {},
+            "caller": "",
+            "serves": "",
+            "placed": False,
+            "observer": "",
+            "lock": {},
+            "identity": {**PERSON, "tailnet_user": ""},
+        },
+        # Who owns the device and who signed in, in two namespaces nothing linked.
+        {**KEPT, "identity": {**PERSON, "tailnet_user": "operator@passkey"}},
+        # An agent's call where no tailnet places it.
+        {**KEPT, "identity": {**PERSON, "agent": "example-agent", "device_standing": "unplaced"}},
+        # A port the sweep asked the policy nothing about, by address.
+        {**KEPT, "host": f"{HQ_HOST}:8443"},
+        # Lock off: no node key is signed.
+        {**KEPT, "lock": {"enabled": False}},
+        # HQ's own machine not placed, so the observer is no evidence about it.
+        {**KEPT, "placed": False},
+        # An old reading from before this device joined.
+        {
+            **KEPT,
+            "devices": {name: {**fields, "observed_at": _LONG_AGO} for name, fields in KEPT["devices"].items()},
+            "caller": "",
+            "lock": {},
+            "identity": {**PERSON, "tailnet_user": ""},
+        },
     ),
 )

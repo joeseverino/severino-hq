@@ -97,12 +97,6 @@ class LayerTests(TestCase):
         self.assertTrue(all(layer.check.boundary for layer in found.checks.results))
         self.assertTrue(all(layer.check.mechanism for layer in found.checks.results))
 
-    def test_a_request_off_the_tailnet_says_so(self):
-        with override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True):
-            found = connection(a_request(A_LAN_ADDRESS))
-
-        self.assertFalse(self.layer(found, "channel").met)
-
     def test_an_undeclared_forwarding_peer_is_not_labeled_as_the_caller(self):
         request = a_request(A_LAN_ADDRESS, HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS)
 
@@ -136,32 +130,6 @@ class LayerTests(TestCase):
         forwarder = self.layer(found, "forwarder")
         self.assertTrue(forwarder.met)
         self.assertEqual(forwarder.reading.evidence, A_LAN_ADDRESS)
-
-    @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
-    def test_npm_redundant_headers_corroborate_the_canonical_inputs(self):
-        request = a_request(
-            A_LAN_ADDRESS,
-            HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
-            HTTP_X_REAL_IP=A_TAILNET_ADDRESS,
-            HTTP_X_FORWARDED_SCHEME="https",
-        )
-
-        layer = self.layer(connection(request), "proxy-evidence")
-
-        self.assertTrue(layer.met)
-
-    @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
-    def test_disagreeing_npm_headers_are_a_visible_proxy_failure(self):
-        request = a_request(
-            A_LAN_ADDRESS,
-            HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
-            HTTP_X_REAL_IP="100.64.0.77",
-            HTTP_X_FORWARDED_SCHEME="https",
-        )
-
-        layer = self.layer(connection(request), "proxy-evidence")
-
-        self.assertEqual(layer.state, Standing.UNMET)
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=[A_LAN_ADDRESS])
     def test_the_corroborating_headers_are_the_ones_a_proxy_kind_declares(self):
@@ -209,27 +177,6 @@ class LayerTests(TestCase):
         # Each encrypted segment, in the order the request crossed them.
         self.assertLess(path.index("TLS"), path.index("WireGuard"))
 
-    def test_a_plain_lan_request_claims_no_verified_encryption(self):
-        found = connection(a_request(A_LAN_ADDRESS, secure=False))
-
-        layer = self.layer(found, "transport")
-        self.assertFalse(layer.met)
-        self.assertEqual(found.transport, layer.reading.evidence)
-        self.assertNotIn("TLS", layer.reading.evidence)
-        self.assertNotIn("WireGuard", layer.reading.evidence)
-
-    def test_the_gate_reports_when_it_is_not_being_enforced(self):
-        """The check that would otherwise be a sentence rather than a fact."""
-
-        with override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=False):
-            found = connection(a_request())
-
-        self.assertFalse(self.layer(found, "gate").met)
-
-    @override_settings(AUTHENTICATION_BACKENDS=["hq.platform.core.oidc.HQOIDCAuthenticationBackend"])
-    def test_single_sign_on_alone_meets_the_sign_in_check(self):
-        self.assertTrue(self.layer(connection(a_request()), "sign-in").met)
-
     @override_settings(
         AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.ModelBackend"], SEVERINO_POSTURE="standard"
     )
@@ -260,15 +207,9 @@ class LayerTests(TestCase):
         self.assertIs(self.layer(connection(a_request()), "sign-in").check, SIGN_IN)
         self.assertEqual([check.id for check in REQUEST_STANDARD].count("sign-in"), 1)
 
-    @override_settings(SESSION_COOKIE_SECURE=False)
-    def test_a_session_cookie_missing_a_flag_is_reported(self):
-        found = connection(a_request())
-
-        layer = self.layer(found, "session")
-        self.assertFalse(layer.met)
-        self.assertIn("Secure=off", layer.reading.evidence)
-
     def test_a_published_name_is_not_treated_as_a_defense(self):
+        """The request's facts carry what public DNS answers for its name."""
+
         ProviderInventory.objects.update_or_create(
             kind="cloudflare.dns_record",
             defaults={
@@ -281,70 +222,6 @@ class LayerTests(TestCase):
 
         self.assertFalse(self.layer(found, "name").met)
 
-    def test_an_unpublished_name_holds(self):
-        self.assertTrue(self.layer(connection(a_request()), "name").met)
-
-    def test_the_policy_layer_reports_a_device_the_policy_refuses(self):
-        a_tailnet(
-            a_device("a-laptop", A_TAILNET_ADDRESS, tags=["tag:guest"]),
-            a_device("hq-host", "100.64.0.9", observer=True, reach=[(443, ["tag:admin"])]),
-        )
-
-        found = connection(a_request())
-
-        self.assertEqual(self.layer(found, "policy").state, Standing.UNMET)
-
-    def test_a_policy_question_the_sweep_did_not_ask_is_unverified_not_denied(self):
-        found = connection(a_request(host="hq.example.test:8443"))
-
-        layer = self.layer(found, "policy")
-        self.assertEqual(layer.state, Standing.UNAVAILABLE)
-        self.assertNotEqual(found.verdict, "confirmed")
-
-    def test_a_device_awaiting_approval_is_not_a_known_node(self):
-        """Being listed is not being admitted. A device pending approval is in
-        the inventory and the tailnet carries nothing for it."""
-
-        a_tailnet(a_device("a-laptop", "100.64.0.77", authorized=False))
-
-        found = connection(a_request("100.64.0.77"))
-
-        layer = self.layer(found, "device")
-        self.assertFalse(layer.met)
-        self.assertIn("approved", layer.reading.detail)
-
-    def test_a_device_lock_has_not_signed_is_not_a_known_node(self):
-        """Under tailnet lock an unsigned node is filtered out by every peer
-        while reporting itself as perfectly healthy."""
-
-        a_tailnet(
-            a_device(
-                "a-laptop",
-                "100.64.0.77",
-                lock_error="node is not signed by a trusted key.",
-            )
-        )
-
-        found = connection(a_request("100.64.0.77"))
-
-        layer = self.layer(found, "device")
-        self.assertFalse(layer.met)
-        self.assertIn("tailnet lock", layer.reading.detail)
-
-    def test_a_device_nothing_swept_is_not_reported_as_a_known_node(self):
-        found = connection(a_request("100.64.0.77"))
-
-        self.assertEqual(self.layer(found, "device").state, Standing.UNMET)
-
-    def test_with_no_tailnet_read_a_device_is_unconfirmed_not_missing(self):
-        """A fresh install has read no tailnet: that is not a device missing from one."""
-
-        ProviderInventory.objects.filter(kind="tailscale.device").delete()
-
-        layer = self.layer(connection(a_request(A_TAILNET_ADDRESS)), "device")
-
-        self.assertEqual(layer.state, Standing.UNAVAILABLE)
-
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class IdentityTests(TestCase):
@@ -353,23 +230,6 @@ class IdentityTests(TestCase):
             a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test"),
             a_device("hq-host", "100.64.0.9", observer=True),
         )
-
-    def test_two_independent_sources_agreeing_is_reported_as_such(self):
-        self.assertTrue(connection(a_request()).identity.corroborated)
-
-    def test_a_session_with_no_device_behind_it_is_not_corroborated(self):
-        self.assertFalse(connection(a_request(A_LAN_ADDRESS)).identity.corroborated)
-
-    def test_two_sources_naming_different_people_is_a_visible_conflict(self):
-        request = a_request()
-        request.user.email = "different@example.test"
-
-        identity = connection(request).identity
-
-        self.assertFalse(identity.corroborated)
-        self.assertTrue(identity.conflicted)
-        layer = next(layer for layer in connection(request).checks.results if layer.check.id == "identity-agreement")
-        self.assertFalse(layer.met)
 
     def test_an_sso_signed_link_correlates_different_identity_namespaces(self):
         a_tailnet(
@@ -401,17 +261,6 @@ class IdentityTests(TestCase):
         }
 
         self.assertFalse(connection(request).identity.corroborated)
-
-    def test_different_identity_namespaces_are_unknown_without_a_link(self):
-        a_tailnet(
-            a_device("a-laptop", A_TAILNET_ADDRESS, user="operator@passkey"),
-            a_device("hq-host", "100.64.0.9", observer=True),
-        )
-
-        identity = connection(a_request()).identity
-
-        self.assertFalse(identity.corroborated)
-        self.assertFalse(identity.conflicted)
 
     @override_settings(OIDC_OP_AUTHORIZATION_ENDPOINT="https://identity.example.test/authorize")
     def test_a_configured_sso_provider_is_not_attributed_to_a_password_session(self):
