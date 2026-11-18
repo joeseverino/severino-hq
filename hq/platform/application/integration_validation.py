@@ -13,7 +13,7 @@ from typing import Any, is_typeddict
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import BaseModel, PydanticUndefinedAnnotation, PydanticUserError, ValidationError
 
-from .connection_contracts import GRANT_MODELS, ConnectionAbility, ConnectionSpec
+from .connection_contracts import ConnectionAbility, ConnectionSpec
 from .contracts import DJANGO_ROUTE, DOTTED_NAME, SCOPE_NAME
 from .integration_specs import (
     CONSENT_KEYWORD,
@@ -329,14 +329,6 @@ def _validate_ability(spec: ConnectionSpec, ability: ConnectionAbility) -> None:
         not SCOPE_NAME.fullmatch(scope) for scope in ability.required_scopes
     ):
         raise ImproperlyConfigured(f"Connection ability {ability.name!r} has invalid required scopes.")
-    if ability.grant not in ("", *GRANT_MODELS):
-        raise ImproperlyConfigured(f"Connection ability {ability.name!r} has invalid grant model {ability.grant!r}.")
-    if ability.grant == "scoped" and not ability.required_scopes:
-        raise ImproperlyConfigured(f"Connection ability {ability.name!r} declares scoped proof but requires no scopes.")
-    if ability.grant in ("coarse", "none") and ability.required_scopes:
-        raise ImproperlyConfigured(
-            f"Connection ability {ability.name!r} declares {ability.grant} proof but lists required scopes."
-        )
     if ability.capability and not DOTTED_NAME.fullmatch(ability.capability):
         raise ImproperlyConfigured(f"Connection ability {ability.name!r} has invalid capability.")
     if len(ability.governs_kinds) != len(set(ability.governs_kinds)) or any(

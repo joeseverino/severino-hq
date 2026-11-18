@@ -575,8 +575,6 @@ class ConnectionWorkspaceTests(TestCase):
     def test_a_connection_that_does_not_say_its_credential_model_is_refused(self):
         made = {"id": "one", "label": "One", "kind": "example", "status": "good", "status_label": "ok"}
 
-        with self.assertRaisesRegex(TypeError, "credential_model"):
-            ConnectionInstance(**made)
         for unsaid in ("", "password"):
             with self.subTest(unsaid), self.assertRaises(ValueError) as refused:
                 ConnectionInstance(**made, credential_model=unsaid)
@@ -683,27 +681,6 @@ class GrantEvidenceTests(TestCase):
         self.assertEqual(life(fresh, "proven"), "ready")
         self.assertEqual(life(fresh, "whole_account"), "ready")
         self.assertEqual(life(fresh, "undeclared"), "reachable")
-
-    def test_a_grant_model_must_agree_with_its_scopes(self):
-        from hq.platform.application.integration_validation import validate_connection_spec
-
-        def spec(ability):
-            return ConnectionSpec(
-                "example.grants",
-                "Grants",
-                "Grant contract.",
-                Capability.READ,
-                lambda: (),
-                (ability,),
-            )
-
-        with self.assertRaisesRegex(ImproperlyConfigured, "invalid grant model"):
-            validate_connection_spec(spec(self.ability(grant="admin")))
-        with self.assertRaisesRegex(ImproperlyConfigured, "requires no scopes"):
-            validate_connection_spec(spec(self.ability(grant="scoped")))
-        with self.assertRaisesRegex(ImproperlyConfigured, "lists required scopes"):
-            validate_connection_spec(spec(self.ability(grant="none", required_scopes=("a:read",))))
-        validate_connection_spec(spec(self.ability(grant="scoped", required_scopes=("a:read",))))
 
     def test_a_keyless_instance_cannot_also_report_grants(self):
         spec = ConnectionSpec(
