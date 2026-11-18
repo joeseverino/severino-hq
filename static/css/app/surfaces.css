@@ -58,16 +58,19 @@
      take the line under it, so they never reach past the figure's column, and
      the figure's lines pack at the top of its row so the values stand level. */
   .figure-dots { display: inline-flex; flex-wrap: wrap; gap: var(--space-3); }
-  /* Past six, dots are set in even rows filled column by column, never more
+  /* Past four, dots are set in even rows filled column by column, never more
      than four columns wide, rather than left to break wherever the column
-     ends: two rows to eight, three to the dozen that are ever drawn
-     (drawings.Dots.LIMIT). Four linked dots a target apart fit the narrowest
-     column a card sets (110px, layout.css). */
-  .figure-dots:has(> :nth-child(7)) { display: inline-grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); }
+     ends (four over one): two rows to eight, three to the dozen that are ever
+     drawn (drawings.Dots.LIMIT). Four linked dots a target apart fit a band's
+     narrowest cell (`--band-floor`, figures.css). */
+  .figure-dots:has(> :nth-child(5)) { display: inline-grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); }
   .figure-dots:has(> :nth-child(9)) { grid-template-rows: repeat(3, auto); }
   /* Dots may wrap into rows taller than the value: it keeps to the top of its
      line, level with the values beside it, rather than at their middle. */
   .fact-figure:has(> .figure-dots) > span { align-self: flex-start; }
+  /* The dots keep to the top as well, at least the value's line tall, so a
+     single row of them stands at the middle of the value's line. */
+  .fact-figure > .figure-dots { align-self: flex-start; min-block-size: 1lh; align-content: center; align-items: center; }
   .figure-dot { position: relative; display: block; width: 10px; height: 10px; border: 1.5px solid var(--muted-2); border-radius: 50%; }
   .figure-dot.is-filled { border-color: var(--ok); background: var(--ok); }
   /* A dot that leads somewhere is hit through a square around it (page.css),

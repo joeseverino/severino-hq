@@ -6,8 +6,10 @@
 /* A band (`data-band`, drawn by the facts and insight parts): each cell draws its own left and top edge and the band clips the outer rim, so a wrapped row keeps its dividers at any width with no breakpoint. */
 /* The rule weighs an attribute: a cell that is also a surface has its shadow cleared by the frame rule, which weighs nothing, and this rule has to win that. */
 [data-band] {
-  /* A band in a frame (a band of facts, below) says its gap (`--band-gap`) and that it draws no edges (`--band-rules`). */
-  gap: var(--band-gap, 0px);
+  /* A band says its gaps (`--band-row-gap`, `--band-column-gap`: a band of facts in a frame, below) and whether it draws edges (`--band-rules`); its cells' least width is `--band-floor`. */
+  --band-floor: 11rem;
+  --band-gutter: var(--band-column-gap, 0px);
+  gap: var(--band-row-gap, 0px) var(--band-gutter);
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the band clips its cells' outer rim, not their text */
   overflow: clip;
   & > * {
@@ -16,15 +18,22 @@
     --surface-inset: initial;
   }
 
-  /* A band of tracks (insights) lays out as whole even rows by how many cells it has (seven or more as rows of six, four, three, two or one), read off the band itself, so no page says how many it holds and none is left with three over one; cells are counted, not children. A band of facts lays its cells out as even columns (below). */
+  /* Every band (facts and insights alike) lays out as whole even rows by how many cells it has, read off the band itself, so no page says how many it holds and none is left with three over one; cells are counted, not children. A count's columns are the divisors it fills rows with, and N stand in a row once the band holds N floors and the gaps between them: each track below is the width of N in a row, `(x - 100%) * 999` a step, hugely positive below x and negative above it, so clamp() lands on one end or the other. Headline figures led by the first (`is-lead`) of four are the lead on a row of its own over three at any width, each sized to its column (below). Small figures read across (`is-small`) lay out their own way. */
+  --tracks-2-1: clamp(calc((100% - 1 * var(--band-gutter)) / 2 - .1px), (2 * var(--band-floor) + 1 * var(--band-gutter) - 100%) * 999, 100%);
+  --tracks-3-1: clamp(calc((100% - 2 * var(--band-gutter)) / 3 - .1px), (3 * var(--band-floor) + 2 * var(--band-gutter) - 100%) * 999, 100%);
+  --tracks-4-2-1: clamp(clamp(calc((100% - 3 * var(--band-gutter)) / 4 - .1px), (4 * var(--band-floor) + 3 * var(--band-gutter) - 100%) * 999, calc((100% - 1 * var(--band-gutter)) / 2 - .1px)), (2 * var(--band-floor) + 1 * var(--band-gutter) - 100%) * 999, 100%);
+  --tracks-5-1: clamp(calc((100% - 4 * var(--band-gutter)) / 5 - .1px), (5 * var(--band-floor) + 4 * var(--band-gutter) - 100%) * 999, 100%);
+  --tracks-6-3-2-1: clamp(clamp(clamp(calc((100% - 5 * var(--band-gutter)) / 6 - .1px), (6 * var(--band-floor) + 5 * var(--band-gutter) - 100%) * 999, calc((100% - 2 * var(--band-gutter)) / 3 - .1px)), (3 * var(--band-floor) + 2 * var(--band-gutter) - 100%) * 999, calc((100% - 1 * var(--band-gutter)) / 2 - .1px)), (2 * var(--band-floor) + 1 * var(--band-gutter) - 100%) * 999, 100%);
+  --tracks-6-4-3-2-1: clamp(clamp(clamp(clamp(calc((100% - 5 * var(--band-gutter)) / 6 - .1px), (6 * var(--band-floor) + 5 * var(--band-gutter) - 100%) * 999, calc((100% - 3 * var(--band-gutter)) / 4 - .1px)), (4 * var(--band-floor) + 3 * var(--band-gutter) - 100%) * 999, calc((100% - 2 * var(--band-gutter)) / 3 - .1px)), (3 * var(--band-floor) + 2 * var(--band-gutter) - 100%) * 999, calc((100% - 1 * var(--band-gutter)) / 2 - .1px)), (2 * var(--band-floor) + 1 * var(--band-gutter) - 100%) * 999, 100%);
   /* stylelint-disable declaration-property-value-disallowed-list -- a band's cells in one frame, counted into whole rows */
-  &:not(.facts-band):has(> :nth-child(1 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(100%, 1fr)); }
-  &:not(.facts-band):has(> :nth-child(2 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-2-1), 1fr)); }
-  &:not(.facts-band):has(> :nth-child(3 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr)); }
-  &:not(.facts-band):has(> :nth-child(4 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-4-2-1), 1fr)); }
-  &:not(.facts-band):has(> :nth-child(5 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-5-1), 1fr)); }
-  &:not(.facts-band):has(> :nth-child(6 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-6-3-1), 1fr)); }
-  &:not(.facts-band):has(> :nth-child(7 of :not(dialog))) {
+  &:not(.is-small):has(> :nth-child(1 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: 100%; }
+  &:not(.is-small):has(> :nth-child(2 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-2-1), 1fr)); }
+  &:not(.is-small):has(> :nth-child(3 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr)); }
+  &.is-lead:has(> :nth-child(4 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  &:not(.is-small, .is-lead):has(> :nth-child(4 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-4-2-1), 1fr)); }
+  &:not(.is-small):has(> :nth-child(5 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-5-1), 1fr)); }
+  &:not(.is-small):has(> :nth-child(6 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-6-3-2-1), 1fr)); }
+  &:not(.is-small):has(> :nth-child(7 of :not(dialog))) {
     grid-template-columns: repeat(auto-fill, var(--tracks-6-4-3-2-1));
     /* stylelint-enable declaration-property-value-disallowed-list */
   }
@@ -239,11 +248,10 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .external-link:not(td *, th *) > code :is(.token, .cut, .whole) { background: inherit; border-radius: inherit; }
 
 /* A band of facts (`{% facts layout="band" %}`): the few figures that sum up a page or a part, each a cell drawn as a figure is: its label, its mark before it, over its value over its detail. `size="large"` sets the values as a page's headline figures. */
-/* Its cells are even columns, as many as its width holds at a cell's floor, so a long detail wraps in its cell and never takes a row for the cell alone. Each cell is its own stack, top-aligned, its value right under its label. In a frame with more in it (a section's body, a card that holds more than the band) the facts stand apart by gaps and draw no edges, the frame's padding their inset, as a card's figures do. */
+/* Its cells are counted into whole rows (`data-band`, above) at a narrower floor than an insight's, so a long detail wraps in its cell and never takes a row for the cell alone. Each cell is its own stack, top-aligned, its value right under its label. In a frame with more in it (a section's body, a card that holds more than the band) the facts stand apart by gaps and draw no edges, the frame's padding their inset, as a card's figures do. */
 .facts-band {
+  --band-floor: 6.5rem;
   display: grid;
-  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a band's cells as even columns, as many as its width holds */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
   margin: 0 0 var(--stack-gap);
   /* A container's width is its frame's, never its facts', so in a flex row (a card that lays out its parts in one) it would size to nothing; it takes a line of its own there instead. */
   container: band / inline-size;
@@ -251,7 +259,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 }
 /* The band draws no box of its own: a box is the card around it. A card holding the band alone is its frame and nothing more, so its facts keep their own padding and edges. Anywhere else (a section's body, a card that holds more, the page's ground) the facts stand apart by gaps with no edges, their words at the content's edge. Weightless (`:where`), so a size that spaces its facts its own way says so in a rule of one class more. */
 .card:not(.section-body):has(> .facts-band:only-child) { padding: 0; }
-.facts-band:where(:not(.card:not(.section-body) > :only-child)) { --band-gap: var(--space-6) var(--space-12); --band-rules: none; overflow: visible; }
+.facts-band:where(:not(.card:not(.section-body) > :only-child)) { --band-row-gap: var(--space-6); --band-column-gap: var(--space-12); --band-rules: none; overflow: visible; }
 .facts-band > .fact {
   display: flex;
   flex-direction: column;
@@ -263,6 +271,8 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* A band of facts beside a page's title (the dashboard's glance) stands on the page's ground: beside the title while its facts fit there, on a line of its own under it, from the page's edge, where not. */
 :is(.page-head, .page-title-row) > :has(> .facts-band) { flex: 1 1 32rem; min-width: 0; }
 .page-head .facts-band { margin-block: 0; }
+/* There each reading stands at the middle of its column, so the readings spread through the room beside the greeting rather than crowding it; under 24rem they are a list (surfaces.css). */
+@container band (width >= 24rem) { .page-head .facts-band > .fact { justify-self: center; } }
 /* What names a value is sentence case in the muted voice; capitals are for a kicker over a group (`.eyebrow`), never a value's name. Its mark is quieter than its words, and a label too long for its cell wraps beside its mark, never under it. */
 .facts-band dt { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; color: var(--muted); font-size: var(--text-xs); }
 .facts-band .fact-label { min-width: 0; }
@@ -271,7 +281,6 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* The value's line is a target tall (`--target-min`) whatever it holds, and a link in it is a box of that line's height set by its top, so a linked value is a target and stands on the line an unlinked one does, a zero beside a count of 13 alike. A word longer than its line breaks where it overflows (`break-word`), which leaves the fact's least width at its longest word: `anywhere` would size it to a letter, splitting a count from its noun. */
 .facts-band > .fact > dd { margin: 0; }
 .facts-band .fact-value { min-width: 0; color: var(--ink); font-size: var(--text-2xl); font-weight: 650; letter-spacing: -.018em; line-height: max(var(--target-min), 1.2em); font-feature-settings: "tnum"; overflow-wrap: break-word; }
-.facts-band.is-large .fact-value { font-size: var(--text-4xl); }
 .facts-band .fact-value :is(a:not(.figure-dot), [tabindex]) { display: inline-block; vertical-align: top; }
 /* A link in a value is the value's own ink, so a link never reads as a tone: only a toned fact's value is colored. It stands alone, so it is underlined only under the pointer and the focus, its fact tinted (below). */
 .facts-band .fact-value a:not(.figure-dot) { min-inline-size: var(--target-min); color: inherit; text-decoration: none; }
@@ -285,9 +294,8 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .fact-figure > span { min-width: 0; }
 /* A drawing beside a value never sets its cell's width: it has none of its own (`contain`), and takes what the cell's words leave, its dots wrapping there. */
 .facts-band .fact-figure > .figure-dots { flex: 1 1 0; contain: inline-size; }
-/* Dots set in rows (past six, surfaces.css) cannot wrap, so they keep their own width, which fits the narrowest cell, and take the line under the value where that is all the room left. */
-.facts-band .fact-figure > .figure-dots:has(> :nth-child(7)) { flex: none; contain: none; }
-.facts-band.is-lead > .fact:first-child .figure-trend { height: 40px; }
+/* Dots set in rows (past four, surfaces.css) cannot wrap, so they keep their own width, which fits the narrowest cell, and take the line under the value where that is all the room left. */
+.facts-band .fact-figure > .figure-dots:has(> :nth-child(5)) { flex: none; contain: none; }
 .facts-band .fact:is(.tone-good, .tone-attention, .tone-serious) :is(.band-icon .icon, .fact-value) { color: var(--tone-ink); }
 /* A linked fact tints under the pointer and the focus on its value, ; in a frame the tint reaches into the gap as a shadow, so nothing moves. */
 .facts-band > .fact:has(> .fact-value a:is(:hover, :focus-visible)) { background: var(--surface-2); }
@@ -300,16 +308,16 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .fact-detail :is(a, [tabindex]) { display: inline-block; line-height: var(--target-min); }
 /* A figure that counts nothing is quiet, so the figures that count something are read first. */
 .facts-band .fact.is-zero .fact-value { color: var(--muted-2); font-weight: 500; }
-/* Headline figures led by the first: the lead stands larger than the rest, on a row of its own where the band has no room for it beside them, a rule under it in a frame where nothing else divides it. */
-.facts-band.is-lead .fact-value { font-size: var(--text-4xl); }
-.facts-band.is-lead > .fact:first-child .fact-value { font-size: var(--text-display); letter-spacing: -.04em; line-height: 1.1; }
-@container band (width < 46rem) {
-  .facts-band.is-lead > .fact:first-child { grid-column: 1 / -1; }
-  .section-body > .facts-band.is-lead > .fact:first-child { padding-block-end: var(--space-8); border-block-end: 1px solid var(--line-2); }
-}
+/* A headline figure (`is-large`, `is-lead`) sets its value to its cell, at most a headline's size, so a long amount in a narrow cell is smaller rather than past its edge. */
+.facts-band:is(.is-large, .is-lead) > .fact { container: figure / inline-size; }
+.facts-band:is(.is-large, .is-lead) .fact-value { font-size: clamp(var(--text-lg), 15cqi, var(--text-4xl)); }
+/* Headline figures led by the first: of four, the lead takes a row of its own over the other three (`data-band`, above), larger and in the accent, a rule under it. */
+.facts-band.is-lead:has(> .fact:nth-child(4):last-child) > .fact:first-child { grid-column: 1 / -1; padding-block-end: var(--space-8); border-block-end: 1px solid var(--line-2); }
+.facts-band.is-lead:has(> .fact:nth-child(4):last-child) > .fact:first-child .fact-value { color: var(--accent); font-size: var(--text-display); letter-spacing: -.04em; line-height: 1.1; }
+.facts-band.is-lead:has(> .fact:nth-child(4):last-child) > .fact:first-child .figure-trend { height: 40px; }
 /* Small figures read across, as a forecast's hours are: as many to a line as the band holds, each centered over its few characters, and a note under one marked, since one is said only where something stands out. */
 /* stylelint-disable-next-line declaration-property-value-disallowed-list -- small figures read across, each a column of one strip */
-.facts-band.is-small { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr)); --band-gap: var(--space-4) 0; }
+.facts-band.is-small { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr)); --band-row-gap: var(--space-4); --band-column-gap: 0px; }
 .facts-band.is-small > .fact { align-items: center; gap: 1px; padding: 0; text-align: center; }
 .facts-band.is-small dt { font-size: var(--text-3xs); }
 .facts-band.is-small .fact-value { font-size: var(--text-xs); line-height: 1.3; }

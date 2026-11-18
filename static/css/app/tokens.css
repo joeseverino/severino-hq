@@ -324,19 +324,6 @@
      in the line beneath (cards.css). The survey's ROW_WORDS holds every row
      of buttons to it (probes/controls.py). */
   --row-words: 30ch;
-  /* Track floors for a band of a fixed number of cells, so it lays out as a
-     whole number of even rows at any width: 4, 2 or 1 columns (never 3+1),
-     or 3 or 1. Read where they are used, so 100% is that grid's width.
-     `(x - 100%) * 999` is a step, hugely positive below x and negative above
-     it, so clamp() lands on one end or the other. For gapless bands. */
-  --tracks-4-2-1: clamp(clamp(25%, (54rem - 100%) * 999, 50%), (24rem - 100%) * 999, 100%);
-  --tracks-3-1: clamp(33.333%, (36rem - 100%) * 999, 100%);
-  --tracks-2-1: clamp(50%, (24rem - 100%) * 999, 100%);
-  --tracks-5-1: clamp(20%, (55rem - 100%) * 999, 100%);
-  --tracks-6-3-1: clamp(clamp(16.666%, (66rem - 100%) * 999, 33.333%), (33rem - 100%) * 999, 100%);
-  /* For a band of more cells than one row holds: 6, 4, 3, 2 or 1 columns,
-     each a divisor of 12, so a count with divisors lays out as whole rows. */
-  --tracks-6-4-3-2-1: clamp(clamp(clamp(clamp(16.666%, (66rem - 100%) * 999, 25%), (44rem - 100%) * 999, 33.333%), (33rem - 100%) * 999, 50%), (22rem - 100%) * 999, 100%);
   --stack-gap: var(--space-9);
   /* The widest a chart drawing with type inside it renders. Its SVG scales
      with its card, so uncapped its axis type and marks inflate in a wide card

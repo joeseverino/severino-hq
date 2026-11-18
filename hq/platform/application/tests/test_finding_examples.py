@@ -5,7 +5,7 @@ from importlib import import_module
 from importlib.util import find_spec
 from itertools import zip_longest
 from typing import Any
-from unittest import mock
+from unittest import mock, skipUnless
 
 from django.db import transaction
 from django.test import TestCase, override_settings
@@ -28,6 +28,13 @@ from ..security import Capability, Principal
 from ..tone import Tone
 from ..topology import derive_topology
 from .finding_examples import AT, Ago, Example, Examples, Raised, Stored, connection
+
+try:
+    import time_machine
+except ImportError:  # pragma: no cover - a dev dependency, which the image does not carry
+    TIME_MACHINE = False
+else:
+    TIME_MACHINE = True
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
 # Where the queue keeps a finding of a rule about the estate rather than a section's records.
@@ -124,6 +131,7 @@ def stated(rule: FindingRule, raised: Raised) -> tuple[Any, ...]:
     return (raised.title, raised.severity or rule.severity, raised.presses, raised.evidence, raised.steps)
 
 
+@skipUnless(TIME_MACHINE, "the clock is held by time_machine, a development tool")
 class EveryRuleTests(TestCase):
     """Each rule raises what its examples say and nothing where they say
     nothing, and each finding it raises keeps every finding's promises: in
@@ -133,8 +141,6 @@ class EveryRuleTests(TestCase):
     that the reading would not raise, as if a failure read as nothing there."""
 
     def setUp(self):
-        import time_machine  # a dev dependency, which the image does not install
-
         self.enterContext(time_machine.travel(AT, tick=False))
         self.enterContext(frozen(AT))
 
