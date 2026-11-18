@@ -202,33 +202,3 @@ class SourceTests(SimpleTestCase):
         for suffix in types:
             with self.subTest(type=suffix):
                 self.assertIn(suffix, (*rules.KEPT_ACTIVE, *rules.RUN_WHEN_STARTED))
-
-
-class FactTests(SimpleTestCase):
-    def test_a_fact_carries_a_unit_whole(self):
-        unit = rules.UnitState(
-            SERVICE,
-            "loaded",
-            "static",
-            "failed",
-            "failed",
-            "exit-code",
-            "3",
-            "2026-01-02T03:05:00Z",
-            "2026-01-02T03:06:00Z",
-            "yes",
-            "2026-01-02T03:05:00Z",
-            "2026-01-03T03:05:00Z",
-            TIMER,
-            "2026-01-02T04:00:00Z",
-            "",
-            "",
-            "12",
-            "2026-01-02T03:05:30Z",
-            "yes",
-        )
-
-        key, value = unit.fact
-
-        self.assertEqual(key, rules.UNIT_STATE)
-        self.assertEqual(rules.UnitState.of(value), unit)

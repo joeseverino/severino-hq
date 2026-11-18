@@ -160,6 +160,11 @@ EXAMPLES = (
                 looping(active="failed", sub="failed", result="start-limit-hit"),
                 raises=("“Example upload” failed on example-controller",),
             ),
+            # A title holds whatever its unit file says, a "|" included.
+            raising(
+                failed(title="Example | nightly"),
+                raises=("“Example | nightly” failed on example-controller",),
+            ),
             # A record the schema refused leaves the units that were read judged.
             raising(
                 failed(),

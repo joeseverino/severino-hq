@@ -8,10 +8,9 @@ from django.utils import timezone
 from hq.domains.control_plane.bridge_contract import contract
 from hq.domains.control_plane.observations import OBSERVATIONS
 
-from ..findings import derive_findings
+from ..findings import estate_findings
 from ..inventory_testing import store
 from ..projection import projection_scope
-from ..topology import derive_topology
 from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
 
 # Written out rather than imported, so the module loads where the reading is
@@ -64,11 +63,7 @@ def evidence(finding) -> dict[str, str]:
 
 def steps(rule: str = RULE) -> list[str]:
     with projection_scope():
-        (finding,) = [
-            found
-            for found in derive_findings(derive_topology(principal=EVERYTHING), principal=EVERYTHING)
-            if found.rule == rule
-        ]
+        (finding,) = [found for found in estate_findings(principal=EVERYTHING) if found.rule == rule]
     return [step.command for step in finding.steps]
 
 

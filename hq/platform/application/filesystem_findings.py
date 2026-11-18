@@ -2,12 +2,11 @@
 
 A full disk fails whatever writes next (a build, a backup, the database)
 with an error that names the write, not the disk, so this reads the
-``host.filesystem`` reading's one fact per filesystem (docs/Derived-Facts.md
+``host.filesystem`` reading's one row per filesystem (docs/Derived-Facts.md
 says how it is taken).
 """
 
 import shlex
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,12 +15,10 @@ from hq.domains.control_plane.observations.host import FILESYSTEM_KIND
 from .finding_model import FindingRule, cannot_run_commands, machine_step
 from .finding_steps import Run
 from .labels import human_bytes
-from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller
+from .reading_facts import OnEachMachine, ReadingRow
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted, measured
-
-FILESYSTEM_SPACE = "filesystem-space"
 
 GIB = 1 << 30
 MIB = 1 << 20
@@ -34,18 +31,19 @@ SERIOUS_FREE, SERIOUS_SHARE = 512 * MIB, 0.03
 
 
 @dataclass(frozen=True, slots=True)
-class FilesystemSpace(FactRow):
-    """One filesystem as its fact carries it, in field order."""
+class FilesystemSpace(ReadingRow):
+    """One filesystem as its record says it."""
 
-    KEY = FILESYSTEM_SPACE
     KIND = FILESYSTEM_KIND
 
     mount: str = ""
     free_bytes: str = ""
     total_bytes: str = ""
     read_at: str = ""
-    # Set when the reading itself failed; such a row names no filesystem.
-    reason: str = ""
+
+    @classmethod
+    def record(cls, record: dict[str, Any], snapshot: Any) -> FilesystemSpace:
+        return filesystem_space(record)
 
     @property
     def free(self) -> int:
@@ -77,17 +75,6 @@ def filesystem_space(record: dict[str, Any]) -> FilesystemSpace:
         free_bytes=str(record.get("free_bytes", 0) or 0),
         total_bytes=str(record.get("total_bytes", 0) or 0),
         read_at=str(record.get("read_at", "") or ""),
-    )
-
-
-def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
-    """One fact per filesystem, on the node of the controller that read it."""
-
-    state_on_controller(
-        nodes,
-        machine,
-        FilesystemSpace,
-        lambda snapshot: rows_of(snapshot, filesystem_space, lambda reason: FilesystemSpace(reason=reason)),
     )
 
 
@@ -139,6 +126,7 @@ RULES: tuple[FindingRule, ...] = (
         "A filesystem is nearly full",
         Tone.SERIOUS,
         _nearly_full,
+        gathered=True,
         operator_action="On the machine, free space on the mount, then check again.",
         no_help_reason=cannot_run_commands(),
         bars={

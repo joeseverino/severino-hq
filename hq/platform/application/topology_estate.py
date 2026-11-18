@@ -522,15 +522,23 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
 
 
 def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
-    """What provider-specific joins add: unrecognized container, render
-    status, unit, filesystem, restart, tailnet device, refused report, certificate and renewal facts."""
+    """What provider-specific joins add: unrecognized container, tailnet
+    device, refused report, certificate and renewal facts, and the node each
+    machine reading is about."""
 
     if estate.machine.ids:
         docker_estate.add(nodes, estate.machine)
-    render_status_findings.add(nodes, estate.machine)
-    unit_findings.add(nodes, estate.machine)
-    filesystem_findings.add(nodes, estate.machine)
-    reboot_findings.add(nodes, estate.machine)
+    reading_facts.add_readers(
+        nodes,
+        estate.machine,
+        (
+            render_status_findings.Rendering,
+            unit_findings.UnitState,
+            filesystem_findings.FilesystemSpace,
+            reboot_findings.RebootState,
+            reboot_findings.EdgeRebootState,
+        ),
+    )
     tailnet_device_findings.add(nodes, estate.machine)
     reading_facts.add_refusals(nodes, estate.machine)
     reference_findings.add(nodes, resources)

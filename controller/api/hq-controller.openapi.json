@@ -4934,7 +4934,7 @@
             "default": "",
             "description": "Description: what the unit is, in the words of the unit file the repository ships. Its name when the file has none.",
             "maxLength": 120,
-            "pattern": "^(?:|[ -.0-<>-{}~]+)$",
+            "pattern": "^(?:|[ -.0-<>-~]+)$",
             "type": "string"
           },
           "load": {

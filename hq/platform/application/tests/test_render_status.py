@@ -21,11 +21,9 @@ from hq.domains.control_plane.observations.host import (
 from hq.platform.application.markup_testing import all_elements
 
 from .. import render_status_findings as rules
-from ..findings import derive_findings
+from ..findings import estate_findings
 from ..inventory_testing import store
-from ..projection import projection_scope
 from ..security import web_principal
-from ..topology import derive_topology
 from .commands import commands_on
 from .test_remedy_links import TRAP, UNOFFERED, _command_links, an_operator
 from .test_tailnet_posture import raised, tailnet_connection
@@ -259,12 +257,11 @@ class PageTests(TestCase):
                 if element.tag == "a" and element.attrs.get("href", "").startswith("/commands/")
             ]
         principal = web_principal(self.user)
-        with projection_scope():
-            for finding in derive_findings(derive_topology(principal=principal), principal=principal):
-                if finding.rule not in RULES:
-                    continue
-                offered = (*finding.presses, *((finding.check,) if finding.check else ()))
-                emitted += [(action.url, action.method) for action in offered]
+        for finding in estate_findings(principal=principal):
+            if finding.rule not in RULES:
+                continue
+            offered = (*finding.presses, *((finding.check,) if finding.check else ()))
+            emitted += [(action.url, action.method) for action in offered]
         self.assertTrue(emitted)
         for label_url in _command_links([("", url, method) for url, method in emitted]):
             with self.subTest(url=label_url[1]):
@@ -274,32 +271,17 @@ class PageTests(TestCase):
                 self.assertNotContains(response, TRAP)
 
 
-class FactTests(SimpleTestCase):
-    def test_a_fact_carries_a_rendering_whole(self):
-        rendering = rules.Rendering(
-            "hq",
-            "read",
-            "",
-            "failed",
-            "connect_denied",
-            "2026-01-02T00:00:00Z",
-            "2026-01-01T00:00:00Z",
-            "2025-12-31T23:00:00Z",
-            "TOKEN_NEEDED",
-            "2026-01-02T00:00:00Z",
-        )
-
-        key, value = rendering.fact
-
-        self.assertEqual(key, rules.RENDER_STATUS)
-        self.assertEqual(rules.Rendering.of(value), rendering)
-
+class ThresholdTests(SimpleTestCase):
     def test_the_threshold_is_judged_as_of_the_reading(self):
         at = datetime(2026, 1, 1, tzinfo=UTC)
 
         def read_after(age: timedelta) -> rules.Rendering:
             return rules.Rendering(
-                "hq", "read", confirmed_at=at.isoformat(), rendered_at=at.isoformat(), read_at=(at + age).isoformat()
+                renderer="hq",
+                state="read",
+                confirmed_at=at.isoformat(),
+                rendered_at=at.isoformat(),
+                read_at=(at + age).isoformat(),
             )
 
         second = timedelta(seconds=1)
@@ -307,4 +289,4 @@ class FactTests(SimpleTestCase):
         self.assertTrue(read_after(rules.CONFIRMED_WITHIN + second).unconfirmed)
         self.assertFalse(read_after(rules.RENDERED_WITHIN).unrendered)
         self.assertTrue(read_after(rules.RENDERED_WITHIN + second).unrendered)
-        self.assertTrue(rules.Rendering("hq", "read").unconfirmed)
+        self.assertTrue(rules.Rendering(renderer="hq", state="read").unconfirmed)

@@ -3,13 +3,13 @@ or not enabled, a timer not starting its unit, a service systemd keeps
 restarting, or units nobody could read.
 
 A unit that fails stays failed in its machine's journal and nothing else
-notices, so these rules read the ``host.unit`` reading's one fact per unit
+notices, so these rules read the ``host.unit`` reading's one row per unit
 (docs/Derived-Facts.md says how it is taken). They name no unit, so one added
 to ``deploy/systemd`` is covered once installed.
 """
 
 import shlex
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -26,12 +26,10 @@ from .finding_model import (
     machine_step,
 )
 from .moments import ago, duration, moment
-from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller, stated, unjudged
+from .reading_facts import OnEachMachine, ReadingRow, stated, unjudged
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted, ended
-
-UNIT_STATE = "unit-state"
 
 # ``LoadState`` when systemd holds the unit's configuration, and
 # ``UnitFileState`` when the file is there and nothing starts it at boot.
@@ -73,10 +71,9 @@ UNREAD_REASONS = {
 
 
 @dataclass(frozen=True, slots=True)
-class UnitState(FactRow):
-    """One unit as its fact carries it: words and instants, in field order."""
+class UnitState(ReadingRow):
+    """One unit as its record says it: words and instants."""
 
-    KEY = UNIT_STATE
     KIND = UNIT_KIND
 
     unit: str = ""
@@ -94,8 +91,6 @@ class UnitState(FactRow):
     next_elapse_at: str = ""
     activates: str = ""
     read_at: str = ""
-    # Set when the reading itself failed; such a row names no unit.
-    reason: str = ""
     # What the unit is, in its unit file's words; "" when systemd gave none.
     title: str = ""
     # How often systemd restarted it on its own, "" for none, and when it
@@ -104,6 +99,10 @@ class UnitState(FactRow):
     active_at: str = ""
     # "yes" for a service HQ does not ship, read because systemd restarted it.
     foreign: str = ""
+
+    @classmethod
+    def record(cls, record: dict[str, Any], snapshot: Any) -> UnitState:
+        return unit_state(record)
 
     @property
     def label(self) -> str:
@@ -196,17 +195,6 @@ def unit_state(record: dict[str, Any]) -> UnitState:
     )
 
 
-def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
-    """One fact per unit, on the node of the controller that read it."""
-
-    state_on_controller(
-        nodes,
-        machine,
-        UnitState,
-        lambda snapshot: rows_of(snapshot, unit_state, lambda reason: UnitState(reason=reason)),
-    )
-
-
 def _units(estate: FindingEstate) -> Iterator[tuple[TopologyNode, tuple[UnitState, ...]]]:
     """Each machine's units, without the rows that say the reading failed."""
 
@@ -242,9 +230,9 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
     """
 
     found = []
+    said = render_status_findings.failed_units(estate)
     for node, units in _units(estate):
-        said = render_status_findings.failed_units(estate, node)
-        failed = tuple(unit for unit in units if unit.failed and unit.unit not in said)
+        failed = tuple(unit for unit in units if unit.failed and unit.unit not in said.get(node.id, ()))
         if not failed:
             continue
         # A unit a timer, path or socket starts runs again on its own; one nothing
@@ -510,6 +498,7 @@ RULES: tuple[FindingRule, ...] = (
         "A background job failed",
         Tone.SERIOUS,
         _failed,
+        gathered=True,
         operator_action=("On the machine, read the job's log for why it failed, fix that, then start it again."),
         no_help_reason=cannot_run_commands(),
         bars={
@@ -522,6 +511,7 @@ RULES: tuple[FindingRule, ...] = (
         "A background job is not set up",
         Tone.SERIOUS,
         _absent,
+        gathered=True,
         operator_action=("Deploy HQ, which sets up every background job, or turn the job on on the machine."),
         no_help_reason=cannot_run_commands(),
         bars={Tone.SERIOUS: "a job HQ's machine needs is not installed or not turned on"},
@@ -531,6 +521,7 @@ RULES: tuple[FindingRule, ...] = (
         "A scheduled job is not running",
         Tone.SERIOUS,
         _stalled,
+        gathered=True,
         operator_action=("On the machine, see when the timer last ran and read its job's log, then start the job."),
         no_help_reason=cannot_run_commands(),
         bars={
@@ -546,6 +537,7 @@ RULES: tuple[FindingRule, ...] = (
         "A service keeps restarting",
         Tone.SERIOUS,
         _restarting,
+        gathered=True,
         operator_action=(
             "On the machine, read the service's log for why it keeps stopping, fix that, then clear its restart count."
         ),
@@ -563,6 +555,7 @@ RULES: tuple[FindingRule, ...] = (
         "Cannot check background jobs",
         Tone.ATTENTION,
         _unread,
+        gathered=True,
         operator_action=(
             "Check that systemd answers on the controller's machine. If it does and this stays, deploy HQ."
         ),

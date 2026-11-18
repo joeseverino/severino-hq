@@ -134,16 +134,15 @@ class HostRenderStatusRecord(ObservationRecord):
 # title its unit file gives it. A title is the one field of words, written by
 # the repository for a unit it ships and by another package for a service read
 # because it restarts, so it is admitted only as printable ASCII on one line,
-# without a slash or an equals sign, so no path or assignment can stand in it,
-# nor the bar HQ's fact rows keep between fields. The
-# controller reads each pattern from this record's schema in the bridge
+# without a slash or an equals sign, so no path or assignment can stand in it.
+# The controller reads each pattern from this record's schema in the bridge
 # contract and checks it first. A name may carry systemd's \xNN escape, which
 # a unit named for a path uses for a dash in it (run-a\x2db.mount).
 UNIT_NAME = r"^(?:[A-Za-z0-9:_.@-]|\\x[0-9a-f]{2})+\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$"
 UNIT_WORD = r"^[a-z][a-z0-9-]{0,31}$"
 UNIT_INSTANT = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
 UNIT_NAME_LENGTH = 255
-UNIT_TEXT = r"^[ -.0-<>-{}~]+$"
+UNIT_TEXT = r"^[ -.0-<>-~]+$"
 UNIT_TEXT_LENGTH = 120
 
 
