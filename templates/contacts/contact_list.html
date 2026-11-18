@@ -37,10 +37,10 @@
       <tr{% row_state emphasized=s.unread %}>
         <td>
           <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name|breakable }}</strong></a>
-          {% muted element="div" %}{% cell_line s.email %}{% endmuted %}
+          {% muted element="div" %}{% cell_line text=s.email %}{% endmuted %}
         </td>
         <td>{% muted %}{{ s.created_at|when }}{% endmuted %}</td>
-        <td>{% url 'contacts:detail' s.id as message_url %}{% cell_line s.message_preview message_url %}</td>
+        <td>{% url 'contacts:detail' s.id as message_url %}{% cell_line text=s.message_preview url=message_url %}</td>
         <td>{% status s.state %}{% if s.pending %} {% status "Waiting" tone="attention" %}{% endif %}</td>
         <td>{% muted %}{{ s.country|or_empty }}{% endmuted %}</td>
         <td>{{ s.id|breakable }}</td>

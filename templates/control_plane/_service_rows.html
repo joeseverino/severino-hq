@@ -74,10 +74,10 @@ sizes and counts, so the service's name keeps its column's whole line.
             {% elif service.path.ends_at.step == "origin" %}
               {{ service.path.ends_at.label|breakable }}{% if service.path.ends_at.unread %}{% muted %}{% dot %}redirect not read{% endmuted %}{% endif %}
             {% elif service.origin %}
-              {% for facet in service.facets %}{% if facet.id == runtime_facet %}{% for claim in facet.claims %}{% if forloop.first %}{% cell_line service.origin.headline claim.url %}{% endif %}{% empty %}{% cell_line service.origin.headline %}{% endfor %}{% endif %}{% endfor %}
+              {% for facet in service.facets %}{% if facet.id == runtime_facet %}{% for claim in facet.claims %}{% if forloop.first %}{% cell_line text=service.origin.headline url=claim.url %}{% endif %}{% empty %}{% cell_line text=service.origin.headline %}{% endfor %}{% endif %}{% endfor %}
               {% if service.origin.qualifier %}{% muted %}{{ service.origin.qualifier|breakable }}{% endmuted %}{% endif %}
             {% elif service.served_by %}
-              {% for name in service.served_by %}{% cell_line name %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+              {% for name in service.served_by %}{% cell_line text=name %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
             {% else %}
               {% present service.path.machine %}{% entity "machine"|entity_of:service.path.machine %}{% endpresent %}
             {% endif %}

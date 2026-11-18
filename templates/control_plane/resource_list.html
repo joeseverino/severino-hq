@@ -32,8 +32,7 @@ offers every type.
           </td>
           <td>
             {% with status=resource.record_status %}
-              {% status status.label tone=status.tone title=status.detail %}
-              {% if status.since %}<br>{% muted %}{{ status.since|when:"ago" }}{% endmuted %}{% endif %}
+              {% stack_list %}<li>{% status status.label tone=status.tone title=status.detail %}</li>{% if status.since %}<li>{% muted %}{{ status.since|when:"ago" }}{% endmuted %}</li>{% endif %}{% endstack_list %}
             {% endwith %}
           </td>
           <td class="date-col">{% muted %}{% include "partials/_reading_age.html" with at=resource.last_observed_at only %}{% endmuted %}</td>

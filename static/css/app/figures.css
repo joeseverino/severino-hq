@@ -46,6 +46,9 @@
 /* Links one to a line in a cell are a target apart (`--target-min`): each line that tall, and the link's box with it. */
 .data-table td :is(a, .cell-line):is(:has(+ br), br + *) { line-height: var(--target-min); }
 .data-table td a:not([data-entity], .cell-line):is(:has(+ br), br + *) { display: inline-block; }
+/* A cell line's quiet second line (`{% cell_line %}`) is a line of its own under the first; either line that holds something to press is a target tall. */
+.cell-detail { display: block; }
+:is(.cell-line:has(+ .cell-detail), .cell-line + .cell-detail):is(a[href], :has(a[href], [tabindex])) { line-height: var(--target-min); }
 /* Anywhere else the box the filter puts in a name is no box, and in a link a part is text, as in the link's token (base.css). */
 .cut { display: contents; }
 :is(td, th) [data-entity] > .token > .cut > .whole { display: contents; }
@@ -385,6 +388,8 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 
 /* A stack list ({% stack_list %}): items read down, each its parts inline. */
 .stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; }
+/* One that opens its cell (a status and the line under it) starts on the row's first line, as its neighbors do. */
+[data-kind] > .stack-list:first-child { margin-block-start: 0; }
 /* A raw answer kept for the open row scrolls inside it rather than lengthening it. */
 .row-below > pre { max-block-size: 18rem; }
 

@@ -136,7 +136,7 @@
 /* A link alone in its cell is a box of its own a target tall, no wider than the cell: alone, it wraps as it would inline. */
 .data-table > tbody > tr > td:not([data-kind="identifier"]) > a[href]:not(.btn):only-child,
 .data-table > tbody > tr > td:not([data-kind="identifier"]) > .cell-short:only-child > a[href]:not(.btn):only-child { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
-/* A fact on one line of its own (`{% cell_line lines=1 %}`). */
+/* A fact on one line of its own (`{% cell_line text=... lines=1 %}`). */
 .data-table > tbody > tr > td .cell-line[data-lines="1"] { display: block; }
 .data-table > tbody > tr > td .cell-line[data-lines="1"] :is(.token, .whole, .part) { display: inline; max-inline-size: none; }
 /* A control's label is the control's to cut, as one line at its end: its words (`button_words`, one box) are cut where the control ends, a part among them text of that line so the cut lands inside it; a part alone, longer than the control, is held to it and cut there, set on the line by its top since a box that clips takes its bottom edge as its baseline. */
