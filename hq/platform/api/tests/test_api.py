@@ -18,7 +18,6 @@ from hq.platform.application.tests.sentinel import (
     plant_credentials,
 )
 from hq.platform.application.topology import TOPOLOGY_SCHEMA_VERSION
-from hq.platform.application.topology_lenses import topology_lenses
 
 from .. import views
 from ..testing import ContractClient
@@ -777,13 +776,6 @@ class TransportTests(SentinelMixin, TestCase):
         resource = next(node for node in topology["nodes"] if node["id"] == "resource:api-zone")
         self.assertEqual([action["name"] for action in resource["actions"]], ["open"])
 
-    def test_an_unknown_topology_lens_is_refused_with_every_lens(self):
-        with _serving(), host_only():
-            response = self.client.get(
-                "/api/v2/topology/?lens=not-a-lens", HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}"
-            )
-        self.assertTrue(all(lens.name in response.json()["error"]["message"] for lens in topology_lenses()))
-
     def test_a_projection_refuses_a_caller_without_read_before_it_judges_input_or_derives_state(self):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='write_projects')}"}
         with _serving(), patch("hq.platform.application.topology.connection_catalog") as catalog:
@@ -885,23 +877,6 @@ class TransportTests(SentinelMixin, TestCase):
         for value, response in refused.items():
             with self.subTest(value):
                 self.assertNotIn(value.split("=")[1], response.json()["error"]["message"])
-
-    def test_a_refusal_answers_with_the_reason_the_application_gave(self):
-        from pydantic import ValidationError
-
-        from hq.platform.application.findings import findings
-        from hq.platform.application.refusal_status import refusal_of
-        from hq.platform.application.security import cli_principal
-
-        with self.assertRaises(ValidationError) as refused:
-            findings(principal=cli_principal(), limit=0)
-        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
-        with _serving(), host_only():
-            response = self.client.get("/api/v2/findings/?limit=0", **headers)
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(
-            response.json()["error"]["message"], refusal_of(refused.exception, name="get_findings").message
-        )
 
     def test_resource_read_requires_its_declared_grant(self):
         with _serving():

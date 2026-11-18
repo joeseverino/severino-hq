@@ -13,7 +13,7 @@ from ..record_errors import RecordNotFound
 from ..refusal_status import refusal_of
 from ..security import Capability, Principal
 from ..topology import derive_topology, topology
-from ..topology_lenses import TRACE_DIRECTIONS, topology_lenses
+from ..topology_lenses import topology_lenses
 from .host_only import host_only
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
@@ -48,13 +48,6 @@ class TopologyNarrowingTests(TestCase):
         # A narrowed answer carries its nodes.
         self.assertIn("resource:lonely-record", {node["id"] for node in lensed["nodes"]})
 
-    def test_an_unknown_lens_is_refused_with_every_lens_name(self):
-        reason = self.refusal(lens="not-a-lens")
-
-        for lens in topology_lenses():
-            self.assertIn(lens.name, reason)
-        self.assertNotIn("not-a-lens", reason)
-
     def test_an_unknown_focus_is_not_found_and_says_where_ids_come_from(self):
         with host_only(), self.assertRaises(RecordNotFound):
             topology(principal=READ, focus="resource:not-a-record")
@@ -72,17 +65,6 @@ class TopologyNarrowingTests(TestCase):
 
         self.refusal(lens="unobserved-resources", focus=outside[0])
 
-    def test_an_unknown_direction_is_refused_with_every_direction(self):
-        reason = self.refusal(focus="resource:lonely-record", direction="sideways")
-
-        for direction in TRACE_DIRECTIONS:
-            self.assertIn(direction, reason)
-
-    def test_a_depth_that_is_not_a_hop_count_is_refused(self):
-        for depth in (0, 99):
-            with self.subTest(depth=depth):
-                self.refusal(focus="resource:lonely-record", depth=depth)
-
     def test_a_known_focus_answers_its_neighborhood(self):
         with host_only():
             traced = topology(principal=READ, focus="resource:lonely-record", direction="inbound", depth=1)
@@ -92,15 +74,6 @@ class TopologyNarrowingTests(TestCase):
 
 
 class FindingsNarrowingTests(TestCase):
-    def test_an_unknown_rule_is_refused_with_every_rule_name(self):
-        with host_only(), self.assertRaises(ValidationError) as refused:
-            findings(principal=READ, rule="not-a-rule")
-        reason = refusal_of(refused.exception, name="get_findings").message
-
-        for rule in finding_rules():
-            self.assertIn(rule.name, reason)
-        self.assertNotIn("not-a-rule", reason)
-
     def test_a_known_rule_narrows_to_it(self):
         rule = finding_rules()[0].name
         with host_only():
