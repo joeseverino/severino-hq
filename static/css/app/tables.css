@@ -284,9 +284,9 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* Below every rank's width a row's state goes to its open line too (`STATES_LEAVE`, table_cells), the last to leave. */
 @container table-region (width < 20rem) {
   .data-table > * > tr > [data-drop="5"] { display: none; }
-  /* The narrowest box wraps a held value or a time between its words, so a key stands whole: a pill of several words (`data-words`, table_cells) is as wide as its words up to its column's share, as a short value is, and past it wraps between them inside its own paint. */
+  /* The narrowest box wraps a held value or a time between its words, so a key stands whole: a pill is as wide as its words up to its column's share, as a short value is, past it wraps between them inside its own paint, and is never narrower than its longest word: its one track is `fit-content()` of the share, which a grid sizes from its words in every engine. */
   .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]), .data-table td time { white-space: normal; }
-  .data-table > tbody > tr:not(.row-detail) > [data-kind="status"][data-words] .pill { white-space: normal; inline-size: max-content; max-inline-size: var(--share); }
+  .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) .pill { white-space: normal; display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; }
   .data-table:has(> thead > tr:last-child > [data-drop="5"]) { --gone-5: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="5"] ~ [data-drop="5"]) { --gone-5: 2; }
   .data-table:has(> thead > tr:last-child > [data-drop="5"] ~ [data-drop="5"] ~ [data-drop="5"]) { --gone-5: 3; }

@@ -587,10 +587,6 @@ class Cells(HTMLParser):
         marks = [] if "data-kind" in cell.attrs else [f' data-kind="{kind}"']
         if body and _long(cell):
             marks.append(" data-long")
-        elif body and kind == "status" and len(" ".join(cell.text).split()) > 1:
-            # A state of several words, which the narrowest box wraps between
-            # them (tables.css); one word stands whole.
-            marks.append(" data-words")
         words = kind in _CUT_KINDS or (kind == "control" and not cell.controls)
         if body and words and not cell.says_nothing:
             if _long(cell):

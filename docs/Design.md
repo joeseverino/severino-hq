@@ -291,7 +291,8 @@ that declares a rank is one of a row's secondary checks: it leaves at that
 rank, whatever its cells hold, and no later than the table's last ranked
 column, so a row's own state is declared with no rank and its checks with one.
 Below every rank's width (20rem) the state goes to the open line last; a key
-never does, and a key's pill wraps between its words. A name's least width is its
+never does, and a pill there is as wide as its words up to its column's share,
+wraps between them past it, and is never narrower than its longest word. A name's least width is its
 longest word, so another column gives way before a name breaks inside one; a
 hash or key with no break in it may break anywhere (cuts.css).
 
