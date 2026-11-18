@@ -24,8 +24,8 @@ queue's (data-queue) is counted down as its rows are dismissed.
 {% with area=action_groups.0 %}
 {% if action_groups|length == 1 %}{% firstof area.label as queue_heading %}{% elif action_query or action_status or action_source or action_about %}{% firstof "Matches" as queue_heading %}{% else %}{% firstof "To do" as queue_heading %}{% endif %}
 {% section queue_heading count=action_item_total data_queue=True data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
-  {% include "partials/_queue_groups.html" with groups=action_groups prefix="queue" aside_url=aside_all_url titled=action_groups|length|add:"-1" %}
-{% aside %}{% if action_groups|length == 1 and area.url %}<a class="subtle-link" href="{{ area.url }}">View all{% arrow %}</a>{% dot %}{% endif %}{% button "Dismiss all" aside_all_url post=True look="compact ghost" %}
+  {% include "partials/_queue_groups.html" with groups=action_groups prefix="queue" aside_url=dismiss_all.url titled=action_groups|length|add:"-1" %}
+{% aside %}{% if action_groups|length == 1 and area.url %}<a class="subtle-link" href="{{ area.url }}">View all{% arrow %}</a>{% if dismiss_all %}{% dot %}{% endif %}{% endif %}{% if dismiss_all %}{% include "partials/_page_action.html" with action=dismiss_all extra="compact ghost" only %}{% endif %}
 {% endsection %}
 {% endwith %}
 {% elif action_query or action_status or action_source or action_about %}
@@ -42,8 +42,8 @@ of it unless it reports something else.
 {% endcomment %}
 {% if notice_groups %}
   {% section "Notices" count=notice_total data_queue=True %}
-    {% include "partials/_queue_groups.html" with groups=notice_groups prefix="notice" aside_url=notices_aside_url %}
-  {% aside %}{% button "Dismiss all" notices_aside_url post=True look="compact ghost" %}
+    {% include "partials/_queue_groups.html" with groups=notice_groups prefix="notice" aside_url=dismiss_notices.url %}
+  {% aside %}{% if dismiss_notices %}{% include "partials/_page_action.html" with action=dismiss_notices extra="compact ghost" only %}{% endif %}
   {% endsection %}
 {% endif %}
 

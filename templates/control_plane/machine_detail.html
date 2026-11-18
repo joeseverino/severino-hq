@@ -109,9 +109,8 @@ last done to it is read before its parts.
         set, so there is one control rather than one per route, and it
         appears only when something is actually waiting on it.
         {% endcomment %}
-        {% if machine.presence.unapproved_routes and route_approval %}
-          {% url 'control_plane:approve_routes' machine.route_approval_key as approve_url %}
-          {% button "Approve routes" approve_url post=True title=route_approval.reason disabled=route_approval_off %}
+        {% if machine.presence.unapproved_routes and approve_routes %}
+          {% include "partials/_page_action.html" with action=approve_routes only %}
         {% endif %}
       {% endfact %}
     {% endif %}

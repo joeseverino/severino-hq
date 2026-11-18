@@ -21,8 +21,9 @@ lazy from hq.platform.application.routes import reverse
 
 from .entity_links import link_url
 lazy from . import domains
-lazy from .calendar_entries import own_sources
+lazy from .calendar_entries import CHOOSE_SOURCE, own_sources
 lazy from .moments import month as month_name, weekday
+lazy from .pages import PageAction
 
 logger = logging.getLogger("severino.calendar")
 
@@ -173,6 +174,12 @@ class SourceView:
     count: int = 0
     # Why it could not be read this time, or blank.
     failure: str = ""
+
+    @property
+    def choice(self) -> PageAction | None:
+        """The press that shows it, or hides it while shown, for a reader who may choose."""
+
+        return PageAction.command(CHOOSE_SOURCE, self.id, field="shown", value="0" if self.shown else "1")
 
 
 @dataclass(frozen=True, slots=True)

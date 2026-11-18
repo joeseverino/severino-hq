@@ -2428,7 +2428,9 @@ ENTRIES |= {
     "part/allocation": Entry(context=ENTRIES["part/allocation-legend"].context),
     "part/ask": Entry(context={"ask": ENTRIES["part/ask-states"].context["idle"]}),
     "part/attention-list": Entry(context={"entries": [], "empty": "No example decision waits."}),
-    "part/button": Entry(context={"url": "/example/restart/"}),
+    "part/button": Entry(
+        context={"restart": PageAction._built(label="Restart", url="/example/restart/", method="post")}
+    ),
     "part/certificate-mark": Entry(
         context={"certificate": Certificate("Proxy", name="app.example.com", issuer="Example CA")}
     ),

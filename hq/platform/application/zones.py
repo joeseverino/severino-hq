@@ -275,6 +275,14 @@ class Zone:
         return entity_link("zone", self.zone).url
 
     @property
+    def adopt(self) -> PageAction | None:
+        """The press that manages it in HQ, while it can be and its reader may."""
+
+        if not self.adopt_token:
+            return None
+        return PageAction.command(ADOPT_ZONE, self.zone, field="token", value=self.adopt_token, primary=True)
+
+    @property
     def managed_count(self) -> int:
         return sum(1 for record in self.records if record.managed)
 

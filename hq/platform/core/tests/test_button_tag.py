@@ -1,9 +1,18 @@
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase
 
+from hq.platform.application.pages import PageAction, RowMark, RowOrder
 
-def draw(source: str) -> str:
-    return Template(source).render(Context({}))
+
+def draw(source: str, **context) -> str:
+    return Template(source).render(Context(context))
+
+
+def moves_up(url: str = "/example/7/"):
+    """A row's press that moves it up, an offer built where its command was read."""
+
+    (up,) = RowOrder(url, "example 7", up=True, down=False).presses
+    return up
 
 
 class ButtonTagTests(SimpleTestCase):
@@ -38,10 +47,55 @@ class ButtonTagTests(SimpleTestCase):
 
     def test_a_posting_button_refuses_a_hook_it_would_drop(self):
         with self.assertRaises(TemplateSyntaxError):
-            draw('{% button "Example" "/example/" post=True data_example=True %}')
+            draw('{% button "Example" offer=press data_example=True %}', press=moves_up())
 
     def test_its_icon_and_count_are_drawn_as_markup_beside_its_words(self):
         html = draw('{% button "Example" icon="info" count=3 %}')
 
         self.assertIn('<svg class="icon"', html)
         self.assertIn('<span class="filter-count">3</span>', html)
+
+
+class PostingButtonTests(SimpleTestCase):
+    """A button posts only what an offer sends, through the one shared form,
+    so no page draws a press the rule behind it was not asked about."""
+
+    def test_a_template_cannot_post_to_an_address_of_its_own(self):
+        with self.assertRaises(TemplateSyntaxError):
+            draw('{% button "Example" "/example/" post=True %}')
+
+    def test_a_link_is_no_offer_to_post(self):
+        with self.assertRaises(TemplateSyntaxError):
+            draw('{% button "Example" offer=link %}', link=PageAction("Example", "/example/"))
+
+    def test_it_sends_only_what_its_offer_says(self):
+        for written in (
+            '{% button "Example" "/example/" offer=press %}',
+            '{% button "Example" offer=press value="down" %}',
+        ):
+            with self.subTest(written), self.assertRaises(TemplateSyntaxError):
+                draw(written, press=moves_up())
+
+    def test_it_targets_the_shared_form_with_its_offers_address_and_field(self):
+        html = draw('{% button press.label offer=press css="icon-link" %}', press=moves_up("/things/7/"))
+
+        self.assertIn('form="hq-post"', html)
+        self.assertIn('formaction="/things/7/"', html)
+        self.assertIn('name="direction" value="up"', html)
+        self.assertIn('aria-label="Move example 7 up"', html)
+        self.assertNotIn("disabled", html)
+
+    def test_a_button_of_words_is_named_by_them(self):
+        press = RowMark("/example/pin/", False, "example", "favorites").press
+        html = draw('{% button "Pin" offer=press %}', press=press)
+
+        self.assertIn('title="Add example to favorites"', html)
+        self.assertNotIn("aria-label", html)
+
+    def test_it_can_be_disabled(self):
+        html = draw('{% button "Example" offer=press disabled=True %}', press=moves_up())
+        self.assertIn(" disabled>", html)
+
+    def test_its_label_is_escaped(self):
+        html = draw("{% button label offer=press %}", label="<b>", press=moves_up())
+        self.assertIn("&lt;b&gt;", html)

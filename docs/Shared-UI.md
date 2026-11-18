@@ -41,7 +41,7 @@ fails when this file falls behind. The rules around it are in
 | Tag | Later parts | What it is | Written |
 | --- | --- | --- | --- |
 | `{% arrow %}` | nothing | The arrow that ends a link onward, written straight after its last word. | `<a href="/example/">All of them{% arrow %}</a>` |
-| `{% button %}` | nothing | Every control that looks like a button: a link, a post through the page's one shared form, its form's own, or one a script acts on. | `{% button "Restart" url post=True look="primary" %}` |
+| `{% button %}` | nothing | Every control that looks like a button: a link, a post through the page's one shared form, its form's own, or one a script acts on. | `{% button restart.label offer=restart look="primary" %}` |
 | `{% button_row %}` | nothing | A row of buttons that stands on its own: a form's closing row, a card's decisions, a page's way on. | `{% button_row %}{% button "Save" submit=True look="primary" %}{% endbutton_row %}` |
 | `{% card %}` | nothing | The frame a page's content is grouped in; a titled part of a page is a `{% section %}`. | `{% card label="Hosts" %}<p>Body</p>{% endcard %}` |
 | `{% dot %}` | nothing | The middle dot between two parts of one line, written straight after the first. | `{{ count }}{% dot %}{{ age }}` |
@@ -77,17 +77,16 @@ fails when this file falls behind. The rules around it are in
 | `button` | `css` |  |  | Classes in place of its look, for a control not drawn as a button. |
 | `button` | `current` | `False` |  | It names the page being drawn. |
 | `button` | `disabled` | `False` |  | Neither a link nor a form, kept in the tab order. |
-| `button` | `fields` | `None` |  | What a posting one sends besides its own field, as a form of its own. |
 | `button` | `hit` | `False` |  | Drawn smaller than a target, so it asks for its hit area. |
 | `button` | `icon` |  |  | The icon its words open with. |
 | `button` | `look` |  |  | How it looks, its words from `ui.BUTTON_LOOKS`. |
 | `button` | `modal` |  |  | The dialog a link opens where script runs. |
-| `button` | `name` |  |  | The field it sends. |
-| `button` | `post` | `False` |  | Posts to its url. |
+| `button` | `name` |  |  | The field its form's own sends. |
+| `button` | `offer` | `None` |  | A `PageAction` that posts, which it sends: where, its field and the rest. |
 | `button` | `pressed` | `None` |  | A toggle, and which way it stands. |
 | `button` | `submit` | `False` |  | Sends its own form. |
 | `button` | `title` |  |  | Its `title`, read where it stands. |
-| `button` | `url` |  |  | Where it leads, or with `post` where it posts. |
+| `button` | `url` |  |  | Where it leads. |
 | `button` | `value` |  |  | That field's value. |
 | `button` | `**attributes` |  |  | Each `data_*` hook, and the popover, dialog command or `hidden` a script acts on. |
 | `button_row` | `bar` |  |  | Pinned to the bottom of the screen once its form has changed. |
@@ -248,7 +247,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `hand-drawn-empty-said-quietly` | An empty line drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`. |
 | `hand-drawn-filter-bar` | A search field or select drawn by hand, where the filter bar and select parts draw it. | Write `{% filter_bar search="..." query=q filtered=... clear=... %}``{% choices %}``{% select ... %}``{% summary %}`count`{% endfilter_bar %}`. |
 | `hand-drawn-fold` | A fold drawn by hand, where the section part draws it. | Write `{% section "Heading" fold=True %}`body`{% endsection %}`. |
-| `hand-drawn-form` | A form that writes drawn by hand, where the form part draws it. | Write `{% include "partials/_form.html" %}`, or `{% button ... post=True %}` for a single verb. |
+| `hand-drawn-form` | A form that writes drawn by hand, where the form part draws it. | Write `{% include "partials/_form.html" %}`, or `{% include "partials/_page_action.html" with action=... %}` of a PageAction.command for a single verb. |
 | `hand-drawn-heading` | A heading drawn by hand, where the section part or the page frame draws it. | Write the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it (it heads itself a level down); the page's own title is the frame's, from page. |
 | `hand-drawn-icon` | An icon drawn by hand, where the icon part draws it. | Write `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img". |
 | `hand-drawn-missing-value` | A missing value's mark drawn by an if, where the value's own tag or filter draws it. | Write {{ x\|or_empty }} for a plain value, {{ x\|money }} (or measured, seconds, bytes, when) alone for a figure or a moment, and `{% present x %}`...`{% endpresent %}` for a value shown in markup. |

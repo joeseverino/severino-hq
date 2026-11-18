@@ -1,7 +1,7 @@
 """Dashboard + audit-log views."""
 
 import re
-from typing import ClassVar, override
+from typing import Any, ClassVar, override
 lazy from datetime import timedelta
 
 from django.conf import settings
@@ -43,7 +43,7 @@ from hq.platform.application.web_writes import execute_posted, refusal_response,
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
 lazy from hq.platform.application.connection_catalog import connection_catalog
 lazy from hq.platform.application.hq_context import hq_context
-lazy from hq.platform.application.lookup import AGAIN, LOOK_UP_ADDRESS, stored_address
+lazy from hq.platform.application.lookup import AGAIN, FIRST, LOOK_UP_ADDRESS, stored_address
 lazy from hq.platform.application.posture import estate_posture
 lazy from hq.platform.application.request_path import request_path
 lazy from hq.platform.application.visit_refresh import worth_asking
@@ -712,6 +712,13 @@ ADDRESS_DENIALS = RowCap(
 )
 
 
+def lookup_action(address: str, reading: Any) -> dict[str, PageAction | None]:
+    """The fragment's press that looks ``address`` up, or again beside its ``reading``."""
+
+    mode = AGAIN if reading else FIRST
+    return {"lookup": PageAction.command(LOOK_UP_ADDRESS, variant=mode, field="address", value=address)}
+
+
 class PublicAddressView(View):
     """What the public internet says about one address, as a fragment.
 
@@ -720,7 +727,7 @@ class PublicAddressView(View):
     """
 
     template_name = "core/_public_address.html"
-    runs = ((LOOK_UP_ADDRESS, AGAIN),)
+    runs = ((LOOK_UP_ADDRESS, FIRST), (LOOK_UP_ADDRESS, AGAIN))
 
     def get(self, request):
         address = request.GET.get("address", "")
@@ -731,7 +738,7 @@ class PublicAddressView(View):
         except Exception as error:  # noqa: BLE001 - every failure is said in the one refusal shape, a denial recorded
             recorded = principal if ADDRESS_DENIALS.admits(actor=principal.actor, capability=LOOK_UP_ADDRESS) else None
             context["failure"] = refusal_of(error, name=LOOK_UP_ADDRESS, principal=recorded).message
-        return render(request, self.template_name, context)
+        return render(request, self.template_name, context | lookup_action(address, context["reading"]))
 
     def post(self, request):
         if request.headers.get("X-Requested-With") != "XMLHttpRequest":
@@ -741,4 +748,4 @@ class PublicAddressView(View):
         context = {"address": address, "reading": result if result["ok"] else None}
         if not result["ok"]:
             context["failure"] = refusal_of(result).message
-        return render(request, self.template_name, context)
+        return render(request, self.template_name, context | lookup_action(address, context["reading"]))

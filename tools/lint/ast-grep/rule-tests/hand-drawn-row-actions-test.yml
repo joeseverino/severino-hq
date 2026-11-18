@@ -1,9 +1,9 @@
 id: hand-drawn-row-actions
 valid:
   - '<tr><td>{% row_actions actions %}</td></tr>'
-  - '<tr><td>{% button "Move up" url post=True css="icon-link" %}</td></tr>'
+  - '<tr><td>{% button "Move up" offer=press css="icon-link" %}</td></tr>'
   - '<tr><td><a class="subtle-link" href="/a/">A</a></td></tr>'
 invalid:
-  - '<tr><td>{% button "A" "/a/" post=True %}</td></tr>'
+  - '<tr><td>{% button "A" offer=press %}</td></tr>'
   - '<tr><td class="row-actions">{% if a %}{% button "B" "/" %}{% endif %}</td></tr>'
-  - '<tr><td>{% button "A" "/a/" post=True look="danger" %}</td></tr>'
+  - '<tr><td>{% button "A" offer=press look="danger" %}</td></tr>'

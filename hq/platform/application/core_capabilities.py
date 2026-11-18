@@ -83,6 +83,8 @@ from .infrastructure import ManagedResourceCommand, save_managed_resource
 from .integration_specs import ON_ITS_PAGE, CapabilitySpec
 from .labels import adding
 from .lookup import (
+    AGAIN as ADDRESS_AGAIN,
+    FIRST,
     LOOK_UP_ADDRESS,
     LOOK_UP_NAME,
     AddressCommand,
@@ -306,6 +308,7 @@ CORE_CAPABILITY_SPECS = (
             "Adopt every record in it HQ can, in one transaction; the domain stands if none can be.",
         ),
         label="Manage a domain in HQ",
+        verb="Manage domain",
         reached_from="zones:index",
     ),
     CapabilitySpec(
@@ -809,6 +812,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
             ),
             label="Set aside action items",
             verb="Dismiss",
+            variants=((action_items.ALL, "Dismiss all"),),
             reached_from="action_items",
         ),
         CapabilitySpec(
@@ -944,6 +948,7 @@ def tools() -> tuple[CapabilitySpec, ...]:
                 ),
             ),
             label="Look up an address",
+            variants=((FIRST, "Look up"), (ADDRESS_AGAIN, "Look up again")),
         ),
     )
 

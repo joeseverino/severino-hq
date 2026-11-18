@@ -63,6 +63,17 @@ class CommandControlTests(TestCase):
         self.assertTrue(action.danger)
         self.assertEqual((action.method, action.url), ("get", reverse("control_plane:remove", args=["example-key"])))
 
+    def test_the_press_on_its_confirmation_posts_there_and_is_loud(self):
+        operator = _person("operator", roles.Role.OPERATOR)
+        head = self.offered_to(operator, REMOVAL_CAPABILITY, "example-key")
+        confirmed = self.offered_to(operator, REMOVAL_CAPABILITY, "example-key", confirms=True)
+
+        assert head is not None and confirmed is not None
+        self.assertEqual((confirmed.method, confirmed.url), ("post", head.url))
+        self.assertIn("ghost", head.look.split())
+        self.assertEqual(confirmed.look.split(), ["danger"])
+        self.assertIsNone(self.offered_to(_person("viewer", roles.Role.VIEWER), REMOVAL_CAPABILITY, "x", confirms=True))
+
     def test_a_view_that_answers_only_a_post_is_posted_to_in_the_variant_s_words(self):
         action = self.offered_to(
             _person("operator", roles.Role.OPERATOR), RECONCILE, "example-key", variant=READS_AGAIN

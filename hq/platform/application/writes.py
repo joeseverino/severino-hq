@@ -32,10 +32,11 @@ from hq.platform.application.routes import reverse
 from .contracts import route_url
 from .domains import load
 from .labels import SAVE_CHANGES
-from .records import DELETE, described, record_form, records_for
+from .records import described, record_form, records_for
 from .web_writes import form_payload, posted_answer, refused, run_posted, said
 lazy from .capabilities import capability_words, command_spec
 lazy from .integrations import held_graph
+lazy from .pages import PageAction
 lazy from .record_declaration import Records
 
 
@@ -185,14 +186,13 @@ class CapabilityDeleteMixin(_RecordWrite):
 
 
 def _confirmed(view: Any, context: dict[str, Any]) -> dict[str, Any]:
-    """What confirm_page.html needs: one button that posts here, and a way
-    back to the record being deleted."""
+    """What confirm_page.html needs: the press that deletes the record, for
+    whoever may, and a way back to it."""
 
     # Django leaves get_absolute_url for a model to define or not.
     back = getattr(view.object, "get_absolute_url", None)
     context["confirm"] = {
-        "url": view.request.path,
-        "label": capability_words(view.runs[0]) if view.runs else DELETE,
+        "action": PageAction.command(view.deletes, dict(view.kwargs), confirms=True),
         "cancel_url": back() if back else view.success_url,
     }
     return context

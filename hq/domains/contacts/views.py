@@ -13,6 +13,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from hq.platform.application.asks import WAITING
+from hq.platform.application.capabilities import command_spec
 from hq.platform.application.contact_submissions import (
     DELETE,
     MOST_SHOWN,
@@ -23,7 +24,7 @@ from hq.platform.application.contact_submissions import (
 )
 from hq.platform.application.labels import dotted
 from hq.platform.application.moments import moment, when
-from hq.platform.application.pages import PageAction, page_context
+from hq.platform.application.pages import PageAction, page_context, runs_here
 from hq.platform.application.security import safe_next
 from hq.platform.application.ui import counted
 from hq.platform.application.url_query import with_query
@@ -63,8 +64,22 @@ def _row_actions(submission: dict) -> tuple[PageAction, ...]:
     """What a message's row offers: the reviews it is not already in, and its
     deletion, which asks first on a page of its own."""
 
-    pk, status = submission["id"], submission.get("status")
-    marks = [mark for mark, shown in (("read", status == "unread"), ("spam", status != "spam")) if shown]
+    status = submission.get("status")
+    return _offered(
+        submission, [mark for mark, shown in (("read", status == "unread"), ("spam", status != "spam")) if shown]
+    )
+
+
+def _page_actions(submission: dict) -> tuple[PageAction, ...]:
+    """What a message's page offers: every review it is not already in, and
+    its deletion."""
+
+    marks = (mark for mark, _words in command_spec(REVIEW).variants)
+    return _offered(submission, [mark for mark in marks if mark != submission.get("status")])
+
+
+def _offered(submission: dict, marks: list[str]) -> tuple[PageAction, ...]:
+    pk = submission["id"]
     offered = (
         *(PageAction.command(REVIEW, pk, variant=mark, field="status", value=mark) for mark in marks),
         PageAction.command(DELETE, pk),
@@ -162,6 +177,8 @@ def contact_detail(request, pk: int):
             "reply_href": reply,
             "form": form,
             "gap": change_gap(),
+            "offered": _page_actions(submission),
+            "notes_kept": runs_here(REVIEW),
             **page_context(
                 f"Message #{pk}",
                 dotted(submission.get("name", ""), _sent(submission)),
@@ -219,8 +236,7 @@ def contact_delete(request, pk: int):
         {
             "submission": submission,
             "confirm": {
-                "url": reverse("contacts:delete", args=[pk]),
-                "label": f"Delete message #{pk}",
+                "action": PageAction.command(DELETE, pk, confirms=True),
                 "cancel_url": reverse("contacts:detail", args=[pk]),
                 "gap": change_gap(),
             },

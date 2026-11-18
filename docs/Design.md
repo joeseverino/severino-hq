@@ -1341,10 +1341,15 @@ the site header's bar, on the bar's ground. `link` and `menu` draw
 no box, so `button_classes` drops a look that paints one beside them, and a
 destructive row keeps only its red. Every control that
 looks like a button is `{% button label url look="primary compact" %}`, the one
-writer of `.btn` (`ui.button_classes` for Python's parts): a link, with
-`post=True` one that posts, with `submit=True` its form's own, and with neither
+writer of `.btn` (`ui.button_classes` for Python's parts): a link, with an
+`offer` one that posts, with `submit=True` its form's own, and with neither
 and no url one a script acts on (`data_*`, `popovertarget`, `command`). Its
 words may open with an `icon`, close with a `count` or end with an `arrow`.
+A post is only ever an offer's: a `PageAction` from `PageAction.command`,
+which is None for a reader who may not run the command, or a `RowOrder`'s or
+`RowMark`'s press, so a page has no way to draw a press its reader would be
+refused. `_page_action.html` draws one; a confirmation's is
+`PageAction.command(..., confirms=True)`, loud where it destroys.
 The push button is `.btn`, and a `<button>` with no class of its own; a button with a class (a
 menu row, a toggle, a close mark) starts from nothing painted (`base.css`)
 and draws itself, so no rule takes the push button's look back off. A label

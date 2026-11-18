@@ -8,6 +8,6 @@ A disabled one, by any method, is never a link or a form: it stays in the tab
 order (`aria-disabled`) so its reason, the title, is read where it stands. One
 that names the view it is drawn on (a switch between views) is that view's
 state, `aria-current`, never a link to itself, unless it opens a dialog: then
-it is the dialog's one way in. A POST one that sends `fields` besides its
-button's is a form of its own (`button`'s `fields`).
-{% endcomment %}{% is_this_page action.url as here %}{% if action.is_ask %}{% include "partials/_ask.html" with ask=action heard=heard %}{% else %}{% firstof extra "" as more %}{% with look=action.look|add:" "|add:more %}{% if action.disabled %}{% button action.label look=look title=action.title disabled=True %}{% elif action.method == "post" %}{% button action.label action.url post=True name=action.field value=action.value look=look title=action.title fields=action.fields %}{% elif here and not action.modal %}{% button action.label look=look current=True %}{% else %}{% button action.label action.url look=look title=action.title modal=action.modal_id %}{% endif %}{% endwith %}{% endif %}
+it is the dialog's one way in. A POST one is the button's `offer`, which
+sends what it carries.
+{% endcomment %}{% is_this_page action.url as here %}{% if action.is_ask %}{% include "partials/_ask.html" with ask=action heard=heard %}{% else %}{% firstof extra "" as more %}{% with look=action.look|add:" "|add:more %}{% if action.disabled %}{% button action.label look=look title=action.title disabled=True %}{% elif action.method == "post" %}{% button action.label offer=action look=look %}{% elif here and not action.modal %}{% button action.label look=look current=True %}{% else %}{% button action.label action.url look=look title=action.title modal=action.modal_id %}{% endif %}{% endwith %}{% endif %}

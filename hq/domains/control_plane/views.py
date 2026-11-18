@@ -197,8 +197,9 @@ class ResourceRemoveView(View):
                 "holds_records": bool(PROVIDERS[resource.kind].contains),
                 "removal_reason": RemovalReasonForm(),
                 "confirm": {
-                    "url": request.path,
-                    "label": capabilities.removal_words,
+                    "action": PageAction.command(
+                        REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant, confirms=True
+                    ),
                     "cancel_url": resource.get_absolute_url(),
                 },
                 **page_context(
@@ -529,8 +530,9 @@ class OperationView(View):
                 # The unit that runs it, which the verb goes through.
                 "supervision": supervision(resource),
                 "confirm": {
-                    "url": request.get_full_path(),
-                    "label": label,
+                    "action": PageAction.command(
+                        ACTION_CAPABILITY[self.action], key, query=request.GET.dict(), confirms=True
+                    ),
                     "cancel_url": safe_next(request, fallback=resource.get_absolute_url()),
                 },
                 **page_context(f"{label}?", kind_label(resource.kind)),

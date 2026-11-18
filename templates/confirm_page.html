@@ -2,16 +2,17 @@
 {% comment %}
 Confirming a destructive action. The page says what will happen in
 `{% block consequences %}`; this supplies the one button that does it and the
-way back. Context: `confirm` with `url` (where the POST goes), `label` (the
-button, naming the thing), `cancel_url`, and `gap` (an `adoption.WriteGap`)
-when the connection cannot make the change, which stands in the button's place. It works with scripting off and is
+way back. Context: `confirm` with `action` (the command's press, built with
+`PageAction.command(..., confirms=True)`, None for a reader who may not
+make it), `cancel_url`, and `gap` (an `adoption.WriteGap`) when the
+connection cannot make the change, which stands in the button's place. It works with scripting off and is
 the same two clicks either way.
 {% endcomment %}
 {% block page %}
 {% card %}
   {% block consequences %}{% endblock %}
   {% button_row %}
-    {% if confirm.gap %}{% include "partials/_write_gap.html" with gap=confirm.gap %}{% else %}{% button confirm.label confirm.url post=True look="danger" %}{% endif %}
+    {% if confirm.gap %}{% include "partials/_write_gap.html" with gap=confirm.gap %}{% elif confirm.action %}{% include "partials/_page_action.html" with action=confirm.action only %}{% endif %}
     {% button "Cancel" confirm.cancel_url look="ghost" %}
   {% endbutton_row %}
 {% endcard %}
