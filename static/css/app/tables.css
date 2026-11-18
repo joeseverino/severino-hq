@@ -39,6 +39,8 @@
   --tick-box: 16px;
   /* A column's share of its region while every column stands: the region's width over one more than the table's count of columns, read from its headings, less a cell's padding. The one more is kept for what a column asks past its share (a state's line). What a value holds whole, or the line a long one keeps, is never more than that share, so the table's columns together never ask more than their region. */
   --columns: 1;
+  /* Whether its box is narrow enough that a held value or a time wraps (below), its own and never a table's around it. */
+  --held-wraps: 0;
   --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-wide, 0) + 1) - 2 * var(--cell-pad));
   inline-size: 100%; border-collapse: collapse;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm);
@@ -261,9 +263,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* Below every rank's width a row's state goes to its open line too (`STATES_LEAVE`, table_cells), the last to leave. */
 @container table-region (width < 20rem) {
   .data-table > * > tr > [data-drop="5"] { display: none; }
-  /* The narrowest box wraps a held value or a time between its words, so a key stands whole: a pill is as wide as its words up to its column's share, as a short value is, past it wraps between them inside its own paint, and is never narrower than its longest word: its one track is `fit-content()` of the share, which a grid sizes from its words in every engine. */
-  .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]), .data-table td time { white-space: normal; }
-  .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) .pill { white-space: normal; display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; }
+  .data-table { --held-wraps: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="5"]) { --gone-5: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="5"] ~ [data-drop="5"]) { --gone-5: 2; }
   .data-table:has(> thead > tr:last-child > [data-drop="5"] ~ [data-drop="5"] ~ [data-drop="5"]) { --gone-5: 3; }
@@ -273,6 +273,13 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table > tbody > tr.is-expanded:has(+ tr.row-detail > td > .row-columns > [data-drop="5"]) > * { border-bottom: 0; }
 }
 @container table-region (width >= 20rem) { .row-columns > [data-drop="5"] [data-row-shows] { display: none; } }
+/* A table that keeps the gutter (below) gives the column that names its rows `--row-gutter` in place of a cell's pad: the toggle's 1.5rem more, as its two edges are a narrow cell's pad. So its held values wrap at 20rem plus that 1.5rem, written out since a container query reads no variable. */
+@container table-region (width < 21.5rem) { .data-table:is([data-rows-can-open], :has(> tbody > tr.row-detail, .row-fold, .cell-clamp)) { --held-wraps: 1; } }
+/* The narrowest box wraps a held value or a time between its words, so a key stands whole: a pill is as wide as its words up to its column's share, as a short value is, past it wraps between them inside its own paint, and is never narrower than its longest word: its one track is `fit-content()` of the share, which a grid sizes from its words in every engine. */
+@container style(--held-wraps: 1) {
+  .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]), .data-table td time { white-space: normal; }
+  .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) .pill { white-space: normal; display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; }
+}
 @container table-region (width < 40rem) {
   .data-table > * > tr > [data-drop="4"] { display: none; }
   .data-table:has(> thead > tr:last-child > [data-drop="4"]) { --gone-4: 1; }
@@ -347,7 +354,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table[data-wide-columns="9"] { --gone-wide: 9; }
   .data-table > tbody > tr:has(> [data-kind] .narrow-more) .row-expand { display: grid; }
   .data-table > tbody > tr.is-expanded [data-kind] .narrow-more { display: block; contain: inline-size; }
-  /* A value its clamp holds here (`cell-clamp`, cuts.css) opens its row, which releases it in place. */
+  /* A value its clamp holds here (`cell-clamp`, cuts.css) opens its row, which releases it in place. The toggle shows whether or not the value overran its clamp, since no CSS every engine has can tell. */
   .data-table > tbody > tr:has(.cell-clamp) .row-expand { display: grid; }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
 }

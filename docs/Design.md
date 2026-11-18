@@ -469,8 +469,9 @@ layout survey's `cut and closed`, `cut when open` and `cut beside room`.
 
 A long value in a cell (a line past `table_cells.LONG`) wraps, and in a
 narrow box is held to its third line by a clamp with its mark (`.cell-clamp`,
-cuts.css), its whole value where its row opens; a wide box holds it whole. A row with no toggle (a table with
-no headings, a fold's head) clamps nothing, so its value wraps whole,
+cuts.css), its whole value where its row opens; a wide box holds it whole. The
+name a row is read by is never held, nor is a row with no toggle (a table with
+no headings, a fold's head), so their values wrap whole,
 and no cell carries its value again as a title. Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
 toggle beside them stays whole, and a cell holding such parts is the clamp

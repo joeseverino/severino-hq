@@ -35,10 +35,12 @@ from hq.platform.core.tests.browser.probes.settle import (
 from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
     CELLS,
+    CLAMP_TABLE,
     COLUMNS_SHOWN,
     CUT_AND_CLOSED,
     CUT_TABLE,
     CUT_VALUES,
+    OPENS_NOTHING,
     POPOVER_IN_A_CELL,
     POPOVER_VALUES,
     ROW_TOGGLE_TABLES,
@@ -1511,6 +1513,27 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 found = self.page.evaluate(CUT_AND_CLOSED, SELECTORS["unseen"])
                 named = {row for row in rows if any(f'"{row}' in line for line in found)}
                 self.assertEqual(named, expected, found)
+
+    @with_script
+    def test_a_row_opened_narrow_to_release_its_clamp_opens_something(self):
+        """In a narrow box an open row that holds a clamp shows its value
+        whole in place, so its toggle opens something though its line draws
+        nothing; a shown toggle over an empty line on a row with no clamp
+        opens nothing, and is found."""
+
+        self.pages = {**self.pages, "clamp-probe": probe(CLAMP_TABLE)}
+        self.open("clamp-probe", PHONE_SCREEN[0])
+        self.page.evaluate(SETTLE)
+        self.page.evaluate(
+            "() => document.querySelectorAll('main [data-row-toggle]').forEach((toggle) => toggle.click())"
+        )
+        self.assertEqual(self.page.locator("main tr.is-expanded").count(), 2)
+        self.assertEqual(self.page.evaluate(OPENS_NOTHING), [])
+        # A row that says it holds a part below shows its toggle at any width.
+        self.page.evaluate(
+            "() => document.querySelector('main tr[data-probe=\"plain\"]').setAttribute('data-below', '')"
+        )
+        self.assertEqual(len(self.page.evaluate(OPENS_NOTHING)), 1)
 
     @with_script
     def test_a_panel_a_cell_shows_shows_its_values_whole(self):

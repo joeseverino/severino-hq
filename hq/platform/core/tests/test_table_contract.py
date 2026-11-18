@@ -342,8 +342,9 @@ class TableTagTests(SimpleTestCase):
 
     def test_only_a_cut_cell_with_a_long_line_is_clamped(self):
         """A value with a long line is held to a few lines where its row
-        opens, and its row holds the toggle that shows it whole; a status is
-        never held, nor is a short line or a blank cell."""
+        opens, and its row holds the toggle that shows it whole; the name the
+        row is read by and a status are never held, nor is a short line or a
+        blank cell."""
 
         long = "A sentence long enough to stand <em>several</em> lines tall in a narrow column"
         lines = "Two lines, each of them short<br>and the second one as short"
@@ -357,7 +358,7 @@ class TableTagTests(SimpleTestCase):
         )
         found = all_elements(_render(source))
         clamped = [each.ancestors[-1].attrs.get("data-col") for each in found if "cell-clamp" in each.classes]
-        self.assertEqual(clamped, ["name", "long"])
+        self.assertEqual(clamped, ["long"])
         # An open row releases its clamp in place, so the value is never
         # copied to the open line.
         self.assertFalse([each for each in found if each.tag == "dl"])

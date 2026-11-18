@@ -594,7 +594,7 @@ class Cells(HTMLParser):
             marks.append(" data-long")
         if body and _words(cell, kind) and not cell.says_nothing:
             if _long(cell):
-                if self.toggled and cell.closed:
+                if self.toggled and cell.closed and _clamps(kind):
                     self._box(cell, kind, "cell-clamp")
             # A fold's toggle is drawn before its head's value, which the
             # value's span (ended at a toggle) would leave out.
@@ -784,6 +784,14 @@ def _words(cell: _Cell, kind: str) -> bool:
     return kind in _CUT_KINDS or (kind == "control" and not cell.controls)
 
 
+def _clamps(kind: str) -> bool:
+    """Whether a long value of the kind is held to a few lines: the name a
+    row is read by wraps whole, as a part the row is read by does
+    (`cell-whole`, cuts.css), so it never makes its row open."""
+
+    return kind != "name"
+
+
 def _holds_back(row: _Row, kinds: dict[int, str], named: int) -> bool:
     """Whether the row can hold back from its line what its open line shows:
     a long value a narrow box clamps, a part held for the open line, a block
@@ -792,7 +800,8 @@ def _holds_back(row: _Row, kinds: dict[int, str], named: int) -> bool:
     for at, cell in _placed(row):
         if cell.folds or cell.holds & _HELD or _finished(cell, "below") or _finished(cell, "editor"):
             return True
-        if "colspan" not in cell.attrs and cell.closed and _long(cell) and _words(cell, _kind_at(at, kinds, named)):
+        kind = _kind_at(at, kinds, named)
+        if "colspan" not in cell.attrs and cell.closed and _long(cell) and _words(cell, kind) and _clamps(kind):
             return True
     return False
 

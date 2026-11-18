@@ -649,7 +649,9 @@ CUT_WHEN_OPEN = (
 
 # A row offers its toggle only where opening it shows something: an open row
 # whose toggle stands over a line with nothing drawn is a chevron that does
-# nothing. A group's toggle opens
+# nothing, unless in a narrow box it holds a clamp, which opening releases in
+# place (cuts.css), and whose toggle tables.css shows whether or not the
+# value overran. A group's toggle opens
 # the rows folded under it, so its line may hold nothing.
 OPENS_NOTHING = (
     "() => {"
@@ -659,6 +661,7 @@ OPENS_NOTHING = (
   for (const row of document.querySelectorAll('main table > tbody > tr.is-expanded:not(:has([data-fold-toggle]))')) {
     const line = row.nextElementSibling;
     if (!row.querySelector('[data-row-toggle]')?.checkVisibility() || row.closest('details:not([open])') || !line?.matches('.row-detail')) continue;
+    if (row.querySelector('.cell-clamp') && narrowBox(row.closest('table'))) continue;
     const drawn = [...line.querySelectorAll(':scope > td *')]
       .some((part) => part.checkVisibility() && part.getClientRects().length && box(part).height > 0);
     if (!drawn) found.push(`${describe(row)} opens a line with nothing drawn`);
@@ -957,6 +960,19 @@ CUT_TABLE = (
     + '{% table_region "Opening" %}<table class="data-table"><thead><tr>'
     '{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" %}</tr></thead><tbody>'
     + f"<tr><td>Opens</td><td>opens value far too long to show whole on one line of its column</td>{_NOTE}</tr>"
+    "</tbody></table>{% endtable_region %}"
+)
+
+# Two rows whose open line draws nothing (their state has not left): one the
+# region clamps, which opening releases in place, and one with a short value.
+CLAMP_TABLE = (
+    '{% table_region "Clamps" %}<table class="data-table"><thead><tr>'
+    '{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "State" "status" %}'
+    "</tr></thead><tbody>"
+    "<tr><td>Clamped</td><td>"
+    + " ".join(["a value that runs well past the three lines its clamp holds"] * 6)
+    + '</td><td><span class="pill">Up</span></td></tr>'
+    '<tr data-probe="plain"><td>Plain</td><td>Short</td><td><span class="pill">Up</span></td></tr>'
     "</tbody></table>{% endtable_region %}"
 )
 
