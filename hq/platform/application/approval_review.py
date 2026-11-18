@@ -82,6 +82,9 @@ class ChangePreview:
     # is said as the change itself.
     amends: bool = False
     groups: tuple[ChangeGroup, ...] = ()
+    # Whether the change is made, as an audit entry's is, so each row says
+    # what it did; one held for approval says what it would do.
+    made: bool = False
 
     @property
     def changes(self) -> tuple[ChangeRow, ...]:

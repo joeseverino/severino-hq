@@ -341,7 +341,7 @@ class AuditLogDetailView(PageMixin, DetailView):
         # What happened, and to what kind of thing, as the event's heading.
         context["event_heading"] = dotted(event.get_action_display(), event.object_type and event.type_label)
         context["changes"] = approval_review.ChangePreview(
-            label="Changes", rows=change_rows(metadata.get("changes")), lines=()
+            label="Changes", rows=change_rows(metadata.get("changes")), lines=(), made=True
         )
         # The operation's name and id are one fact, stated in its own row.
         context["operation"] = operation_words(event)

@@ -8,9 +8,10 @@ same side and leave the other blank, since the record's row says its change;
 the fields of a record that moves each say their own. A record the change
 lets do more has its rows marked for attention. The rows keep the change's
 own order, so no heading sorts them. The count is of what moves as a reader
-sees it, a record as one. Status says each row's kind of change: New,
-Changed or Removed. Where nothing stood before, every row would say New,
-so the table is Field and Value alone.
+sees it, a record as one. Status says each row's kind of change, as the
+preview's state words it: what a made change did, or what a held one would
+do. Where nothing stood before, every row would say the same, so the table
+is Field and Value alone.
 {% endcomment %}{% if not preview.empty %}
 {% section preview.label count=preview.moves|default:"" %}
   {% if bodies %}
@@ -24,7 +25,7 @@ so the table is Field and Value alone.
             <th>{% if body.rows %}{% include "partials/_row_fold.html" with label=body.head.label only %}{% endif %}{{ body.head.label|breakable }}</th>
             {% if preview.compares %}<td class="cell-data" data-side="before">{% if body.head.before %}{{ body.head.before|breakable }}{% elif body.whole %}{% empty_value %}{% endif %}</td>{% endif %}
             <td class="cell-data" data-side="after">{% if body.head.after %}{{ body.head.after|breakable }}{% elif body.whole %}{% empty_value %}{% endif %}</td>
-            {% if preview.compares %}<td>{% change_status body.head.change %}</td>{% endif %}
+            {% if preview.compares %}<td>{% change_status body.head.change preview %}</td>{% endif %}
           </tr>
           {% endif %}
           {% for row in body.rows %}
@@ -32,7 +33,7 @@ so the table is Field and Value alone.
             <th>{{ row.label|breakable }}</th>
             {% if preview.compares %}<td class="cell-data" data-side="before">{% if row.redacted and row.change != "added" %}{% muted %}redacted{% endmuted %}{% elif row.before %}{{ row.before|breakable }}{% elif not body.whole %}{% empty_value %}{% endif %}</td>{% endif %}
             <td class="cell-data" data-side="after">{% if row.redacted and row.change != "removed" %}{% muted %}redacted{% endmuted %}{% elif row.after %}{{ row.after|breakable }}{% elif not body.whole %}{% empty_value %}{% endif %}</td>
-            {% if preview.compares %}<td>{% if not body.whole %}{% change_status row.change %}{% endif %}</td>{% endif %}
+            {% if preview.compares %}<td>{% if not body.whole %}{% change_status row.change preview %}{% endif %}</td>{% endif %}
           </tr>
           {% endfor %}
         </tbody>

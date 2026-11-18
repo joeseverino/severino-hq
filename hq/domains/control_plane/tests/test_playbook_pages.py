@@ -208,10 +208,14 @@ class PlaybooksPageTests(TestCase):
                 self.assertEqual(offered[key]["change"], change)
                 self.assertEqual(offered[key]["Adopt"], _adopt(newest.pk))
                 self.assertEqual(offered[key]["Reject"], _reject(newest.pk))
-        # In the change table's own Status words.
-        for change, word in (("added", "New"), ("changed", "Changed"), ("removed", "Removed")):
+        # In the change table's own Status words for a change that waits.
+        from django.utils.html import strip_tags
+
+        from hq.platform.core.templatetags.change_tags import change_status
+
+        for change in ("added", "changed", "removed"):
             (row,) = select(html, "data-change", change)
-            self.assertIn(word, row.words)
+            self.assertIn(strip_tags(change_status(change)).strip(), row.words)
         self.assertIn("Status", " ".join(element.words for element in elements(html, "th")))
 
     def test_adopting_one_playbook_runs_only_it_from_the_new_commit_and_the_rest_still_wait(self):

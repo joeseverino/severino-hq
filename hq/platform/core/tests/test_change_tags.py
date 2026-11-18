@@ -67,13 +67,13 @@ class ChangeTableTests(SimpleTestCase):
         self.assertEqual(name.words.strip(), "example.first", "the row is named by its record alone")
         self.assertNotIn("›", html, "no row is named by its record and its field")
         (status,) = [pill for pill in in_head if "pill" in pill.classes]
-        self.assertEqual(status.words, "Changed")
         folds = head.attrs["id"]
         fields = [cell.words for cell in within(html, "data-folded", folds) if cell.tag == "th"]
         self.assertEqual(fields, ["Example effect", "Example mode"])
         self.assertEqual(_sides(html, folds), {"before": ["read", MISSING], "after": ["change", "fast"]})
         said = [pill.words for pill in within(html, "data-folded", folds) if "pill" in pill.classes]
-        self.assertEqual(said, ["Changed", "New"], "each field of a record that moves says its own change")
+        self.assertEqual(said[0], status.words, "the record and its field that moves say the same change")
+        self.assertNotEqual(said[0], said[1], "each field of a record that moves says its own change")
         self.assertFalse(with_class(html, "row-group"), "no row only says what the rows under it say")
         (foot,) = with_class(html, "section-foot")
         self.assertIn("example.second", foot.words)
@@ -154,13 +154,10 @@ class ChangeTableTests(SimpleTestCase):
 
 
 class ChangeKindTests(SimpleTestCase):
-    def test_each_row_says_in_its_status_column_whether_it_is_new_changed_or_removed_each_in_its_own_tone(self):
-        from hq.platform.application.approval_review import grouped
+    def _statuses(self, preview: ChangePreview) -> tuple[dict[str, str], dict[str, frozenset[str]]]:
+        """Each record's Status words and its pill's classes, by its name."""
 
-        before = {"example.kept": {"example_effect": "read"}, "example.gone": {"example_effect": "read"}}
-        after = {"example.kept": {"example_effect": "change"}, "example.fresh": {"example_effect": "read"}}
-        html = _drawn(grouped({"records": before}, {"records": after}, label="Would change"))
-
+        html = _drawn(preview)
         self.assertEqual(_headings(html)[-1], "Status")
         # One parse, so each cell's row and each pill's cell are the same objects.
         shown = all_elements(html)
@@ -179,5 +176,24 @@ class ChangeKindTests(SimpleTestCase):
             (name,) = [name for name in ("example.kept", "example.gone", "example.fresh") if name in row.words]
             (pill,) = [el for el in shown if "pill" in el.classes and any(a is status for a in el.ancestors)]
             said[name], tones[name] = pill.words, pill.classes
-        self.assertEqual(said, {"example.kept": "Changed", "example.gone": "Removed", "example.fresh": "New"})
+        return said, tones
+
+    def test_a_held_change_says_what_each_row_would_do_and_a_made_one_what_it_did_each_kind_in_its_own_tone(self):
+        from dataclasses import replace
+
+        from hq.platform.application.approval_review import grouped
+
+        before = {"example.kept": {"example_effect": "read"}, "example.gone": {"example_effect": "read"}}
+        after = {"example.kept": {"example_effect": "change"}, "example.fresh": {"example_effect": "read"}}
+        held = grouped({"records": before}, {"records": after}, label="Would change")
+
+        would, tones = self._statuses(held)
+        did, made_tones = self._statuses(replace(held, made=True))
+
+        self.assertEqual(set(would), {"example.kept", "example.gone", "example.fresh"})
+        self.assertEqual(len(set(would.values())), 3, "each kind of change has words of its own")
+        self.assertTrue(
+            set(would.values()).isdisjoint(did.values()), "no row of a held change reads as a change already made"
+        )
         self.assertEqual(len(set(tones.values())), 3, "each kind of change is drawn in a tone of its own")
+        self.assertEqual(tones, made_tones, "a kind keeps its tone, held or made")
