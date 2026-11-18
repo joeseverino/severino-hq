@@ -35,11 +35,7 @@ ESTATE = "hq.infrastructure"
 LOOPBACK = ("127.0.0.1", "::1")
 # The rule modules whose tests still hold their rules, each to move to
 # examples of its own; the list only shrinks.
-UNWALKED = frozenset(
-    {
-        "controller_findings",
-    }
-)
+UNWALKED: frozenset[str] = frozenset()
 
 
 def _short(module: Any) -> str:

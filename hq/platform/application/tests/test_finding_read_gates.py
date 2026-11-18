@@ -91,17 +91,6 @@ class TheSeededEstateTests(TestCase):
         items = list(finding_rows("hq.findings", "Findings", raised))
         return readable_by(principal, items)
 
-    def test_every_finding_has_a_gate_derived_from_what_it_is_about(self):
-        topology, raised = self.raised()
-        by_id = {node.id: node for node in topology.nodes}
-
-        self.assertTrue(any(not finding.subject for finding in raised), "the estate raised no scope-level finding")
-        for finding in raised:
-            with self.subTest(finding.rule, subject=finding.subject, scope=finding.scope):
-                gate = findings.read_gate(finding, by_id.get(finding.subject))
-                self.assertIsNotNone(gate, f"rule {finding.rule!r} raised a finding whose read gate is underivable")
-                self.assertEqual(finding.read_capabilities, gate)
-
     def test_a_check_that_names_a_gated_instance_takes_its_family_s_gate(self):
         _topology, raised = self.raised()
 

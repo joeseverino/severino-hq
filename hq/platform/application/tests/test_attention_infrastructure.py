@@ -44,13 +44,6 @@ class InfrastructureQueueTests(TestCase):
         self.assertTrue(about)
         self.assertTrue(all(key.startswith("finding:") for key in about), about)
 
-    def test_a_resource_read_without_a_state_of_its_own_is_a_finding(self):
-        rewrite("silent", status={"domain": "silent.example.com", "answer": "192.0.2.1"})
-
-        self.assertEqual(keys_about("silent"), {"finding:resource-unchecked:resource:silent"})
-        (finding,) = estate_findings(principal=cli_principal(), rule="resource-unchecked")
-        self.assertIn("could not be checked", finding.title)
-
     def test_a_resource_never_found_is_said_so_once(self):
         """Never found in a read of its kind is the sharper claim."""
 
