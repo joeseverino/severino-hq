@@ -248,6 +248,9 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .change > *, .change-to > * { min-width: 0; }
 .change-arrow { flex: none; color: var(--muted-2); font-weight: 400; }
 .change:has(> code) .change-arrow { font-family: var(--font-mono); font-size: .88em; }
+/* Held in a cell's clamp (cuts.css), on its row or its open line, the value before it is laid in the clamp's own lines, whose count a flex box and its blocks would escape; what it changes to stays one box of one line, set apart from the words before it. Opening the row keeps these boxes, so it moves no column. */
+.cell-clamp :is(.change, .change > :not(.change-to)) { display: inline; }
+.cell-clamp .change-to { display: inline-flex; vertical-align: top; max-inline-size: 100%; }
 /* A chip in a cell is a box of its own, which would leave a break after it, so its link lays chip and arrow out as one row: the chip gives way, the arrow stays. */
 td .external-link:has(> code:only-child) { display: inline-flex; align-items: baseline; max-width: 100%; }
 td .external-link:has(> code:only-child) > * { min-width: 0; }
