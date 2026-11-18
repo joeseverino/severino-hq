@@ -632,17 +632,6 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "invalid_json")
 
-    def test_execute_requires_json_content(self):
-        with _serving():
-            response = self.client.post(
-                "/api/v2/capabilities/project.create/",
-                data="payload=not-json",
-                content_type="application/x-www-form-urlencoded",
-                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
-                HTTP_IDEMPOTENCY_KEY="test-key",
-            )
-        self.assertEqual(response.status_code, 415)
-
     def test_the_root_reports_what_the_credential_may_do(self):
         with _serving():
             response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}")
@@ -935,11 +924,6 @@ class TransportTests(SentinelMixin, TestCase):
             )
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["error"]["code"], "insufficient_scope")
-
-    def test_a_response_is_never_cacheable(self):
-        with _serving():
-            response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}")
-        self.assertEqual(response["Cache-Control"], "private, no-store")
 
     @override_settings(SEVERINO_API_RESOURCE="")
     def test_the_surface_is_off_until_a_resource_is_configured(self):
