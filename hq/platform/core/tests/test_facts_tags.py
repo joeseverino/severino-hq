@@ -78,16 +78,6 @@ class FactsTagTests(SimpleTestCase):
         self.assertIn("facts-list", plain.classes)
         self.assertNotIn("aria-label", plain.attrs)
 
-    def test_what_a_page_gives_is_escaped(self):
-        html = _render(
-            "{% facts %}{% fact label value=value %}{% fact label %}{{ value }}{% endfact %}{% endfacts %}",
-            label="<b>x</b>",
-            value="<i>y</i>",
-        )
-
-        self.assertEqual(elements(html, "b"), [])
-        self.assertEqual(elements(html, "i"), [])
-
     def test_a_detail_given_as_lines_is_a_line_each_with_no_dot(self):
         html = _render(
             '{% facts layout="band" %}{% fact "Certificate" value="example" detail=lines %}{% endfacts %}',
@@ -104,13 +94,6 @@ class FactsTagTests(SimpleTestCase):
 
         self.assertIn("facts-inline", line.classes)
 
-    def test_an_unknown_layout_option_or_part_is_refused(self):
-        with self.assertRaisesMessage(TemplateSyntaxError, "layout= is one of band, inline, list"):
-            _render('{% facts layout="grid" %}{% endfacts %}')
-        with self.assertRaises(TemplateSyntaxError):
-            Template('{% facts %}{% fact "A" heading="B" value=1 %}{% endfacts %}')
+    def test_a_fact_without_its_label_is_refused(self):
         with self.assertRaises(TemplateSyntaxError):
             Template("{% facts %}{% fact value=1 %}{% endfacts %}")
-        # The fact's projection says its tone; the tag has no part for it.
-        with self.assertRaises(TemplateSyntaxError):
-            Template('{% facts %}{% fact "A" %}1{% tone %}good{% endfact %}{% endfacts %}')

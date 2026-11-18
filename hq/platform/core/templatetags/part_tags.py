@@ -70,6 +70,7 @@ class SectionNode(TagHelperNode):
 
     def render(self, context) -> str:
         args, options = self.get_resolved_arguments(context)
+        SECTION.held(options)
         data = {name.removeprefix("data_"): options.pop(name) for name in list(options) if name.startswith("data_")}
         heading = args[0] if args else ""
         options["moment"] = options.get("moment") or None
@@ -116,8 +117,8 @@ def compile_section(parser, token) -> SectionNode:
     )
     if not args and "moment" not in kwargs:
         raise template.TemplateSyntaxError("section takes its heading, or the moment= its heading names")
-    if unknown := sorted(name for name in kwargs if name not in options and not name.startswith("data_")):
-        raise template.TemplateSyntaxError(f"{SECTION.refused()}, not {', '.join(unknown)}")
+    if not SECTION.admits(set(kwargs)):
+        raise template.TemplateSyntaxError(SECTION.refused())
     found = {name: template.NodeList() for name in SECTION.parts}
     ahead = list(SECTION.parts)
     while True:

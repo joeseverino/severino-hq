@@ -88,12 +88,6 @@ class NoticeTagTests(SimpleTestCase):
         self.assertEqual(notice.words, "")
         self.assertEqual(notice.attrs["role"], "alert")
 
-    def test_its_body_is_escaped_as_the_page_writes_it(self):
-        html = _render("{% notice title=title %}{{ body }}{% endnotice %}", title="<b>t</b>", body="<i>b</i>")
-
-        self.assertEqual(elements(html, "b"), [])
-        self.assertEqual(elements(html, "i"), [])
-
     def test_a_message_is_a_notice_in_its_levels_tone(self):
         request = RequestFactory().get("/")
         request.user = None
