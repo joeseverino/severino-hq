@@ -1309,6 +1309,15 @@ theme is a set of token values and dark mode is not a second stylesheet.
 and none but the tokens reads `data-theme`, so an operator's chosen theme
 and the system's paint one page, and the survey, which paints each palette
 the same way, reads both.
+
+A state's color is its tone's. A part drawn in one carries the tone's class
+(`tone-good`, through `tone_class` or `{% status %}`) and reads a role the
+tone map in tokens.css sets for it: `--tone-mark` for a mark or words that
+stand alone, `--tone-ink` for words on a fill, `--tone-bg`, `--tone-tint` and
+`--tone-wash` for fills, `--tone-line` for an edge. No other rule reads a
+tone's palette (`--ok`, `--tone-caution-ink`), so a state looks one way
+wherever it stands; the button's destructive look, which is no state, is the
+one exception.
 *Gate:* `lint:css`.
 
 **Text never fades.** An opacity under 1 is for an inactive control

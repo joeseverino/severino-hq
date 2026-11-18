@@ -134,7 +134,7 @@ class RecordPageTests(TestCase):
                 page = all_elements(self.client.get(reverse("control_plane:detail", args=[record.key])))
                 (line,) = [element for element in page if element.attrs.get("data-record-status") == state]
                 tones = {
-                    element.words: {tone for tone in element.classes if tone.startswith("toned-")}
+                    element.words: {tone for tone in element.classes if tone.startswith("tone-")}
                     for element in page
                     if "toned" in element.classes and any(outer is line for outer in element.ancestors)
                 }

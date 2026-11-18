@@ -7,7 +7,7 @@ part, which says what opening it shows. The `body` part is what it opens to,
 after the `page` part, a link to the thing the rung is about: there rather
 than in the summary, since a link inside the control that opens the rung is
 a control inside a control. Its options are its Part's (ladder_tags).
-{% endcomment %}<li class="ladder-rung" data-state="{{ state }}">
+{% endcomment %}<li class="ladder-rung {{ tone }}" data-state="{{ state }}">
   {% comment %}
   <!-- ast-grep-ignore: hand-drawn-fold --> the check ladder's rung, a part of its own
   {% endcomment %}<details{{ attributes }}>

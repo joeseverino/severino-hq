@@ -78,13 +78,13 @@ class AccessTests(TestCase):
 
     def test_it_reads_allowed_then_paused_with_the_button_that_switches_it(self):
         said, button = self.state()
-        self.assertEqual((said.words, "toned-good" in said.classes), ("Allowed", True))
+        self.assertEqual((said.words, "tone-good" in said.classes), ("Allowed", True))
         self.assertEqual(button.words, "Pause all agents")
 
         self.press(button)
         self.assertTrue(agent_access.agents_paused())
         said, button = self.state()
-        self.assertEqual((said.words, "toned-attention" in said.classes), ("Paused", True))
+        self.assertEqual((said.words, "tone-attention" in said.classes), ("Paused", True))
         self.assertEqual(button.words, "Resume agents")
 
         self.press(button)

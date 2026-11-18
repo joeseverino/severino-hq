@@ -784,7 +784,7 @@ ENTRIES = {
         ' css="example" data_example="example"'
         ' lede="An example lede, the line that says what the section holds." %}'
         "<p>An example line of prose in the frame.</p>"
-        '{% aside %}<span class="pill pill-neutral">Example state</span>'
+        '{% aside %}<span class="pill tone-neutral">Example state</span>'
         ' <a class="btn ghost compact" href="/example/">Example action</a>{% endsection %}'
     ),
     # Reference text behind an info button in a section's body (partials/_about.html).
@@ -955,7 +955,7 @@ ENTRIES = {
     "part/section-in-card": Entry(
         "{% card %}<p>An example line about the card.</p>"
         '{% section "Example preview" count=2 %}<p>An example line in the inner section.</p>'
-        '{% aside %}<span class="pill pill-neutral">Example state</span>{% endsection %}{% endcard %}'
+        '{% aside %}<span class="pill tone-neutral">Example state</span>{% endsection %}{% endcard %}'
     ),
     # Muted words as a line beside a value and as a paragraph under it.
     "part/muted-beside-a-value": Entry(

@@ -175,7 +175,7 @@ class UpdatesSurfaceTests(TestCase):
         self.assertIn("/projects/alpha/#updates", hrefs(response))
         self.assertIn("1 open update", text(response))
         # The alert count is a figure, so its state is its ink, never a chip.
-        self.assertIn("2 open alerts", [figure.words for figure in with_class(response, "toned-attention")])
+        self.assertIn("2 open alerts", [figure.words for figure in with_class(response, "tone-attention")])
         self.assertEqual({project.slug for project in filtered.context["object_list"]}, {"alpha"})
 
     def test_the_record_carries_the_update_state_when_it_names_a_repository(self):
@@ -280,7 +280,7 @@ class LastRunSurfaceTests(TestCase):
                 self.assertIn(seen.label if seen else "Last ran", run.words)
                 tones = {name for element in within(response, "data-updates-run") for name in element.classes}
                 if seen:
-                    self.assertIn(f"pill-{seen.tone}", tones)
+                    self.assertIn(f"tone-{seen.tone}", tones)
                 self.assertIn("2 hours ago", state.words)
 
     def test_a_run_asked_for_and_not_yet_handed_off_says_so_and_is_followed(self):

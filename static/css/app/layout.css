@@ -241,7 +241,7 @@
 .calendar-source:hover { background: var(--bg-tint); }
 .calendar-source[aria-pressed="false"] { color: var(--muted); }
 :is(.calendar-source-note, .calendar-source-failure) { padding-inline-start: calc(var(--check-inset) + var(--check) + var(--check-gap)); color: var(--muted-2); font-size: var(--text-2xs); }
-.calendar-source-failure { color: var(--warn); font-variant-numeric: tabular-nums; }
+.calendar-source-failure { color: var(--tone-mark); font-variant-numeric: tabular-nums; }
 /* Compact, as the dashboard shows it: where things are, not what. Bars are
    slivers and lines fold away; the day opens the calendar for the rest. */
 .month-grid.is-compact .month-day { height: 2.5rem; padding: var(--space-1); }

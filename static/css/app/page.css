@@ -1,57 +1,8 @@
-/* The tone assignment every component reads, and the page's frame: section
+/* The page's frame: section
    rhythm, heads and their actions, the readings beside a title, buttons, the
    sections menu and the user menu. */
 
 @layer components {
-
-/* ── Tone assignment ─────────────────────────────────────────────────
-   The one place a tone maps to its colors, for every component that draws
-   one. A pill takes one of the four tones (`Tone`), never a word of its
-   own: a subject's states declare theirs (`Toned`), so `published`, `done`
-   and `success` cannot become three different greens.
-
-   A component decides which fill level it reads (`--tone-bg` for a chip,
-   `--tone-wash` for a banner);
-   this section decides only what the tone *is*. A notice keeps the four
-   levels Django's messages carry. */
-
-.pill-good, .notice-success, .tone-good {
-  --tone-bg: var(--tone-positive-bg);
-  --tone-wash: var(--tone-positive-wash);
-  --tone-ink: var(--tone-positive-ink);
-  --tone-line: var(--tone-positive-line);
-}
-.pill-attention, .notice-warning, .tone-attention {
-  --tone-bg: var(--tone-caution-bg);
-  --tone-wash: var(--tone-caution-wash);
-  --tone-ink: var(--tone-caution-ink);
-  --tone-line: var(--tone-caution-line);
-}
-.notice-error {
-  --tone-bg: var(--tone-critical-bg);
-  --tone-wash: var(--tone-critical-wash);
-  --tone-ink: var(--tone-critical-ink);
-  --tone-line: var(--tone-critical-line);
-}
-.notice-info {
-  --tone-bg: var(--tone-info-bg);
-  --tone-wash: var(--tone-info-wash);
-  --tone-ink: var(--tone-info-ink);
-  --tone-line: var(--tone-info-line);
-}
-.pill-serious, .tone-serious {
-  --tone-bg: var(--tone-severe-bg);
-  --tone-ink: var(--tone-severe-ink);
-  --tone-line: var(--tone-severe-line);
-}
-/* Neutral is already every component's fallback, so this assigns nothing.
-   It is still named: a pill with no tone and a pill deliberately neutral
-   look identical and are not the same claim. */
-.pill-neutral {
-  --tone-bg: var(--tone-neutral-bg);
-  --tone-ink: var(--tone-neutral-ink);
-  --tone-line: var(--tone-neutral-line);
-}
 
 /* Its top is the gap between stacked sections, never wider than its sides: the head's first line holds the page's note, so the band above it holds nothing. */
 /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the page clips what bleeds past its edge, which the layout gate holds to nothing */

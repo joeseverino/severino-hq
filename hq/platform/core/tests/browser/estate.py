@@ -658,7 +658,7 @@ class ExampleEstateControlTests(BrowserGate):
                 # The urgency the first row is at, so the answer has rows to hold.
                 offered = urgency.locator("option").evaluate_all("(options) => options.map((option) => option.value)")
                 first = self.page.locator(f"{SELECTORS['decisions']} .pill").first.get_attribute("class").split()
-                chosen = next(value for value in offered if value and f"pill-{value}" in first)
+                chosen = next(value for value in offered if value and f"tone-{value}" in first)
                 urgency.select_option(chosen)
                 with self.page.expect_navigation():
                     self.page.locator(SELECTORS["queue_apply"]).click()
@@ -669,7 +669,7 @@ class ExampleEstateControlTests(BrowserGate):
                 self.assertGreater(shown, 0)
                 self.assertLessEqual(shown, every)
                 marks = rows.locator(".pill").evaluate_all("(pills) => pills.map((pill) => [...pill.classList])")
-                self.assertEqual([mark for mark in marks if f"pill-{chosen}" not in mark], [])
+                self.assertEqual([mark for mark in marks if f"tone-{chosen}" not in mark], [])
 
     def test_a_category_opened_in_the_phone_drawer_keeps_the_drawer_open(self):
         """A category's menu lives inside the drawer that holds it, so pressing

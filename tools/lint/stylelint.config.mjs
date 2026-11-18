@@ -77,7 +77,9 @@ const disallowedValues = (keys, { floating = true } = {}) => [
   { ...keys, ...flowGrid, ...capsuleRadius, ...(floating ? floatingShadow : {}) },
   {
     message: (property, value) =>
-      matches(floatingShadow, property) && /--shadow-pop/.test(value)
+      matches(paletteTone, property) && new RegExp(paletteTone["/^.+$/"][0].slice(1, -1)).test(value)
+        ? `"${property}: ${value}" picks a tone's palette: give the element its state's tone class (\`tone_class\`) and read the role it sets (--tone-mark, --tone-ink, --tone-bg, --tone-tint, --tone-wash, --tone-line)`
+        : matches(floatingShadow, property) && /--shadow-pop/.test(value)
         ? `"${property}: ${value}" draws a floating panel of its own: an open popover is the panel base.css's \`:popover-open\` rule draws, so lay it out and leave its frame`
         : autoGrid.test(value)
         ? `"${property}: ${value}" lays out its own auto-fit grid: a run of sibling sections or cards is the flow (\`.section-flow\`, docs/Design.md); a part that lays out something else inside itself says so in a disable comment`
@@ -103,8 +105,16 @@ const strandedMark =
   "/(?<!\\\\[0-9a-f]{1,6}) (?:[·•→←↗›‹»«]|\\\\0*(?:b7|2022|2192|2190|2197|203a|2039|bb|ab)(?![0-9a-f]))/i";
 const unspokenContent = { "/^content$/": [`/^\\s*(["'])(?:(?!\\1).)+\\1\\s*$/`, strandedMark] };
 
-// What every component sheet holds its values to.
-const everySheet = { ...literalFontSize, ...spacingLiteral, ...systemColor, ...unspokenContent, ...cutText, ...readingMeasure };
+// A part draws a state in the roles its tone class sets (tokens.css, "Tones"),
+// so no rule picks a tone's palette itself: the button's destructive look,
+// which is no state, is the one other reader.
+const paletteTone = {
+  "/^.+$/": ["/var\\(--(ok|warn|danger)(?![-\\w])|var\\(--tone-(positive|caution|critical|severe|info|neutral|special)-/"],
+};
+// What every component sheet holds its values to; the button's sheet leaves out
+// the tones' palette.
+const buttonSheet = { ...literalFontSize, ...spacingLiteral, ...systemColor, ...unspokenContent, ...cutText, ...readingMeasure };
+const everySheet = { ...buttonSheet, ...paletteTone };
 
 // Capitals are for a kicker over a group, never a value's name, a state or a
 // tag, which are said in sentence case (docs/Design.md). The kicker is one
@@ -286,6 +296,11 @@ export default {
     },
     ...restyledBySheet,
     {
+      // The button's sheet draws the destructive look, which is no state.
+      files: [sheet("page")],
+      rules: { "declaration-property-value-disallowed-list": disallowedValues(buttonSheet) },
+    },
+    {
       // The one sheet that answers a reader who asks for less motion.
       files: [sheet("base")],
       rules: {
@@ -309,7 +324,7 @@ export default {
       // The one sheet that cuts text.
       files: [cuts],
       rules: {
-        "declaration-property-value-disallowed-list": disallowedValues({ ...literalFontSize, ...spacingLiteral, ...systemColor, ...unspokenContent, ...readingMeasure }),
+        "declaration-property-value-disallowed-list": disallowedValues({ ...literalFontSize, ...spacingLiteral, ...systemColor, ...unspokenContent, ...readingMeasure, ...paletteTone }),
       },
     },
     {

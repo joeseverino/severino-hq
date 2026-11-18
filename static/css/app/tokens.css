@@ -133,6 +133,7 @@
   --topology-controller: light-dark(#6c7480, #9aa2ae);
   --topology-ability: light-dark(#7b68a6, #a996d8);
   --topology-target: light-dark(#b5762d, #d99a52);
+  --topology-resource: var(--ok);
   --topology-lane-head: 44px;
 
   /* Print is a different medium: its ink is ink, not the screen palette. */
@@ -366,5 +367,58 @@
 :root[data-theme="dark"] { color-scheme: dark; }
 /* Paper is light whatever the screen was. */
 @media print { :root { color-scheme: light; } }
+
+
+/* ── Tones ─────────────────────────────────────────────────────────
+   The one place a tone maps to its colors, for every part that draws one:
+   a part carries its state's class (`tone_class`, `{% status %}`) and reads
+   the roles it sets, never a palette of its own. A tone is one of the four
+   (`Tone`), so `published`, `done` and `success` cannot become three
+   greens. A part decides which role it reads: `--tone-bg` for a chip,
+   `--tone-wash` for a banner, `--tone-tint` under a strong mark, `--tone-ink`
+   for words on a fill, `--tone-mark` for a mark or words that stand alone.
+   A notice keeps the four levels Django's messages carry. */
+.tone-good, .notice-success {
+  --tone-bg: var(--tone-positive-bg);
+  --tone-wash: var(--tone-positive-wash);
+  --tone-tint: var(--tone-positive-tint);
+  --tone-ink: var(--tone-positive-ink);
+  --tone-line: var(--tone-positive-line);
+  --tone-mark: var(--ok);
+}
+.tone-attention, .notice-warning {
+  --tone-bg: var(--tone-caution-bg);
+  --tone-wash: var(--tone-caution-wash);
+  --tone-tint: var(--tone-caution-tint);
+  --tone-ink: var(--tone-caution-ink);
+  --tone-line: var(--tone-caution-line);
+  --tone-mark: var(--warn);
+}
+.tone-serious {
+  --tone-bg: var(--tone-severe-bg);
+  --tone-tint: var(--tone-critical-tint);
+  --tone-ink: var(--tone-severe-ink);
+  --tone-line: var(--tone-severe-line);
+  --tone-mark: var(--danger);
+}
+.tone-neutral {
+  --tone-bg: var(--tone-neutral-bg);
+  --tone-ink: var(--tone-neutral-ink);
+  --tone-line: var(--tone-neutral-line);
+  --tone-mark: var(--ink-2);
+}
+.notice-error {
+  --tone-bg: var(--tone-critical-bg);
+  --tone-wash: var(--tone-critical-wash);
+  --tone-ink: var(--tone-critical-ink);
+  --tone-line: var(--tone-critical-line);
+  --tone-mark: var(--danger);
+}
+.notice-info {
+  --tone-bg: var(--tone-info-bg);
+  --tone-wash: var(--tone-info-wash);
+  --tone-ink: var(--tone-info-ink);
+  --tone-line: var(--tone-info-line);
+}
 
 }

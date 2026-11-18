@@ -10,7 +10,7 @@ drag highlight and the list of chosen files: with it unavailable the field
 still selects, validates, and submits. The hint and the errors carry the ids
 the input's aria-describedby names.
 {% endcomment %}
-<div class="field{% if field.errors %} has-errors{% endif %}">
+<div class="field{% if field.errors %} has-errors tone-serious{% endif %}">
   <label class="dropzone" data-dropzone>
     {{ field }}
     <span class="dropzone-title">{{ title|default:field.label|breakable }}</span>

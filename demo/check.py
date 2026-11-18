@@ -338,8 +338,8 @@ class DemoSiteTests(unittest.TestCase):
                 if (
                     "approved by" in shown
                     and "Finished" in shown
-                    and "pill-good" in tones
-                    and "pill-serious" not in tones
+                    and "tone-good" in tones
+                    and "tone-serious" not in tones
                 ):
                     approved.append(run)
         self.assertTrue(approved, "a playbook's runs hold one approved and finished")

@@ -526,7 +526,7 @@ class SectionPartTests(SimpleTestCase):
         )
 
         (state,) = [element for element in within(html, "id", "example") if "pill" in element.classes]
-        self.assertEqual((state.words, "pill-serious" in state.classes), ("Failed", True))
+        self.assertEqual((state.words, "tone-serious" in state.classes), ("Failed", True))
 
     def test_a_section_of_the_latest_links_to_the_rest_from_its_heading(self):
         html = _drawn(

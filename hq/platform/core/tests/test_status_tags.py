@@ -34,7 +34,7 @@ class StatusPillTests(SimpleTestCase):
     def test_its_tone_names_the_class_it_is_colored_by(self):
         pill = elements(_drawn('{% status "Blocked" tone="attention" %}'), "span")[0]
 
-        self.assertEqual(pill.attrs["class"].split(), ["pill", "pill-attention"])
+        self.assertEqual(pill.attrs["class"].split(), ["pill", "tone-attention"])
 
     def test_a_resources_health_state_takes_the_tone_every_page_draws_it_in(self):
         """A record's "drifted" or "healthy" is a state, not a class the
@@ -45,7 +45,7 @@ class StatusPillTests(SimpleTestCase):
         for state in ResourceState:
             with self.subTest(state):
                 pill = elements(_drawn("{% status label tone=state %}", label="Working", state=state), "span")[0]
-                self.assertEqual(pill.attrs["class"].split(), ["pill", f"pill-{state.tone}"])
+                self.assertEqual(pill.attrs["class"].split(), ["pill", f"tone-{state.tone}"])
 
     def test_a_subjects_state_is_drawn_in_its_own_words_and_tone(self):
         """Every subject's states carry both (a machine's, a container's, a
@@ -65,7 +65,7 @@ class StatusPillTests(SimpleTestCase):
         for state in states:
             with self.subTest(f"{type(state).__qualname__}.{state.name}"):
                 pill = elements(_drawn("{% status state %}", state=state), "span")[0]
-                self.assertEqual(pill.attrs["class"].split(), ["pill", f"pill-{state.tone}"])
+                self.assertEqual(pill.attrs["class"].split(), ["pill", f"tone-{state.tone}"])
                 self.assertEqual(pill.words.lower(), state.label.lower())
 
     def test_a_models_stored_states_each_take_one_of_the_four_tones(self):
@@ -84,7 +84,7 @@ class StatusPillTests(SimpleTestCase):
             with self.subTest(state):
                 pill = elements(_drawn("{% status state %}", state=state), "span")[0]
                 self.assertEqual(pill.words, label)
-                self.assertEqual(pill.attrs["class"].split(), ["pill", f"pill-{tone}"])
+                self.assertEqual(pill.attrs["class"].split(), ["pill", f"tone-{tone}"])
 
     def test_several_parts_are_one_label_only_the_first_cased(self):
         pill = elements(_drawn('{% status record_type "not managed" %}', record_type="cname"), "span")[0]
@@ -115,7 +115,7 @@ class StatusPillTests(SimpleTestCase):
                 drawn = elements(_drawn('{% status "+3 bpm" tone=tone pill=False %}', tone=tone), "span")[0]
                 self.assertEqual(drawn.words, "+3 bpm")
                 self.assertNotIn("pill", drawn.classes)
-                self.assertIn(f"toned-{shown}", drawn.classes)
+                self.assertIn(f"tone-{shown}", drawn.classes)
 
     def test_a_chip_is_a_name_said_as_written_in_no_tone(self):
         """A technology, a domain or a role a record carries is a name, so it
@@ -137,7 +137,7 @@ class StatusPillTests(SimpleTestCase):
                 drawn = elements(_drawn('{% status "allowed" tone=tone dot=True %}', tone=tone), "span")[0]
                 self.assertEqual(drawn.words, "Allowed")
                 self.assertNotIn("pill", drawn.classes)
-                self.assertIn(f"toned-{shown}", drawn.classes)
+                self.assertIn(f"tone-{shown}", drawn.classes)
                 self.assertIn("toned-dot", drawn.classes)
 
     def test_a_dotted_state_in_context_ink_tones_only_its_dot(self):
@@ -146,7 +146,7 @@ class StatusPillTests(SimpleTestCase):
 
         drawn = elements(_drawn('{% status "Tailnet" tone="good" dot=True ink="context" %}'), "span")[0]
         self.assertEqual(drawn.words, "Tailnet")
-        self.assertIn("toned-good", drawn.classes)
+        self.assertIn("tone-good", drawn.classes)
         self.assertIn("toned-dot", drawn.classes)
         self.assertIn("toned-ink-context", drawn.classes)
         self.assertNotIn(
@@ -171,7 +171,7 @@ class StatusPillTests(SimpleTestCase):
         html = _drawn('{% status "1 serious" tone="serious" pill=False icon="shield" %}')
         drawn = elements(html, "span")[0]
         self.assertEqual(drawn.words, "1 serious")
-        self.assertIn("toned-serious", drawn.classes)
+        self.assertIn("tone-serious", drawn.classes)
         self.assertNotIn("toned-ink-context", drawn.classes)
         (mark,) = elements(html, "svg")
         self.assertIn(drawn, mark.ancestors)
@@ -180,7 +180,7 @@ class StatusPillTests(SimpleTestCase):
         quiet = elements(
             _drawn('{% status "Up to date" tone="good" pill=False icon="check-circle" ink="context" %}'), "span"
         )[0]
-        self.assertIn("toned-good", quiet.classes)
+        self.assertIn("tone-good", quiet.classes)
         self.assertIn("toned-ink-context", quiet.classes)
         self.assertNotIn("toned-dot", quiet.classes)
 

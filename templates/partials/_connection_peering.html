@@ -44,7 +44,7 @@ internet, a lookup of the address it crosses from.
   </div>
 </div>
 
-{% partialdef carriage %}<div class="conn-carriage conn-carriage-{{ peering.id }}">
+{% partialdef carriage %}<div class="conn-carriage conn-carriage-{{ peering.id }}{% if peering.tone %} {{ peering.tone|tone_class }}{% endif %}">
   <strong>{{ peering.label|breakable }}</strong>
   {% if peering.public %}
     {% comment %}

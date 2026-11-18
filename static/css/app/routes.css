@@ -30,7 +30,7 @@
 .request-path li:first-child::before { top: 50%; }
 .request-path li:last-child::before { bottom: 50%; }
 .request-path li:only-child::before { display: none; }
-.request-path li.is-attention::before { background: var(--tone-critical-tint); }
+.request-path li.tone-serious::before { background: var(--tone-tint); }
 .request-path .hop-icon {
   position: relative;
   display: grid; place-items: center;
@@ -81,12 +81,12 @@
 .cert-mark.is-pending { color: var(--muted-2); }
 /* A hop this very request was proven to pass through: its icon in the positive
    tone, its reason on hover; the evidence is the connection page's. */
-.request-path li.is-proven .hop-icon,
-.hop-proof-key { background: linear-gradient(var(--tone-positive-bg) 0 0), var(--surface); color: var(--ok); }
+.request-path li.tone-good .hop-icon,
+.hop-proof-key { background: linear-gradient(var(--tone-bg) 0 0), var(--surface); color: var(--tone-mark); }
 .path-proof-note { display: flex; align-items: center; gap: var(--space-4); margin: var(--space-4) 0 0; color: var(--muted); font-size: var(--text-sm); }
 .hop-proof-key { display: grid; flex-shrink: 0; place-items: center; width: 20px; height: 20px; border-radius: var(--radius-sm); font-size: var(--text-sm); }
 .request-path li.is-unknown .hop-icon { background: linear-gradient(var(--line-2) 0 0), var(--surface); color: var(--muted-2); }
-.request-path li.is-attention .hop-icon { background: linear-gradient(var(--tone-critical-tint) 0 0), var(--surface); color: var(--danger); }
+.request-path li.tone-serious .hop-icon { background: linear-gradient(var(--tone-tint) 0 0), var(--surface); color: var(--tone-mark); }
 /* A note with the names in it as links. */
 .linked-text { white-space: pre-line; overflow-wrap: anywhere; }
 kbd {

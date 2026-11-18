@@ -128,7 +128,7 @@ class FiguresInChipsTests(SimpleTestCase):
         self.assertEqual(self.values(source), ["total|money", 'hops|counted:"step"', "share", "group.count|breakable"])
 
     def test_words_in_a_chip_pass(self):
-        self.assertEqual(self.values('<span class="pill pill-{{ tone }}">{{ state|breakable }}</span>'), [])
+        self.assertEqual(self.values('<span class="pill tone-{{ tone }}">{{ state|breakable }}</span>'), [])
 
     def test_a_figure_outside_a_chip_passes(self):
         source = '<span class="pill">Open</span> <span class="count">{{ n|counted:"host" }}</span> {{ total|money }}'
@@ -136,7 +136,7 @@ class FiguresInChipsTests(SimpleTestCase):
         self.assertEqual(self.values(source), [])
 
     def test_a_chip_class_set_by_a_condition_is_read(self):
-        source = '<span class="{% if serious %}pill pill-serious{% endif %}">{{ alerts|length }}</span>'
+        source = '<span class="{% if serious %}pill tone-serious{% endif %}">{{ alerts|length }}</span>'
 
         self.assertEqual(self.values(source), ["alerts|length"])
 

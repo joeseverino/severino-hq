@@ -219,8 +219,8 @@
     if (label && standing.label) {
       label.textContent = standing.label;
       // Its pill takes the state's tone with its word (work_runs.TONES).
-      const toned = [...label.classList].find((name) => name.startsWith("pill-"));
-      if (toned && standing.tone) label.classList.replace(toned, `pill-${standing.tone}`);
+      const toned = [...label.classList].find((name) => name.startsWith("tone-"));
+      if (toned && standing.tone) label.classList.replace(toned, `tone-${standing.tone}`);
     }
     const bar = control.querySelector("[data-ask-bar]");
     if (bar) {

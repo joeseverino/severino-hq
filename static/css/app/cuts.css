@@ -23,6 +23,7 @@
   color: var(--muted); visibility: visible;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- an ask's outcome is the state word ask.js writes as the work stands, which no tone class follows */
 .page-head [data-reading-age][data-ask-state="failed"]::after { color: var(--danger); }
 /* A page's note ends the head's first line (page.css), and a script fills it
    once the page is drawn. It stands in a slot as wide as its unseen struts

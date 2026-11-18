@@ -17,7 +17,7 @@ source's color alone, beside what of it a day holds:
     <li class="series-{{ source.slot }}">
       {% url 'calendar:source' source.id as source_url %}{% button source.label source_url post=True name="shown" value=source.shown|yesno:"0,1" css="calendar-source" pressed=source.shown %}
       {% if source.description %}<small class="calendar-source-note">{{ source.description|breakable }}</small>{% endif %}
-      {% if source.failure %}<small class="calendar-source-failure">{{ source.failure|breakable }}</small>{% endif %}
+      {% if source.failure %}<small class="calendar-source-failure tone-attention">{{ source.failure|breakable }}</small>{% endif %}
     </li>
   {% endfor %}
 </ul>

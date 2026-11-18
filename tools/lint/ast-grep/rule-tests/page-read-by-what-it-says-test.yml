@@ -15,7 +15,7 @@ valid:
   - 'response = render("<p>{{ value }}</p>")'
 invalid:
   - 'self.assertContains(response, "<td>Served</td>")'
-  - "self.assertContains(response, 'class=\"pill pill-good\"')"
+  - "self.assertContains(response, 'class=\"pill tone-good\"')"
   - 'self.assertNotContains(response, ">expense</a>")'
   - 'self.assertContains(response, text="<th>Name")'
   - "self.assertContains(response, '<a href=\"/x/\">Example</a>', html=True)"

@@ -83,7 +83,7 @@ READING_AGE = _part(
 PATH_HOPS = _part(
     "path_hops",
     "The hops a request takes to a service, each with the proof HQ holds of it.",
-    *("hop-body", "hop-icon", "hop-label", "hop-proof-key", "is-attention", "is-proven", "is-unknown"),
+    *("hop-body", "hop-icon", "hop-label", "hop-proof-key", "is-unknown"),
     *("path-proof-note", "request-path", "route"),
 )
 RESOLUTION_WORKFLOW = _part(
@@ -358,7 +358,7 @@ PARTS = (
         partial="projects/_repository_postures.html",
         about="Each repository's checks as a meter of those met.",
         classes=(
-            *("is-met", "is-unmet", "posture-access", "posture-meter", "posture-meter-break", "posture-repo-name"),
+            *("posture-access", "posture-meter", "posture-meter-break", "posture-repo-name"),
             *("posture-repos", "posture-score"),
         ),
         draws=(MONTH_GRID,),

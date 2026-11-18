@@ -73,33 +73,18 @@ def _form(tone_class: str, *, pill: bool, chip: bool, dot: bool, ink: Ink) -> st
     (after a dot or an icon, the words in the ink around them when ``ink`` is
     "context"), or a pill."""
 
-    # Each assigned whole to `classes`, so the stylesheet's usage check and the
-    # browser gate's selector check read the `toned-` family.
     if chip:
-        classes = "tag"
-    elif dot and ink == "context":
-        classes = f"toned toned-{_toned(tone_class)} toned-dot toned-ink-context"
-    elif dot:
-        classes = f"toned toned-{_toned(tone_class)} toned-dot"
-    elif ink == "context":
-        classes = f"toned toned-{_toned(tone_class)} toned-ink-context"
-    elif not pill:
-        classes = f"toned toned-{_toned(tone_class)}"
-    else:
-        classes = "pill"
-        if tone_class:
-            classes = f"{classes} {_PILL_TONES[Tone(tone_class)]}"
-    return classes
-
-
-# Each written whole, so a pill is colored by one of the four tones and the
-# stylesheet's usage check reads any other `pill-` rule as one nothing draws.
-_PILL_TONES = {
-    Tone.GOOD: "pill-good",
-    Tone.ATTENTION: "pill-attention",
-    Tone.SERIOUS: "pill-serious",
-    Tone.NEUTRAL: "pill-neutral",
-}
+        return "tag"
+    toned = _TONE_CLASSES[_toned(tone_class)]
+    if dot and ink == "context":
+        return f"toned {toned} toned-dot toned-ink-context"
+    if dot:
+        return f"toned {toned} toned-dot"
+    if ink == "context":
+        return f"toned {toned} toned-ink-context"
+    if not pill:
+        return f"toned {toned}"
+    return f"pill {toned}"
 
 
 def _refuse_mixed(*, tone: str, pill: bool, chip: bool, dot: bool, ink: str, icon: str) -> None:
@@ -182,19 +167,20 @@ def severity_tone(severity):
     return _severity_tone(severity)
 
 
-# Each written whole, so the stylesheet's usage check finds it.
+# Each written whole, so the stylesheet's usage check finds it: the class
+# that sets a part's tone roles (tokens.css), a pill's and a frame's alike.
 _TONE_CLASSES = {
-    Tone.GOOD: "toned-good",
-    Tone.ATTENTION: "toned-attention",
-    Tone.SERIOUS: "toned-serious",
-    Tone.NEUTRAL: "toned-neutral",
+    Tone.GOOD: "tone-good",
+    Tone.ATTENTION: "tone-attention",
+    Tone.SERIOUS: "tone-serious",
+    Tone.NEUTRAL: "tone-neutral",
 }
 
 
 @register.filter
 def tone_class(tone):
     """``class="frame {{ tone|tone_class }}"``: the class that sets a part's
-    ``--toned`` to a state's tone, for a frame or a line drawn in the color the
+    tone roles (``--tone-mark`` and kin) to a state's tone, for a frame or a line drawn in the color the
     state's `{% status %}` takes: no tone is neutral, and a word that is no
     tone is refused, as a status's is."""
 

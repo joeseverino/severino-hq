@@ -47,7 +47,7 @@
 .topology-kind-controller { background: var(--topology-controller); }
 .topology-kind-connection { background: var(--accent-2); }
 .topology-kind-ability { background: var(--topology-ability); }
-.topology-kind-resource { background: var(--ok); }
+.topology-kind-resource { background: var(--topology-resource); }
 .topology-kind-target { background: var(--topology-target); }
 .topology-kind-dependency { background: var(--muted-2); }
 .topology-node-list > * + * { margin-top: var(--space-3); }
@@ -58,7 +58,7 @@
 .topology-node {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
   gap: 1px var(--space-3); padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--line); border-left: 3px solid var(--toned);
+  border: 1px solid var(--line); border-left: 3px solid var(--tone-mark);
   border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-sm);
   cursor: pointer; scroll-margin-top: var(--topology-lane-head);
   transition: border-color 100ms ease, box-shadow 100ms ease, opacity 100ms ease;
@@ -168,7 +168,9 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
   background: var(--muted-2);
 }
 .visit-status:is(.ask[aria-busy="true"] > *, :root:has(.ask[aria-busy="true"] > #page-visit) [form="page-visit"])::before { background: var(--accent); animation: conn-pulse 1.8s ease-in-out infinite; }
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- an ask's outcome is the state word ask.js writes as the work stands, which no tone class follows */
 .visit-status:is(.ask[data-ask-state="done"] > *, :root:has(.ask[data-ask-state="done"] > #page-visit) [form="page-visit"])::before { background: var(--ok); }
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- an ask's outcome is the state word ask.js writes as the work stands, which no tone class follows */
 .visit-status:is(.ask[data-ask-state="failed"] > *, :root:has(.ask[data-ask-state="failed"] > #page-visit) [form="page-visit"])::before { background: var(--danger); }
 /* An ask: a button and how the work it asked for stands (partials/_ask.html).
    It lays nothing out of its own, so its button stands wherever a button
@@ -204,6 +206,7 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
   .ask-why { display: inline; overflow-wrap: anywhere; }
 }
 .ask-elapsed { font-variant-numeric: tabular-nums; }
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- an ask's outcome is the state word ask.js writes as the work stands, which no tone class follows */
 .ask[data-ask-state="failed"] .ask-note { color: var(--danger); }
 /* Busy keeps the button focusable, so it is marked rather than disabled. */
 .ask [aria-disabled="true"],

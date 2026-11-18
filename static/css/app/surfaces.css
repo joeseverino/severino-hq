@@ -72,7 +72,7 @@
      single row of them stands at the middle of the value's line. */
   .fact-figure > .figure-dots { align-self: flex-start; min-block-size: 1lh; align-content: center; align-items: center; }
   .figure-dot { --mark-size: 10px; position: relative; display: block; border: 1.5px solid var(--muted-2); background: none; }
-  .figure-dot.is-filled { border-color: var(--ok); background: var(--ok); }
+  .figure-dot.is-filled { border-color: var(--tone-mark); background: var(--tone-mark); }
   /* A dot that leads somewhere is hit through a square around it (page.css),
      so dots that lead somewhere are set a square apart. */
   .figure-dots:has(> a) { gap: calc(var(--target-min) - 10px); }
@@ -207,7 +207,7 @@
 /* An edged section (`edge=`) wears its tone down its frame's starting edge,
    drawn by whichever box frames it: the section framed whole,
    or its body under a head that stands above. */
-.section-edge { --surface-edge: 3px solid var(--toned); }
+.section-edge { --surface-edge: 3px solid var(--tone-mark); }
 /* A figure's own margin is the browser's; the page's stacking gives it its room. */
 :where(figure.section) { margin: 0; }
 /* A heading is never left alone at the foot of a column or a printed page:

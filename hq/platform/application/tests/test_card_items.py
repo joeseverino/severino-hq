@@ -28,7 +28,7 @@ class KpiToneTests(SimpleTestCase):
 
         (toned,) = with_class(drawn, "toned")
         self.assertEqual(toned.words, "−$40 in 30 days")
-        self.assertIn("toned-attention", toned.classes)
+        self.assertIn("tone-attention", toned.classes)
         (detail,) = with_class(drawn, "fact-detail")
         self.assertIn(detail, toned.ancestors)
 

@@ -20,6 +20,7 @@ from . import tailnet
 from .labels import dotted, human_bytes
 from .reach import network_of, on_link_networks
 from .request_channel import Channel, encryption, forwarding_of
+from .tone import Tone
 from .request_identity import Identity, identity_of
 from .request_standard import RequestFacts, ServingDeviceResolution, measure_request
 from .standards import CheckResult, Measurement, Standing
@@ -55,6 +56,12 @@ class Peering:
     @property
     def public(self) -> bool:
         return self.id == "internet"
+
+    @property
+    def tone(self) -> str:
+        """A relayed link is one to weigh: it is slower than a direct one."""
+
+        return Tone.ATTENTION if self.id == "relay" else ""
 
 
 def _peering(presence) -> Peering | None:

@@ -144,21 +144,17 @@
    colored by which way it went, with the sign and the number carrying the
    meaning, so the color is never the only thing saying it. */
 .toned { font-variant-numeric: tabular-nums; }
-.toned:where(:not(.toned-ink-context)) { color: var(--toned); }
-.toned-good { --toned: var(--ok); }
-.toned-attention { --toned: var(--warn); }
-.toned-serious { --toned: var(--danger); }
-.toned-neutral { --toned: var(--ink-2); }
+.toned:where(:not(.toned-ink-context)) { color: var(--tone-mark); }
 /* A standing state (`dot=True`): a dot in the state's tone leads its words,
    which take that tone too, or with `ink="context"` the ink around them, as a
    heading's or a menu's own words do. It never moves, since a moving dot says
    a thing is live. */
 .toned-dot { display: inline-flex; align-items: center; gap: var(--space-3); }
-.toned-dot::before { content: "" / ""; background: var(--toned); }
+.toned-dot::before { content: "" / ""; background: var(--tone-mark); }
 /* A state led by its mark (`icon=`) in place of the dot: inline, so a cell
    still cuts its words beside it, set on the words' baseline, and in the
    state's tone even where the words take the ink around them. */
-.toned > .icon { vertical-align: -0.15em; color: var(--toned); }
+.toned > .icon { vertical-align: -0.15em; color: var(--tone-mark); }
 /* Its words are a state or a name, never a figure in a column of figures, so
    they keep the face's own digits and the cell no wider than they need. */
 .toned:has(> .icon) { font-variant-numeric: normal; }
@@ -224,7 +220,9 @@
 /* Its line is held while the work has nothing to say, so the panel keeps its
    height as the note comes and goes. */
 .job-note { display: block; min-block-size: 1lh; color: var(--muted); font-size: var(--text-sm); }
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- an ask's outcome is the state word ask.js writes as the work stands, which no tone class follows */
 .job-progress:is([data-state="failed"], [data-state="lost"]) .job-bar { color: var(--danger); }
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- an ask's outcome is the state word ask.js writes as the work stands, which no tone class follows */
 .job-progress[data-state="succeeded"] .job-bar { color: var(--ok, var(--accent)); }
 /* Reduced motion: the sweep is decoration. The bar still fills. */
 /* stylelint-disable-next-line media-feature-name-disallowed-list -- a still band drawn in place of the sweep base.css stops */

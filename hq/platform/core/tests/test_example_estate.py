@@ -171,7 +171,7 @@ class ExampleEstateTests(TestCase):
         self.assertEqual({option.attrs["value"] for option in chosen}, {"", *RULE_LABELS})
         for option in chosen:
             (setting,) = [element for element in option.ancestors if element.tag == "select"]
-            self.assertIn(f"toned-{RULE_TONES.get(option.attrs['value'], 'neutral')}", setting.classes)
+            self.assertIn(f"tone-{RULE_TONES.get(option.attrs['value'], 'neutral')}", setting.classes)
         self.assertTrue(select(page, "data-unavailable"), "a cell past an agent's grant")
         # An agent a viewer signed in: what of its grant is in force, and what is beyond their role.
         row = " ".join(element.words for element in within(page, "data-client", "example-reader"))

@@ -26,6 +26,13 @@ class Standing(StrEnum):
     UNMET = "unmet"
     UNAVAILABLE = "unavailable"
 
+    @property
+    def tone(self) -> Tone:
+        """The tone a rung of a check ladder is drawn in: a check that cannot
+        be read is one to look at, never a fault."""
+
+        return {Standing.MET: Tone.GOOD, Standing.UNMET: Tone.SERIOUS, Standing.UNAVAILABLE: Tone.ATTENTION}[self]
+
 
 # A result, not a standing: a check failed on purpose, for a declared reason.
 INTENDED = "intended"

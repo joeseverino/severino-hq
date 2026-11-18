@@ -212,7 +212,7 @@ class SectionTagTests(SimpleTestCase):
 
         (landmark,) = elements(edged, "section")
         self.assertIn("section-edge", landmark.classes)
-        self.assertIn("toned-attention", landmark.classes)
+        self.assertIn("tone-attention", landmark.classes)
         self.assertNotIn("section-edge", elements(plain, "section")[0].classes)
         self.assertEqual(
             [(e.tag, e.words) for e in all_elements(edged)[1:]], [(e.tag, e.words) for e in all_elements(plain)[1:]]
