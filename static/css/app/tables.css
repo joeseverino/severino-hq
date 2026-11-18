@@ -37,9 +37,10 @@
   --row-gutter: calc(2 * var(--row-edge) + 1.5rem);
   /* A row's tick-box, which a row of one cell across the table steps past. */
   --tick-box: 16px;
-  /* A column's share of its region while every column stands: the region's width over one more than the table's count of columns, read from its headings, less a cell's padding. The one more is kept for what a column asks past its share (a state's line, a row's name among its controls). What a value holds whole, or the line a long one keeps, is never more than that share, so the table's columns together never ask more than their region. */
+  /* A column's share of its region while every column stands: the region's width over one more than the table's count of columns, read from its headings, less a cell's padding. The one more (`--spare`) is kept for what a column asks past its share (a state's line, a row's name among its controls); a narrow box keeps two where a state stands. What a value holds whole, or the line a long one keeps, is never more than that share, so the table's columns together never ask more than their region. */
   --columns: 1;
-  --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-6, 0) + 1) - 2 * var(--cell-pad));
+  --spare: 1;
+  --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-6, 0) + var(--spare)) - 2 * var(--cell-pad));
   inline-size: 100%; border-collapse: collapse;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm);
 }
@@ -346,6 +347,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .data-table .narrow-only { display: none; }
 @container table-region (width < 36rem) {
   .data-table { --cell-pad: var(--space-4); }
+  /* A state keeps its line however long, so beside one (`data-states`, table_cells) each other column's share is less. */
+  .data-table[data-states] { --spare: 2; }
   .data-table > tbody { --row-pad: var(--space-3); }
   .data-table .row-columns { gap: var(--space-3) var(--space-4); padding: 0; background: none; }
   .data-table .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-3); }

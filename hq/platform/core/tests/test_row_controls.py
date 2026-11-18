@@ -108,16 +108,17 @@ class RowControlsTests(SimpleTestCase):
                 )
                 self.assertEqual(len([each for each in all_elements(html) if each.tag == "select"]), 1)
 
-    def test_a_key_column_takes_no_rank(self):
-        """Words every row must show (a change's two sides) never leave, and a
-        cell that says nothing is marked so."""
+    def test_a_key_column_leaves_only_at_the_narrowest_rank(self):
+        """Words every row must show (a change's two sides) stay until the
+        narrowest box, then move to the row's open line, and a cell that says
+        nothing is marked so."""
 
         rows = "<tr><td>Example</td><td>one</td><td></td><td>three</td></tr>"
         head = '{% table_heading "Name" gutter=True %}{% table_heading "Before" css="key-col" %}'
         html = _table(rows, head=head + '{% table_heading "After" css="key-col" %}{% table_heading "Note" %}')
         cells = [each for each in all_elements(html) if each.tag == "td"][1:3]
         self.assertEqual(["data-blank" in each.attrs for each in cells], [False, True])
-        self.assertEqual(_ranks(html), [None, None, None, "6"])
+        self.assertEqual(_ranks(html), [None, "6", None, "6"])
 
     def test_a_table_that_ranks_no_column_lets_its_spare_ones_go_only_when_narrow(self):
         """A table whose headings rank nothing keeps what names and states
