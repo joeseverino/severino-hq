@@ -93,7 +93,7 @@ SELECTORS = {
     "nav_drawer": ".primary-nav",
     "nav_toggle": "[popovertarget=primary-navigation]",
     # The dashboard's domain overviews, and the row its calendar leads.
-    "highlights": ".section-flow > .section:has(> .section-body > .facts-band.is-large)",
+    "highlights": ".section-flow > .section:has(> .section-body > .facts-band.is-lead)",
     "patterns": ".section-flow:has(> #dashboard-calendar) > .section",
     "glance": ".page-head .facts-band > .fact",
     # The dashboard's strip of counts across HQ, by the name it gives a reader.

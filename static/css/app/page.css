@@ -340,7 +340,9 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    another, a section's links in the sections drawer, leaves the outer open),
    and hands focus back to the button. The panel hangs from its own button,
    the scope keeping each to its own; its containing block is the viewport,
-   so where it would cross the screen it flips to the button's other edge. */
+   so where it would cross the page's gutter (its margin on the side it grows
+   toward, which the flip carries to the other side) it flips to the button's
+   other edge. */
 [data-menu] { anchor-scope: --menu; }
 [data-menu] > [popovertarget] { anchor-name: --menu; }
 [data-menu] > [popover] {
@@ -348,7 +350,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   position-area: block-end span-inline-start;
   position-try-fallbacks: flip-inline;
   inset: auto;
-  margin: var(--space-3) 0 0;
+  margin: var(--space-3) 0 0 var(--content-pad);
   color: inherit;
 }
 /* Each panel says how it is laid out open; closed, it is not drawn. */
