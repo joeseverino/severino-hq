@@ -116,10 +116,10 @@ class DecisionTests(SimpleTestCase):
 
     def test_the_named_page_leads_when_nothing_else_is_recommended(self):
         check = read_link("verify", "Check again", "/example/check/")
-        shown = decision(self.item(url="/example/plan/", action="Upgrade plan for example", check=check))
+        shown = decision(self.item(url="/example/plan/", action="Upgrade plan", check=check))
 
         self.assertEqual(
-            [action["label"] for action in shown["actions"] if action["recommended"]], ["Upgrade plan for example"]
+            [action["label"] for action in shown["actions"] if action["recommended"]], ["Upgrade plan"]
         )
 
     def test_a_reason_is_a_sentence_and_never_a_numbered_step(self):

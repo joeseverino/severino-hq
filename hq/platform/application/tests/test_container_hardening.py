@@ -331,7 +331,7 @@ class FindingHelpTests(TestCase):
 
         item = self.items()["container-image-update", "kuma"]
 
-        self.assertEqual(item.primary.label, "Upgrade plan for kuma")
+        self.assertEqual(item.primary.label, "Upgrade plan")
         self.assertTrue(item.primary.url.endswith("/example-box-kuma/#upgrade"))
         self.assertIn(reverse("control_plane:containers"), [link.url for link in item.pages])
 

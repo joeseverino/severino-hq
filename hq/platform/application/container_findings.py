@@ -291,7 +291,7 @@ def _plan(item: Container) -> ActionLink:
 
     if plan_for(item) is None or not item.running.watcher:
         return _containers()
-    return opens(f"Upgrade plan for {item.running.name}", f"{item.url}#upgrade")
+    return opens("Upgrade plan", f"{item.url}#upgrade")
 
 
 def _adopt(item: Container, intent: str) -> FindingRemedy:
