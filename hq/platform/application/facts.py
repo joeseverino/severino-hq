@@ -543,12 +543,12 @@ def connection_facts(connection_ref: str, provider: str) -> tuple[tuple[str, str
     for spec in OBSERVATIONS.values():
         if spec.provider != provider:
             continue
-        for record in _records_for_connection(spec.kind, connection_ref):
+        for record in records_for_connection(spec.kind, connection_ref):
             found.extend(fact for fact in spec.facts(record) if fact not in found)
     return tuple(found)
 
 
-def _records_for_connection(kind: str, connection_ref: str) -> Iterator[Mapping[str, Any]]:
+def records_for_connection(kind: str, connection_ref: str) -> Iterator[Mapping[str, Any]]:
     """The records of one kind's readable snapshots that speak for ``connection_ref``:
     its own, and those naming no connection."""
 

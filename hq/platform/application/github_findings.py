@@ -3,13 +3,19 @@
 GitHub records nothing a person can read when a leaked App key or token is
 used for reads, so what everything else spent of the installation's hour,
 beside HQ's own sweeps, is the one sign there is (docs/Security.md). The
-allowance reading carries it, and puts it on the connection's node once it
-passes ``OTHERS_SPENT_ATTENTION`` (``observations.github``).
+allowance reading carries it (``observations.github``), and the rule is
+gathered: it reads each GitHub connection's allowance records, and speaks
+once their spend passes ``OTHERS_SPENT_ATTENTION``.
 """
 
-from hq.domains.control_plane.observations.github import OTHERS_SPENT, OTHERS_SPENT_ATTENTION
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
 
-from .finding_model import Finding, FindingEstate, FindingRule, connections_carrying
+from hq.domains.control_plane.observations.github import ALLOWANCE_KIND, OTHERS_SPENT_ATTENTION, PROVIDER
+
+from .facts import records_for_connection
+from .finding_model import Finding, FindingEstate, FindingRule
 from .finding_steps import Do, Run
 from .moments import moment, when
 from .tone import Tone
@@ -47,17 +53,41 @@ def _between(since: str, until: str) -> str:
     return f"between {when(start)} and {when(end)}"
 
 
+@dataclass(frozen=True, slots=True)
+class OthersSpent:
+    """What everything besides HQ's sweeps spent of one installation's hour."""
+
+    account: str
+    requests: int
+    since: str
+    until: str
+
+
+def _others_spent(record: Mapping[str, Any]) -> OthersSpent | None:
+    """What an allowance record says others spent, once it passes ``OTHERS_SPENT_ATTENTION``."""
+
+    spent = record.get("others_spent")
+    if spent is None or int(spent) < OTHERS_SPENT_ATTENTION:
+        return None
+    return OthersSpent(
+        str(record.get("account", "")), int(spent), str(record.get("others_since", "")), str(record["started_at"])
+    )
+
+
 def others_spent(estate: FindingEstate) -> tuple[Finding, ...]:
     """A GitHub App connection whose installation something besides HQ's
     sweeps spent more of in one hour than the deploy pipeline and the
     dependency update run take."""
 
     found = []
-    for node, values in connections_carrying(estate, OTHERS_SPENT):
-        for value in values:
-            account, requests, since, until = [*value.split("|"), "", "", ""][:4]
-            between = _between(since, until)
-            spent = f"{int(requests):,}"
+    for node in estate.nodes():
+        if node.kind != "connection" or node.provider != PROVIDER:
+            continue
+        said = (_others_spent(record) for record in records_for_connection(ALLOWANCE_KIND, node.connection_ref))
+        for spend in dict.fromkeys(item for item in said if item is not None):
+            account = spend.account
+            between = _between(spend.since, spend.until)
+            spent = f"{spend.requests:,}"
             on = f" on {account}" if account else ""
             found.append(
                 Finding(
@@ -88,6 +118,7 @@ RULES: tuple[FindingRule, ...] = (
         "Something besides HQ spends its App's hourly allowance",
         Tone.ATTENTION,
         others_spent,
+        gathered=True,
         operator_action=("Delete every App key on GitHub that is not HQ's, then rotate HQ's."),
         no_help_reason="HQ cannot see or delete the App's keys: GitHub lists them only on the App's settings page.",
         bars={Tone.ATTENTION: "something besides HQ spends the App's requests in an hour"},

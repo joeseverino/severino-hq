@@ -256,9 +256,6 @@ ALLOWANCE_KIND = "github.allowance"
 # dependency update run take of it, a few requests a deploy and some hundreds
 # a day: more than that is something else holding the App's key or a token.
 OTHERS_SPENT_ATTENTION = 1000
-# The fact a connection's node carries once others' spend passes it, as
-# ``account|requests|since|until``.
-OTHERS_SPENT = "github-others-spent"
 
 
 class AllowanceRecord(ObservationRecord):
@@ -311,16 +308,6 @@ def with_others_spent(last: Iterable[Mapping[str, Any]], records: list[dict[str,
     for record in records:
         record["others_spent"], record["others_since"] = _others(earlier.get(_installation(record)), record)
     return records
-
-
-def _allowance_facts(record: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
-    spent = record.get("others_spent")
-    if spent is None or int(spent) < OTHERS_SPENT_ATTENTION:
-        return ()
-    value = "|".join(
-        (str(record.get("account", "")), str(spent), str(record.get("others_since", "")), str(record["started_at"]))
-    )
-    return ((OTHERS_SPENT, value),)
 
 
 def _allowance(record: Mapping[str, Any]) -> str:
@@ -401,7 +388,6 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("account", "") or record.get("installation", "")),
         describe=_allowance,
         relation="Hourly allowance of",
-        facts=_allowance_facts,
         from_last=with_others_spent,
     ),
 )
