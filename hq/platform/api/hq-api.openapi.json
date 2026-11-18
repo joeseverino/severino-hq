@@ -6044,7 +6044,7 @@
                 "type": "null"
               }
             ],
-            "description": "What names the record it acts on: `slug`, `doc_id`, `integer` or `key`; null for a command that takes none."
+            "description": "What names the record it acts on: `slug`, `doc_id`, `integer`, `key` or `client_id`; null for a command that takes none."
           },
           "target_help": {
             "description": "What to send as the target, in a sentence; empty for none.",

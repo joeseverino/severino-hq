@@ -20,7 +20,7 @@ from jwt import PyJWK, PyJWKClient
 
 from . import own_devices
 from .linked_accounts import sign_in_subject
-from .own_devices import REGISTERED_CLIENT_ID
+from .own_devices import REGISTERED
 from .security import (
     AuthorizationError,
     Principal,
@@ -338,7 +338,7 @@ def _require_a_persons_client(claims: dict[str, Any], person_key: str) -> None:
     """
 
     client = str(claims.get("client_id") or "")
-    if not REGISTERED_CLIENT_ID.fullmatch(client):
+    if not REGISTERED.fullmatch(client):
         raise AuthorizationError(
             f"This token carries {DEVICE_SCOPE!r} but names no registered client in `client_id`. "
             "Grant that scope only to your own device clients on the Pocket ID API resource."

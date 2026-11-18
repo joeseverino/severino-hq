@@ -8,6 +8,7 @@ from dataclasses import dataclass, fields as dataclass_fields, is_dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Any, TypeAliasType, Union, get_args, get_origin, is_typeddict
 
+from django.db.models import BigIntegerField
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from .contracts import Effect
@@ -27,18 +28,32 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class TargetKind:
-    """How a declared target binds to and is coerced for a capability."""
+    """How a declared target binds to and is coerced for a capability, and
+    the pattern a text target of the kind matches whole, which every door
+    refuses the rest by and the API document states."""
 
     keyword: str
     coerce: Callable[[Any], Any]
+    pattern: str = ""
 
+
+# What an integer target may be sent as besides a number: the digits of an
+# id, a digit fewer than the most a record's id may be, so every one is an id
+# the number form takes.
+INTEGER_TARGET = rf"^[1-9][0-9]{{0,{len(str(BigIntegerField.MAX_BIGINT)) - 2}}}$"
+
+# A client the identity provider registered. A client known only by a Client
+# ID Metadata Document is named by a URL, which this refuses, so one opt-in
+# covering every such client can never reach a person's standing.
+REGISTERED_CLIENT_ID = r"^[A-Za-z0-9._-]+$"
 
 # One declaration drives spec validation, handler binding and request coercion.
 TARGET_KINDS: dict[str, TargetKind] = {
     "slug": TargetKind("current_slug", str),
     "doc_id": TargetKind("current_doc_id", str),
-    "integer": TargetKind("current_id", int),
+    "integer": TargetKind("current_id", int, INTEGER_TARGET),
     "key": TargetKind("current_key", str),
+    "client_id": TargetKind("current_client_id", str, REGISTERED_CLIENT_ID),
 }
 
 

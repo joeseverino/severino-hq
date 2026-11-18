@@ -720,7 +720,7 @@ CORE_CAPABILITY_SPECS = (
         Capability.GOVERN_AGENTS,
         OwnDeviceCommand,
         set_own_device,
-        "key",
+        "client_id",
         target_label="Client",
         target_help="The client id Pocket ID registered for your device.",
         execution_notes=(

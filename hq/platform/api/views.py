@@ -39,7 +39,7 @@ from hq.platform.application.agent_access import AgentRefusal
 from hq.platform.application.agent_limits import Limited
 from hq.platform.application.answer_fields import Outcome, Pinned
 from hq.platform.application.approvals import is_held
-from hq.platform.application.call_envelope import ENVELOPE_SCHEMA, INTEGER_TARGET, read_body
+from hq.platform.application.call_envelope import ENVELOPE_SCHEMA, read_body
 from hq.platform.application.capabilities import (
     CapabilitiesVersion,
     CapabilityDescription,
@@ -56,6 +56,7 @@ from hq.platform.application.integration_specs import (
     CURRENT_API_VERSION,
     IDEMPOTENCY_HEADER,
     RESERVED_QUERY_FIELD,
+    TARGET_KINDS,
     CapabilitySpec,
     answer_type,
 )
@@ -269,10 +270,12 @@ def _target(kind: str, words: str) -> dict[str, Any]:
 
     # An id is the envelope's own (``RecordId``), whose definition the body's schema carries.
     number = ENVELOPE_SCHEMA["properties"]["target"]["anyOf"][0]
+    pattern = TARGET_KINDS[kind].pattern
+    text: dict[str, Any] = {"type": "string", **({"pattern": pattern} if pattern else {"minLength": 1})}
     schema: dict[str, Any] = (
-        {"oneOf": [number, {"type": "string", "pattern": INTEGER_TARGET}], "examples": [42]}
+        {"oneOf": [number, text], "examples": [42]}
         if kind == "integer"
-        else {"type": "string", "minLength": 1, "examples": [f"example-{kind.replace('_', '-')}"]}
+        else {**text, "examples": [f"example-{kind.replace('_', '-')}"]}
     )
     return {
         **schema,
