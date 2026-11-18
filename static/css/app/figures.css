@@ -16,7 +16,7 @@
     --surface-inset: initial;
   }
 
-  /* A band of tracks (insights) lays out as whole even rows by how many cells it has (seven or more as rows of six, four, three, two or one), read off the band itself, so no page says how many it holds and none is left with three over one; cells are counted, not children. A band of facts lays its cells out by what they hold (below). */
+  /* A band of tracks (insights) lays out as whole even rows by how many cells it has (seven or more as rows of six, four, three, two or one), read off the band itself, so no page says how many it holds and none is left with three over one; cells are counted, not children. A band of facts lays its cells out as even columns (below). */
   /* stylelint-disable declaration-property-value-disallowed-list -- a band's cells in one frame, counted into whole rows */
   &:not(.facts-band):has(> :nth-child(1 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(100%, 1fr)); }
   &:not(.facts-band):has(> :nth-child(2 of :not(dialog)):nth-last-child(1 of :not(dialog))) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-2-1), 1fr)); }
@@ -239,10 +239,11 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .external-link:not(td *, th *) > code :is(.token, .cut, .whole) { background: inherit; border-radius: inherit; }
 
 /* A band of facts (`{% facts layout="band" %}`): the few figures that sum up a page or a part, each a cell drawn as a figure is: its label, its mark before it, over its value over its detail. `size="large"` sets the values as a page's headline figures. */
-/* Its cells are sized by what they hold, a wrapping flex row of cells whose basis is their content (`flex: 1 1 auto`), as a cluster layout wraps its items: each starts at its own widest line, the room left over is shared among a row's cells, and a cell takes the next row only when the band has no room for it, so a label wraps only in a band too narrow for it on one line. Each cell is its own stack, top-aligned, its value right under its label. The band draws its edges as every band does (`data-band`, above). In a frame with more in it (a section's body, a card that holds more than the band) the facts stand apart by gaps and draw no edges, the frame's padding their inset, as a card's figures do. */
+/* Its cells are even columns, as many as its width holds at a cell's floor, so a long detail wraps in its cell and never takes a row for the cell alone. Each cell is its own stack, top-aligned, its value right under its label. In a frame with more in it (a section's body, a card that holds more than the band) the facts stand apart by gaps and draw no edges, the frame's padding their inset, as a card's figures do. */
 .facts-band {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a band's cells as even columns, as many as its width holds */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
   margin: 0 0 var(--stack-gap);
   /* A container's width is its frame's, never its facts', so in a flex row (a card that lays out its parts in one) it would size to nothing; it takes a line of its own there instead. */
   container: band / inline-size;
@@ -253,7 +254,6 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band:where(:not(.card:not(.section-body) > :only-child)) { --band-gap: var(--space-6) var(--space-12); --band-rules: none; overflow: visible; }
 .facts-band > .fact {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--space-2);
   min-width: 0;
@@ -302,7 +302,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band.is-lead .fact-value { font-size: var(--text-4xl); }
 .facts-band.is-lead > .fact:first-child .fact-value { font-size: var(--text-display); letter-spacing: -.04em; line-height: 1.1; }
 @container band (width < 46rem) {
-  .facts-band.is-lead > .fact:first-child { flex-basis: 100%; }
+  .facts-band.is-lead > .fact:first-child { grid-column: 1 / -1; }
   .section-body > .facts-band.is-lead > .fact:first-child { padding-block-end: var(--space-8); border-block-end: 1px solid var(--line-2); }
 }
 /* Small figures read across, as a forecast's hours are: as many to a line as the band holds, each centered over its few characters, and a note under one marked, since one is said only where something stands out. */
