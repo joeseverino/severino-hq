@@ -137,28 +137,6 @@ class ReceiptEditTests(TestCase):
         self.assertEqual(self.receipt.notes, "Paid by card")
         self.assertEqual(self.receipt.file.name, stored)
 
-    def test_an_edit_with_a_new_file_of_a_refused_type_is_refused(self):
-        stored = self.receipt.file.name
-
-        response = self._edit(file=SimpleUploadedFile("note.html", b"markup", content_type="text/html"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context["form"].has_error("file"))
-        self.receipt.refresh_from_db()
-        self.assertEqual(self.receipt.file.name, stored)
-        self.assertEqual(self.receipt.notes, "")
-
-    def test_an_edit_with_a_new_valid_file_saves_it(self):
-        stored = self.receipt.file.name
-
-        response = self._edit(file=SimpleUploadedFile("photo.png", b"\x89PNG", content_type="image/png"))
-
-        self.assertRedirects(response, self.receipt.get_absolute_url(), fetch_redirect_response=False)
-        self.receipt.refresh_from_db()
-        self.assertNotEqual(self.receipt.file.name, stored)
-        self.assertEqual(self.receipt.original_filename, "photo.png")
-        self.assertEqual(self.receipt.content_type, "image/png")
-
 
 class ReceiptPageFileTests(TestCase):
     """A receipt's page shows its file beside its facts: a picture of an

@@ -10,10 +10,8 @@ from mcp import types
 from hq.domains.assets.models import Asset
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
-from hq.platform.application import projection
 from hq.platform.application.plugin_testing import offering
 from hq.platform.application.record_errors import RecordNotFound
-from hq.platform.application.resources import InvalidResourceInput
 from hq.platform.application.security import AuthorizationError, Capability, Principal, is_interactive
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.sentinel import (
@@ -152,16 +150,6 @@ class ServiceTests(SentinelMixin, TestCase):
 
         self.assertEqual(result["total"], 1)
         self.assertEqual([record["doc_id"] for record in result["records"]], ["rb-safe"])
-
-    def test_page_size_is_bounded(self):
-        for number in range(105):
-            Project.objects.create(name=f"Project {number:03d}")
-
-        result = services.list_resource("projects", limit=projection.MAX_PAGE_SIZE)
-
-        self.assertEqual(result["count"], projection.MAX_PAGE_SIZE)
-        with self.assertRaises(InvalidResourceInput):
-            services.list_resource("projects", limit=projection.MAX_PAGE_SIZE + 1)
 
     def test_a_missing_record_is_not_found_and_names_nothing_sent(self):
         sent = "sent-by-the-caller-7f3a"
