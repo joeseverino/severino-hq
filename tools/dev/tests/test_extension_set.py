@@ -174,6 +174,15 @@ class CoordinatedBranchTests(SimpleTestCase):
         self.assertIn("pass/x", picked.said)
         self.assertEqual(picked.at, ((str(self.extensions), self.git(self.extensions, "rev-parse", "pass/x")),))
 
+    def test_a_worktree_named_on_the_command_line_is_composed_as_it_stands(self):
+        chosen = self.work / "chosen"
+        self.git(self.extensions, "worktree", "add", "-q", "-b", "pass/y", str(chosen), "main")
+        self.declare(chosen, 2, "chosen")
+        self.environ["HQ_LOCAL_PYTHONPATH"] = str(chosen / "packages/alpha/src")
+        picked = self.picked()
+        self.assertEqual(picked.sources, (str(chosen / "packages/alpha/src"),))
+        self.assertNotIn("pass/x", picked.said)
+
     def test_a_tree_landing_on_the_default_branch_or_detached_keeps_the_named_set(self):
         for switch in (("-c", "from-main", "main"), ("--detach", "pass/x")):
             with self.subTest(switch=switch):
