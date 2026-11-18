@@ -79,6 +79,8 @@
     element.classList.remove(...toned);
     if (tone) element.classList.add(`tone-${tone}`);
   };
+  const toneOf = (element) =>
+    [...(element?.classList ?? [])].find((name) => name.startsWith("tone-"))?.slice("tone-".length) ?? "";
 
   const say = (control, text, word = "") => {
     const note = noteOf(control);
@@ -140,7 +142,10 @@
     if (!line) return;
     const state = control.dataset.askState;
     const said = state === "failed" ? text || word : state === "idle" ? "" : document.body.dataset.askRefreshing;
-    line.dataset.askState = state;
+    // Speaking for the work, the line takes its note's tone; speaking for its
+    // reading again, the tone the server drew it with.
+    if (!("drawnTone" in line.dataset)) line.dataset.drawnTone = toneOf(line);
+    retone(line, said ? (state === "failed" ? toneOf(noteOf(control)) : "") : line.dataset.drawnTone);
     if (said) {
       line.dataset.askSaid = said;
       line.title = said;
@@ -221,9 +226,10 @@
       if (standing.live) button.setAttribute("aria-disabled", "true");
       else button.removeAttribute("aria-disabled");
     });
-    say(control, standing.note || "", standing.label || "");
+    // Toned first, so the head's line echoing the note takes its new tone.
     const note = noteOf(control);
     if (note) retone(note, standing.tone || "");
+    say(control, standing.note || "", standing.label || "");
     tick(control);
     const label = control.querySelector("[data-ask-label]");
     if (label && standing.label) {

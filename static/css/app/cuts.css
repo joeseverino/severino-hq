@@ -15,7 +15,8 @@
 /* A head is one short line, and stays so: what one of its controls says is
    said over the head's reading line (ask.js, partials/_ask.html), in the room the words the
    server drew there keep, hidden and not removed, and cut to their width,
-   whole in its title. A failure says its sentence in the danger tone. */
+   whole in its title. A failure says its sentence in its note's tone, which
+   the line takes while it speaks for the work (ask.js). */
 .page-head [data-reading-age][data-ask-said] { position: relative; color: transparent; }
 .page-head [data-reading-age][data-ask-said] * { visibility: hidden; }
 .page-head [data-reading-age][data-ask-said]::after {
@@ -23,8 +24,7 @@
   color: var(--muted); visibility: visible;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-/* stylelint-disable-next-line declaration-property-value-disallowed-list -- an ask's outcome is the state word ask.js writes as the work stands, which no tone class follows */
-.page-head [data-reading-age][data-ask-state="failed"]::after { color: var(--danger); }
+.page-head [data-reading-age][data-ask-said]:is(.tone-attention, .tone-serious)::after { color: var(--tone-mark); }
 /* A page's note ends the head's first line (page.css), and a script fills it
    once the page is drawn. It stands in a slot as wide as its unseen struts
    (_visit_refresh.html), each a sentence HQ writes word for word with the
