@@ -15,17 +15,19 @@ reading's own "not read" rule when it was taken and, where the bridge refused
 the report that would have replaced it, why.
 """
 
-import json
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Any, ClassVar, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Self
+
+if TYPE_CHECKING:
+    from hq.domains.control_plane.models import RefusedReport
 
 from .core_capabilities import CONTROLLER_REFRESH
-from .finding_model import Finding, FindingEstate, FindingRemedy, cannot_run_commands, fact_values
+from .finding_model import Finding, FindingEstate, FindingRemedy, cannot_run_commands
 from .finding_steps import Do, Run
 from .freshness import LAST_READ, freshness
-from .moments import moment, when
+from .moments import when
 from .tone import Tone
 from .topology_model import TopologyNode, derived_id
 from .ui import ended
@@ -36,9 +38,6 @@ lazy from .topology_estate import machine_nodes
 # Why a reading holds no record, when the reading itself is what failed.
 UNREAD = "unread"
 REFUSED = "refused"
-
-# A call of the controller's the bridge refused, as JSON.
-REFUSED_REPORT = "refused-report"
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,13 +101,6 @@ def _reached(nodes: Mapping[str, TopologyNode], machine: Callable[[Any], str], r
     return nodes.get(node_id) or TopologyNode(id=node_id, kind="target", label=ref, subtitle="Machine")
 
 
-def _on_controller(
-    nodes: dict[str, TopologyNode], machine: Callable[[Any], str], controller: str, found: tuple[tuple[str, str], ...]
-) -> None:
-    node = placed(nodes, machine, controller)
-    nodes[node.id] = replace(node, facts=node.facts + found)
-
-
 def onto_machine(
     nodes: dict[str, TopologyNode], machine: Callable[[Any], str], ref: str, found: tuple[tuple[str, str], ...]
 ) -> None:
@@ -121,40 +113,38 @@ def onto_machine(
 def add_readers(
     nodes: dict[str, TopologyNode], machine: Callable[[Any], str], rows: Iterable[type[ReadingRow]]
 ) -> None:
-    """The node each stored row of ``rows`` is about, where none stands yet,
-    so a finding about it has a node to be read through."""
+    """The node each stored row of ``rows``, and each open refusal, is about,
+    where none stands yet, so a finding about it has a node to be read through."""
 
     for row in rows:
         for snapshot in snapshots_of(row.KIND):
             for item in row.rows(snapshot):
                 node = placed(nodes, machine, snapshot.controller_id, item.through)
                 nodes.setdefault(node.id, node)
-
-
-def add_refusals(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
-    """One fact per open refusal (``refused_reports``), on the node of the
-    controller it refused."""
-
     for refusal in open_refusals():
-        said = json.dumps([refusal.action, refusal.detail, refusal.refused_at.isoformat()])
-        _on_controller(nodes, machine, refusal.controller_id, ((REFUSED_REPORT, said),))
+        node = placed(nodes, machine, refusal.controller_id)
+        nodes.setdefault(node.id, node)
 
 
-@dataclass(frozen=True, slots=True)
-class OpenRefusal:
-    """A refusal as its controller's node carries it."""
+def _about[T](estate: FindingEstate, items: Iterable[tuple[str, str, T]]) -> tuple[tuple[TopologyNode, list[T]], ...]:
+    """Each ``(controller, through, item)`` on the node ``placed`` puts it on,
+    by node in the projection's order."""
 
-    action: str
-    detail: str
-    refused_at: datetime | None
+    nodes = {node.id: node for node in estate.nodes()}
+    machine = machine_nodes()
+    found: dict[str, tuple[TopologyNode, list[T]]] = {}
+    for controller, through, item in items:
+        node = placed(nodes, machine, controller, through)
+        found.setdefault(node.id, (node, []))[1].append(item)
+    order = {node_id: index for index, node_id in enumerate(nodes)}
+    return tuple(found[node_id] for node_id in sorted(found, key=lambda node_id: order.get(node_id, len(order))))
 
 
-def refusals_on(node: TopologyNode) -> tuple[OpenRefusal, ...]:
-    found = []
-    for value in fact_values(node, REFUSED_REPORT):
-        action, detail, at = json.loads(value)
-        found.append(OpenRefusal(action, detail, moment(at)))
-    return tuple(found)
+def refusals(estate: FindingEstate) -> tuple[tuple[TopologyNode, tuple[RefusedReport, ...]], ...]:
+    """Each open refusal (``refused_reports``), by the node of the controller it refused."""
+
+    found = _about(estate, ((refusal.controller_id, "", refusal) for refusal in open_refusals()))
+    return tuple((node, tuple(items)) for node, items in found)
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,20 +159,17 @@ class Read[R: ReadingRow]:
 def read[R: ReadingRow](estate: FindingEstate, row: type[R]) -> tuple[Read[R], ...]:
     """Each node the stored rows of ``row.KIND`` are about, in the projection's order."""
 
-    nodes = {node.id: node for node in estate.nodes()}
-    machine = machine_nodes()
-    found: dict[str, tuple[TopologyNode, list[R], list[datetime]]] = {}
-    for snapshot in snapshots_of(row.KIND):
-        for item in row.rows(snapshot):
-            node = placed(nodes, machine, snapshot.controller_id, item.through)
-            _node, rows, taken = found.setdefault(node.id, (node, [], []))
-            rows.append(item)
-            if snapshot.observed_at:
-                taken.append(snapshot.observed_at)
-    order = {node_id: index for index, node_id in enumerate(nodes)}
+    found = _about(
+        estate,
+        (
+            (snapshot.controller_id, item.through, (item, snapshot.observed_at))
+            for snapshot in snapshots_of(row.KIND)
+            for item in row.rows(snapshot)
+        ),
+    )
     return tuple(
-        Read(node, tuple(rows), max(taken, default=None))
-        for node_id, (node, rows, taken) in sorted(found.items(), key=lambda item: order.get(item[0], len(order)))
+        Read(node, tuple(item for item, _at in items), max((at for _item, at in items if at), default=None))
+        for node, items in found
     )
 
 
@@ -249,7 +236,7 @@ class Unjudged:
 
     node: TopologyNode
     taken: datetime
-    refusal: OpenRefusal | None
+    refusal: RefusedReport | None
 
     @property
     def explanation(self) -> str:
@@ -284,7 +271,8 @@ class Unjudged:
 def unjudged(estate: FindingEstate, row: type[ReadingRow]) -> Iterator[Unjudged]:
     """Each node whose reading of ``row.KIND`` is too old to judge."""
 
+    refused = {node.id: held for node, held in refusals(estate)}
     for found in read(estate, row):
         if found.taken is not None and freshness(row.KIND, found.taken, estate.now).stale:
-            refusal = next((item for item in refusals_on(found.node) if item.action == READINGS_ACTION), None)
+            refusal = next((item for item in refused.get(found.node.id, ()) if item.action == READINGS_ACTION), None)
             yield Unjudged(found.node, found.taken, refusal)

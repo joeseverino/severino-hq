@@ -523,8 +523,8 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
 
 def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
     """What provider-specific joins add: unrecognized container, tailnet
-    device, refused report, certificate and renewal facts, and the node each
-    machine reading is about."""
+    device, certificate and renewal facts, and the node each machine reading
+    and refused report is about."""
 
     if estate.machine.ids:
         docker_estate.add(nodes, estate.machine)
@@ -540,7 +540,6 @@ def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
         ),
     )
     tailnet_device_findings.add(nodes, estate.machine)
-    reading_facts.add_refusals(nodes, estate.machine)
     reference_findings.add(nodes, resources)
     certificate_expiry.add_renewals(nodes)
     by_ref, by_provider = _reader_index(nodes)
