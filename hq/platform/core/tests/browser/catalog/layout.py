@@ -91,8 +91,8 @@ class MeasuredPartTests(BrowserGate):
         draws no map it reads none and finds nothing, as it does on the
         map's entry when it reads the map."""
 
-        source, (_map, *rest) = survey.CHECKS["map"].probe
-        blind = replace(survey.CHECKS["map"], probe=(source, ["[data-matches-nothing]", *rest]))
+        source, selectors = survey.CHECKS["map"].probe
+        blind = replace(survey.CHECKS["map"], probe=(source, ["[data-matches-nothing]", *selectors[1:]]))
         self.open(_MAP_ENTRY, WIDE)
         self.assertEqual(self.geometry(_MAP_ENTRY, WIDE)["map"], [])
         with mock.patch.dict(survey.CHECKS, {"map": blind}):
