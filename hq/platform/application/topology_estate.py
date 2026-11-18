@@ -541,11 +541,18 @@ def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
     )
     tailnet_device_findings.add(nodes, estate.machine)
     reference_findings.add(nodes, resources)
-    certificate_expiry.add_renewals(nodes)
+    certificate_expiry.held(nodes, estate.machine)
+
+
+def readers_of(
+    nodes: dict[str, TopologyNode], machine: Callable[[Any], str]
+) -> tuple[Callable[[Joined], tuple[str, ...]], Callable[[Any, Any], tuple[str, ...]]]:
+    """Who took a reading, and whom a provider's record was read through,
+    among ``nodes``, making sure a node stands for each."""
+
     by_ref, by_provider = _reader_index(nodes)
-    certificate_expiry.add(
-        nodes,
-        lambda joined: _readers(joined, by_ref, by_provider, nodes, estate.machine),
+    return (
+        lambda joined: _readers(joined, by_ref, by_provider, nodes, machine),
         lambda provider, record: _holding(provider, record, by_ref, by_provider, nodes),
     )
 
