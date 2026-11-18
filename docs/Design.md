@@ -194,17 +194,18 @@ Each column that may leave has a rank, 1 first
 (`{% table_heading ... drop=N %}`). A list's ranks are derived by `ranked`:
 `optional-col` first, then from the far end. It never ranks the column that
 names the row, one marked `key-col`, or the closing figure of a table that
-marks none. The region turns a table's ranks into at most six levels from the
-widest (`data-drop`, `table_cells`): its first rank leaves while the region is
-narrower than 64rem, its next below 56rem, and so on down to 24rem, by six
-container-query rules written once in tables.css. Nothing is measured, so a
-column may leave a box that could still hold it. What leaves shows on the
+marks none. The region turns a table's ranks into at most four levels from
+the widest (`data-drop`, `table_cells`): its first rank leaves while the region
+is narrower than 64rem, its next below 56rem, then 48rem and 40rem, by four
+container-query rules written once in tables.css, and any rank past the fourth
+leaves with it. So a narrow box holds only the columns a row keeps. Nothing is
+measured, so a column may leave a box that could still hold it. What leaves shows on the
 row's open line. The gates fail a table that runs past its card.
 
 A table whose headings rank no column has its ranks derived by the region
 (`table_cells`), by the rule `ranked` follows, and lets them go only at the
 narrowest widths: its far column at the widest of them and its nearest below
-24rem, so it keeps every column until a narrow box and a hand-written table
+40rem, so it keeps every column until a narrow box and a hand-written table
 needs no rank of its own to fit a phone. A column holding a button stands,
 since a cell held back holds none. This is the column-priority pattern of
 jQuery Mobile's and Tablesaw's column toggle (six priorities, each shown from
@@ -243,8 +244,9 @@ the section or card around a table is one already, often by the same name.
 as tall as its rows up to a fixed reading height, as the topology ledger is,
 and scrolls past it. A table is never swiped through: in a narrow box its
 ranked columns have left. A column of words every row must show, such as a
-change's two sides, is a `key-col`, which takes no rank, since a rank would
-hide it behind the row's toggle.
+change's two sides, is a `key-col`, which takes no rank and never leaves,
+nor does the closing figure of a table that marks none: a table whose kept
+columns cannot stand at a phone's width declares too many keys.
 
 A key/value table (row headers, no `thead`) sizes its label column to its
 longest label.
@@ -264,12 +266,8 @@ row's record ends the row as `{% row_actions actions %}`, under a heading of
 kind `control`. Each is a `PageAction` drawn as a compact control with its
 middle on the first line's. A page never draws a button in a cell (*Gate:* the
 `hand-drawn-row-actions` rule). A row's controls stand side by side on one
-line, which their column asks for, and the words beside them wrap first. The
-line is held to the room the column is sure of, its own share and the one kept
-spare (`cell-controls`, `table_cells`); past it, or where the table has less
-room than its columns ask, the controls wrap between them: their column asks
-for no more than its widest control, so no row of controls holds its table
-wider than its region.
+line, which their column asks for, and the words beside them wrap first; in a
+narrow box they take the row's last line (below).
 Every row's controls end on one edge, and each draws its edge of its own but
 the last, which is quiet only when it sets the row aside (`put_away`, a
 button). A cell of the row's actions is a control whatever its heading says.
@@ -283,21 +281,35 @@ row: its list of columns (`.row-columns`) is drawn only while one of its
 entries is, so a row with nothing gone opens to its controls alone and no
 empty box. *Gates:* the survey's `rows unruled` and `empty panels`.
 
-**A narrow box keeps its table a table.** Below 36rem of its region (the
-`table-region` container query in tables.css) every ranked column has left
-for the row's open line, and what stands keeps the browser's table layout:
-the naming column, a row's state, its controls, a field it fills in and any
-`key-col`, each under its heading. A state keeps its line, so beside one each
-other column leaves a rank sooner, and below every rank's width (20rem) the
-state goes to the open line last. *Gates:* `tables` in the layout survey,
-which fails a table not laid out as one, and the survey's `row state kept`.
+**A narrow box keeps its rows under their headings.** Below 36rem of its
+region (the `table-region` container query in tables.css) every column a row
+can spare has left for the row's open line, and what stands is the naming
+column, each `key-col` (or the closing figure), a row's state (its pills, or
+any column under a heading of kind `status`), a field it fills in and its
+controls, each under its heading. Below every rank's width (20rem) the state
+goes to the open line last; a key never does. A name's least width is its
+longest word, so another column gives way before a name breaks inside one; a
+hash or key with no break in it may break anywhere (cuts.css).
 
-**A row's controls are a column of the table.** The rows' actions, or a
-column of kind `control`, stand at every width beside the row's words, every
-one in the row's cell (`{% row_actions %}`, with its order and mark). They
-stand side by side and wrap between them only where the row runs out of
-room. A label keeps one line, cut at its end where its column has less room
-than it asks, so no control holds its table wider than its box. A field a reader fills in (a select) is the row's value, so a
+A table cell cannot take a line of its own, so a narrow table whose rows hold
+labeled controls is a grid of its columns' tracks instead, each row a subgrid
+of them: the headings, the cells under them, the open line and a group's
+heading keep their place and their roles (table, row, column header, cell, in
+WebKit and Chromium), and the heading still pins. A row's labeled controls
+take its last line: at the end of the line of notes its name ends with
+(`dot_list`: its date, its source) where the name stands alone in its row,
+else on a line of their own from where its name starts, wrapping only between
+whole controls. A row of icon controls (a star, the order arrows) keeps them
+at its end on its first line. *Gates:* the survey's `tables` (each cell a row
+shows stands under its column's heading, and no row draws a column's label),
+`rows unruled` (a row's bottom edge is ruled, whichever cell draws it),
+`overlaps` (what two boxes draw never crosses) and `row state kept` (a key, a
+state or a field never leaves early).
+
+**A row's controls stand in the row.** The rows' actions, or a column of kind
+`control`, stand at every width in the row, every one in the row's cell
+(`{% row_actions %}`, with its order and mark), side by side on one line, all
+one size. A label keeps one line, uncut. A field a reader fills in (a select) is the row's value, so a
 column holding one never leaves, and in a cell it fills its cell and gives
 way with its column. The reader's way to set a row aside (`row_actions
 put_away=`, the queue's Dismiss) is the last of its buttons, drawn quiet.

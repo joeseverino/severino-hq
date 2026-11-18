@@ -131,8 +131,7 @@
 .pill.is-mark { padding: 0 var(--space-3); font-size: var(--text-xs); line-height: 1.5; font-weight: 600; }
 /* A row dismissed in place (app.js): its title, quiet, and the way back, the button that posts its key (action_tags.triage). */
 [data-attention-item][data-dismissed] > .row-gutter > :not(.row-line),
-[data-attention-item][data-dismissed] > .row-actions > :not(button[name="key"], .cell-controls),
-[data-attention-item][data-dismissed] > .row-actions > .cell-controls > :not(button[name="key"]),
+[data-attention-item][data-dismissed] > .row-actions > :not(button[name="key"]),
 [data-attention-item][data-dismissed] .pill.is-mark { display: none; }
 [data-attention-item][data-dismissed] [data-attention-title] { color: var(--muted); font-weight: 400; }
 [data-attention-item][data-dismissed] [data-attention-title]::before { content: "Dismissed: " / "Dismissed: "; }

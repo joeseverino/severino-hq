@@ -42,14 +42,39 @@ TABLES = (
     "() => {"
     + DESCRIBE
     + """
-  // A table is laid out by the browser's table layout (tables.css) at every
-  // width, which keeps every cell under its column's heading, and its
+  // Every cell a row shows stands under its column's heading (its span
+  // covers the heading's), no row draws a column's label in itself, and the
   // headings are drawn.
   const width = document.documentElement.clientWidth;
-  const tabled = (table) => getComputedStyle(table).display === 'table'
-    && [...table.querySelectorAll(':scope > * > tr')].filter((row) => row.checkVisibility())
-      .every((row) => getComputedStyle(row).display === 'table-row'
-        && [...row.cells].every((cell) => !cell.checkVisibility() || getComputedStyle(cell).display === 'table-cell'));
+  const said = (el) => el.textContent.replace(/\\s+/g, ' ').trim();
+  const columns = (row) => {
+    const placed = [];
+    let at = 0;
+    for (const cell of row.cells) {
+      placed.push([at, cell]);
+      at += cell.colSpan;
+    }
+    return placed;
+  };
+  const unplaced = (table, headings) => {
+    const over = new Map(columns(headings).filter(([, th]) => th.checkVisibility()).map(([at, th]) => [at, th]));
+    const labels = new Set([...over.values()].map(said).filter(Boolean));
+    const wrong = [];
+    for (const row of table.querySelectorAll(':scope > tbody > tr:not(.row-detail, .row-group)')) {
+      if (!row.checkVisibility()) continue;
+      for (const [at, cell] of columns(row)) {
+        if (!cell.checkVisibility()) continue;
+        const drawn = getComputedStyle(cell, '::before').content.replace(/^"|"$/g, '');
+        if (labels.has(drawn)) wrong.push(`a row draws the label ${drawn}`);
+        const heading = cell.colSpan === 1 && over.get(at);
+        if (!heading) continue;
+        const c = cell.getBoundingClientRect();
+        const h = heading.getBoundingClientRect();
+        if (c.left > h.left + 1 || c.right < h.right - 1) wrong.push(`${said(cell).slice(0, 16) || 'a cell'} stands outside its heading ${said(heading).slice(0, 16)}`);
+      }
+    }
+    return wrong;
+  };
   const found = [];
   let seen = 0;
   let undrawn = 0;
@@ -63,12 +88,12 @@ TABLES = (
     }
     seen += 1;
     const name = describe(table);
-    if (!tabled(table)) found.push(`${name} is not laid out as a table`);
-    const head = table.querySelector('thead');
-    const headings = head ? [...head.querySelectorAll(':scope > tr:last-child > th')] : [];
+    const head = table.querySelector(':scope > thead > tr:last-child');
+    const headings = head ? [...head.cells] : [];
     if (headings.length && !headings.some((heading) => heading.checkVisibility())) {
       found.push(`${name} hides its column headings`);
     }
+    if (head) for (const wrong of new Set(unplaced(table, head))) found.push(`${name}: ${wrong}`);
     let scroller = table.parentElement;
     while (scroller && scroller !== document.body && !scrolls(scroller)) scroller = scroller.parentElement;
     if (!scroller || scroller === document.body) {
@@ -479,9 +504,10 @@ EMPTY_PANELS = (
 
 
 # Every row of a table is ruled off from the row after it across the whole
-# table, as one reads where a row ends: a rule drawn under the row, its
-# cells or the row's open line beneath it. A row's own open line joins it
-# with no rule, and a group's heading row is set apart by its fill.
+# table, as one reads where a row ends: a rule along the row's bottom edge,
+# drawn by the row or by whichever of its cells stand on that edge. A row's
+# own open line joins it with no rule, and a group's heading row is set apart
+# by its fill.
 ROWS_UNRULED = (
     "() => {"
     + DESCRIBE
@@ -494,11 +520,20 @@ ROWS_UNRULED = (
     rows.forEach((row, at) => {
       const next = rows[at + 1];
       if (!next || next.matches('.row-group') || next.matches('[data-row-detail]') && next.previousElementSibling === row) return;
-      const cells = [...row.children].filter((cell) => cell.checkVisibility() && cell.getBoundingClientRect().width >= 1);
-      const bare = cells.filter((cell) => !ruled(cell));
-      if (!ruled(row) && bare.length) {
+      if (ruled(row)) return;
+      const edge = row.getBoundingClientRect();
+      // The stretches of the row's bottom edge its ruled cells draw, joined.
+      const drawn = [...row.children]
+        .filter((cell) => cell.checkVisibility() && ruled(cell))
+        .map((cell) => cell.getBoundingClientRect())
+        .filter((r) => r.width >= 1 && Math.abs(r.bottom - edge.bottom) <= 1)
+        .map((r) => [r.left, r.right])
+        .sort((a, b) => a[0] - b[0]);
+      let reach = edge.left;
+      for (const [left, right] of drawn) if (left <= reach + 1) reach = Math.max(reach, right);
+      if (reach < edge.right - 1) {
         const said = (row.innerText || '').trim().replace(/\\s+/g, ' ').slice(0, 24);
-        found.push(`${describe(table)}: "${said}" has no rule beneath ${bare.length === cells.length ? 'it' : `${bare.length} of its ${cells.length} cells`}`);
+        found.push(`${describe(table)}: "${said}" has no rule along ${Math.round(edge.right - reach)}px of its bottom edge`);
       }
     });
   }
@@ -507,11 +542,12 @@ ROWS_UNRULED = (
 )
 
 
-# What a reader changes in a row (a field) never leaves with a column a narrow
-# box lets go, and what a row is (its state, a cell its pills say) leaves only
-# once no other column that can leave still stands: a row without them no
-# longer says what it is or does what it is for while a column it could
-# spare stands in their place.
+# What a reader changes in a row (a field) and what a row is read by (a
+# `key-col`, or the closing figure of a table that marks none) never leave
+# with a column a narrow box lets go, and what a row is (its state, a cell
+# its pills say) leaves only once no other column that can leave still
+# stands: a row without them no longer says what it is or does what it is
+# for while a column it could spare stands in their place.
 STATE_LEFT = (
     "() => {"
     + DESCRIBE
@@ -525,6 +561,16 @@ STATE_LEFT = (
     const spared = [...cell.parentElement.children].some((other) => other.matches('[data-drop]') && other.checkVisibility());
     const held = cell.querySelector('select, textarea, input:not([type="hidden"])') || (stated && spared ? pills[0] : null);
     if (held) found.push(`${describe(cell)} "${(cell.dataset.label || '').slice(0, 30)}" leaves with its column, holding ${describe(held)}`);
+  }
+  for (const head of document.querySelectorAll('main table.data-table > thead > tr:last-child')) {
+    if (!head.closest('table').checkVisibility()) continue;
+    const cells = [...head.cells].filter((th) => !th.matches('[data-blank-column], .wide-only'));
+    const keys = cells.filter((th) => th.matches('.key-col'));
+    const closing = cells.findLast((th) => !th.matches('[data-kind="control"]'));
+    const read = keys.length ? keys : closing && closing.matches('[data-kind="numeric"]') ? [closing] : [];
+    for (const key of read) {
+      if (!key.checkVisibility()) found.push(`${describe(key)} "${key.textContent.trim().slice(0, 30)}" leaves, though its rows are read by it`);
+    }
   }
   return found;
 }"""
@@ -935,7 +981,10 @@ ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-det
 CHECKS = {
     "cells": Check(CELLS, table=True, reader_sees="a cell's content running out of its cell"),
     "tables": Check(
-        TABLES, table=True, findings=lambda report: report["found"], reader_sees="a table wider than its box"
+        TABLES,
+        table=True,
+        findings=lambda report: report["found"],
+        reader_sees="a table wider than its box, a cell away from its heading or a heading drawn in a row",
     ),
     "tables fit": Check(
         (TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]),
@@ -958,7 +1007,7 @@ CHECKS = {
     "empty panels": Check(EMPTY_PANELS, table=True, reader_sees="a panel in a table with nothing in it"),
     "rows unruled": Check(ROWS_UNRULED, table=True, reader_sees="two rows with no rule between them"),
     "row state kept": Check(
-        STATE_LEFT, table=True, reader_sees="a row's state or its field gone with a column a narrow box let go"
+        STATE_LEFT, table=True, reader_sees="a row's state, key or field gone with a column a narrow box let go"
     ),
     "cut and closed": Check(
         (CUT_AND_CLOSED, SELECTORS["unseen"]), table=True, reader_sees="a cut value with no way to read it whole"

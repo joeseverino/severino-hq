@@ -117,14 +117,11 @@
   .cell-clamp .line-list { display: inline; }
   .cell-clamp .tag { padding-block: 0; }
 }
-/* An identifier (a hash, a key, a host) or a row's name (its own part, never
-   its cell's other words) may break anywhere, so one with no break in it
-   asks its column for no more than a letter: the table still gives each
-   column its whole line when the box holds it. A pill, a state in words,
-   breaks only inside a word wider than its column, as prose does
-   (tables.css), so its column holds its words whole. */
-.data-table > tbody > tr > [data-kind="identifier"],
-.data-table > tbody > tr > * :is(code:not(.cell-whole), .token, [data-cell~="name"]) { overflow-wrap: anywhere; }
+/* A hash or a key, which has no break in it, may break anywhere, so it asks
+   its column for no more than a letter. A name or a host breaks only at its
+   words and the breaks it is drawn with, so its column asks for its longest
+   word and another column gives way first. */
+.data-table > tbody > tr > * :is(code:not(.cell-whole), .token) { overflow-wrap: anywhere; }
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }

@@ -252,6 +252,26 @@ OVERLAPS = (
     "() => {"
     + DESCRIBE
     + """
+  // What a reader sees of an item is what it draws: its words and the boxes
+  // of what it holds to press or fill in, else its own box, so two items
+  // whose boxes cross are judged by what each draws there.
+  const pressed = 'img, svg, canvas, video, iframe, input, select, textarea, button, a.btn, .pill';
+  const drawn = (el) => {
+    const rects = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim() || !node.parentElement.checkVisibility()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      rects.push(...range.getClientRects());
+    }
+    for (const part of el.querySelectorAll(pressed)) if (part.checkVisibility()) rects.push(part.getBoundingClientRect());
+    return rects.length ? rects : [el.getBoundingClientRect()];
+  };
+  const cross = (ra, rb) => [
+    Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left),
+    Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top),
+  ];
   const found = [];
   for (const parent of document.querySelectorAll('main *')) {
     const display = getComputedStyle(parent).display;
@@ -262,9 +282,13 @@ OVERLAPS = (
       for (let j = i + 1; j < items.length; j += 1) {
         const [a, , ra] = items[i];
         const [b, , rb] = items[j];
-        const x = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
-        const y = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
-        if (x > 1 && y > 1) found.push(`${describe(a)} overlaps ${describe(b)} by ${Math.round(x)}x${Math.round(y)}px`);
+        const [x, y] = cross(ra, rb);
+        if (x <= 1 || y <= 1) continue;
+        const inA = drawn(a);
+        const inB = drawn(b);
+        const worst = inA.flatMap((da) => inB.map((db) => cross(da, db))).filter(([dx, dy]) => dx > 1 && dy > 1)
+          .sort((m, n) => n[0] * n[1] - m[0] * m[1])[0];
+        if (worst) found.push(`${describe(a)} overlaps ${describe(b)} by ${Math.round(worst[0])}x${Math.round(worst[1])}px`);
       }
     }
   }
