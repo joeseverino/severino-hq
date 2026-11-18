@@ -343,7 +343,7 @@ def table_region(parser: Any, token: Any) -> RegionNode:
 
 
 # The template contract reads a tag's declaration from what it wraps.
-table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
+TABLE_REGION = table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
     name="table_region",
     about=(
         "The box a table fits, which draws what follows from its headings, and, with no rows, the one empty "
@@ -621,21 +621,19 @@ slotted(
     ),
     library=register,
 )
-slotted(
-    Part(
-        name="row_actions",
-        about="The cell that ends a row with what can be done to its record, each a compact control.",
-        partial="partials/_row_actions.html",
-        function=row_actions,
-        public=True,
-        example=(
-            '{% table_region "Example actions" %}<table class="data-table"><tbody><tr><td>{{ row.name }}</td>'
-            "{% row_actions row.actions %}</tr></tbody></table>{% endtable_region %}"
-        ),
-        public_classes=("row-actions",),
+ROW_ACTIONS = Part(
+    name="row_actions",
+    about="The cell that ends a row with what can be done to its record, each a compact control.",
+    partial="partials/_row_actions.html",
+    function=row_actions,
+    public=True,
+    example=(
+        '{% table_region "Example actions" %}<table class="data-table"><tbody><tr><td>{{ row.name }}</td>'
+        "{% row_actions row.actions %}</tr></tbody></table>{% endtable_region %}"
     ),
-    library=register,
+    public_classes=("row-actions",),
 )
+slotted(ROW_ACTIONS, library=register)
 slotted(
     Part(
         name="row_select",

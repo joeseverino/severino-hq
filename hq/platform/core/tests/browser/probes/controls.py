@@ -1,5 +1,6 @@
 """Probes of controls drawn as controls: their words on one line, and one height to a row."""
 
+from hq.platform.core.templatetags.table_tags import ROW_ACTIONS
 from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, TEXT_SHOWN
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -149,8 +150,10 @@ ACTIONS_BESIDE_SQUEEZED_WORDS = (
     ruler.remove();
     return width;
   };
+  let read = 0;
   for (const cell of document.querySelectorAll(cells)) {
     if (!cell.checkVisibility()) continue;
+    read += 1;
     const controls = [...cell.querySelectorAll(pressed)]
       .filter((el) => el.checkVisibility() && !el.parentElement.closest(pressed) && box(el).width >= 2);
     if (!controls.length) continue;
@@ -169,7 +172,7 @@ ACTIONS_BESIDE_SQUEEZED_WORDS = (
       found.push(`${describe(cell)} stands "${said}" beside words wrapped in ${room.toFixed(1)}px, under their ${line.toFixed(1)}px line`);
     }
   }
-  return found;
+  return {read, found};
 }"""
 )
 
@@ -229,6 +232,7 @@ CHECKS = {
             [SELECTORS["row_actions_cell"], ROW_WORDS],
         ),
         reader_sees="a row's words squeezed a few to a line beside its buttons",
+        part=ROW_ACTIONS,
     ),
     "words swapped for a glyph": Check(
         (WORDS_SWAPPED_FOR_A_GLYPH, SELECTORS["pressed"]),

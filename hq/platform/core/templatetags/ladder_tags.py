@@ -44,29 +44,27 @@ slotted(
     ),
     library=register,
 )
-slotted(
-    Part(
-        name="check_rung",
-        example='{% check_ladder %}{% check_rung state="unmet" kind="Tailnet" %}Example policy admits the device{% body %}<p>Example HQ could not read the policy.</p>{% endcheck_rung %}{% endcheck_ladder %}',
-        classes=(
-            *("ladder-body", "ladder-check", "ladder-detail", "ladder-evidence", "ladder-kind", "ladder-mark"),
-            *("ladder-more", "ladder-page", "ladder-rung", "ladder-statement"),
-        ),
-        partial="partials/_check_rung.html",
-        about=(
-            "One rung of a `{% check_ladder %}`: its tick, its statement with any `detail` part, and its `more` "
-            "part saying what opening it shows; it opens to its `body` part, after the `page` part's link to "
-            "what it is about."
-        ),
-        parts=("content", "detail", "more", "page", "body"),
-        options={
-            "state": Option(choices=("", *Standing), about="How its check stands, unavailable when not read."),
-            "kind": Option(about="What kind of check it is."),
-            "evidence": Option(about="What it was read from."),
-            "open": Option(about="Drawn opened."),
-        },
-        data=True,
-        shape=rung_frame,
+CHECK_RUNG = Part(
+    name="check_rung",
+    example='{% check_ladder %}{% check_rung state="unmet" evidence="192.0.2.10" %}Example policy admits the device{% body %}<p>Example HQ could not read the policy.</p>{% endcheck_rung %}{% endcheck_ladder %}',
+    classes=(
+        *("ladder-body", "ladder-check", "ladder-detail", "ladder-evidence", "ladder-kind", "ladder-mark"),
+        *("ladder-more", "ladder-page", "ladder-rung", "ladder-statement"),
     ),
-    library=register,
+    partial="partials/_check_rung.html",
+    about=(
+        "One rung of a `{% check_ladder %}`: its tick, its statement with any `detail` part, and its `more` "
+        "part saying what opening it shows; it opens to its `body` part, after the `page` part's link to "
+        "what it is about."
+    ),
+    parts=("content", "detail", "more", "page", "body"),
+    options={
+        "state": Option(choices=("", *Standing), about="How its check stands, unavailable when not read."),
+        "kind": Option(about="What kind of check it is."),
+        "evidence": Option(about="What it was read from."),
+        "open": Option(about="Drawn opened."),
+    },
+    data=True,
+    shape=rung_frame,
 )
+slotted(CHECK_RUNG, library=register)

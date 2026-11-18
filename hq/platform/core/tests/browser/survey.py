@@ -88,13 +88,24 @@ def survey_checks(path, width, scripted=True):
     return [*geometry_probes(scripted), *palette_probes(), "fills"]
 
 
-def _as_is(value):
-    return value
+def findings_of(check, returned, value, drawn=None, on=""):
+    """What ``check``'s probe returned or threw as its findings on the page
+    ``on``, which draws the part ``drawn`` (its catalog entry's): a probe that
+    threw is a finding of its own check, so it hides no other, and one that
+    measures a part (`Check.part`) and read none of it on the page that draws
+    it has measured nothing, which is a finding too."""
 
-
-# What turns a probe's value into its check's findings, where that is not the
-# value itself.
-AS_FINDINGS = {name: check.findings for name, check in CHECKS.items() if check.findings}
+    if not returned:
+        return [f"the probe threw: {value}"]
+    declared = CHECKS.get(check)
+    if declared is None or declared.part is None:
+        return declared.findings(value) if declared is not None and declared.findings else value
+    if not isinstance(value, dict) or not {"read", "found"} <= value.keys():
+        return [f"its probe names a part, so says how much of it it read as {{read, found}}, not {value!r}"]
+    found = list(value["found"])
+    if drawn is declared.part and not value["read"]:
+        found.append(f"measured nothing on {on}, which draws {declared.part.name or declared.part.partial}")
+    return found
 
 
 # A region waiting on its answer: fragment.js marks one busy until then, and a

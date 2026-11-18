@@ -2,6 +2,7 @@
 
 import json
 
+from hq.platform.core.templatetags.table_tags import TABLE_REGION
 from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, PAINTED_PART
 from hq.platform.core.tests.browser.probes.shifts import PROBE_MOVES
@@ -125,9 +126,11 @@ TABLE_PROMISES = (
     + TABLE_NAME
     + """
   const found = new Set();
+  let read = 0;
   for (const region of document.querySelectorAll('main ' + scroll)) {
     const table = region.querySelector(':scope > table');
     if (!table || !table.checkVisibility()) continue;
+    read += 1;
     const name = tableName(region, table);
     const width = table.getBoundingClientRect().width;
     for (const cell of table.querySelectorAll(':scope > tbody > tr > [colspan]')) {
@@ -138,7 +141,7 @@ TABLE_PROMISES = (
     const sticks = (el) => el && getComputedStyle(el).position === 'sticky';
     if (head && !sticks(head.parentElement) && ![...head.children].every(sticks)) found.add(`${name}: its heading row does not stick`);
   }
-  return [...found];
+  return {read, found: [...found]};
 }"""
 )
 
@@ -148,12 +151,14 @@ TABLES_THAT_DO_NOT_FIT = (
     "(scroll) => {"
     + TABLE_NAME
     + """
-  return [...document.querySelectorAll('main ' + scroll)]
+  const read = [...document.querySelectorAll('main ' + scroll)]
     .filter((box) => box.checkVisibility() && !box.closest('details:not([open])'))
     .map((box) => [box, box.querySelector(':scope > table')])
-    .filter(([box, table]) => table && table.querySelector('tbody td')
-      && table.getBoundingClientRect().width > box.clientWidth + 1)
+    .filter(([, table]) => table && table.querySelector('tbody td'));
+  const found = read
+    .filter(([box, table]) => table.getBoundingClientRect().width > box.clientWidth + 1)
     .map(([box, table]) => `${tableName(box, table)} +${Math.round(table.getBoundingClientRect().width - box.clientWidth)}`);
+  return {read: read.length, found};
 }"""
 )
 
@@ -672,8 +677,11 @@ UNSEEN_COLUMNS = (
   // held to its box then shares its width with columns nobody sees. A
   // stacked table has no columns to share it.
   const found = [];
+  let read = 0;
   for (const table of document.querySelectorAll('main ' + scroll + ' > table')) {
-    if (!table.checkVisibility() || getComputedStyle(table).display !== 'table') continue;
+    if (!table.checkVisibility()) continue;
+    read += 1;
+    if (getComputedStyle(table).display !== 'table') continue;
     const shown = [...table.querySelectorAll(':scope > thead > tr:last-child > th')]
       .filter((heading) => getComputedStyle(heading).display !== 'none');
     if (!shown.length) continue;
@@ -683,7 +691,7 @@ UNSEEN_COLUMNS = (
       found.push(`${describe(table)} shows ${shown.length} columns in ${Math.round(used)}px of ${Math.round(width)}px`);
     }
   }
-  return found;
+  return {read, found};
 }"""
 )
 
@@ -995,11 +1003,13 @@ CHECKS = {
         (TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]),
         table=True,
         reader_sees="a table running past its box",
+        part=TABLE_REGION,
     ),
     "unseen columns": Check(
         (UNSEEN_COLUMNS, SELECTORS["table_scroll"]),
         table=True,
         reader_sees="a column cut off where nothing scrolls to it",
+        part=TABLE_REGION,
     ),
     "cut beside room": Check(
         (CUT_BESIDE_ROOM, SELECTORS["unseen"]), table=True, reader_sees="a value cut while its row has room to show it"
@@ -1024,6 +1034,7 @@ CHECKS = {
     "table promises": Check(
         (TABLE_PROMISES, SELECTORS["table_scroll"]),
         reader_sees="a table's heading row scrolling away, or a cell across its row stopping short",
+        part=TABLE_REGION,
     ),
     "whole parts moved by opening": Check(
         (WHOLE_PARTS_MOVED_BY_OPENING, SELECTORS["table_scroll"]),

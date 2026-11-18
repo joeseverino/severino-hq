@@ -5,6 +5,7 @@ one entry in the module of its family under ``families/``, the prefix of its
 name (``part/``, ``table/``). A new family is a new module there and one
 import below."""
 
+import functools
 import re
 from dataclasses import replace
 
@@ -27,6 +28,13 @@ def default_name(each: Part) -> str:
     return f"part/{stem.replace('_', '-')}"
 
 
+@functools.cache
+def _defaults() -> dict[str, Part]:
+    """Every part by the name of its default entry."""
+
+    return {default_name(each): each for each in parts()}
+
+
 def _assembled(*families) -> dict[str, Entry]:
     """Every family's ``ENTRIES``, each in its module's own order, after each
     part's default entry: its ``Part.example`` as a page writes it, given what
@@ -34,7 +42,7 @@ def _assembled(*families) -> dict[str, Entry]:
     holds only names it begins, but for those, and never writes a default's
     template, so no two modules name one entry and every part has its own."""
 
-    named = {default_name(each): each for each in parts()}
+    named = _defaults()
     given = {name: entry for family in families for name, entry in family.ENTRIES.items() if not entry.template}
     if strays := sorted(given.keys() - named.keys()):
         raise ImportError(f"an entry with no template is a part's default, but no part is named {strays}")
@@ -149,6 +157,13 @@ def left_out_on(name) -> tuple[str, ...]:
     """The axe rules the page ``name`` of ``PAGES`` leaves out."""
 
     return tuple(GALLERY_LEAVES_OUT) if name == GALLERY else ()
+
+
+def part_of(name):
+    """The shared part the page ``name`` of ``PAGES`` is the default entry
+    of, drawn from its ``Part.example``, or None."""
+
+    return _defaults().get(name)
 
 
 def premise_of(name):

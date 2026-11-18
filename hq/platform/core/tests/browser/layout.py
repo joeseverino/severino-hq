@@ -215,7 +215,7 @@ class LayoutBrowserTests(BrowserGate):
 
         self.open_every_disclosure(name)
         self.page.evaluate(SETTLE)
-        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"])["found"], [])
 
     def a_table_fits_its_box_at_every_width(self, name):
         """Every table on the page, with every disclosure open, fits its box

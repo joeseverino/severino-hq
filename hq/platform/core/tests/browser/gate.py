@@ -60,9 +60,8 @@ from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
 from hq.platform.core.tests.browser.shards import share, sweeps
 from hq.platform.core.tests.browser.shots import shoot_page
 from hq.platform.core.tests.browser.survey import (
-    AS_FINDINGS,
     CHECKS,
-    _as_is,
+    findings_of,
     geometry_probes,
     palette_probes,
     table_probes,
@@ -968,7 +967,7 @@ class BrowserGate(SimpleTestCase):
         """What the layout invariants find on the page as loaded, by check:
         every one the gates hold on a page as a reader has it."""
 
-        return self.checked(self.geometry_on(path))
+        return self.checked(self.geometry_on(path), path)
 
     def geometry_on(self, path, scripted=True):
         """The geometry's probes on the page at ``path``, axe's without the
@@ -1050,8 +1049,7 @@ class BrowserGate(SimpleTestCase):
                     where = f"at {width}px" + (f", {said_state}" if said_state else "")
                     for check, (returned, value, ms) in zip(probes, outcomes, strict=False):
                         self.spent(CHECK_COSTS, check, ms / 1000, f"{self.where()} {where}")
-                        said = AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
-                        take(check, said, where)
+                        take(check, findings_of(check, returned, value), where)
                 take("opening rows moves", moved, f"at {width}px")
 
         folds = self.page.evaluate_handle(PRESS, SELECTORS["row_fold"])
@@ -1123,7 +1121,8 @@ class BrowserGate(SimpleTestCase):
                 **self.geometry_on(path, self.runs_script),
                 **palette_probes(),
                 "put back": (PUT_BACK, None),
-            }
+            },
+            path,
         )
         began = perf_counter()
         found["fills"] = self.lost_fills()
@@ -1145,18 +1144,20 @@ class BrowserGate(SimpleTestCase):
 
         return
 
-    def checked(self, probes):
-        """Each check's findings, read in one round trip, each check's time
-        in the page kept for the run's ledger; a probe that threw is a finding
-        of its own check, so it hides no other."""
+    def checked(self, probes, path=None):
+        """Each check's findings on the page at ``path``, read in one round
+        trip, each check's time in the page kept for the run's ledger
+        (`survey.findings_of`): a check of a part that page draws, its
+        catalog entry's, holds its probe to having read some of it."""
 
         outcomes = self.timed_outcomes(list(probes.values()))
         where = self.where_and_width()
+        drawn = catalog.part_of(path)
         found = {}
         for check, (returned, value, seconds) in zip(probes, outcomes, strict=True):
             if check in CHECKS:
                 self.spent(CHECK_COSTS, check, seconds, where)
-            found[check] = AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
+            found[check] = findings_of(check, returned, value, drawn, path)
         return found
 
     @contextmanager

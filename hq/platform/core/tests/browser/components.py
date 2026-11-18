@@ -569,7 +569,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             with self.subTest(name):
                 self.assertEqual(self.page.locator(SELECTORS["dialog_opener"].format(id=name)).count(), 1)
         said = self.page.evaluate(DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]])
-        self.assertEqual(said, [])
+        self.assertEqual(said["found"], [])
 
     @with_script
     def test_a_rows_ask_says_its_sentence_on_the_line_its_row_opens_to(self):
@@ -1722,7 +1722,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
         self.open("topology", WIDE)
         check, arg = CHECKS["map"].probe
-        self.assertEqual(self.page.evaluate(check, arg), [])
+        self.assertEqual(self.page.evaluate(check, arg)["found"], [])
         # The stylesheet hides a lane with no node in it, so the plant empties
         # the lanes of a sheet that lost that rule.
         self.page.evaluate(
@@ -1730,7 +1730,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             " el.querySelectorAll(node).forEach((each) => each.remove()); el.style.display = 'block'; })",
             arg[1:],
         )
-        self.assertTrue(self.page.evaluate(check, arg))
+        self.assertTrue(self.page.evaluate(check, arg)["found"])
 
     def test_a_short_name_is_broken_only_where_its_table_holds_it(self):
         """A short name its table holds on its line (`nowrap`) and something
@@ -1844,7 +1844,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         # every sentence now asks for its whole line.
         self.page.evaluate("() => { document.querySelector('main table').style.whiteSpace = 'nowrap'; }")
         self.page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))")
-        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"])["found"], [])
         self.assertEqual(self.page.evaluate(COLUMNS_SHOWN), shown)
 
     @with_script

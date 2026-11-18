@@ -99,6 +99,16 @@ WORK_QUEUE = _part(
     pieces=("partials/_queue_entries.html", "partials/_queue_rows.html", "partials/_urgency_pill.html"),
 )
 
+TOPOLOGY_MAP = _part(
+    "topology_map",
+    "The map of how things connect, laid out and filtered by its own script, each node's edges stated from it.",
+    *("topology-detail", "topology-kind-*", "topology-kind-mark", "topology-lane", "topology-map"),
+    *("topology-node", "topology-node-*", "topology-node-degree", "topology-node-link", "topology-node-list"),
+    *("topology-node-select", "topology-node-title", "topology-workspace", "relation-arrow", "relation-kind"),
+    *("relation-link", "relation-list", "relation-other", "relation-reading", "relation-values", "relation-verb"),
+    pieces=("partials/_relation_list.html",),
+)
+
 PARTS = (
     FIELD,
     Part(
@@ -338,15 +348,7 @@ PARTS = (
     ),
     _part("tip", "The tip a chart's point shows when pointed at.", "chart-tip"),
     _part("toggle_set", "A set of toggles that filter what a view shows.", "toggle-set"),
-    _part(
-        "topology_map",
-        "The map of how things connect, laid out and filtered by its own script, each node's edges stated from it.",
-        *("topology-detail", "topology-kind-*", "topology-kind-mark", "topology-lane", "topology-map"),
-        *("topology-node", "topology-node-*", "topology-node-degree", "topology-node-link", "topology-node-list"),
-        *("topology-node-select", "topology-node-title", "topology-workspace", "relation-arrow", "relation-kind"),
-        *("relation-link", "relation-list", "relation-other", "relation-reading", "relation-values", "relation-verb"),
-        pieces=("partials/_relation_list.html",),
-    ),
+    TOPOLOGY_MAP,
     _part(
         "visit_refresh",
         "Whether what a page shows is fresh, and the control that reads it again.",
