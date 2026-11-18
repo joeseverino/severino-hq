@@ -20494,6 +20494,7 @@
         "type": "object"
       },
       "TopologyEdge": {
+        "additionalProperties": false,
         "description": "A relationship derived from a declaration or observation.",
         "properties": {
           "detail": {
@@ -20565,6 +20566,7 @@
         "type": "object"
       },
       "TopologyNode": {
+        "additionalProperties": false,
         "description": "One addressable thing in the derived topology.",
         "properties": {
           "actions": {

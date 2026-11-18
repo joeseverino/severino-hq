@@ -7,7 +7,7 @@ without loading every detector.
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
-from pydantic import ConfigDict, Field, with_config
+from pydantic import Field
 
 from .action_links import ActionLink
 from .command_fields import Describe
@@ -17,8 +17,6 @@ from .workflows import WrittenAction
 type StepNotes = Annotated[tuple[str, ...], Describe("What to know before or after it, a sentence each.")]
 
 
-# Each has its own config, so it is written one way under every answer that holds it.
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class Press:
     """A command HQ runs through its own route, offered only to a reader who may run it.
@@ -30,7 +28,6 @@ class Press:
     kind: Annotated[Literal["press"], Describe("A command HQ runs, pressed through `link`.")] = "press"
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class Run:
     """A command an operator runs on their own machine. HQ never runs it."""
@@ -45,7 +42,6 @@ class Run:
             raise ValueError("A Run names its command; a step said in words is a Do.")
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class Do:
     """What to do, in words, where no exact command can be named."""

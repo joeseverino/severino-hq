@@ -9,8 +9,6 @@ from datetime import datetime
 from hashlib import sha256
 from typing import TYPE_CHECKING, Annotated
 
-from pydantic import ConfigDict, with_config
-
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink as TopologyAction
@@ -352,7 +350,6 @@ def edge_between(source: str, target: str, kind: str, label: str = "", status: s
     )
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class Relationship:
     """One thing a node is related to, who says so, and when they last read it."""
@@ -363,7 +360,6 @@ class Relationship:
     stale: Annotated[bool, Describe("Whether the reading it came from is out of date.")] = False
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class RelationGroup:
     phrase: Annotated[str, Describe("What each relationship in it says from the node, such as `runs on`.")]

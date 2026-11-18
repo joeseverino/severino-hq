@@ -13,8 +13,6 @@ from dataclasses import dataclass
 from ipaddress import ip_address
 from typing import Annotated, Any
 
-from pydantic import ConfigDict, with_config
-
 from hq.platform.application.describe import Describe, listed
 
 from .connection_kinds import CONNECTION_LABELS
@@ -67,7 +65,6 @@ def parts_of(kind: str) -> Mapping[str, ReadingPart]:
     return frozendict({WHOLE: whole, **{part.name: part for part in declared}})
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class RefusedPart:
     """One part of one kind that a sweep could not read, and on what."""

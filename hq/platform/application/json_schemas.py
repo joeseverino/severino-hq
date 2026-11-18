@@ -107,7 +107,10 @@ class PublishedSchema(GenerateJsonSchema):
 
     @override
     def dataclass_schema(self, schema: core_schema.DataclassSchema) -> JsonSchemaValue:
-        return _untitled(super().dataclass_schema(schema), schema["cls"])
+        written = _untitled(super().dataclass_schema(schema), schema["cls"])
+        if self.mode == "serialization":
+            written["additionalProperties"] = False
+        return written
 
     @override
     def field_is_required(
@@ -115,8 +118,8 @@ class PublishedSchema(GenerateJsonSchema):
         field: core_schema.ModelField | core_schema.DataclassField | core_schema.TypedDictField,
         total: bool,
     ) -> bool:
-        # A dataclass is written whole (``as_written``, ``asdict``), so every
-        # field it publishes is in each answer, one at its default too.
+        # A dataclass is written whole (``as_written``, ``asdict``): each answer
+        # holds every field it publishes, one at its default too, and no other.
         if self.mode == "serialization" and field["type"] == "dataclass-field":
             return field.get("serialization_exclude_if") is None
         return super().field_is_required(field, total)
@@ -314,12 +317,7 @@ class Written:
     """``Annotated[dict[str, Any], Written(Kind)]``: a part the API document
     types whole, as ``Kind``, and an MCP tool's shape leaves an object. It is a
     dataclass as ``as_written`` writes it: a dict to the type checker and
-    ``Kind`` to every validator.
-
-    A stdlib dataclass with no config of its own takes the config of the
-    answer that holds it, so one held by several answers carries its own
-    (``pydantic.with_config``), or a closed holder and an open one write it as
-    two components of one name."""
+    ``Kind`` to every validator."""
 
     def __init__(self, kind: type) -> None:
         self.kind = kind

@@ -11,8 +11,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Annotated
 
-from pydantic import ConfigDict, with_config
-
 from .contracts import Effect
 from .describe import Describe
 from .display_words import as_members
@@ -76,7 +74,6 @@ class ConnectionAbility:
         object.__setattr__(self, "effect", Effect(self.effect))
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class ConnectionLink:
     """A safe relationship from a connection to something HQ can name."""
@@ -88,7 +85,6 @@ class ConnectionLink:
     resource_key: Annotated[str, Describe("The key of HQ's record it is; empty when it is none.")] = ""
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class ConnectionFact:
     """A small provider-owned fact that is useful in a generic connection row."""

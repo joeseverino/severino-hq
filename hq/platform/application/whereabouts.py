@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Annotated, Any
 
-from pydantic import ConfigDict, Field, with_config
+from pydantic import Field
 
 from hq.config.networks import is_loopback
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
@@ -19,7 +19,6 @@ lazy from .known_hosts import operator
 lazy from .reach import is_documentation, network_of
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class Origin:
     """Where a request for the name is finally served, and what serves it there."""

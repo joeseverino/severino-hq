@@ -5,15 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from pydantic import (
-    BaseModel,
-    BeforeValidator,
-    ConfigDict,
-    PlainSerializer,
-    ValidationError,
-    WithJsonSchema,
-    with_config,
-)
+from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainSerializer, ValidationError, WithJsonSchema
 
 from hq.platform.application.describe import Describe
 from hq.platform.core.digests import digest
@@ -50,7 +42,6 @@ class ObservationRecord(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class ReadingPart:
     """One part a reading is read in, and the permissions that part needs."""

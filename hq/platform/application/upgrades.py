@@ -10,8 +10,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Annotated, Any
 
-from pydantic import ConfigDict, with_config
-
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
 from .describe import Describe
 from .images import affected, version
@@ -30,14 +28,12 @@ MEDIUM = "medium"
 HIGH = "high"
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class Blocker:
     id: Annotated[str, Describe("What stands in the way, as a stable id an agent can act on, such as `mounts-unread`.")]
     reason: Annotated[str, Describe("What stands in the way, in a sentence.")]
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class UpgradeStep:
     id: Annotated[str, Describe("The step's stable id.")]

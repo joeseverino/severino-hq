@@ -11,8 +11,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import Annotated, Any
 
-from pydantic import ConfigDict, with_config
-
 from .describe import Describe
 from .entity_links import EntityLink, entity_link
 from .locate import host_of
@@ -20,7 +18,6 @@ lazy from . import connections
 lazy from .tailnet import policy
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class PolicyName:
     """One name as a policy writes it, and the entity it stands for if any."""

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated
 
 from django.utils.text import capfirst
-from pydantic import ConfigDict, Field, computed_field, with_config
+from pydantic import Field, computed_field
 
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
@@ -37,7 +37,6 @@ _CHECK_LABELS = {
 
 # Whether the request agrees with what the readings say about one hop. A
 # comment, since the hop that holds it says so where it is published.
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class HopCheck:
     state: Standing
@@ -60,7 +59,6 @@ class HopCheck:
 _ROLE_TONES = {JUDGED: Tone.GOOD, IGNORED: Tone.SERIOUS}
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class Evidence:
     """One thing the request itself carried, at the hop it belongs to."""
@@ -80,7 +78,6 @@ class Evidence:
         return _ROLE_TONES.get(self.role, Tone.NEUTRAL)
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class HopSource:
     """Where HQ read a hop: a reading, or HQ's own record."""
@@ -125,7 +122,6 @@ class HopSource:
         return f"{self.label} through {self.connection}" if self.connection else self.label
 
 
-@with_config(ConfigDict(extra="forbid"))
 @dataclass(frozen=True, slots=True)
 class Certificate:
     """The certificate one hop presents, or why HQ cannot say."""
