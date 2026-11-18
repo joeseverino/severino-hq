@@ -736,6 +736,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         found = self.page.evaluate(SPILLED_LABELS, "main :is(.example-glyph, .example-word)")
         self.assertEqual([spilled.split(" holds ")[0] for spilled in found], ["button.example-word"])
 
+    @with_script
     def test_a_word_before_a_name_in_a_cell_shares_the_name_s_line(self):
         """The word a cell sets before a name ("on" a machine under a row's
         name, "Created" a record in a cell of free text) stays on the line
@@ -756,12 +757,17 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 "</tr></tbody></table>{% endtable_region %}</div>"
             ),
         }
-        # A box that keeps both columns and still wraps each name.
+        # A box that wraps each name, where the column of free text leaves for
+        # the row's open line.
         self.open("word-before-a-name-probe", WIDE)
+        self.page.locator("main " + SELECTORS["row_toggle"]).click()
         lines = self.page.evaluate(
-            """() => [...document.querySelectorAll('main td')].map((cell) => {
-              // The line under the row's name, and the cell of free text.
-              const box = cell.querySelector('br')?.nextElementSibling ?? cell;
+            """() => [
+              // The line under the row's name, and the free text on its open line.
+              document.querySelector('main tbody td br').nextElementSibling,
+              [...document.querySelectorAll('main .row-detail .token')].map((name) => name.parentElement)
+                .find((box) => box.textContent.includes('from a request')),
+            ].map((box) => {
               const first = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, {
                 acceptNode: (node) => node.data.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
               }).nextNode();
