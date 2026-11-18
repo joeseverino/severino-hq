@@ -294,7 +294,7 @@ class NameContext:
     swept: bool = False
     # Where this name is already served, as "host:port", declared or observed.
     # The host half is whatever the provider calls the machine, which for a
-    # container stack is the machine's name rather than an address.
+    # route can be the machine's name rather than an address.
     origin: str = ""
     # The same place, as something on the network can actually reach it. A
     # proxy seeded with a machine name is seeded with something nginx cannot
@@ -378,10 +378,6 @@ class ProviderSpec:
     # within the minute. The page that takes the edit is the only place that
     # can say so beforehand, and a provider is the only thing that knows.
     change_effects: tuple[tuple[str, str], ...] = ()
-    # What a person approving a change to this kind must be told about the
-    # declaration it would write: a sentence per thing in it that reaches
-    # further than the kind's name suggests. Shown on the approval card.
-    review_warnings: Callable[[dict[str, Any]], tuple[str, ...]] | None = None
     # What a change from one declaration of this kind to another does, in the
     # words a person reads first (what it opens, a check it drops), or "" when
     # nothing needs saying ahead of the field-by-field change. It heads that

@@ -157,8 +157,8 @@ def _origin_for(hostname: str) -> str:
 def _reachable(origin: str) -> str:
     """The same origin, with the machine named as the network reaches it.
 
-    A stack names its machine by name, which everything inside HQ matches on; a
-    proxy is not HQ, and nginx has never heard the name. Unchanged when HQ knows
+    A route may name its machine by name, which everything inside HQ matches on;
+    a proxy is not HQ, and nginx has never heard the name. Unchanged when HQ knows
     no address for the machine, which leaves the operator a wrong-looking value
     to correct rather than a plausible one to trust.
     """

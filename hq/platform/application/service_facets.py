@@ -193,10 +193,13 @@ class ServiceFacet:
         one whose job includes answering "and then what serves it". Tells a
         facet that is genuinely missing from one that cannot apply, because a
         name resolving straight to something outside is already routed and needs
-        nothing on this network to answer for it.
+        nothing on this network to answer for it. What runs a name is where it
+        is served, so the runtime facet always routes.
         """
 
-        return any(provider.origin is not None for provider in PROVIDERS.values() if provider.facet == self.id)
+        return self.id == RUNTIME_FACET or any(
+            provider.origin is not None for provider in PROVIDERS.values() if provider.facet == self.id
+        )
 
     @property
     def state(self) -> str:

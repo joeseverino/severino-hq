@@ -22,6 +22,8 @@ from schemathesis.generation import GenerationMode
 from schemathesis.hook_specs import flatmap_case, map_case
 from werkzeug.test import Client
 
+from hq.domains.control_plane.models import ProviderConnection
+from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.application.capabilities import CapabilitySpec
 from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD, IDEMPOTENCY_HEADER, STALE_WRITE_KEYWORD
@@ -126,6 +128,13 @@ def one_key(context, case):
         case.query.pop("cursor", None)
     if isinstance(case.body, dict):
         case.body.pop(STALE_WRITE_KEYWORD, None)
+    # So is a connection a declaration names: a sweep reported it, and a drawn
+    # one names none, so the change is refused for want of a connection.
+    spec = payload.get("spec") if isinstance(payload, dict) else None
+    provider = PROVIDERS.get(payload.get("kind")) if isinstance(payload, dict) else None
+    if isinstance(spec, dict) and "connection_ref" in spec and provider is not None:
+        reported = ProviderConnection.objects.filter(provider__in=provider.connection_providers)
+        spec["connection_ref"] = reported.values_list("connection_ref", flat=True).first() or ""
     return case
 
 

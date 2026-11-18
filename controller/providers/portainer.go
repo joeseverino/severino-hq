@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -92,23 +91,6 @@ type PortainerContainerRecord struct {
 	Unit string `json:"unit,omitempty"`
 }
 
-type PortainerStackSpec struct {
-	ConnectionRef string            `json:"connection_ref"`
-	Host          string            `json:"host"`
-	Name          string            `json:"name"`
-	Compose       string            `json:"compose"`
-	Environment   []portainerEnvVar `json:"environment"`
-	Port          *int              `json:"port"`
-}
-
-type PortainerStackStatus struct {
-	Environment string                     `json:"environment"`
-	Host        string                     `json:"host"`
-	Containers  []PortainerContainerRecord `json:"containers"`
-	Origin      string                     `json:"origin"`
-	State       string                     `json:"state"`
-}
-
 type PortainerContainerSpec struct {
 	ConnectionRef string `json:"connection_ref"`
 	Host          string `json:"host"`
@@ -122,24 +104,7 @@ type PortainerContainerStatus struct {
 	Containers []PortainerContainerRecord `json:"containers"`
 }
 
-// portainerEnvVar is one value a stack's compose file reads, in the spec and in
-// Portainer's Env list alike.
-type portainerEnvVar struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
-// portainerStackPayload is the body of a stack create; an update adds PullImage.
-type portainerStackPayload struct {
-	Name             string            `json:"Name"`
-	StackFileContent string            `json:"StackFileContent"`
-	Env              []portainerEnvVar `json:"Env"`
-	PullImage        *bool             `json:"PullImage,omitempty"`
-}
-
 func (r *Registry) admitPortainer() {
-	act(r, runtime.ResourceKindPortainerStack, "reconcile", r.portainerReconcile)
-	act(r, runtime.ResourceKindPortainerStack, "delete", r.portainerDelete)
 	act(r, runtime.ResourceKindPortainerContainer, "restart", r.portainerCycler("restart"))
 	act(r, runtime.ResourceKindPortainerContainer, "start", r.portainerCycler("start"))
 	act(r, runtime.ResourceKindPortainerContainer, "stop", r.portainerCycler("stop"))
@@ -404,15 +369,15 @@ func (r *Registry) portainerStackList(ctx context.Context, ref string) ([]portai
 	return portainerGet[[]portainerStack](ctx, r, ref, "/stacks", "portainer-stacks:"+ref, "stack list")
 }
 
-// portainerStacksOn is the stacks Portainer created in one environment, optionally of one name.
-func (r *Registry) portainerStacksOn(ctx context.Context, ref string, environment int64, name string) ([]portainerStack, error) {
+// portainerStacksOn is the stacks Portainer created in one environment.
+func (r *Registry) portainerStacksOn(ctx context.Context, ref string, environment int64) ([]portainerStack, error) {
 	stacks, err := r.portainerStackList(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
 	found := []portainerStack{}
 	for _, stack := range stacks {
-		if stack.EndpointID == environment && (name == "" || stack.Name == name) {
+		if stack.EndpointID == environment {
 			found = append(found, stack)
 		}
 	}
@@ -506,133 +471,6 @@ func supervisor(container dockerContainer) string {
 	return ""
 }
 
-func stackPayload(spec PortainerStackSpec) portainerStackPayload {
-	env := spec.Environment
-	if env == nil {
-		env = []portainerEnvVar{}
-	}
-	return portainerStackPayload{Name: spec.Name, StackFileContent: spec.Compose, Env: env}
-}
-
-// sameEnvironment is whether two Env lists set the same variables, in any
-// order. Portainer answers a stack with no variables as null or [] alike, and
-// either deploys with none, so the two are equal.
-func sameEnvironment(a, b []portainerEnvVar) bool {
-	sorted := func(env []portainerEnvVar) []portainerEnvVar {
-		out := slices.Clone(env)
-		slices.SortFunc(out, func(x, y portainerEnvVar) int {
-			return cmp.Or(strings.Compare(x.Name, y.Name), strings.Compare(x.Value, y.Value))
-		})
-		return out
-	}
-	return slices.Equal(sorted(a), sorted(b))
-}
-
-func (r *Registry) portainerReconcile(ctx context.Context, spec PortainerStackSpec, _ struct{}, apply bool) (Result, error) {
-	ref := spec.ConnectionRef
-	environment, err := r.portainerEnvironmentFor(ctx, spec.Host, ref)
-	if err != nil {
-		return Result{}, err
-	}
-	if !environment.Reachable {
-		return Result{}, &ProviderError{Message: "Portainer cannot reach " + spec.Host}
-	}
-	existing, err := r.portainerStacksOn(ctx, ref, environment.ID, spec.Name)
-	if err != nil {
-		return Result{}, err
-	}
-	if len(existing) > 1 {
-		return Result{}, &ProviderError{Message: fmt.Sprintf("Portainer holds more than one stack named %q", spec.Name)}
-	}
-	envID := itoa(environment.ID)
-	changed := true
-	if len(existing) == 1 {
-		stackID := itoa(existing[0].ID)
-		current, err := portainerGet[portainerStackFile](ctx, r, ref, "/stacks/"+stackID+"/file", "", "stack file")
-		if err != nil {
-			return Result{}, err
-		}
-		if current.StackFileContent == spec.Compose && sameEnvironment(existing[0].Env, spec.Environment) {
-			changed = false
-		} else if apply {
-			payload := stackPayload(spec)
-			pull := false
-			payload.PullImage = &pull
-			if _, err := r.portainerCall(ctx, ref, "/stacks/"+stackID+"?endpointId="+envID, "PUT", payload); err != nil {
-				return Result{}, fmt.Errorf("update stack %s: %w", spec.Name, err)
-			}
-		}
-	} else if apply {
-		if _, err := r.portainerCall(ctx, ref, "/stacks/create/standalone/string?endpointId="+envID, "POST", stackPayload(spec)); err != nil {
-			return Result{}, fmt.Errorf("create stack %s: %w", spec.Name, err)
-		}
-	}
-
-	// What is running is the only thing worth reporting: a stack Portainer
-	// accepted and Docker then failed to start is not Ready.
-	listed, err := r.portainerContainers(ctx, ref, environment.ID)
-	if err != nil {
-		return Result{}, err
-	}
-	containers := []PortainerContainerRecord{}
-	for _, container := range listed {
-		if container.Labels[composeProject] == spec.Name {
-			containers = append(containers, containerRecord(container, spec.Host, ref, nil, ""))
-		}
-	}
-	running, unreachable := 0, []string{}
-	for _, item := range containers {
-		if item.State == "running" {
-			running++
-		}
-		if !item.Reachable {
-			unreachable = append(unreachable, item.Name)
-		}
-	}
-	status := PortainerStackStatus{Environment: environment.Name, Host: spec.Host, Containers: containers}
-	if spec.Port != nil && *spec.Port > 0 {
-		status.Origin = spec.Host + ":" + strconv.Itoa(*spec.Port)
-	}
-	if running > 0 && running == len(containers) {
-		status.State = "running"
-	}
-	message := "Stack unchanged."
-	if changed {
-		message = "Stack updated."
-	}
-	switch {
-	case apply && len(containers) == 0:
-		return Result{Changed: changed, Status: status, Conditions: []Condition{condition(runtime.ConditionDegraded, "NotRunning", "The stack exists in Portainer but no container from it is running.")}, Message: "The stack exists but nothing in it is running."}, nil
-	case len(unreachable) > 0:
-		slices.Sort(unreachable)
-		detail := strings.Join(unreachable, ", ") + " publishes a port on the loopback address, so nothing outside that machine can reach it, including a proxy running in a container on the same host."
-		return Result{Changed: changed, Status: status, Conditions: []Condition{condition(runtime.ConditionDegraded, "BoundToLoopback", detail)}, Message: "Stack is running but is not reachable."}, nil
-	}
-	return result(changed, status, "Reconciled", "Stack is running.", message), nil
-}
-
-func (r *Registry) portainerDelete(ctx context.Context, spec PortainerStackSpec, _ struct{}, apply bool) (Result, error) {
-	ref := spec.ConnectionRef
-	environment, err := r.portainerEnvironmentFor(ctx, spec.Host, ref)
-	if err != nil {
-		return Result{}, err
-	}
-	existing, err := r.portainerStacksOn(ctx, ref, environment.ID, spec.Name)
-	if err != nil {
-		return Result{}, err
-	}
-	if len(existing) == 0 {
-		return result(false, struct{}{}, "Absent", "Stack is already gone.", "Stack was already absent."), nil
-	}
-	if apply {
-		path := "/stacks/" + itoa(existing[0].ID) + "?endpointId=" + itoa(environment.ID)
-		if _, err := r.portainerCall(ctx, ref, path, "DELETE", nil); err != nil {
-			return Result{}, fmt.Errorf("delete stack %s: %w", spec.Name, err)
-		}
-	}
-	return result(true, struct{}{}, "Deleted", "Stack removed.", "Stack removed."), nil
-}
-
 // portainerContainerRecords is every container Portainer can see, on every
 // machine it reaches. Containers, not stacks: Portainer lists only the stacks it
 // created, and Docker will cycle any container.
@@ -649,7 +487,7 @@ func (r *Registry) portainerContainerRecords(ctx context.Context) ([]PortainerCo
 				continue
 			}
 			host := machineName(environment, local)
-			stacks, err := r.portainerStacksOn(ctx, ref, environment.ID, "")
+			stacks, err := r.portainerStacksOn(ctx, ref, environment.ID)
 			if err != nil {
 				return nil, err
 			}

@@ -615,7 +615,7 @@ is refused the audit log (`read_audit_log`) and the calendar
   once, and no rule can reach past it (`set_rule` refuses one). An agent's rule
   beats the default for that agent, over every surface it calls through.
 - With no rules, a change to a kind that stands behind access
-  (`requires_approval`: the tailnet policy, a container stack) is held from
+  (`requires_approval`: the tailnet policy) is held from
   anyone but a person, the host's shell included. An agent's change to a kind
   the public internet sees (`public_effect`: a public DNS record, a domain) is
   held, as is anything destructive an agent asks for (a deletion, or stopping

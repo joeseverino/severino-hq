@@ -398,163 +398,6 @@ func TestPortainerEachRefusesPerMachine(t *testing.T) {
 	}
 }
 
-func stackRoutes(stackFile, stacks, containers string) map[string]string {
-	return map[string]string{
-		"/api/endpoints":      oneLocalEndpoint,
-		"/api/stacks":         stacks,
-		"/api/stacks/10/file": stackFile,
-		containersPath:        containers,
-	}
-}
-
-func TestPortainerStackReconcileDecisions(t *testing.T) {
-	running := `[{"Id":"a1","Names":["/web-app-1"],"Labels":{"com.docker.compose.project":"web"},"State":"running","Ports":[{"IP":"0.0.0.0","PublicPort":8080}]}]`
-	loopback := `[{"Id":"a1","Names":["/web-app-1"],"Labels":{"com.docker.compose.project":"web"},"State":"running","Ports":[{"IP":"127.0.0.1","PublicPort":8080}]}]`
-	existing := `[{"Id":10,"Name":"web","EndpointId":1,"Env":[{"name":"A","value":"1"}]}]`
-	port := 8080
-	spec := PortainerStackSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web", Compose: "services: {}",
-		Environment: []portainerEnvVar{{Name: "A", Value: "1"}}, Port: &port}
-	cases := []struct {
-		name       string
-		stacks     string
-		file       string
-		containers string
-		apply      bool
-		changed    bool
-		reason     string
-		writes     []string
-	}{
-		{"unchanged", existing, `{"StackFileContent":"services: {}"}`, running, true, false, "Reconciled", nil},
-		{"changed, planned", existing, `{"StackFileContent":"old"}`, running, false, true, "Reconciled", nil},
-		{"changed, applied", existing, `{"StackFileContent":"old"}`, running, true, true, "Reconciled", []string{"PUT /api/stacks/10?endpointId=1"}},
-		{"absent, applied", `[]`, `null`, running, true, true, "Reconciled", []string{"POST /api/stacks/create/standalone/string?endpointId=1"}},
-		{"applied, nothing runs", existing, `{"StackFileContent":"services: {}"}`, `[]`, true, false, "NotRunning", nil},
-		{"bound to loopback", existing, `{"StackFileContent":"services: {}"}`, loopback, true, false, "BoundToLoopback", nil},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			api, server := newPortainerAPI(t, stackRoutes(c.file, c.stacks, c.containers))
-			r := portainerRegistry(t, server.URL, runtime.Environment{})
-			res, err := r.portainerReconcile(t.Context(), spec, struct{}{}, c.apply)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if res.Changed != c.changed || res.Conditions[0].Reason != c.reason {
-				t.Fatalf("%+v", res)
-			}
-			writes := []string{}
-			for _, w := range api.written() {
-				writes = append(writes, w.method+" "+w.path)
-				if w.body["Name"] != "web" || w.body["StackFileContent"] != "services: {}" || !reflect.DeepEqual(w.body["Env"], []any{map[string]any{"name": "A", "value": "1"}}) {
-					t.Errorf("payload %v", w.body)
-				}
-				if w.method == "PUT" && w.body["PullImage"] != false {
-					t.Errorf("an update does not pull: %v", w.body)
-				}
-			}
-			if len(writes) != len(c.writes) || (len(writes) > 0 && writes[0] != c.writes[0]) {
-				t.Fatalf("writes %v, want %v", writes, c.writes)
-			}
-			if status := res.Status.(PortainerStackStatus); status.Origin != "hq-node:8080" {
-				t.Errorf("origin %q", status.Origin)
-			}
-		})
-	}
-}
-
-// The stack list answers each stack's Env as Portainer's Pair list
-// (portainer.Stack.Env, api/portainer.go at 2.45.3), null when it holds none.
-func TestPortainerStackReconcileComparesTheEnvironment(t *testing.T) {
-	running := `[{"Id":"a1","Names":["/web-app-1"],"Labels":{"com.docker.compose.project":"web"},"State":"running","Ports":[{"IP":"0.0.0.0","PublicPort":8080}]}]`
-	stackWith := func(env string) string { return `[{"Id":10,"Name":"web","EndpointId":1,"Env":` + env + `}]` }
-	wanted := []portainerEnvVar{{Name: "TOKEN", Value: "spec-value-only"}, {Name: "MODE", Value: "on"}}
-	cases := []struct {
-		name    string
-		env     []portainerEnvVar
-		current string
-		apply   bool
-		changed bool
-	}{
-		{"a value changed, applied", wanted, `[{"name":"TOKEN","value":"stack-value-only"},{"name":"MODE","value":"on"}]`, true, true},
-		{"a value changed, planned", wanted, `[{"name":"TOKEN","value":"stack-value-only"},{"name":"MODE","value":"on"}]`, false, true},
-		{"a variable added", wanted, `[{"name":"MODE","value":"on"}]`, true, true},
-		{"a variable removed", nil, `[{"name":"MODE","value":"on"}]`, true, true},
-		{"unchanged", wanted, `[{"name":"TOKEN","value":"spec-value-only"},{"name":"MODE","value":"on"}]`, true, false},
-		{"reordered", wanted, `[{"name":"MODE","value":"on"},{"name":"TOKEN","value":"spec-value-only"}]`, true, false},
-		{"none, answered null", nil, `null`, true, false},
-		{"none, answered empty", []portainerEnvVar{}, `[]`, true, false},
-		{"none in the spec, empty in Portainer", nil, `[]`, true, false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			api, server := newPortainerAPI(t, stackRoutes(`{"StackFileContent":"services: {}"}`, stackWith(c.current), running))
-			r := portainerRegistry(t, server.URL, runtime.Environment{})
-			spec := PortainerStackSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web", Compose: "services: {}", Environment: c.env}
-			res, err := r.portainerReconcile(t.Context(), spec, struct{}{}, c.apply)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if res.Changed != c.changed {
-				t.Fatalf("changed %v, want %v: %+v", res.Changed, c.changed, res)
-			}
-			writes := api.written()
-			if !c.changed || !c.apply {
-				if len(writes) != 0 {
-					t.Fatalf("nothing to apply, yet wrote %v", writes)
-				}
-			} else {
-				if len(writes) != 1 || writes[0].method+" "+writes[0].path != "PUT /api/stacks/10?endpointId=1" {
-					t.Fatalf("writes %v, want one update", writes)
-				}
-				want := []any{}
-				for _, v := range c.env {
-					want = append(want, map[string]any{"name": v.Name, "value": v.Value})
-				}
-				if body := writes[0].body; !reflect.DeepEqual(body["Env"], want) || body["PullImage"] != false {
-					t.Errorf("update %v, want Env %v without a pull", body, want)
-				}
-			}
-			reported, err := json.Marshal(res)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, value := range []string{"spec-value-only", "stack-value-only"} {
-				if strings.Contains(string(reported), value) {
-					t.Errorf("the result carries an environment value: %s", reported)
-				}
-			}
-		})
-	}
-}
-
-func TestPortainerStackReconcileRefusals(t *testing.T) {
-	spec := PortainerStackSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web", Compose: "x"}
-	cases := []struct {
-		name, endpoints, stacks, want string
-	}{
-		{"no such machine", oneLocalEndpoint, `[]`, `no Portainer environment is "elsewhere"`},
-		{"machine down", `[{"Id":1,"Name":"local","URL":"unix:///var/run/docker.sock","Status":2}]`, `[]`, "Portainer cannot reach hq-node"},
-		{"two stacks of the name", oneLocalEndpoint, `[{"Id":10,"Name":"web","EndpointId":1},{"Id":11,"Name":"web","EndpointId":1}]`, `Portainer holds more than one stack named "web"`},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			api, server := newPortainerAPI(t, map[string]string{"/api/endpoints": c.endpoints, "/api/stacks": c.stacks})
-			r := portainerRegistry(t, server.URL, runtime.Environment{})
-			s := spec
-			if c.name == "no such machine" {
-				s.Host = "elsewhere"
-			}
-			_, err := r.portainerReconcile(t.Context(), s, struct{}{}, true)
-			if err == nil || err.Error() != c.want {
-				t.Fatalf("got %v", err)
-			}
-			if len(api.written()) != 0 {
-				t.Fatal("a refusal writes nothing")
-			}
-		})
-	}
-}
-
 func TestPortainerCyclerReadsBackTheState(t *testing.T) {
 	cases := []struct {
 		verb, state, kind string
@@ -581,6 +424,14 @@ func TestPortainerCyclerReadsBackTheState(t *testing.T) {
 	r := portainerRegistry(t, server.URL, runtime.Environment{})
 	if _, err := r.portainerCycler("stop")(t.Context(), PortainerContainerSpec{ConnectionRef: "portainer-example", Host: "hq-node", Name: "web"}, struct{}{}, true); err == nil || err.Error() != `no container named "web" on hq-node` {
 		t.Fatalf("got %v", err)
+	}
+	api, server := newPortainerAPI(t, map[string]string{"/api/endpoints": oneLocalEndpoint})
+	r = portainerRegistry(t, server.URL, runtime.Environment{})
+	if _, err := r.portainerCycler("stop")(t.Context(), PortainerContainerSpec{ConnectionRef: "portainer-example", Host: "elsewhere", Name: "web"}, struct{}{}, true); err == nil || err.Error() != `no Portainer environment is "elsewhere"` {
+		t.Fatalf("got %v", err)
+	}
+	if len(api.written()) != 0 {
+		t.Fatal("a refusal writes nothing")
 	}
 }
 
@@ -672,11 +523,11 @@ func TestPortainerProbe(t *testing.T) {
 	}
 }
 
-// A stack spec field of the wrong type refuses the action at the boundary.
-func TestPortainerStackSpecDecodesStrictly(t *testing.T) {
+// A spec field of the wrong type refuses the action at the boundary.
+func TestPortainerContainerSpecDecodesStrictly(t *testing.T) {
 	r := New(runtime.Environment{}, supplied(), &fakeHTTP{})
-	_, err := r.runAction(t.Context(), runtime.ResourceKindPortainerStack, "reconcile", Object{"name": "web", "port": "8080"}, nil, false)
+	_, err := r.runAction(t.Context(), runtime.ResourceKindPortainerContainer, "restart", Object{"host": "hq-node", "name": 7}, nil, false)
 	if err == nil {
-		t.Fatal("a port given as text is refused")
+		t.Fatal("a name given as a number is refused")
 	}
 }

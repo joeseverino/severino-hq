@@ -33,10 +33,14 @@ def service_facets() -> tuple[tuple[str, str], ...]:
     A facet nothing supplies is a gap in HQ, not in the service, and a column
     with nothing in it tells the operator to go fix something they cannot. So a
     facet may be declared ahead of the provider that fills it and stays
-    invisible until that provider is registered.
+    invisible until that provider is registered. A reading fills a facet as a
+    declaration does, so either supplies it.
     """
 
-    supplyable = {provider.facet for provider in PROVIDERS.values() if provider.facet}
+    supplyable = {
+        *(provider.facet for provider in PROVIDERS.values() if provider.facet),
+        *(spec.facet for spec in OBSERVATIONS.values() if spec.facet),
+    }
     return tuple((facet, label) for facet, label in SERVICE_FACETS if facet in supplyable)
 
     # No operating system field: the tailnet reports `os` for every device.

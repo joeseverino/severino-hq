@@ -154,8 +154,8 @@ def dns_record(_context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     }
 
 
-def container_stack(_context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
-    """Where a stack can run, and which Portainer reaches it.
+def container(_context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
+    """Where a container can run, and which Portainer reaches it.
 
     Both menus come from the connection sweep, since only a Portainer knows
     which machines it holds: HQ lists a printer as readily as a Docker host, and

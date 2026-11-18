@@ -148,22 +148,7 @@ close every one.
             {% endcomment %}
             {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}{% fact "Compose project" %}<code>{{ facet.observed.stack|breakable }}</code>{% endfact %}{% endif %}
             {% fact "Reading" %}{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}{% endfact %}
-            {% comment %}
-            The offer to take it on, only when taking it on would not mean
-            building a second one. A container started by compose on the machine
-            is invisible to Portainer's stack list, so declaring it here asks
-            Portainer to stand up its own copy of something already serving,
-            which, for the container running this page, means HQ redeploying
-            itself.
-
-            Defining it and cycling it are different claims. HQ can start, stop
-            and restart any container, because those are Docker's verbs; it can
-            only redefine one Portainer created, because everything else is
-            defined by a compose file HQ has never seen. Offering the second as
-            though it were the first would ask Portainer to stand up its own
-            copy of something already serving.
-            {% endcomment %}
-            {% fact "Defined by" %}{% if facet.observed.portainer_managed %}Portainer.{% for kind, label in facet.declarable %} <a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label|breakable }}{% arrow %}</a>{% endfor %}{% else %}A compose file on {{ facet.observed.host|breakable:"." }} HQ cannot read it.{% endif %}{% endfact %}
+            {% fact "Defined by" %}{% if facet.observed.portainer_managed %}Portainer.{% else %}A compose file on {{ facet.observed.host|breakable:"." }} HQ cannot read it.{% endif %}{% endfact %}
           {% endfacts %}
         {% endsection %}
         {% partial reading_lines %}

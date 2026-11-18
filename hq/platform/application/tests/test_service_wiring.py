@@ -3,6 +3,7 @@
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_spec import SERVICE_FACET_IDS, SERVICE_FACETS
 from hq.domains.control_plane.providers import PROVIDERS
 
@@ -218,11 +219,14 @@ class ProviderFacetContractTests(TestCase):
     def test_the_facet_order_is_declared_once(self):
         """Templates render columns from SERVICE_FACETS, so nothing restates it.
 
-        Filtered to the facets some provider supplies, in the catalog's order:
-        a facet can be declared before the provider that fills it exists, and
+        Filtered to the facets some provider or reading supplies, in the
+        catalog's order: a facet can be declared before anything fills it, and
         until then it is not a column with nothing in it.
         """
-        supplyable = {provider.facet for provider in PROVIDERS.values() if provider.facet}
+        supplyable = {
+            *(provider.facet for provider in PROVIDERS.values() if provider.facet),
+            *(spec.facet for spec in OBSERVATIONS.values() if spec.facet),
+        }
         catalog_order = [facet for facet, _ in SERVICE_FACETS if facet in supplyable]
 
         healthy(

@@ -436,16 +436,10 @@ def _resource_label(held: ApprovalRequest, record: Any, sentence: Asked) -> str:
 
 
 def _warnings(held: ApprovalRequest) -> tuple[str, ...]:
-    """What the request reaches that a person should weigh, said plainly: what
-    the handler that measured it says (``WARNINGS``), then what its kind's
-    provider reads in the declaration it would write."""
+    """What the request reaches that a person should weigh, as the handler
+    that measured it says (``WARNINGS``)."""
 
-    measured = tuple(str(warning) for warning in held.baseline.get(WARNINGS) or ())
-    provider = PROVIDERS.get(held.resource_kind)
-    requested = held.payload.get("spec")
-    if provider is None or provider.review_warnings is None or not isinstance(requested, dict):
-        return measured
-    return (*measured, *provider.review_warnings(requested))
+    return tuple(str(warning) for warning in held.baseline.get(WARNINGS) or ())
 
 
 def marked(shown: ChangePreview, warnings: tuple[str, ...]) -> tuple[ChangePreview, tuple[str, ...]]:

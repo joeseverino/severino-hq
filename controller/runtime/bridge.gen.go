@@ -678,7 +678,6 @@ const (
 	ResourceKindPortainerImage               ResourceKind = "portainer.image"
 	ResourceKindPortainerNetwork             ResourceKind = "portainer.network"
 	ResourceKindPortainerRuntime             ResourceKind = "portainer.runtime"
-	ResourceKindPortainerStack               ResourceKind = "portainer.stack"
 	ResourceKindPortainerVolume              ResourceKind = "portainer.volume"
 	ResourceKindRegistryAddress              ResourceKind = "registry.address"
 	ResourceKindRegistryDigest               ResourceKind = "registry.digest"
@@ -792,8 +791,6 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindPortainerNetwork:
 		return true
 	case ResourceKindPortainerRuntime:
-		return true
-	case ResourceKindPortainerStack:
 		return true
 	case ResourceKindPortainerVolume:
 		return true

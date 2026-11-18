@@ -107,7 +107,7 @@ class Machine:
         Every watched container is already a row below, named and linked, so
         listing its key again in a summary card says the same thing twice and
         makes that card the tallest thing on the page. What is left over is
-        worth a line: a stack, or anything else that names this host.
+        worth a line: anything else that names this host.
         """
 
         watched = {item.watcher for item in self.containers if item.watcher}

@@ -8714,19 +8714,6 @@
         },
         "type": "object"
       },
-      "DeclaredPortainerStackSpec": {
-        "properties": {
-          "kind": {
-            "const": "portainer.stack",
-            "description": "What type of record it is.",
-            "type": "string"
-          },
-          "spec": {
-            "$ref": "#/components/schemas/PortainerStackSpec"
-          }
-        },
-        "type": "object"
-      },
       "DeclaredSourceSpec": {
         "properties": {
           "kind": {
@@ -12255,10 +12242,6 @@
                 "title": "Declared git hub delivery spec"
               },
               {
-                "$ref": "#/components/schemas/DeclaredPortainerStackSpec",
-                "title": "Declared portainer stack spec"
-              },
-              {
                 "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
                 "title": "Declared portainer container spec"
               },
@@ -12458,10 +12441,6 @@
               {
                 "$ref": "#/components/schemas/DeclaredGitHubDeliverySpec",
                 "title": "Declared git hub delivery spec"
-              },
-              {
-                "$ref": "#/components/schemas/DeclaredPortainerStackSpec",
-                "title": "Declared portainer stack spec"
               },
               {
                 "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
@@ -13389,7 +13368,6 @@
           "tls.uploaded_certificate",
           "npm.proxy_host",
           "github.delivery",
-          "portainer.stack",
           "portainer.container",
           "tailscale.device",
           "tailscale.policy",
@@ -13418,7 +13396,6 @@
           "npm.proxy_host": "Proxy host",
           "pki.authority": "Certificate authority",
           "portainer.container": "Container",
-          "portainer.stack": "Container stack",
           "tailscale.device": "Tailnet device",
           "tailscale.policy": "Tailnet policy",
           "tls.certificate": "TLS certificate",
@@ -15833,102 +15810,6 @@
           "connection_ref",
           "host",
           "name"
-        ],
-        "type": "object"
-      },
-      "PortainerStackEnvVar": {
-        "additionalProperties": false,
-        "description": "One environment variable a stack is deployed with.",
-        "properties": {
-          "name": {
-            "description": "The variable's name.",
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "value": {
-            "default": "",
-            "description": "The variable's value.",
-            "maxLength": 4000,
-            "title": "Value",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "type": "object"
-      },
-      "PortainerStackSpec": {
-        "additionalProperties": false,
-        "description": "A compose stack Portainer deploys on one machine.",
-        "properties": {
-          "compose": {
-            "description": "The docker compose file, as it would be on disk.",
-            "minLength": 1,
-            "title": "Compose file",
-            "type": "string"
-          },
-          "connection_ref": {
-            "description": "The Portainer environment this runs in.",
-            "maxLength": 160,
-            "minLength": 1,
-            "title": "Portainer",
-            "type": "string"
-          },
-          "environment": {
-            "description": "Values the compose file reads. Keep secrets in 1Password.",
-            "items": {
-              "$ref": "#/components/schemas/PortainerStackEnvVar"
-            },
-            "title": "Environment",
-            "type": "array"
-          },
-          "host": {
-            "description": "The machine the stack runs on.",
-            "maxLength": 160,
-            "minLength": 1,
-            "title": "Runs on",
-            "type": "string"
-          },
-          "hostnames": {
-            "description": "Hostnames that reach this stack from outside, if any.",
-            "items": {
-              "type": "string"
-            },
-            "title": "Serves",
-            "type": "array"
-          },
-          "name": {
-            "description": "Lowercase and hyphenated. Used as the compose project name.",
-            "maxLength": 120,
-            "minLength": 1,
-            "pattern": "^[a-z0-9][a-z0-9-]*$",
-            "title": "Stack name",
-            "type": "string"
-          },
-          "port": {
-            "anyOf": [
-              {
-                "maximum": 65535,
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "The port on the machine. Needed only for host-network containers. Published ports are read from the running container.",
-            "title": "Answers on port"
-          }
-        },
-        "required": [
-          "connection_ref",
-          "host",
-          "name",
-          "compose"
         ],
         "type": "object"
       },
@@ -19634,7 +19515,6 @@
           "portainer.image",
           "portainer.network",
           "portainer.runtime",
-          "portainer.stack",
           "portainer.volume",
           "registry.address",
           "registry.digest",
@@ -19701,7 +19581,6 @@
           "portainer.image": "Docker image",
           "portainer.network": "Docker network",
           "portainer.runtime": "Container settings",
-          "portainer.stack": "Container stack",
           "portainer.volume": "Volumes and mounts",
           "registry.address": "Address owner",
           "registry.digest": "Image signatures",
@@ -29199,7 +29078,7 @@
             "required": false,
             "schema": {
               "maxLength": 2000,
-              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|portainer\\.stack|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|portainer\\.stack|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
+              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
               "type": "string"
             },
             "style": "form"
@@ -29216,7 +29095,6 @@
                 "tls.uploaded_certificate",
                 "npm.proxy_host",
                 "github.delivery",
-                "portainer.stack",
                 "portainer.container",
                 "tailscale.device",
                 "tailscale.policy",

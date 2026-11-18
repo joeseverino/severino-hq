@@ -122,8 +122,8 @@ class Machines:
     def resolve(self, endpoint: Any) -> str:
         """The machine an origin points at, whether it named one or addressed one.
 
-        An origin is genuinely either: a stack declares the machine it runs on
-        by name, and a proxy forwards to an address. Empty when neither knows
+        An origin is genuinely either: a route may forward to a machine by
+        name, and a proxy forwards to an address. Empty when neither knows
         it, which is the honest answer and leaves the raw address on the page.
         """
 

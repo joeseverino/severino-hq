@@ -584,7 +584,7 @@ func (r *Registry) portainerStacksReading(ctx context.Context, at portainerSite)
 		}
 		project.Containers = append(project.Containers, container.name())
 	}
-	stacks, err := r.portainerStacksOn(ctx, at.ConnectionRef, at.EnvironmentID, "")
+	stacks, err := r.portainerStacksOn(ctx, at.ConnectionRef, at.EnvironmentID)
 	if err != nil {
 		return nil, err
 	}
