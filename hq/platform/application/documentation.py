@@ -28,12 +28,13 @@ from .labels import plural
 from .projection import listing
 from .record_errors import PolicyError, RecordNotFound
 from .record_fields import PublishedAt, RecordId, one_of
-from .record_saves import Held, Link, linked_saver
+from .record_saves import Held, Link, linked_saver, row
 from .references import Mention, Mentions
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Capability, Principal
 from .sensitivity import safe_records
 from .ui import counted
+lazy from .resource_records import DocumentationRow
 
 MAX_MANIFEST_ITEMS = 2000
 SYNC = "documentation.sync"
@@ -289,24 +290,13 @@ class DocumentationCommand:
     ] = ()
 
 
+# What a doc too sensitive to share leaves blank: where it lives and its notes.
+_WITHHELD = ("obsidian_path", "github_path", "external_url", "notes")
+
+
 def serialize_documentation(record: DocumentationRecord, *, relationships: bool = True) -> dict[str, Any]:
-    safe = record.is_safe_for_ai_export
-    fields: dict[str, Any] = {
-        "doc_id": record.doc_id,
-        "title": record.title,
-        "doc_type": record.doc_type,
-        "system": record.system_service,
-        "environment": record.environment,
-        "status": record.status,
-        "sensitivity": record.sensitivity,
-        "obsidian_path": record.obsidian_path if safe else "",
-        "github_path": record.github_path if safe else "",
-        "external_url": record.external_url if safe else "",
-        "last_reviewed": (record.last_reviewed.isoformat() if record.last_reviewed else None),
-        "published_at": (record.published_at.isoformat() if record.published_at else None),
-        "notes": record.notes if safe else "",
-        "updated_at": record.updated_at.isoformat(),
-    }
+    withheld = {} if record.is_safe_for_ai_export else dict.fromkeys(_WITHHELD, "")
+    fields = row(record, DocumentationRow, system=record.system_service, **withheld)
     if relationships:
         fields["relationships"] = {
             "projects": list(record.related_projects.order_by("slug").values_list("slug", flat=True)),

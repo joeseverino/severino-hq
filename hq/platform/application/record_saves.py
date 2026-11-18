@@ -131,27 +131,35 @@ def as_sent(record: Model, command: type, keys: Mapping[str, str]) -> dict[str, 
     return values
 
 
-def row(record: Model, shape: type) -> Any:
+def row(record: Model, shape: Any, **given: Any) -> Any:
     """``record`` read as ``shape``, the TypedDict its resource declares: each
     field's value, an amount as its decimal string, a day or time in ISO 8601,
     and a linked record by the key its ``Names`` gives, or null for a doc too
-    sensitive to share."""
+    sensitive to share. A field the record does not hold as the shape says it
+    is ``given``; a field the shape does not require is left out unless given."""
 
     values: dict[str, Any] = {}
     for name, names in _row_fields(shape):
-        if names is None:
+        if name in given:
+            values[name] = given[name]
+        elif name not in shape.__required_keys__:
+            continue
+        elif names is None:
             values[name] = _plain(getattr(record, name))
-            continue
-        field = record._meta.get_field(name)
-        key = names.key or records_of(names.resource).lookup
-        if key == field.target_field.name:
-            values[name] = getattr(record, field.attname)
-            continue
-        linked = getattr(record, name)
-        # Only a doc says whether it may be shared.
-        shared = linked is not None and getattr(linked, "is_safe_for_ai_export", True)
-        values[name] = getattr(linked, key) if shared else None
+        else:
+            values[name] = _linked(record, name, names)
     return values
+
+
+def _linked(record: Model, name: str, names: Names) -> Any:
+    field = record._meta.get_field(name)
+    key = names.key or records_of(names.resource).lookup
+    if key == field.target_field.name:
+        return getattr(record, field.attname)
+    linked = getattr(record, name)
+    # Only a doc says whether it may be shared.
+    shared = linked is not None and getattr(linked, "is_safe_for_ai_export", True)
+    return getattr(linked, key) if shared else None
 
 
 @cache
