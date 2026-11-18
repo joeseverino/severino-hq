@@ -9,6 +9,7 @@ from .answer_fields import CallMessage
 from .command_fields import Describe
 from .describe import listed
 from .hq_self import site_url
+from .record_saves import row
 
 # The resource a held request is read by, which a held answer names for a
 # caller whose client cannot wait on it as a task.
@@ -90,21 +91,13 @@ class ApprovalWithdrawn(TypedDict):
 
 
 def serialize_approval(held: ApprovalRequest) -> HeldRequest:
-    return {
-        "id": str(held.id),
-        "capability": held.capability,
-        "target": held.target,
-        "resource_kind": held.resource_kind,
-        "resource_key": held.resource_key,
-        "state": held.state,
-        "requested_actor": held.requested_actor,
-        "requested_interface": held.requested_interface,
-        "reason": held.reason,
-        "requested_at": held.created_at.isoformat(),
-        "expires_at": held.expires_at.isoformat(),
-        "content_fingerprint": held.content_fingerprint,
-        "review_url": site_url(reverse("core:approval_entry", kwargs={"approval_id": held.id})),
-    }
+    return row(
+        held,
+        HeldRequest,
+        id=str(held.id),
+        requested_at=held.created_at.isoformat(),
+        review_url=site_url(reverse("core:approval_entry", kwargs={"approval_id": held.id})),
+    )
 
 
 # The fields of an answer that carry the operation it queued: ``OperationAsked``'s
