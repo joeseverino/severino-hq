@@ -317,7 +317,8 @@ state or a field never leaves early).
 one size. A label keeps one line, uncut. A field a reader fills in (a select) is the row's value, so a
 column holding one never leaves, and in a cell it fills its cell and gives
 way with its column. The reader's way to set a row aside (`row_actions
-put_away=`, the queue's Dismiss) is the last of its buttons, drawn quiet.
+put_away=`, the queue's Dismiss) is the last of its buttons, drawn quiet; alone
+on a row's line its words start at the name's edge.
 *Gates:* the survey's `row actions beside squeezed words`, and
 `test_row_controls.py`.
 
@@ -603,9 +604,8 @@ is the button that opens the panel in place, as a menu does, and each
 facts refreshed in place as its own (`core/_dashboard_glance.html`). Under
 24rem a band reads as a list, each fact a row of its own; small figures keep
 their grid, and headline figures (`large`, `lead`) and a band beside a page's
-title their counted rows, two to a row (a phone's head: label beside value over a one-line note). Headline figures stand on a wider
-floor, so three take a row only once the band is about 360px wide, and each
-value is sized to its cell, never under the band's value size.
+title their counted rows, two to a row (a phone's head: label beside value, a one-line note). Headline figures stand on a
+wider floor, so three take a row only once the band is about 360px wide, each value sized to its cell, never under the band's.
 
 Every label and its value is a fact: `{% fact "Label" value=n url=...
 detail=... %}` inside `{% facts %}`, or the block form `{% fact "Label"
