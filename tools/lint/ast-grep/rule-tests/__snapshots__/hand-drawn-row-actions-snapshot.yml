@@ -54,3 +54,21 @@ snapshots:
       style: secondary
       start: 8
       end: 50
+  "<tr><td>{% button \"A\" offer=press look=\"glyphs\" %}</td></tr>":
+    labels:
+    - source: <td>{% button "A" offer=press look="glyphs" %}</td>
+      style: primary
+      start: 4
+      end: 55
+    - source: td
+      style: secondary
+      start: 5
+      end: 7
+    - source: <td>
+      style: secondary
+      start: 4
+      end: 8
+    - source: "{% button \"A\" offer=press look=\"glyphs\" %}"
+      style: secondary
+      start: 8
+      end: 50

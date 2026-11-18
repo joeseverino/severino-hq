@@ -40,7 +40,7 @@ whole.
         {% if item.advice %}<p>{{ item.advice|breakable }}</p>{% endif %}
         {% include "partials/_resolution_workflow.html" with steps=item.steps only %}
         {% if item.reason %}<p class="attention-reason">{{ item.reason|breakable }}</p>{% endif %}
-        {% if item.links %}<ul class="attention-links">{% for link in item.links %}<li>{% with icon=link|link_icon %}{% if icon %}<a class="icon-link" href="{{ link.url }}" data-tip="{{ link.label }}">{% include "partials/_icon.html" with name=icon only %}<span class="visually-hidden">{{ link.label|breakable }}</span></a>{% else %}<a href="{{ link.url }}">{{ link.label|breakable }}</a>{% endif %}{% endwith %}</li>{% endfor %}</ul>{% endif %}
+        {% if item.links %}<ul class="attention-links">{% for link in item.links %}<li>{% with icon=link|link_icon %}{% if icon %}{% button link.label link.url look="ghost glyph" icon=icon data_tip=link.label %}{% else %}<a href="{{ link.url }}">{{ link.label|breakable }}</a>{% endif %}{% endwith %}</li>{% endfor %}</ul>{% endif %}
       </div>
       {% endif %}
     {% endif %}

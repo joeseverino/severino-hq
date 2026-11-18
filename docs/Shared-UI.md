@@ -83,6 +83,7 @@ fails when this file falls behind. The rules around it are in
 | `button` | `modal` |  |  | The dialog a link opens where script runs. |
 | `button` | `name` |  |  | The field its form's own sends. |
 | `button` | `offer` | `None` |  | A `PageAction` that posts, which it sends: where, its field and the rest. |
+| `button` | `outside` | `False` |  | Its url is a page outside HQ, opened as every outside link is. |
 | `button` | `pressed` | `None` |  | A toggle, and which way it stands. |
 | `button` | `submit` | `False` |  | Sends its own form. |
 | `button` | `title` |  |  | Its `title`, read where it stands. |
@@ -237,7 +238,7 @@ fails when this file falls behind. The rules around it are in
 
 Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `two-col`, `visually-hidden`, `whole`, `wide-only`.
+Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `two-col`, `visually-hidden`, `whole`, `wide-only`.
 
 Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
 

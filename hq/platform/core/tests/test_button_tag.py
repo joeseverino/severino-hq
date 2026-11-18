@@ -1,6 +1,7 @@
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase
 
+from hq.platform.application.markup_testing import elements, with_class
 from hq.platform.application.pages import PageAction, RowMark, RowOrder
 
 
@@ -39,7 +40,7 @@ class ButtonTagTests(SimpleTestCase):
 
     def test_a_look_and_a_class_together_are_refused(self):
         with self.assertRaises(TemplateSyntaxError):
-            draw('{% button "Example" "/example/" look="ghost" css="icon-link" %}')
+            draw('{% button "Example" "/example/" look="ghost" css="example-pin" %}')
 
     def test_an_attribute_it_does_not_draw_is_refused(self):
         with self.assertRaises(TemplateSyntaxError):
@@ -54,6 +55,32 @@ class ButtonTagTests(SimpleTestCase):
 
         self.assertIn('<svg class="icon"', html)
         self.assertIn('<span class="filter-count">3</span>', html)
+
+    def test_a_glyph_with_an_icon_shows_the_icon_and_is_named_by_its_words(self):
+        html = draw('{% button "Topology" "/example/" look="ghost glyph" icon="info" %}')
+
+        (link,) = elements(html, "a")
+        self.assertEqual(link.words, "Topology")
+        self.assertEqual([each.words for each in with_class(html, "visually-hidden")], ["Topology"])
+        self.assertEqual(len(elements(html, "svg")), 1)
+
+    def test_a_button_out_of_hq_opens_as_every_outside_link_does(self):
+        html = draw('{% button "↗" url look="glyph" outside=True title="Open live page" %}', url="https://example.com/")
+
+        (link,) = elements(html, "a")
+        self.assertEqual((link.attrs["href"], link.attrs["target"]), ("https://example.com/", "_blank"))
+        self.assertEqual(set(link.attrs["rel"].split()), {"noopener", "noreferrer"})
+        self.assertEqual(link.attrs["aria-label"], "Open live page")
+        self.assertLessEqual({"btn", "glyph"}, link.classes)
+        self.assertEqual(elements(draw('{% button "Open" url outside=True %}', url="javascript:alert(1)"), "a"), [])
+
+    def test_a_button_out_of_hq_refuses_what_an_outside_link_cannot_carry(self):
+        for written in (
+            '{% button "Open" outside=True %}',
+            '{% button "Open" "https://example.com/" outside=True data_example=1 %}',
+        ):
+            with self.subTest(written), self.assertRaises(TemplateSyntaxError):
+                draw(written)
 
 
 class PostingButtonTests(SimpleTestCase):
@@ -77,7 +104,7 @@ class PostingButtonTests(SimpleTestCase):
                 draw(written, press=moves_up())
 
     def test_it_targets_the_shared_form_with_its_offers_address_and_field(self):
-        html = draw('{% button press.label offer=press css="icon-link" %}', press=moves_up("/things/7/"))
+        html = draw('{% button press.label offer=press look="glyph" %}', press=moves_up("/things/7/"))
 
         self.assertIn('form="hq-post"', html)
         self.assertIn('formaction="/things/7/"', html)

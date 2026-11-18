@@ -224,6 +224,11 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    last button touched hovered, so it would stay tinted beside its
    neighbors after a tap. */
 @media (hover: hover) { .btn:hover, :where(button:not([class])):hover { border-color: var(--line-strong); background: var(--surface-2); text-decoration: none; } }
+/* A square for a glyph, and as wide as its word when it holds one, a line
+   tall. Written before the looks that color a button, so a quiet glyph is
+   the ghost's color. */
+.btn.glyph { min-width: var(--control-compact); min-height: var(--control-compact); block-size: var(--control-compact); padding: 0 var(--space-3); color: var(--accent-2); font-weight: 650; line-height: 1; }
+@media (hover: hover) { .btn.glyph:hover { color: var(--accent); } }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: none; }
 @media (hover: hover) { .btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); } }
 .btn.danger { background: var(--danger); color: var(--accent-ink); border-color: var(--danger); }

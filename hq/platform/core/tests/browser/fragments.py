@@ -194,9 +194,9 @@ _ROWS = """{% load action_tags %}{% if said %}<ul class="messages"><li class="ms
 <p data-probe="other">{{ other }}</p>
 {% for line in lines %}<p>An example line {{ line }}.</p>{% endfor %}
 <ul class="list-rows" data-probe="rows">{% for row in rows %}<li data-row="{{ row.key }}"><span>Example {{ row.key }}</span>
-{% button "\u2191" offer=row.up css="icon-link" title="Move up" disabled=forloop.first %}
-{% button "\u2193" offer=row.down css="icon-link" title="Move down" disabled=forloop.last %}
-{% button "\u00d7" offer=row.delete css="icon-link" title="Delete" %}
+{% button "\u2191" offer=row.up look="glyph" title="Move up" disabled=forloop.first %}
+{% button "\u2193" offer=row.down look="glyph" title="Move down" disabled=forloop.last %}
+{% button "\u00d7" offer=row.delete look="glyph" title="Delete" %}
 </li>{% endfor %}</ul>
 <div id="probe-aside" data-fragment><span data-probe="aside">{{ aside }}</span>
 {% button "Mark" offer=presses.mark %}</div>

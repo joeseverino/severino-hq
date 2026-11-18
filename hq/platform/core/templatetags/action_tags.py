@@ -28,6 +28,7 @@ lazy from hq.platform.application.pages import PageAction, offered_now
 lazy from hq.platform.application.ui import button_classes
 lazy from hq.platform.core.template_parts import Part, slotted
 lazy from hq.platform.core.templatetags.value_tags import (
+    OUTSIDE_LINK,
     _request,
     arrow as onward_arrow,
     breakable,
@@ -169,8 +170,7 @@ def _post_button(label, url, *, name, value, css, title, disabled, pressed, hit,
     # A toggle (`pressed`, true or false) says aloud which way it stands. A
     # control drawn smaller than a target asks for its hit area (`hit`,
     # page.css).
-    glyph = not any(character.isalnum() for character in str(label))
-    attributes = {"name": name, "value": value, "title": title, "aria-label": title if glyph else ""}
+    attributes = {"name": name, "value": value, "title": title, "aria-label": title if _glyph(label) else ""}
     if pressed is not None:
         attributes["aria-pressed"] = "true" if pressed else "false"
     return format_html(
@@ -190,8 +190,17 @@ def _post_button(label, url, *, name, value, css, title, disabled, pressed, hit,
 BUTTON_ATTRIBUTES = frozenset({"popovertarget", "command", "commandfor", "aria_haspopup", "hidden"})
 
 
-def _button_words(label, icon="", count=None, onward=False):
+def _glyph(label):
+    """Whether ``label`` is a glyph (an arrow, a star), which says nothing aloud."""
+
+    return not any(character.isalnum() for character in str(label))
+
+
+def _button_words(label, icon="", count=None, onward=False, *, unseen=False):
+    # A glyph button with an icon shows the icon alone; its words name it.
     words = button_words(label)
+    if unseen and icon:
+        words = format_html('<span class="visually-hidden">{}</span>', words)
     if onward:
         words = format_html("{}{}", words, mark_safe(onward_arrow()))  # noqa: S308 - the arrow tag's own markup
     if icon:
@@ -208,6 +217,7 @@ def button(
     label: Annotated[Any, Describe("Its words.")],
     url: Annotated[Any, Describe("Where it leads.")] = "",
     *,
+    outside: Annotated[bool, Describe("Its url is a page outside HQ, opened as every outside link is.")] = False,
     offer: Annotated[Any, Describe("A `PageAction` that posts, which it sends: where, its field and the rest.")] = None,
     submit: Annotated[bool, Describe("Sends its own form.")] = False,
     look: Annotated[str, Describe("How it looks, its words from `ui.BUTTON_LOOKS`.")] = "",
@@ -233,8 +243,10 @@ def button(
     or the platform acts on (``data_*``, ``BUTTON_ATTRIBUTES``). Its words may
     open with an ``icon``, close with a ``count`` of what it holds, or end
     with the ``arrow`` of a link onward. ``look`` is how
-    it looks (``ui.BUTTON_LOOKS``); ``css`` stands in for the button's look
-    on a control that is not drawn as one (an icon, a pin). Disabled or the
+    it looks (``ui.BUTTON_LOOKS``); the ``glyph`` look shows its ``icon``
+    alone, its words heard and unseen. ``css`` stands in for the button's look
+    on a control that is not drawn as one (a pin). ``outside`` leads out of HQ
+    as ``{% outside_link %}`` does. Disabled or the
     page it names (``current``), it is neither a link nor a form, and stays in
     the tab order so its title is read where it stands.
 
@@ -258,6 +270,8 @@ def button(
     )
     if posts and (name or value != ""):
         unknown += ["name", "value"]
+    if outside and (not url or attributes or modal):
+        raise template.TemplateSyntaxError("button leads outside (outside=True) to a url, with no hooks or modal")
     if unknown:
         raise template.TemplateSyntaxError(f"button takes no {', '.join(unknown)}")
     try:
@@ -268,11 +282,14 @@ def button(
         return _posting(
             label, offer, classes=classes, title=title, disabled=disabled, pressed=pressed, hit=hit, context=context
         )
-    words = _button_words(label, icon, count, arrow)
+    words = _button_words(label, icon, count, arrow, unseen="glyph" in look.split())
     named = {"class": classes, "title": title} | {key.replace("_", "-"): val for key, val in attributes.items()}
     if (disabled and not submit) or current:
         state = {"role": "button", "aria-disabled": "true", "tabindex": "0"} if disabled else {"aria-current": "page"}
         return format_html("<span{}>{}</span>", html_attributes(named | state), words)
+    if outside:
+        named = {"css": classes, "title": title, "label": title if _glyph(label) else "", "content": words}
+        return mark_safe(render_to_string(OUTSIDE_LINK, {"url": url, **named}).strip())  # noqa: S308 - the outside link part's own markup
     if url:
         return format_html("<a{}>{}</a>", html_attributes({"href": url, "data-modal-open": modal} | named), words)
     kind = {"type": "submit" if submit else "button", "name": name, "value": value, "disabled": bool(disabled)}

@@ -1335,13 +1335,16 @@ fill, `--muted` on a surface, `--code-muted` beside code.
 **Buttons.** Primary for the one thing a page is for; default for the rest;
 `ghost` for link-like actions that sit inline; `danger` in red text on the same
 surface as its neighbors, loud only in its confirmation; `compact` for one
-that stands in a row, a list or a head, a line tall; `link` for one among
+that stands in a row, a list or a head, a line tall; `glyph` for a square
+that holds a glyph or an `icon` alone (a row's order and mark, a page's links
+on a queue row with `ghost`), its words heard and unseen; `link` for one among
 words, drawn as a link; `menu` for a row of a menu; `bar` for a control of
 the site header's bar, on the bar's ground. `link` and `menu` draw
 no box, so `button_classes` drops a look that paints one beside them, and a
 destructive row keeps only its red. Every control that
 looks like a button is `{% button label url look="primary compact" %}`, the one
-writer of `.btn` (`ui.button_classes` for Python's parts): a link, with an
+writer of `.btn` (`ui.button_classes` for Python's parts): a link, with
+`outside=True` one out of HQ drawn as `{% outside_link %}` draws it, with an
 `offer` one that posts, with `submit=True` its form's own, and with neither
 and no url one a script acts on (`data_*`, `popovertarget`, `command`). Its
 words may open with an `icon`, close with a `count` or end with an `arrow`.
