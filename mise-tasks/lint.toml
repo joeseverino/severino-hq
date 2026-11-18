@@ -79,6 +79,7 @@ sources = [
   "hq/platform/api/hq-api.openapi.json",
   "controller/api/*.openapi.json",
   "tools/lint/package*.json",
+  "tools/lint/redocly.yaml",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -88,21 +89,23 @@ sources = [
 ]
 outputs = []
 depends = ["setup:lint-tools"]
-# Specification rules cover wire contracts. HTTP style recommendations do not
-# apply to Django's canonical trailing slashes or the stdin/stdout bridge.
+# Specification rules cover wire contracts, and redocly.yaml adds the ones that
+# hold each example to its schema. HTTP style recommendations do not apply to
+# Django's canonical trailing slashes or the stdin/stdout bridge.
 # Stylish names each problem's file, line and column. HQ writes all three
 # documents, so a problem is fixed in what declares them, never ignored.
 env = { REDOCLY_SUPPRESS_UPDATE_NOTICE = "true" }
-run = "redocly lint --extends=spec --format=stylish hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json || { echo 'lint:openapi: each problem is at the file:line:column above. HQ writes these documents: fix the Python that declares the shape, then rewrite them: mise run manage -- api_openapi for hq-api, mise run manage -- bridge_contract for the two under controller/api.' >&2; exit 1; }"
+run = "redocly lint --config=tools/lint/redocly.yaml --format=stylish hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json || { echo 'lint:openapi: each problem is at the file:line:column above. HQ writes these documents: fix the Python that declares the shape, then rewrite them: mise run manage -- api_openapi for hq-api, mise run manage -- bridge_contract for the two under controller/api.' >&2; exit 1; }"
 
-["lint:openapi-breaking"]
-description = "The machine API's document breaks no client of its base's, or its exemption file admits the break with a reason"
+["lint:sdk-breaking"]
+description = "hq_sdk keeps the shape its base offered extensions, or PLUGIN_API_VERSION moves with the break"
 hide = true
 tags = ["fast"]
 sources = [
-  "hq/platform/api/hq-api.openapi.json",
-  "hq/platform/api/hq-api.breaking-exemptions.md",
-  "tools/openapi_breaking.py",
+  "hq/**/*.py",
+  "hq_sdk/**/*.py",
+  "tools/sdk_breaking.py",
+  "tools/pipeline/plugin_identity.py",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -111,11 +114,10 @@ sources = [
   "tools/pipeline/toolchain.env",
 ]
 outputs = []
-# Only hq-api: the controller's two documents ship in the same image as both
-# of their ends. The base is fast's; CI's lint job names the commit its
-# change lands on in CHECK_BASE.
+# The base is fast's; CI's lint job names the commit its change lands on in
+# CHECK_BASE.
 usage = 'arg "[base]" env="CHECK_BASE" help="The ref to compare with; default the branch HEAD lands on, then origin/main"'
-run = 'uv run python -m tools.openapi_breaking "${usage_base:-}"'
+run = 'uv run python -m tools.sdk_breaking "${usage_base:-}"'
 
 ["lint:deptry"]
 description = "Host code imports only declared runtime dependencies and imports every one, or pyproject.toml says why not"
@@ -361,21 +363,28 @@ run = "go tool govulncheck -test ./..."
 
 # Each derived file against its source. A gate tagged derived is its file's
 # one declaration (docs/Development.md, Derived files): vars.writes names each
-# file it writes whole, and vars.writes_part_of each hand-written file it writes
-# a section of. fix:derived runs every one's fix mode, .gitattributes marks what
+# file it writes whole. fix:derived runs every one's fix mode, .gitattributes marks what
 # they write, and tools/tests/test_drift_gates.py holds each to what its fix
 # writes.
 
-["lint:drift-sdk-contract"]
-description = "hq_sdk's committed shape, text examples and docs/Plugins.md table are what the SDK offers"
+["lint:drift-shared-ui-reference"]
+description = "docs/Shared-UI.md is what the host's templates offer an extension"
 hide = true
 tags = ["fast", "derived"]
 sources = [
   "**/*.py",
-  "hq_sdk/**",
-  "docs/Plugins.md",
+  "docs/Shared-UI.md",
   "hq/domains/control_plane/bridge_base.json",
-  "templates/**",
+  "hq/domains/docs_index/schema.json",
+  # The frames and partials its tables read; an extension's
+  # check derives the rest of the template contract as it runs.
+  "templates/page.html",
+  "templates/list_page.html",
+  "templates/confirm_page.html",
+  "templates/form_page.html",
+  "templates/partials/**",
+  # Each public class and hook the table lists is held to the stylesheet and
+  # scripts that still define it.
   "static/css/**",
   "static/js/**",
   "tools/lint/ast-grep/rules/hand-drawn-*.yml",
@@ -390,8 +399,8 @@ sources = [
 outputs = []
 extends = "django"
 usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
-vars = { writes = "hq_sdk/contract.json hq_sdk/text_examples.json", writes_part_of = "docs/Plugins.md" }
-run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py sdk_contract; else uv run python manage.py sdk_contract --check; fi'
+vars = { writes = "docs/Shared-UI.md" }
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py shared_ui_reference; else uv run python manage.py shared_ui_reference --check; fi'
 
 ["lint:drift-api-document"]
 description = "The machine API's OpenAPI document is current"
@@ -400,8 +409,8 @@ tags = ["fast", "derived"]
 sources = [
   "**/*.py",
   "hq/platform/api/hq-api.openapi.json",
-  "hq/platform/api/openapi-examples.json",
   "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
@@ -416,38 +425,6 @@ usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it f
 vars = { writes = "hq/platform/api/hq-api.openapi.json" }
 run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py api_openapi; else uv run python manage.py api_openapi --check; fi'
 
-# A recording the examples file must equal, written to a temporary file of its
-# own rather than over the file.
-["lint:drift-api-examples"]
-description = "The machine API's recorded examples are what its tests receive"
-hide = true
-sources = [
-  "**/*.py",
-  "hq/platform/api/openapi-examples.json",
-  "hq/domains/control_plane/bridge_base.json",
-  "deploy/systemd/severino-hq-secrets.timer",
-  "templates/**",
-  "static/css/**",
-  "static/js/**",
-  "static/vendor/scalar/**",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-]
-outputs = []
-extends = "django"
-# A recording: a serial run of the tests fix:api-examples names. So fast
-# selects it on a change to Python alone only where it selects one of those
-# tests, and runs its fix only once its check has failed, then checks again
-# (tools/gate/fast.py, RECORDING).
-tags = ["fast", "recording", "heavy"]
-usage = 'flag "--fix" help="Record the examples into the file and rewrite the document instead of checking: fast runs it once the check fails"'
-vars = { writes = "hq/platform/api/openapi-examples.json" }
-run = 'if [ "${usage_fix:-}" = true ]; then mise run fix:api-examples; exit; fi; recorded="$(mktemp)"; trap "rm -f \"$recorded\"" EXIT; HQ_API_RECORD_EXAMPLES_TO="$recorded" mise run fix:api-examples && diff -u hq/platform/api/openapi-examples.json "$recorded" || { echo "lint:drift-api-examples: the recording differs from hq/platform/api/openapi-examples.json, or did not finish; mise run fix:api-examples records it again" >&2; exit 1; }'
-
 ["lint:drift-bridge-contract"]
 description = "The controller's contracts are the ones the registry derives"
 hide = true
@@ -455,6 +432,7 @@ tags = ["fast", "derived"]
 sources = [
   "**/*.py",
   "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
   "controller/api/**",
   "hq/config/controller-connections.json",
   "deploy/systemd/severino-hq-secrets.timer",
@@ -479,6 +457,7 @@ sources = [
   "**/*.py",
   "docs/Connections.md",
   "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
@@ -501,6 +480,7 @@ sources = [
   "**/*.py",
   "docs/Posture.md",
   "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
@@ -523,6 +503,7 @@ sources = [
   "**/*.py",
   "hq/platform/application/hq-procedure.schema.json",
   "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",

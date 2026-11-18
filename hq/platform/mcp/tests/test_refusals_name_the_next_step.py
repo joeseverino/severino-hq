@@ -21,7 +21,7 @@ from hq.platform.application.security import Principal, agent_principal, mcp_pri
 
 from ..identity import set_principal
 from ..server import mcp
-from .registry import KIND, registry_patched, served, with_kind
+from .registry import KIND, ExampleRecord, registry_patched, served, with_kind
 
 WRITER = Principal("example-writer", "mcp", frozenset({"write_projects", "read"}))
 PROJECT = {"name": "Named next", "slug": "named-next", "status": "active"}
@@ -155,7 +155,9 @@ class NamedServedReadTests(TestCase):
         return async_to_sync(server._call)(None, params).structured_content
 
     def test_a_resource_gone_since_the_tools_were_bound_names_the_catalog_and_the_catalog_answers(self):
-        kind = ResourceSpec(KIND, "Example", "Records.", "read", _listing, EmptyQuery, _record, "name")
+        kind = ResourceSpec(
+            KIND, "Example", "Records.", "read", _listing, EmptyQuery, _record, "name", item_type=ExampleRecord
+        )
         host = resource_registry()
 
         with served(with_kind(kind)) as server, registry_patched(host):
@@ -179,7 +181,9 @@ class NamedServedReadTests(TestCase):
         self.assertEqual(found, _record("example-one"))
 
     def test_a_resource_with_no_detail_view_names_its_listing_and_the_listing_answers(self):
-        kind = ResourceSpec(KIND, "Example", "Records.", "read", _listing, EmptyQuery, None, "name")
+        kind = ResourceSpec(
+            KIND, "Example", "Records.", "read", _listing, EmptyQuery, None, "name", item_type=ExampleRecord
+        )
 
         with served(with_kind(kind)) as server:
             refused = self._on(server, "get_resource", {"name": KIND, "identifier": "example-one"})
@@ -203,7 +207,18 @@ def _example_records(owner_of):
             raise RecordNotFound("No record matches the requested identifier.")
         return {"name": identifier}
 
-    return ResourceSpec(KIND, "Example", "Records.", "read", listing, EmptyQuery, detail, "name", pass_principal=True)
+    return ResourceSpec(
+        KIND,
+        "Example",
+        "Records.",
+        "read",
+        listing,
+        EmptyQuery,
+        detail,
+        "name",
+        pass_principal=True,
+        item_type=ExampleRecord,
+    )
 
 
 class NearestRecordTests(TestCase):

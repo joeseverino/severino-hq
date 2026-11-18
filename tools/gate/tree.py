@@ -30,7 +30,9 @@ def working_tree(root: Path, *, user_ignores: bool = True, leaving: Sequence[str
         # A checkout with nothing yet staged has no index, and an empty one is the same start.
         real = Path(root, git("rev-parse", "--git-path", "index"))
         if real.is_file():
-            shutil.copyfile(real, index)
+            # With its modification time: git rereads an entry written in the
+            # instant the index was, which a copy stamped later would hide.
+            shutil.copy2(real, index)
         env = os.environ | {"GIT_INDEX_FILE": str(index)}
         excludes = () if user_ignores else ("-c", "core.excludesFile=/dev/null")
         git(*excludes, "add", "--all", env=env)

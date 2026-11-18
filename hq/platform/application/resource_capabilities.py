@@ -37,6 +37,8 @@ CREATE_CAPABILITY = "infrastructure.resource.create"
 MACHINE_DETAILS = "machine_details"
 REMOVAL_CAPABILITY = "infrastructure.resource.remove"
 UPDATE_CAPABILITY = "infrastructure.resource.update"
+# The update's mode on a domain's mail page: a policy composed from its choices.
+MAIL_POLICY = "mail_policy"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

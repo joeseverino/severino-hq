@@ -9,15 +9,11 @@ from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SET
 from hq.platform.core.tests.browser.probes.tables import CELLS, TABLES_THAT_DO_NOT_FIT
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.stress import stress_estate
+from hq.platform.core.tests.browser.survey import CLOSE_OPENED, open_every_fold
 
 # A key that changes nothing, pressed before a batch a gate opens, so the
 # browser takes what the batch moves as the reader's own doing (`as_a_reader`).
 _NO_OP_KEY = "Shift"
-
-# Each drawing with no box of its own while the box that holds it has one:
-# something a reader can open.
-_CLOSED = """(disclosure) => document.querySelector(
-  `${disclosure}:not([open]), [popover]:not(:popover-open)`) !== null"""
 
 # A page's note on its readings, saying nothing and then the longest line it
 # says (a failure that names what it could not read), against the band
@@ -99,17 +95,31 @@ class LayoutBrowserTests(BrowserGate):
                 self.spent(RULE_COSTS, rule.__name__, perf_counter() - began, f"{name} at {width}px")
 
     def hold_opened(self, name, width, *, popovers=True, **where):
-        """Every layout check with every disclosure open, and with each
-        anchored popover shown when ``popovers``, wherever the page holds
-        something closed: with nothing to open, the page open is the page as
-        read."""
+        """Every layout check with every fold open as the survey opens them
+        (`open_every_fold`: with script, every row a reader can open too), and
+        with each anchored popover shown when ``popovers``, wherever the page
+        holds something closed: with nothing to open, the page open is the
+        page as read. What was opened is closed again after."""
 
-        if not self.page.evaluate(_CLOSED, SELECTORS["disclosure"]):
-            return
-        opened = [self.open_every_disclosure, self.every_layout_check_holds]
+        self.folds_opened = 0
+        opened = [self.opens_every_fold]
         if popovers:
             opened.append(self.every_anchored_popover_keeps_the_layout_rules)
         self.hold(name, width, opened, disclosures="open", **where)
+        if self.folds_opened:
+            self.page.evaluate(CLOSE_OPENED)
+            self.settle()
+
+    def opens_every_fold(self, name):
+        """Every fold open, round after round, and every layout check held on
+        the page so: a fold that would not open, or a region it brought in
+        that never answered, is a finding of its own."""
+
+        self.folds_opened, short = open_every_fold(self)
+        if short:
+            self.fail(f"opening every fold stopped short: {short}")
+        if self.folds_opened:
+            self.every_layout_check_holds(name)
 
     def open_every_disclosure(self, _name):
         """Every disclosure open, for the rules that follow. A popover is
@@ -177,11 +187,6 @@ class LayoutBrowserTests(BrowserGate):
             self.assertGreaterEqual(placed["end"], -0.5)
             self.assertFalse(placed["lines"])
             self.assertEqual(note["cut"], [])
-
-    def no_block_breaks_a_paragraph(self, _name):
-        # A block written inside a <p> closes it early and leaves an empty <p>
-        # where its end tag was: the rest of the line falls out of it.
-        self.assertEqual(self.page.locator(SELECTORS["broken_paragraph"]).count(), 0)
 
     def nothing_runs_out_of_its_table_cell(self, _name):
         self.assertEqual(self.read([(CELLS, None)])[0], [])

@@ -1,19 +1,16 @@
 id: attention-item-says-why
 valid:
-  - 'Insight(status="attention", eyebrow="Example", title="Example", value="1", body="", why="Example reads late.")'
-  - 'ui.Insight(title="Example", why=reason)'
-  - 'Insight(status="attention", title="Example", **said)'
-  - 'Insightful(title="Example")'
   - |
     from hq_sdk.plugin import Finding
     Finding(rule="example", subject="", severity="attention", title="Example", explanation="", why="Example reads late.")
   - |
+    from hq_sdk.plugin import Finding
+    Finding(rule="example", subject="", severity="attention", title="Example", **said)
+  - |
     from example_findings import Finding
     Finding(rule="example", subject="", severity="attention", title="Example", explanation="")
-invalid:
   - 'Insight(status="attention", eyebrow="Example", title="Example", value="1", body="")'
-  - 'ui.Insight(title="Example", workflow=plan)'
-  - 'Insight("attention", "Example", "Example", "", "")'
+invalid:
   - |
     from hq_sdk.plugin import Finding, opens
     Finding(rule="example", subject="", severity="attention", title="Example", explanation="")

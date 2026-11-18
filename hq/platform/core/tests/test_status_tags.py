@@ -2,7 +2,7 @@
 
 import re
 
-from django.template import engines
+from django.template import TemplateSyntaxError, engines
 from django.template.autoreload import get_template_directories
 from django.test import SimpleTestCase, tag
 
@@ -162,6 +162,13 @@ class StatusPillTests(SimpleTestCase):
         for options in ({"ink": "context"}, {"ink": "context", "pill": False}, {"ink": "other", "dot": True}):
             with self.subTest(options), self.assertRaises(ValueError):
                 status_pill("Up", tone="good", **options)
+
+    def test_a_page_s_ink_outside_its_choices_is_refused_as_the_tag_draws(self):
+        """The tag's options are its function's signature, and a choice its
+        type names is held by the one check every part's choices pass."""
+
+        with self.assertRaisesMessage(TemplateSyntaxError, "status ink="):
+            _drawn('{% status "Up" tone="good" dot=True ink="other" %}')
 
     def test_only_a_dotted_state_carries_the_dot(self):
         for source in ('{% status "Up" tone="good" %}', '{% status "Up" tone="good" pill=False %}'):

@@ -7,8 +7,9 @@ from django.test import SimpleTestCase
 
 import hq_sdk.ui
 
-from ..card_items import Insight, Kpi, ListRow
+from ..card_items import Kpi, ListRow
 from ..display_words import in_words
+from ..finding_model import Finding
 from ..service_context import Cell
 
 
@@ -49,7 +50,7 @@ class ConstructionTests(SimpleTestCase):
             lambda: Kpi("Last read", value="2026-10-22T09:36:47Z"),
             lambda: ListRow("Message", meta="2026-10-22"),
             lambda: Cell("[{'name': 'web'}]"),
-            lambda: Insight("good", "Tailnet", "Device", "1", "Body", facts=(("Seen", "True"),)),
+            lambda: Finding("example", "example", "Device", "good", "Body", evidence=(("Seen", "True"),)),
         ):
             with self.assertRaisesRegex(ValueError, "say it in words"):
                 build()
@@ -66,7 +67,9 @@ class ConstructionTests(SimpleTestCase):
     def test_a_label_or_a_facts_label_is_refused_as_a_fields_name(self):
         for build in (
             lambda: Kpi("confirm_prune", value=3),
-            lambda: Insight("good", "Tailnet", "Device", "1", "Body", facts=(("device_address", "192.0.2.10"),)),
+            lambda: Finding(
+                "example", "example", "Device", "good", "Body", evidence=(("device_address", "192.0.2.10"),)
+            ),
         ):
             with self.assertRaises(ValueError):
                 build()

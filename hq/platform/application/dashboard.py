@@ -6,14 +6,13 @@ model and decides no number.
 """
 
 from collections.abc import Iterable, Mapping
-from dataclasses import asdict
 from functools import partial
 from typing import Any, TypedDict
 
 from django.utils import timezone
 
 from . import sections
-from .attention import finding_insight, readable_by
+from .attention import finding_why, readable_by
 from .derivations import derivation
 from .derived_inputs import DASHBOARD_READS, QUEUE_READS, READER_QUEUE_READS, composed_variant
 from .domains import (
@@ -25,14 +24,17 @@ from .domains import (
     reader_variant,
 )
 from .finding_model import Finding
+from .finding_steps import WrittenStep
+from .findings import finding_key, rule_for
+from .json_schemas import as_written
 from .plugins import source_overview
 from .projection import projection_scope
 from .read_models import ActivityEvent, recent_activity
 from .record_findings import contacts_state
 from .security import Capability, Principal
-from .workflows import WrittenAction, WrittenWorkflow, serialize_workflow
+from .workflows import WrittenAction
 lazy from .action_items import item_key, item_revision, waiting_count
-lazy from .card_items import Insight
+lazy from .resource_records import ActionItem
 lazy from .routes import reverse
 lazy from .ui import DomainOverview
 
@@ -117,7 +119,8 @@ def waiting(principal: Principal, user_pk: int) -> int:
 
 
 class QueueItem(TypedDict):
-    """One action item as the queue partial and the machine doors carry it."""
+    """One action item as the queue partial and the machine doors carry it:
+    a ``Finding`` as ``finding_rows`` words it."""
 
     key: str
     revision: str
@@ -129,16 +132,18 @@ class QueueItem(TypedDict):
     status: str
     url: str
     action: str
-    workflow: WrittenWorkflow | None
+    steps: list[WrittenStep]
+    no_help_reason: str
+    check: WrittenAction | None
     actions: list[WrittenAction]
     subject: WrittenAction | None
     notice: bool
-    # A request a person decides, never set aside (``Insight.held``).
+    # A request a person decides, never set aside (``Finding.held``).
     held: bool
     family: str
-    # Why it is as urgent as its status says (``Insight.why``).
+    # Why it is as urgent as its status says (``attention.finding_why``).
     why: str
-    # What clears it, or "" (``Insight.clears``).
+    # What clears it, or "".
     clears: str
     # ISO 8601, or "" when unknown.
     since: str
@@ -152,11 +157,15 @@ class QueueItem(TypedDict):
 
 
 def finding_rows(source_id: str, source: str, findings: Iterable[Finding]) -> tuple[QueueItem, ...]:
-    """``findings`` as the queue's rows, each worded by ``attention.finding_insight``:
-    how a page draws what is wrong with the thing it is about."""
+    """``findings`` as the queue's rows: how a page draws what is wrong with
+    the thing it is about, wherever it is drawn.
+
+    A host rule's finding is said in its rule's words; one no host rule
+    raises (an extension's, a held request) says its own ``family``, ``why``
+    and ``clears``."""
 
     url = reverse("control_plane:findings")
-    return tuple(_queue_item(source_id, source, finding_insight(finding, url)) for finding in findings)
+    return tuple(_queue_item(source_id, source, finding, url) for finding in findings)
 
 
 def gathered_rows(entries: Iterable[Mapping[str, Any]]) -> list[QueueItem]:
@@ -166,34 +175,67 @@ def gathered_rows(entries: Iterable[Mapping[str, Any]]) -> list[QueueItem]:
     return [row for entry in entries for row in finding_rows(entry["source_id"], entry["source"], (entry["finding"],))]
 
 
-def _queue_item(source_id: str, source: str, item: Insight) -> QueueItem:
-    # Private, so a row reaches a page only as a finding (``finding_rows``).
-
+def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str) -> QueueItem:
+    rule = rule_for(finding.rule)
+    primary = finding.primary
     return {
-        "key": item_key(source_id, item.key),
-        "revision": item_revision(item),
+        "key": item_key(source_id, finding_key(finding)),
+        "revision": item_revision(finding),
         "source_id": source_id,
         "source": source,
-        "label": item.title,
-        "detail": item.body,
-        "count": item.magnitude or 1,
-        "status": item.status,
-        "url": item.url,
-        "action": item.action,
-        "workflow": serialize_workflow(item.workflow),
-        "actions": [asdict(action) for action in item.actions],
-        "subject": asdict(item.subject) if item.subject else None,
-        "notice": item.notice,
-        "held": item.held,
-        "family": item.family,
-        "why": item.why,
-        "clears": item.clears,
-        "since": item.since.isoformat() if item.since else "",
-        "observed_at": item.observed_at.isoformat() if item.observed_at else "",
-        "reads": item.reads,
-        "facts": [list(fact) for fact in item.facts],
-        "links": [asdict(link) for link in item.links],
-        "read_capabilities": list(item.read_capabilities),
+        "label": finding.title,
+        "detail": finding.explanation,
+        "count": finding.count or 1,
+        "status": finding.severity,
+        "action": primary.label if primary else "",
+        # A finding of a page's own (an unmet check, a step a request contradicts) has no rule the findings page lists.
+        "url": primary.url if primary else f"{findings_url}?rule={finding.rule}" if rule else "",
+        "steps": [as_written(step) for step in finding.steps],
+        "no_help_reason": finding.no_help_reason,
+        "check": as_written(finding.check) if finding.check else None,
+        "actions": [],
+        "subject": as_written(finding.subject_link) if finding.subject_link else None,
+        "notice": finding.notice,
+        "held": finding.held,
+        # A rule's findings are one kind of matter, named as the rule names itself.
+        "family": rule.title if rule is not None else finding.family,
+        "why": finding_why(finding, rule),
+        "clears": rule.clears if rule is not None else finding.clears,
+        "since": finding.since.isoformat() if finding.since else "",
+        "observed_at": finding.observed_at.isoformat() if finding.observed_at else "",
+        "reads": finding.reads,
+        "facts": [list(fact) for fact in finding.evidence],
+        "links": [as_written(link) for link in finding.pages],
+        "read_capabilities": list(finding.read_capabilities),
+    }
+
+
+def listed_item(item: QueueItem) -> ActionItem:
+    """``item`` as a machine reads it, by list or at a glance: every command
+    and address it acts on or points at, without what the page keeps for
+    itself (the revision a person sets it aside at, the capabilities the
+    queue was already filtered by, and the heading items are grouped under)."""
+
+    return {
+        "key": item["key"],
+        "source_id": item["source_id"],
+        "source": item["source"],
+        "label": item["label"],
+        "detail": item["detail"],
+        "count": item["count"],
+        "status": item["status"],
+        "url": item["url"],
+        "action": item["action"],
+        "steps": item["steps"],
+        "no_help_reason": item["no_help_reason"],
+        "check": item["check"],
+        "actions": item["actions"],
+        "subject": item["subject"],
+        "notice": item["notice"],
+        "since": item["since"],
+        "observed_at": item["observed_at"],
+        "facts": item["facts"],
+        "links": item["links"],
     }
 
 

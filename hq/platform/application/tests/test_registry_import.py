@@ -118,7 +118,7 @@ class ValidationTests(TestCase):
         self.assertEqual([problem["loc"] for problem in result["error"]["details"]], [["projects", 0, "slug"]])
 
     def test_a_blank_slug_is_refused(self):
-        self.assert_refused({"projects": [{"slug": " ", "name": "Blank slug"}]}, "slug is required")
+        self.assert_refused({"projects": [{"slug": " ", "name": "Blank slug"}]}, '["projects", 0, "slug"]')
 
     def test_a_slug_twice_is_refused(self):
         self.assert_refused(
@@ -154,6 +154,31 @@ class ValidationTests(TestCase):
             {"projects": [{"slug": "a", "name": "A", "status": "nope"}, {"slug": "b", "name": "B", "category": "nope"}]}
         )
         self.assertEqual(len(content["error"]["details"]), 2)
+
+    def test_a_refusal_answers_the_code_of_what_it_depends_on(self):
+        cases = (
+            # A record no document may hold, whatever HQ stores.
+            ({"projects": [{"slug": "twice", "name": "A"}, {"slug": "twice", "name": "B"}]}, "invalid_input"),
+            # A record naming one HQ does not have.
+            ({"assets": [{"slug": "example", "item_name": "A", "related_projects": ["nowhere"]}]}, "not_found"),
+            # A new record lacking what creating one needs.
+            ({"assets": [{"slug": "example"}]}, "precondition"),
+            # The first cause any record holds, in that order.
+            (
+                {
+                    "projects": [{"slug": "twice", "name": "A"}, {"slug": "twice", "name": "B"}],
+                    "assets": [{"slug": "example", "item_name": "A", "related_projects": ["nowhere"]}],
+                },
+                "invalid_input",
+            ),
+            (
+                {"assets": [{"slug": "example", "item_name": "A", "related_projects": ["nowhere"]}, {"slug": "new"}]},
+                "not_found",
+            ),
+        )
+        for document, code in cases:
+            with self.subTest(code=code, document=document):
+                self.assertEqual(self.assert_refused(document)["error"]["code"], code)
 
     def test_the_record_limit_is_enforced(self):
         document = {"projects": [{"slug": f"p-{index}", "name": "P"} for index in range(MAX_IMPORT_RECORDS + 1)]}

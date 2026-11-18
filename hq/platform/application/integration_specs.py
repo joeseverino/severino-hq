@@ -16,7 +16,7 @@ from .json_schemas import fields, json_schema
 from .search_contracts import SearchDefinition
 from .security import Capability, Principal, Requires
 from .ui import ended
-lazy from . import records
+lazy from . import records, stored_columns
 lazy from .labels import human_label, lower_first
 lazy from .refusal_status import RefusalEnvelope
 
@@ -53,10 +53,11 @@ def command_adapter(command_type: type) -> TypeAdapter[Any]:
     of whatever holds it, so the command and every such type inside it take
     this one. Pydantic accepts a config only for a type that has none of its
     own to hold, which an alias of the command is. A command is such a type;
-    ``CapabilitySpec`` refuses one whose own config leaves it open.
+    ``CapabilitySpec`` refuses one whose own config leaves it open. A field a
+    model stores is held to its column's rules as well (``stored_columns``).
     """
 
-    alias: Any = TypeAliasType(command_type.__name__, command_type)
+    alias: Any = TypeAliasType(command_type.__name__, stored_columns.held(command_type))
     return TypeAdapter(alias, config=ConfigDict(extra="forbid"))
 
 
@@ -196,13 +197,12 @@ def capability_schema(spec: CapabilitySpec) -> dict[str, Any]:
 
     A capability whose effect is not ``read`` takes an optional
     ``idempotency_key``, whether or not its command type declares the field,
-    and never requires it. A ``read`` takes none. A record command's fields
-    say what its model allows (``records.as_its_model_declares``), and one
-    that keeps what it is not sent of the record it targets requires no field
-    the record holds and gives none a default (``records.as_an_update_declares``).
+    and never requires it. A ``read`` takes none. One that keeps what it is
+    not sent of the record it targets requires no field the record holds and
+    gives none a default (``records.as_an_update_declares``).
     """
 
-    schema = records.as_its_model_declares(spec.command_type, command_schema(spec.command_type))
+    schema = command_schema(spec.command_type)
     if kept := kept_by(spec):
         schema = records.as_an_update_declares(schema, kept.always_sent)
     if not spec.effect.changes:
@@ -410,7 +410,7 @@ def requested(words: str, subject: str = "", *, again: bool = False) -> str:
 RESERVED_QUERY_FIELD = "fields"
 FIELD_MASK = (
     "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only "
-    "the part named inside it, in every element of a list (`items.waiting`); `*` alone keeps every field. "
+    "the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. "
     "Absent, a list keeps the fields its description in `describe_resources` names as "
     "`operations.list.fields`, and a read of one record keeps the whole record."
 )
@@ -441,7 +441,8 @@ class ResourceSpec(Requires):
     list_query_type: type[BaseModel] | None = None
     detail_handler: Callable[..., object] | None = None
     identifier: str | None = None
-    identifier_type: type = str
+    # A type, or one an ``Annotated`` bounds (``RecordId``).
+    identifier_type: Any = str
     # RecordNotFound is answered as not found without being listed; these are
     # the other types a detail handler raises for a missing record, such as an
     # extension model's DoesNotExist.
@@ -451,17 +452,15 @@ class ResourceSpec(Requires):
     # The handlers also take ``principal=``: the answer depends on what the
     # caller may see, not only on whether it may read the resource.
     pass_principal: bool = False
-    # The fields each item of a list read keeps when the caller names none, so
-    # a page costs what it shows; empty keeps the whole item. The whole record
-    # is the detail read, or a list read's ``fields``. Derived from
-    # ``row_type`` where the spec declares one.
+    # The TypedDict one item of a list read is whole (``fields=*``): a list
+    # answers only its keys, and the API document types each item by it.
+    item_type: type | None = None
+    # The fields each item keeps when the caller names none, so a page costs
+    # what it shows; every key of ``item_type`` where the spec names none.
     list_fields: tuple[str, ...] = ()
-    # The TypedDict one item of a list read is, as it keeps ``list_fields``,
-    # and the one a read of one record answers, which extends it. The API
-    # document types each read's answer by them.
-    row_type: type | None = None
+    # The TypedDict a read of one record answers.
     record_type: type | None = None
 
     def __post_init__(self) -> None:
-        if self.row_type is not None and not self.list_fields and is_typeddict(self.row_type):
-            object.__setattr__(self, "list_fields", typed_keys(self.row_type))
+        if self.item_type is not None and not self.list_fields and is_typeddict(self.item_type):
+            object.__setattr__(self, "list_fields", typed_keys(self.item_type))

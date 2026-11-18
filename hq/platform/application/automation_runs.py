@@ -16,9 +16,9 @@ from django.core.exceptions import ImproperlyConfigured, ValidationError as Djan
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import get_text_list
-from pydantic import AfterValidator, Field, StrictStr
+from pydantic import AfterValidator, Field, StrictStr, StringConstraints
 
-from hq.domains.control_plane.names import is_hostname, normalized_hostname
+from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
 from hq.platform.core.digests import digest
 lazy from hq.domains.control_plane.models import (
     ApprovalRequest,
@@ -33,7 +33,7 @@ lazy from hq.domains.control_plane.providers import validate_spec
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
-from .command_fields import Among, AmongNow, Describe, ForAgents, Names
+from .command_fields import Among, AmongNow, Describe, ForAgents, Names, NonEmpty
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
 from .record_errors import PolicyError, RecordNotFound
@@ -42,7 +42,7 @@ from .tone import Tone
 lazy from . import approvals, automation_adoption, pages
 lazy from .action_links import command_url
 lazy from .approval_review import ChangePreview
-lazy from .approvals import AUDIT_LABELS, ApprovalSubject, every_call, measured_by, waits_for_a_person
+lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
 lazy from .cadence import ask, automation_standing
 lazy from .capabilities import Consented, consent
@@ -59,8 +59,8 @@ lazy from .machines import machine_catalog
 lazy from .moments import ago, moment, when
 lazy from .payload_words import ChangeRow, field_words, value_words
 lazy from .resource_operations import (
-    OperationAsked,
     Prepared,
+    RunAsked,
     asked_fields,
     enqueue,
     operation_asked,
@@ -131,16 +131,17 @@ def resource_key(operation_id: str) -> str:
     return f"automation-{operation_id.replace('.', '-')}"
 
 
-def _host(name: str) -> str:
-    host = normalized_hostname(name)
-    if not is_hostname(host):
-        raise ValueError("Name a machine by its host name, such as app.example.com.")
-    return host
-
-
 type Hosts = Annotated[
-    tuple[Annotated[StrictStr, Field(min_length=1, max_length=253), AfterValidator(_host)], ...],
-    Field(min_length=1, max_length=64),
+    tuple[
+        Annotated[
+            StrictStr,
+            StringConstraints(strip_whitespace=True, max_length=HOSTNAME_LENGTH, pattern=HOSTNAME_PATTERN),
+            AfterValidator(normalized_hostname),
+        ],
+        ...,
+    ],
+    NonEmpty(),
+    Field(max_length=64),
     AfterValidator(sorted_unique),
     Names("machines"),
     # The label says it on the form, so the sentence is the agent's alone.
@@ -451,7 +452,7 @@ def _holder_cancel(holding: dict[str, Any], principal: Principal | None) -> Page
 
 
 @transaction.atomic
-def request_run(manifest: OperationManifest, command: RunCommand, *, consented: Consented) -> OperationAsked:
+def request_run(manifest: OperationManifest, command: RunCommand, *, consented: Consented) -> RunAsked:
     """Queue one run of ``manifest`` for the automation worker.
 
     A read takes no retry key, so asking twice queues twice, and the
@@ -550,7 +551,7 @@ def _asked_it(operation: OperationRequest, principal: Principal) -> bool:
 
 
 @transaction.atomic
-def cancel_run(command: CancelRunCommand, *, principal: Principal) -> OperationAsked:
+def cancel_run(command: CancelRunCommand, *, principal: Principal) -> RunAsked:
     """Cancel a run nothing has claimed, so it holds its playbook and machines no more.
 
     A claimed run is left to its runner, which ends it or lets its lease run
@@ -715,7 +716,7 @@ def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSect
     when none waits."""
 
     waiting = approvals.pending(principal=principal, capability=capability_name(manifest.id))
-    who = asked_by(ApprovalRequest, waiting, formerly=AUDIT_LABELS)
+    who = asked_by(ApprovalRequest, waiting)
     records = tuple(
         (
             machines_cell([str(host) for host in held.baseline.get("hosts") or ()]),

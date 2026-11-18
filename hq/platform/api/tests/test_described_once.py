@@ -17,7 +17,7 @@ import sys
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Annotated, Any, TypeAliasType
+from typing import Annotated, Any, TypeAliasType, TypedDict
 
 from django.test import SimpleTestCase
 from pydantic import Field, WithJsonSchema
@@ -34,8 +34,8 @@ from hq.platform.mcp.shapes import answer_type
 from .. import openapi
 from ..fragments import OpenAPIError
 
-# Values the document carries rather than says: recorded data and schema values.
-_VALUES = ("examples", "example", "dataValue", "value", "const", "default", "enum")
+# Values the document carries rather than says.
+_VALUES = ("examples", "example", "const", "default", "enum")
 # The objects whose keys are names rather than keywords.
 _NAME_MAPS = (
     "properties",
@@ -255,7 +255,7 @@ class DescribedOnceTests(SimpleTestCase):
         # The fuzz test's graph: one capability, and every generic list and
         # detail parameter written with no resource to name.
         spec = CapabilitySpec(
-            "example.properties",
+            "example.properties.set",
             "Exercise a generated write.",
             "remote_write",
             "example.write",
@@ -278,7 +278,7 @@ class DescribedOnceTests(SimpleTestCase):
                 "key",
                 target_help="The vehicle's key",
             )
-            for verb, command in (("recall", ExampleCommand), ("refresh", ExampleNoteCommand))
+            for verb, command in (("restart", ExampleCommand), ("refresh", ExampleNoteCommand))
         )
         with override_integration_graph(compile_integration_graph(capabilities=specs, resources=(), connections=())):
             document = openapi.document()
@@ -287,7 +287,7 @@ class DescribedOnceTests(SimpleTestCase):
         schemas = document["components"]["schemas"]
         targets = {
             json.dumps(schemas[f"ExampleVehicle{verb}Request"]["properties"]["target"])
-            for verb in ("Recall", "Refresh")
+            for verb in ("Restart", "Refresh")
         }
         self.assertEqual(len(targets), 1)
         self.assertIn("$ref", json.loads(targets.pop()))
@@ -301,11 +301,16 @@ class DescribedOnceTests(SimpleTestCase):
         class ExampleTaskQuery(TopQuery):
             pass
 
+        class ExampleRow(TypedDict):
+            name: str
+
         def rows(*, limit: int = 50) -> dict:
             return {"items": [], "count": 0}
 
         specs = tuple(
-            ResourceSpec(f"example.{kind}", kind.title(), f"Example {kind}.", "example.read", rows, query)
+            ResourceSpec(
+                f"example.{kind}", kind.title(), f"Example {kind}.", "example.read", rows, query, item_type=ExampleRow
+            )
             for kind, query in (("notes", ExampleNoteQuery), ("tasks", ExampleTaskQuery))
         )
         composed = compile_integration_graph(capabilities=(), resources=specs, connections=())

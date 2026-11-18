@@ -20,6 +20,7 @@ replay stands on: the record as the capability answered it.
 from collections.abc import Callable, Mapping
 from typing import Any, override
 
+from django.core.exceptions import ImproperlyConfigured
 from django.http import Http404
 from django.shortcuts import redirect
 from django.views.generic.edit import BaseCreateView
@@ -31,11 +32,11 @@ from hq.platform.application.routes import reverse
 from .contracts import route_url
 from .domains import load
 from .labels import SAVE_CHANGES
-from .records import DELETE, described, records_for
+from .records import DELETE, described, record_form, records_for
 from .web_writes import form_payload, posted_answer, refused, run_posted, said
 lazy from .capabilities import capability_words, command_spec
-lazy from .domains import Records
 lazy from .integrations import held_graph
+lazy from .record_declaration import Records
 
 
 class PostedOnce:
@@ -212,7 +213,7 @@ class _Records(_RecordWrite):
 
     @property
     def records(self) -> Records:
-        return records_for(self.get_form_class()._meta.model if self.model is None else self.model)
+        return records_for(self.model)
 
     @property
     def record_model(self) -> Any:
@@ -232,15 +233,21 @@ class _Records(_RecordWrite):
 
 
 class RecordFormMixin(_Records, CapabilityFormMixin):
-    """Create or update a plain record domain's record from its ``ModelForm``.
+    """Create or update a plain record domain's record from the form its
+    declaration builds (``records.record_form``).
 
     For ``CreateView`` and ``UpdateView``, through the create and update
     capabilities its declaration derives. Its help, its verb and
     its way back come from the declaration too, so it reads as the command's
-    page does, and its page is the form page frame.
+    page does, and its page is the form page frame. A view names its
+    ``model``; one that names a form of its own is refused as it is declared.
     """
 
     template_name = "form_page.html"
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        _refuse_own_form(cls)
 
     @property
     def creates(self) -> str:
@@ -250,20 +257,38 @@ class RecordFormMixin(_Records, CapabilityFormMixin):
     def updates(self) -> str:
         return f"{self.records.noun}.update"
 
+    def get_form_class(self) -> Any:
+        return record_form(self.records)
+
     def get_form(self, form_class: Any = None) -> Any:
-        form = super().get_form(form_class)
-        return described(form, load(records_for(form._meta.model).command))
+        return described(super().get_form(form_class), load(self.records.command))
 
     def get_form_verb(self, form: Any) -> str:
         """What makes a new one: its create command's words."""
 
-        return capability_words(f"{records_for(form._meta.model).noun}.create")
+        return capability_words(self.creates)
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
-        form = context["form"]
-        listed = route_url(held_graph().resources[records_for(form._meta.model).resource].web_route)
-        return {**context, **form_close(self.object, self.get_form_verb(form), listed)}
+        listed = route_url(held_graph().resources[self.records.resource].web_route)
+        return {**context, **form_close(self.object, self.get_form_verb(context["form"]), listed)}
+
+
+def _refuse_own_form(view: type) -> None:
+    """A record domain's form view that names a form of its own, refused as
+    it is declared: its form is its declaration's, built from its command."""
+
+    if "form_class" in vars(view) and _declared(view.model) is not None:
+        raise ImproperlyConfigured(f"{view.__name__} names a form; a record's form is built from its command.")
+
+
+def _declared(model: Any) -> Records | None:
+    """The record declaration of ``model``, or None for a model no domain declares."""
+
+    try:
+        return records_for(model)
+    except LookupError:
+        return None
 
 
 class RecordDeleteMixin(_Records, CapabilityDeleteMixin):
@@ -281,11 +306,25 @@ class CommandFormPage:
     """A record's form whose create goes through a named command (``creates``)
     rather than its domain's declaration: its help is that command's, and it
     closes with its words, or Save changes, and Cancel (``listed_route`` for a
-    new one), on the form page frame."""
+    new one), on the form page frame.
+
+    A declared record domain's form is its declaration's, with the fields of
+    that command; only a model no domain declares names a ``form_class``.
+    """
 
     template_name = "form_page.html"
     creates = ""
     listed_route = ""
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        _refuse_own_form(cls)
+
+    def get_form_class(self) -> Any:
+        records = _declared(self.model)
+        if records is None:
+            return super().get_form_class()
+        return record_form(records, command_spec(self.creates).command_type)
 
     def get_form(self, form_class: Any = None) -> Any:
         return described(super().get_form(form_class), command_spec(self.creates).command_type)

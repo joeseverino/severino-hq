@@ -1,17 +1,17 @@
 {% comment %}
 Rules as one table, a group per resource: the columns are the same for every
 resource, so they are headed once rather than once per resource. A column per
-agent, so a rule is read and changed where it sits. On a narrow page the
-default goes, then each agent no rule is offered for, from the far end; an
-agent's rule stands beneath the action it sets.
+agent, so a rule is read and changed where it sits. Each agent's column is a
+field a row's open line cannot copy, so a narrow box, which holds no column
+of them beside the action, keeps the action and its default (`wide-only`).
 {% endcomment %}
 {% table_region label %}
   <table class="data-table">
     <thead>
       <tr>
         {% table_heading "Action" local_sort=True gutter=True %}
-        {% table_heading "Default" "status" local_sort=True drop=columns|length|add:1 %}
-        {% for column in columns %}{% table_heading column.label "control" local_sort=True drop=forloop.revcounter title=column.detail %}{% endfor %}
+        {% table_heading "Default" "status" local_sort=True %}
+        {% for column in columns %}{% table_heading column.label "control" css="wide-only" local_sort=True title=column.detail %}{% endfor %}
       </tr>
     </thead>
     {% for group in groups %}

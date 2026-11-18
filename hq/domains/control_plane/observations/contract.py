@@ -7,6 +7,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainSerializer, ValidationError, WithJsonSchema
 
+from hq.platform.application.describe import Describe
 from hq.platform.core.digests import digest
 lazy from hq.platform.application.json_schemas import json_schema
 lazy from hq.platform.application.moments import moment
@@ -43,16 +44,16 @@ class ObservationRecord(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class ReadingPart:
-    """One part a reading is read in, and the permissions that part needs.
+    """One part a reading is read in, and the permissions that part needs."""
 
-    ``provider`` is the connection provider whose credential reads the part,
-    when it is not the kind's own.
-    """
-
-    name: str
-    label: str
-    requires: tuple[Permission, ...] = ()
-    provider: str = ""
+    name: Annotated[str, Describe("The part's name among its type's parts; empty for the whole type.")]
+    label: Annotated[str, Describe("The part, in words.")]
+    requires: Annotated[
+        tuple[Permission, ...], Describe("The permissions reading the part needs, as the service names them.")
+    ] = ()
+    provider: Annotated[
+        str, Describe("The service whose credential reads the part, where it is not its type's own; else empty.")
+    ] = ""
 
 
 def _none(_record: Mapping[str, Any]) -> tuple[str, ...]:

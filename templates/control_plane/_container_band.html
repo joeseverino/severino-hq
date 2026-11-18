@@ -4,7 +4,7 @@ is doing, what version it runs, whether a newer one is out, and what is known
 against it. HQ's own image answers the last two from the GitHub App's reading
 of its repository instead: the production deploy, and the repository's alerts.
 {% endcomment %}
-{% facts layout="band" %}
+{% card element="div" %}{% facts layout="band" %}
   {% fact running.state.label|capfirst icon="activity" tone=running.state.tone %}
     {{ container.item.uptime|default:running.uptime|default:running.status|default:"No status"|breakable }}
   {% detail %}
@@ -56,4 +56,4 @@ of its repository instead: the production deploy, and the repository's alerts.
       {% endif %}
     {% endfact %}
   {% endif %}
-{% endfacts %}
+{% endfacts %}{% endcard %}

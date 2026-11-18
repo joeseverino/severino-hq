@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from collections.abc import Callable, Iterable, Mapping
 from typing import Annotated, Any, Literal, NotRequired, TypedDict, override
 
@@ -14,7 +15,6 @@ from pydantic import (
     TypeAdapter,
     ValidationError,
     create_model,
-    field_validator,
     with_config,
 )
 
@@ -42,11 +42,11 @@ from .connection_records import (
     CredentialRow,
     Tailnet,
 )
-from .contracts import DOTTED_NAME, Closed
+from .contracts import Closed
 from .describe import Describe
-from .field_masks import FieldMaskRefusal, Fields, asks_whole, selected
+from .field_masks import FieldMaskRefusal, Fields, asks_whole, field_paths, selected
 from .input_errors import pydantic_refusal
-from .integration_specs import PAGE_FIELD, ResourceSpec
+from .integration_specs import PAGE_FIELD, ResourceSpec, typed_keys
 from .integration_validation import required_capability_names
 from .integrations import held_graph
 from .json_schemas import json_schema, narrowed
@@ -54,6 +54,7 @@ from .projection import MAX_PAGE_SIZE, CursorRefusal, NextPage, PageScope, page_
 from .record_errors import HostRefusal, RecordNotFound
 from .refusal_status import next_call
 from .resource_records import (
+    ActionItem,
     ActionItemRow,
     ContainerRecord,
     ContainerRow,
@@ -63,14 +64,17 @@ from .resource_records import (
     HopRow,
     MachineRecord,
     MachineRow,
+    ManagedResourceItem,
     ManagedResourceRecord,
     ManagedResourceRow,
     Match,
     PathRecord,
     Problem,
+    ReadingItem,
     ReadingRecord,
     ReadingRow,
     RelationshipsRecord,
+    ServiceItem,
     ServiceRecord,
     ServiceRow,
     UpgradeRecord,
@@ -198,34 +202,30 @@ def one_of(values: Iterable[str]) -> Any:
     return Literal[chosen]
 
 
-class _KindsQuery(BoundedQuery):
-    kinds: str | None = Field(
-        default=None,
-        max_length=2000,
-        description="Several types to keep, comma-separated, each one the single type filter offers; not sent with it.",
-    )
+def several_of(values: Iterable[str]) -> str:
+    """The pattern of a comma-separated text whose every part is one of
+    ``values``: a query field held to it lists them in its schema and refuses
+    any other part, as ``one_of`` does for one."""
 
-    @field_validator("kinds")
-    @classmethod
-    def valid_kinds(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        kinds = value.split(",")
-        if not kinds or any(not DOTTED_NAME.fullmatch(kind) for kind in kinds):
-            raise ValueError("kinds must be comma-separated dotted resource kinds")
-        if len(kinds) != len(set(kinds)):
-            raise ValueError("kinds must not repeat a resource kind")
-        if any(kind not in PROVIDERS for kind in kinds):
-            raise ValueError("kinds must each be a resource kind the kind field lists")
-        return value
+    either = "|".join(re.escape(value) for value in dict.fromkeys(values))
+    return rf"^(?:{either})(?:,(?:{either}))*$"
 
 
 InfrastructureResourceQuery = create_model(
     "InfrastructureResourceQuery",
-    __base__=_KindsQuery,
+    __base__=BoundedQuery,
+    kinds=(
+        str | None,
+        Field(
+            default=None,
+            max_length=2000,
+            pattern=several_of(PROVIDERS),
+            description="Several types to keep, comma-separated, each one the single type filter offers.",
+        ),
+    ),
     kind=(
         one_of(PROVIDERS) | None,
-        Field(default=None, description="Only the records of this type; not sent with the filter of several."),
+        Field(default=None, description="Only the records of this type."),
     ),
 )
 
@@ -325,7 +325,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
                 snippet_field="search_summary",
             ),
             web_route="control_plane:list",
-            row_type=ManagedResourceRow,
+            item_type=ManagedResourceItem,
+            list_fields=typed_keys(ManagedResourceRow),
             record_type=ManagedResourceRecord,
         ),
         ResourceSpec(
@@ -338,7 +339,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             service_list.get_service,
             "hostname",
             web_route="control_plane:services",
-            row_type=ServiceRow,
+            item_type=ServiceItem,
+            list_fields=typed_keys(ServiceRow),
             record_type=ServiceRecord,
         ),
         ResourceSpec(
@@ -350,7 +352,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             web_route="dashboard",
             pass_principal=True,
-            row_type=EstateFigure,
+            item_type=EstateFigure,
         ),
         ResourceSpec(
             "machines",
@@ -362,7 +364,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             derived_reads.get_machine,
             "name",
             web_route="control_plane:machines",
-            row_type=MachineRow,
+            item_type=MachineRecord,
+            list_fields=typed_keys(MachineRow),
             record_type=MachineRecord,
         ),
         ResourceSpec(
@@ -376,7 +379,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             container_reads.get_container,
             "address",
             web_route="control_plane:containers",
-            row_type=ContainerRow,
+            item_type=ContainerRecord,
+            list_fields=typed_keys(ContainerRow),
             record_type=ContainerRecord,
         ),
         ResourceSpec(
@@ -390,7 +394,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             container_reads.get_upgrade,
             "address",
             web_route="control_plane:containers",
-            row_type=UpgradeRow,
+            item_type=UpgradeRecord,
+            list_fields=typed_keys(UpgradeRow),
             record_type=UpgradeRecord,
         ),
         ResourceSpec(
@@ -403,7 +408,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             derived_reads.get_domain,
             "name",
             web_route="zones:index",
-            row_type=DomainRow,
+            item_type=DomainRow,
             record_type=DomainRecord,
         ),
         ResourceSpec(
@@ -437,7 +442,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             web_route="hq_self",
             pass_principal=True,
-            row_type=Problem,
+            item_type=Problem,
         ),
         ResourceSpec(
             READINGS,
@@ -449,7 +454,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             derived_reads.get_reading,
             "kind",
             web_route="control_plane:connections",
-            row_type=ReadingRow,
+            item_type=ReadingItem,
+            list_fields=typed_keys(ReadingRow),
             record_type=ReadingRecord,
         ),
         ResourceSpec(
@@ -462,7 +468,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             derived_reads.get_credential,
             "provider",
             web_route="control_plane:connections",
-            row_type=CredentialRow,
+            item_type=CredentialRecord,
+            list_fields=typed_keys(CredentialRow),
             record_type=CredentialRecord,
         ),
         ResourceSpec(
@@ -475,7 +482,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             web_route="control_plane:tailnet",
             pass_principal=True,
-            row_type=Tailnet,
+            item_type=Tailnet,
         ),
         ResourceSpec(
             "connections",
@@ -489,7 +496,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "connection_ref",
             web_route="control_plane:connections",
             pass_principal=True,
-            row_type=ConnectionStandingRow,
+            item_type=ConnectionStandingRecord,
+            list_fields=typed_keys(ConnectionStandingRow),
             record_type=ConnectionStandingRecord,
         ),
     )
@@ -510,7 +518,8 @@ def dashboard() -> tuple[ResourceSpec, ...]:
             action_item_query(),
             web_route="action_items",
             pass_principal=True,
-            row_type=ActionItemRow,
+            item_type=ActionItem,
+            list_fields=typed_keys(ActionItemRow),
         ),
     )
 
@@ -526,7 +535,7 @@ def connections() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             web_route="connection",
             pass_principal=True,
-            row_type=HopRow,
+            item_type=HopRow,
         ),
     )
 
@@ -542,7 +551,7 @@ def search() -> tuple[ResourceSpec, ...]:
             SearchQuery,
             web_route="search",
             pass_principal=True,
-            row_type=Match,
+            item_type=Match,
         ),
     )
 
@@ -618,12 +627,7 @@ class ListOperation(TypedDict):
             "given this name says each one's type and choices."
         ),
     ]
-    fields: NotRequired[
-        Annotated[
-            list[str],
-            Describe("The fields each item keeps unless the caller names its own; absent, items keep them all."),
-        ]
-    ]
+    fields: Annotated[list[str], Describe("The fields each item keeps unless the caller names its own.")]
     query_schema: NotRequired[
         Annotated[
             dict[str, Any],
@@ -677,13 +681,6 @@ class ResourceDescription(TypedDict):
     permitted: NotRequired[Permitted]
 
 
-# What the catalog of every resource says in place of each list's whole schema.
-WHOLE_SCHEMA = (
-    "Each list's query_schema, filters, paging and largest limit are in describe_resources with name set to "
-    "its resource."
-)
-
-
 # The shape describe_resources answers in; it moves when that shape does.
 RESOURCES_SCHEMA_VERSION = 3
 
@@ -693,9 +690,6 @@ class ResourceCatalog(TypedDict):
 
     schema_version: Annotated[SchemaVersion, Pinned(RESOURCES_SCHEMA_VERSION)]
     resources: Annotated[list[ResourceDescription], Describe("Each resource asked for: every one, or the one named.")]
-    schemas: NotRequired[
-        Annotated[str, Describe("Where each list's whole query schema is; only where the answer holds every resource.")]
-    ]
 
 
 def describe_resources(*, principal: Principal | None = None, name: str = "") -> ResourceCatalog:
@@ -710,15 +704,13 @@ def describe_resources(*, principal: Principal | None = None, name: str = "") ->
             "resources": [_described(_resource(name), principal, whole=True)],
         }
     described = [_described(spec, principal, whole=False) for spec in held_graph().resources.values()]
-    return {"schema_version": RESOURCES_SCHEMA_VERSION, "resources": described, "schemas": WHOLE_SCHEMA}
+    return {"schema_version": RESOURCES_SCHEMA_VERSION, "resources": described}
 
 
 def _listing(spec: ResourceSpec, *, whole: bool) -> ListOperation | None:
     if not spec.list_query_type:
         return None
-    listing: ListOperation = {"filters": list(list_filters(spec.list_query_type))}
-    if spec.list_fields:
-        listing["fields"] = list(spec.list_fields)
+    listing: ListOperation = {"filters": list(list_filters(spec.list_query_type)), "fields": list(spec.list_fields)}
     if whole:
         schema = json_schema(spec.list_query_type)
         properties = schema.get("properties", {})
@@ -800,25 +792,16 @@ def list_resource(
         raise invalid from None
     if handled["count"] != len(handled["items"]):
         raise invalid
+    if spec.item_type is None:
+        raise RuntimeError(f"Resource {name!r} lists items of no declared type.")
     page: ResourceCollection = {**handled, **_page(spec, parsed, handled, scope, bound)}
-    if fields is None:
-        return {**page, "items": _listed_fields(spec, page["items"])}
-    if asks_whole(fields):
-        return page
-    return {**page, "items": _masked(name, page["items"], fields)}
-
-
-def _listed_fields(spec: ResourceSpec, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Each item cut to its kind's ``list_fields``, or whole where it declares none.
-
-    A field an item lacks is left out rather than refused: it is the kind's
-    declaration, not the caller's ask, and a page of items that happen to lack
-    an optional one is still a page.
-    """
-
-    if not spec.list_fields:
-        return items
-    return [{key: item[key] for key in item if key in spec.list_fields} for item in items]
+    # Each item holds only what its type declares, whatever its handler built,
+    # and by default only its kind's list_fields of that.
+    kept = frozenset(spec.list_fields if fields is None else typed_keys(spec.item_type))
+    items = [{key: value for key, value in item.items() if key in kept} for item in page["items"]]
+    if fields is not None and not asks_whole(fields):
+        items = _masked(spec, items, fields, listed=True)
+    return {**page, "items": items}
 
 
 class PagePosition(TypedDict):
@@ -838,7 +821,7 @@ class ResourceCollection(PagePosition):
     """One page of a list: every list holds these, and may hold metadata of its own."""
 
     items: Annotated[
-        list[dict[str, Any]], Describe("The page's records, in the list's order, each in its row's shape.")
+        list[dict[str, Any]], Describe("The page's records, in the list's order, each of its list's item type.")
     ]
     count: Annotated[int, Describe("How many records this page holds.")]
 
@@ -921,13 +904,27 @@ def _cursor_refused(name: str, reason: str) -> InvalidResourceInput:
     return InvalidResourceInput(name, [{"type": "value_error", "loc": [PAGE_FIELD], "msg": reason}])
 
 
-def _masked(name: str, records: list[Any], fields: Fields) -> list[dict[str, Any]]:
+def masked_kind(spec: ResourceSpec, *, listed: bool) -> type | None:
+    """The type a field mask over ``spec``'s records declares paths from: a
+    list's item, or a read of one's record; none where it types neither."""
+
+    return spec.item_type if listed else spec.record_type
+
+
+def mask_paths(spec: ResourceSpec, *, listed: bool) -> tuple[str, ...]:
+    """Every field path a mask over ``spec``'s records may name, from ``masked_kind``."""
+
+    kind = masked_kind(spec, listed=listed)
+    return () if kind is None else field_paths(kind)
+
+
+def _masked(spec: ResourceSpec, records: list[Any], fields: Fields, *, listed: bool) -> list[dict[str, Any]]:
     if any(not isinstance(record, dict) for record in records):
-        raise TypeError(f"Resource {name!r} returned a record that is not an object.")
+        raise TypeError(f"Resource {spec.name!r} returned a record that is not an object.")
     try:
-        return selected(records, fields)
+        return selected(records, fields, mask_paths(spec, listed=listed))
     except FieldMaskRefusal as exc:
-        raise InvalidResourceInput(name, exc.errors) from exc
+        raise InvalidResourceInput(spec.name, exc.errors) from exc
 
 
 def get_resource(
@@ -966,4 +963,4 @@ def get_resource(
         raise TypeError(f"Resource {name!r} detail handler returned a non-object.")
     if fields is None or asks_whole(fields):
         return result
-    return _masked(name, [result], fields)[0]
+    return _masked(spec, [result], fields, listed=False)[0]

@@ -1,6 +1,6 @@
 """The catalog's forms: a form page, its lookups, filter bars, choices and drop zones."""
 
-from typing import Any
+from typing import Any, override
 
 from django import forms
 
@@ -236,5 +236,56 @@ ENTRIES = {
     "form/dropzone-errors": Entry(
         '{% section "Example import 2" %}{% include "partials/_dropzone.html" with field=form.exports %}{% endsection %}',
         {"form": _ExampleFiles(data={})},
+    ),
+}
+
+# What each part's default entry, its Part.example, is given (catalog.default_name).
+
+
+class _ExampleWhole(forms.Form):
+    """A form refused as a whole, its error above its fields."""
+
+    name = forms.CharField(label="Example name", required=False)
+
+    @override
+    def clean(self):
+        raise forms.ValidationError("An example of what was wrong with the form as a whole.")
+
+
+ENTRIES |= {
+    "part/field": Entry(context={"field": _ExampleForm()["name"]}),
+    "part/choice-cards": Entry(context={"field": _ExampleChoices()["answer"]}),
+    "part/suffixed": Entry(context={"field": _ExampleChoices()["share"]}),
+    "part/dropzone": Entry(
+        context={
+            "field": _ExampleFiles()["exports"],
+            "title": "Drop example exports here",
+            "hint": "CSV or JSON, several at once",
+        }
+    ),
+    "part/row-field": Entry(context={"field": _ExampleForm()["name"]}),
+    "part/form": Entry(
+        context={
+            "form": _ExampleForm(),
+            "verb": "Save example",
+            "cancel_url": "#",
+            "note": "",
+            "choices": "",
+            "choice_field": "",
+            "bar": "",
+        }
+    ),
+    "part/form-actions": Entry(
+        context={"verb": "Save example", "cancel_url": "#", "choice_field": "", "note": "Saving changes the example."}
+    ),
+    "part/filter-bar": Entry(context={"kinds": ENTRIES["form/filter-bar"].context["kinds"], "every_url": "#"}),
+    "part/form-errors": Entry(context={"form": _ExampleWhole(data={})}),
+    "part/toggle-set": Entry(
+        context={
+            "legend": "Example kinds",
+            "set": "kind",
+            "name": "kind",
+            "toggles": ENTRIES["form/filter-bar-toggles"].context["toggles"],
+        }
     ),
 }

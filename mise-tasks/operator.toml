@@ -61,24 +61,6 @@ description = "When a docs figure's source (docs/images/*/*.fig) changes: render
 hide = true
 run = 'for spec in docs/images/*/*.fig; do brand figure "$spec" --scale 1; done'
 
-# The API's examples are responses its tests really received, so they are
-# recorded by a serial run of the tests that call the API through a
-# ContractClient (test_api_openapi_command.py holds the labels to every one),
-# under a clock that stands still and with fixed ids (hq/platform/api/testing.py),
-# so a recording reads the same every run. It is not a step of fix, being a
-# serial run of the suite; lint:drift-api-examples and lint:drift-api-document
-# name this task.
-["fix:api-examples"]
-description = "When the API's recorded examples no longer match its document: record them again from the tests that call it, then rewrite the document"
-hide = true
-extends = "django"
-# One process, so outside the heavy turn (tools/gate/turn.py). The tests read
-# the examples file before the run writes the new one, so an entry whose
-# operation is gone is dropped first. A recording written elsewhere
-# (HQ_API_RECORD_EXAMPLES_TO, lint:drift-api-examples's) leaves the examples
-# file and the document as they are.
-run = 'elsewhere="${HQ_API_RECORD_EXAMPLES_TO:-}"; { [ -n "$elsewhere" ] || uv run python manage.py api_openapi --prune-examples; } && HQ_API_RECORD_EXAMPLES=1 uv run python manage.py test hq.platform.api hq.domains.contacts --parallel 1 && { [ -n "$elsewhere" ] || uv run python manage.py api_openapi; }'
-
 ["plugin:check"]
 description = "One extension package's contract check against this host, as its CI runs it"
 hide = true

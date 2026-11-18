@@ -9,8 +9,8 @@ from hq.domains.content.models import ContentItem
 
 from .command_fields import Describe, Names
 from .entity_links import EntityLink, entity_link, web_url
-from .projection import iso, listing
-from .record_fields import Notes, PublishedAt, PublishedUrl, one_of
+from .projection import addressable, iso, listing
+from .record_fields import Notes, PublishedAt, PublishedUrl, RecordId, one_of
 from .record_saves import Held, Link, linked_saver
 from .sensitivity import safe_doc_ids
 lazy from .published_sites import projects_by_hostname
@@ -56,7 +56,7 @@ class ContentCommand:
     related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects it is about.")] = ()
     related_assets: Annotated[tuple[str, ...], Names("assets"), Describe("The assets it is about.")] = ()
     related_expenses: Annotated[
-        tuple[int, ...], Names("expenses", key="id"), Describe("The expenses it accounts for.")
+        tuple[RecordId, ...], Names("expenses", key="id"), Describe("The expenses it accounts for.")
     ] = ()
     related_documentation: Annotated[
         tuple[str, ...], Names("documentation", key="doc_id"), Describe("The docs it draws on.")
@@ -95,6 +95,12 @@ def list_content(*, status: str | None = None, query: str | None = None, limit: 
         query=query,
         limit=limit,
     )
+
+
+def get_content(slug: str) -> dict[str, Any]:
+    """One writeup, video or page by its slug, with the records it is linked to."""
+
+    return addressable(ContentItem, serialize_content, slug)
 
 
 save_content = linked_saver(

@@ -1,4 +1,5 @@
-"""HQ's standard: each check read from what decides it, shown always, raised under Advanced HQ Posture."""
+"""HQ's standard: each check read from what decides it, shown always, raised
+under Advanced HQ Posture (``standards.Standard``, held in test_standards)."""
 
 import os
 import subprocess
@@ -19,9 +20,8 @@ from ..posture import STANDARD, estate_posture
 from ..report_testing import bridged
 from ..security import cli_principal
 from ..standards import CheckResult, Reading, Standing
-from .test_tailnet_posture import raised, tailnet_connection
+from .test_tailnet_posture import tailnet_connection
 
-RULE = "posture-unmet"
 PASSWORDS = ["hq.platform.core.oidc.HQOIDCAuthenticationBackend", "django.contrib.auth.backends.ModelBackend"]
 SSO_ONLY = ["hq.platform.core.oidc.HQOIDCAuthenticationBackend"]
 
@@ -236,47 +236,6 @@ class ReadingTests(TestCase):
             self.assertIn(result.check.label, found.count_line)
 
 
-@override_settings(AUTHENTICATION_BACKENDS=PASSWORDS)
-class FindingTests(TestCase):
-    def test_without_advanced_posture_nothing_is_raised(self):
-        self.assertEqual(raised(RULE), [])
-
-    @override_settings(SEVERINO_POSTURE="advanced")
-    def test_under_advanced_posture_each_unmet_check_is_raised(self):
-        found = {finding["title"]: finding for finding in raised(RULE)}
-
-        finding = found["Password sign-in is installed"]
-        self.assertEqual(finding["severity"], "attention")
-        self.assertIn("a guessed or reused password", finding["explanation"])
-
-    @override_settings(SEVERINO_POSTURE="advanced")
-    def test_a_check_not_read_yet_is_no_finding_and_says_what_would_read_it(self):
-        from ..connection_context import connections_context
-
-        unread = [
-            found
-            for found in estate_posture(connection_catalog(principal=cli_principal())).results
-            if found.state == Standing.UNAVAILABLE
-        ]
-        self.assertIn("tailnet-policy", {found.check.id for found in unread})
-
-        found = raised(RULE)
-        steps = [step["label"] for item in found for step in item["operator_steps"]]
-        for waiting in unread:
-            with self.subTest(check=waiting.check.id):
-                self.assertNotIn(f"posture.{waiting.check.id}", {item["scope"] for item in found})
-                self.assertNotIn(waiting.check.fix, steps)
-        checks = connections_context(principal=cli_principal()).as_dict()["standard"]["checks"]
-        served = next(check for check in checks if check["id"] == "tailnet-policy")
-        self.assertIsNone(served["met"])
-        self.assertEqual(served["remedy"], "connect Tailscale")
-        self.assertTrue(served["remedy_url"])
-
-    @override_settings(SEVERINO_POSTURE="advanced", AUTHENTICATION_BACKENDS=SSO_ONLY)
-    def test_a_met_check_is_not_raised(self):
-        self.assertNotIn("Password sign-in is installed", [finding["title"] for finding in raised(RULE)])
-
-
 class PageTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_superuser("posture-reader"))
@@ -300,92 +259,21 @@ class PageTests(TestCase):
         self.assertIn("Advanced HQ Posture", [words for words, _target in links(response)])
         self.assertNotContains(response, "SEVERINO_POSTURE=advanced")
 
-    def test_the_api_carries_the_standard(self):
+    def test_the_api_carries_the_standard_and_what_would_read_a_check_not_read(self):
         from ..connection_context import connections_context
 
         standard = connections_context(principal=cli_principal()).as_dict()["standard"]
 
         self.assertFalse(standard["advanced"])
         self.assertEqual([check["id"] for check in standard["checks"]], [check.id for check in STANDARD])
-
-
-class ScopeTests(TestCase):
-    """One judgment of every token, from what the checks of its abilities found."""
-
-    def reading(self, provider: str, *evidence: str):
-        from types import SimpleNamespace
-
-        from ..posture import Inputs, posture
-
-        connection = SimpleNamespace(
-            instance=SimpleNamespace(label="Example", kind=provider),
-            abilities=tuple(SimpleNamespace(evidence=found) for found in evidence),
-        )
-        group = SimpleNamespace(connections=(connection,), spec=SimpleNamespace(required_capabilities=("read",)))
-        unread = Reading.unavailable("Not read")
-        found = posture(Inputs(edge=unread, firewall=unread, groups=(group,)))
-        return next(result for result in found.results if result.check.id == "scope").reading
-
-    def test_a_full_account_token_where_a_scoped_one_is_offered_is_unmet(self):
-        reading = self.reading("cloudflare_api", "coarse")
-
-        self.assertEqual(reading.standing, Standing.UNMET)
-        self.assertEqual(reading.evidence, "Full account access: Example")
-
-    def test_a_missing_permission_is_unmet(self):
-        reading = self.reading("cloudflare_api", "verified", "missing")
-
-        self.assertEqual(reading.standing, Standing.UNMET)
-        self.assertEqual(reading.evidence, "Permission missing: Example")
-
-    def test_a_certificate_authority_account_is_read_as_the_whole_account_it_is(self):
-        from hq.domains.control_plane.connection_kinds import connection_credential
-
-        reading = self.reading("acme", "coarse")
-
-        self.assertEqual(connection_credential("acme"), "coarse")
-        self.assertEqual(reading.standing, Standing.MET)
-        self.assertTrue(reading.limited)
-
-    def test_a_login_with_no_scoped_form_is_met_but_not_a_clean_pass(self):
-        reading = self.reading("npm", "coarse")
-
-        self.assertEqual(reading.standing, Standing.MET)
-        self.assertTrue(reading.limited)
-        self.assertEqual(reading.evidence, "Nothing narrower offered for Example")
-
-    def test_a_checked_token_is_met(self):
-        reading = self.reading("cloudflare_api", "verified")
-
-        self.assertEqual(reading.standing, Standing.MET)
-        self.assertFalse(reading.limited)
-        self.assertEqual(reading.evidence, "1 checked")
-
-    def test_a_token_not_checked_is_not_read(self):
-        self.assertEqual(self.reading("cloudflare_api", "unverified").standing, Standing.UNAVAILABLE)
-
-    def test_with_nothing_held_there_is_nothing_to_judge(self):
-        self.assertEqual(self.reading("").standing, Standing.UNAVAILABLE)
+        served = next(check for check in standard["checks"] if check["id"] == "tailnet-policy")
+        self.assertEqual((served["state"], served["read_with"]), (Standing.UNAVAILABLE, "connect Tailscale"))
+        self.assertTrue(served["read_with_url"])
 
 
 class ToneTests(TestCase):
     def result(self, reading, *, enforced=True):
         return CheckResult(STANDARD[0], reading, enforced=enforced)
-
-    def test_without_advanced_posture_an_unmet_check_is_quiet(self):
-        found = self.result(Reading.unmet(), enforced=False)
-
-        self.assertEqual((found.tone, found.icon), ("neutral", "circle"))
-
-    def test_under_advanced_posture_an_unmet_check_is_a_fault(self):
-        found = self.result(Reading.unmet())
-
-        self.assertEqual((found.tone, found.icon), ("attention", "x-circle"))
-
-    def test_an_unread_check_is_never_a_fault(self):
-        found = self.result(Reading.unavailable("Waiting on the first read of example"))
-
-        self.assertEqual((found.tone, found.icon), ("neutral", "clock"))
 
     def test_a_limited_pass_is_ticked_but_not_green(self):
         found = self.result(Reading.met(limited=True))

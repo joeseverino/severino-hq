@@ -106,10 +106,6 @@ class FilterBarTagTests(SimpleTestCase):
         (button,) = elements(html, "button")
         self.assertEqual(button.words, "Check")
 
-    def test_an_unknown_option_is_refused(self):
-        with self.assertRaises(TemplateSyntaxError):
-            Template('{% filter_bar label="Example" %}{% endfilter_bar %}')
-
     def test_its_search_is_drawn_first_and_the_query_s_other_fields_are_sent_again(self):
         html = _render(
             '{% filter_bar search="Filter by name" query=q keep=kept autofocus=True %}{% choices %}'

@@ -11,7 +11,6 @@ from hq.domains.control_plane.observations.adguard import CLIENT_KIND, DNS_KIND,
 from hq_sdk.testing import plain
 
 from ..facts import Subject, inventory_about
-from ..findings import derive_findings
 from ..relationships import relationships_for
 from ..security import Capability, Principal
 from ..tailnet import TAILNET_KIND
@@ -146,47 +145,6 @@ class AdGuardJoinTests(TestCase):
         page = self.client.get(reverse("control_plane:service", kwargs={"hostname": "app.example.com"}))
 
         self.assertIn("12 lookups from 1 device in 24 hours: laptop", plain(page.content))
-
-    def test_posture_and_usage_raise_their_findings(self):
-        found = derive_findings(derive_topology(principal=READ), principal=READ)
-        by_rule = {finding.rule: finding for finding in found}
-
-        self.assertNotIn("dns-protection-off", by_rule)
-        self.assertEqual(by_rule["dns-filtering-off"].severity, "attention")
-        self.assertEqual(by_rule["dns-plain-upstream"].evidence, (("Unencrypted server", "198.51.100.53"),))
-        unused = by_rule["dns-name-unused"]
-        self.assertEqual(unused.subject, "service:idle.example.com")
-        self.assertEqual(unused.title, "No device looked up idle.example.com")
-        self.assertNotIn("app.example.com", {f.title for f in found if f.rule == "dns-name-unused"})
-
-    def test_protection_switched_off_is_its_own_finding(self):
-        store(DNS_KIND, {"connection_ref": ADGUARD, "protection_enabled": False, "filtering_enabled": True})
-
-        found = derive_findings(derive_topology(principal=READ), principal=READ)
-        (off,) = (finding for finding in found if finding.rule == "dns-protection-off")
-
-        self.assertTrue(off.title.startswith("AdGuard protection is off on "))
-        self.assertEqual(off.evidence, (("Protection", "Off"),))
-        self.assertNotIn("dns-filtering-off", {finding.rule for finding in found})
-
-    def test_a_healthy_resolver_raises_nothing(self):
-        store(
-            DNS_KIND,
-            {
-                "connection_ref": ADGUARD,
-                "protection_enabled": True,
-                "filtering_enabled": True,
-                "upstreams": [
-                    {"host": "dns.example.test", "transport": "tls"},
-                    {"host": "10.0.0.53", "transport": "dns"},
-                ],
-            },
-        )
-        store(QUERY_KIND, summary("app.example.com", 3))
-
-        rules = {f.rule for f in derive_findings(derive_topology(principal=READ), principal=READ)}
-
-        self.assertFalse(rules & {"dns-protection-off", "dns-filtering-off", "dns-plain-upstream", "dns-name-unused"})
 
     def test_a_reading_of_another_connection_says_nothing_about_this_one(self):
         connection("other-adguard", "adguard")

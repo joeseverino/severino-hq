@@ -140,7 +140,6 @@ func newFakeHost(t *testing.T) *fakeHost {
 		State:      filepath.Join(root, "state"),
 		Seal:       filepath.Join(root, "seal"),
 		SealPublic: filepath.Join(root, "state", "seal", "public.key"),
-		Sbin:       filepath.Join(root, "sbin"),
 		Runtime:    filepath.Join(root, "run"),
 		Out:        &f.out,
 	}
@@ -151,7 +150,7 @@ func newFakeHost(t *testing.T) *fakeHost {
 	f.machine.Sudoers = filepath.Join(root, "sudoers.d")
 	f.runners, f.runnerUser = []string{"actions.runner.example.service"}, "deployer"
 	f.sudoRules = fmt.Sprintf(sudoListing, f.runnerUser, "    (root) NOPASSWD: "+filepath.Join(lib, "deploy", "bin", "hq-host")+" deploy *\n")
-	for _, dir := range []string{"systemd", "sbin", "run", "run/severino-hq", "run/severino-hq-secrets", "sudoers.d", "image/app"} {
+	for _, dir := range []string{"systemd", "run", "run/severino-hq", "run/severino-hq-secrets", "sudoers.d", "image/app"} {
 		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
 			t.Fatal(err)
 		}

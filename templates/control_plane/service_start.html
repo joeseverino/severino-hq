@@ -6,5 +6,5 @@ service needs (a DNS record, something to answer for it, a certificate that
 covers it) is declared by the providers, and the page this leads to offers
 each of them already filled in with the name.
 {% endcomment %}
-{% url 'control_plane:services' as cancel_url %}{% include "partials/_form.html" with form=form verb="Continue" cancel_url=cancel_url %}
+{% url 'control_plane:services' as cancel_url %}{% include "partials/_form.html" with form=form method="get" verb="Continue" cancel_url=cancel_url %}
 {% endblock %}

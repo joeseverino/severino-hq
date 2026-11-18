@@ -10,11 +10,7 @@ opening a day ask this page for the `calendar` part and take it in place.
   {% section moment=calendar.month when="month" id="calendar-month" %}
     {% include "partials/_month_grid.html" %}
   {% aside %}
-    <nav class="calendar-nav" aria-label="Change month">
-      <a href="{{ previous_url }}" rel="prev" aria-label="Previous month" data-hotkey="ArrowLeft k p">&lsaquo;</a>
-      <a class="calendar-now" href="{{ today_url }}" data-hotkey="t"{% if calendar.is_current %} aria-current="date"{% endif %}>Today</a>
-      <a href="{{ next_url }}" rel="next" aria-label="Next month" data-hotkey="ArrowRight j n">&rsaquo;</a>
-    </nav>
+    {% include "partials/_calendar_nav.html" with unit="month" previous=previous_url today=today_url current=calendar.is_current next=next_url hotkeys=True only %}
   {% endsection %}
 
   <aside class="section-flow">
@@ -27,7 +23,7 @@ opening a day ask this page for the `calendar` part and take it in place.
             {% if entry.about %}{% muted element="p" %}About {{ entry.about.kind_label|lower|breakable }} {% entity entry.about %}{% endmuted %}{% endif %}
             {% if entry.next %}{% muted element="p" %}Next {% for when, url in entry.next %}<a href="{{ url }}">{{ when|when:"day" }}</a>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}{% endif %}
             {% if entry.object.notes %}<p>{{ entry.object.notes|breakable|linebreaksbr }}</p>{% endif %}
-            <p class="page-actions">{% for action in entry.actions %}{% include "partials/_page_action.html" %}{% endfor %}</p>
+            {% button_row %}{% for action in entry.actions %}{% include "partials/_page_action.html" %}{% endfor %}{% endbutton_row %}
           {% endsection %}
         {% endif %}
         {% for source, rows in day_groups %}
@@ -40,11 +36,7 @@ opening a day ask this page for the `calendar` part and take it in place.
         {% endfor %}
         <div><a href="{{ day.new_entry_url }}" data-hotkey="c">{% words "calendar.entry.create" %}</a></div>
       {% aside %}
-        <nav class="calendar-nav" aria-label="Change day">
-          <a href="{{ day.previous_url }}" rel="prev" aria-label="Previous day">&lsaquo;</a>
-          <a href="{{ day.next_url }}" rel="next" aria-label="Next day">&rsaquo;</a>
-          <a href="{{ calendar.url }}" aria-label="Close this day" data-hotkey="Escape">&times;</a>
-        </nav>
+        {% include "partials/_calendar_nav.html" with unit="day" previous=day.previous_url next=day.next_url close=calendar.url only %}
       {% endsection %}
     {% endif %}
 

@@ -1,12 +1,17 @@
 {% comment %}
 One fact, drawn by {% fact %} inside {% facts %}: its label, its value, and
-the detail under the value, flowing words or, given as lines, a line each. The value and its link are one element, so a
-count of 0 and a linked count of 13 stand alike. url is an address in HQ; an
-outside one is written in the block form, its value {% entity url|outside %}
-in the fact. A tone, when there is one, colors the fact by what it means.
-<!-- ast-grep-ignore: hand-drawn-toned-value --> the fact part, toned by what its value means
-{% endcomment %}<div class="fact{% if tone %} tone-{{ tone }}{% endif %}">
+the detail under the value, flowing words or, given as lines, a line each.
+The value and its link are one element, so a count of 0 and a linked count of
+13 stand alike. An outside link is written in the block form, its value
+{% entity url|outside %} in the fact. A `drawing` stands beside the value
+(dots, a line) or under the detail (the parts of a whole). Given a `panel`,
+its value is the button that opens it in place, as a menu does, the panel's
+`heading` over it and its `foot` under it. Its options are its Part's
+(facts_tags, docs/Shared-UI.md).
+{% endcomment %}<div class="fact{% if tone %} tone-{{ tone }}{% endif %}{% if zero %} is-zero{% endif %}"{% if title %} title="{{ title }}"{% endif %}{{ attributes }}>
   <dt>{% if icon %}<span class="band-icon">{% include "partials/_icon.html" with name=icon only %}</span>{% endif %}<span class="fact-label">{{ label|breakable }}</span></dt>
-  <dd class="fact-value">{% present value %}{% if url %}<a href="{{ url }}">{{ value|breakable }}</a>{% else %}{{ value|breakable }}{% endif %}{% endpresent %}</dd>
-  {% if lines %}<dd class="fact-detail">{% for line in lines %}<small>{{ line|breakable }}</small>{% endfor %}</dd>{% elif detail %}<dd class="fact-detail">{{ detail|breakable }}</dd>{% endif %}
+  {% partialdef shown %}{% present value %}{% if panel %}<button type="button" class="fact-open" popovertarget="{{ id }}">{{ value|breakable }}</button>{% elif url %}<a href="{{ url }}"{% if modal %} data-modal-open="{{ modal }}"{% endif %}>{{ value|breakable }}</a>{% else %}{{ value|breakable }}{% endif %}{% endpresent %}{% endpartialdef %}
+  {% if drawing and drawing.kind != "allocation" %}<dd class="fact-value fact-figure"><span>{% partial shown %}</span>{% include "partials/_figure_drawing.html" with drawing=drawing only %}</dd>{% else %}<dd class="fact-value"{% if panel %} data-menu{% endif %}>{% partial shown %}{% if panel %}<div class="fact-panel" id="{{ id }}" popover>{% if heading %}<header class="fact-panel-head">{{ heading|safe }}</header>{% endif %}{{ panel|safe }}{% if foot %}<footer class="fact-panel-foot">{{ foot|safe }}</footer>{% endif %}</div>{% endif %}</dd>{% endif %}
+  {% if lines or detail %}<dd class="fact-detail">{% if lines %}{% for line in lines %}<small>{{ line|breakable }}</small>{% endfor %}{% elif detail_tone %}{% status detail tone=detail_tone pill=False href=detail_url %}{% elif detail_url %}<a href="{{ detail_url }}">{{ detail|breakable }}</a>{% else %}{{ detail|breakable }}{% endif %}</dd>{% endif %}
+  {% if drawing.kind == "allocation" and drawing.drawn %}<dd>{% include "partials/_allocation.html" with allocation=drawing legend=True stacked=True only %}</dd>{% endif %}
 </div>

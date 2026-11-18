@@ -1,14 +1,14 @@
 {% comment %}
-One table of services, a tbody per group (`groups`: label, rows, reorderable;
+One table of services, a tbody per group (`groups`: label and rows, each row
+a service with its star and, among the favorites, the pair that moves it;
 `row_count`: the rows in all of them),
 so the favorites and the rest share one set of columns without fixing their
 widths. A group's heading shows only when there is more than one group.
 Columns leave a narrow table from the far end, so the facets are ranked from
 the last one back.
 
-`reorderable` turns on the up/down controls. They are only meaningful inside the
-favorites, where the order is something the operator chose; among the rest,
-alphabetical is the order and there is nothing to move.
+The star and the move pair end the row in its controls column, which the table
+sizes and counts, so the service's name keeps its column's whole line.
 {% endcomment %}
 {% table_region "Services" empty=empty_message action_url=start_url action_label="Publish a service" %}
   <table class="data-table">
@@ -20,16 +20,15 @@ alphabetical is the order and there is nothing to move.
         {% table_heading "Runs on" drop=2 local_sort=True %}
         {% if show_service_projects %}{% table_heading "Project" drop=1 local_sort=True %}{% endif %}
         {% table_heading "State" "status" css="key-col" local_sort=True %}
+        {% table_heading "Actions" css="actions-col" hidden=True %}
       </tr>
     </thead>
-    {% for group_label, rows, reorderable in groups %}
+    {% for group_label, rows in groups %}
     <tbody>
       {% if forloop.length > 1 %}{% row_group group_label %}{% endif %}
-      {% for service in rows %}
+      {% for service, mark, order in rows %}
         <tr>
-          <td>
-            {% include "control_plane/_service_pin.html" with service=service reorderable=reorderable first=forloop.first last=forloop.last only %}
-          </td>
+          <td><strong data-cell="name">{% entity "service"|entity_of:service.hostname %}</strong></td>
           {% with exposure=service.exposure %}
             <td>{% status exposure.short tone=exposure.tone title=exposure.sentence pill=False data_exposure=exposure.level %}</td>
           {% endwith %}
@@ -85,6 +84,7 @@ alphabetical is the order and there is nothing to move.
           </td>
           {% if show_service_projects %}<td>{% present service.project %}{% entity "project"|entity_of:service.project.slug label=service.project.name %}{% endpresent %}</td>{% endif %}
           <td>{% status service.status_label tone=service.tone title=service.health.detail %}</td>
+          {% row_actions mark=mark order=order %}
         </tr>
       {% endfor %}
     </tbody>

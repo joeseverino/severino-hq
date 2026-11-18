@@ -260,14 +260,6 @@ func TestAFirstRenderInstallsEveryConsumersFile(t *testing.T) {
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"), sshConnection(2),
 		connecttest.KeyItem(id(3), "Edge deploy key", key.PKCS8, key.Public))
 	h.web.installed = true
-	// A token file an earlier release kept: nothing accepts one.
-	if err := os.MkdirAll(h.layout().SecretDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	token := filepath.Join(h.layout().SecretDir, "severino_mcp_token")
-	if err := os.WriteFile(token, []byte("previous-value"), 0o400); err != nil {
-		t.Fatal(err)
-	}
 
 	result := h.ok()
 	if result.Outcome != "rendered" || !result.Changed || !result.WebChanged || !result.Restarted || h.web.restarts != 1 {
@@ -292,9 +284,6 @@ func TestAFirstRenderInstallsEveryConsumersFile(t *testing.T) {
 	if read(t, h.ssh("known_hosts")) != "[edge.example.com]:2222 "+hostKey+"\n" || mode(t, h.ssh("edge")) != 0o400 ||
 		read(t, h.ssh("edge.pub")) != key.Public+"\n" || mode(t, h.ssh("edge.pub")) != 0o444 {
 		t.Fatal("identities")
-	}
-	if _, err := os.Lstat(token); err == nil {
-		t.Fatal("the retired MCP token file was kept")
 	}
 	if len(h.staging()) != 0 {
 		t.Fatalf("staging was left behind: %v", h.staging())
@@ -525,46 +514,37 @@ func TestARefreshKeepsTheAppEnvironmentInodeAndReplacesTheDocuments(t *testing.T
 			t.Fatal(err)
 		}
 	}
-	checkout := filepath.Join(layout.SecretDir, install.AppEnvName)
-	for _, path := range []string{h.appEnv(), checkout, h.document()} {
+	for _, path := range []string{h.appEnv(), h.document()} {
 		if err := os.WriteFile(path, []byte("previous-value"), 0o400); err != nil {
 			t.Fatal(err)
 		}
 	}
 	h.web.installed = true
-	before := []uint64{inode(t, h.appEnv()), inode(t, checkout), inode(t, h.document())}
+	before := []uint64{inode(t, h.appEnv()), inode(t, h.document())}
 	result := h.ok()
 	if !result.WebChanged || h.web.restarts != 1 {
 		t.Fatalf("result: %+v", result)
 	}
 	// Bind-mounted into a running container: the same inode, new content.
-	if inode(t, h.appEnv()) != before[0] || inode(t, checkout) != before[1] {
+	if inode(t, h.appEnv()) != before[0] {
 		t.Fatal("the application environment lost its inode: the container would keep the old file")
 	}
-	if read(t, h.appEnv()) == "previous-value" || read(t, checkout) != read(t, h.appEnv()) || mode(t, checkout) != 0o400 {
-		t.Fatal("the application environment was not rewritten in both places")
+	if read(t, h.appEnv()) == "previous-value" || mode(t, h.appEnv()) != 0o400 {
+		t.Fatal("the application environment was not rewritten")
 	}
 	// No persistent bind mount: a rename gives each reader a whole old or new file.
-	if inode(t, h.document()) == before[2] || mode(t, h.document()) != 0o400 {
+	if inode(t, h.document()) == before[1] || mode(t, h.document()) != 0o400 {
 		t.Fatal("the connections document was rewritten in place")
 	}
-	current := []uint64{inode(t, h.appEnv()), inode(t, checkout), inode(t, h.document())}
+	current := []uint64{inode(t, h.appEnv()), inode(t, h.document())}
 	if repeated := h.ok(); repeated.Outcome != "current" || repeated.Changed {
 		t.Fatalf("a repeated refresh was not current: %+v", repeated)
 	}
 	if !strings.Contains(h.log.String(), "secrets are current") {
 		t.Fatal("a current run did not say so")
 	}
-	if current[0] != inode(t, h.appEnv()) || current[1] != inode(t, checkout) || current[2] != inode(t, h.document()) {
+	if current[0] != inode(t, h.appEnv()) || current[1] != inode(t, h.document()) {
 		t.Fatal("a repeated refresh replaced a file")
-	}
-	// The deploy that binds the tmpfs copy removes the checkout's: the next
-	// render does not put it back.
-	os.Remove(checkout)
-	h.fake.Edit(func(*connecttest.State) {})
-	h.ok()
-	if _, err := os.Lstat(checkout); err == nil {
-		t.Fatal("the checkout's copy was recreated")
 	}
 }
 
@@ -823,11 +803,6 @@ func TestDestinationsThatAreNotTheRenderersOwnAreRefused(t *testing.T) {
 		},
 		"a directory at the app environment": func(h *machine, _ string) {
 			if err := os.Mkdir(h.appEnv(), 0o700); err != nil {
-				h.t.Fatal(err)
-			}
-		},
-		"a symlinked checkout copy": func(h *machine, system string) {
-			if err := os.Symlink(system, filepath.Join(h.layout().SecretDir, install.AppEnvName)); err != nil {
 				h.t.Fatal(err)
 			}
 		},

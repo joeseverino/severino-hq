@@ -14,7 +14,7 @@ from typing import Any
 from django.test import SimpleTestCase, tag
 
 from hq.platform.core.tests.task import changed_paths, names, overlay, trusted_mise, worktree
-from tests.mise_tasks import ROOT, body, mise_tasks, writes, writes_part_of
+from tests.mise_tasks import ROOT, body, mise_tasks, writes
 
 DRIFT = "lint:drift-"
 # The tag that makes a gate its files' declaration, the one fix:derived runs.
@@ -25,10 +25,7 @@ NAMED = re.compile(r"\brun `([^`]+)`")
 RUNS_TASK = re.compile(r"\bmise run ([\w:-]+)")
 ECHOED = re.compile(r"""\becho (["'])(.*?)\1""")
 EVERY_FILE = "mise run fix"
-DECLARE = (
-    "Tag it derived and name each file its fix writes whole in its vars.writes, and each hand-written file it "
-    "writes a section of in vars.writes_part_of (docs/Development.md, Derived files)."
-)
+DECLARE = "Tag it derived and name each file its fix writes in its vars.writes (docs/Development.md, Derived files)."
 
 
 def drift_gates() -> dict[str, str]:
@@ -62,7 +59,7 @@ class DriftGateTests(SimpleTestCase):
                 self.assertTrue(writes(mise_tasks()[name]), f"{name} declares no file it writes. {DECLARE}")
         self.assertLessEqual(declarations.keys(), gates.keys(), f"a gate tagged {DERIVED} is named {DRIFT}*")
         for name, task in declarations.items():
-            for path in writes(task) + writes_part_of(task):
+            for path in writes(task):
                 with self.subTest(name, path=path):
                     self.assertTrue((ROOT / path).is_file(), f"{name} declares it writes {path}, which is not here")
 
@@ -167,7 +164,7 @@ class DriftGateTests(SimpleTestCase):
                         (tree / path).unlink()
                     self.assertEqual(
                         written(["mise", "run", name, "--fix"]),
-                        set(held + writes_part_of(task)),
+                        set(held),
                         f"{name} --fix writes these. {DECLARE}",
                     )
                     for path in held:

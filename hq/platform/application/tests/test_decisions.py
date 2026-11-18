@@ -11,12 +11,11 @@ from django.utils import timezone
 
 from hq.platform.application.action_links import read_link
 from hq.platform.application.contracts import Effect
-from hq.platform.application.decisions import decision, workflow_parts
-from hq.platform.application.item_help import cannot_step, commands, do_step, run_step
+from hq.platform.application.decisions import decision
+from hq.platform.application.finding_steps import Do, Press, Run
 from hq.platform.application.markup_testing import all_elements, elements, hrefs, select, text, texts, with_class
 from hq.platform.application.tests.links import example_command
 from hq.platform.application.tone import Tone
-from hq.platform.application.workflow_contracts import WorkflowOutcome, WorkflowPlan, WorkflowStep
 
 
 def row_hrefs(html):
@@ -35,7 +34,7 @@ def card(item) -> str:
 
 
 class DecisionTests(SimpleTestCase):
-    def item(self, *, actions=(), steps=(), **fields):
+    def item(self, *, actions=(), steps=(), check=None, **fields):
         return {
             "label": "Example needs a decision",
             "status": "attention",
@@ -43,33 +42,20 @@ class DecisionTests(SimpleTestCase):
             "detail": "What it means for the reader.",
             "count": 1,
             "actions": [asdict(action) for action in actions],
-            "workflow": asdict(
-                WorkflowPlan(
-                    "example",
-                    "What to do",
-                    steps,
-                    WorkflowOutcome("claim_absent", "example", ""),
-                )
-            )
-            if steps
-            else None,
+            "steps": [asdict(step) for step in steps],
+            "check": asdict(check) if check else None,
             **fields,
         }
 
-    def test_the_first_available_step_leads_without_mutating_or_repeating_it(self):
+    def test_the_press_leads_and_its_check_follows_without_mutating_or_repeating_either(self):
         action = read_link("fix", "Review change", "/example/review/", recommended=True)
         verify = example_command("verify", "Recheck", "write", "/example/check/", method="POST")
-        item = self.item(
-            steps=(
-                WorkflowStep("act", "Fix it", "", "recommended", (action,)),
-                WorkflowStep("verify", "Confirm", "Check the outcome", "after_action", (verify,)),
-            )
-        )
+        item = self.item(steps=(Press(action),), check=verify)
         before = deepcopy(item)
         shown = decision(item)
         self.assertEqual(item, before)
-        self.assertEqual(shown["actions"], [asdict(action)])
-        self.assertEqual([step["phase"] for step in shown["workflow"]["steps"]], ["verify"])
+        self.assertEqual(shown["actions"], [asdict(action), asdict(verify)])
+        self.assertEqual(shown["steps"], [])
         html = card(item)
         self.assertEqual(row_hrefs(html).count("/example/review/"), 1)
         (recheck,) = select(html, "formaction", "/example/check/")
@@ -79,14 +65,7 @@ class DecisionTests(SimpleTestCase):
     def test_what_is_wrong_and_its_buttons_are_on_the_face_of_the_card(self):
         fix = example_command("fix", "Restore the example", "remote_write", "/example/fix/", recommended=True)
         check = example_command("verify", "Check again", Effect.READ, "/example/check/", method="POST")
-        html = card(
-            self.item(
-                steps=(
-                    WorkflowStep("act", "Fix it", "", "recommended", (fix,)),
-                    WorkflowStep("verify", "Check that it worked", "", "after_action", (check,)),
-                )
-            )
-        )
+        html = card(self.item(steps=(Press(fix),), check=check))
 
         self.assertEqual(elements(html, "details") + elements(html, "ol"), [])
         for words in ("What it means for the reader.", "Restore the example", "Check again"):
@@ -94,18 +73,15 @@ class DecisionTests(SimpleTestCase):
 
     def test_a_lone_check_is_a_button_and_never_a_step(self):
         check = example_command("verify", "Check again", Effect.READ, "/example/check/", method="POST")
-        shown = decision(self.item(steps=(WorkflowStep("verify", "Check again", "", "available", (check,)),)))
+        shown = decision(self.item(check=check))
 
         self.assertEqual(shown["actions"], [asdict(check)])
         self.assertEqual(shown["steps"], [])
-        self.assertIsNone(shown["workflow"])
 
     def test_a_check_stands_beside_the_owners_own_action(self):
         own = read_link("open", "Open", "/example/")
         check = example_command("verify", "Check again", Effect.READ, "/example/check/", method="POST")
-        shown = decision(
-            self.item(actions=(own,), steps=(WorkflowStep("verify", "Check again", "", "available", (check,)),))
-        )
+        shown = decision(self.item(actions=(own,), check=check))
 
         self.assertEqual(shown["actions"], [asdict(own), asdict(check)])
 
@@ -113,14 +89,7 @@ class DecisionTests(SimpleTestCase):
         fix = example_command("remedy", "Renew certificate", "remote_write", "/commands/renew/", recommended=True)
         check = read_link("verify", "Check again", "/example/check/")
         shown = decision(
-            self.item(
-                url="/certificates/example/",
-                action="Open certificate",
-                steps=(
-                    WorkflowStep("act", "Renew", "", "recommended", (fix,)),
-                    WorkflowStep("verify", "Check again", "", "available", (check,)),
-                ),
-            )
+            self.item(url="/certificates/example/", action="Open certificate", steps=(Press(fix),), check=check)
         )
 
         self.assertEqual(
@@ -147,20 +116,12 @@ class DecisionTests(SimpleTestCase):
 
     def test_the_named_page_leads_when_nothing_else_is_recommended(self):
         check = read_link("verify", "Check again", "/example/check/")
-        shown = decision(
-            self.item(
-                url="/example/plan/",
-                action="Upgrade plan for example",
-                steps=(WorkflowStep("verify", "Check again", "", "available", (check,)),),
-            )
-        )
+        shown = decision(self.item(url="/example/plan/", action="Upgrade plan", check=check))
 
-        self.assertEqual(
-            [action["label"] for action in shown["actions"] if action["recommended"]], ["Upgrade plan for example"]
-        )
+        self.assertEqual([action["label"] for action in shown["actions"] if action["recommended"]], ["Upgrade plan"])
 
     def test_a_reason_is_a_sentence_and_never_a_numbered_step(self):
-        item = self.item(steps=(cannot_step("Only the registrar can renew it."),))
+        item = self.item(no_help_reason="Only the registrar can renew it.")
         shown = decision(item)
         html = card(item)
 
@@ -171,15 +132,8 @@ class DecisionTests(SimpleTestCase):
         self.assertNotIn("Why HQ cannot", text(html))
 
     def test_one_command_stands_alone_and_several_are_numbered(self):
-        one = card(self.item(steps=(run_step("On the machine", "example --fix"),)))
-        two = card(
-            self.item(
-                steps=(
-                    run_step("On the machine", "example --fix"),
-                    do_step("Then sign in again."),
-                )
-            )
-        )
+        one = card(self.item(steps=(Run("On the machine", "example --fix"),)))
+        two = card(self.item(steps=(Run("On the machine", "example --fix"), Do("Then sign in again."))))
 
         self.assertEqual([steps.tag for steps in with_class(one, "resolution-workflow")], ["ul"])
         self.assertIn("example --fix", texts(one, "code"))
@@ -187,17 +141,18 @@ class DecisionTests(SimpleTestCase):
         self.assertIn("Then sign in again.", text(two))
         self.assertEqual(elements(one, "details") + elements(two, "details"), [])
 
-    def test_long_steps_fold_and_short_ones_do_not(self):
-        long = commands("k", (("In the repository", "example " + "--flag " * 40),))
-        many = commands("k", tuple((f"Step {n}", "example") for n in range(3)))
+    def test_a_steps_notes_are_said_under_it(self):
+        html = card(self.item(steps=(Run("On the machine", "example --fix", ("Then press Refresh.",)),)))
 
-        self.assertFalse(workflow_parts(commands("k", (("Here", "example"),)))["fold"])
-        for plan in (long, many):
-            self.assertTrue(workflow_parts(asdict(plan))["fold"])
-            # The queue holds every step in the row's opened line, long or short.
-            html = card({**self.item(), "workflow": asdict(plan)})
-            (below,) = with_class(html, "row-below")
-            self.assertIn("example", below.words)
+        (steps,) = with_class(html, "resolution-workflow")
+        self.assertIn("Then press Refresh.", steps.words)
+
+    def test_the_queue_holds_every_step_in_the_rows_opened_line(self):
+        many = tuple(Run(f"Step {n}", "example " + "--flag " * 40) for n in range(3))
+        html = card(self.item(steps=many))
+
+        (below,) = with_class(html, "row-below")
+        self.assertIn("example", below.words)
 
     def test_a_row_reads_its_meaning_in_full_and_keeps_its_buttons_together(self):
         links = tuple(read_link(f"open-{n}", f"Open page {n}", f"/example/{n}/") for n in range(3))
@@ -207,15 +162,14 @@ class DecisionTests(SimpleTestCase):
         (meaning,) = select(html, "data-attention-detail")
         self.assertIn("What it means for the reader.", meaning.words)
         self.assertEqual(with_class(html, "row-below"), [])
-        # The first buttons are in one cell, and those that wait stand
-        # together on the row's open line (beside the first ones' copy there).
+        # Every button stands in the row's one cell; none waits beneath it.
         buttons = [link for link in all_elements(html) if link.attrs.get("href", "").startswith("/example/")]
-        shown = [link for link in buttons if not link.beneath]
-        cells = {id(next(ancestor for ancestor in reversed(link.ancestors) if ancestor.tag == "td")) for link in shown}
+        cells = {
+            id(next(ancestor for ancestor in reversed(link.ancestors) if ancestor.tag == "td")) for link in buttons
+        }
         self.assertEqual(len(cells), 1)
-        later = [link for link in buttons if link.beneath and any("row-later" in up.classes for up in link.ancestors)]
-        self.assertTrue(later)
-        self.assertEqual(sorted(link.attrs["href"] for link in shown + later), [f"/example/{n}/" for n in range(3)])
+        self.assertFalse([link for link in buttons if link.beneath])
+        self.assertEqual(sorted(link.attrs["href"] for link in buttons), [f"/example/{n}/" for n in range(3)])
 
     def test_the_title_goes_to_the_thing_and_the_named_next_step_is_a_link(self):
         subject = asdict(read_link("subject", "example-host", "/machines/example-host/"))
@@ -253,28 +207,9 @@ class DecisionTests(SimpleTestCase):
     def test_owner_actions_win_and_only_identical_method_and_url_are_removed(self):
         get = read_link("open", "Open", "/example/")
         post = example_command("run", "Run", "write", "/example/", method="POST")
-        shown = decision(
-            self.item(
-                actions=(get,), steps=(WorkflowStep("act", "Act", "Keep this explanation", "recommended", (get, post)),)
-            )
-        )
-        self.assertEqual(shown["actions"], [asdict(get)])
-        self.assertEqual(shown["workflow"]["steps"][0]["actions"], [asdict(post)])
-        self.assertEqual(shown["workflow"]["steps"][0]["summary"], "Keep this explanation")
+        shown = decision(self.item(actions=(get,), steps=(Press(get), Press(post))))
 
-    def test_a_blocked_or_later_step_is_never_promoted(self):
-        action = example_command("run", "Run", "write", "/example/", method="POST")
-        for state in ("blocked", "after_action"):
-            with self.subTest(state=state):
-                item = self.item(steps=(WorkflowStep("act", "Act", "", state, (action,)),))
-                self.assertEqual(decision(item)["actions"], [])
-                self.assertEqual([step["label"] for step in decision(item)["steps"]], ["Act"])
-                self.assertEqual(len(decision(item)["steps"][0]["actions"]), 1)
-
-    def test_a_fully_promoted_plan_does_not_leave_an_empty_disclosure(self):
-        action = read_link("open", "Review", "/example/")
-        shown = decision(self.item(steps=(WorkflowStep("act", "Act", "", "available", (action,)),)))
-        self.assertIsNone(shown["workflow"])
+        self.assertEqual(shown["actions"], [asdict(get), asdict(post)])
 
     def test_destructive_post_actions_keep_the_shared_safety_and_escaping(self):
         action = example_command("remove", "Remove <example>", "destructive", "/example/remove/", method="POST")

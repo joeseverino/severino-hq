@@ -2,10 +2,13 @@
 
 import re
 from dataclasses import KW_ONLY, dataclass
-from typing import Annotated, Any, Literal, get_args
+from typing import Annotated, Any, Literal, get_args, override
 
-from pydantic import Field, model_validator
+from pydantic import Field, GetJsonSchemaHandler, model_validator
+from pydantic_core import CoreSchema
 
+from hq.platform.application.command_fields import RequiredText
+from hq.platform.application.describe import Describe
 from hq.platform.application.routes import reverse
 
 from ..connection_shapes import API_TOKEN
@@ -66,6 +69,15 @@ class DNSRecordType:
     # a domain apex answers it under four CAA records and three verification
     # strings, so these are listed apart, folded away, rather than first.
     secondary: bool = False
+    # Whether a record of this type is tried in an order, by a priority it must carry.
+    takes_priority: bool = False
+    # What its value must look like, where Cloudflare holds it to a form.
+    value_pattern: str = ""
+
+
+# One expression, used both to validate a CAA value and to take it apart, so a
+# value the form accepts is one the canonicalizer can parse.
+_CAA_VALUE_PARTS = r'^\s*(\d{1,3})\s+(issue|issuewild|iodef)\s+"([^"]*)"\s*$'
 
 
 DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
@@ -115,6 +127,7 @@ DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
         value_label="Mail server hostname",
         value_help="The host that accepts mail for this domain.",
         removal_impact="Mail for this domain stops being delivered.",
+        takes_priority=True,
     ),
     DNSRecordType(
         "CAA",
@@ -124,6 +137,7 @@ DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
         value_help='Flags, tag and value, e.g. 0 issue "letsencrypt.org".',
         removal_impact=("If this is the last CAA record, any certificate authority can issue for this domain."),
         secondary=True,
+        value_pattern=_CAA_VALUE_PARTS,
     ),
 )
 
@@ -139,27 +153,21 @@ if set(DNS_RECORD_TYPES_BY_ID) != set(get_args(DNSRecordTypeId)):
     raise ValueError("DNS record type registry and its annotation disagree; a type was added to one and not the other.")
 
 
-# One expression, used both to validate a CAA value and to take it apart, so a
-# value the form accepts is one the canonicalizer can parse.
-_CAA_VALUE_PARTS = r'^\s*(\d{1,3})\s+(issue|issuewild|iodef)\s+"([^"]*)"\s*$'
-
-
 class CloudflareDNSRecordSpec(ProviderModel):
-    zone: str = Field(
-        min_length=1,
+    """One DNS record in a Cloudflare zone, as HQ keeps it."""
+
+    zone: RequiredText = Field(
         max_length=253,
         title="Zone",
         description="The record's domain, e.g. example.com.",
     )
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=253,
         title="Hostname",
         description="The full name, e.g. app.example.com.",
     )
-    record_type: DNSRecordTypeId = Field(title="Record type")
-    content: str = Field(
-        min_length=1,
+    record_type: Annotated[DNSRecordTypeId, Describe("", api="The record's DNS type.")] = Field(title="Record type")
+    content: RequiredText = Field(
         max_length=2048,
         title="Value",
         description=(
@@ -198,13 +206,14 @@ class CloudflareDNSRecordSpec(ProviderModel):
         Every rule here is one the API enforces anyway. Enforcing them at the
         edge turns a failed job into a red field next to the answer that caused
         it, which is the difference between a correction and an investigation.
+        Each is read from its record type, which ``_by_type`` says in the schema.
         """
 
         record_type = DNS_RECORD_TYPES_BY_ID[self.record_type]
-        if self.priority is not None and self.record_type != "MX":
-            raise ValueError("priority applies only to MX records")
-        if self.record_type == "MX" and self.priority is None:
-            raise ValueError("an MX record needs a priority")
+        if self.priority is not None and not record_type.takes_priority:
+            raise ValueError(f"priority applies only to {', '.join(_PRIORITIZED)} records")
+        if record_type.takes_priority and self.priority is None:
+            raise ValueError(f"a {self.record_type} record needs a priority")
         if self.proxied and not record_type.proxyable:
             raise ValueError(f"Cloudflare cannot proxy a {self.record_type} record")
         if self.proxied and self.ttl != 1:
@@ -213,9 +222,38 @@ class CloudflareDNSRecordSpec(ProviderModel):
             # make every reconciliation report drift against a value the
             # provider will never agree to.
             raise ValueError("a proxied record must leave TTL automatic (1)")
-        if self.record_type == "CAA" and not re.match(_CAA_VALUE_PARTS, self.content):
-            raise ValueError('a CAA value looks like: 0 issue "letsencrypt.org"')
+        if record_type.value_pattern and not re.match(record_type.value_pattern, self.content):
+            raise ValueError(f"a {self.record_type} value looks like: {record_type.value_help}")
         return self
+
+    @classmethod
+    @override
+    def __get_pydantic_json_schema__(cls, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        declared: dict[str, Any] = handler(schema)
+        handler.resolve_ref_schema(declared)["anyOf"] = [_by_type(record_type) for record_type in DNS_RECORD_TYPES]
+        return declared
+
+
+_PRIORITIZED = tuple(record_type.id for record_type in DNS_RECORD_TYPES if record_type.takes_priority)
+
+
+def _by_type(record_type: DNSRecordType) -> dict[str, Any]:
+    """What ``type_shape`` holds a record of ``record_type`` to, as a schema
+    branch beside the spec's fields: whether it carries a priority, whether it
+    may be proxied (and then leaves TTL automatic), and its value's form."""
+
+    proxied: dict[str, Any] = {"properties": {"proxied": {"const": False}}}
+    branch: dict[str, Any] = {
+        "properties": {
+            "record_type": {"const": record_type.id},
+            "priority": {"not": {"type": "null"}} if record_type.takes_priority else {"type": "null"},
+        },
+        "required": ["record_type", "priority"] if record_type.takes_priority else ["record_type"],
+        "anyOf": [proxied, {"properties": {"ttl": {"const": 1}}}] if record_type.proxyable else [proxied],
+    }
+    if record_type.value_pattern:
+        branch["properties"]["content"] = {"pattern": record_type.value_pattern}
+    return branch
 
 
 class CloudflareZoneSpec(ProviderModel):
@@ -228,14 +266,12 @@ class CloudflareZoneSpec(ProviderModel):
     set here.
     """
 
-    zone: str = Field(
-        min_length=1,
+    zone: RequiredText = Field(
         max_length=253,
         title="Domain",
         description="The domain itself, e.g. example.com.",
     )
-    connection_ref: str = Field(
-        min_length=1,
+    connection_ref: RequiredText = Field(
         max_length=160,
         title="Served by",
         description="The connection that holds this zone.",
@@ -592,9 +628,9 @@ class ContactInboxSpec(ProviderModel):
     nothing.
     """
 
-    connection_ref: str = Field(min_length=1, max_length=160, title="Connection")
-    account_id: str = Field(min_length=1, max_length=64, title="Account")
-    database_id: str = Field(min_length=1, max_length=64, title="Database")
+    connection_ref: RequiredText = Field(max_length=160, title="Connection")
+    account_id: RequiredText = Field(max_length=64, title="Account")
+    database_id: RequiredText = Field(max_length=64, title="Database")
     reviews: tuple[ContactReview, ...] = Field(default=(), max_length=CONTACT_CHANGES_LIMIT, title="Reviews")
     deletions: tuple[Annotated[int, Field(ge=1)], ...] = Field(
         default=(), max_length=CONTACT_CHANGES_LIMIT, title="Deletions"

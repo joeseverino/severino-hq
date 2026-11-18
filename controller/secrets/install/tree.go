@@ -30,7 +30,6 @@ const (
 	SSHDirName      = "ssh"
 	lockName        = "refresh.lock"
 	sshLockName     = "ssh.lock"
-	mcpTokenName    = "severino_mcp_token" //nolint:gosec // G101: a file's name
 	stagePrefix     = ".refresh."
 	maxFileBytes    = 16 << 20
 	sshLockWait     = 60 * time.Second
@@ -52,8 +51,7 @@ func hostError(parts ...string) error { return &refusal{message: strings.Join(pa
 
 // Layout is where everything lives and who owns it.
 type Layout struct {
-	// SecretDir is on disk, under the deploy checkout: the lock, and the
-	// checkout's copy of the application environment while a container binds it.
+	// SecretDir is the renderer's directory on disk, under the deploy checkout.
 	SecretDir string
 	// RuntimeDir is the private tmpfs: connections, identities, staging.
 	RuntimeDir string
@@ -130,7 +128,6 @@ func ensurePrivate(dir string, uid, gid int, what string) error {
 // Tree is the opened layout.
 type Tree struct {
 	Layout  Layout
-	secret  *os.Root
 	runtime *os.Root
 	web     *os.Root
 }
@@ -158,10 +155,6 @@ func Open(layout Layout, mounts MountChecker) (*Tree, error) {
 		tree.Close()
 		return nil, err
 	}
-	if tree.secret, err = openPrivate(layout.SecretDir, layout.RootUID, "The secret directory"); err != nil {
-		tree.Close()
-		return nil, err
-	}
 	if err := ensurePrivate(layout.WebDir, layout.RootUID, layout.RootGID, "The web secret directory"); err != nil {
 		tree.Close()
 		return nil, err
@@ -181,7 +174,7 @@ func Open(layout Layout, mounts MountChecker) (*Tree, error) {
 
 // Close releases the directory handles.
 func (t *Tree) Close() {
-	for _, root := range []*os.Root{t.secret, t.runtime, t.web} {
+	for _, root := range []*os.Root{t.runtime, t.web} {
 		if root != nil {
 			root.Close()
 		}
@@ -429,31 +422,11 @@ func InPlace(root *os.Root, name string, data []byte, uid, gid int, mode fs.File
 	return true, nil
 }
 
-// Secret is the opened secret directory.
-func (t *Tree) Secret() *os.Root { return t.secret }
-
 // Runtime is the opened runtime directory.
 func (t *Tree) Runtime() *os.Root { return t.runtime }
 
 // Web is the opened web directory.
 func (t *Tree) Web() *os.Root { return t.web }
-
-// RemoveMCPToken removes the token file earlier releases kept: nothing
-// accepts one, so none is kept.
-func (t *Tree) RemoveMCPToken() error {
-	if err := t.secret.Remove(mcpTokenName); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return hostError("The retired MCP token file could not be removed.")
-	}
-	return nil
-}
-
-// HasCheckoutEnv reports whether anything sits at the checkout's copy of the
-// application environment, a link included: it is kept current only while a
-// container binds it, and the deploy that replaces that container removes it.
-func (t *Tree) HasCheckoutEnv() bool {
-	_, err := t.secret.Lstat(AppEnvName)
-	return err == nil
-}
 
 // Rename moves a staged file over name in the runtime directory when the
 // installed one differs: on one tmpfs, so each reader sees a complete old or

@@ -47,7 +47,7 @@ from hq.platform.application.capabilities import (
     run_capability,
 )
 from hq.platform.application.connections import ConnectionCatalog, describe_connections
-from hq.platform.application.contracts import Effect
+from hq.platform.application.contracts import DOTTED_NAME, Effect
 from hq.platform.application.describe import Describe
 from hq.platform.application.findings import Findings, FindingsQuery, findings as application_findings
 from hq.platform.application.held_answer import AwaitingApproval
@@ -77,6 +77,7 @@ from hq.platform.application.resources import (
     describe_resources,
     get_resource as get_application_resource,
     list_resource as list_application_resource,
+    resource_registry,
 )
 from hq.platform.application.security import API_INTERFACE, Capability, Principal, web_principal
 from hq.platform.application.tokens import is_configured
@@ -262,8 +263,10 @@ def _operator(request: HttpRequest) -> AbstractBaseUser | None:
 def _target(kind: str, words: str) -> dict[str, Any]:
     """The target's schema for a capability whose target is of ``kind``, said in its own words."""
 
+    # An id is the envelope's own (``RecordId``), whose definition the body's schema carries.
+    number = ENVELOPE_SCHEMA["properties"]["target"]["anyOf"][0]
     schema: dict[str, Any] = (
-        {"oneOf": [{"type": "integer"}, {"type": "string", "pattern": INTEGER_TARGET}], "examples": [42]}
+        {"oneOf": [number, {"type": "string", "pattern": INTEGER_TARGET}], "examples": [42]}
         if kind == "integer"
         else {"type": "string", "minLength": 1, "examples": [f"example-{kind.replace('_', '-')}"]}
     )
@@ -493,7 +496,7 @@ def capabilities(request: APIRequest) -> HttpResponse:
 
     # `?name=` narrows to a capability or a dotted prefix of whole segments,
     # and `?resource=` to the capabilities acting on that resource.
-    described = describe_capabilities(principal=request.principal, **_narrowing(request, CAPABILITY_QUERY))
+    described = describe_capabilities(principal=request.principal, **_narrowing(request, capability_query()))
     specs: list[CapabilityDescription] = described["capabilities"]
     catalog: CapabilityRequestCatalog = {
         "schema_version": described["schema_version"],
@@ -509,21 +512,28 @@ def capabilities(request: APIRequest) -> HttpResponse:
     return _ok(catalog)
 
 
-CAPABILITY_QUERY: Mapping[str, Mapping[str, Any]] = {
-    "name": {
-        "type": "string",
-        "description": (
-            "A capability's name, or a prefix of whole dotted segments: `infrastructure` keeps every "
-            "`infrastructure.*`. Absent, every capability."
-        ),
-    },
-    "resource": {
-        "type": "string",
-        "description": "Only the capabilities that act on this resource, as /resources/ names it.",
-    },
-}
+def capability_query() -> QueryFields:
+    """What the capability catalog narrows by: a dotted name or prefix, and a resource it acts on."""
+
+    return {
+        "name": {
+            "type": "string",
+            "pattern": DOTTED_NAME.pattern,
+            "description": (
+                "A capability's name, or a prefix of whole dotted segments: `infrastructure` keeps every "
+                "`infrastructure.*`. Absent, every capability."
+            ),
+        },
+        "resource": {
+            "type": "string",
+            "enum": sorted(resource_registry()),
+            "description": "Only the capabilities that act on this resource, as /resources/ names it.",
+        },
+    }
+
+
 # The narrowing inputs, for the OpenAPI document's query parameters.
-capabilities.__dict__.update(__hq_query_fields__=CAPABILITY_QUERY)
+capabilities.__dict__.update(__hq_query_fields__=capability_query)
 
 
 @_endpoint(
@@ -536,37 +546,26 @@ def resources(request: APIRequest) -> HttpResponse:
     with its list's whole query schema.
     """
 
-    return _ok(describe_resources(principal=request.principal, **_narrowing(request, RESOURCE_QUERY)))
+    return _ok(describe_resources(principal=request.principal, **_narrowing(request, resource_query())))
 
 
-RESOURCE_QUERY: Mapping[str, Mapping[str, Any]] = {
-    "name": {
-        "type": "string",
-        "description": "One resource, answered with its list's whole query schema. Absent, every resource.",
+def resource_query() -> QueryFields:
+    """What the resource catalog narrows by: one resource, by its name."""
+
+    return {
+        "name": {
+            "type": "string",
+            "enum": sorted(resource_registry()),
+            "description": "One resource, answered with its list's whole query schema. Absent, every resource.",
+        }
     }
-}
+
+
 # The narrowing input, for the OpenAPI document's query parameters.
-resources.__dict__.update(__hq_query_fields__=RESOURCE_QUERY)
+resources.__dict__.update(__hq_query_fields__=resource_query)
 
 
 QueryFields = Mapping[str, Mapping[str, Any]]
-_NULL: Mapping[str, Any] = {"type": "null"}
-
-
-def query_fields(model: type[BaseModel]) -> dict[str, dict[str, Any]]:
-    """Each input ``model`` takes, as the schema of its query parameter: one
-    not sent is absent, so a ``null`` the model allows is no value it can be."""
-
-    fields: dict[str, dict[str, Any]] = {}
-    for name, schema in json_schema(model)["properties"].items():
-        said = {key: value for key, value in schema.items() if key != "anyOf" and (key, value) != ("default", None)}
-        branches = [branch for branch in schema.get("anyOf", ()) if branch != _NULL]
-        if len(branches) == 1:
-            said = {**branches[0], **said}
-        elif branches:
-            said["anyOf"] = branches
-        fields[name] = said
-    return fields
 
 
 class _UnreadableQuery(QueryRefusal):
@@ -579,13 +578,20 @@ class _UnreadableQuery(QueryRefusal):
 _COUNT = re.compile(r"-?[0-9]{1,18}")
 
 
+def _counts(schema: Mapping[str, Any]) -> bool:
+    """Whether a query field's schema takes an integer, alone or beside ``null``."""
+
+    return any(said.get("type") == "integer" for said in (schema, *schema.get("anyOf", ())))
+
+
 def _narrowing(request: APIRequest, query_fields: QueryFields) -> dict[str, Any]:
     """The declared query parameters, each sent at most once, an integer one in digits read as that integer.
 
-    Text sent empty is absent, as a form leaves it, so the read's own default
-    applies. Anything but a count stays the text it was, which the read's
-    strict model refuses in the words MCP's argument model uses for the same
-    input.
+    Anything but a count stays the text it was, an empty one included, which
+    the read's strict model judges as the document declares it, in the words
+    MCP's argument model uses for the same input: only a field left out takes
+    the read's default. The web pages, whose forms send a field they leave
+    empty, read their own queries.
     """
 
     values: dict[str, Any] = {}
@@ -596,10 +602,7 @@ def _narrowing(request: APIRequest, query_fields: QueryFields) -> dict[str, Any]
         if not sent:
             continue
         (raw,) = sent
-        if schema.get("type") == "integer":
-            values[field] = int(raw) if _COUNT.fullmatch(raw) else raw
-        elif text := raw.strip():
-            values[field] = text
+        values[field] = int(raw) if _counts(schema) and _COUNT.fullmatch(raw) else raw
     return values
 
 
@@ -612,6 +615,7 @@ def _projection(
     title: str,
     doc: str,
     page: str,
+    codes: tuple[str, ...] = ("invalid_input",),
 ) -> View:
     """One principal-scoped projection, served with its query model's inputs.
 
@@ -622,7 +626,7 @@ def _projection(
     tool name, so both doors say it alike.
     """
 
-    fields = query_fields(query)
+    fields = json_schema(query)["properties"]
 
     def view(request: APIRequest) -> HttpResponse:
         # A repeat, or a focus that names nothing, is answered as
@@ -637,11 +641,11 @@ def _projection(
     # route-walking security test reads them.
     view.__name__ = name
     view.__doc__ = doc
-    served = _endpoint(
-        ("GET",), title=title, requires=holding(Capability.READ), data=answers, codes=("invalid_input",), page=page
-    )(view)
+    served = _endpoint(("GET",), title=title, requires=holding(Capability.READ), data=answers, codes=codes, page=page)(
+        view
+    )
     # The narrowing inputs, for the OpenAPI document's query parameters.
-    served.__dict__.update(__hq_query_fields__=fields)
+    served.__dict__.update(__hq_query_fields__=lambda: fields)
     return served
 
 
@@ -659,6 +663,8 @@ topology: View = _projection(
     neither a lens nor a focus, it returns the counts and the lenses.
     """,
     "control_plane:topology",
+    # A focus no node on the map has.
+    ("invalid_input", "not_found"),
 )
 
 findings: View = _projection(

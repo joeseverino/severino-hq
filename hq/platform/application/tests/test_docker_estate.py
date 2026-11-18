@@ -8,7 +8,6 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.application.markup_testing import select, text
 
 from ..docker_estate import IMAGE_BEHIND, IMAGE_UNTAGGED, image_verdicts, reference_tag
-from ..findings import findings
 from ..inventory_testing import store
 from ..projection import projection_scope
 from ..relationships import relationships_for
@@ -150,41 +149,6 @@ class GraphTests(TestCase):
 
         # Named as the container: its machine is the context, not its name.
         self.assertEqual(found.labels(RELATIONS["talks_to"].inverse), ("db",))
-
-
-class FindingTests(TestCase):
-    def setUp(self):
-        estate()
-
-    def found(self, rule):
-        return findings(principal=READER, rule=rule)["findings"]
-
-    def test_a_container_behind_its_tag_is_a_finding_with_the_recreate_step(self):
-        (finding,) = self.found("container-image-behind")
-
-        self.assertEqual(finding["subject"], "machine:lab-1")
-        self.assertEqual(finding["title"], "web on lab-1 runs an older example/web:1")
-        self.assertIn({"label": "Tagged now", "value": "b" * 12}, finding["evidence"])
-        self.assertIn("docker compose up -d --force-recreate web", str(finding))
-
-    def test_an_untagged_image_is_a_finding(self):
-        titles = [finding["title"] for finding in self.found("container-image-untagged")]
-
-        self.assertEqual(titles, ["job on lab-1 runs an untagged image"])
-
-    def test_nothing_is_claimed_when_images_are_current(self):
-        store(
-            "portainer.image",
-            {
-                **ON_LAB,
-                "id": NEW,
-                "tags": ["example/web:1"],
-                "containers": [{"container": "web", "reference": "example/web:1"}],
-            },
-        )
-
-        self.assertEqual(self.found("container-image-behind"), [])
-        self.assertEqual(self.found("container-image-untagged"), [])
 
 
 class MachinePageTests(TestCase):

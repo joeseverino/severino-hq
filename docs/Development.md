@@ -356,20 +356,13 @@ Ruff's fixes and format, `lint:css` with Stylelint's, `lint:js` with
 ESLint's, `lint:mise-format` with `mise fmt`, `lint:ast-grep` with each
 rule's `fix:`, `lint:controller` with gofmt, `go fix` and `go generate`, and
 each `lint:drift-*` gate with its file's writer), and the run names the files
-they rewrote. A run whose fixes rewrote a file then fails on them, before any
-test, so the tree a run passes is always the tree it was given, the one a
-landing compares with the commit: the fixed files are in the checkout, ready
-to commit, and the next run judges them. `mise run fast --fix` judges the tree
-the fixes leave in the same run instead. What a tool cannot fix, its gate
+they rewrote. The run then judges the tree the fixes left, and its verdict
+line ends by naming the files they rewrote, which the checkout holds
+uncommitted: a commit of them is the tree the run judged, the one a landing
+compares with the commit. A run sent to a second machine has its fixes run
+here first and sends the tree they leave. What a tool cannot fix, its gate
 still reports. Only fast and `mise run fix` pass `--fix`, so CI's gates only
 check.
-
-A gate tagged `recording` (`lint:drift-api-examples`) is a serial run of the
-tests its run names, compared with a file. Its fix records over the file,
-which every gate would wait on, so `fast --fix` runs it only once the check
-has failed; the gates and tests the rewritten files select then run again,
-and they decide the run. Without `--fix`, its failure stands. A change to Python files alone runs a recording only
-when it selects one of the tests the recording runs.
 
 The tests it selects are:
 
@@ -433,15 +426,23 @@ A run runs its selection however wide it is. `--whole` runs the whole suite
 with every quick gate instead, whatever changed: the landing asks for it, and
 its pass records the tree.
 
-CI's Map job records which test modules ran each line of each Python file,
-on every push to main and on a pull request's head: coverage runs the whole
-suite with its C tracer and a context per test module, switched before the
-module's fixtures (`hq/platform/core/coverage_contexts.py`), since
-`sys.monitoring`, coverage's default core, records a line once per process
-(`mise run fast:map`). The contexts make the run much slower, so no gate
-records; nothing waits on the job, and its failure never fails CI. It keeps
-the map, coverage's own `contexts_by_lineno`, as the artifact `fast-map` of
-the commit it checked out. fast fetches through gh the map of the nearest
+CI's Map job records which tests ran each line of each Python file, on every
+push to main and on a pull request's head: coverage runs the whole suite with
+its C tracer, a context per test module switched before the module's
+fixtures and one per test switched before the test
+(`hq/platform/core/coverage_contexts.py`), since `sys.monitoring`, coverage's
+default core, records a line once per process (`mise run fast:map`). The
+contexts make the run much slower, so no gate records; nothing waits on the
+job, and its failure never fails CI. It keeps the map, coverage's own
+`contexts_by_lineno` read back by test module, as the artifact `fast-map` of
+the commit it checked out. From the same recording, `mise run audit:tests`
+names each test whose lines a test of its module (its class, in a large
+module) also covers, and the tests of its app or package that run the same
+lines, ranked by the lines each runs past its setup, and leaves out the
+tests tagged `source` or `tree` and those of `tools/`, whose lines coverage
+does not measure. The job keeps that report as the artifact `test-audit`:
+candidates to read before deleting a test, since two tests running the same
+lines may assert different outcomes. fast fetches through gh the map of the nearest
 commit on HEAD's first-parent history, as far back as `MAP_REACH` in
 `tools/gate/chain.py`, into `$(git rev-parse --git-common-dir)/severino/fast-line-maps/`
 (`tools/gate/testmap.py`), and says where its map came from, or that none
@@ -638,16 +639,6 @@ Each `lint:drift-*` gate checks one against its source without writing. Its
 failure names the command that rewrites that file alone, in seconds; `fast`
 runs the ones a change reaches. A rebase conflict in one is settled by
 `mise run fix`, never by hand.
-
-The OpenAPI document's examples are responses the API's tests received,
-recorded in `hq/platform/api/openapi-examples.json`. A recording is a serial
-run of those tests under a clock that stands still, with fixed ids, so it
-reads the same every run.
-
-`lint:drift-api-examples` records one beside the file and fails when they
-differ, and `mise run fix:api-examples`, its fix mode, records them again,
-then rewrites the document; fast runs it once the check fails. It is not a
-step of `fix`, being a run of the suite.
 
 ### The extension set
 
@@ -911,7 +902,7 @@ A run kept here or left waiting says why, with each machine's free tokens:
 
 A machine that does not answer within five seconds leaves the run here, after
 one line saying so; so does a run inside a turn here, one whose flag acts on
-this machine (`--open`, `--docs`, `browser --linux`, `perf --image`, `fast --fix`), and one
+this machine (`--open`, `--docs`, `browser --linux`, `perf --image`), and one
 typed with `HQ_GATE_REMOTE=` before it. A task the release check runs that
 reads a secret or the deploy host (`failure-logs`, `mint`, the host check)
 never asks.
@@ -946,7 +937,8 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    since the run there writes to no terminal. Every other variable a gate
    reads is named in `LEFT` with why the run there reads its own. Closing the
    connection stops it.
-   The run only checks, as CI's gates do: fast writes no fix there, and a
+   The run only checks, as CI's gates do: fast's fixes ran here before the
+   tree was sent, its line naming what they rewrote follows the verdict, and a
    run that leaves the worktree holding any tree but the one sent fails,
    naming each file it changed.
 4. What it wrote comes back, archived there as the run ends, while the
@@ -1226,11 +1218,12 @@ gallery as its content, drawn by a checkout's server from the catalog it runs on
 read from the image build's copy in the image. An entry is answered from memory as a gate page is, with no
 server or estate behind it, so a look at one entry is the quick way to see a
 change to a shared part, ahead of the catalog's whole browser class. A name that begins entries
-(`part/notice`, `table`) is each of them, in the catalog's order. The gate
-reads the catalog without script, so a look draws an entry without it too, in
-a context of its own beside a real page's, which keeps script unless
-`--no-script`. A page drawn without script runs no frame or timer, so the
-look waits on none there: `--eval`, `--css` and `--open` read it as it stands.
+(`part/notice`, `table`) is each of them, in the catalog's order. An
+entry's page loads HQ's scripts as base.html does (`scripts/page.html`), and
+the gate reads it twice, as the server drew it and once its scripts have run,
+so a look draws an entry with script, as any page, unless `--no-script`. A
+page drawn without script runs no frame or timer, so the look waits on none
+there: `--eval`, `--css` and `--open` read it as it stands.
 The catalog builds its entries as it is imported, so a look reads it only
 for `all` or a name no other page is: a `--base` whose parts' constructors this
 checkout's catalog does not fit still looks at every other page.
@@ -1293,10 +1286,19 @@ or reach out is refused and reported instead.
 what it finds on a page the gates read is what they fail on. Markup a vendored
 script draws (`data-vendored` on its mount, `SELECTORS["vendored"]`: the API
 reference's viewer) is styled by its own rules alone, and the gates read
-none of it. With `--open-folds`, a page with a fold closed is surveyed
+none of it. It reads each page as its gate does (`Judged` in
+`hq/platform/core/tests/browser/widths.py`, which the sweeps read too): at
+its widths, `WIDE_TABLES` among them on a page that draws a table, and where
+the gate opens a page (a catalog entry, a list, a page without script),
 again with every fold open, a fold within a fold and one a region brings in
-included (`survey.open_every_fold`), and only what that adds is said, under
-"with every fold open"; the folds close again before a dialog opens.
+included (`survey.open_every_fold`), and with script every row a reader
+can open opened by its own toggle, saying only what that adds under "with
+every fold open", and with each anchored popover shown at the widths the
+gate shows one. `--open-folds` opens a page with script the same way. The
+folds close again before a dialog opens. Where the gate reads a page's
+tables at every window width (a catalog entry and a dense page with script),
+the survey does too, from the first width it looks at, under "at every
+width".
 
 A run that judges takes no screenshots, since a shot and its bands cost more
 than the rule that reads the page: `--shots` takes them too, and `--base`,

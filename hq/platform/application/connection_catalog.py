@@ -4,7 +4,7 @@ Each connection grouped by family, what it may do and why, and the evidence
 behind each ability. The API serializes the same view.
 """
 
-from dataclasses import KW_ONLY, asdict, dataclass, replace
+from dataclasses import KW_ONLY, dataclass, replace
 from datetime import datetime
 
 from django.core.exceptions import ImproperlyConfigured
@@ -22,7 +22,6 @@ from .action_links import (
 # record without importing this reader. Re-exported here as the one name
 # callers already use.
 from .connection_contracts import (
-    UNKNOWN_CREDENTIAL,
     ConnectionAbility,
     ConnectionInstance,
     ConnectionLink,
@@ -33,10 +32,12 @@ from .contracts import SCOPE_NAME, endpoint_has_private_parts
 from .derivations import present
 from .freshness import freshness, last_read
 from .integrations import held_graph
+from .json_schemas import as_written
 from .moments import ago
 from .projection import read_once
 from .security import Principal
 from .tone import Tone
+lazy from .connection_records import AbilityPart
 lazy from .entity_links import entity_link, link_url
 
 # The family the controller observes on HQ's behalf. It leads every inventory
@@ -480,32 +481,7 @@ def _connection_view(
     )
 
 
-def serialize_connection(connection: ConnectionView) -> dict:
-    instance = connection.instance
-    return {
-        "id": instance.id,
-        "label": instance.label,
-        "kind": instance.kind,
-        "status": instance.status,
-        "status_label": instance.status_label,
-        "detail": instance.detail,
-        "endpoint": instance.endpoint or None,
-        "observed_at": (instance.observed_at.isoformat() if instance.observed_at else None),
-        "scopes_known": instance.scopes_known,
-        "granted_scopes": list(instance.granted_scopes),
-        "credential_model": None if instance.credential_model == UNKNOWN_CREDENTIAL else instance.credential_model,
-        "lifecycle": connection.lifecycle,
-        "authority": connection.authority,
-        "abilities": [serialize_ability(state) for state in connection.abilities],
-        "targets": [asdict(link) for link in instance.targets],
-        "dependencies": [asdict(link) for link in instance.dependencies],
-        "facts": [asdict(fact) for fact in instance.facts],
-        "controller_id": instance.controller_id or None,
-        "actions": [asdict(action) for action in connection.actions],
-    }
-
-
-def serialize_ability(state: ConnectionAbilityState) -> dict:
+def serialize_ability(state: ConnectionAbilityState) -> AbilityPart:
     return {
         "name": state.ability.name,
         "label": state.ability.label,
@@ -517,5 +493,5 @@ def serialize_ability(state: ConnectionAbilityState) -> dict:
         "missing_scopes": list(state.missing_scopes),
         "capability": state.ability.capability or None,
         "subject_resource": state.ability.subject_resource or None,
-        "action": asdict(state.action) if state.action else None,
+        "action": as_written(state.action) if state.action else None,
     }

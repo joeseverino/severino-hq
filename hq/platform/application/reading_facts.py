@@ -1,12 +1,13 @@
-"""Facts a controller's reading of its own machine puts on that machine's node.
+"""What a controller's reading of its own machine says, about that machine's node.
 
 A reading such as ``host.render_status`` or ``host.unit`` is taken by a
-controller of the machine it runs on. Each record becomes one fact on the node
-of that controller, a row of words and instants joined in field order, and
-the rules read the rows back. A record read through one of its connections
-(``host.reboot``'s of an edge) goes on the machine that connection reaches
-instead. A reading that could not be taken is a row too, so what went quiet
-is said and not dropped.
+controller of the machine it runs on. Each stored record is one row
+(``ReadingRow``) about the node of that controller, or, for a record read
+through one of its connections (``host.reboot``'s of an edge), about the
+machine that connection reaches (``placed``). The topology only makes sure
+that node stands; the rules are gathered and read the rows from the store.
+A reading that could not be taken is a row too, so what went quiet is said
+and not dropped.
 
 A reading says how things stood when it was taken, so a rule judges its rows
 as of then. Once it is out of date (``freshness``), ``stated`` withholds its rows from every rule, and ``unjudged`` hands the
@@ -14,172 +15,179 @@ reading's own "not read" rule when it was taken and, where the bridge refused
 the report that would have replaced it, why.
 """
 
-import json
-from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass, fields, replace
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, ClassVar, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Self
+
+if TYPE_CHECKING:
+    from hq.domains.control_plane.models import RefusedReport
 
 from .core_capabilities import CONTROLLER_REFRESH
-from .finding_model import (
-    Finding,
-    FindingEstate,
-    FindingRemedy,
-    OperatorStep,
-    cannot_run_commands,
-    fact_values,
-)
+from .finding_model import Finding, FindingEstate, FindingRemedy, cannot_run_commands
+from .finding_steps import Do, Run
 from .freshness import LAST_READ, freshness
-from .moments import moment, when
+from .moments import when
 from .tone import Tone
 from .topology_model import TopologyNode, derived_id
 from .ui import ended
 lazy from .facts import snapshots_of
 lazy from .refused_reports import READINGS_ACTION, open_refusals
+lazy from .topology_estate import machine_nodes
 
 # Why a reading holds no record, when the reading itself is what failed.
 UNREAD = "unread"
 REFUSED = "refused"
 
-# When a node's reading of one kind was taken, as ``kind|instant``.
-TAKEN = "reading-taken"
-# A call of the controller's the bridge refused, as JSON.
-REFUSED_REPORT = "refused-report"
 
+@dataclass(frozen=True, slots=True)
+class ReadingRow:
+    """What one stored record of ``KIND`` says, as its rules read it.
 
-class FactRow:
-    """A frozen dataclass of strings carried whole as one fact.
-
-    The subclass is a ``@dataclass(frozen=True)`` whose fields all default to
-    ``""`` and hold no ``|``; ``KEY`` is the fact it is stored under and
-    ``KIND`` the reading it comes from.
+    The subclass is a frozen dataclass whose fields all default, and
+    ``record`` reads one stored record into it. A row of ``reason`` alone
+    says the reading itself failed, and names nothing it reads.
     """
 
-    KEY: ClassVar[str]
     KIND: ClassVar[str]
 
-    @property
-    def fact(self) -> tuple[str, str]:
-        return self.KEY, "|".join(getattr(self, field.name) for field in fields(self))
+    reason: str = ""
 
     @classmethod
-    def of(cls, value: str) -> Self:
-        names = [field.name for field in fields(cls)]
-        parts = (value.split("|") + [""] * len(names))[: len(names)]
-        return cls(**dict(zip(names, parts, strict=True)))
+    def record(cls, record: dict[str, Any], snapshot: Any) -> Self:
+        raise NotImplementedError
+
+    @property
+    def through(self) -> str:
+        """The connection the row was read through, "" for its controller's own machine."""
+
+        return ""
+
+    @classmethod
+    def rows(cls, snapshot: Any) -> Iterator[Self]:
+        """What one stored reading says: a row per record, and the reading's
+        own failure as a row of ``UNREAD`` or ``REFUSED``."""
+
+        if not snapshot.reachable:
+            yield cls(reason=UNREAD)
+            return
+        for record in snapshot.records or ():
+            yield cls.record(record, snapshot)
+        if snapshot.error:
+            yield cls(reason=REFUSED)
 
 
-def rows_of[R: FactRow](snapshot: Any, row: Callable[[dict[str, Any]], R], unread: Callable[[str], R]) -> Iterator[R]:
-    """What one stored reading says: a row per record, and the reading's own
-    failure as a row ``unread`` makes from ``UNREAD`` or ``REFUSED``."""
+def placed(
+    nodes: Mapping[str, TopologyNode], machine: Callable[[Any], str], controller: str, through: str = ""
+) -> TopologyNode:
+    """The node what ``controller`` read stands on: for what it read
+    ``through`` a connection, the machine that connection reaches, which an
+    SSH transport's own name stands for; else the controller's node, or the
+    machine node it folded into. Where none stands, a node of its own, so
+    what it says is never dropped for want of somewhere to say it."""
 
-    if not snapshot.reachable:
-        yield unread(UNREAD)
-        return
-    for record in snapshot.records or ():
-        yield row(record)
-    if snapshot.error:
-        yield unread(REFUSED)
-
-
-def _on_controller(
-    nodes: dict[str, TopologyNode], machine: Callable[[Any], str], controller: str, found: tuple[tuple[str, str], ...]
-) -> None:
-    """Put ``found`` on the node of ``controller``: the machine node it folded
-    into, else a node of its own, so what it says is never dropped for want
-    of somewhere to say it."""
-
+    if through:
+        return _reached(nodes, machine, through)
     node_id = derived_id("controller", controller)
     if node_id not in nodes:
         node_id = machine(controller) or node_id
-    node = nodes.get(node_id) or TopologyNode(
+    return nodes.get(node_id) or TopologyNode(
         id=node_id, kind="controller", label=controller or "The controller", subtitle="Controller"
     )
-    nodes[node_id] = replace(node, facts=node.facts + found)
 
 
-def onto_machine(
-    nodes: dict[str, TopologyNode], machine: Callable[[Any], str], ref: str, found: tuple[tuple[str, str], ...]
-) -> None:
-    """Put ``found`` on the machine the connection ``ref`` reaches, which an
-    SSH transport's own name stands for, else a node of its own."""
-
+def _reached(nodes: Mapping[str, TopologyNode], machine: Callable[[Any], str], ref: str) -> TopologyNode:
     node_id = machine(ref) or derived_id("target", ref)
-    node = nodes.get(node_id) or TopologyNode(id=node_id, kind="target", label=ref, subtitle="Machine")
-    nodes[node_id] = replace(node, facts=node.facts + found)
+    return nodes.get(node_id) or TopologyNode(id=node_id, kind="target", label=ref, subtitle="Machine")
 
 
-def state_on_controller[R: FactRow](
-    nodes: dict[str, TopologyNode],
-    machine: Callable[[Any], str],
-    row: type[R],
-    rows: Callable[[Any], Iterable[R]],
-    through: Callable[[R], str] = lambda _row: "",
+def stands(nodes: dict[str, TopologyNode], machine: Callable[[Any], str], controller: str, through: str = "") -> None:
+    """Make sure the node ``placed`` picks stands, so a finding about it has a
+    node to be read through."""
+
+    node = placed(nodes, machine, controller, through)
+    nodes.setdefault(node.id, node)
+
+
+def add_readers(
+    nodes: dict[str, TopologyNode], machine: Callable[[Any], str], rows: Iterable[type[ReadingRow]]
 ) -> None:
-    """One fact per row of ``row.KIND``, and when it was read, on the node of
-    the controller that read it, or, for a row ``through`` names the
-    connection it was read through, on the machine that connection reaches."""
+    """The node each stored row of ``rows``, and each open refusal, is about,
+    where none stands yet."""
 
-    for snapshot in snapshots_of(row.KIND):
-        placed: dict[str, tuple[tuple[str, str], ...]] = {}
-        for item in rows(snapshot):
-            ref = through(item)
-            placed[ref] = (*placed.get(ref, ()), item.fact)
-        taken = ((TAKEN, f"{row.KIND}|{snapshot.observed_at.isoformat()}"),) if snapshot.observed_at else ()
-        for ref, found in placed.items():
-            if ref:
-                onto_machine(nodes, machine, ref, found + taken)
-            else:
-                _on_controller(nodes, machine, snapshot.controller_id, found + taken)
-
-
-def add_refusals(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
-    """One fact per open refusal (``refused_reports``), on the node of the
-    controller it refused."""
-
+    for row in rows:
+        for snapshot in snapshots_of(row.KIND):
+            for item in row.rows(snapshot):
+                stands(nodes, machine, snapshot.controller_id, item.through)
     for refusal in open_refusals():
-        said = json.dumps([refusal.action, refusal.detail, refusal.refused_at.isoformat()])
-        _on_controller(nodes, machine, refusal.controller_id, ((REFUSED_REPORT, said),))
+        stands(nodes, machine, refusal.controller_id)
+
+
+def by_node[T](estate: FindingEstate, items: Iterable[tuple[str, str, T]]) -> tuple[tuple[TopologyNode, list[T]], ...]:
+    """Each ``(controller, through, item)`` on the node ``placed`` puts it on,
+    by node in the projection's order."""
+
+    nodes = {node.id: node for node in estate.nodes()}
+    machine = machine_nodes()
+    found: dict[str, tuple[TopologyNode, list[T]]] = {}
+    for controller, through, item in items:
+        node = placed(nodes, machine, controller, through)
+        found.setdefault(node.id, (node, []))[1].append(item)
+    order = {node_id: index for index, node_id in enumerate(nodes)}
+    return tuple(found[node_id] for node_id in sorted(found, key=lambda node_id: order.get(node_id, len(order))))
+
+
+def refusals(estate: FindingEstate) -> tuple[tuple[TopologyNode, tuple[RefusedReport, ...]], ...]:
+    """Each open refusal (``refused_reports``), by the node of the controller it refused."""
+
+    found = by_node(estate, ((refusal.controller_id, "", refusal) for refusal in open_refusals()))
+    return tuple((node, tuple(items)) for node, items in found)
 
 
 @dataclass(frozen=True, slots=True)
-class OpenRefusal:
-    """A refusal as its controller's node carries it."""
+class Read[R: ReadingRow]:
+    """The rows of one kind about one node, and when the newest reading of them was taken."""
 
-    action: str
-    detail: str
-    refused_at: datetime | None
-
-
-def refusals_on(node: TopologyNode) -> tuple[OpenRefusal, ...]:
-    found = []
-    for value in fact_values(node, REFUSED_REPORT):
-        action, detail, at = json.loads(value)
-        found.append(OpenRefusal(action, detail, moment(at)))
-    return tuple(found)
+    node: TopologyNode
+    rows: tuple[R, ...]
+    taken: datetime | None
 
 
-def taken_at(node: TopologyNode, kind: str) -> datetime | None:
-    """When the newest reading of ``kind`` on ``node`` was taken."""
+def read[R: ReadingRow](estate: FindingEstate, row: type[R]) -> tuple[Read[R], ...]:
+    """Each node the stored rows of ``row.KIND`` are about, in the projection's order."""
 
-    times = (
-        moment(at) for value in fact_values(node, TAKEN) for named, _, at in (value.partition("|"),) if named == kind
+    found = by_node(
+        estate,
+        (
+            (snapshot.controller_id, item.through, (item, snapshot.observed_at))
+            for snapshot in snapshots_of(row.KIND)
+            for item in row.rows(snapshot)
+        ),
     )
-    return max((at for at in times if at is not None), default=None)
+    return tuple(
+        Read(node, tuple(item for item, _at in items), max((at for _item, at in items if at), default=None))
+        for node, items in found
+    )
 
 
-def stated[R: FactRow](estate: FindingEstate, row: type[R]) -> Iterator[tuple[TopologyNode, tuple[R, ...]]]:
-    """Each node that carries rows of one kind, with the rows, while its
-    reading is young enough to judge."""
+def fresh[R: ReadingRow](estate: FindingEstate, row: type[R]) -> Iterator[Read[R]]:
+    """What ``read`` holds while its reading is young enough to judge."""
 
-    for node in estate.nodes():
-        values = fact_values(node, row.KEY)
-        if values and not freshness(row.KIND, taken_at(node, row.KIND), estate.now).stale:
-            yield node, tuple(row.of(value) for value in values)
+    for found in read(estate, row):
+        if not freshness(row.KIND, found.taken, estate.now).stale:
+            yield found
+
+
+def stated[R: ReadingRow](estate: FindingEstate, row: type[R]) -> Iterator[tuple[TopologyNode, tuple[R, ...]]]:
+    """Each node rows of one kind are about, with the rows, while its reading
+    is young enough to judge."""
+
+    for found in fresh(estate, row):
+        yield found.node, found.rows
 
 
 @dataclass(frozen=True, slots=True)
-class OnEachMachine[R: FactRow]:
+class OnEachMachine[R: ReadingRow]:
     """A detector that says one thing per machine about the rows of its reading
     it picks: one finding, with each picked row's evidence and steps in turn,
     a command on that machine HQ cannot run."""
@@ -191,12 +199,13 @@ class OnEachMachine[R: FactRow]:
     title: Callable[[TopologyNode, tuple[R, ...]], str]
     explanation: Callable[[tuple[R, ...]], str]
     evidence: Callable[[R], Iterable[tuple[str, str]]]
-    steps: Callable[[TopologyNode, R], Iterable[OperatorStep]]
+    steps: Callable[[TopologyNode, R], Iterable[Run | Do]]
 
     def __call__(self, estate: FindingEstate) -> tuple[Finding, ...]:
         found = []
-        for node, rows in stated(estate, self.row):
-            picked = tuple(row for row in rows if self.picked(row))
+        for reading in fresh(estate, self.row):
+            node = reading.node
+            picked = tuple(row for row in reading.rows if self.picked(row))
             if not picked:
                 continue
             found.append(
@@ -210,7 +219,7 @@ class OnEachMachine[R: FactRow]:
                     evidence=tuple(item for row in picked for item in self.evidence(row)),
                     steps=tuple(step for row in picked for step in self.steps(node, row)),
                     no_help_reason=cannot_run_commands(node.label),
-                    observed_at=taken_at(node, self.row.KIND),
+                    observed_at=reading.taken,
                     reads=self.row.KIND,
                 )
             )
@@ -224,7 +233,7 @@ class Unjudged:
 
     node: TopologyNode
     taken: datetime
-    refusal: OpenRefusal | None
+    refusal: RefusedReport | None
 
     @property
     def explanation(self) -> str:
@@ -256,13 +265,11 @@ class Unjudged:
         )
 
 
-def unjudged(estate: FindingEstate, row: type[FactRow]) -> Iterator[Unjudged]:
+def unjudged(estate: FindingEstate, row: type[ReadingRow]) -> Iterator[Unjudged]:
     """Each node whose reading of ``row.KIND`` is too old to judge."""
 
-    for node in estate.nodes():
-        if not fact_values(node, row.KEY):
-            continue
-        taken = taken_at(node, row.KIND)
-        if taken is not None and freshness(row.KIND, taken, estate.now).stale:
-            refusal = next((item for item in refusals_on(node) if item.action == READINGS_ACTION), None)
-            yield Unjudged(node, taken, refusal)
+    refused = {node.id: held for node, held in refusals(estate)}
+    for found in read(estate, row):
+        if found.taken is not None and freshness(row.KIND, found.taken, estate.now).stale:
+            refusal = next((item for item in refused.get(found.node.id, ()) if item.action == READINGS_ACTION), None)
+            yield Unjudged(found.node, found.taken, refusal)

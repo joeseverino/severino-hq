@@ -23,12 +23,11 @@ from hq.platform.application.pages import runs_at
 from ..action_links import command_url
 from ..capabilities import capability_registry, capability_words
 from ..dashboard import work_queue
-from ..findings import derive_findings
+from ..findings import estate_findings
 from ..paths import routed_names
 from ..projection import MAX_PAGE_SIZE, projection_scope
 from ..resource_capabilities import UPDATE_CAPABILITY
 from ..security import web_principal
-from ..topology import derive_topology
 from .test_approvals import POLICY_KEY, declare_policy
 from .test_finding_fixes import document
 from .test_paths import PUBLIC_RANGE, estate, record, store
@@ -175,14 +174,14 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
         principal = web_principal(self.user)
         links: list[tuple[str, str, str]] = []
         with projection_scope():
-            for finding in derive_findings(derive_topology(principal=principal), principal=principal):
-                links += [(remedy.label, remedy.url, remedy.method) for remedy in finding.remedies]
-                for step in finding.workflow.steps if finding.workflow else ():
-                    links += [(action.label, action.url, action.method) for action in step.actions]
+            for finding in estate_findings(principal=principal):
+                offered = (*finding.presses, *((finding.check,) if finding.check else ()))
+                links += [(action.label, action.url, action.method) for action in offered]
             for item in work_queue():
-                links += [(action["label"], action["url"], action["method"]) for action in item["actions"]]
-                for step in (item["workflow"] or {}).get("steps", ()):
-                    links += [(action["label"], action["url"], action["method"]) for action in step.get("actions", ())]
+                offered = [*item["actions"], *(step["link"] for step in item["steps"] if step["kind"] == "press")]
+                links += [(action["label"], action["url"], action["method"]) for action in offered]
+                if item["check"]:
+                    links.append((item["check"]["label"], item["check"]["url"], item["check"]["method"]))
         return links + self.rendered()
 
     def pages(self) -> list[str]:
@@ -241,7 +240,7 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
             held = {
                 id(box)
                 for box in drawn
-                if box.classes & {"attention-actions", "row-later"}
+                if "attention-actions" in box.classes
                 or ("row-actions" in box.classes and "data-blank" not in box.attrs)
             }
             boxes += len(held)

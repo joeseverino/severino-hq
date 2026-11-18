@@ -13,7 +13,7 @@ from hq.platform.application.resources import BoundedQuery
 from hq.platform.application.security import Capability, Principal
 
 from ..identity import set_principal
-from .registry import KIND, served, with_kind
+from .registry import KIND, ExampleRecord, served, with_kind
 
 READER = Principal("example-reader", "mcp", frozenset(Capability))
 
@@ -40,7 +40,15 @@ def _example_kind():
     """A listable kind the host does not name, narrowed by a filter of its own."""
 
     query = create_model("ExampleQuery", __base__=BoundedQuery, shade=(str | None, Field(default=None)))
-    return ResourceSpec(KIND, "Example records", "Records an extension declares.", "read", lambda **_: {}, query)
+    return ResourceSpec(
+        KIND,
+        "Example records",
+        "Records an extension declares.",
+        "read",
+        lambda **_: {},
+        query,
+        item_type=ExampleRecord,
+    )
 
 
 class PagingArgumentTests(TestCase):

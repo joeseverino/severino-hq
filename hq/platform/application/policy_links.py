@@ -9,8 +9,9 @@ unresolved names stay as the policy writes them.
 
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Annotated, Any
 
+from .describe import Describe
 from .entity_links import EntityLink, entity_link
 from .locate import host_of
 lazy from . import connections
@@ -21,8 +22,8 @@ lazy from .tailnet import policy
 class PolicyName:
     """One name as a policy writes it, and the entity it stands for if any."""
 
-    text: str
-    link: EntityLink | None = None
+    text: Annotated[str, Describe("A name as the policy writes it, such as a tag, a group or an address.")]
+    link: Annotated[EntityLink | None, Describe("The machine it stands for; null when it names none HQ knows.")] = None
 
 
 class PolicyNames:

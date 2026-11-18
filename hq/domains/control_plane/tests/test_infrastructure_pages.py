@@ -259,7 +259,7 @@ class InfrastructureViewsTests(TestCase):
             self.assertIn(url, hrefs(response))
             self.assertNotIn(url, actions(response))
 
-    def test_legacy_operation_evidence_is_not_mislabeled_as_a_mismatch(self):
+    def test_a_consumer_with_no_answer_is_not_a_mismatch(self):
         OperationRequest.objects.create(
             resource=self.resource,
             action=OperationRequest.Action.RECONCILE,
@@ -267,7 +267,7 @@ class InfrastructureViewsTests(TestCase):
             completed_at=timezone.now(),
             requested_actor="joe",
             requested_interface="web",
-            idempotency_key="legacy-success",
+            idempotency_key="unanswered-success",
             input={"generation": self.resource.generation},
             result={
                 "message": "Every site already serves this certificate.",
@@ -276,7 +276,7 @@ class InfrastructureViewsTests(TestCase):
                         {
                             "consumer": "npm",
                             "domain": "hq.example.test",
-                            "fingerprint_sha256": "legacy",
+                            "fingerprint_sha256": "unanswered",
                         }
                     ]
                 },

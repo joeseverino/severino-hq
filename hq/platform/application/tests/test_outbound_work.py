@@ -10,6 +10,7 @@ nobody, is driven through what its units and timer ask for.
 
 import importlib
 import os
+import pkgutil
 import re
 from contextlib import contextmanager
 from dataclasses import replace
@@ -257,7 +258,6 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
         response = self.client.post(reverse("jobs:ask", args=["example.undeclared"]), form_keyed())
 
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(self.client.get(self.route).status_code, 405)
 
 
 class TheCapabilityIsDerivedTests(ComposedExample):
@@ -322,10 +322,10 @@ class NothingLiftsTheRuleTests(ComposedExample):
         self.assertEqual(self.registry.asked, [])
 
     def test_the_sdk_exports_nothing_that_enters_an_exception_or_leaves_a_request(self):
-        from hq_sdk.contract import module_names
+        import hq_sdk
 
         lifting = {}
-        for name in (*module_names(), "contract"):
+        for name in (info.name for info in pkgutil.iter_modules(hq_sdk.__path__)):
             module = importlib.import_module(f"hq_sdk.{name}")
             for attribute, value in vars(module).items():
                 if getattr(value, "__module__", "") == "hq.platform.core.outbound":
@@ -338,7 +338,7 @@ class NothingLiftsTheRuleTests(ComposedExample):
 class DeclarationTests(SimpleTestCase):
     def work(self, **changed):
         fields = {
-            "name": "example.lookup",
+            "name": "example.lookup.run",
             "label": "Look up",
             "summary": "Ask the registry.",
             "required_capability": "notes.write",

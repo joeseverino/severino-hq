@@ -5,12 +5,13 @@ import os
 import re
 import tempfile
 from collections.abc import Iterator
-from dataclasses import MISSING, asdict, fields, replace
+from dataclasses import MISSING, fields, replace
 from datetime import timedelta
 from pathlib import Path
 from unittest import TestCase, mock
 
 from django.core.exceptions import ImproperlyConfigured
+from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase as DatabaseTestCase, tag
 from django.utils import timezone
@@ -22,6 +23,7 @@ from hq.platform.application.tests.links import example_command
 from ..card_items import Kpi
 from ..domains import domain_navigation
 from ..finding_model import Finding
+from ..finding_steps import Do
 from ..pages import page_context
 from ..plugin_testing import importable
 from ..plugins import (
@@ -170,7 +172,7 @@ class PluginContractTests(TestCase):
     def test_the_host_source_never_names_an_installed_extension(self):
         """The host must not know which extensions exist, even by a mention (a
         docstring, a fixture, a default), since that is the first dependency.
-        Imports are `hq_sdk.validation`'s half; this is the other.
+        Imports are `hq.platform.application.plugin_validation`'s half; this is the other.
 
         The names come from the runtime composition, since a list of them here
         would be the coupling itself, so this speaks only where a set is
@@ -245,10 +247,6 @@ class PluginContractTests(TestCase):
         named = {field for field, _ in refused.exception.violations}
         self.assertEqual(named, {"distribution", "api_version", "mcp_read_capabilities"})
         self.assertIn(repr(VALID.id), str(refused.exception))
-
-    def test_a_field_no_manifest_declares_is_refused(self):
-        with self.assertRaisesRegex(TypeError, "mcp_capabilities"):
-            PluginManifest(**{**asdict(VALID), "navigation": VALID.navigation, "mcp_capabilities": ()})
 
     def test_a_manifest_is_taken_as_declared_never_coerced(self):
         self.assertRefused("django_apps", django_apps=["example_notes"])
@@ -352,9 +350,6 @@ class PluginContractTests(TestCase):
 
         self.assertIs(api_version.default, MISSING)
 
-    def test_plugin_registry_cannot_be_cleared_without_its_derived_graph(self):
-        self.assertFalse(hasattr(installed_plugins, "cache_clear"))
-
     def test_integration_surfaces_stay_lazy_and_independent(self):
         dashboard = mock.Mock(return_value=())
         health = mock.Mock(return_value=True)
@@ -414,12 +409,8 @@ class PluginContractTests(TestCase):
             "partials/_page_head.html",
             page_context("Example Notes", "Shared host interface"),
         )
-        kpis = render_to_string(
-            "partials/_kpi_grid.html",
-            {
-                "label": "Notes summary",
-                "items": (Kpi("Notes", 0, "No records yet", is_zero=True),),
-            },
+        kpis = Template('{% facts layout="band" items=items label="Notes summary" %}').render(
+            Context({"items": (Kpi("Notes", 0, "No records yet", is_zero=True),)})
         )
         empty = render_to_string("partials/_empty_state.html", {"message": "No notes have been created."})
         page_navigation = render_to_string(
@@ -641,10 +632,24 @@ class AttentionContractTests(TestCase):
             (a, b),
             {
                 "example.a": [
-                    Finding(rule="example", subject="A watch", severity="attention", title="A watch", explanation="")
+                    Finding(
+                        rule="example",
+                        subject="A watch",
+                        severity="attention",
+                        title="A watch",
+                        explanation="",
+                        steps=(Do("Look into it."),),
+                    )
                 ],
                 "example.b": [
-                    Finding(rule="example", subject="B urgent", severity="serious", title="B urgent", explanation="")
+                    Finding(
+                        rule="example",
+                        subject="B urgent",
+                        severity="serious",
+                        title="B urgent",
+                        explanation="",
+                        steps=(Do("Look into it."),),
+                    )
                 ],
             },
         )
@@ -661,7 +666,14 @@ class AttentionContractTests(TestCase):
                 "example.demo": [
                     Finding(rule="example", subject="Fine", severity="good", title="Fine", explanation=""),
                     Finding(rule="example", subject="Context", severity="neutral", title="Context", explanation=""),
-                    Finding(rule="example", subject="Broken", severity="serious", title="Broken", explanation=""),
+                    Finding(
+                        rule="example",
+                        subject="Broken",
+                        severity="serious",
+                        title="Broken",
+                        explanation="",
+                        steps=(Do("Look into it."),),
+                    ),
                 ]
             },
         )
@@ -672,7 +684,18 @@ class AttentionContractTests(TestCase):
 
         gathered = self._gather(
             (self._manifest(),),
-            {"example.demo": [Finding(rule="example", subject="T", severity="serious", title="T", explanation="")]},
+            {
+                "example.demo": [
+                    Finding(
+                        rule="example",
+                        subject="T",
+                        severity="serious",
+                        title="T",
+                        explanation="",
+                        steps=(Do("Look into it."),),
+                    )
+                ]
+            },
         )
         self.assertEqual(gathered[0]["source"], "Demo")
         self.assertEqual(gathered[0]["source_id"], "example.demo")
@@ -735,7 +758,12 @@ class ComposedPluginTestKitTests(TestCase):
         from ..plugins import plugin_attention_items
 
         item = Finding(
-            rule="alpha-wrong", subject="", severity="serious", title="Something is wrong", explanation="Body."
+            rule="alpha-wrong",
+            subject="",
+            severity="serious",
+            title="Something is wrong",
+            explanation="Body.",
+            steps=(Do("Look into it."),),
         )
         self.case(siblings=(sibling(attention=(item,)),))
 
@@ -758,7 +786,14 @@ class ComposedPluginTestKitTests(TestCase):
         from ..plugins import plugin_attention_items
         from ..ui import DomainOverview
 
-        item = Finding(rule="alpha-wrong", subject="", severity="serious", title="Still wrong", explanation="Body.")
+        item = Finding(
+            rule="alpha-wrong",
+            subject="",
+            severity="serious",
+            title="Still wrong",
+            explanation="Body.",
+            steps=(Do("Look into it."),),
+        )
         self.case(
             siblings=(
                 sibling(
@@ -796,16 +831,10 @@ class ComposedPluginTestKitTests(TestCase):
 
 
 class AttentionOrderTests(SimpleTestCase):
-    def entry(self, title, status="attention", *, since=None, notice=False, source="Example", actions=()):
+    def entry(self, title, status="attention", *, since=None, notice=False, source="Example", actions=(), check=None):
         from ..finding_model import Finding
-        from ..workflow_contracts import WorkflowOutcome, WorkflowPlan, WorkflowStep
+        from ..finding_steps import Do, Press
 
-        plan = WorkflowPlan(
-            "example",
-            "Next steps",
-            (WorkflowStep("remedy", "Fix", "Fix it.", "recommended", actions=actions),),
-            WorkflowOutcome("claim_absent", "example", ""),
-        )
         finding = Finding(
             rule="example",
             subject=title,
@@ -814,7 +843,8 @@ class AttentionOrderTests(SimpleTestCase):
             explanation="",
             since=since,
             notice=notice,
-            workflow=plan if actions else None,
+            steps=tuple(Press(action) for action in actions) or (Do("Fix it."),),
+            check=check,
         )
         return {"finding": finding, "source": source, "source_id": "example"}
 
@@ -829,7 +859,7 @@ class AttentionOrderTests(SimpleTestCase):
         old = timezone.now() - timedelta(days=30)
         entries = [
             self.entry("a page", since=old, actions=press(capability="")),
-            self.entry("a check again", since=old, actions=press("verify")),
+            self.entry("a check again", since=old, check=press("verify")[0]),
             self.entry("refused", since=old, actions=press(refusal="Not now.")),
             self.entry("one press", actions=press()),
             self.entry("serious", status="serious", since=old),

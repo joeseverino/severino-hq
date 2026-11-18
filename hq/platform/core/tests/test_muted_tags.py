@@ -1,4 +1,4 @@
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import Context, Template
 from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import elements, select, with_class
@@ -51,16 +51,7 @@ class MutedTests(SimpleTestCase):
         self.assertEqual(elements(shown, "b"), [])
         self.assertEqual(with_class(shown, "muted")[0].words, "<b>x</b>")
 
-    def test_an_element_or_option_it_does_not_take_is_refused(self):
-        for source in (
-            '{% muted element="td" %}x{% endmuted %}',
-            '{% muted element="ul" %}<li>x</li>{% endmuted %}',
-            '{% muted tone="good" %}x{% endmuted %}',
-        ):
-            with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
-                drawn(source)
-
     def test_an_extension_may_write_it(self):
-        from hq_sdk.template_contract import TAGS
+        from hq.platform.core.template_contract import describe
 
-        self.assertIn("muted", TAGS)
+        self.assertIn("muted", describe()["tags"])

@@ -6,7 +6,7 @@
 #MISE output="prefix"
 #MISE depends=["fast:source {{ get_env(name='HQ_FAST_SOURCE', default='') }}"]
 #USAGE flag "--parallel <workers>" default="auto" help="Test workers per suite"
-#USAGE flag "--map <data>" help="Measure which test modules ran each line into this coverage data file, for fast's map (fast:map, tools/gate/testmap.py)"
+#USAGE flag "--map <data>" help="Measure which tests ran each line into this coverage data file, for fast's map and audit:tests (fast:map, tools/gate/testmap.py)"
 #USAGE arg "[labels]..." var=#true help="The test labels fast selected"
 
 # fast runs this beside the quick gates, in one run of mise (tools/gate/fast.py).
@@ -28,7 +28,7 @@ if [ -z "${usage_map:-}" ]; then
     exec env -u MISE_ENV uv run python manage.py test --noinput --parallel "${usage_parallel:-auto}" "$@"
 fi
 # Coverage as pyproject.toml configures it, with the C tracer and a context
-# per test module (hq/platform/core/coverage_contexts.py), into data of its own
+# per test and per test module's fixtures (hq/platform/core/coverage_contexts.py), into data of its own
 # with no shard of an earlier run. Its workers read the same settings from
 # the environment and the config, never from coverage's command line.
 rm -f "$usage_map" "$usage_map".*

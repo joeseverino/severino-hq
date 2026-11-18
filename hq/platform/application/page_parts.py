@@ -9,7 +9,7 @@ an extension builds the same part. docs/Design.md ("A section is drawn by
 from collections.abc import Mapping
 from dataclasses import field
 from datetime import date
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from django.utils.html import conditional_escape, format_html, format_html_join, strip_tags
 from django.utils.safestring import SafeString, mark_safe
@@ -42,7 +42,8 @@ def html_attributes(named: Mapping[str, object]) -> SafeString:
 
 SECTION_PARTIAL = "partials/_part_section.html"
 # Where a section's head may be told to stand; "" leaves it to surfaces.css.
-HEADS = frozenset({"", "above", "inside"})
+Head = Literal["", "above", "inside"]
+HEADS = frozenset(get_args(Head))
 # A section in a section heads it one level down, to the last level HTML has.
 TOP_LEVEL, LAST_LEVEL = 2, 6
 
@@ -52,47 +53,35 @@ class SectionPart:
     """A titled part of a page in its frame: a heading, a count of what it
     holds, a line under the heading, a line beside it, its body and the line
     under the body that says how to read it; or, with no body, the line that
-    says what is missing and the link that fills it, or nothing at all.
-
-    The heading is plain words; a moment it names is ``moment``, drawn after
-    them as a ``<time>`` in the ``when`` form, and with no words it is the
-    heading. ``template`` and ``context`` draw the body. ``id`` is the
-    section's own, for a link to it or a region refreshed in place; its
-    heading's is derived. ``fold`` draws it closed with its heading as the
-    toggle (``open`` starts it open). ``more_label`` and ``more_url`` are the
-    aside's link to the whole of what the section shows part of, drawn only
-    when there is somewhere to go, so a page passes its address as it has
-    one. ``figure``
-    draws it as a figure, its head the caption. ``head`` overrides where the stylesheet
-    stands the head, ``"above"`` or ``"inside"`` its frame. ``edge`` marks
-    the frame's starting edge in a status tone, for a section that stands out
-    from those beside it while it is in that state (a request waiting for a
-    decision). ``data`` holds the ``data-`` attributes a script reads.
+    says what is missing and the link that fills it, or nothing at all. Each
+    field says what it does; ``{% section %}`` takes them as its options.
     """
 
-    heading: str = ""
-    count: int | str | None = None
-    lede: str = ""
-    aside: str = ""
-    empty: str = ""
-    id: str = ""
-    fold: bool = False
-    open: bool = False
+    heading: str = field(default="", doc="Plain words; with none, the moment it names is the heading.")
+    count: int | str | None = field(default=None, doc="How many things it holds, beside the heading.")
+    lede: str = field(default="", doc="A line under the heading.")
+    aside: str = field(default="", doc="A line, a link or a control beside the heading.")
+    empty: str = field(default="", doc="With no body, what is missing.")
+    id: str = field(default="", doc="Its own `id`, for a link to it or a region refreshed in place.")
+    fold: bool = field(default=False, doc="Drawn closed, its heading the toggle.")
+    open: bool = field(default=False, doc="A folded section drawn open.")
     level: int = TOP_LEVEL
-    css: str = ""
-    template: str = ""
+    css: str = field(default="", doc="The classes of where it stands.")
+    template: str = field(default="", doc="The template that draws the body, with `context`.")
     context: Mapping[str, Any] = field(default_factory=dict)
-    data: Mapping[str, Any] = field(default_factory=dict)
-    remedy_label: str = ""
-    remedy_url: str = ""
-    moment: date | None = None
-    when: str = ""
-    head: str = ""
-    foot: str = ""
-    more_label: str = ""
-    more_url: str = ""
-    figure: bool = False
-    edge: Tone | Literal[""] = ""
+    data: Mapping[str, Any] = field(default_factory=dict, doc="The `data-` attributes a script reads.")
+    remedy_label: str = field(default="", doc="The label of the link the empty line offers.")
+    remedy_url: str = field(default="", doc="Where the empty line's link leads.")
+    moment: date | None = field(default=None, doc="A moment the heading names, drawn after its words.")
+    when: str = field(default="", doc="The `when` form the moment is drawn in.")
+    head: Head = field(default="", doc="Where its head stands; left empty, the stylesheet decides.")
+    foot: str = field(default="", doc="Under the body, how to read it.")
+    more_label: str = field(default="", doc="The label of the aside's link to the whole of what it shows part of.")
+    more_url: str = field(default="", doc="Where that link leads, drawn only when there is somewhere to go.")
+    figure: bool = field(default=False, doc="Drawn as a figure, its head the caption.")
+    edge: Tone | Literal[""] = field(
+        default="", doc="Its frame's starting edge in a status tone, while it stands out from those beside it."
+    )
 
     def __post_init__(self) -> None:
         if self.head not in HEADS:

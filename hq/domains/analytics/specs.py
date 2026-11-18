@@ -50,6 +50,6 @@ def resources() -> tuple[ResourceSpec, ...]:
             analytics.list_analytics,
             AnalyticsQuery,
             web_route="analytics:overview",
-            row_type=Breakdown,
+            item_type=Breakdown,
         ),
     )

@@ -1,22 +1,17 @@
 """The layout sweeps: the stress estate's pages without script, with it, and at their longest."""
 
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
-from hq.platform.core.tests.browser.probes.settle import (
-    CLOSE_AGAIN,
-    FINISH_TRANSITIONS,
-    KEEP_CLOSED,
-    PRESS_EVERY_SHOWN,
-    SETTLE,
-)
+from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, PRESS_EVERY_SHOWN, SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.shards import sweep
 from hq.platform.core.tests.browser.widths import (
+    DENSE,
+    LIST,
     NARROWEST,
     PALETTE_AT,
-    WIDE_TABLES,
-    WIDTHS,
+    SCRIPTED,
+    UNSCRIPTED,
     viewport,
-    with_wide_tables,
 )
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES
 from hq.platform.core.tests.test_browser_fixtures import PAGES
@@ -28,28 +23,18 @@ class UnscriptedLayoutTests(LayoutBrowserTests):
 
     Without script nothing on a page reads the width it was loaded at, so a
     page is loaded once, at its narrowest width, and resized for the rest
-    (``across``): what a rule opened is closed again before the next width.
+    (``across``): what a rule opened it closes again (``hold_opened``).
     """
 
     def sweep(self, names):
         for name in self.mine(names):
-            for width in self.across(name, WIDTHS):
-                self.hold(
-                    name,
-                    width,
-                    [
-                        self.no_block_breaks_a_paragraph,
-                        self.a_heads_note_costs_its_head_no_room,
-                        self.every_layout_check_holds,
-                    ],
-                )
+            for width in self.across(name, UNSCRIPTED.widths):
+                self.hold(name, width, [self.a_heads_note_costs_its_head_no_room, self.every_layout_check_holds])
                 if width in PALETTE_AT:
                     was = self.in_scheme("dark")
                     self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
                     self.in_scheme(was)
-                # Each popover shown is a survey of its own, so they are read
-                # at the phone, where one has the least room.
-                self.hold_opened(name, width, popovers=width == WIDTHS[0])
+                self.hold_opened(name, width, popovers=width in UNSCRIPTED.popovers_at)
 
     def across(self, name, widths):
         """``name`` at each of ``widths``, narrowest first, from one load; a
@@ -58,10 +43,8 @@ class UnscriptedLayoutTests(LayoutBrowserTests):
         first, *rest = sorted(widths)
         if not self.loaded(name, first):
             return
-        self.page.evaluate(KEEP_CLOSED)
         yield first
         for width in rest:
-            self.page.evaluate(CLOSE_AGAIN)
             self.page.set_viewport_size(viewport(width))
             # A rule the new width changes may transition; the load it stands
             # for would have drawn it finished.
@@ -86,13 +69,14 @@ class ScriptedLayoutTests(LayoutBrowserTests):
 
     scripted = True
 
-    def sweep(self, names):
+    def sweep(self, names, judged=SCRIPTED):
         """Every layout check holds, at the laptop window where a wide table
-        has the least room too. Script reads the width a page loads at, so
-        each width is a load."""
+        has the least room too, and where ``judged`` asks, the page's tables
+        at every width from its first load. Script reads the width a page
+        loads at, so each width is a load."""
 
         for name in self.mine(names):
-            for width in with_wide_tables(WIDTHS, self.draws_a_table):
+            for at, width in enumerate(judged.at(self.draws_a_table)):
                 if not self.loaded(name, width, script="on"):
                     continue
                 self.page.evaluate(SETTLE)
@@ -102,6 +86,8 @@ class ScriptedLayoutTests(LayoutBrowserTests):
                     self.hold(name, width, [self.every_palette_check_holds], script="on", scheme="dark")
                     self.in_scheme(was)
                 self.hold(name, width, [self.every_layout_check_holds], script="on")
+                if judged.every_width and not at:
+                    self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
 
 
 class ScriptedSparseLayoutTests(ScriptedLayoutTests):
@@ -113,7 +99,7 @@ class ScriptedSparseLayoutTests(ScriptedLayoutTests):
 class ScriptedDenseLayoutTests(ScriptedLayoutTests):
     @sweep
     def test_every_dense_page_keeps_the_layout_rules_once_its_script_has_run(self):
-        self.sweep(DENSE_PAGES)
+        self.sweep(DENSE_PAGES, DENSE)
 
 
 class LongestValueLayoutTests(LayoutBrowserTests):
@@ -128,7 +114,7 @@ class LongestValueLayoutTests(LayoutBrowserTests):
 
         held = [self.a_table_fits_its_box]
         for name in self.mine(self.lists):
-            for width in (NARROWEST, *WIDTHS, *WIDE_TABLES):
+            for width in LIST.at():
                 if not self.loaded(name, width, script="on"):
                     continue
                 self.page.evaluate(SETTLE)

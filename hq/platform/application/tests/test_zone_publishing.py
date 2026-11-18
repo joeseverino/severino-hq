@@ -245,7 +245,7 @@ class PublishAServiceTests(TestCase):
         self.assertEqual(service.status_label, "Nothing set up in HQ")
 
     def test_the_hostname_is_all_it_asks_for(self):
-        response = self.client.post(
+        response = self.client.get(
             reverse("control_plane:service_start"),
             {"hostname": "New.Example.com."},
         )
@@ -256,7 +256,7 @@ class PublishAServiceTests(TestCase):
         )
 
     def test_a_name_that_is_not_a_name_is_refused(self):
-        response = self.client.post(reverse("control_plane:service_start"), {"hostname": "not a hostname"})
+        response = self.client.get(reverse("control_plane:service_start"), {"hostname": "not a hostname"})
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.context["form"].errors["hostname"], ["Enter a hostname, like app.example.com."])

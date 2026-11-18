@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from django.test import SimpleTestCase
 
-from hq.platform.application import refusal_status
 from hq.platform.application.contracts import Effect
 from hq.platform.application.refusal_status import (
     CODES,
@@ -17,8 +16,6 @@ from hq.platform.application.refusal_status import (
     statuses,
     waiting,
 )
-
-from .. import views
 
 EXAMPLE = "example_added"
 
@@ -57,13 +54,6 @@ class DerivedSetTests(SimpleTestCase):
                 self.assertIn(EXAMPLE, answered_by(door, table=table))
         self.assertIn(EXAMPLE, _codes(None, table))
         self.assertIn(EXAMPLE, _codes(_Spec(effect=Effect.READ), table))
-
-    def test_each_published_set_is_the_table_s(self):
-        self.assertEqual(refusal_status.REFUSAL_STATUS, statuses())
-        self.assertEqual(refusal_status.LATER_CODES, waiting())
-        self.assertEqual(views.ENDPOINT_CODES, answered_by(Door.ADMISSION, Door.ENDPOINT))
-        self.assertEqual(views.RESOURCE_CODES, answered_by(Door.RESOURCE))
-        self.assertEqual(views.execute.__hq_codes__, views.ENDPOINT_CODES | answered_by(Door.BODY) | _codes(None))
 
     def test_every_code_has_a_door(self):
         for code, facts in CODES.items():

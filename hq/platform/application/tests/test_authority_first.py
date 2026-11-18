@@ -20,7 +20,7 @@ class AuthorityFirstTests(TestCase):
 
     def spec(self, *, target_kind=None):
         return CapabilitySpec(
-            "example.records.change",
+            "example.records.update",
             "Change example records.",
             "remote_write",
             Capability.MANAGE_INFRASTRUCTURE,

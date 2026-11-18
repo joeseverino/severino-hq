@@ -7,52 +7,28 @@ value wins over an imported one: docs/Derived-Facts.md#one-time-import.
 """
 
 from dataclasses import asdict, dataclass, field, fields
-from typing import Annotated, Any, Literal, NotRequired, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from pydantic import ValidationError as PydanticValidationError
 
-from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
-from .answer_fields import BusinessUseShare, RecordSlug
-from .assets import (
-    AssetCategory,
-    AssetCommand,
-    AssetInfrastructure,
-    AssetName,
-    AssetProjects,
-    AssetStatus,
-    AssetVendor,
-    PaymentMethod,
-    PurchaseDate,
-    SerialNumber,
-    WarrantyDate,
-    upsert_asset,
-)
+from .answer_fields import RecordSlug
+from .assets import AssetCommand
 from .command_fields import Describe
 from .describe import listed
-from .domains import records_of
+from .domains import load, records_of
 from .integration_specs import command_adapter
-from .projects import (
-    DeploymentNotes,
-    ProjectCategory,
-    ProjectCommand,
-    ProjectDescription,
-    ProjectName,
-    ProjectStatus,
-    RepositoryUrl,
-    SecurityNotes,
-    TechnologiesUsed,
-    upsert_project,
-)
+from .projects import ProjectCommand
+from .record_declaration import Records
 from .record_errors import RecordConflict, RecordNotFound
-from .record_fields import Notes, PublishedUrl, TotalCost
-from .refusal_status import RefusalEnvelope, refuse
+from .refusal_status import NOT_FOUND, RefusalEnvelope, refuse
 from .security import Principal
+from .stored_columns import laid_over
 from .ui import counted, ended
 
 MAX_IMPORT_RECORDS = 1000
@@ -69,39 +45,20 @@ REQUIRED_CAPABILITIES = (records_of("projects").write, records_of("assets").writ
 
 # A record of the document is laid over the one stored under its slug, so
 # every field but the slug may be left out.
-class ImportedProject(TypedDict):
-    """A project to import: its slug, and the fields to lay over the project stored under it."""
-
-    slug: RecordSlug
-    name: NotRequired[ProjectName]
-    category: NotRequired[ProjectCategory]
-    status: NotRequired[ProjectStatus]
-    description: NotRequired[ProjectDescription]
-    technologies_used: NotRequired[TechnologiesUsed]
-    repository_url: NotRequired[RepositoryUrl]
-    public_url: NotRequired[PublishedUrl]
-    deployment_notes: NotRequired[DeploymentNotes]
-    security_notes: NotRequired[SecurityNotes]
-    notes: NotRequired[Notes]
-
-
-class ImportedAsset(TypedDict):
-    """An asset to import: its slug, and the fields to lay over the asset stored under it."""
-
-    slug: RecordSlug
-    item_name: NotRequired[AssetName]
-    vendor: NotRequired[AssetVendor]
-    category: NotRequired[AssetCategory]
-    purchase_date: NotRequired[PurchaseDate]
-    total_cost: NotRequired[TotalCost]
-    business_use_percentage: NotRequired[BusinessUseShare]
-    payment_method: NotRequired[PaymentMethod]
-    serial_number: NotRequired[SerialNumber]
-    warranty_date: NotRequired[WarrantyDate]
-    status: NotRequired[AssetStatus]
-    notes: NotRequired[Notes]
-    related_projects: NotRequired[AssetProjects]
-    infrastructure: NotRequired[AssetInfrastructure]
+ImportedProject = laid_over(
+    ProjectCommand,
+    name="ImportedProject",
+    doc="A project to import: its slug, and the fields to lay over the project stored under it.",
+    key="slug",
+    key_type=RecordSlug,
+)
+ImportedAsset = laid_over(
+    AssetCommand,
+    name="ImportedAsset",
+    doc="An asset to import: its slug, and the fields to lay over the asset stored under it.",
+    key="slug",
+    key_type=RecordSlug,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,31 +72,13 @@ class HQImportCommand:
     check_only: Annotated[bool, Describe("Check the import without saving anything.")] = False
 
 
-@dataclass(frozen=True, slots=True)
-class _Kind:
-    name: str
-    model: type
-    command: type
-    upsert: Any
-
-
-_PROJECT = _Kind(
-    "project",
-    Project,
-    ProjectCommand,
-    upsert_project,
-)
-_ASSET = _Kind(
-    "asset",
-    Asset,
-    AssetCommand,
-    upsert_asset,
-)
+_PROJECT = records_of("projects")
+_ASSET = records_of("assets")
 
 
 @dataclass
 class _Planned:
-    kind: _Kind
+    kind: Records
     index: int
     slug: str
     command: Any
@@ -147,27 +86,51 @@ class _Planned:
     kept: list[dict[str, str]]
 
 
+# What a record's error depends on, each the code a refusal of it alone
+# answers, in the order a document's refusal takes the first one it holds: the
+# document itself, a record it names that is not stored, or the stored record
+# it lays over (one it creates lacks what creating one needs).
+INVALID = "invalid_input"
+UNMET = "precondition"
+CAUSES = (INVALID, NOT_FOUND, UNMET, RecordConflict.code)
+
+# One error of a record: its cause and its words.
+type _Error = tuple[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class _Problem:
+    cause: str
+    detail: dict[str, Any]
+
+
 class _Refused(Exception):
-    def __init__(self, problem: dict[str, Any]):
-        super().__init__(problem.get("errors"))
+    def __init__(self, problem: _Problem):
+        super().__init__(problem.detail.get("errors"))
         self.problem = problem
 
 
-def _problem(kind: str, index: int, slug: str, *errors: str) -> dict[str, Any]:
-    return {"kind": kind, "index": index, "slug": slug, "errors": list(errors)}
+def _problem(kind: str, index: int, slug: str, *errors: _Error) -> _Problem:
+    cause = min((cause for cause, _ in errors), key=CAUSES.index)
+    return _Problem(cause, {"kind": kind, "index": index, "slug": slug, "errors": [said for _, said in errors]})
 
 
-def _refused(message: str, problems: list[dict[str, Any]]) -> dict[str, Any]:
-    """An import refused as invalid input, each record's problems its details."""
+def _refused(message: str, problems: list[_Problem]) -> dict[str, Any]:
+    """An import refused, each record's problems its details, under the code
+    of the first cause any of them holds."""
 
-    return refuse("invalid_input", message, problems)
+    return refuse(
+        min((problem.cause for problem in problems), key=CAUSES.index),
+        message,
+        [problem.detail for problem in problems],
+    )
 
 
-def _stored(kind: _Kind, instance) -> dict[str, Any]:
+def _stored(kind: Records, instance) -> dict[str, Any]:
     """An existing row as the command's fields."""
 
     values = {}
-    for item in fields(kind.command):
+    for item in fields(load(kind.command)):
         if item.name == "related_projects":
             values[item.name] = tuple(sorted(instance.related_projects.values_list("slug", flat=True)))
         else:
@@ -175,47 +138,49 @@ def _stored(kind: _Kind, instance) -> dict[str, Any]:
     return values
 
 
-def _existing(kind: _Kind, records: list[Any]) -> dict[str, Any]:
+def _existing(kind: Records, records: list[Any]) -> dict[str, Any]:
     slugs = [record["slug"].strip() for record in records]
-    query = kind.model.objects.filter(slug__in=slugs)
-    if kind is _ASSET:
+    query = load(kind.model).objects.filter(slug__in=slugs)
+    if kind.noun == "asset":
         query = query.prefetch_related("related_projects")
     return {row.slug: row for row in query}
 
 
-def _slug_errors(slug: str, seen: set[str]) -> list[str]:
+def _slug_errors(slug: str, seen: set[str]) -> list[_Error]:
     """A record's slug errors; records the slug as seen."""
 
-    errors = []
-    if not slug:
-        errors.append("slug is required.")
-    elif slug in seen:
-        errors.append("slug appears twice in this document.")
+    errors = [(INVALID, "slug appears twice in this document.")] if slug in seen else []
     seen.add(slug)
     return errors
 
 
 def _keep_derived(
-    kind: _Kind, record: dict, stored: dict[str, Any] | None, values: dict[str, Any]
+    kind: Records, record: dict, stored: dict[str, Any] | None, values: dict[str, Any]
 ) -> list[dict[str, str]]:
     """Hold stored derived fields against an offered change; the kept pairs."""
 
     kept = []
     if stored is None:
         return kept
-    for name in DERIVED_FIELDS[kind.name]:
+    for name in DERIVED_FIELDS[kind.noun]:
         if name in record and stored[name] and record[name] != stored[name]:
             kept.append({"field": name, "kept": str(stored[name]), "offered": str(record[name])})
             values[name] = stored[name]
     return kept
 
 
-def _command(kind: _Kind, values: dict[str, Any]) -> tuple[Any, list[str]]:
+def _command(kind: Records, values: dict[str, Any]) -> tuple[Any, list[_Error]]:
+    """The record laid over what is stored as its command. Each field already
+    holds as the command holds it, so what fails is what the stored record
+    lacks: every field a record created needs."""
+
+    lacking = f"HQ has no {kind.noun} of this slug to lay it over."
     try:
-        return command_adapter(kind.command).validate_python(values), []
+        return command_adapter(load(kind.command)).validate_python(values), []
     except PydanticValidationError as exc:
         return None, [
-            f"{'.'.join(str(part) for part in error['loc']) or 'record'}: {error['msg']}" for error in exc.errors()
+            (UNMET, f"{'.'.join(str(part) for part in error['loc']) or 'record'}: {error['msg']}; {lacking}")
+            for error in exc.errors()
         ]
 
 
@@ -229,13 +194,13 @@ def _outcome(command: Any, stored: dict[str, Any] | None) -> str:
 
 
 def _plan_record(
-    kind: _Kind,
+    kind: Records,
     index: int,
     record: dict,
     slug: str,
     row: Any,
     known_projects: set[str],
-) -> tuple[_Planned | None, list[str]]:
+) -> tuple[_Planned | None, list[_Error]]:
     stored = _stored(kind, row) if row is not None else None
     values = {**(stored or {}), **record}
     kept = _keep_derived(kind, record, stored, values)
@@ -249,9 +214,9 @@ def _plan_record(
 
 
 def _plan_kind(
-    kind: _Kind,
+    kind: Records,
     records: list[Any],
-    problems: list[dict[str, Any]],
+    problems: list[_Problem],
     known_projects: set[str],
 ) -> list[_Planned]:
     existing = _existing(kind, records)
@@ -263,31 +228,45 @@ def _plan_kind(
         if not errors:
             plan, errors = _plan_record(kind, index, record, slug, existing.get(slug), known_projects)
         if errors:
-            problems.append(_problem(kind.name, index, slug, *errors))
+            problems.append(_problem(kind.noun, index, slug, *errors))
             continue
         planned.append(plan)
     return planned
 
 
-def _model_errors(kind: _Kind, command: Any, known_projects: set[str]) -> list[str]:
+def _model_errors(kind: Records, command: Any, known_projects: set[str]) -> list[_Error]:
     """Model validation of one record, without writing it."""
 
     values = asdict(command)
     related = values.pop("related_projects", ())
-    errors = []
+    errors: list[_Error] = []
     missing = sorted(set(related) - known_projects)
     if missing:
         errors.append(
-            ended(
-                f"{counted(len(missing), 'related project not found', 'related projects not found')}: "
-                f"{', '.join(missing)}"
+            (
+                NOT_FOUND,
+                ended(
+                    f"{counted(len(missing), 'related project not found', 'related projects not found')}: "
+                    f"{', '.join(missing)}"
+                ),
             )
         )
     try:
-        kind.model(**values).full_clean(validate_unique=False)
+        load(kind.model)(**values).full_clean(validate_unique=False)
     except DjangoValidationError as exc:
-        errors.extend(f"{name}: {message}" for name, messages in exc.message_dict.items() for message in messages)
+        errors.extend(_said(exc))
     return errors
+
+
+def _said(exc: DjangoValidationError) -> list[_Error]:
+    """Each error of a model's validation, a reference to nothing stored told from an invalid value."""
+
+    return [
+        (NOT_FOUND if error.code == NOT_FOUND else INVALID, f"{name}: {message}")
+        for name, errors in exc.error_dict.items()
+        for error in errors
+        for message in error.messages
+    ]
 
 
 def _apply(planned: _Planned, principal: Principal) -> None:
@@ -297,20 +276,21 @@ def _apply(planned: _Planned, principal: Principal) -> None:
         _audit(planned, planned.slug)
         return
     try:
-        result = planned.kind.upsert(planned.command, principal=principal)
+        result = load(planned.kind.upsert)(planned.command, principal=principal)
     except DjangoValidationError as exc:
-        raise _Refused(_problem(planned.kind.name, planned.index, planned.slug, *exc.messages)) from exc
+        errors = _said(exc) if hasattr(exc, "error_dict") else [(INVALID, message) for message in exc.messages]
+        raise _Refused(_problem(planned.kind.noun, planned.index, planned.slug, *errors)) from exc
     except (RecordNotFound, RecordConflict) as exc:
-        raise _Refused(_problem(planned.kind.name, planned.index, planned.slug, str(exc))) from exc
-    _audit(planned, result[planned.kind.name]["slug"])
+        raise _Refused(_problem(planned.kind.noun, planned.index, planned.slug, (exc.code, str(exc)))) from exc
+    _audit(planned, result[planned.kind.noun]["slug"])
 
 
 def _audit(planned: _Planned, slug: str) -> None:
     record_event(
         action=AuditLog.Action.IMPORTED,
-        obj=planned.kind.model.objects.get(slug=slug),
-        type_label=planned.kind.model.__name__,
-        message=ended(f"Imported {planned.kind.name} {planned.slug}: {planned.outcome}"),
+        obj=load(planned.kind.model).objects.get(slug=slug),
+        type_label=load(planned.kind.model).__name__,
+        message=ended(f"Imported {planned.kind.noun} {planned.slug}: {planned.outcome}"),
         metadata={"outcome": planned.outcome, "kept": planned.kept},
         required=True,
     )
@@ -365,9 +345,9 @@ def import_registry(command: HQImportCommand, *, principal: Principal) -> HqImpo
     total = len(command.projects) + len(command.assets)
     if total > MAX_IMPORT_RECORDS:
         limit = f"The document holds {counted(total, 'record')}; the limit is {MAX_IMPORT_RECORDS}."
-        return _refused(limit, [_problem("document", 0, "", limit)])
+        return _refused(limit, [_problem("document", 0, "", (INVALID, limit))])
 
-    problems: list[dict[str, Any]] = []
+    problems: list[_Problem] = []
     projects = _plan_kind(_PROJECT, command.projects, problems, set())
     known = {item.slug for item in projects} | set(Project.objects.values_list("slug", flat=True))
     assets = _plan_kind(_ASSET, command.assets, problems, known)

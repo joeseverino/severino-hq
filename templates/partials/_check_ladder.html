@@ -2,8 +2,8 @@
 A check ladder, drawn by {% check_ladder %}, each rung a {% check_rung %}:
 {% check_ladder route=True %}{% check_rung state="met" kind="Device" %}example-laptop{% more %}2 checks{% body %}...{% endcheck_rung %}{% endcheck_ladder %}.
 Checks read down one after another, each opening to say why it stands as it
-does. `route` draws them as the stops of a route, from where a request starts
-to where it ends, the tick of each on one line whose stretch takes the color
-of the stop it leaves; without it each is a row, as the checks inside a stop
-are (connection.css).
+does. A route is the stops from where a request starts to where it ends, the
+tick of each on one line whose stretch takes the color of the stop it leaves;
+otherwise each is a row, as the checks inside a stop are (connection.css).
+Its options are its Part's (ladder_tags).
 {% endcomment %}<ol class="check-ladder{% if route %} is-route{% endif %}">{{ content|safe }}</ol>

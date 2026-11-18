@@ -9,7 +9,6 @@ and resource its registry's entry, and the tag tree the domain registry's.
 
 import json
 import re
-import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from http import HTTPStatus
@@ -20,46 +19,41 @@ from django.urls import URLPattern, reverse
 
 from hq.platform.application.capabilities import capability_registry, describe_capabilities
 from hq.platform.application.contracts import effect_glossary
-from hq.platform.application.domains import NAVIGATION_GROUPS, Domain, all_domains, domain_navigation
+from hq.platform.application.field_masks import FIELD_PATH_PATTERN, WHOLE_RECORD
+from hq.platform.application.held_answer import HELD, AwaitingApproval
 from hq.platform.application.integration_specs import (
     FIELD_MASK,
     IDEMPOTENCY_FIELD,
     IDEMPOTENCY_FIELD_SCHEMA,
     IDEMPOTENCY_HEADER,
+    PAGE_FIELD,
     RESERVED_QUERY_FIELD,
+    STALE_WRITE_KEYWORD,
     CapabilitySpec,
+    answer_type,
+    takes_stale_write_token,
+    typed_keys,
 )
 from hq.platform.application.json_schemas import LOCAL, json_schema
-from hq.platform.application.plugins import NavigationItem
 from hq.platform.application.refusal_status import LATER_CODES
-from hq.platform.application.resources import describe_resources, resource_registry
+from hq.platform.application.resource_operations import RunAsked
+from hq.platform.application.resources import describe_resources, mask_paths, masked_kind, resource_registry
+from hq.platform.application.run_reads import RUNS
 from hq.platform.application.security import API_INTERFACE, Principal
 lazy from hq.platform.application.routes import routed
 
 from . import urls, views
 from .components import SCHEMAS, Components
-from .fragments import OpenAPIError, pascal as _pascal
+from .fragments import OpenAPIError, camel as _camel, pascal as _pascal
 from .refusal_names import LATER_STATUSES, codes_by_status, refusal_name
+from .tags import API_TAG, Tags
 
 OPENAPI_VERSION = "3.2.0"
 DOCUMENT_PATH = Path(__file__).with_name("hq-api.openapi.json")
-EXAMPLES_PATH = Path(__file__).with_name("openapi-examples.json")
 PARAMETERS = "#/components/parameters/"
 RESPONSES = "#/components/responses/"
-EXAMPLES = "#/components/examples/"
-HEADERS = "#/components/headers/"
-# The tag for what belongs to the API itself rather than to one domain: the
-# domain whose page this document is drawn on, so it stands where the bar has it.
-API_TAG = "hq.api"
-# What a nav group's own tag is named under, where no domain heads the group.
-_GROUP_PREFIX = "nav."
 VERSION = views.CURRENT_API_VERSION
 _PARAMETER = re.compile(r"<(?:\w+:)?(\w+)>")
-
-
-def _camel(name: str) -> str:
-    pascal = _pascal(name)
-    return pascal[:1].lower() + pascal[1:]
 
 
 def routes() -> Iterator[tuple[str, URLPattern]]:
@@ -83,209 +77,8 @@ def path_template(route: str) -> str:
     return _PARAMETER.sub(r"{\1}", route)
 
 
-def _declared_resources(domain: Domain) -> list[str]:
-    """The resources a domain declares: its integration's, then its records'."""
-
-    integration = domain.integration
-    names = [spec.name for spec in integration.resources()] if integration.resources else []
-    return [*names, domain.records.resource] if domain.records else names
-
-
-def _declared_capabilities(domain: Domain) -> list[str]:
-    """The capabilities a domain declares: its integration's commands, and its
-    outbound work, each piece asked for through the capability of its name."""
-
-    integration = domain.integration
-    commands = [spec.name for spec in integration.capabilities()] if integration.capabilities else []
-    return [*commands, *(work.name for work in integration.outbound())] if integration.outbound else commands
-
-
-def _bar(item: NavigationItem) -> tuple[int, str]:
-    return item.order, item.label
-
-
-def _first_declarer(domains: Iterable[Domain], declared: Callable[[Domain], list[str]]) -> dict[str, str]:
-    """Each name some domain declares, owned by the first domain to declare it."""
-
-    owner: dict[str, str] = {}
-    for domain in domains:
-        for name in declared(domain):
-            owner.setdefault(name, domain.id)
-    return owner
-
-
-class _Tags:
-    """The document's sections: the domains of the domain registry under their nav groups, in the bar's order."""
-
-    def __init__(self, resources: dict[str, Any], capabilities: dict[str, Any]) -> None:
-        self.domains = {domain.id: domain for domain in all_domains()}
-        domains = self.domains.values()
-        # What a domain serves stands in its section by one rule, the host's
-        # core and every extension alike: the domain that declares it, else the
-        # domain whose nav item is its page (a resource's web page, a
-        # capability's starting page, a route's `page`), else, for a
-        # capability, the domain of the resource it acts on. What none places
-        # carries no tag, which test_sections refuses; only the API's own
-        # routes, which serve every domain, stand in its section.
-        self.pages = _first_declarer(domains, lambda domain: [item.route for item in domain.navigation])
-        self.resource_owner = _first_declarer(domains, _declared_resources)
-        for name, resource in resources.items():
-            if name not in self.resource_owner and resource.web_route in self.pages:
-                self.resource_owner[name] = self.pages[resource.web_route]
-        declared = _first_declarer(domains, _declared_capabilities)
-        self.capability_owner = {
-            name: owner
-            for name, capability in capabilities.items()
-            if (
-                owner := declared.get(name)
-                or self.pages.get(capability.reached_from)
-                or self.resource_owner.get(capability.subject_resource or "")
-            )
-        }
-        self.placed = {item.route: item for item in reversed(domain_navigation())}
-        self.used: set[str] = set()
-
-    def of_resource(self, name: str) -> str | None:
-        return self.use(self.resource_owner.get(name))
-
-    def of_capability(self, name: str) -> str | None:
-        return self.use(self.capability_owner.get(name))
-
-    def of_route(self, page: str) -> str | None:
-        """A route's section: the domain of the page it serves, or the API's own for a route serving every domain."""
-
-        return self.use(self.pages.get(page) if page else API_TAG)
-
-    def use(self, tag: str | None) -> str | None:
-        if tag:
-            self.used.add(tag)
-        return tag
-
-    def _item(self, domain: Domain) -> NavigationItem | None:
-        """A domain's first nav item where the bar draws it: an extension may
-        place a host page in a group of its own (``domain_navigation``)."""
-
-        placed = sorted((self.placed.get(item.route, item) for item in domain.navigation), key=_bar)
-        return placed[0] if placed else None
-
-    def _group(self, domain: Domain) -> str:
-        item = self._item(domain)
-        return item.group if item else ""
-
-    def _place(self) -> Callable[[Domain], tuple[bool, bool, int, str]]:
-        """Where a domain stands: the API's own domain is where a client starts,
-        so it and its group lead; the rest keep the bar's order."""
-
-        api = self.domains.get(API_TAG)
-        leading = self._group(api) if api else ""
-
-        def place(domain: Domain) -> tuple[bool, bool, int, str]:
-            first = domain.id == API_TAG or (bool(leading) and self._group(domain) == leading)
-            item = self._item(domain)
-            return (not first, domain.id != API_TAG, item.order if item else domain.bar_order, domain.label)
-
-        return place
-
-    def _groups(self, place: Callable[[Domain], Any]) -> dict[str, dict[str, Any]]:
-        """Each nav group's tag, by the group's name.
-
-        A group says what it is for as the host or the extension that adds it
-        declares. A domain named as its group is that group's section, so no
-        section reads "Projects > Projects": it heads the group, its siblings
-        under it.
-        """
-
-        purposes = {group.name: group.description for domain in self.domains.values() for group in domain.groups}
-        purposes.update(NAVIGATION_GROUPS)
-        groups: dict[str, dict[str, Any]] = {}
-        for domain in sorted(self.domains.values(), key=place):
-            group = self._group(domain)
-            heads = domain.label == group
-            held = groups.get(group)
-            # The first domain named as the group heads it; until one does, the group is its own tag.
-            if not group or (held is not None and not (heads and held["name"].startswith(_GROUP_PREFIX))):
-                continue
-            tag = {"name": domain.id if heads else _GROUP_PREFIX + _camel(group), "summary": group, "kind": "nav"}
-            if said := purposes.get(group) or (domain.description if heads else ""):
-                tag["description"] = said
-            groups[group] = tag
-        return groups
-
-    def render(self) -> list[dict[str, Any]]:
-        place = self._place()
-        groups = self._groups(place)
-        # A group stands where its first domain does, and a domain outside
-        # every group keeps its own place among them.
-        tags: list[dict[str, Any]] = []
-        for domain in sorted((self.domains[tag] for tag in self.used if tag in self.domains), key=place):
-            group = groups.get(self._group(domain))
-            if group is not None and group not in tags:
-                tags.append(group)
-            if group is not None and group["name"] == domain.id:
-                continue
-            tag: dict[str, Any] = {"name": domain.id, "summary": domain.label, "kind": "nav"}
-            if domain.description:
-                tag["description"] = domain.description
-            if group is not None:
-                tag["parent"] = group["name"]
-            tags.append(tag)
-        for group in groups.values():
-            if group["name"].startswith(_GROUP_PREFIX):
-                _index(group, [tag for tag in tags if tag.get("parent") == group["name"]])
-        return tags
-
-
-def _index(group: dict[str, Any], held: list[dict[str, Any]]) -> None:
-    """End a group's description with a link to each domain it holds.
-
-    A group has no operations of its own, so the viewer's section for it,
-    closed, would be its heading alone; the links make it the group's index.
-    Each goes to the address the viewer gives a tag's section, `#tag/` and
-    the tag's name as its slugger writes it (`AY` in Scalar 1.76.4's
-    standalone bundle, line 1102).
-    """
-
-    links = "\n".join(f"- [{tag['summary']}](#tag/{_scalar_slug(tag['name'])})" for tag in held)
-    group["description"] = "\n\n".join(part for part in (group.get("description", ""), links) if part)
-
-
-def _scalar_slug(name: str) -> str:
-    """A tag's name as the viewer's slugger writes it: lowercased, every
-    character but a letter, number, space, `_` or `-` dropped, each run of
-    those three one `-`, none at either end."""
-
-    slug = unicodedata.normalize("NFC", name[:255].strip()).lower()
-    slug = re.sub(r"[^\w\s-]", "", slug)
-    return re.sub(r"[\s_-]+", "-", slug).strip("-")
-
-
-def _json_content(schema: dict[str, Any], examples: dict[str, Any] | None = None) -> dict[str, Any]:
-    media: dict[str, Any] = {"schema": schema}
-    if examples:
-        media["examples"] = examples
-    return {"application/json": media}
-
-
-def _load_examples() -> dict[str, Any]:
-    if not EXAMPLES_PATH.exists():
-        return {}
-    loaded: dict[str, Any] = json.loads(EXAMPLES_PATH.read_text(encoding="utf-8"))
-    return loaded
-
-
-def prune_examples(value: dict[str, Any]) -> list[str]:
-    """Drop each recorded example whose operation ``value`` no longer has, and say which.
-
-    A recording run reads the examples file before it writes the new one, so
-    an entry whose operation moved would fail that run's conformance check.
-    """
-
-    operations = {operation["operationId"] for methods in value["paths"].values() for operation in methods.values()}
-    examples = _load_examples()
-    gone = sorted(set(examples) - operations)
-    if gone:
-        EXAMPLES_PATH.write_text(render({key: entry for key, entry in examples.items() if key in operations}))
-    return gone
+def _json_content(schema: dict[str, Any]) -> dict[str, Any]:
+    return {"application/json": {"schema": schema}}
 
 
 class _Builder:
@@ -293,7 +86,6 @@ class _Builder:
         self.components = Components()
         self.paths: dict[str, dict[str, Any]] = {}
         self.operation_ids: set[str] = set()
-        self.examples = _load_examples()
         self.data = self.components.typed(
             {
                 view.__name__: view.__hq_data__
@@ -306,7 +98,6 @@ class _Builder:
         self.responses: dict[str, Any] = {}
         self.parameters: dict[str, Any] = {}
         self.headers: dict[str, Any] = {}
-        self.recordings: dict[str, Any] = {}
         # Each request body's first name, by what it says.
         self.requests: dict[str, str] = {}
         # What a token could ever run: /api/v2 is called with tokens, the
@@ -315,86 +106,75 @@ class _Builder:
         self.capabilities = describe_capabilities(principal=widest)["capabilities"]
         self.resources = [describe_resources(name=name)["resources"][0] for name in resource_registry()]
         self.resource_specs = resource_registry()
-        self.tags = _Tags(self.resource_specs, capability_registry())
-
-    def recorded(self, name: str, value: Any) -> dict[str, Any]:
-        """The examples of a part ``value`` was recorded for, kept as the component ``name``.
-
-        Each recording is its operation's own, so two operations recorded
-        alike still answer apart.
-        """
-
-        self.recordings[name] = {"summary": "Recorded by HQ's test suite.", "dataValue": value}
-        return {"recorded": {"$ref": EXAMPLES + name}}
+        self.tags = Tags(self.resource_specs, capability_registry())
 
     def _responses(
         self,
         view: Any,
-        operation_id: str,
         codes: Iterable[str],
         answer: tuple[str, dict[str, Any]] | None,
         held: Any,
+        links: dict[str, Any],
     ) -> dict[str, Any]:
-        recorded = self.examples.get(operation_id, {}).get("responses", {})
         schema: dict[str, Any]
-        if answer is not None:
-            envelope = self.components.schemas["Success"]
-            schema = {**envelope, "properties": {**envelope["properties"], "data": answer[1]}}
-        elif view.__hq_data__ is None:
+        if view.__hq_data__ is None and answer is None:
             # This document itself.
             schema = {
                 "type": "object",
-                "properties": {"openapi": {"type": "string", "pattern": r"^3\.2\.\d+$"}},
+                "properties": {
+                    "openapi": {
+                        "description": "The OpenAPI version the document is written in.",
+                        "type": "string",
+                        "pattern": r"^3\.2\.\d+$",
+                    }
+                },
                 "required": ["openapi", "info", "paths"],
             }
         else:
             envelope = self.components.schemas["Success"]
-            schema = {**envelope, "properties": {**envelope["properties"], "data": self.data.get(view.__name__, {})}}
-        success: dict[str, Any] = {"description": "Success."}
-        if "200" in recorded:
-            success["content"] = _json_content(schema, self.recorded(f"{operation_id}OK", recorded["200"]))
-        else:
-            # Named for the type its data is, which every view answering it shares.
-            kind = view.__hq_data__
-            name = (
-                f"{answer[0]}Success"
-                if answer is not None
-                else f"{_pascal(view.__name__)}Success"
-                if kind is None
-                else f"{kind.__name__}Success"
-                if isinstance(kind, (type, TypeAliasType))
-                else "ObjectSuccess"
-            )
-            success = self.component("responses", self.responses, name, {**success, "content": _json_content(schema)})
+            data = answer[1] if answer is not None else self.data.get(view.__name__, {})
+            # An answer written in place (a page) keeps the envelope's words for ``data``.
+            if "$ref" not in data:
+                data = {**envelope["properties"]["data"], **data}
+            schema = {**envelope, "properties": {**envelope["properties"], "data": data}}
+        # Named for the type its data is, which every view answering it shares.
+        kind = view.__hq_data__
+        name = (
+            f"{answer[0]}Success"
+            if answer is not None
+            else f"{_pascal(view.__name__)}Success"
+            if kind is None
+            else f"{kind.__name__}Success"
+            if isinstance(kind, (type, TypeAliasType))
+            else "ObjectSuccess"
+        )
+        # The answer's schema is a component, so an operation whose answer
+        # leads somewhere writes out its own response, the links beside the
+        # same schema: a Reference Object takes no other field (OpenAPI 3.2.0,
+        # section 4.23).
+        ran = {"description": "Success.", "content": _json_content({"$ref": self.components.add(name, schema)})}
+        success = {**ran, "links": links} if links else self.component("responses", self.responses, name, ran)
         responses: dict[str, Any] = {"200": success}
         if held is not None:
-            responses[str(views.HELD_STATUS)] = self.held(operation_id, held, recorded)
+            responses[str(views.HELD_STATUS)] = self.held(held)
         for status, answered in codes_by_status(codes).items():
-            name = self.refusal(status, answered)
-            if str(status) in recorded:
-                example = self.recorded(f"{operation_id}{_pascal(HTTPStatus(status).phrase)}", recorded[str(status)])
-                responses[str(status)] = {
-                    **self.responses[name],
-                    "content": _json_content({"$ref": f"{SCHEMAS}{name}Refusal"}, example),
-                }
-            else:
-                responses[str(status)] = {"$ref": RESPONSES + name}
+            responses[str(status)] = {"$ref": RESPONSES + self.refusal(status, answered)}
         return responses
 
-    def held(self, operation_id: str, kind: Any, recorded: Mapping[str, Any]) -> dict[str, Any]:
+    def held(self, kind: Any) -> dict[str, Any]:
         """The answer at ``views.HELD_STATUS`` of a call held for a person, its data ``kind``."""
 
-        name, status, phrase = kind.__name__, str(views.HELD_STATUS), _pascal(views.HELD_STATUS.phrase)
+        name, phrase = kind.__name__, _pascal(views.HELD_STATUS.phrase)
         envelope = self.components.schemas["Success"]
         data = self.components.typed({name: kind})[name]
         schema = {**envelope, "properties": {**envelope["properties"], "data": data}}
-        response: dict[str, Any] = {"description": "Accepted: held for approval in HQ. Nothing has happened yet."}
-        if status in recorded:
-            example = self.recorded(f"{operation_id}{phrase}", recorded[status])
-            return {**response, "content": _json_content(schema, example)}
-        return self.component(
-            "responses", self.responses, f"{name}{phrase}", {**response, "content": _json_content(schema)}
-        )
+        response = {
+            "description": "Accepted: held for approval in HQ. Nothing has happened yet.",
+            "content": _json_content(schema),
+        }
+        if links := self.links(answering=kind):
+            response["links"] = links
+        return self.component("responses", self.responses, f"{name}{phrase}", response)
 
     def refusal(self, status: int, codes: list[str]) -> str:
         """The response, and its schema, for refusing at ``status`` with ``codes``, named for them."""
@@ -420,11 +200,12 @@ class _Builder:
             "content": _json_content({"$ref": SCHEMAS + schema}),
         }
         if status == HTTPStatus.UNAUTHORIZED:
-            response["headers"] = self.header(
-                name,
-                "WWW-Authenticate",
-                {"description": "How to authenticate.", "schema": {"type": "string", "const": views.REALM}},
-            )
+            response["headers"] = {
+                "WWW-Authenticate": {
+                    "description": "How to authenticate.",
+                    "schema": {"type": "string", "const": views.REALM},
+                }
+            }
         if "insufficient_scope" in codes:
             # One component every 403 that can answer the code shares.
             response["headers"] = {
@@ -442,15 +223,13 @@ class _Builder:
                 )
             }
         if later:
-            response["headers"] = self.header(
-                name,
-                "Retry-After",
-                {
+            response["headers"] = {
+                "Retry-After": {
                     "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
                     "required": waits,
                     "schema": {"type": "integer", "minimum": 1},
-                },
-            )
+                }
+            }
         if self.responses.setdefault(name, response) != response:
             raise OpenAPIError(f"Two responses claim the component name {name!r}.")
         return name
@@ -463,17 +242,63 @@ class _Builder:
             raise OpenAPIError(f"Two {section} claim the component name {name!r}.")
         return {"$ref": f"#/components/{section}/{name}"}
 
+    def links(
+        self, *, resource: str = "", listed: bool = False, query: Iterable[str] = (), answering: Any = None
+    ) -> dict[str, Any]:
+        """Each request an answer leads to, as Link Objects (OpenAPI 3.2.0,
+        section 4.20) keyed by the operation they call.
+
+        Derived from what the registries say of the answer: an answer typed
+        as ``READ_BY`` names leads to the read of what it carries; a page of
+        ``resource`` (``listed``, its query parameters ``query``) leads to the
+        page after it, with the same query, and its first item to that item's
+        read; a page or a record leads to each command on ``resource`` that
+        takes it as its target, with its ``updated_at`` where the command
+        checks for a stale write. A value is a runtime expression (section
+        4.20.3), one in a request body embedded in its string in braces.
+        """
+
+        found: dict[str, Any] = {}
+        members = set(get_args(answering) or (answering,))
+        for kind, (read, pointer) in READ_BY.items():
+            if kind in members and (spec := self.resource_specs.get(read)) and spec.detail_handler is not None:
+                found[_read_id(read)] = _link(_read_id(read), {"path.identifier": f"$response.body#/data{pointer}"})
+        if not resource:
+            return found
+        spec = self.resource_specs[resource]
+        query = tuple(query)
+        if listed and PAGE_FIELD in query:
+            parameters = {f"query.{name}": f"$request.query.{name}" for name in query if name != PAGE_FIELD}
+            found[_list_id(resource)] = _link(
+                _list_id(resource), {f"query.{PAGE_FIELD}": f"$response.body#/data/next/{PAGE_FIELD}", **parameters}
+            )
+        record = spec.record_type
+        carried = spec.list_fields if listed else (typed_keys(record) if record is not None else ())
+        identifier = spec.identifier
+        if spec.detail_handler is None or identifier not in carried:
+            return found
+        at = "/data/items/0" if listed else "/data"
+        if listed:
+            found[_read_id(resource)] = _link(
+                _read_id(resource), {"path.identifier": f"$response.body#{at}/{identifier}"}
+            )
+        registry = capability_registry()
+        for command in self.capabilities:
+            capability = registry[command["name"]]
+            if capability.subject_resource != resource or not capability.target_kind:
+                continue
+            body = {"target": f"{{$response.body#{at}/{identifier}}}"}
+            if takes_stale_write_token(capability.handler) and UPDATED_AT in carried:
+                body[STALE_WRITE_KEYWORD] = f"{{$response.body#{at}/{UPDATED_AT}}}"
+            link = _link(_capability_id(capability.name), {}, body)
+            if capability.target_query:
+                said = " and ".join(f"`{field}` is `{value}`" for field, value in capability.target_query)
+                link["description"] = f"Only for a record whose {said}."
+            found[_capability_id(capability.name)] = link
+        return found
+
     def parameter(self, name: str, value: dict[str, Any]) -> dict[str, Any]:
         return self.component("parameters", self.parameters, name, value)
-
-    def header(self, response: str, header: str, value: dict[str, Any]) -> dict[str, Any]:
-        """``header`` of the response component ``response``, kept as a component of its own,
-        since a recorded copy of the response sends it too."""
-
-        name = response + _pascal(header)
-        if self.headers.setdefault(name, value) != value:
-            raise OpenAPIError(f"Two headers claim the component name {name!r}.")
-        return {header: {"$ref": HEADERS + name}}
 
     def operation(
         self,
@@ -490,14 +315,14 @@ class _Builder:
         codes = fields.pop("codes", view.__hq_codes__)
         answer = fields.pop("answer", None)
         held = fields.pop("held", view.__hq_held__)
-        operation_id += f"V{VERSION}"
+        # What a call needs: the view's own access, or the one capability or
+        # resource a concrete operation serves.
+        scopes = fields.pop("scopes", view.__hq_requires__.scopes)
+        links = fields.pop("links", {})
+        operation_id = _versioned(operation_id)
         if operation_id in self.operation_ids:
             raise OpenAPIError(f"Operation id {operation_id!r} is derived twice.")
         self.operation_ids.add(operation_id)
-        request = self.examples.get(operation_id, {}).get("request")
-        if request is not None and "requestBody" in fields:
-            for media in fields["requestBody"]["content"].values():
-                media["examples"] = self.recorded(f"{operation_id}Request", request)
         # A view's title names it and its docstring says what it answers; an
         # expansion states both for the concrete operation it derives.
         summary = fields.pop("summary", None)
@@ -511,7 +336,8 @@ class _Builder:
             "summary": summary,
             **({"tags": [tag]} if tag else {}),
             **fields,
-            "responses": self._responses(view, operation_id, codes, answer, held),
+            "security": [{BEARER: list(scopes)}],
+            "responses": self._responses(view, codes, answer, held, links),
         }
         self.paths.setdefault(path, {})[method.lower()] = operation
 
@@ -526,7 +352,8 @@ class _Builder:
                 expand(self, template, method, view)
                 continue
             query = [
-                _query_parameter(field, schema) for field, schema in getattr(view, "__hq_query_fields__", {}).items()
+                _query_parameter(field, schema)
+                for field, schema in getattr(view, "__hq_query_fields__", dict)().items()
             ]
             self.operation(
                 template,
@@ -568,7 +395,12 @@ class _Builder:
             view,
             _camel(view.__name__),
             self.tags.use(API_TAG),
-            parameters=[_named("capability", [spec["name"] for spec in self.capabilities], "call")],
+            # A parameter cannot depend on the path's name, so the key is said
+            # here as every change's own operation says it: taken, never required.
+            parameters=[
+                _named("capability", [spec["name"] for spec in self.capabilities], "call"),
+                {"$ref": f"#/components/parameters/{IDEMPOTENCY_KEY}"},
+            ],
             requestBody=_body(generic),
         )
         registry = capability_registry()
@@ -621,18 +453,16 @@ class _Builder:
                 view,
                 _camel(name),
                 self.tags.of_capability(name),
+                links=self.links(answering=answer_type(registry[name])),
                 summary=spec["label"],
                 description=spec["summary"],
-                parameters=([{"$ref": "#/components/parameters/IdempotencyKey"}] if spec["effect"].changes else []),
+                parameters=([{"$ref": f"#/components/parameters/{IDEMPOTENCY_KEY}"}] if spec["effect"].changes else []),
                 requestBody=_body(body),
                 codes=views.execute_codes(registry[name]),
                 answer=self.answer_of(registry[name]),
                 held=views.capability_held(registry[name]),
-                **{
-                    "x-hq-capability": name,
-                    EFFECT_EXTENSION: spec["effect"],
-                    "x-hq-required-capabilities": spec["required_capabilities"],
-                },
+                scopes=spec["required_capabilities"],
+                **{"x-hq-capability": name, EFFECT_EXTENSION: spec["effect"]},
             )
 
     def answer_of(self, spec: CapabilitySpec) -> tuple[str, dict[str, Any]] | None:
@@ -666,11 +496,12 @@ class _Builder:
             name = spec["name"]
             # The machine API reads a list's paging from the query string, beside its filters.
             parts = [listing["query_schema"], *([listing["paging"]] if "paging" in listing else [])]
+            query = [field for part in parts for field in part.get("properties", {})]
             self.operation(
                 template.replace("{name}", name),
                 method,
                 view,
-                f"list{_pascal(name)}",
+                _list_stem(name),
                 self.tags.of_resource(name),
                 # Titled as a read of one is, so it never reads as its section's
                 # name or as a bare verb.
@@ -682,13 +513,15 @@ class _Builder:
                     for part in parts
                     for field in part.get("properties", {})
                 ]
-                + [_FIELDS],
-                answer=self.page_of(self.resource_specs[name].row_type),
+                + [self.mask(name, listed=True)],
+                answer=self.page_of(name),
+                links=self.links(resource=name, listed=True, query=[*query, RESERVED_QUERY_FIELD]),
+                scopes=spec["required_capabilities"],
                 **{"x-hq-resource": name},
             )
 
     def typed(self, kind: type) -> dict[str, Any]:
-        """The ``$ref`` to a resource's row or record, kept as the component of its name.
+        """The ``$ref`` to a resource's list item or record, kept as the component of its name.
 
         A caller's field mask cuts it, so neither it nor any part a mask can
         reach promises a field (``Components.sparse``).
@@ -700,14 +533,16 @@ class _Builder:
         self.components.mask(name)
         return {"$ref": SCHEMAS + name}
 
-    def page_of(self, row: type | None) -> tuple[str, dict[str, Any]] | None:
-        """A list's answer whose items are ``row``: every list's page, its items narrowed to it."""
+    def page_of(self, name: str) -> tuple[str, dict[str, Any]] | None:
+        """A list's answer: every list's page, its items of the type the
+        resource declares, which a mask cuts and never widens."""
 
-        if row is None:
+        kind = masked_kind(self.resource_specs[name], listed=True)
+        if kind is None:
             return None
         page = self.data[views.resource_list.__name__]
-        items = {"type": "array", "items": self.typed(row)}
-        return f"{row.__name__}Page", {"allOf": [page], "properties": {"items": items}}
+        items = {"type": "array", "items": self.typed(kind)}
+        return f"{kind.__name__}Page", {"allOf": [page], "properties": {"items": items}}
 
     def record_of(self, record: type | None) -> tuple[str, dict[str, Any]] | None:
         """A read of one record's answer, where its kind types it; else the view's object."""
@@ -738,6 +573,21 @@ class _Builder:
         )
         return self.parameter(alias, parameter) if alias else parameter
 
+    def mask(self, name: str, *, listed: bool) -> dict[str, Any]:
+        """The ``fields`` parameter of a read of resource ``name``: the field paths of what it answers, kept
+        as the parameter component named for their type."""
+
+        spec = self.resource_specs[name]
+        declared = masked_kind(spec, listed=listed)
+        if declared is None:
+            return _FIELDS
+        paths = mask_paths(spec, listed=listed)
+        if listed and masked_kind(spec, listed=False) and set(paths) == set(mask_paths(spec, listed=False)):
+            # A list whose item's paths are its record's keeps what one record's read keeps.
+            return self.mask(name, listed=False)
+        kind = f"{declared.__name__}{'Page' if listed else ''}Fields"
+        return self.parameter(kind, _mask({"type": "string", "enum": [*paths, WHOLE_RECORD]}))
+
     def resource_detail_paths(self, template: str, method: str, view: Any) -> None:
         self.operation(
             template,
@@ -746,14 +596,19 @@ class _Builder:
             _camel(view.__name__),
             self.tags.use(API_TAG),
             parameters=[
+                # A resource found by other than text is read by its own path alone,
+                # where its identifier is typed as it declares it.
                 _named(
                     "resource",
-                    [spec["name"] for spec in self.resources if spec["operations"]["get"]],
+                    [
+                        spec["name"]
+                        for spec in self.resources
+                        if spec["operations"]["get"]
+                        and json_schema(self.resource_specs[spec["name"]].identifier_type) == _TEXT
+                    ],
                     "read of one record",
                 ),
-                _path_parameter(
-                    "identifier", {"type": "string"}, "The record's value of the field its resource is found by."
-                ),
+                _path_parameter("identifier", _TEXT, "The record's value of the field its resource is found by."),
                 _FIELDS,
             ],
         )
@@ -772,7 +627,7 @@ class _Builder:
                 template.replace("{name}", name),
                 method,
                 view,
-                f"get{_pascal(name)}",
+                _read_stem(name),
                 self.tags.of_resource(name),
                 summary=f"{spec['label']}: one by {field.replace('_', ' ')}",
                 description=(
@@ -790,17 +645,62 @@ class _Builder:
                             else f"The `{field}` to read it for.",
                         ),
                     ),
-                    _FIELDS,
+                    self.mask(name, listed=False),
                 ],
                 answer=self.record_of(self.resource_specs[name].record_type),
+                links=self.links(resource=name),
+                scopes=spec["required_capabilities"],
                 **{"x-hq-resource": name, "x-hq-identifier": field},
             )
 
 
 _FIELDS = {"$ref": "#/components/parameters/Fields"}
+_TEXT = {"type": "string"}
+# The one security scheme; an operation's requirement of it lists the capabilities a call needs
+# (OpenAPI 3.2, Security Requirement Object: role names, for a scheme other than OAuth's).
+BEARER = "bearer"
 IDEMPOTENCY_KEY = "IdempotencyKey"
 # Where a capability operation says its effect, which the document's introduction explains.
 EFFECT_EXTENSION = "x-hq-effect"
+
+
+# The answers that carry what a read finds, each by that read's resource and
+# where in the answer's data its identifier stands.
+READ_BY: dict[Any, tuple[str, str]] = {AwaitingApproval: (HELD, "/approval/id"), RunAsked: (RUNS, "/operation/id")}
+UPDATED_AT = "updated_at"
+
+
+def _versioned(stem: str) -> str:
+    return f"{stem}V{VERSION}"
+
+
+def _list_stem(resource: str) -> str:
+    return f"list{_pascal(resource)}"
+
+
+def _read_stem(resource: str) -> str:
+    return f"get{_pascal(resource)}"
+
+
+def _list_id(resource: str) -> str:
+    return _versioned(_list_stem(resource))
+
+
+def _read_id(resource: str) -> str:
+    return _versioned(_read_stem(resource))
+
+
+def _capability_id(capability: str) -> str:
+    return _versioned(_camel(capability))
+
+
+def _link(operation_id: str, parameters: dict[str, str], body: dict[str, str] | None = None) -> dict[str, Any]:
+    link: dict[str, Any] = {"operationId": operation_id}
+    if parameters:
+        link["parameters"] = parameters
+    if body:
+        link["requestBody"] = body
+    return link
 
 
 EXPANSIONS: dict[str, Callable[[_Builder, str, str, Any], None]] = {
@@ -811,18 +711,38 @@ EXPANSIONS: dict[str, Callable[[_Builder, str, str, Any], None]] = {
 
 
 def _query_parameter(name: str, schema: Mapping[str, Any], *, required: bool = False, **style: Any) -> dict[str, Any]:
-    """A query parameter for one field of a query's schema, its words on the parameter rather than its schema."""
+    """A query parameter for one field of a query's schema, its words on the parameter rather than its schema.
 
-    parameter: dict[str, Any] = {
-        "name": name,
-        "in": "query",
-        "required": required,
-        **style,
-        "schema": {key: value for key, value in schema.items() if key != "description"},
-    }
+    A field not sent is absent, so a ``null`` its model allows is no value the
+    parameter can be, and a ``null`` default no default it has.
+    """
+
+    said = {key: value for key, value in schema.items() if key not in {"description", "anyOf"}}
+    if said.get("default", ...) is None:
+        del said["default"]
+    branches = [branch for branch in schema.get("anyOf", ()) if branch != {"type": "null"}]
+    if len(branches) == 1:
+        said = {**branches[0], **said}
+    elif branches:
+        said["anyOf"] = branches
+    parameter: dict[str, Any] = {"name": name, "in": "query", "required": required, **style, "schema": said}
     if "description" in schema:
         parameter["description"] = schema["description"]
     return parameter
+
+
+def _mask(path: dict[str, Any]) -> dict[str, Any]:
+    """The ``fields`` query parameter whose every item is a ``path``."""
+
+    return {
+        "name": RESERVED_QUERY_FIELD,
+        "in": "query",
+        "required": False,
+        "description": f"{FIELD_MASK} Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "style": "form",
+        "explode": False,
+        "schema": {"type": "array", "items": path, "minItems": 1},
+    }
 
 
 def _named(kind: str, names: list[str], operation: str) -> dict[str, Any]:
@@ -872,43 +792,36 @@ def document() -> dict[str, Any]:
             + " Derived from HQ's routes and its capability, resource and domain registries.\n\n"
             + effect_glossary(EFFECT_EXTENSION),
         },
-        "security": [{"bearer": []}],
         "tags": builder.tags.render(),
         "paths": dict(sorted(builder.paths.items())),
         "components": {
             "securitySchemes": {
-                "bearer": {
+                BEARER: {
                     "type": "http",
                     "scheme": "bearer",
                     "bearerFormat": "JWT",
-                    "description": "An access token from HQ's identity provider, addressed to this API.",
+                    "description": (
+                        "An access token from HQ's identity provider, addressed to this API. The names an "
+                        "operation's security lists are the HQ capabilities its token must carry, every one."
+                    ),
                 }
             },
             "parameters": dict(
                 sorted(
                     {
-                        "IdempotencyKey": {
+                        IDEMPOTENCY_KEY: {
                             "name": IDEMPOTENCY_HEADER,
                             "in": "header",
                             "required": False,
                             "schema": {"$ref": builder.components.add(IDEMPOTENCY_KEY, dict(IDEMPOTENCY_FIELD_SCHEMA))},
                         },
                         **builder.parameters,
-                        "Fields": {
-                            "name": RESERVED_QUERY_FIELD,
-                            "in": "query",
-                            "required": False,
-                            "description": f"{FIELD_MASK} Sent as one comma-separated value (`observed_at,items.waiting`).",
-                            "style": "form",
-                            "explode": False,
-                            "schema": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-                        },
+                        "Fields": _mask({"type": "string", "pattern": FIELD_PATH_PATTERN}),
                     }.items()
                 )
             ),
             "responses": dict(sorted(builder.responses.items())),
             "headers": dict(sorted(builder.headers.items())),
-            "examples": dict(sorted(builder.recordings.items())),
             "schemas": dict(sorted(builder.components.sparse().items())),
         },
     }

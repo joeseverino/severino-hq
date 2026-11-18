@@ -7,20 +7,25 @@ and never listed here. Every door, the web's forms included
 through its capability, which ends in the model's own ``full_clean``.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import fields
+from functools import cache
 from typing import Any
 
-from django.core.validators import MaxValueValidator, MinValueValidator
-from django.forms import ModelForm
+from django import forms
+from django.core.exceptions import ImproperlyConfigured
+from django.db.models import Field
+from django.forms import ModelForm, modelform_factory
 from django.utils.text import capfirst
 
+from .command_fields import for_agents
 from .contracts import Effect
 from .deletion import DeleteCommand, RecordDeleted, delete_record
 from .describe import meanings
-from .domains import Records, host_records, load, records_of
-from .integration_specs import TARGET_KINDS, CapabilitySpec
-from .json_schemas import choices
+from .domains import host_records, load, records_of
+from .integration_specs import TARGET_KINDS, CapabilitySpec, command_schema
 from .labels import adding, lower_first, one
+from .record_declaration import Control, Records
 from .security import Principal
 from .ui import ended
 
@@ -73,6 +78,61 @@ def records_for(model: type) -> Records:
     raise LookupError(f"No host domain declares records for {model.__name__}.")
 
 
+# Each control a record's form draws, where Django's own says less than the
+# browser offers: a date or time picker, a text box of a few lines, a list
+# tall enough to choose several from.
+_CONTROLS: dict[Control, Callable[[], forms.Widget]] = {
+    Control.DATE: lambda: forms.DateInput(attrs={"type": "date"}),
+    Control.TIME: lambda: forms.TimeInput(attrs={"type": "time"}),
+    Control.LINES: lambda: forms.Textarea(attrs={"rows": 4}),
+    Control.CHOOSE_SEVERAL: lambda: forms.SelectMultiple(attrs={"size": 6}),
+}
+# The control each kind of column takes unless its declaration names another.
+_BY_KIND = {
+    "DateField": Control.DATE,
+    "TimeField": Control.TIME,
+    "TextField": Control.LINES,
+    "ManyToManyField": Control.CHOOSE_SEVERAL,
+}
+
+
+def _controlled(named: Mapping[str, Control]) -> Callable[..., forms.Field | None]:
+    """The form field of a column, in the control ``named`` gives it or its
+    kind takes; one limited to choices keeps Django's list."""
+
+    def field(column: Field[Any, Any], **kwargs: Any) -> forms.Field | None:
+        control = named.get(column.name) or _BY_KIND.get(column.get_internal_type())
+        if control is not None and not column.choices:
+            kwargs.setdefault("widget", _CONTROLS[control]())
+        return column.formfield(**kwargs)
+
+    return field
+
+
+@cache
+def record_form(records: Records, command: type | None = None) -> type[ModelForm[Any]]:
+    """A plain record domain's form: the fields of its command (or of
+    ``command``, a page whose save runs another), each drawn from the model's
+    column of that name, on the declaration's ``form`` where it names one. A
+    command field the model has no column for is refused as the form is built
+    (Django's ``FieldError``), and so is a ``form`` that lists fields of its own."""
+
+    command = command or load(records.command)
+    base = load(records.form) if records.form else ModelForm
+    if {"fields", "exclude"} & set(vars(getattr(base, "Meta", object))):
+        raise ImproperlyConfigured(f"{base.__name__} lists fields; a record's form takes its command's.")
+    taken = [item.name for item in fields(command) if item.name not in for_agents(command)]
+    # A field's title is its label wherever it is drawn, the command's own page included.
+    titled = {name: said["title"] for name, said in command_schema(command)["properties"].items() if "title" in said}
+    return modelform_factory(
+        load(records.model),
+        form=base,
+        fields=taken,
+        labels=titled,
+        formfield_callback=_controlled(dict(records.controls)),
+    )
+
+
 def described[F: ModelForm[Any]](form: F, command: type) -> F:
     """``form`` with the meaning ``command`` declares as each field's help, so
     a record's form says what that command's own page says (``meanings``).
@@ -84,27 +144,6 @@ def described[F: ModelForm[Any]](form: F, command: type) -> F:
         if name in form.fields and name not in own:
             form.fields[name].help_text = meaning
     return form
-
-
-def as_its_model_declares(command_type: type, schema: dict[str, Any]) -> dict[str, Any]:
-    """A record command's schema with what its model says of each field.
-
-    A field the model limits to choices lists them, each value with its label
-    (``json_schemas.choices``), and one it holds as long text is
-    ``format: textarea``. The model is the one declaration: its ``full_clean``
-    refuses any other value on every path, so the schema only says so. Any
-    other command's schema is returned as it is.
-    """
-
-    model = next((load(records.model) for records in host_records() if load(records.command) is command_type), None)
-    if model is None:
-        return schema
-    names = {field.name: field for field in model._meta.get_fields() if field.concrete}
-    properties = {
-        name: _as_field_declares(names[name], declared) if name in names else declared
-        for name, declared in schema.get("properties", {}).items()
-    }
-    return {**schema, "properties": properties}
 
 
 def as_an_update_declares(schema: dict[str, Any], always_sent: frozenset[str] = frozenset()) -> dict[str, Any]:
@@ -123,26 +162,6 @@ def as_an_update_declares(schema: dict[str, Any], always_sent: frozenset[str] = 
     else:
         updated.pop("required", None)
     return updated
-
-
-def _bounds(field: Any) -> dict[str, Any]:
-    """The tightest bounds a model field's validators hold a number to, as JSON Schema says them."""
-
-    lows = [v.limit_value for v in field.validators if isinstance(v, MinValueValidator)]
-    highs = [v.limit_value for v in field.validators if isinstance(v, MaxValueValidator)]
-    return {**({"minimum": max(lows)} if lows else {}), **({"maximum": min(highs)} if highs else {})}
-
-
-def _as_field_declares(field: Any, declared: dict[str, Any]) -> dict[str, Any]:
-    declared = {**declared, **_bounds(field)}
-    if field.choices:
-        allowed = [(value, str(label)) for value, label in field.flatchoices]
-        if field.blank and all(value != "" for value, _label in allowed):
-            allowed.insert(0, ("", "Not set"))
-        return {**declared, **choices(allowed)}
-    if field.get_internal_type() == "TextField":
-        return {**declared, "format": "textarea"}
-    return declared
 
 
 def _specs(records: Records) -> tuple[CapabilitySpec, ...]:

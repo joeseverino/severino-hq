@@ -9,10 +9,12 @@ what it would take to change it. Nothing here derives a fact.
 from collections.abc import Callable
 from typing import Any
 
+from .json_schemas import as_written
 from .projection import projection_scope, window
 from .record_errors import RecordNotFound
-from .tone import Tone
 lazy from .containers import containers
+lazy from .derived_reads import serialize_measurement
+lazy from .resource_records import ContainerRecord, RepositoryPart, UpgradeRecord, UsagePart
 lazy from .upgrades import plans
 
 
@@ -20,7 +22,7 @@ def _moment(value: Any) -> str | None:
     return value.isoformat() if value is not None else None
 
 
-def _repository(repo: Any) -> dict[str, Any] | None:
+def _repository(repo: Any) -> RepositoryPart | None:
     """What the GitHub App says about the repository that builds this image:
     what production runs, where the default branch is, and what is open."""
 
@@ -44,29 +46,6 @@ def _repository(repo: Any) -> dict[str, Any] | None:
                 "draft": bool(pull.get("draft")),
             }
             for pull in repo.pull_requests or ()
-        ],
-    }
-
-
-def _posture(posture: Any) -> dict[str, Any]:
-    return {
-        "met": posture.met,
-        "measured": posture.measured,
-        "checks": [
-            {"id": result.check.id, "label": result.check.label, "state": result.state} for result in posture.results
-        ],
-        "unmet": [
-            {
-                "id": result.check.id,
-                "label": result.check.label,
-                Tone.SERIOUS: result.check.serious,
-                "why": result.check.why,
-                "fix": result.check.fix,
-            }
-            for result in posture.unmet
-        ],
-        "by_design": [
-            {"id": result.check.id, "label": result.check.label, "reason": result.reason} for result in posture.intended
         ],
     }
 
@@ -104,7 +83,7 @@ def _supply_chain(standing: Any) -> dict[str, Any]:
     }
 
 
-def _usage(usage: Any) -> dict[str, Any] | None:
+def _usage(usage: Any) -> UsagePart | None:
     """What it uses beside its limits, when its sweep sampled it: bytes and
     how they were counted, CPU as a share of one core since the sweep before."""
 
@@ -121,7 +100,7 @@ def _usage(usage: Any) -> dict[str, Any] | None:
     }
 
 
-def serialize_container(item: Any) -> dict[str, Any]:
+def serialize_container(item: Any) -> ContainerRecord:
     standing = item.standing
     return {
         "address": item.address,
@@ -175,8 +154,8 @@ def serialize_container(item: Any) -> dict[str, Any]:
         "repository": _repository(standing.repository),
         "runtime": dict(item.runtime) if item.runtime is not None else None,
         "usage": _usage(item.usage),
-        "posture": _posture(item.posture),
-        "supply_chain": _supply_chain(standing) | {"standard": _posture(item.supply_chain)},
+        "posture": serialize_measurement(item.posture),
+        "supply_chain": _supply_chain(standing) | {"standard": serialize_measurement(item.supply_chain)},
     }
 
 
@@ -206,10 +185,7 @@ def get_container(address: str) -> dict[str, Any]:
     return _one(containers, address, serialize_container)
 
 
-def serialize_plan(plan: Any) -> dict[str, Any]:
-    def blockers(items):
-        return [{"id": item.id, "reason": item.reason} for item in items]
-
+def serialize_plan(plan: Any) -> UpgradeRecord:
     def advisories(items):
         return [{key: item.get(key, "") for key in ("id", "severity", "summary", "url")} for item in items]
 
@@ -234,9 +210,9 @@ def serialize_plan(plan: Any) -> dict[str, Any]:
         "stateful": plan.stateful,
         "data": [dict(mount) for mount in plan.data],
         "verified_by": list(plan.verified_by),
-        "blockers": blockers(plan.blockers),
-        "not_automatic": blockers(plan.not_automatic),
-        "steps": [{"id": step.id, "label": step.label, "detail": step.detail} for step in plan.steps],
+        "blockers": [as_written(item) for item in plan.blockers],
+        "not_automatic": [as_written(item) for item in plan.not_automatic],
+        "steps": [as_written(step) for step in plan.steps],
     }
 
 

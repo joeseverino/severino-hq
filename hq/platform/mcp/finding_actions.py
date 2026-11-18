@@ -1,8 +1,8 @@
 """The open problems as ``get_findings`` answers them: each action the tool call that carries it out.
 
 An agent cannot follow a web path, so a finding's actions here are calls, built
-from what the finding already holds and never read back out of a URL: a remedy
-or a command step runs through ``execute_capability``, an investigation is the
+from what the finding already holds and never read back out of a URL: a press
+runs through ``execute_capability``, an investigation is the
 trace ``action_links.INVESTIGATIONS`` declares, an offer reads its subject
 through the resource a topology node is read by, and "Check again" is this
 read narrowed to the finding's rule. An action none of these derives is left
@@ -19,29 +19,20 @@ from hq.platform.application.answer_fields import Pinned, SchemaVersion
 from hq.platform.application.capabilities import command_spec
 from hq.platform.application.describe import Describe
 from hq.platform.application.finding_model import Finding
+from hq.platform.application.finding_steps import Do, Press, Run
 from hq.platform.application.findings import (
     NODE_READ,
     FindingFacts,
     FindingsSummary,
-    RemedyEffect,
     finding_facts,
     narrowed_findings,
 )
-from hq.platform.application.json_schemas import Written
+from hq.platform.application.json_schemas import Written, as_written
 from hq.platform.application.security import Principal
-from hq.platform.application.workflow_contracts import (
-    ActionLink,
-    PlanId,
-    PlanLabel,
-    StepLabel,
-    StepPhase,
-    StepState,
-    StepSummary,
-    WorkflowOutcome,
-)
+from hq.platform.application.workflow_contracts import ActionLink
 
 # The shape get_findings answers in, apart from the API's: it moves when this shape does.
-AGENT_FINDINGS_SCHEMA_VERSION = 3
+AGENT_FINDINGS_SCHEMA_VERSION = 4
 
 _CLOSED = ConfigDict(extra="forbid")
 
@@ -127,38 +118,44 @@ type Call = CapabilityCall | TopologyCall | RecordCall | FindingsCall
 class RemedyCall(CapabilityCall):
     """A command that would fix it."""
 
-    effect: RemedyEffect
+    effect: Annotated[
+        str,
+        Describe(
+            "What running it does, in its command's own terms: `read`, `remote_write` or "
+            "`infrastructure_change`. A `destructive` one is never offered."
+        ),
+    ]
 
 
 @with_config(_CLOSED)
-class AgentWorkflowStep(TypedDict):
-    phase: StepPhase
-    label: StepLabel
-    summary: StepSummary
-    state: StepState
-    calls: Annotated[list[Call], Describe("The calls that carry it out, in order.")]
+class AgentPress(TypedDict):
+    """A command HQ runs, as the call that runs it."""
+
+    kind: Annotated[Literal["press"], Describe("A command HQ runs, through `call`.")]
+    call: RemedyCall
 
 
-@with_config(_CLOSED)
-class AgentWorkflow(TypedDict):
-    id: PlanId
-    label: PlanLabel
-    steps: Annotated[list[AgentWorkflowStep], Describe("Its steps, in the order they are taken.")]
-    outcome: Annotated[dict[str, Any], Written(WorkflowOutcome)]
+type AgentStep = AgentPress | Annotated[dict[str, Any], Written(Run)] | Annotated[dict[str, Any], Written(Do)]
 
 
 @with_config(_CLOSED)
 class AgentFinding(FindingFacts):
     """One finding, its every action a tool call."""
 
-    remedies: Annotated[list[RemedyCall], Describe("The commands you may run that would fix it. None is destructive.")]
+    steps: Annotated[
+        list[AgentStep],
+        Describe(
+            "What to do about it, in order: a command HQ runs (`press`), a command the operator runs on their own "
+            "machine (`run`), or what to do in words (`do`)."
+        ),
+    ]
+    check: Annotated[
+        list[Call],
+        Describe("The calls that read again what it rests on and run its check, in order; empty for none."),
+    ]
     offers: Annotated[list[RecordCall], Describe("Reads of its subject to make before acting.")]
     investigations: Annotated[
         list[TopologyCall], Describe("Traces around its subject: its neighborhood and what depends on it.")
-    ]
-    workflow: Annotated[
-        AgentWorkflow | None,
-        Describe("The plan that resolves it, a fix and then the check that confirms it; null when it has neither."),
     ]
 
 
@@ -226,35 +223,20 @@ def _unique[T: Call](calls: list[T | None]) -> list[T]:
     return kept
 
 
+def _step(step: Press | Run | Do) -> AgentStep:
+    if isinstance(step, Press):
+        link = step.link
+        return {"kind": "press", "call": {**_command(link.label, link.capability, link.target), "effect": link.effect}}
+    return as_written(step)
+
+
 def agent_finding(finding: Finding) -> AgentFinding:
-    workflow = finding.workflow
     return {
         **finding_facts(finding),
-        "remedies": [
-            {**_command(remedy.label, remedy.capability, remedy.target), "effect": remedy.effect}
-            for remedy in finding.remedies
-        ],
+        "steps": [_step(step) for step in finding.steps],
+        "check": _unique(_calls(finding.check, finding)) if finding.check else [],
         "offers": _unique([_read(link, finding) for link in finding.offers]),
         "investigations": _unique([_trace(link, finding) for link in finding.investigations]),
-        "workflow": (
-            {
-                "id": workflow.id,
-                "label": workflow.label,
-                "steps": [
-                    {
-                        "phase": step.phase,
-                        "label": step.label,
-                        "summary": step.summary,
-                        "state": step.state,
-                        "calls": _unique([call for link in step.actions for call in _calls(link, finding)]),
-                    }
-                    for step in workflow.steps
-                ],
-                "outcome": asdict(workflow.outcome),
-            }
-            if workflow is not None
-            else None
-        ),
     }
 
 

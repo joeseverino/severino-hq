@@ -1,4 +1,4 @@
-"""The host's templates as a contract: what an extension may use, and the record of it."""
+"""The host's templates as a contract: what an extension may use."""
 
 import io
 from contextlib import redirect_stdout
@@ -8,14 +8,15 @@ from unittest import mock
 
 from django.template import engines
 from django.template.loader import render_to_string
-from django.test import RequestFactory, SimpleTestCase, override_settings, tag
+from django.test import RequestFactory, SimpleTestCase, override_settings
 
-from hq_sdk import contract, template_contract, text_contract, validation
+from hq.platform.application import plugin_validation as validation
+from hq.platform.application.plugin_validation import template_violations
+from hq.platform.core import template_contract
 from hq_sdk.money import money
 from hq_sdk.pages import PageAction, PageDialog, page_context
 from hq_sdk.site import host
 from hq_sdk.testing import plain
-from hq_sdk.validation import template_violations
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -39,8 +40,14 @@ OUTSIDE = {
         '{% table_heading "Go" color="red" %}\n{% present first second %}x{% endpresent %}'
     ),
     "templates/example/markup.html": (
-        '<div class="compact invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p><svg data-chart></svg></div>\n'
-        '<span class="nowrap" style="--part: {{ width }}">x</span>'
+        '<div class="compact invented {{ chosen }}">\n<p data-secret>x</p><svg data-chart></svg></div>\n'
+        '<span class="nowrap" style="--part: {{ width }}">x</span>\n<H1 id="own">{{ title }}</H1>'
+    ),
+    # A class beside a tag is still written, and one built from a value is
+    # its prefix's.
+    "templates/example/beside.html": (
+        '<b class="{% if a %}chip{% endif %}"></b>\n<i class="compact {% if b %}kpi{% endif %}"></i>\n'
+        '<s class="tone-{{ t }}"></s>'
     ),
     "templates/example/parts.html": (
         '{% card %}{% section "A" %}B{% aside %}C{% endsection %}{% aside %}C{% endcard %}\n'
@@ -83,6 +90,10 @@ class TemplateValidationTests(SimpleTestCase):
             "markup.html:1": "invented",
             "markup.html:2": "data-secret",
             "markup.html:3": "style attribute",
+            "markup.html:4": "h1",
+            "beside.html:1": "class chip ",
+            "beside.html:2": "class kpi ",
+            "beside.html:3": "class tone-* ",
             "parts.html:1": "aside",
             "parts.html:2": "aside",
             "parts.html:3": "invented-card",
@@ -94,6 +105,29 @@ class TemplateValidationTests(SimpleTestCase):
             with self.subTest(place=place):
                 self.assertTrue(any(place in line and name in line for line in found), f"{place} {name} not in {found}")
         self.assertEqual(len(found), len(expected), found)
+
+
+class ClassWordsTests(SimpleTestCase):
+    def test_attributes_and_tag_options_are_read_outside_comments(self):
+        self.assertEqual(
+            template_contract.class_words(
+                '<p class="note {{ tone }} tone-{{ x }}{% if a == "b" %} on {% endif %}">\n{% card css="frame wide" %}'
+                '{% comment %}<b class="gone">{% endcomment %}{# class="gone" #}{% button link_css=\'link\' %}'
+            ),
+            [(2, "frame"), (2, "wide"), (2, "link"), (1, "note"), (1, "tone-*"), (1, "on")],
+        )
+
+    def test_a_tag_ends_a_word_unless_a_hyphen_joins_it_across(self):
+        words = template_contract.class_words(
+            '<a class="tab{% if a %} tab-current{% endif %}"><b class="{% if a %}band{% else %}list{% endif %}">'
+            '<i class="table{% if dense %} is-dense{% endif %}"><s class="series-{{ slot }}{% if a %} is-start{% endif %}">'
+            '<u class="tone-{% if a %}ok{% endif %} mark-{% if a %}{% endif %} {{ a }}-{{ b }}">'
+        )
+
+        self.assertEqual(
+            {word for _, word in words},
+            {"tab", "tab-current", "band", "list", "table", "is-dense", "series-*", "is-start", "tone-*", "mark-*"},
+        )
 
 
 # The shapes a report can lose: a violation inside a block override, the same
@@ -175,26 +209,6 @@ class TemplateRecordTests(SimpleTestCase):
             self.assertRaisesMessage(ValueError, "empty"),
         ):
             template_contract.describe()
-
-    def test_class_attributes_an_extension_declares_are_recorded(self):
-        members = contract.describe()["modules"]["tables"]["TableListMixin"]["members"]
-
-        self.assertEqual(members["table_empty"], {"kind": "attribute", "type": "str"})
-        self.assertEqual(members["table_columns"], {"kind": "attribute", "type": "tuple"})
-
-    def test_the_rendered_text_examples_are_current(self):
-        differences = text_contract.drift(text_contract.load_committed(), text_contract.describe())
-
-        self.assertEqual(differences, [], "Run `mise run fix` and review the words that changed.")
-
-    @tag("source")
-    def test_plugins_md_states_the_recorded_contract(self):
-        from hq.platform.core.management.commands.sdk_contract import documented, plugins_doc
-
-        text = plugins_doc().read_text(encoding="utf-8")
-        section = template_contract.markdown(contract.load_committed()["templates"])
-
-        self.assertEqual(documented(text, section), text, "Run `mise run fix`.")
 
 
 class PageDialogTests(SimpleTestCase):

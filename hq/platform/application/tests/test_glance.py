@@ -126,7 +126,11 @@ class DashboardGlanceTests(TestCase):
 
         for machine, name in ((self.machine, "app"), (other, "db")):
             (part,) = select(html, "data-fragment-part", f"machine-{machine.pk}")
-            (head,) = (element for element in with_class(html, "reading-lines") if part in element.ancestors)
+            (head,) = (
+                element
+                for element in with_class(html, "fact-label")
+                if part in element.ancestors and not any("fact-panel" in up.classes for up in element.ancestors)
+            )
             self.assertIn(name, head.text)
 
     def test_compact_summary_preserves_full_readings_in_the_menu_it_opens(self):
@@ -432,18 +436,20 @@ class DashboardGlanceTests(TestCase):
         self.assertFalse(DashboardMachine.objects.filter(machine=other).exists())
         self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.DENIED).count(), 3)
 
-    def test_a_record_that_is_not_an_enabled_machine_is_refused_with_its_reason(self):
+    def test_a_machine_switched_off_is_a_precondition_and_a_key_naming_no_machine_is_not_found(self):
         ManagedResource.objects.create(key="off-machine", kind="machine", spec={"name": "off"}, enabled=False)
-        for key in ("off-machine", "nothing-by-this-name"):
+        ManagedResource.objects.create(key="example-zone", kind="cloudflare.zone", spec={"name": "example.com"})
+        for key, code in (
+            ("off-machine", "precondition"),
+            ("nothing-by-this-name", "not_found"),
+            ("example-zone", "not_found"),
+        ):
             with self.subTest(key=key):
                 result = execute_capability(
                     DASHBOARD_MACHINE, keyed({"selected": True}), principal=AN_OPERATOR, target=key
                 )
 
-                self.assertEqual(
-                    result["error"],
-                    {"code": "precondition", "message": "Dashboard telemetry requires an enabled machine record."},
-                )
+                self.assertEqual(result["error"]["code"], code, result)
         self.assertEqual(DashboardMachine.objects.count(), 1)
 
     def test_a_selection_that_is_not_a_yes_or_no_is_invalid(self):
@@ -616,7 +622,7 @@ class GlanceRenderingTests(TestCase):
         )
         self.assertIn("Example Town, EX", text(html))
         # Each hour by its time, and a chance of rain said only when there is one.
-        hours = {hour.attrs["title"]: hour.text for hour in select(html, "title") if hour.tag == "li"}
+        hours = {hour.attrs["title"]: hour.text for hour in with_class(html, "fact") if "title" in hour.attrs}
         self.assertIn("60%", hours["Showers"])
         self.assertIn("4\xa0PM", hours["Showers"])
         self.assertNotIn("%", hours["Cloudy"])

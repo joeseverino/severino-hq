@@ -29,7 +29,8 @@ from ..action_items import (
     with_aside_state,
 )
 from ..capabilities import execute_capability
-from ..card_items import Insight
+from ..finding_model import Finding
+from ..findings import finding_key
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, internal_principal
 
 ITEM = {
@@ -43,49 +44,46 @@ ITEM = {
     "status": "attention",
     "url": "",
     "action": "",
-    "workflow": None,
+    "steps": [],
+    "no_help_reason": "",
+    "check": None,
 }
 OTHER = {**ITEM, "key": "example:gadget", "label": "A gadget is stale", "count": 1}
 
 
 class IdentityTests(TestCase):
-    def insight(self, **fields):
-        return Insight(**{"status": "attention", "eyebrow": "Finding", "title": "t", "value": "", "body": "", **fields})
+    def finding(self, **fields):
+        return Finding(
+            **{"rule": "rule", "subject": "a", "severity": "attention", "title": "t", "explanation": "", **fields}
+        )
 
     def test_an_item_is_what_it_is_about_not_what_it_says(self):
-        first = self.insight(key="finding:rule:a", title="Expires in 5 days", body="x")
-        later = self.insight(key="finding:rule:a", title="Expires in 4 days", body="y")
+        first = self.finding(title="Expires in 5 days", explanation="x")
+        later = self.finding(title="Expires in 4 days", explanation="y")
 
-        self.assertEqual(item_key("infra", first.key), item_key("infra", later.key))
+        self.assertEqual(item_key("infra", finding_key(first)), item_key("infra", finding_key(later)))
         self.assertEqual(item_revision(first), item_revision(later))
 
     def test_getting_worse_or_growing_is_a_new_revision(self):
-        base = self.insight(key="k", magnitude=2)
+        base = self.finding(count=2)
 
-        self.assertNotEqual(item_revision(base), item_revision(self.insight(key="k", magnitude=3)))
-        self.assertNotEqual(item_revision(base), item_revision(self.insight(key="k", magnitude=2, status="serious")))
+        self.assertNotEqual(item_revision(base), item_revision(self.finding(count=3)))
+        self.assertNotEqual(item_revision(base), item_revision(self.finding(count=2, severity="serious")))
 
     def test_a_notice_comes_back_only_when_it_reports_something_else(self):
-        told = self.insight(key="k", notice=True, body="Rose 19 bpm on the Sep 21 run", value="1 day ago")
+        told = self.finding(notice=True, explanation="Rose 19 bpm on the Sep 21 run")
 
         # Nothing about a notice gets worse, and a counter that moves on its
         # own is not news.
         self.assertEqual(
             item_revision(told),
             item_revision(
-                self.insight(
-                    key="k",
-                    notice=True,
-                    status="serious",
-                    magnitude=4,
-                    body="Rose 19 bpm on the Sep 21 run",
-                    value="2 days ago",
-                )
+                self.finding(notice=True, severity="serious", count=4, explanation="Rose 19 bpm on the Sep 21 run")
             ),
         )
         self.assertNotEqual(
             item_revision(told),
-            item_revision(self.insight(key="k", notice=True, body="Rose 12 bpm on the Sep 28 run")),
+            item_revision(self.finding(notice=True, explanation="Rose 12 bpm on the Sep 28 run")),
         )
 
 

@@ -3,7 +3,7 @@ What reaches it, what runs on it and how that stands, and what it answers
 for: one band under the head, as a service's and HQ's own page open.
 {% endcomment %}
 {% if reached_links or machine.containers or serves_links or machine.roles %}
-{% facts layout="band" %}
+{% card element="div" %}{% facts layout="band" %}
   {% if reached_links %}
   {% fact "Read through" icon="network" %}
     {% comment %}A connection named for this machine is named by its kind, a word rather than an identifier.{% endcomment %}
@@ -35,5 +35,5 @@ for: one band under the head, as a service's and HQ's own page open.
     {% endif %}
   {% endfact %}
   {% endif %}
-{% endfacts %}
+{% endfacts %}{% endcard %}
 {% endif %}

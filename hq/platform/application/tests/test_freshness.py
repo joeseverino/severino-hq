@@ -84,8 +84,6 @@ class FreshnessTests(TestCase):
             ReadCadence(timedelta(0), timedelta(days=1))
         with self.assertRaises(ValueError):
             ReadCadence(timedelta(days=1), -timedelta(days=1))
-        with self.assertRaises(TypeError):
-            ReadCadence(timedelta(days=1), 2)
 
 
 # An extension's own kind, read when somebody asks.

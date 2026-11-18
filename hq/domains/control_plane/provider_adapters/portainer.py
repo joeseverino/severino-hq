@@ -5,13 +5,16 @@ about them is here.
 """
 
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import Field, field_validator
 
+from hq.platform.application.command_fields import RequiredText
+from hq.platform.application.container_standard import CHECK_IDS
+from hq.platform.application.describe import Describe
 from hq.platform.application.github_public import GitHubRepositoryURL
+from hq.platform.application.record_fields import one_of
 from hq.platform.application.ui import ended
-lazy from hq.platform.application.container_standard import CHECK_IDS
 
 from ..connection_shapes import API_TOKEN
 from ..observations import portainer as readings
@@ -28,6 +31,13 @@ from ..provider_spec import (
 CONTAINER_KIND = "portainer.container"
 CONTAINER_STACK_KIND = "portainer.stack"
 
+# A check of the container standard, by id. The set is read at run time, so a
+# type checker reads the key as text.
+if TYPE_CHECKING:
+    type CheckId = str
+else:
+    CheckId = one_of(sorted(CHECK_IDS))
+
 
 class PortainerContainerSpec(ProviderModel):
     """One container HQ is responsible for keeping up, not for defining.
@@ -37,20 +47,17 @@ class PortainerContainerSpec(ProviderModel):
     watch and to cycle", and reconciliation is locked with nothing to converge.
     """
 
-    connection_ref: str = Field(
-        min_length=1,
+    connection_ref: RequiredText = Field(
         max_length=160,
         title="Portainer",
         description="The Portainer that manages this machine.",
     )
-    host: str = Field(
-        min_length=1,
+    host: RequiredText = Field(
         max_length=160,
         title="Runs on",
-        description="The machine this runs on.",
+        description="The machine the container runs on.",
     )
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=200,
         title="Container",
         description="The container name, as Docker reports it.",
@@ -65,7 +72,7 @@ class PortainerContainerSpec(ProviderModel):
         title="Holds the Docker socket",
         description="A socket proxy or agent whose job is Docker. Its socket access is listed, not flagged.",
     )
-    by_design: dict[str, str] = Field(
+    by_design: dict[CheckId, Annotated[str, Field(pattern=r"\S")]] = Field(
         default_factory=dict,
         title="Checks its job requires",
         description=(
@@ -78,7 +85,7 @@ class PortainerContainerSpec(ProviderModel):
         title="Collapse on machine page",
         description=("Collapse it on the machine's page. HQ still watches and controls it."),
     )
-    serves_ports: list[int] = Field(
+    serves_ports: list[Annotated[int, Field(ge=1, le=65535)]] = Field(
         default_factory=list,
         title="Answers on",
         description=(
@@ -98,49 +105,37 @@ class PortainerContainerSpec(ProviderModel):
 
     @field_validator("by_design")
     @classmethod
-    def _known_checks_with_reasons(cls, value: dict[str, str]) -> dict[str, str]:
-        unknown = sorted(set(value) - CHECK_IDS)
-        if unknown:
-            raise ValueError(f"Not a check of the container standard: {', '.join(unknown)}.")
-        if any(not str(reason).strip() for reason in value.values()):
-            raise ValueError("Each check needs the reason its job requires it.")
-        return {check: str(reason).strip() for check, reason in value.items()}
-
-    @field_validator("serves_ports")
-    @classmethod
-    def ports_are_ports(cls, value: list[int]) -> list[int]:
-        if any(port < 1 or port > 65535 for port in value):
-            raise ValueError("Ports must be between 1 and 65535.")
-        return value
+    def _reasons_trimmed(cls, value: dict[str, str]) -> dict[str, str]:
+        return {check: reason.strip() for check, reason in value.items()}
 
 
 class PortainerStackEnvVar(ProviderModel):
-    name: str = Field(min_length=1, max_length=200, title="Name")
-    value: str = Field(default="", max_length=4000, title="Value")
+    """One environment variable a stack is deployed with."""
+
+    name: Annotated[RequiredText, Describe("", api="The variable's name.")] = Field(max_length=200, title="Name")
+    value: Annotated[str, Describe("", api="The variable's value.")] = Field(default="", max_length=4000, title="Value")
 
 
 class PortainerStackSpec(ProviderModel):
-    connection_ref: str = Field(
-        min_length=1,
+    """A compose stack Portainer deploys on one machine."""
+
+    connection_ref: RequiredText = Field(
         max_length=160,
         title="Portainer",
         description="The Portainer environment this runs in.",
     )
-    host: str = Field(
-        min_length=1,
+    host: RequiredText = Field(
         max_length=160,
         title="Runs on",
-        description="The machine this runs on.",
+        description="The machine the stack runs on.",
     )
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=120,
         pattern=r"^[a-z0-9][a-z0-9-]*$",
         title="Stack name",
         description="Lowercase and hyphenated. Used as the compose project name.",
     )
-    compose: str = Field(
-        min_length=1,
+    compose: RequiredText = Field(
         title="Compose file",
         description="The docker compose file, as it would be on disk.",
     )

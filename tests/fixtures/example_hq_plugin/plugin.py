@@ -1,6 +1,6 @@
 """One declaration from which HQ derives every example integration surface."""
 
-from hq_sdk.plugin import NavigationItem, PluginIntegration, PluginManifest
+from hq_sdk.plugin import PLUGIN_API_VERSION, NavigationItem, PluginIntegration, PluginManifest
 
 
 def integration() -> PluginIntegration:
@@ -17,7 +17,7 @@ plugin = PluginManifest(
     distribution="severino-hq",
     source_repository="joeseverino/severino-hq",
     source_workflow=".github/workflows/ci.yml",
-    api_version=16,
+    api_version=PLUGIN_API_VERSION,
     integration_provider="tests.fixtures.example_hq_plugin.plugin:integration",
     django_apps=("tests.fixtures.example_hq_plugin",),
     url_prefix="examples/notes/",

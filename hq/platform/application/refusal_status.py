@@ -19,10 +19,12 @@ from typing import Annotated, Any, NotRequired, TypedDict, TypeIs
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pydantic import Field, ValidationError as PydanticValidationError
 
+from hq.platform.core.errors import UpstreamUnavailable
+
 from .answer_fields import Outcome, Pinned
 from .input_errors import django_refusal, pydantic_refusal
 from .projection import QueryRefusal
-from .record_errors import HostRefusal
+from .record_errors import NOT_FOUND, HostRefusal
 from .security import AuthorizationError, InsufficientScope, Principal
 lazy from .approvals import RefusedHold
 lazy from .denials import record_denial
@@ -90,7 +92,7 @@ CODES = {
     # The operator's standing rule refuses this client. Like a missing grant,
     # no change to the request gets it through.
     "denied_by_policy": _code(403, "the operator's rule refuses this client", Door.CAPABILITY),
-    "not_found": _code(404, "the record it names is not there", Door.RESOURCE, Door.CAPABILITY),
+    NOT_FOUND: _code(404, "the record it names is not there", Door.RESOURCE, Door.CAPABILITY),
     "unknown_resource": _code(404, "HQ has no list by that name", Door.RESOURCE),
     # The resource exists, and has no list or detail to read.
     "unsupported_operation": _code(405, "that list has nothing of that kind to read", Door.RESOURCE),
@@ -118,6 +120,11 @@ CODES = {
     "work_failed": _code(409, "the work ran and failed", Door.CAPABILITY),
     # Something HQ did not expect went wrong: the log holds it, the answer says nothing of it.
     "operation_failed": _code(500, "something HQ did not expect went wrong", Door.ENDPOINT, Door.CAPABILITY),
+    # A service outside HQ that the call reaches did not answer, or answered
+    # nothing usable: the request is sound, and asking again may succeed.
+    "upstream_unavailable": _code(
+        503, "a service outside HQ that it reaches did not answer", Door.ENDPOINT, Door.CAPABILITY
+    ),
     "invalid_input": _code(400, "what it sent is not valid", Door.RESOURCE, Door.CAPABILITY),
     "target_required": _code(400, "it names no record to act on", Door.TARGETED),
     "target_not_allowed": _code(400, "it names a record, and this acts on none", Door.UNTARGETED),
@@ -377,7 +384,10 @@ def _mapped(exc: Exception, name: str) -> Refusal:
         return Refusal("invalid_input", refused.message, refused.details)
     if isinstance(exc, DjangoValidationError):
         refused = django_refusal(name, exc)
-        return Refusal("invalid_input", refused.message, refused.details)
+        # Only fields naming records that are not there: the call names a missing record.
+        codes = [code for named in refused.details.values() for code in named]
+        missing = bool(codes) and all(code == NOT_FOUND for code in codes)
+        return Refusal(NOT_FOUND if missing else "invalid_input", refused.message, refused.details)
     if isinstance(exc, InvalidResourceInput):
         # The pydantic error list describing the request sent, beside what the kind takes.
         return Refusal("invalid_input", exc.reason, exc.details)
@@ -394,6 +404,16 @@ def _mapped(exc: Exception, name: str) -> Refusal:
         # A narrowing or a resource HQ cannot read, said in HQ's own sentence.
         return Refusal("invalid_input", exc.reason)
     subject = name or "This request"
+    if isinstance(exc, UpstreamUnavailable):
+        # Every reader of a service outside HQ raises this for one that did
+        # not answer (``http_read.UNREACHABLE``), whichever call reached it.
+        logger.warning(
+            "%s could not reach a service outside HQ: %s",
+            _loggable(subject),
+            _loggable(exc),
+            extra={"event": "capability.upstream_unavailable"},
+        )
+        return Refusal("upstream_unavailable", f"{subject} could not reach a service outside HQ. Try again later.")
     # Neither handler nor dependency exception text crosses an adapter. It can
     # contain argument names, provider responses, paths, or values from the
     # request, so it stays in the log. The name is registry-owned and safe.

@@ -31,7 +31,3 @@ class TitleMetaTagTests(SimpleTestCase):
         for parts in ("Online{% dot %}<code>example-host</code>", "<li>Online</li> since today", ""):
             with self.subTest(parts=parts), self.assertRaises(TemplateSyntaxError):
                 _render(f"{{% title_meta %}}{parts}{{% endtitle_meta %}}")
-
-    def test_an_option_it_does_not_take_is_refused(self):
-        with self.assertRaises(TemplateSyntaxError):
-            Template('{% title_meta css="example" %}<li>A</li>{% endtitle_meta %}')

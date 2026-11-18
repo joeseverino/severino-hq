@@ -15,6 +15,7 @@ from typing import Any, get_args
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError as DjangoValidationError
 from pydantic_core.core_schema import ErrorType
 
+from .record_errors import NOT_FOUND
 from .ui import ended
 
 # How many problems the sentence names before pointing at ``details``.
@@ -45,6 +46,7 @@ _DJANGO_REASONS = {
     "invalid_choice": "is not one of the allowed choices",
     "unique": "is already taken",
     "unique_together": "is already taken",
+    NOT_FOUND: "names nothing HQ has",
 }
 
 
@@ -61,15 +63,19 @@ def pydantic_refusal(subject: str, errors: Iterable[Mapping[str, Any]]) -> Input
 
     # Pydantic's ``input``, ``url`` and ``ctx`` are dropped: ``ctx`` can hold
     # the exception a validator raised, text and all.
+    sent = list(map(_unknown_as_extra, errors))
     details = [
         {
             "type": error.get("type", ""),
             "loc": list(error.get("loc", ())),
             "msg": _safe_msg(error) or _OPAQUE_MSG,
         }
-        for error in map(_unknown_as_extra, errors)
+        for error in sent
     ]
-    problems = [(_path(error["loc"]), _pydantic_reason(error)) for error in details]
+    problems = [
+        (_path(error["loc"]), _pydantic_reason(error, original.get("ctx") or {}))
+        for error, original in zip(details, sent, strict=True)
+    ]
     return InputRefusal(_message(subject, problems), details)
 
 
@@ -142,12 +148,15 @@ def _safe_msg(error: Mapping[str, Any]) -> str:
     return _ERROR_CLAUSE.split(str(error.get("msg", "")), maxsplit=1)[0]
 
 
-def _pydantic_reason(error: Mapping[str, Any]) -> str:
+def _pydantic_reason(error: Mapping[str, Any], context: Mapping[str, Any]) -> str:
     kind = error["type"]
     if kind == "missing":
         return "is required"
     if kind == "extra_forbidden":
         return "is not a known field"
+    if kind == "string_pattern_mismatch":
+        # The pattern is for a machine; its details and the schema carry it.
+        return "is not in the form its schema's pattern gives"
     msg = error["msg"]
     if kind in _CHOICE and msg.startswith("Input should be "):
         # Pydantic phrases the declared choices as "'a', 'b' or 'c'".
@@ -157,6 +166,12 @@ def _pydantic_reason(error: Mapping[str, Any]) -> str:
             if choice.strip()
         ]
         return f"must be one of {', '.join(choices)}"
+    # A bound, a number the schema declares, reads as the model's refusal of
+    # it does, whichever of the two answers first.
+    if kind == "less_than_equal" and "le" in context:
+        return f"must be at most {context['le']}"
+    if kind == "greater_than_equal" and "ge" in context:
+        return f"must be at least {context['ge']}"
     if msg and msg != _OPAQUE_MSG:
         return _SHOULD.sub("must ", msg)
     return "is invalid"

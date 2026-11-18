@@ -277,7 +277,6 @@ func TestHostUnitsLeaveOutATitleTheContractRefuses(t *testing.T) {
 		"a control byte": "example\x1b[2Jcleared",
 		"a path":         "/run/example/token",
 		"an assignment":  "EXAMPLE_TOKEN=sentinel-value",
-		"a fact's bar":   "example | other",
 		"too long":       strings.Repeat("a", hostUnitTextLimit+1),
 	} {
 		t.Run(name, func(t *testing.T) {

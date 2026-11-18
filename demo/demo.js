@@ -171,7 +171,7 @@
     // Re-apply saved dismissals.
     const state = read();
     document.querySelectorAll("[data-attention-item]").forEach((row) => {
-      const key = row.querySelector(':scope > .row-actions > button[name="key"]')?.value;
+      const key = row.querySelector(':scope > .row-actions button[name="key"]')?.value;
       if (key && state.dismissed.includes(key)) {
         row.dataset.dismissed = `Dismissed: ${row.querySelector("[data-attention-title]")?.textContent.trim() || ""}`;
       }
@@ -198,7 +198,7 @@
   // Save dismissals and un-dismissals.
   document.addEventListener("click", (event) => {
     // The row's own Dismiss or Restore, as app.js finds it.
-    const button = event.target.closest('[data-attention-item] .row-actions > button[name="key"][formaction]');
+    const button = event.target.closest('[data-attention-item] .row-actions button[name="key"][formaction]');
     if (!button) return;
     const state = read();
     const dismissing = /set-aside/.test(button.getAttribute("formaction"));

@@ -1,6 +1,6 @@
 """A sentence a page shows closes through ``ended``, never on a bare period after a value.
 
-One rule for the host and its extensions, kept in ``hq_sdk.validation``, which
+One rule for the host and its extensions, kept in ``hq.platform.application.plugin_validation``, which
 says what it refuses and what it leaves bare. This holds the host's code that
 builds page text to it: ``hq/platform/application`` and ``hq/domains``, less
 their tests, migrations and management commands.
@@ -15,11 +15,10 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application import plugin_validation as validation
+from hq.platform.application.plugin_validation import _closes_by_hand, sentence_closes
 from hq.platform.application.tests.reads import reads
-from hq_sdk import ui as sdk_ui, validation
-from hq_sdk.validation import _closes_by_hand, sentence_closes
 
-from ..ui import ended
 from .apart import apart
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -108,9 +107,6 @@ class ExtensionSentenceTests(SimpleTestCase):
             (root / name).write_text(source, encoding="utf-8")
         return root
 
-    def test_an_extension_closes_a_sentence_with_the_hosts_own_ended(self):
-        self.assertIs(sdk_ui.ended, ended)
-
     def test_a_sentence_closed_by_hand_is_found_where_page_text_is_built(self):
         with tempfile.TemporaryDirectory() as directory:
             root = self._tree(
@@ -128,7 +124,7 @@ class ExtensionSentenceTests(SimpleTestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = self._tree(directory, {"example/views.py": 'detail = f"Logged by {device}."\n'})
             said = io.StringIO()
-            with redirect_stdout(said), patch("sys.argv", ["hq_sdk.validation", str(root)]):
+            with redirect_stdout(said), patch("sys.argv", ["hq.platform.application.plugin_validation", str(root)]):
                 status = validation.main()
 
         self.assertEqual(status, 1)

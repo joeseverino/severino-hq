@@ -13,11 +13,13 @@ import re
 from collections.abc import Mapping
 from typing import Annotated, Any, NotRequired, TypedDict, cast
 
+from django.db.models import BigIntegerField
 from pydantic import (
     AfterValidator,
+    BeforeValidator,
     ConfigDict,
     Field,
-    StrictInt,
+    Strict,
     StrictStr,
     TypeAdapter,
     ValidationError as PydanticValidationError,
@@ -27,24 +29,35 @@ from pydantic import (
 )
 from pydantic_core import PydanticKnownError
 
+from .command_fields import RequiredText
 from .integration_specs import CapabilitySpec
 from .json_schemas import json_schema
 from .moments import moment
+from .record_fields import RecordId
 from .refusal_status import Refusal, refusal_of
 
-# What an integer target may be sent as besides a number: its digits.
-INTEGER_TARGET = r"^-?[0-9]+$"
+# What an integer target may be sent as besides a number: the digits of an
+# id, a digit fewer than the most a record's id may be, so every one is an id
+# the number form takes.
+INTEGER_TARGET = rf"^[1-9][0-9]{{0,{len(str(BigIntegerField.MAX_BIGINT)) - 2}}}$"
 _INTEGER_DIGITS = re.compile(INTEGER_TARGET)
 
 
 def _as_its_kind(value: str | int, info: ValidationInfo) -> str | int:
-    """``value``, refused where the capability's target is an integer and it is text of anything but digits."""
+    """``value``, refused where the capability's target is an integer and it is text of anything but an id's digits."""
 
     kind = (info.context or {}).get("target_kind")
     if kind == "integer" and isinstance(value, str) and not _INTEGER_DIGITS.fullmatch(value):
         # Pydantic's own type, whose fixed words name the kind; a validator's own text is never shown.
         raise PydanticKnownError("int_parsing")
     return value
+
+
+def _whole(value: Any) -> Any:
+    """``value`` as an integer where it is a JSON number with nothing after its point, which JSON Schema's
+    ``integer`` admits (``2.0``); anything else unchanged, for the strict integer to judge."""
+
+    return int(value) if isinstance(value, float) and value.is_integer() else value
 
 
 def _moment(value: str) -> str:
@@ -84,7 +97,7 @@ class CallEnvelope(TypedDict):
     ]
     target: NotRequired[
         Annotated[
-            StrictInt | Annotated[StrictStr, Field(min_length=1)],
+            Annotated[RecordId, Strict(), BeforeValidator(_whole)] | Annotated[RequiredText, Strict()],
             AfterValidator(_as_its_kind),
             Field(description="The record the command acts on, by its identifier."),
         ]

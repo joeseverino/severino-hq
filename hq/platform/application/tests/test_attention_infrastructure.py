@@ -2,10 +2,9 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.application.tests.worded import worded
 
 from ..attention import infrastructure
-from ..findings import estate_findings
+from ..findings import estate_findings, finding_key
 from ..security import cli_principal
 from .inventory_records import kind_read
 
@@ -23,7 +22,7 @@ def rewrite(key: str, *, generation: int = 1, observed_generation: int = 1, **fi
 
 
 def keys_about(key: str) -> set[str]:
-    return {item.key for item in worded(infrastructure()) if item.key.endswith(f"resource:{key}")}
+    return {finding_key(item) for item in tuple(infrastructure()) if finding_key(item).endswith(f"resource:{key}")}
 
 
 class InfrastructureQueueTests(TestCase):
@@ -44,13 +43,6 @@ class InfrastructureQueueTests(TestCase):
 
         self.assertTrue(about)
         self.assertTrue(all(key.startswith("finding:") for key in about), about)
-
-    def test_a_resource_read_without_a_state_of_its_own_is_a_finding(self):
-        rewrite("silent", status={"domain": "silent.example.com", "answer": "192.0.2.1"})
-
-        self.assertEqual(keys_about("silent"), {"finding:resource-unchecked:resource:silent"})
-        (finding,) = estate_findings(principal=cli_principal(), rule="resource-unchecked")
-        self.assertIn("could not be checked", finding.title)
 
     def test_a_resource_never_found_is_said_so_once(self):
         """Never found in a read of its kind is the sharper claim."""

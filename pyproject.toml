@@ -72,9 +72,6 @@ DEP004 = [
     # hq/config/urls.py mounts the toolbar only when SEVERINO_DEBUG_TOOLBAR is
     # on, which development alone sets; the image installs no toolbar.
     "debug_toolbar",
-    # hq/platform/api/testing.py holds the clock still for a recording run of
-    # the tests (HQ_API_RECORD_EXAMPLES), which no image runs.
-    "time_machine",
     # hq/platform/core/test_runner.py registers the Hypothesis profiles when
     # the suite starts, and does nothing in the image, which has no Hypothesis.
     "hypothesis",
@@ -124,6 +121,12 @@ source_modules = ["hq.platform.application.describe"]
 forbidden_modules = ["hq.**"]
 
 [[tool.importlinter.contracts]]
+name = "The non-empty marker is a leaf: it imports nothing of HQ"
+type = "forbidden"
+source_modules = ["hq.platform.application.non_empty"]
+forbidden_modules = ["hq.**"]
+
+[[tool.importlinter.contracts]]
 name = "The shared answer fields import nothing of HQ but the description marker"
 type = "forbidden"
 source_modules = ["hq.platform.application.answer_fields"]
@@ -131,16 +134,18 @@ forbidden_modules = ["hq.**"]
 ignore_imports = ["hq.platform.application.answer_fields -> hq.platform.application.describe"]
 
 [[tool.importlinter.contracts]]
-name = "The operation manifest is a leaf: it imports nothing of HQ but two validators"
+name = "The operation manifest is a leaf: it imports nothing of HQ but three validators"
 type = "forbidden"
 source_modules = ["hq.platform.application.automation_manifest"]
 forbidden_modules = ["hq.**"]
-# HQ's one spelling of a dotted name (contracts.DOTTED_NAME) and of a host
-# name (names.is_hostname), which the manifest holds its ids, kinds and hosts
-# to rather than restating them.
+# HQ's one spelling of a dotted name (contracts.DOTTED_NAME), of a host name
+# (names.is_hostname) and of a value that must hold something
+# (non_empty.NonEmpty), which the manifest holds its ids, kinds, hosts and
+# statements to rather than restating them.
 ignore_imports = [
   "hq.platform.application.automation_manifest -> hq.platform.application.contracts",
   "hq.platform.application.automation_manifest -> hq.domains.control_plane.names",
+  "hq.platform.application.automation_manifest -> hq.platform.application.non_empty",
 ]
 
 [[tool.importlinter.contracts]]
@@ -214,13 +219,15 @@ tools = [
     "django-stubs==6.1.2",
     # Writes the served font from its source (tools/fonts), and the font tests read it.
     "fonttools==4.68.0",
+    # Compares hq_sdk's public shape with the base's (lint:sdk-breaking).
+    "griffelib==2.4.1",
     "hypothesis==6.170.15",
     # Holds the layering contracts in [tool.importlinter] (lint:imports); its
     # graph, grimp, counts the imports between the layers (audit:layers).
     "import-linter==2.16",
     "mypy==2.4.1",
     "ruff==0.17.4",
-    # Holds the clock still while the API examples are recorded (fix:api-examples).
+    # Holds a test's clock still (test_record_life.py).
     "time-machine==3.6.0",
     "types-jsonschema==4.26.0.20261006",
     # Lists the names nothing outside tests reads (audit:dead, [tool.vulture]).
@@ -239,7 +246,7 @@ runner = [
 ]
 # Generates the API cases of test:api-properties, the one task that installs it.
 fuzz = [
-    "schemathesis==4.33.1",
+    "schemathesis==4.33.4",
 ]
 
 [tool.ruff]

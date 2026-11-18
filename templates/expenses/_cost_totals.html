@@ -5,4 +5,4 @@ is application.expenses.CostTotals; a list with nothing to add up says nothing.
 list narrowed to it.
 {% endcomment %}
 {% if totals %}{% muted element="p" %}{% if totals.narrowed %}Matching: {% else %}Total {% endif %}<strong>{{ totals.total|money }}</strong>{% if totals.narrowed %} total{% endif %}{% dot %}deductible (est.) <strong>{{ totals.deductible|money }}</strong>{% endmuted %}{% endif %}
-{% if by_category %}{% include "partials/_kpi_grid.html" with items=by_category label="Totals by category" only %}{% endif %}
+{% if by_category %}{% card element="div" %}{% facts layout="band" size="large" items=by_category label="Totals by category" %}{% endcard %}{% endif %}

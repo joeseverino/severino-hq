@@ -1,5 +1,6 @@
 """Thin MCP adapters over HQ's canonical application services and safe queries."""
 
+from datetime import MAXYEAR, MINYEAR
 from typing import Annotated, Any, cast
 
 from pydantic import Field, SkipValidation
@@ -21,6 +22,7 @@ from hq.platform.application.input_errors import unknown_field_errors
 from hq.platform.application.integration_specs import FIELD_MASK, PAGE_FIELD
 from hq.platform.application.projection import MAX_PAGE_SIZE
 from hq.platform.application.read_models import DocumentationStatus, RecentActivity, SystemHealth
+from hq.platform.application.record_fields import RecordId
 from hq.platform.application.registry import RegistryAudit, audit_registry as audit_application_registry
 from hq.platform.application.reports import (
     ExportFormat,
@@ -33,6 +35,7 @@ from hq.platform.application.resources import (
     InvalidResourceInput,
     ResourceCatalog,
     ResourceCollection,
+    TopLimit,
     describe_resources as describe_application_resources,
     get_resource as get_application_resource,
     list_resource as list_application_resource,
@@ -100,7 +103,7 @@ def execute_capability(
     # Absent means an empty one, as an answer's left-out field means its default.
     payload: dict[str, Any] | None = None,
     # Read by the capability runner once the caller may run it, as every door's are.
-    target: SkipValidation[str | int | None] = None,
+    target: SkipValidation[str | RecordId | None] = None,
     expected_updated_at: SkipValidation[str | None] = None,
 ) -> Performed | HeldCall:
     """Run one capability with a JSON payload its schema checks.
@@ -148,14 +151,14 @@ def describe_connections() -> ConnectionCatalog:
 
 @tool("Open findings", requires=holding(Capability.READ), arguments=FindingsQuery, budget=Budget(5_000))
 def get_findings(**narrowing: Any) -> AgentFindings:
-    """The open problems HQ found, most severe first, each with its evidence and remedies.
+    """The open problems HQ found, most severe first, each with its evidence and what to do about it.
 
     `system_health` says only whether HQ answers. The `status-brief` prompt
     returns health and problems together.
 
-    Every action a finding carries (a remedy, an offer, an investigation, a
-    step of its plan) is a tool call: send its `arguments` to its `tool`. A
-    finding lists only the remedies you may run.
+    Every action a finding carries (a press, its check, an offer, an
+    investigation) is a tool call: send its `arguments` to its `tool`. A
+    finding lists only the presses you may make.
 
     `severity` is a floor: `attention` also returns `serious`. `limit` caps
     how many come back, and without it only the few most severe do.
@@ -222,7 +225,7 @@ def list_resource(
     "Read one record", requires=READS_A_RECORD, budget=Budget(700, frozendict({"name": "projects", "identifier": "hq"}))
 )
 def get_resource(
-    name: str, identifier: str | int, fields: Annotated[list[str] | None, Field(description=FIELD_MASK)] = None
+    name: str, identifier: str | RecordId, fields: Annotated[list[str] | None, Field(description=FIELD_MASK)] = None
 ) -> dict[str, Any]:
     """One record of a kind, by its identifier.
 
@@ -245,7 +248,9 @@ def audit_registry() -> RegistryAudit:
 
 
 @tool("Export a year summary", requires=holding(Capability.READ), budget=Budget(4_700, frozendict({"year": 2026})))
-def export_year_summary(year: int, format: ExportFormat = "md") -> YearSummary:
+def export_year_summary(
+    year: Annotated[int, Field(ge=MINYEAR, le=MAXYEAR)], format: ExportFormat = "md"
+) -> YearSummary:
     """One year's summary, as Markdown or JSON: its expenses, projects,
     writeups, docs and the assets bought.
 
@@ -270,7 +275,7 @@ def documentation_status() -> DocumentationStatus:
 
 
 @tool("What changed lately", requires=holding(Capability.READ_AUDIT_LOG), budget=Budget(12_500))
-def recent_activity(*, limit: int = 25) -> RecentActivity:
+def recent_activity(*, limit: TopLimit = 25) -> RecentActivity:
     """The newest audit-log events, newest first: who did what to which
     record, and when.
 

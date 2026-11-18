@@ -8,9 +8,10 @@ HQ's own image is never upgraded from here: only its signed pipeline deploys it.
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Annotated, Any
 
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
+from .describe import Describe
 from .images import affected, version
 from .tone import Tone
 from .ui import ended
@@ -29,15 +30,15 @@ HIGH = "high"
 
 @dataclass(frozen=True, slots=True)
 class Blocker:
-    id: str
-    reason: str
+    id: Annotated[str, Describe("What stands in the way, as a stable id an agent can act on, such as `mounts-unread`.")]
+    reason: Annotated[str, Describe("What stands in the way, in a sentence.")]
 
 
 @dataclass(frozen=True, slots=True)
-class Step:
-    id: str
-    label: str
-    detail: str
+class UpgradeStep:
+    id: Annotated[str, Describe("The step's stable id.")]
+    label: Annotated[str, Describe("The step, in a few words.")]
+    detail: Annotated[str, Describe("What the step does, in a sentence.")]
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +58,7 @@ class Plan:
     blockers: tuple[Blocker, ...]
     # Why it would not apply on its own, though it may by a person's approval.
     not_automatic: tuple[Blocker, ...]
-    steps: tuple[Step, ...] = field(default_factory=tuple)
+    steps: tuple[UpgradeStep, ...] = field(default_factory=tuple)
 
     @property
     def viable(self) -> bool:
@@ -301,30 +302,32 @@ def _pinned_in(item: Container) -> str:
     return f"The compose override of {item.running.stack or item.running.name} on {item.machine.name}"
 
 
-def _steps(item: Container, target: str, digest: str, data, verified_by) -> tuple[Step, ...]:
+def _steps(item: Container, target: str, digest: str, data, verified_by) -> tuple[UpgradeStep, ...]:
     where = _pinned_in(item)
     pinned = f"{item.standing.image.short}:{target}, " + ("by its digest" if digest else "once its digest is read")
-    steps = [Step("pull", "Pull the target by digest", pinned)]
+    steps = [UpgradeStep("pull", "Pull the target by digest", pinned)]
     if data:
         steps.append(
-            Step(
+            UpgradeStep(
                 "snapshot",
                 "Stop it and snapshot its data",
                 ", ".join(str(mount.get("source")) for mount in data),
             )
         )
     steps += [
-        Step(
+        UpgradeStep(
             "trial",
             "Run the target as the service is defined",
             "With no network and no published ports"
             + (", against a copy of its data" if data else "")
             + ", until it proves itself. The service stays stopped, and is started unchanged if it fails.",
         ),
-        Step("pin", "Pin the digest in its compose override", f"{ended(where)} The compose file itself is not edited."),
-        Step("apply", "Recreate the service", f"compose up for {item.running.name} only"),
-        Step("verify", "Verify", ", ".join(verified_by) if verified_by else "That it keeps running."),
-        Step(
+        UpgradeStep(
+            "pin", "Pin the digest in its compose override", f"{ended(where)} The compose file itself is not edited."
+        ),
+        UpgradeStep("apply", "Recreate the service", f"compose up for {item.running.name} only"),
+        UpgradeStep("verify", "Verify", ", ".join(verified_by) if verified_by else "That it keeps running."),
+        UpgradeStep(
             "keep-or-roll-back",
             "Keep it, or roll back",
             (

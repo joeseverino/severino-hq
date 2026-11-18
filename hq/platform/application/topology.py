@@ -9,7 +9,7 @@ mutation that could drift from the thing it claims to represent.
 
 import re
 from collections import Counter
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -20,7 +20,6 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.routes import reverse
-lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .action_links import (
@@ -36,13 +35,14 @@ from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .conditions import DRIFTED, holding
 from .connection_catalog import ConnectionGroup, connection_catalog
 from .connections import ConnectionLink, ConnectionSpec
-from .contradiction_findings import add_contradiction_facts
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, node_name, record_name
-from .infrastructure import ResourceState, resource_health
+from .infrastructure import ResourceState, declared_resources, resource_health
 from .integration_validation import required_capability_names
-from .projection import QUERY, QueryRefusal, projection_scope
+from .json_schemas import as_written
+from .projection import QUERY, projection_scope
+from .record_errors import RecordNotFound
 from .resource_capabilities import REMOVAL_CAPABILITY, UPDATE_CAPABILITY, removals_pending, resource_capabilities
 from .resource_context import record_summary, shared_names
 from .security import Capability, Principal
@@ -70,10 +70,8 @@ from .topology_model import (
     newest_stamp,
 )
 lazy from .adoption import manages_through
-lazy from .cadence import WorkerStanding, automation_standing
 lazy from .facts import stored_snapshots
 lazy from .hq_self import serving
-lazy from .posture import estate_posture
 lazy from .topology_estate import add_estate
 
 
@@ -478,7 +476,7 @@ def relation_graph(*, principal: Principal) -> RelationGraph:
     def build() -> RelationGraph:
         nodes: dict[str, TopologyNode] = {}
         edges: dict[str, TopologyEdge] = {}
-        resources = tuple(ManagedResource.objects.all())
+        resources = declared_resources()
         for resource in resources:
             node = _resource_node(resource)
             nodes[node.id] = node
@@ -501,7 +499,7 @@ def _relations(_principal: Principal, build: Any) -> RelationGraph:
 @derivation("estate.topology", reads=ESTATE_READS, vary=estate_variant)
 def _derive(principal: Principal) -> Topology:
     edges: dict[str, TopologyEdge] = {}
-    resources = tuple(ManagedResource.objects.all())
+    resources = declared_resources()
     nodes = _resource_nodes(resources, principal)
     # Observed facts that decide a finding, attached to the resource they are
     # about. Read once here rather than by a rule, which must cost no queries.
@@ -513,7 +511,6 @@ def _derive(principal: Principal) -> Topology:
     _connection_nodes(groups, nodes, edges, principal)
     add_estate(nodes, edges, resources)
     add_connection_facts(nodes)
-    add_contradiction_facts(nodes)
     _governs_edges(groups, resources, edges)
     _measure(nodes)
 
@@ -524,22 +521,7 @@ def _derive(principal: Principal) -> Topology:
         )
     )
     ordered_edges = tuple(sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target)))
-    unmet = tuple(
-        (result.check.id, result.reading.evidence, result.reading.read_capabilities)
-        for result in estate_posture(groups).unmet
-    )
-    return Topology(ordered_nodes, ordered_edges, unmet, _kinds_read(), _automation_worker(resources))
-
-
-def _automation_worker(resources) -> WorkerStanding | None:
-    """HQ's playbook worker's standing, or None for an HQ that never had a
-    playbook source and never saw a worker: nobody set automation up there,
-    so its absence is nothing to raise."""
-
-    worker = automation_standing()
-    if worker.seen_at is None and not any(resource.kind == SOURCE_KIND for resource in resources):
-        return None
-    return worker
+    return Topology(ordered_nodes, ordered_edges, kinds_read=_kinds_read())
 
 
 def _kinds_read() -> tuple[tuple[str, datetime], ...]:
@@ -603,10 +585,6 @@ def _governs_edges(groups, resources, edges: dict[str, TopologyEdge]) -> None:
                     edges[relation.id] = relation
 
 
-class InvalidTopologyQuery(QueryRefusal):
-    """A focus the topology holds no node for; ``reason`` says where ids come from."""
-
-
 # Built from the declarations, so a type checker reads each as a value.
 _LENS: Any = Literal[tuple(lens.name for lens in TOPOLOGY_LENSES)]
 _DIRECTION: Any = Literal[TRACE_DIRECTIONS]
@@ -652,8 +630,8 @@ def serialize_topology(
             else None
         ),
         "summary": _counts(topology),
-        "nodes": [asdict(node) for node in topology.nodes],
-        "edges": [asdict(edge) for edge in topology.edges],
+        "nodes": [as_written(node) for node in topology.nodes],
+        "edges": [as_written(edge) for edge in topology.edges],
     }
 
 
@@ -682,7 +660,7 @@ def topology(*, principal: Principal, **narrowing: object) -> TopologyAnswer:
     if selected is not None:
         projection = apply_lens(projection, selected)
     if focus and focus not in {node.id for node in projection.nodes}:
-        raise InvalidTopologyQuery(
+        raise RecordNotFound(
             "The focus names no node on the map; it is a node's id, as a lens's answer gives each one."
         )
     projection, trace = apply_trace(projection, focus, direction=query["direction"], depth=query["depth"])

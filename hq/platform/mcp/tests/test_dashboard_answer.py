@@ -10,6 +10,7 @@ from mcp import Client
 from hq.platform.application.automation_adoption import catch_up
 from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.finding_model import Finding
+from hq.platform.application.finding_steps import Do
 from hq.platform.application.integration_specs import typed_keys
 from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.security import Capability, Principal, operator_capabilities
@@ -26,10 +27,17 @@ ACTED_ON = frozenset({"url", "capability", "target", "summary", "detail", "actio
 # What the page alone reads: the revision a person sets an item aside at, the
 # gate the queue was filtered by, the heading items group under, and a plan's
 # own id and completion.
-PAGE_ONLY = frozenset({"revision", "read_capabilities", "family", "workflow"})
+PAGE_ONLY = frozenset({"revision", "read_capabilities", "family"})
 # More than a page of the queue, raised by an extension.
 RAISED = tuple(
-    Finding(rule="alpha", subject=str(n), severity="serious", title=f"Example {n} needs you", explanation="Body.")
+    Finding(
+        rule="alpha",
+        subject=str(n),
+        severity="serious",
+        title=f"Example {n} needs you",
+        explanation="Body.",
+        steps=(Do("Look at it."),),
+    )
     for n in range(ACTION_ITEMS_PAGE + 2)
 )
 
@@ -89,7 +97,7 @@ class DashboardAnswerTests(TestCase):
         self.assertFalse(answer.is_error)
         agent = {item["key"]: item for item in answer.structured_content["priority"]}
         self.assertLessEqual(set(agent), set(page))
-        self.assertTrue(any(item["workflow"] for item in page.values()), "a plan is read")
+        self.assertTrue(any(item["steps"] for item in page.values()), "a step is read")
         for key, item in agent.items():
             with self.subTest(item=key):
                 self.assertLessEqual(_said(page[key]), _said(item))

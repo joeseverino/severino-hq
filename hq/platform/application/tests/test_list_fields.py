@@ -1,6 +1,7 @@
 """A list read sends each item as its kind lists it: the fields declared once
 on its ResourceSpec, the whole record a detail read or ``fields`` away."""
 
+from typing import TypedDict
 from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
@@ -10,7 +11,6 @@ from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
 from ..integrations import integration_graph
-from ..plugins import plugin_resource_specs
 from ..resources import EmptyQuery, ResourceSpec, describe_resources, get_resource, list_resource, resource_registry
 from ..security import Principal, operator_capabilities
 
@@ -18,7 +18,7 @@ OPERATOR = Principal("example-operator", "test", operator_capabilities())
 
 
 def _declaring():
-    return {name: spec for name, spec in resource_registry().items() if spec.list_fields}
+    return {name: spec for name, spec in resource_registry().items() if spec.list_handler}
 
 
 class ListFieldTests(TestCase):
@@ -30,15 +30,14 @@ class ListFieldTests(TestCase):
 
     def test_each_item_keeps_only_its_kinds_list_fields_and_holds_them(self):
         declaring = _declaring()
-        self.assertTrue(declaring, "a kind declares list_fields")
         for name, spec in declaring.items():
             with self.subTest(name=name):
                 page = list_resource(name, {}, principal=OPERATOR)
                 held = {key for item in page["items"] for key in item}
 
                 self.assertLessEqual(held, set(spec.list_fields))
-                # A row's NotRequired field may be absent from every item.
-                required = spec.row_type.__required_keys__ if spec.row_type else set(spec.list_fields)
+                # An item's NotRequired field may be absent from every item.
+                required = spec.item_type.__required_keys__ & set(spec.list_fields)
                 if page["items"]:
                     self.assertLessEqual(required, held, "a required field no item holds")
 
@@ -74,13 +73,9 @@ class ListFieldTests(TestCase):
             with self.subTest(name=name):
                 self.assertEqual(described[name]["operations"]["list"]["fields"], list(spec.list_fields))
 
-    def test_the_catalog_names_no_fields_for_a_kind_that_declares_none(self):
-        whole = ResourceSpec("example.records", "Records", "Example records.", "example.read", _rows, EmptyQuery)
-        installed = plugin_resource_specs()
-        with mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(*installed, whole)):
-            described = {entry["name"]: entry for entry in describe_resources()["resources"]}
 
-        self.assertNotIn("fields", described["example.records"]["operations"]["list"])
+class _ExampleRecord(TypedDict):
+    name: str
 
 
 def _rows(**_):
@@ -97,6 +92,7 @@ class ListFieldRegistrationTests(SimpleTestCase):
                 "example.read",
                 _rows,
                 EmptyQuery,
+                item_type=_ExampleRecord,
                 list_fields=list_fields,
             )
             with (

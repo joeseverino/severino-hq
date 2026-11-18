@@ -5,6 +5,7 @@ page of the queue is its own, larger than the one the MCP tools answer."""
 from django.test import TestCase
 
 from hq.platform.application.finding_model import Finding
+from hq.platform.application.finding_steps import Do
 from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.resources import BoundedQuery, list_resource, resource_registry
 from hq.platform.application.security import Capability, Principal
@@ -19,7 +20,14 @@ OPERATOR = Principal("example-operator", "mcp", frozenset(Capability))
 LIST_PAGE = BoundedQuery.model_fields["limit"].default
 # More than a page of the queue, as either door reads it, raised by an extension.
 RAISED = tuple(
-    Finding(rule="alpha", subject=str(n), severity="serious", title=f"Example {n} needs you", explanation="Body.")
+    Finding(
+        rule="alpha",
+        subject=str(n),
+        severity="serious",
+        title=f"Example {n} needs you",
+        explanation="Body.",
+        steps=(Do("Look into it."),),
+    )
     for n in range(max(LIST_PAGE, ACTION_ITEMS_PAGE) + 2)
 )
 

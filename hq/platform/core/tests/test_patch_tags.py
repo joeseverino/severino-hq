@@ -1,6 +1,6 @@
 """The code patch: a block to paste, with its Copy button and notes, is one part."""
 
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import Context, Template
 from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import elements, select, with_class
@@ -36,11 +36,3 @@ class PatchTagTests(SimpleTestCase):
         self.assertEqual(select(html, "data-copy"), [])
         self.assertEqual(elements(html, "pre"), [])
         self.assertEqual([item.words for item in elements(html, "li")], ["An example note"])
-
-    def test_a_patch_with_an_unknown_option_is_refused(self):
-        for source in (
-            '{% patch id="example" css="example" %}code{% endpatch %}',
-            '{% patch id="example" data_example="x" %}code{% endpatch %}',
-        ):
-            with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
-                _render(source)

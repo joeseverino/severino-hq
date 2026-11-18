@@ -4,11 +4,7 @@
   {% for section in dashboard_highlights %}
     {% firstof section.overview.url section.cards.0.url as overview_url %}
     {% section section.label more_label="View "|add:section.label more_url=overview_url %}
-      {% if section.overview.kpis %}
-        {% include "partials/_kpi_grid.html" with items=section.overview.kpis featured=True %}
-      {% else %}
-        {% include "partials/_kpi_grid.html" with items=section.cards featured=True %}
-      {% endif %}
+      {% if section.overview.kpis %}{% facts layout="band" size="lead" items=section.overview.kpis %}{% else %}{% facts layout="band" size="lead" items=section.cards %}{% endif %}
     {% aside %}{% if section.overview.period %}<span class="count">{{ section.overview.period|breakable }}</span>{% endif %}
     {% endsection %}
   {% endfor %}

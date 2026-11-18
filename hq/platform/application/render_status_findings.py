@@ -6,7 +6,6 @@ The reading and each finding: docs/Secrets.md#how-hq-reads-it.
 """
 
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -24,23 +23,17 @@ from .finding_model import (
     Finding,
     FindingEstate,
     FindingRule,
-    OperatorStep,
     cannot_run_commands,
-    fact_values,
     journal_step,
     machine_step,
 )
-from .freshness import freshness, missed
+from .finding_steps import Do, Run
+from .freshness import missed
 from .moments import ago, duration, moment, when
-from .reading_facts import FactRow, rows_of, state_on_controller, stated, taken_at, unjudged
+from .reading_facts import ReadingRow, stated, unjudged
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import ended
-
-# The fact a node carries per renderer its controller reported. Neither it nor
-# a rule's name or title says "secret": the findings and the topology are held
-# to carrying no such word, and what is stale here is said as credentials.
-RENDER_STATUS = "render-status"
 
 # The renderer's timer starts it every OnUnitActiveSec, up to
 # RandomizedDelaySec late, read from the timer itself so the two cannot
@@ -115,15 +108,15 @@ SYNC_UNREPORTED = "not reported"
 
 
 @dataclass(frozen=True, slots=True)
-class Rendering(FactRow):
-    """One renderer as its fact carries it: words and instants, in field order."""
+class Rendering(ReadingRow):
+    """One renderer as its record says it: words and instants. Neither a
+    rule's name nor its title says "secret": the findings are held to
+    carrying no such word, and what is stale here is said as credentials."""
 
-    KEY = RENDER_STATUS
     KIND = RENDER_STATUS_KIND
 
     renderer: str = ""
     state: str = RENDER_UNREADABLE
-    reason: str = ""
     outcome: str = ""
     failure: str = ""
     attempted_at: str = ""
@@ -135,6 +128,10 @@ class Rendering(FactRow):
     sync_read_at: str = ""
     # When the controller read the document.
     read_at: str = ""
+
+    @classmethod
+    def record(cls, record: dict[str, Any], snapshot: Any) -> Rendering:
+        return rendering(record, snapshot.observed_at)
 
     @property
     def name(self) -> str:
@@ -204,41 +201,23 @@ def rendering(record: dict[str, Any], read_at: datetime | None = None) -> Render
     )
 
 
-def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
-    """One fact per renderer, on the node of the controller that read it."""
-
-    state_on_controller(
-        nodes,
-        machine,
-        Rendering,
-        lambda snapshot: rows_of(
-            snapshot,
-            lambda record: rendering(record, snapshot.observed_at),
-            lambda reason: Rendering(reason=reason),
-        ),
-    )
-
-
 def _stated(estate: FindingEstate):
     return stated(estate, Rendering)
 
 
-def failed_units(estate: FindingEstate, node: TopologyNode) -> frozenset[str]:
-    """The units on ``node`` whose renderer says its last run failed.
+def failed_units(estate: FindingEstate) -> dict[str, frozenset[str]]:
+    """The units on each node whose renderer says its last run failed, by node id.
 
     ``render-failing`` says that failure with its class, so a rule that reads
     unit state leaves these to it, unless the reading is too old for it to.
     """
 
-    if freshness(RENDER_STATUS_KIND, taken_at(node, RENDER_STATUS_KIND), estate.now).stale:
-        return frozenset()
-    return frozenset(
-        unit for rendering in stated_on(node) if rendering.failed and (unit := RENDERER_UNITS.get(rendering.renderer))
-    )
-
-
-def stated_on(node: TopologyNode) -> tuple[Rendering, ...]:
-    return tuple(Rendering.of(value) for value in fact_values(node, RENDER_STATUS))
+    return {
+        node.id: frozenset(
+            unit for rendering in renderings if rendering.failed and (unit := RENDERER_UNITS.get(rendering.renderer))
+        )
+        for node, renderings in _stated(estate)
+    }
 
 
 def _job(rendering: Rendering, among: tuple[Rendering, ...]) -> str:
@@ -252,7 +231,7 @@ def _run_again(
     renderings: tuple[Rendering, ...],
     label: str,
     notes: tuple[str, ...] = (),
-) -> tuple[OperatorStep, ...]:
+) -> tuple[Run, ...]:
     """Start each refresh job whose unit HQ knows, on the machine."""
 
     return tuple(
@@ -263,7 +242,7 @@ def _run_again(
     )
 
 
-def _journal(node: TopologyNode, renderings: tuple[Rendering, ...]) -> tuple[OperatorStep, ...]:
+def _journal(node: TopologyNode, renderings: tuple[Rendering, ...]) -> tuple[Run, ...]:
     return tuple(
         step
         for rendering in renderings
@@ -449,8 +428,8 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
                     )
                 ),
                 steps=(
-                    OperatorStep(
-                        label=f"Restart 1Password Connect on {node.label} and read its sync container's log",
+                    Do(
+                        f"Restart 1Password Connect on {node.label} and read its sync container's log",
                         notes=("TOKEN_NEEDED means it has not been given its credentials file.",),
                     ),
                     *_run_again(node, stalled, "Then run the refresh again"),
@@ -518,6 +497,7 @@ RULES: tuple[FindingRule, ...] = (
         "Credentials could not be refreshed",
         Tone.SERIOUS,
         _failing,
+        gathered=True,
         operator_action=(
             "On the machine, read the refresh job's log for why it failed, fix that, then start the job again."
         ),
@@ -533,6 +513,7 @@ RULES: tuple[FindingRule, ...] = (
         "Credentials not refreshed lately",
         Tone.SERIOUS,
         _stale,
+        gathered=True,
         operator_action=("On the machine, check that the refresh job's timer is on, then start the job."),
         no_help_reason=cannot_run_commands(),
         bars={
@@ -548,6 +529,7 @@ RULES: tuple[FindingRule, ...] = (
         "1Password Connect has stopped syncing",
         Tone.ATTENTION,
         _sync_stalled,
+        gathered=True,
         operator_action=("Restart 1Password Connect on the machine, then start the refresh job."),
         no_help_reason=cannot_run_commands(),
         bars={Tone.ATTENTION: "1Password Connect no longer reports its sync as active"},
@@ -557,6 +539,7 @@ RULES: tuple[FindingRule, ...] = (
         "Cannot tell whether credentials are fresh",
         Tone.ATTENTION,
         _unread,
+        gathered=True,
         operator_action=("Start the refresh job on the machine. If this stays, deploy HQ."),
         no_help_reason=cannot_run_commands(),
         bars={Tone.ATTENTION: "HQ cannot read when credentials were last refreshed"},

@@ -7,7 +7,7 @@ registry (a tool's schema, its read, the catalog) answers the one registry.
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
-from typing import Any
+from typing import Any, TypedDict
 
 from hq.platform.application.integration_specs import ResourceSpec
 from hq.platform.application.integration_testing import override_integration_graph
@@ -18,6 +18,11 @@ from ..binding import bind_tools
 from ..server import ToolServer
 
 KIND = "example.records"
+
+
+class ExampleRecord(TypedDict):
+    name: str
+    state: str
 
 
 def example_kind(seen: list[str] | None = None) -> ResourceSpec:
@@ -40,6 +45,7 @@ def example_kind(seen: list[str] | None = None) -> ResourceSpec:
         EmptyQuery,
         detail,
         "name",
+        item_type=ExampleRecord,
     )
 
 

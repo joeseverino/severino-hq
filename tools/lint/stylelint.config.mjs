@@ -135,9 +135,9 @@ const primitives = [
     names: String.raw`(?:\.(?:data-table|row-detail|row-columns)(?![-\w])|(?<![-\w.#])(?:table|caption|thead|tbody|tfoot|tr|td|th)(?![-\w]))`,
     sheets: ["base", "cuts", "figures", "tables", "surfaces"],
     parts: [
-      "btn", "button-words", "cell-clamp", "cell-line", "cell-part", "cell-short", "cell-whole", "cut", "external-link", "icon-link", "is-expanded", "line-list", "line-rest", "line-run", "muted",
-      "name-line", "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
-      "row-controls", "row-editor", "row-expand", "row-fold", "row-later", "row-less", "row-more", "select-column", "strut", "table-clamp", "table-scroll", "tag", "token", "visually-hidden", "whole",
+      "btn", "button-words", "cell-clamp", "cell-controls", "cell-line", "cell-part", "cell-short", "cell-whole", "cut", "external-link", "icon-link", "is-expanded", "line-list", "line-rest", "line-run", "muted",
+      "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
+      "row-editor", "row-expand", "row-fold", "row-less", "row-more", "select-column", "strut", "table-clamp", "table-scroll", "tag", "token", "visually-hidden", "whole",
     ],
   },
   { name: "button", classes: "btn", sheets: ["page"] },

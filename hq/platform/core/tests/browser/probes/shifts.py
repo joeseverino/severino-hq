@@ -10,6 +10,11 @@ from hq.platform.core.tests.browser.selectors import SELECTORS
 # Cumulative Layout Shift.
 CLS_LIMIT = 0.1
 
+# Where a check that moves the page to read it (opening a row and closing it
+# again) keeps each span of time it moved it in, as `[from, to]` on the page's
+# clock: that move is the check's, never the page's.
+PROBE_MOVES = "hqProbeMoves"
+
 # The page's Cumulative Layout Shift as Core Web Vitals scores it, from the
 # browser's own layout-shift entries: shifts no input of the reader's explains,
 # grouped into sessions of shifts each under a second from the last and five
@@ -27,7 +32,8 @@ CLS_LIMIT = 0.1
 # nothing to say; Chromium's legs of the gates read it. A shift until the
 # frame after the page's face arrived is the face's: the gates wait for it
 # (`serving.in_the_face`) where a reader's browser draws it from the first paint
-# or never, so that move is the gate's own and left out. The record is read at
+# or never, so that move is the gate's own and left out, as is a move a check
+# made to read the page (`PROBE_MOVES`). The record is read at
 # once: with script off Chromium runs no timer and calls back no observer, so a
 # probe that waits on either never returns.
 #
@@ -38,7 +44,9 @@ LAYOUT_SHIFTS = (
     "(given) => {"
     + DESCRIBE
     + f"""
-  const [vendored, limit] = given ?? [{json.dumps(SELECTORS["vendored"])}, null];"""
+  const [vendored, limit] = given ?? [{json.dumps(SELECTORS["vendored"])}, null];
+  const probed = (shift) => (window[{json.dumps(PROBE_MOVES)}] || [])
+    .some(([from, to]) => shift.startTime >= from && shift.startTime <= to);"""
     + """
   if (!PerformanceObserver.supportedEntryTypes.includes('layout-shift')) return [];
   // What the browser kept of one entry type. A buffered observe() puts it in
@@ -77,7 +85,7 @@ LAYOUT_SHIFTS = (
     .filter((entry) => entry.name.endsWith('.woff2')).map((entry) => entry.responseEnd)) + 50;
   const worst = (entries) => {
     let found = [], session = [];
-    const counted = (s) => !s.hadRecentInput && !s.sources.every(theScripts) && s.startTime > faceArrived;
+    const counted = (s) => !s.hadRecentInput && !s.sources.every(theScripts) && s.startTime > faceArrived && !probed(s);
     for (const shift of entries.filter(counted)) {
       const [first, last] = [session[0], session.at(-1)];
       const joins = first && shift.startTime - last.startTime < 1000 && shift.startTime - first.startTime < 5000;

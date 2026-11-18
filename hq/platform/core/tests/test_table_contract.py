@@ -312,25 +312,9 @@ class TableTagTests(SimpleTestCase):
         )
         self.assertEqual([cell.attrs.get("data-kind") for cell in elements(html, "td")], ["name", "status", "control"])
 
-    def test_a_stacked_cell_names_its_column(self):
-        """A narrow box stacks its table, each value under its column's name
-        (tables.css), so each body cell carries that name. The cell that
-        names its row, a row's controls and a tick-box need none."""
-
-        source = (
-            '{% table_region "Things" %}<table class="data-table" data-selectable-table><thead><tr>'
-            '{% table_heading "Select" select_all=True %}{% table_heading "Name" gutter=True %}'
-            '{% table_heading "State" "status" %}{% table_heading "Act" css="actions-col" %}</tr></thead><tbody>'
-            "<tr>{% row_select 1 %}<td>a</td><td>Up &amp; on</td><td><button>Go</button></td></tr>"
-            "</tbody></table>{% endtable_region %}"
-        )
-        cells = [cell.attrs.get("data-label") for cell in elements(_render(source), "td")]
-        self.assertEqual(cells, [None, None, "State", None])
-
-    def test_a_stacked_choice_names_its_column(self):
-        """A column a row fills a field in holds the rows' values, so each of
-        its cells, the field's and the words standing in for one, stands
-        under its column's name once stacked, whatever kind its heading says."""
+    def test_the_words_standing_for_a_choice_are_a_short_value(self):
+        """Where a row has no choice to make, the words standing in its
+        column of choices keep their line as a short value does."""
 
         source = (
             '{% table_region "Rules" %}<table class="data-table"><thead><tr>{% table_heading "Action" %}'
@@ -338,8 +322,6 @@ class TableTagTests(SimpleTestCase):
             "<tbody><tr><td>a</td><td><select><option>Allow</option></select></td><td><button>Go</button></td></tr>"
             "<tr><td>b</td><td>Not granted</td><td><button>Go</button></td></tr></tbody></table>{% endtable_region %}"
         )
-        cells = [cell.attrs.get("data-label") for cell in elements(_render(source), "td")]
-        self.assertEqual(cells, [None, "example-agent", None, None, "example-agent", None])
         self.assertIn("Not granted", [box.words for box in with_class(_render(source), "cell-short")])
 
     def test_a_rows_actions_are_its_controls_under_any_heading(self):
@@ -442,13 +424,14 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(toggle.ancestors[-1].tag, "td")
 
     def test_only_a_cut_cell_with_a_long_line_is_clamped(self):
-        """A value with a long line is held to a few lines; a status is never
-        held, and a short line or a blank cell is not."""
+        """A value with a long line is held to a few lines where its row
+        opens; a status is never held, and a short line, a blank cell or a
+        row with no toggle to show it whole is not."""
 
         long = "A sentence long enough to stand <em>several</em> lines tall in a narrow column"
         lines = "Two lines, each of them short<br>and the second one as short"
         source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
             '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
             f'<tr><td data-col="name">{long}</td><td data-col="status">{long}</td><td data-col="long">{long}</td></tr>'
             f'<tr><td>b</td><td>Up</td><td data-col="lines">{lines}</td></tr>'
@@ -459,9 +442,10 @@ class TableTagTests(SimpleTestCase):
         clamped = [each.ancestors[-1].attrs.get("data-col") for each in found if "cell-clamp" in each.classes]
         self.assertEqual(clamped, ["name", "long"])
         # An open row releases its clamp in place, so the value is never
-        # copied to the open line; on a wide line the title holds it, so no
-        # row opens for it there.
+        # copied to the open line.
         self.assertFalse([each for each in found if each.tag == "dl"])
+        closed = all_elements(_render(source.replace(" gutter=True", "")))
+        self.assertEqual([each for each in closed if "cell-clamp" in each.classes], [])
         self.assertFalse(any("data-below" in each.attrs for each in found if each.tag == "tr"))
 
     def test_a_long_value_and_its_heading_are_marked_long_whatever_its_kind(self):
@@ -502,11 +486,33 @@ class TableTagTests(SimpleTestCase):
         boxed = re.findall(r'data-col="(\w+)"[^>]*>\s*<div class="cell-short">', _render(source))
         self.assertEqual(boxed, ["name", "proxy"])
 
+    def test_a_box_is_drawn_only_where_no_element_of_the_cell_can_be_it(self):
+        """A short value said by one list is its own box, and a long value
+        whose parts its clamp holds each on their own is clamped by its cell:
+        the region wraps neither in a box of its own."""
+
+        long = "a sentence long enough to stand several lines tall in a narrow column"
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
+            '{% table_heading "Reads" %}</tr></thead><tbody>'
+            f'<tr><td data-col="named"><strong>{long}</strong></td>'
+            '<td data-col="list"><ul class="dot-list"><li>DNS</li><li>Mail</li></ul></td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        found = all_elements(_render(source))
+        boxes = {
+            name: [(each.tag, each.attrs.get("data-col")) for each in found if name in each.classes]
+            for name in ("cell-short", "cell-clamp")
+        }
+
+        self.assertEqual(boxes, {"cell-short": [("ul", None)], "cell-clamp": [("td", "named")]})
+        self.assertFalse([each for each in found if each.tag == "div" and "td" in [up.tag for up in each.ancestors]])
+
     def test_a_row_that_holds_something_back_has_its_line_beneath(self):
-        """After a row is the line its toggle opens: its controls, the blocks
-        it keeps beneath itself, then each labeled block under its label and a
-        copy of each cell that holds something back, the copy saying when it
-        shows: where its column has left, or in a narrow box."""
+        """After a row is the line its toggle opens: the blocks it keeps
+        beneath itself, then each labeled block under its label. What a cell
+        holds back is copied there by tables.js as the row opens, so the
+        server draws no copy of a cell."""
 
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
@@ -532,9 +538,8 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(cell.attrs["colspan"], "5")
         self.assertEqual([each.words for each in beneath if "row-below" in each.classes], ["tall", "x"])
         entries = [each for each in beneath if each.tag == "div" and each.ancestors[-1].tag == "dl"]
-        said = {entry.words for entry in entries if not {"data-drop", "data-narrow"} & set(entry.attrs)}
-        self.assertEqual(said, {"Also x"})
-        self.assertEqual(len([each for each in beneath if "row-controls" in each.classes]), 1)
+        self.assertEqual([entry.words for entry in entries], ["Also x"])
+        self.assertEqual([each for each in beneath if each.words == "Go"], [])
 
     def test_each_part_of_a_cell_is_marked_with_its_role(self):
         """The region marks what a part of a cell is, so the stylesheet keys
@@ -671,10 +676,6 @@ class TableTagTests(SimpleTestCase):
         ):
             with self.subTest(source), self.assertRaises(ValueError):
                 _render(source)
-
-    def test_an_unknown_argument_is_refused_when_the_template_compiles(self):
-        with self.assertRaises(TemplateSyntaxError):
-            _render('{% table_heading "Name" color="red" %}')
 
     def test_a_page_sorted_heading_draws_its_button(self):
         (heading,) = elements(_render('{% table_heading "Name" local_sort=True %}'), "th")

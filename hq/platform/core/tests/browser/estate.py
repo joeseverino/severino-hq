@@ -35,7 +35,7 @@ from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.shards import sweep
 from hq.platform.core.tests.browser.survey import geometry_probes
-from hq.platform.core.tests.browser.widths import PALETTE_AT, PHONE_SCREEN, WIDE, WIDTHS, viewport, with_wide_tables
+from hq.platform.core.tests.browser.widths import PALETTE_AT, PHONE_SCREEN, SCRIPTED, WIDE, viewport
 lazy from hq.platform.application import fragments
 lazy from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.core import seeds
@@ -45,9 +45,9 @@ lazy from hq.platform.core.example_estate.network import ZONE_KEY
 lazy from hq.platform.core.example_estate.records import RUNBOOKS, SERVER_ASSET, SWITCH_ASSET, UNFILED_RECEIPT, WRITEUPS
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 
-# WebKit reads the gate's widths, and the laptop window where a wide table
-# has the least room on a page that draws one (`with_wide_tables`), as HQ is
-# read in Safari; another engine is a second opinion at a phone and a laptop.
+# WebKit reads a page as the sweeps read one once its script has run
+# (`SCRIPTED`), as HQ is read in Safari; another engine is a second opinion
+# at a phone and a laptop.
 SECOND_OPINION_AT = (PHONE_SCREEN[0], WIDE)
 THEMES = ("light", "dark")
 # A page the policy refuses a style element on, answered as HQ answers one,
@@ -57,7 +57,7 @@ THEMES = ("light", "dark")
 _REFUSED = "/example-refused/"
 _STYLED = '<!doctype html><html><head><meta charset="utf-8"><style>p { color: red }</style></head><body><p>Example</p></body></html>'
 # The API reference mounts a vendored viewer, whose markup is not HQ's to hold
-# to these rules; ReferenceBrowserTests holds only what HQ gives the page.
+# to these rules.
 _NOT_HQS_MARKUP = {"api_reference:reference"}
 # Reached from the header on every page rather than from the navigation.
 _HEADER = ("action_items",)
@@ -310,7 +310,7 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
         self.assertGreater(len(self.navigation), 10, "the navigation led almost nowhere")
         webkit = self.browser.browser_type.name == "webkit"
         for path in self.mine(self.navigation):
-            for width in with_wide_tables(WIDTHS, self.draws_a_table) if webkit else SECOND_OPINION_AT:
+            for width in SCRIPTED.at(self.draws_a_table) if webkit else SECOND_OPINION_AT:
                 with self.subTest(page=path, width=width):
                     self.visit(path, width)
                     found = self.geometry(path, width)

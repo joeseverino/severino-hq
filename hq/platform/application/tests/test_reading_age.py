@@ -207,7 +207,7 @@ class ReadingItemsCarryTheirAgeTests(SimpleTestCase):
         reads one holds every item it builds. An item drawn from no single
         reading says so with ``observed_at=None``. A row about what is wrong
         is a ``Finding`` (``dashboard.finding_rows``), so none may be held
-        here; the walk is still proven on ``container_findings.add``."""
+        here; the walk is still proven on ``container_findings._image_findings``."""
 
         modules = _modules()
         readers = _readers(modules)
@@ -224,7 +224,9 @@ class ReadingItemsCarryTheirAgeTests(SimpleTestCase):
 
         missing = sorted(f"{module}:{line}" for (module, line), aged in held.items() if not aged)
 
-        self.assertIn(("container_findings", "add"), readers, "the walk no longer follows an indirect reader")
+        self.assertIn(
+            ("container_findings", "_image_findings"), readers, "the walk no longer follows an indirect reader"
+        )
         self.assertEqual(missing, [])
 
 

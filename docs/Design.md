@@ -131,12 +131,15 @@ every navigation page.
 **No script builds markup.** What a script adds to a page is a `<template>`
 the server drew, in the partial that owns the region (a notice's tone in
 `_notice_frames.html`, an ask's pieces in `_ask.html#frames`, the messages'
-list in `_messages.html`, the live round trip in `_connection_loading.html`),
+list in `_messages.html`, the live round trip in `_connection_loading.html#frame`),
 cloned and filled through `textContent`. A row's open line a script adds is
 `{% open_line %}`, the line `table_tags` draws, so it is the same part. A
-script that clones a frame from anywhere on the page loads only through
-`templates/scripts/<name>.html`, which draws those frames beside its tag, so
-no page, a test's probe included, has the script without them.
+frame is drawn only where something can fill it: one that fills a part of a
+panel comes with that panel, and a tone no script clones is not drawn (the
+demo's info notice only in the saved copy). A script that clones a frame from
+anywhere on the page loads only through `templates/scripts/<name>.html`,
+which draws those frames beside its tag, so no page, a test's probe
+included, has the script without them.
 *Gates:* `lint:js`, which refuses `createElement` outside the API reference's
 viewer; `ScriptFrameTests`, that every frame a script clones is drawn, and
 that a script cloning from the page loads only through its part.
@@ -171,9 +174,10 @@ table. No width is computed in Python. A column whose values keep their line
 (a status, a figure, a row's controls, a date) is as wide as its widest
 (`inline-size: 1px` on its heading), and the columns that wrap share the rest
 as the browser shares it. Each column's share is its region's width over one
-more than the count of columns it shows (`--share`, tables.css: a column with
-nothing in any row, or one ranked to leave at the region's width, is not
-counted), the one more
+more than the count of columns it shows (`--share`, tables.css, over the count
+the region writes, `data-columns`: its headings, or in a table with none its
+widest row; a column with nothing in any row, or one ranked to leave at the
+region's width, is not counted), the one more
 kept for what a column asks past its share, and no column asks more than its
 share to hold a value whole, so the columns together never ask more than the
 region. A value longer than a line of words (`data-long` on its cell and
@@ -195,10 +199,19 @@ widest (`data-drop`, `table_cells`): its first rank leaves while the region is
 narrower than 64rem, its next below 56rem, and so on down to 24rem, by six
 container-query rules written once in tables.css. Nothing is measured, so a
 column may leave a box that could still hold it. What leaves shows on the
-row's open line. Below 36rem the table is in a narrow box (below). The gates
-fail a table that runs past its card. `test_a_table_keeps_its_promises_on_every_catalog_entry`
-holds every promise of this section on the table's catalog entries, in each
-engine, with script and without.
+row's open line. The gates fail a table that runs past its card.
+
+A table whose headings rank no column has its ranks derived by the region
+(`table_cells`), by the rule `ranked` follows, and lets them go only at the
+narrowest widths: its far column at the widest of them and its nearest below
+24rem, so it keeps every column until a narrow box and a hand-written table
+needs no rank of its own to fit a phone. A column holding a button stands,
+since a cell held back holds none. This is the column-priority pattern of
+jQuery Mobile's and Tablesaw's column toggle (six priorities, each shown from
+a set width, the columns with none persisting) rather than their reflow mode,
+which stacks each cell under its label: at every width a table is a table,
+its naming column and the columns it keeps side by side under their
+headings. Below 36rem the table is in a narrow box (below).
 
 What is marked `narrow-only` shows in a narrow box alone: a few words in the
 cell that names the row, standing in for the columns that left (the audit
@@ -228,11 +241,10 @@ the section or card around a table is one already, often by the same name.
 *Gates:* `test_a_region_that_scrolls_is_a_stop_named_for_its_table`,
 `test_a_section_and_the_table_in_it_are_one_landmark`. A pane (`pane=True`) is
 as tall as its rows up to a fixed reading height, as the topology ledger is,
-and scrolls past it. A table is never swiped through: in a narrow box it
-stacks (below). A column of words every row must
-show, such as a change's two sides, takes no rank
-(`{% table_heading ... beneath=True %}`), since a rank would hide it behind
-the row's toggle.
+and scrolls past it. A table is never swiped through: in a narrow box its
+ranked columns have left. A column of words every row must show, such as a
+change's two sides, is a `key-col`, which takes no rank, since a rank would
+hide it behind the row's toggle.
 
 A key/value table (row headers, no `thead`) sizes its label column to its
 longest label.
@@ -252,7 +264,12 @@ row's record ends the row as `{% row_actions actions %}`, under a heading of
 kind `control`. Each is a `PageAction` drawn as a compact control with its
 middle on the first line's. A page never draws a button in a cell (*Gate:* the
 `hand-drawn-row-actions` rule). A row's controls stand side by side on one
-line, which their column asks for, and the words beside them wrap first.
+line, which their column asks for, and the words beside them wrap first. The
+line is held to the room the column is sure of, its own share and the one kept
+spare (`cell-controls`, `table_cells`); past it, or where the table has less
+room than its columns ask, the controls wrap between them: their column asks
+for no more than its widest control, so no row of controls holds its table
+wider than its region.
 Every row's controls end on one edge, and each draws its edge of its own but
 the last, which is quiet only when it sets the row aside (`put_away`, a
 button). A cell of the row's actions is a control whatever its heading says.
@@ -266,34 +283,26 @@ row: its list of columns (`.row-columns`) is drawn only while one of its
 entries is, so a row with nothing gone opens to its controls alone and no
 empty box. *Gates:* the survey's `rows unruled` and `empty panels`.
 
-**A table stacks in a narrow box.** Below 36rem of its region (the
-`table-region` container query in tables.css) each row is a wrapping line of
-blocks: the row's name first, each other cell on a line of its own under its
-column's name, which the region writes on the cell (`data-label`,
-`table_cells`) and the cell draws before its value; a column a row fills a
-field in is a column of values, so its cells carry the name under any kind,
-and a row of choices still says whose each one is. The heading row stays
-above, its sort controls wrapping on one line. The rule that stacks sets
-`display` inside `:where()`, so whatever hides a part (a ranked column, a
-blank cell, a closed row's open line, a folded row) still wins without a
-second rule. Nothing is measured and no table opts in or out but a chart's and
-a table of marks, which keep their grid. *Gate:* `tables` in the layout
-survey, which fails a stacked cell drawn without its column's name, and
-`values named`, which fails a stacked field's column drawn without it.
+**A narrow box keeps its table a table.** Below 36rem of its region (the
+`table-region` container query in tables.css) every ranked column has left
+for the row's open line, and what stands keeps the browser's table layout:
+the naming column, a row's state, its controls, a field it fills in and any
+`key-col`, each under its heading. A state keeps its line, so beside one each
+other column leaves a rank sooner, and below every rank's width (20rem) the
+state goes to the open line last. *Gates:* `tables` in the layout survey,
+which fails a table not laid out as one, and the survey's `row state kept`.
 
-**A row's controls leave a narrow box for its open line.** The region marks
-every cell of a column of the rows' controls, its heading included,
-`data-narrow`: a row's actions, or a column of kind `control`. In a narrow box
-that column leaves as a ranked column does, and each row's open line shows a
-copy of its controls (`.row-controls`), side by side at a target's size and
-wrapping where the line is full. The row's toggle is how a reader reaches
-them. The copy draws no id (`table_cells.without_ids`), so none is drawn
-twice. A field a reader fills in (a select) is the row's value: a copy would
-send it twice, so a column holding one never leaves, and in a cell it fills
-its cell and gives way with its column. The reader's way to set a row aside
-(`row_actions put_away=`, the queue's Dismiss) is the last of its buttons,
-drawn quiet. *Gates:* the survey's `row actions beside squeezed words` and
-`row actions behind the toggle`, and `test_row_controls.py`.
+**A row's controls are a column of the table.** The rows' actions, or a
+column of kind `control`, stand at every width beside the row's words, every
+one in the row's cell (`{% row_actions %}`, with its order and mark). They
+stand side by side and wrap between them only where the row runs out of
+room. A label keeps one line, cut at its end where its column has less room
+than it asks, so no control holds its table wider than its box. A field a reader fills in (a select) is the row's value, so a
+column holding one never leaves, and in a cell it fills its cell and gives
+way with its column. The reader's way to set a row aside (`row_actions
+put_away=`, the queue's Dismiss) is the last of its buttons, drawn quiet.
+*Gates:* the survey's `row actions beside squeezed words`, and
+`test_row_controls.py`.
 
 A pill is as wide as its words wherever it stands, in a cell alone or beside
 words, and is one box: a pill longer than its column wraps inside its own
@@ -330,23 +339,34 @@ class of the page's:
   links weigh more.
 
 **Opening a row moves no column.** An open row keeps its cells as they were,
-but for a clamp in a narrow box, which it releases in place. What it holds
-back stands on the line the server draws after it (`tr.row-detail`,
-`table_tags._detail_row`), whose content asks its columns for no width: its
-controls where they left it, the blocks it moves there, then an entry for
-each cell that holds something back, a copy under its column's name. A copy
-says when it shows: where its column has left (`data-drop`), in a narrow box
-(`data-narrow`: a `narrow-more` part), or always (a part the row never
-shows). So every column keeps its edges and every other row its height. *Gate:*
+but for a clamp, which it releases in place, and, in a narrow box, its
+`narrow-more` parts, which it shows in place, each on a line of its own that
+asks its column for no width. What it holds back
+stands on the line drawn after it (`tr.row-detail`), whose content asks its
+columns for no width: the blocks the server moves there, then an entry for
+each cell that holds something back, under its column's name. So every
+column keeps its edges and every other row its height. *Gate:*
 `test_opening_a_row_moves_no_column_and_no_other_row`.
+
+The server writes each cell once. The browser's table layout cannot set a
+cell on a line beneath its row, so tables.js copies what the row holds back
+onto that line as the row first opens (or as it arrives drawn open), from the
+one frame the region draws (`template[data-open-line]`): each cell of a
+ranked column, shown where its column has left (`data-drop`), and each cell
+holding a part only the open line shows (`row-more`, `line-rest`), shown
+always, what the row's line already shows of it only once its column has
+left (`data-row-shows`). A copy draws no id twice. A cell held back holds no
+control, which a copy would draw twice: the region refuses one, so a button
+stands in place or moves whole (`row-below`). *Gates:*
+`test_table_once.py`: `test_a_row_writes_each_cell_once`,
+`test_a_cell_held_back_holds_no_control`, and the byte budgets `ROW_BYTES`
+and `CHROME_BYTES`.
 
 - A `row-below` block, which the row's line never shows, and the row's editor
   are moved into a line the server draws after the row (`tr.row-detail`,
   `table_tags._detail_row`), shown while the row is open: the blocks first,
   then each labeled block under its label. A row holding a block says so on
   its `tr` (`data-below`), which shows its toggle.
-- A narrow part also marked `row-later` waits for the open row at any width,
-  and its row opens at any width for it: a row's buttons past the first few.
 - A table whose line is the rest of what a row says and does
   (`data-line="flat"` on the table) draws it flat: one column on no panel,
   the buttons of its parts side by side, and on a phone each the line's
@@ -364,10 +384,10 @@ it, last in the row's cell under the heading that keeps the gutter
 a toggle written by hand there is refused. Only a table with no headings to
 name its gutter draws its own (`{% row_toggle %}`), last in its cell, outside
 the cell's clamp and its copy. It shows only where opening the row shows
-something now: an entry whose column has left or whose narrow box holds, a
-`row-later` or `row-below` part, a part the row never shows, a clamp in a
-narrow box, or a fold. A value held by its clamp on a wide line is whole in
-its cell's title there, so it opens no row on a wide line.
+something now: a cell whose column has left, a `narrow-more` part in a
+narrow box, a `row-below` part, a part the row never
+shows, a clamp in a narrow box, or a fold. A wide box clamps nothing, so
+a row owes no toggle there for a long value.
 
 A run of short parts in a cell (a project's technologies, what a connection
 reads or reaches) is `{% line_list values as value %}…{% endline_list %}`, with
@@ -426,13 +446,17 @@ beside its declaration.
 *Gate:* `lint:css` (`cutText` in `tools/lint/stylelint.config.mjs`), and the
 layout survey's `cut and closed`, `cut when open` and `cut beside room`.
 
-A long value in a cell (a line past `table_cells.LONG`) wraps and is held to
-its third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole
-value in its cell's title (written by the server). Only words are held: each
+A long value in a cell (a line past `table_cells.LONG`) wraps, and in a
+narrow box is held to its third line by a clamp with its mark (`.cell-clamp`,
+cuts.css), its whole value where its row opens; a wide box holds it whole. A row with no toggle (a table with
+no gutter heading, a fold's head) clamps nothing, so its value wraps whole,
+and no cell carries its value again as a title. Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
-toggle beside them stays whole. A value of words of 32 characters at most
+toggle beside them stays whole, and a cell holding such parts is the clamp
+itself, with no box drawn around them. A value of words of 32 characters at most
 (`table_cells.SHORT`: an address and its port, a host, a project's name) is
-one box (`cell-short`) as wide as the value up to its column's share, and as
+one box (`cell-short`, the value's own list where it is one) as wide as the
+value up to its column's share, and as
 wide as its column where that is more, so its column holds it whole while the
 table is laid out as one, and past its share it wraps inside its box. Its
 column still asks for the value whole (`calc-size` holds only the share as
@@ -447,7 +471,7 @@ as wide as it is.
 An identifier the row is read by, in a row of many columns (a container's
 image), is `code.cell-whole`, and what a row's buttons decide (a queue row's
 detail) is a `cell-whole` the clamp never holds. A value told in several parts marks each
-`cell-part`. A description cut to a preview is a `.table-clamp`.
+`cell-part`.
 
 A few words that read wrong split (an age, a hyphenated word) are one `.whole`,
 the box `|breakable` gives each part of a name, or a `.nowrap`. A line that
@@ -460,11 +484,12 @@ What each part of a cell is decides how it wraps, and the region marks it
 wraps on that mark, never on a page's class or a cell's tags. The bold a cell
 leads with, or its leading link's, is the row's `name`; free text (a message, a
 record's words) is declared `cell-data` and marked `data`; what a row means in
-words is declared `cell-prose`. A context line is `{% muted %}`. A row's
-name set in one line with its controls (a star, a move) is a `.name-line`,
-where the name is cut rather than wrapped. A service's star and the pair that
-moves a favorite are one part, `control_plane/_service_pin.html` (*Catalog:*
-`part/service-pin`). A table written later sets as every other does by writing
+words is declared `cell-prose`. A context line is `{% muted %}`. A row's own
+arrangement (a favorite's star, the pair that moves it) is no part of the cell
+that names the row: `{% row_actions mark=... order=... %}` draws it first in
+the row's controls column, the star last of the two, a `RowMark` and a `RowOrder`
+(`application.pages`), so the table sizes and counts it and the name keeps its
+column's whole line (*Catalog:* `part/row-arrangement`). A table written later sets as every other does by writing
 those, and `lint:css` refuses a table primitive rule that tells a cell's part
 by anything else. Free text breaks a run with no seam in it (a link, a digest)
 wherever it must, so it never holds its column wider than its box. An
@@ -518,27 +543,52 @@ its own cells (not a dialog a cell opens, not its note) and takes the tracks
 for that count, two to six (`--tracks-2-1` up to `--tracks-6-3-1`). A lone
 cell takes the band, so no page says how many it holds.
 
-A part that draws a band marks its box `data-band` (the stats, insights
-and reading ages), and the one band rule in `css/app/figures.css` draws
-every one; its cells keep their own padding. Too narrow for two cells, a band reads as a list:
-label left, value right.
+A part that draws a band marks its box `data-band` (the facts and the
+insights), and the one band rule in `css/app/figures.css` draws every one;
+its cells keep their own padding. Too narrow for two cells, a band reads as a
+list: label left, value right.
 
-A band of facts draws no rule between them and counts nothing. Its facts share
-its width in equal tracks, as many to a row as keep each at least `--fact-min`
-wide. So a few facts spread across a wide card rather than collecting at its
-start beside an empty end, and past that they wrap. That floor lets a narrow
-band hold fewer facts to a row, and the facts of a row still share their lines.
-Four facts are one row or two of two, never three beside one alone. Standing alone the band is a
-surface with its own inset. In a card or a section, the frame's padding is its
-inset. Under 27.5rem it reads as a list, each fact laying out its own rows.
+A band of facts is every run of small labeled figures: a page's status
+facts, its headline figures, a forecast's hours, the dashboard's glance. Its
+cells are sized by what they hold: a wrapping row where each cell starts at
+its own widest line, a row's cells share the room left over, and a cell takes
+the next row only when the band has no room for it. So a label wraps only in
+a band too narrow for it on one line. Each cell is its own stack, top-aligned,
+its value right under its label, no taller than what it holds; a ragged line
+across cells is better than a gap inside one.
+
+A band draws no box of its own: a box is the card around it
+(`{% card element="div" %}`), so a band outside a card draws none. A card
+holding the band alone is its frame and nothing more: its facts keep their own
+padding and draw their edges as every band does. Anywhere else (a section's
+body, a card holding more, the page's ground) the facts stand apart by a gap
+(`--band-gap`) with no edges (`--band-rules`), their words at the content's
+edge.
+
+A fact is drawn as a figure is: its label with its mark before it, its value
+large under it, its detail under that. What a figure counts may follow it in
+a `<small>` ("9 containers"), in the label's voice. A link in a value is the
+value's ink, underlined only under the pointer and the focus, its fact tinted,
+so only a toned fact's value is colored. `size` sets the values: `small`, an
+even grid of small centered figures read across, as a forecast's hours are,
+a note under one marked; `regular`, status facts; `large`, the headline
+figures a page is read for; `lead`, headline figures led by the first, which
+stands larger and on a row of its own where the band has no room for it
+beside them. Given `items` (each a `Kpi`), the band draws each as its fact.
+A fact's `drawing` is drawn beside its value or under its detail. Given
+`{% heading %}`, `{% panel %}` and `{% foot %}` parts and an `id`, its value
+is the button that opens the panel in place, as a menu does, and each
+`data_*` option is its attribute, so a fragment region in the band holds
+facts refreshed in place as its own (`core/_dashboard_glance.html`). Under
+24rem a band reads as a list, each fact a row of its own; small figures keep
+their grid, and a lead its figure on a row of its own.
 
 Every label and its value is a fact: `{% fact "Label" value=n url=...
 detail=... %}` inside `{% facts %}`, or the block form `{% fact "Label"
 %}markup{% detail %}lines{% endfact %}` for a value that is markup. A band (`{%
 facts layout="band" %}`) is the few facts that sum up a page or a part, each a
-cell with its icon, its label over its value over its detail. The facts of a
-row share their lines, so every value stands on one baseline, a zero beside a
-linked count alike. A list, the default, is the facts about one thing, each
+cell with its label and mark over its value over its detail. A zero and a
+linked count stand alike. A list, the default, is the facts about one thing, each
 label beside its value. It lays as many pairs to a row as keep each a short
 label and a short value wide, so a few short facts fill a wide frame rather
 than stacking down its start. The pairs of a row share their columns, and a
@@ -559,9 +609,9 @@ address is a link whole. A fact's detail is running words. Its lines are the
 ones its markup declares: a `<small>` each, or a `detail=` given as a list.
 What a fact holds past its lines (its record list, a disclosure of what runs
 now) follows them in the detail, so a page's summary cards are a band of facts
-too, never a grid of its own. A fact drawn by hand (a page's own band) is
-refused by the `hand-drawn-facts` rule, and so is a figure set bold apart from
-the words that count it.
+too, never a grid of its own. A fact drawn by hand (a page's own band) writes
+the part's classes, which no page may, and a figure set bold apart from the
+words that count it is refused by the `hand-drawn-split-count` rule.
 
 What names a value (`.fact-label`, a tile's label, a `<dt>`) is sentence case
 in the muted voice. Words in that voice anywhere else (a context line beside
@@ -587,7 +637,6 @@ A run of whole parts read across one line (a fact's links, a row's context
 line, a band's details) is `{% dot_list %}`, each part an `<li>`, with
 `muted=True` for one said quietly. The stylesheet draws the dot in the gap
 before each part, so no template writes a separator and no line opens on one.
-*Gate:* `hand-drawn-dot-list`.
 `below="Label"` makes it a block the open row shows under that label.
 
 A block of code to paste somewhere else (a container's compose change) is `{%
@@ -610,14 +659,9 @@ as Jobs draws a run's Cancel button (`automation_runs.cancel_action`); a
 section none of whose rows has one draws no column for them. *Catalog:*
 `part/run-evidence`.
 
-A row of readings beside a page's title is `{% readings %}`, each
-`{% reading icon=... %}`: its mark, its figure, its quiet lines
-(`{% lines %}`, a `<strong>` part in the attention tone) and a note on how it
-stands (`{% note %}`, `note_tone` "attention" or "stale"). A reading leads to
-its `url`, or opens a `{% panel %}` in place under its `id`; `tone` takes the
-status vocabulary, and each `data_*` option is its attribute, so a fragment
-region in the row holds readings refreshed in place as the row's own. The row
-is one line when each has room and a list when not.
+A band of facts beside a page's title (the dashboard's glance) stands on the
+page's ground: beside the title while its facts fit there, and on a line of
+its own under it, from the page's edge, where not.
 
 The facts a page states on its title's line (a record's state, a machine's
 addresses) are `{% title_meta %}`, written by the template its view names as
@@ -693,8 +737,6 @@ label, help, errors and required mark come with it; one posted with a button
 outside the form names that form in its widget's `form` attribute. A row of
 buttons that stands on its own (a confirmation's, a card's decisions, a page's
 way on) is `{% button_row %}`, which the closing row draws through too.
-*Gate:* `lint:ast-grep` (`hand-drawn-field.yml`), which refuses a `field` or
-`form-actions` class written in a template.
 
 A form that asks one question is one visible field of a line (words, a number,
 a date, one choice) closed by its verb alone. It draws its button on the
@@ -1088,7 +1130,7 @@ notes) is `partials/_linked_text.html`, over the text's runs that
 `application.where_it_runs.named_links` finds: each name a link as every
 mention is, and its line breaks kept.
 
-Numbers are never chips: a figure stands in a KPI cell, a numeric column or a
+Numbers are never chips: a figure stands in a band of facts, a numeric column or a
 sentence (`hq/platform/core/tests/test_template_chips.py`). One that carries a
 state says it in ink, as `.figure` with its tone class
 (`<span class="figure tone-attention">`).
@@ -1326,12 +1368,8 @@ with no script every row shows all of it. The line beneath holds, in order:
 - the reason it cannot be done from here, as a sentence and never as a step;
 - the pages that help look into it (`Insight(links=...)`), the topology's as
   icons with HQ's tooltip;
-- the buttons past the first two, in one place under the rest.
 
-In a narrow box (a phone, or a narrow card on a wide screen) the row's
-buttons leave for its open line, as every table's row controls do (A row's
-controls leave a narrow box for its open line), and its toggle shows that it
-opens. The survey holds "words swapped for a glyph".
+The survey holds "words swapped for a glyph".
 
 The word is `partials/_urgency_pill.html`. A Cmd- or Ctrl-click on it opens
 what raised it, read from the code rather than written down. That is the finding rule,
@@ -1514,19 +1552,18 @@ what the items carry (`hq/platform/application/action_items.py`), so a domain th
 raising items has its section without being listed anywhere.
 Filters that match nothing offer a way back; they never imply a healthy estate.
 
-**Overview figures have a hierarchy.** The shared KPI partial accepts
-`featured=True`: a four-fact overview leads with its contributor's first fact,
-then the three supporting facts together. Values, context and links render
-once from the KPI collection. Other counts keep their even band. Overview cards fit their available width, placing three domains
-side by side when space permits; empty contributors take no space.
+**A band's values are one size.** A domain's overview is a band of facts
+at `size="large"`, every figure the same size, in its contributor's order.
+Values, context and links render once from the `Kpi` collection. Overview cards fit their
+available width, placing three domains side by side when space permits; empty
+contributors take no space.
 
-**A figure may be drawn as well as said.** `Kpi` takes one `drawing`, or none:
+**A figure may be drawn as well as said.** `Kpi` (and `{% fact %}`) takes one `drawing`, or none:
 
 - `Dots`, a part of a whole, one dot each. `Dots.of(filled, whole)` when the
   parts are only a count; `Dots((Dot(...), ...))` when each is something with a
-  page of its own, which then names itself when pointed at and links there. The
-  figure's own link moves from the cell to its value, since a link cannot hold
-  links. Past six, dots stand in even rows at most four wide. Where the column
+  page of its own, which then names itself when pointed at and links there,
+  beside the figure's own link on its value. Past six, dots stand in even rows at most four wide. Where the column
   has no room for them beside the value they take the line under it, so a
   figure's dots never reach the figure beside it (the survey's
   `into a neighbor`). Past a dozen, dots are a texture and
@@ -1547,23 +1584,6 @@ already say, so the words stay, and one that is only decoration is not
 announced. Nothing is drawn against a measure the domain does not have: a date
 that runs out shows the date, not a bar across an invented span.
 
-In a card, a row of figures shares its lines: labels start level and values
-stand level however a label wraps, and a label wraps beside its mark, never
-under it.
-
-A figure with a page reads as one target by its tile: in any figure grid the
-tile tints under the pointer and the focus, and its label and value are never
-underlined. One whose value is its link tints the same while the value is
-pointed at or focused. In a card or an overview the tint reaches into the gap
-as a shadow, so nothing moves, and a lead that spans the frame tints a band
-across it.
-
-A run of small figures read across, as a forecast's hours are, is a tile
-strip (`partials/_tile_strip.html`), each a `StripTile`
-(`application.drawings`): what it is of, the figure, and a `note` said only
-when something stands out, and then marked. As many tiles stand to a line as the box holds, the rest on
-the lines under them.
-
 A ranked list of shares, as the pages and sources of a site's traffic are, is
 a share list (`partials/_share_list.html`): each row its label and figure on
 one line over a bar of its size against the largest row's, so a long tail
@@ -1571,13 +1591,10 @@ still reads apart. The bar is a `<meter>`, and a label past its line is cut,
 whole on hover.
 
 A figure that is itself a change takes `tone`, a status tone its value is drawn
-in, featured or not, so a rise and a fall never read alike. A figure that is a
+in, at any size, so a rise and a fall never read alike. A figure that is a
 level says how it moved in its line, which takes `detail_tone` the same way.
 `detail_url` links the line where it counts things with a page of their own
-("12 expenses"). It needs a `detail`, since a link is said by its words, and
-like dots or legend rows that lead on it moves the figure's own link from the
-cell to its value. The three supporting figures of a featured row size their
-values to their own column, so amounts never run into each other on a phone.
+("12 expenses"). It needs a `detail`, since a link is said by its words.
 
 **A saved copy never says "you" about someone else.** Anything that describes
 the reader's own connection includes `partials/_example_connection.html`. On a live
@@ -1789,6 +1806,13 @@ download, a dialog or a region answered in place.
 *Gate:* `hq/platform/core/tests/test_speculation.py`, which prefetches every
 page and fails on one that writes.
 
+A GET to a route that answers only POST is refused and writes nothing, from
+an operator, from somebody signed out, and from an agent's token where the
+route takes one.
+*Gate:* `GetHasNoEffectTests` in
+`hq/platform/application/tests/test_rendered.py`, which sends that GET to
+every route, an installed extension's included.
+
 **A control is big enough to hit.** A target is hit through at least 24 by 24
 CSS px (`--target-min`, WCAG 2.5.8 Target Size Minimum). That counts the area
 its `::before` or `::after` hangs over the space beside it. A control drawn
@@ -1888,9 +1912,9 @@ Alignment:
 - A chip, a change's two values and a band's facts sit on the baseline of the
   line they share, and a box set in a line that cuts what it holds is set by
   its top.
-- A band of readings or choices lays out as whole even rows, and each of its
-  cells keeps its padding; so does any filled box. A band of facts shares
-  its width in equal tracks.
+- A band of insights or choices lays out as whole even rows, and each of its
+  cells keeps its padding; so does any filled box. A band of facts sizes its
+  cells by what they hold.
 - A form fills its rows, controls in a row share one height, a wrapped bar of
   controls fills its rows, and a section of queue cards ends its buttons at
   one edge.
@@ -1902,8 +1926,8 @@ Alignment:
 - A frame across the page is filled by what it holds.
 - What reads as one unit (a state, a time, a part of a value, a control's
   label) does not wrap.
-- The dashboard's readings are one shape: each mark beside its lead, every
-  lead one size, every second line at one depth.
+- A band's values are one size, and a drawing beside one never sets its
+  cell's width.
 
 Decoration:
 
@@ -1924,11 +1948,12 @@ Decoration:
 1. Find the primitive. Most pages are a head, a band or card of facts, and a
    table or list.
 2. If one almost fits, extend it in its sheet and its partial, with a comment
-   saying what it covers and why. A page writes no class of its own: only
-   CLASSES and the classes of a shared part, one under `templates/partials/`
-   that code or two pages draw. A widget drawn once in the product is drawn
-   from those, or named with its reason in `hand_rolled.ONE_OF_A_KIND`, a
-   list that only shrinks.
+   saying what it covers and why. A page writes only the public classes
+   (`template_contract.public_classes`: the layout classes and each part's
+   `public_classes`), as an extension does. Every other class is one part's
+   own, declared on its `Part` (`classes`), and reaches a page only through
+   that part; a part drawn with no tag is a `Part` in
+   `hq/platform/core/included_parts.py`, a widget drawn once included.
 3. A new container of content is a surface: add its selector to the surface
    list, write only its layout.
 4. A new state of a page (empty, failing, waiting, crowded) gets a fixture in
@@ -1942,8 +1967,12 @@ Decoration:
    catalog's `__init__.py` and listed in `test_browser_probes.py`'s `MODULES`.
    The entry is drawn through the part's own partial or tag, and held by the
    whole survey. An entry whose state is not on the page by itself says so as
-   its premise. An entry is drawn without script, so a table entry is held
-   by every check but those declared `scripted`, and may scroll in its region.
+   its premise, a finding of the survey wherever the entry is read. An
+   entry's page loads HQ's scripts, and the gate holds it
+   as the server drew it and once they have run, with every row a reader
+   can open opened and its tables read at every width. Without script a
+   table entry is held by every check but those declared `scripted`, and
+   may scroll in its region.
 6. Run `mise run check` and `mise run browser`, then look at the page at a phone,
    a tablet and a desktop width (`mise run dev:look`), against the rules held
    by eye. The gates catch classes of mistakes; they do

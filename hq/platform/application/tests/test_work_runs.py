@@ -139,12 +139,13 @@ class OneListTests(WorkRunsTestCase):
     def test_a_job_s_row_is_its_standing(self):
         from ..work_runs import standing_of
 
-        self.job(JobState.FAILED, error="The registry lists nothing.")
+        said = "Two hosts refused the change.\nRetry after the maintenance window."
+        self.job(JobState.FAILED, error=said)
 
         (row,) = self.listed()
 
         standing = standing_of(row)
-        self.assertEqual((row.word, row.note), (standing.label, "The registry lists nothing."))
+        self.assertEqual((row.word, row.note), (standing.label, said))
         self.assertEqual(row.tone, JobState.FAILED.tone)
 
     def test_a_held_run_is_not_listed(self):

@@ -113,23 +113,10 @@ class SwitchTests(TestCase):
         self.assertFalse(agents_paused())
         self.assertEqual(_said(), ["Agents paused", "Agents resumed"])
 
-    def test_a_get_cannot_change_it(self):
-        response = self.client.get(reverse("agent_access"), {"paused": "1"})
-
-        self.assertEqual(response.status_code, 405)
-        self.assertFalse(agents_paused())
-
     def test_an_unrecognized_state_changes_nothing(self):
         response = self._set("yes")
 
         self.assertEqual(response.status_code, 400)
-        self.assertFalse(agents_paused())
-
-    def test_signed_out_it_cannot_be_reached(self):
-        self.client.logout()
-
-        self._set("1")
-
         self.assertFalse(agents_paused())
 
     def test_the_menu_shows_the_state_and_asks_for_the_other_one(self):

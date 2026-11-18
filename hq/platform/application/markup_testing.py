@@ -199,7 +199,7 @@ def within(html: Page, attribute: str, value: str | None = None) -> list[Element
             return True
         return value in ancestor.classes if attribute == "class" else ancestor.attrs[attribute] == value
 
-    return [element for element in _shown(html) if any(holds(ancestor) for ancestor in element.ancestors)]
+    return [element for element in _page(html).elements if any(holds(ancestor) for ancestor in element.ancestors)]
 
 
 def links(html: Page) -> list[tuple[str, str]]:

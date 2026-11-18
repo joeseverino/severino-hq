@@ -1,10 +1,10 @@
-"""The shapes the host's own resources answer in: each list's row and each record.
+"""The shapes the host's own resources answer in: each list's item, row and record.
 
-A row is what a list read keeps of each item unless the caller names its own
-fields, so its keys are the kind's ``list_fields``; a record is what a read of
-one answers, and extends the row where it is the item itself. The API document
-types each read by them, and a test holds every answer on the showcase data to
-its type. Each part of a record HQ builds is a type here too, so every object
+An item is one entry of a list whole, and a list answers no key beside it; a
+row is what a list keeps of each item unless the caller names its own fields,
+so its keys are the kind's ``list_fields``; a record is what a read of one
+answers. The API document types each read by them, and a test holds every
+answer on the showcase data to its type. Each part of a record HQ builds is a type here too, so every object
 the API document writes names its fields; a part in its source's own shape is
 ``AsRead``.
 
@@ -18,7 +18,16 @@ from hq.domains.control_plane.models import OperationRequest
 from hq.domains.control_plane.observations.contract import READERS, READING_FACETS
 from hq.domains.control_plane.provider_adapters.contracts import REFUSALS
 
-from .answer_fields import AsRead, ObservedAt, Since, UpdatedAt
+from .answer_fields import (
+    AsRead,
+    DateTime,
+    LinkedAssets,
+    LinkedProjects,
+    ObservedAt,
+    RecordedExpenses,
+    Since,
+    UpdatedAt,
+)
 from .conditions import DEGRADED, DRIFTED, READY
 from .credential_sight import STATE_LABELS
 from .describe import Describe, listed
@@ -35,15 +44,22 @@ from .documentation import (
     ObsidianPath,
 )
 from .entity_links import EntityLink
+from .finding_steps import WrittenCheck, WrittenReason, WrittenSteps
 from .json_schemas import Written
+from .path_model import Certificate, Evidence, HopCheck, HopSource
 from .plugins import ATTENTION_ORDER
 from .record_fields import Notes, PublishedAt
 from .services import HQ_MARK, OBSERVED_MARK
-from .standards import Standing
+from .standards import INTENDED, Standing
 from .tone import Tone
+from .topology_model import RelationGroup
 from .ui import ended
-from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE
+from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE, Blocker, UpgradeStep
+from .whereabouts import Origin
 from .workflows import WrittenAction
+
+# What stands in the way of an upgrade, as ``Blocker`` says it.
+WrittenBlocker = Annotated[dict[str, Any], Written(Blocker)]
 
 # What a container row and a machine's list of its containers say alike.
 type ComposeProject = Annotated[str, Describe("The compose project it belongs to; empty for one started on its own.")]
@@ -74,8 +90,10 @@ type OperationAction = Annotated[str, Describe(ended(f"What it does: {listed(Ope
 type OperationState = Annotated[str, Describe(ended(f"Where it stands: {listed(OperationRequest.State.values)}"))]
 type RequestedActor = Annotated[str, Describe("Who asked for it, by the name HQ knows them by.")]
 type RequestedInterface = Annotated[str, Describe("Which door it was asked through, such as `api` or `web`.")]
-type AskedAt = Annotated[str, Describe("When it was asked for, an ISO 8601 date-time.")]
-type CompletedAt = Annotated[str | None, Describe("When it finished, an ISO 8601 date-time; null until it has.")]
+type AskedAt = Annotated[str, DateTime(), Describe("When it was asked for, an ISO 8601 date-time.")]
+type CompletedAt = Annotated[
+    Annotated[str, DateTime()] | None, Describe("When it finished, an ISO 8601 date-time; null until it has.")
+]
 type AttemptCount = Annotated[int, Describe("How many times a controller has tried it.")]
 
 
@@ -178,17 +196,6 @@ class ManagedResourceRecord(TypedDict):
 # ----- Services and paths -----------------------------------------------------
 
 
-class OriginPart(TypedDict):
-    """Where a request for the name is finally served, and what serves it there."""
-
-    address: Annotated[
-        str,
-        Describe("Where a request for the name is finally served: the address a proxy forwards to or a record names."),
-    ]
-    host: Annotated[str, Describe("The machine at that address; empty when it matches none.")]
-    container: Annotated[str, Describe("The container serving it there; empty when none is known.")]
-
-
 class ServiceRow(TypedDict):
     hostname: Annotated[str, Describe("The service's hostname, which a read of one names it by.")]
     status: Annotated[
@@ -199,7 +206,7 @@ class ServiceRow(TypedDict):
         ),
     ]
     status_label: Annotated[str, Describe("The service's health in the words its row shows, such as `Working`.")]
-    origin: OriginPart | None
+    origin: Annotated[dict[str, Any], Written(Origin)] | None
     project: Annotated[str | None, Describe("The name of the project published at this name; null for none.")]
     faults: Annotated[list[str], Describe("What is not set up right, each a sentence; empty when nothing is.")]
 
@@ -233,27 +240,8 @@ class ServiceItem(ServiceRow):
     ]
 
 
-class HopSourcePart(TypedDict):
-    """Where HQ read a hop: a reading, or HQ's own record."""
-
-    kind: Annotated[str, Describe("The type of the reading or record it was read from.")]
-    label: Annotated[str, Describe("That type, in words.")]
-    connection: Annotated[str, Describe("The connection the reading came through; empty for HQ's own record.")]
-    observed_at: ObservedAt | None
-    declared: Annotated[
-        str, Describe("The key of HQ's record it comes from, when HQ holds it rather than reads it; else empty.")
-    ]
-
-
-class CertificatePart(TypedDict):
-    role: Annotated[str, Describe("What the certificate is at the hop, such as the edge's or the origin's.")]
-    name: Annotated[str, Describe("The name the certificate is for; empty when not read.")]
-    issuer: Annotated[
-        str, Describe("Who issued it, or 'uploaded' for one uploaded to the proxy that serves it; empty when not read.")
-    ]
-    expiry: Annotated[str, Describe("When it runs out, as read; empty when not read.")]
-    source: Annotated[HopSourcePart | None, Describe("Where HQ read the certificate; null when nothing says.")]
-    unread: Annotated[str, Describe("Why HQ cannot say what certificate the hop presents; empty when it can.")]
+# Where HQ read a hop, as ``HopSource`` says it.
+WrittenSource = Annotated[dict[str, Any], Written(HopSource)]
 
 
 class OverlayPart(TypedDict):
@@ -261,61 +249,33 @@ class OverlayPart(TypedDict):
     link: WrittenLink | None
 
 
-class HopCheckPart(TypedDict):
-    state: Annotated[
-        str,
-        Describe(
-            ended(
-                f"Whether the request agrees with the readings at the hop: {listed(Standing)}, "
-                "the last when the request does not show it"
-            )
-        ),
-    ]
-    label: Annotated[str, Describe("That, in the words the hop shows.")]
-    detail: Annotated[str, Describe("What the request showed beside what was read.")]
-    step: Annotated[str, Describe("What you do to settle a disagreement; empty for none.")]
-
-
-class EvidencePart(TypedDict):
-    label: Annotated[str, Describe("What the request carried, such as a header or an address.")]
-    value: Annotated[str, Describe("Its value, as the request carried it.")]
-    detail: Annotated[str, Describe("A line on what HQ makes of it; empty for none.")]
-    role: Annotated[
-        str,
-        Describe("For an address the request was forwarded through: `judged`, `proxy` or `ignored`; else empty."),
-    ]
-
-
 class CheckPart(TypedDict):
-    id: Annotated[str, Describe("The check's stable id, such as `edge` or `identity`.")]
-    label: Annotated[str, Describe("The check, in words.")]
+    id: Annotated[str, Describe("The check's stable id, such as `edge` or `tailnet-lock`.")]
+    label: Annotated[str, Describe("What is true when it is met, in words.")]
     state: Annotated[
         str,
-        Describe(ended(f"Where it stands: {listed(Standing)}, the last when what decides it did not answer")),
+        Describe(ended(f"Where it stands: {listed((*Standing, INTENDED))}; the last is failed on purpose")),
     ]
-    detail: Annotated[str, Describe("Why it was decided so, in a sentence.")]
-    evidence: Annotated[str, Describe("The value it was decided from; empty for none.")]
+    limited: Annotated[bool, Describe("Met, with a limit the reader should see.")]
+    serious: Annotated[bool, Describe("Whether failing it lets someone or something gain reach.")]
+    detail: Annotated[str, Describe("Why it was decided so, or why it is failed on purpose, in a sentence.")]
+    evidence: Annotated[str, Describe("What it was decided from, or why HQ could not read it; empty for none.")]
+    why: Annotated[str, Describe("Why it matters, in a sentence.")]
+    fix: Annotated[str, Describe("How it is met, in a sentence.")]
+    read_with: Annotated[str, Describe("What would let HQ read a check it could not; empty for none.")]
+    read_with_url: Annotated[str, Describe("Where that is done; empty for none.")]
     boundary: Annotated[str, Describe("The security boundary it belongs to; empty for none.")]
     mechanism: Annotated[str, Describe("What enforces it; empty for none.")]
     rules: Annotated[list[str], Describe("The rules behind it, where what decides it has rules.")]
 
 
-class StandardCheckPart(TypedDict):
-    id: Annotated[str, Describe("The check's stable id, such as `tailnet-lock`.")]
-    label: Annotated[str, Describe("What is true when it is met, in words.")]
-    met: Annotated[bool | None, Describe("Whether it is met; null when HQ could not read it.")]
-    evidence: Annotated[str, Describe("What it was judged from, or why HQ could not read it; empty for none.")]
-    qualified: Annotated[bool, Describe("Met, with a limit the reader should see.")]
-    stops: Annotated[str, Describe("What it stops, as a clause.")]
-    remedy: Annotated[str | None, Describe("What would let HQ read a check it could not; null for none.")]
-    remedy_url: Annotated[str | None, Describe("Where that is done; null for none.")]
+class MeasurementPart(TypedDict):
+    """One subject against a standard: how many checks it meets, and each check."""
 
-
-class StandardPart(TypedDict):
-    advanced: Annotated[bool, Describe("Whether Advanced HQ Posture raises each unmet check as a finding.")]
     met: Annotated[int, Describe("How many checks are met.")]
+    measured: Annotated[int, Describe("How many checks HQ could read.")]
     unread: Annotated[int, Describe("How many checks HQ could not read.")]
-    checks: list[StandardCheckPart]
+    checks: Annotated[list[CheckPart], Describe("Each check that applies, in the standard's order.")]
 
 
 class ObservedPart(TypedDict):
@@ -323,7 +283,7 @@ class ObservedPart(TypedDict):
     name: Annotated[str, Describe("What answers for the hostname, by name.")]
     link: WrittenLink | None
     detail: Annotated[str, Describe("A line on what it does for the hostname; empty for none.")]
-    source: Annotated[HopSourcePart | None, Describe("Where HQ read it; null when nothing says.")]
+    source: Annotated[WrittenSource | None, Describe("Where HQ read it; null when nothing says.")]
 
 
 class RoutePart(TypedDict):
@@ -375,20 +335,28 @@ class HopRow(TypedDict):
     detail: Annotated[
         str, Describe("A line on what it does there, such as where it forwards; empty when there is nothing to add.")
     ]
-    source: Annotated[HopSourcePart | None, Describe("Where HQ read the hop; null when nothing says.")]
+    source: Annotated[WrittenSource | None, Describe("Where HQ read the hop; null when nothing says.")]
     certificate: Annotated[
-        CertificatePart | None,
+        Annotated[dict[str, Any], Written(Certificate)] | None,
         Describe("The certificate the hop presents, or why HQ cannot say; null when it presents none."),
     ]
     unread: Annotated[str, Describe("What HQ could not read about the hop, a sentence; empty when nothing is missing.")]
     overlays: Annotated[list[OverlayPart], Describe("What sits over the hop, such as an access gate.")]
     check: NotRequired[
         Annotated[
-            HopCheckPart,
-            Describe(f"Whether what the request showed here agrees with what was read. {_WALKED}"),
+            Annotated[dict[str, Any], Written(HopCheck)],
+            Describe(
+                "Whether what the request showed here agrees with what was read, its `state` `unavailable` "
+                f"where the request does not show it. {_WALKED}"
+            ),
         ]
     ]
-    evidence: NotRequired[Annotated[list[EvidencePart], Describe(f"What the request carried at the hop. {_WALKED}")]]
+    evidence: NotRequired[
+        Annotated[
+            list[Annotated[dict[str, Any], Written(Evidence)]],
+            Describe(f"What the request carried at the hop. {_WALKED}"),
+        ]
+    ]
     layers: NotRequired[
         Annotated[list[CheckPart], Describe(f"The checks of the request standard decided at the hop. {_WALKED}")]
     ]
@@ -414,6 +382,29 @@ class ActionItemRow(TypedDict):
     action: Annotated[str, Describe("The button that opens it, such as `Open containers`; empty for none.")]
     url: Annotated[str, Describe("The page where it is dealt with.")]
     since: Since
+
+
+class ActionItem(ActionItemRow):
+    """One action item: what needs doing, where, and the calls and commands that do it."""
+
+    key: Annotated[str, Describe("The item's key, which setting it aside names it by.")]
+    source_id: Annotated[str, Describe("The stable id of the part of HQ it comes from, such as `containers`.")]
+    count: Annotated[int, Describe("How many things it stands for, at least 1.")]
+    steps: WrittenSteps
+    no_help_reason: WrittenReason
+    check: WrittenCheck
+    actions: Annotated[
+        list[WrittenAction], Describe("The quick actions offered on it, each through its owner's own command or page.")
+    ]
+    subject: Annotated[
+        WrittenAction | None, Describe("The thing it is about, as a link to its own page; null for none.")
+    ]
+    notice: Annotated[bool, Describe("Whether it only reports something, with nothing to resolve.")]
+    observed_at: Annotated[str, Describe("When the reading it is drawn from was taken, in ISO 8601; empty for none.")]
+    facts: Annotated[list[list[str]], Describe("What was read that shows it, each a label and its value.")]
+    links: Annotated[
+        list[WrittenAction], Describe("Pages that help look into it, such as where it sits; never one that acts.")
+    ]
 
 
 class RolePart(TypedDict):
@@ -592,13 +583,7 @@ class ContainerRecord(ContainerRow):
     usage: Annotated[
         UsagePart | None, Describe("The memory and CPU it uses beside its limits; null when that was not read.")
     ]
-    posture: Annotated[
-        dict[str, Any],
-        Describe(
-            "How it meets the container standard: the checks met and each check's state. An unmet check "
-            "has its reason and fix; a check off by design says so."
-        ),
-    ]
+    posture: MeasurementPart
     supply_chain: Annotated[
         dict[str, Any],
         Describe(
@@ -610,12 +595,13 @@ class ContainerRecord(ContainerRow):
 
 class ImageAt(TypedDict):
     tag: Annotated[str, Describe("The image's tag.")]
-    digest: Annotated[str, Describe("The image's digest, `sha256:` and its hash; empty when not read yet.")]
-
-
-class BlockerPart(TypedDict):
-    id: Annotated[str, Describe("What stands in the way, as a stable id an agent can act on, such as `mounts-unread`.")]
-    reason: Annotated[str, Describe("What stands in the way, in a sentence.")]
+    digest: Annotated[
+        str,
+        Describe(
+            "The image's digest, `sha256:` and its hash; empty when not read yet.",
+            examples=("sha256:50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c",),
+        ),
+    ]
 
 
 UpgradeRow = TypedDict(
@@ -637,7 +623,7 @@ UpgradeRow = TypedDict(
         ],
         "from": Annotated[ImageAt, Describe("The image it runs now.")],
         "to": Annotated[ImageAt, Describe("The image the upgrade would move it to.")],
-        "blockers": Annotated[list[BlockerPart], Describe("Each reason it cannot go ahead yet; empty when none.")],
+        "blockers": Annotated[list[WrittenBlocker], Describe("Each reason it cannot go ahead yet; empty when none.")],
     },
 )
 
@@ -662,12 +648,6 @@ class MountPart(TypedDict):
     read_only: Annotated[bool, Describe("Whether the container may only read it.")]
 
 
-class UpgradeStepPart(TypedDict):
-    id: Annotated[str, Describe("The step's stable id.")]
-    label: Annotated[str, Describe("The step, in a few words.")]
-    detail: Annotated[str, Describe("What the step does, in a sentence.")]
-
-
 class UpgradeRecord(UpgradeRow):
     """One upgrade whole: what it fixes and introduces, its data, and the steps it would take."""
 
@@ -687,13 +667,15 @@ class UpgradeRecord(UpgradeRow):
         Describe("What would show the new version works, such as its health check; empty when nothing would."),
     ]
     not_automatic: Annotated[
-        list[BlockerPart],
+        list[WrittenBlocker],
         Describe(
             "Why it would not apply on its own, though an operator may approve it. Every blocker comes first, "
             "then the bar a patch must clear."
         ),
     ]
-    steps: Annotated[list[UpgradeStepPart], Describe("The steps an upgrade would take, in order.")]
+    steps: Annotated[
+        list[Annotated[dict[str, Any], Written(UpgradeStep)]], Describe("The steps an upgrade would take, in order.")
+    ]
 
 
 class ZoneMemberPart(TypedDict):
@@ -747,19 +729,6 @@ class DomainRecord(DomainRow):
     insights: Annotated[list[InsightPart], Describe("What HQ makes of the domain.")]
 
 
-class RelationshipPart(TypedDict):
-    entity: WrittenLink
-    source: Annotated[WrittenLink | None, Describe("The reading it came from; null when nothing says.")]
-    observed_at: ObservedAt | None
-    stale: Annotated[bool, Describe("Whether the reading it came from is out of date.")]
-
-
-class RelationGroupPart(TypedDict):
-    phrase: Annotated[str, Describe("What each relationship in it says from the node, such as `runs on`.")]
-    rank: Annotated[int, Describe("Where the group falls in page order, lowest first.")]
-    items: Annotated[list[RelationshipPart], Describe("The other end of each relationship it holds.")]
-
-
 class JoinedReadingPart(TypedDict):
     kind: Annotated[str, Describe("The reading's type, such as `adguard.client`.")]
     label: Annotated[str, Describe("The reading's name, as a page heads it.")]
@@ -772,7 +741,10 @@ class RelationshipsRecord(TypedDict):
 
     node: Annotated[str, Describe("The id of the node asked about, such as `machine:<name>` or `zone:<domain>`.")]
     focus_url: Annotated[str, Describe("The map centered on the node.")]
-    groups: Annotated[list[RelationGroupPart], Describe("Its relationships, grouped by what each says from the node.")]
+    groups: Annotated[
+        list[Annotated[dict[str, Any], Written(RelationGroup)]],
+        Describe("Its relationships, grouped by what each says from the node."),
+    ]
     readings: Annotated[list[JoinedReadingPart], Describe("The readings joined to the node.")]
     unreadable: Annotated[list[str], Describe("The readings about the node that could not be read, in words.")]
 
@@ -875,10 +847,26 @@ class DocumentationRow(TypedDict):
     updated_at: UpdatedAt
 
 
+class DocumentationLinks(TypedDict):
+    """The records a documentation pointer is linked to."""
+
+    projects: LinkedProjects
+    assets: LinkedAssets
+    expense_ids: RecordedExpenses
+
+
+class DocumentationItem(DocumentationRow):
+    """One documentation pointer with the records it is linked to."""
+
+    relationships: DocumentationLinks
+
+
 __all__ = [
+    "ActionItem",
     "ActionItemRow",
     "ContainerRecord",
     "ContainerRow",
+    "DocumentationItem",
     "DocumentationRow",
     "DomainRecord",
     "DomainRow",
@@ -886,14 +874,17 @@ __all__ = [
     "HopRow",
     "MachineRecord",
     "MachineRow",
+    "ManagedResourceItem",
     "ManagedResourceRecord",
     "ManagedResourceRow",
     "Match",
     "PathRecord",
     "Problem",
+    "ReadingItem",
     "ReadingRecord",
     "ReadingRow",
     "RelationshipsRecord",
+    "ServiceItem",
     "ServiceRecord",
     "ServiceRow",
     "UpgradeRecord",

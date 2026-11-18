@@ -13,14 +13,15 @@ from dataclasses import asdict, dataclass, fields
 from functools import cache
 from typing import Annotated, Any, Literal, TypedDict
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
 from django.db.models import Model
 
 from .answer_fields import CallMessage
 from .describe import Describe
-from .domains import Records, load, records_of
+from .domains import load, records_of
 from .integration_specs import TARGET_KINDS, Kept, keeps
+from .record_declaration import Records
 from .record_errors import RecordConflict, RecordNotFound, Sentence
 from .security import Principal
 lazy from .resources import resource_registry
@@ -43,7 +44,7 @@ def saved_type(resource: str) -> Any:
 
     records = records_of(resource)
     spec = resource_registry()[resource]
-    record = spec.record_type or spec.row_type
+    record = spec.record_type or spec.item_type
     saved: Any = TypedDict(  # type: ignore[operator]
         _saved_name(records),
         {"ok": Literal[True], "created": Created, records.noun: record, "message": CallMessage},
@@ -106,7 +107,7 @@ def found(model: type[Model], refusals: Held, lookup: Mapping[str, Any], *, lock
     rows = model._default_manager.select_for_update() if locked else model._default_manager
     try:
         return rows.get(**lookup)
-    except (ObjectDoesNotExist, ValueError) as exc:
+    except (ObjectDoesNotExist, ValidationError, ValueError) as exc:
         raise refusals.not_found() from exc
 
 
@@ -244,5 +245,5 @@ def _linked_one(model: type[Model], link: Link, value: Any) -> Any:
         return None
     try:
         return model._default_manager.get(**{link.key: value})
-    except ObjectDoesNotExist as exc:
+    except (ObjectDoesNotExist, ValidationError, ValueError) as exc:
         raise link.not_found() from exc

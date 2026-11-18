@@ -141,33 +141,37 @@ grouping is presentation.
 ### Priority work
 
 Every domain's attention provider returns `Finding`s, composed by
-`domain_attention_items()`, and each row is worded from its finding by
-`attention.finding_insight`, the one wording.
+`domain_attention_items()`, and each row is built from its finding by
+`dashboard._queue_item`, with nothing between the two.
 The dashboard preview, `/action-items/` and the machine snapshot project that
-one queue. Each flattened item keeps its `action` and JSON-safe `workflow` (or
-`null`) beside its label, evidence, severity, count and URL. Neutral and good
+one queue. Each item carries its finding's `steps`, `no_help_reason` and
+`check` beside its label, evidence, severity, count and URL. Neutral and good
 findings stay out of the queue; the contributing domain decides whether a
 reading needs a decision.
 
-The dashboard and the full queue share one row partial and one resolution
-renderer. Workflow forms keep their action URLs, methods and CSRF protection.
-Rendering a workflow neither runs it nor grants authority.
+The dashboard and the full queue share one row partial and one steps
+renderer (`_resolution_workflow.html`). A press keeps its action URL, method
+and CSRF protection; drawing one neither runs it nor grants authority.
 
-Every item HQ raises carries help: a remedy HQ runs, the exact command to run,
-or HQ's reason it can offer neither. A finding rule declares two fields:
+Every item HQ raises carries help. `Finding.steps` holds it, each step one of
+three kinds told apart by `kind` (`finding_steps.Step`):
 
-| Field | Carried as | When |
+| Step | Holds | Who acts |
 |---|---|---|
-| `operator_action` | `steps`, each an `OperatorStep`: a label, a command HQ never runs, notes; the API and MCP's `get_findings` both return `operator_steps` beside the remedies, which MCP writes as tool calls | the operator has a command to run |
-| `no_help_reason` | the reason | there is no remedy and no command |
+| `Press` | an `ActionLink` to an HQ capability, resolved once from the finding's remedies for the reader | HQ, on the reader's press |
+| `Run` | a label, a command HQ never runs, notes | the operator, at a shell |
+| `Do` | what to do in words, notes | the operator, elsewhere |
 
-A row's remedy is one of its `actions`; a command or reason is a `run` or
-`cannot` step of its `workflow`, which `finding_plan` derives from the
-finding (`hq/platform/application/item_help.py`).
-The ast-grep rule `attention-item-carries-help` (lint:ast-grep) fails on host
-source that builds an item without help, and
-`hq/platform/application/tests/test_item_help.py` reads the composed queue
-through the `item_help` gauge defined there.
+A `Run` with no command or a `Do` with no words cannot be built. Where no
+step can be offered, `no_help_reason` says why, from the finding or its rule
+(`FindingRule.no_help_reason`, refused at import when blank); `check` is the
+link that reads it again. Resolution (`findings._resolved`) leaves a host
+finding its presses, its own steps, and its rule's `operator_action` as a
+`Do` when nothing is pressed. An extension's finding with no step, remedy,
+page, reason or held decision is refused when its source is read
+(`plugins.checked_attention`), so the source reads as unreadable. The API's
+findings and MCP's `get_findings` carry the same steps, MCP writing each
+press as the tool call that runs it.
 
 Every item also says why it is as urgent as it is, in one sentence on what HQ
 read and what makes that this urgent. The panel behind a card's
@@ -180,9 +184,9 @@ the bar its rule declares for its severity (`FindingRule.bars`, worded from the
 detector's own constants and refused at import when the rule's own severity
 has none), as in "Free on /: 400 MB of 30 GB (1.3%); urgent once free space is
 under 512 MB and 3% of the disk." The ast-grep rule `attention-item-says-why`
-fails on an `Insight`, or an extension's `Finding`, built without one, and `attention-why-restates-rating`
+fails on an extension's `Finding` built without one, and `attention-why-restates-rating`
 on a why that closes on its rating or names its rule, in host source and,
-through the plugin check, in an extension's. `test_item_help.py` holds every
+through the plugin check, in an extension's. `test_finding_help.py` holds every
 finding the example estate raises to a bar for its severity.
 
 An item a threshold raises also says what clears it (`FindingRule.clears`,

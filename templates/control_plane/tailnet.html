@@ -2,13 +2,13 @@
 {% load nav_tags %}
 {% block page %}
 {% if tailnet.known %}
-  {% facts layout="band" label="Tailnet policy" %}
+  {% card element="div" %}{% facts layout="band" label="Tailnet policy" %}
     {% fact "Grants" value=tailnet.policy.grants|length %}
     {% if tailnet.policy.acls %}{% fact "ACL rules" value=tailnet.policy.acls|length %}{% endif %}
     {% fact "Groups" value=tailnet.policy.groups|length %}
     {% fact "Tags" value=tailnet.policy.tags|length %}
     {% fact "Policy tests" value=tailnet.policy.tests|length %}
-  {% endfacts %}
+  {% endfacts %}{% endcard %}
 
   {% section "Settings" %}{% if tailnet.settings %}
     {% facts %}

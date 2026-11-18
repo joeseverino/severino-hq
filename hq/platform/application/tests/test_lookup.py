@@ -5,10 +5,12 @@ the suite must never depend on a third party being up.
 """
 
 from django.test import SimpleTestCase, TestCase, override_settings
+from pydantic import ValidationError
 
 from hq.domains.control_plane.dns_lookup import LookupUnavailable
 
 from ..capabilities import capability_registry, execute_capability
+from ..integration_specs import command_adapter
 from ..lookup import AddressCommand, NameCommand, look_up_address, look_up_name
 from ..security import Capability, Principal
 
@@ -55,6 +57,18 @@ AN_ALLOCATION = {
 }
 
 
+def _name(name):
+    """The command a door hands the handler for ``name``."""
+
+    return command_adapter(NameCommand).validate_python({"name": name})
+
+
+def _address(address, **extra):
+    """The command a door hands the handler for ``address``."""
+
+    return command_adapter(AddressCommand).validate_python({"address": address, **extra})
+
+
 def _resolver(payload):
     return lambda path, params: payload
 
@@ -66,7 +80,7 @@ def _fails(*_args, **_kwargs):
 class NameLookupTests(SimpleTestCase):
     def test_records_come_back_flattened_for_display(self):
         answer = look_up_name(
-            NameCommand(name="Example.test."),
+            _name("Example.test."),
             principal=OPERATOR,
             resolver=_resolver(A_NAME),
         )
@@ -85,7 +99,7 @@ class NameLookupTests(SimpleTestCase):
         """
 
         answer = look_up_name(
-            NameCommand(name="example.test"),
+            _name("example.test"),
             principal=OPERATOR,
             resolver=_resolver(A_NAME),
         )
@@ -93,10 +107,10 @@ class NameLookupTests(SimpleTestCase):
         caa = [item for item in answer["answers"] if item["type"] == "CAA"]
         self.assertEqual(caa[0]["value"], '0 issuewild "letsencrypt.org"')
 
-    def test_a_name_that_is_not_one_never_reaches_the_resolver(self):
+    def test_a_name_that_is_not_one_is_refused_as_its_command_is_validated(self):
         for value in ("", "not a hostname", "-nope.test", "a" * 300):
-            with self.subTest(value=value), self.assertRaises(ValueError):
-                look_up_name(NameCommand(name=value), principal=OPERATOR, resolver=_fails)
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                _name(value)
 
 
 class AddressLookupTests(TestCase):
@@ -104,7 +118,7 @@ class AddressLookupTests(TestCase):
     # service touches the database on the way in and out.
     def _look(self, address, resolver=None, allocations=None):
         return look_up_address(
-            AddressCommand(address=address),
+            _address(address),
             principal=OPERATOR,
             resolver=resolver or _resolver(AN_ADDRESS),
             allocations=allocations or (lambda ip: AN_ALLOCATION),
@@ -158,8 +172,8 @@ class AddressLookupTests(TestCase):
         self.assertEqual(reading["note"], "No PTR record found")
 
     def test_something_that_is_not_an_address_is_refused(self):
-        with self.assertRaises(ValueError):
-            self._look("not an address", resolver=_fails, allocations=_fails)
+        with self.assertRaises(ValidationError):
+            _address("not an address")
 
 
 class ReadCapabilityTests(TestCase):
@@ -183,15 +197,23 @@ class ReadCapabilityTests(TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["name"], "example.test")
 
-    def test_what_is_not_a_name_or_an_address_is_refused_in_the_hosts_words(self):
+    def test_what_is_not_a_name_or_an_address_is_refused_as_invalid_input(self):
         for name, payload, said in (
-            ("lookup.name.read", {"name": "not a name"}, "That is not a hostname."),
-            ("lookup.address.read", {"address": "not an address"}, "That is not an IP address."),
+            (
+                "lookup.name.read",
+                {"name": "not a name"},
+                "lookup.name.read: name is not in the form its schema's pattern gives.",
+            ),
+            (
+                "lookup.address.read",
+                {"address": "not an address"},
+                "lookup.address.read: address is invalid.",
+            ),
         ):
             with self.subTest(name=name):
                 result = execute_capability(name, payload, principal=OPERATOR)
 
-                self.assertEqual(result["error"], {"code": "invalid_input", "message": said})
+                self.assertEqual((result["error"]["code"], result["error"]["message"]), ("invalid_input", said))
 
     def test_an_agent_reaches_a_third_party_only_where_its_grant_says(self):
         """A read does not carry the lookup with it."""
@@ -219,7 +241,7 @@ class ReadCapabilityTests(TestCase):
 
                 self.assertEqual(result["error"]["code"], "forbidden")
         with self.assertRaises(AuthorizationError):
-            stored_address(AddressCommand(address=GLOBAL), principal=reader)
+            stored_address(GLOBAL, principal=reader)
 
 
 class AddressCacheTests(TestCase):
@@ -238,7 +260,7 @@ class AddressCacheTests(TestCase):
 
     def _look(self, **extra):
         return look_up_address(
-            AddressCommand(address=GLOBAL, **extra),
+            _address(GLOBAL, **extra),
             principal=OPERATOR,
             resolver=self._resolver,
             allocations=self._allocations,
@@ -267,7 +289,7 @@ class AddressCacheTests(TestCase):
         """A registry being down is not a reason to re-ask a second later."""
 
         look_up_address(
-            AddressCommand(address=GLOBAL),
+            _address(GLOBAL),
             principal=OPERATOR,
             resolver=self._resolver,
             allocations=_fails,

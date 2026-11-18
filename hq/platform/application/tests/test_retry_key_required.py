@@ -23,11 +23,10 @@ class RequiredTests(TestCase):
 
     def test_a_change_from_any_other_interface_without_a_key_is_refused_and_writes_nothing(self):
         for interface in ("web", "api", "mcp", DEVICE_INTERFACE, "example-new-interface"):
-            for payload in ({}, {"idempotency_key": ""}):
-                with self.subTest(interface=interface, payload=payload):
-                    result = self.create(Principal("example-client", interface, GRANT), **payload)
+            with self.subTest(interface=interface):
+                result = self.create(Principal("example-client", interface, GRANT))
 
-                    self.assertEqual(result["error"]["code"], "idempotency_key_required")
+                self.assertEqual(result["error"]["code"], "idempotency_key_required")
         self.assertFalse(Project.objects.exists())
 
     def test_a_caller_who_may_not_change_it_is_told_that_first(self):

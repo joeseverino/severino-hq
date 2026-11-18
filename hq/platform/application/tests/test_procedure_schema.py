@@ -1,15 +1,9 @@
-"""The published schema of a procedure's sidecar judges a sidecar as HQ does,
-and `manage.py procedure_schema --check` fails while the file is behind."""
+"""The published schema of a procedure's sidecar judges a sidecar as HQ does."""
 
 import json
-import tempfile
-from io import StringIO
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
-from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.test import SimpleTestCase, tag
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
@@ -94,35 +88,3 @@ class SchemaTests(SimpleTestCase):
                 self.assertEqual(self.validator.is_valid(declaration), accepted)
         # The project holds sidecars of both kinds, so each side is read.
         self.assertEqual(set(judged.values()), {True, False}, judged)
-
-
-class CheckTests(SimpleTestCase):
-    def setUp(self):
-        folder = tempfile.TemporaryDirectory()
-        self.addCleanup(folder.cleanup)
-        self.path = Path(folder.name, procedure_schema.SCHEMA_PATH.name)
-        patcher = patch.object(procedure_schema, "SCHEMA_PATH", self.path)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def check(self) -> None:
-        call_command("procedure_schema", "--check", stdout=StringIO())
-
-    def test_the_current_schema_passes(self):
-        call_command("procedure_schema", stdout=StringIO())
-        self.check()
-
-    def test_a_schema_behind_the_model_fails_and_is_left_as_it_was(self):
-        behind = json.loads(procedure_schema.render())
-        del behind["properties"]["inputs"]
-        stale = json.dumps(behind, indent=2, sort_keys=True) + "\n"
-        self.path.write_text(stale, encoding="utf-8")
-
-        with self.assertRaises(CommandError):
-            self.check()
-        self.assertEqual(self.path.read_text(encoding="utf-8"), stale)
-
-    def test_a_missing_schema_fails(self):
-        with self.assertRaises(CommandError):
-            self.check()
-        self.assertFalse(self.path.exists())

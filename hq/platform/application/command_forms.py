@@ -18,7 +18,6 @@ from .forms import LinesField, UploadField
 from .integration_specs import IDEMPOTENCY_FIELD, capability_schema, command_schema
 from .json_schemas import fields as whole_fields, labeled_choices
 from .labels import field_label
-from .records import as_its_model_declares
 from .references import keeping_held, leave_off_unoffered
 from .ui import ended
 from .web_writes import RETRY_KEY_FIELD
@@ -390,7 +389,7 @@ def command_form_class(
     (``command_targets.record_options``); a field without them is typed.
     """
 
-    schema = as_its_model_declares(spec.command_type, command_schema(spec.command_type))
+    schema = command_schema(spec.command_type)
     # What the command must be sent, which for an update is no field it keeps.
     required = frozenset(capability_schema(spec).get("required", ()))
     agents_only = for_agents(spec.command_type)

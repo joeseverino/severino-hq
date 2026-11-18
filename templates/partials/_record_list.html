@@ -10,9 +10,7 @@ line as compact controls, a POST one through `{% button %}`. A search hit's
 With `whole_rows`, a list of places to go, each row is its title's link. Use _insight_grid.html instead when each
 entry needs interpreting rather than just identifying.
 {% endcomment %}
-{% comment %}
-<!-- ast-grep-ignore: hand-drawn-list-rows --> the list part itself
-{% endcomment %}<ul class="list-rows{% if whole_rows %} whole-rows{% endif %}"{% if label %} aria-label="{{ label }}"{% endif %}>
+<ul class="list-rows{% if whole_rows %} whole-rows{% endif %}"{% if label %} aria-label="{{ label }}"{% endif %}>
   {% for row in rows %}
     <li>
       <span class="row-main">

@@ -13,13 +13,13 @@ lazy from .domains import resources_of
 lazy from .findings import finding_rules
 
 
-def gather_findings(estate: FindingEstate, *, principal: Principal) -> Gathered:
-    """What each rule that reads HQ's records finds, by rule."""
+def gather_findings(estate: FindingEstate, *, principal: Principal, rule: str = "") -> Gathered:
+    """What each rule that reads HQ's records finds, by rule; only ``rule``'s when one is asked."""
 
     return {
         declared.name: declared.detect(estate)
         for declared in finding_rules()
-        if declared.gathered and _reads_section(principal, declared)
+        if declared.gathered and (not rule or declared.name == rule) and _reads_section(principal, declared)
     }
 
 

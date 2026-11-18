@@ -3,8 +3,9 @@
 CI's Map job records it (`mise run fast:map`): coverage measures the run with
 its C tracer (``sys.monitoring`` records a line once per process, whatever the
 context), and the runner switches the context to each test module before the
-module's fixtures run (``hq/platform/core/coverage_contexts.py``), so each line
-is kept once for every test module that ran it. The map is coverage's own
+module's fixtures run and to each test before it runs
+(``hq/platform/core/coverage_contexts.py``), so each line is kept once for every
+test that ran it, and read here by its module. The map is coverage's own
 record, ``contexts_by_lineno``, named by the commit it was recorded at, whose
 lines it numbers.
 
@@ -28,6 +29,8 @@ from typing import NamedTuple
 
 # Only a run that reads a recording loads coverage.
 lazy from coverage import CoverageData
+
+from hq.platform.core.coverage_contexts import module_of
 
 # Where the recording run keeps coverage's data, apart from the suite's own
 # (`mise run test:suite`), so neither run combines the other's shards, and the map it writes from it.
@@ -54,30 +57,36 @@ class TestMap(NamedTuple):
         return frozenset().union(*(modules for line, modules in held.items() if lines is None or line in lines))
 
 
-def read(data_file: Path, root: Path) -> TestMap:
-    """The map in a recording's data: its shards combined, each measured line
-    under ``root`` with the test modules whose context ran it. A line run
-    outside every test module's context (an import as the suite loads, a
-    worker starting) is no test's."""
+def combined(data_file: Path, root: Path) -> CoverageData:
+    """A recording's data, its shards combined into it first."""
 
     if any(data_file.parent.glob(f"{data_file.name}.*")):
         environment = {**os.environ, "COVERAGE_FILE": str(data_file)}
         subprocess.run([sys.executable, "-m", "coverage", "combine", "--quiet"], cwd=root, env=environment, check=True)
     data = CoverageData(basename=str(data_file))
     data.read()
+    return data
+
+
+def read(data: CoverageData, root: Path) -> TestMap:
+    """The map in a recording's data: each measured line under ``root`` with
+    the test modules whose fixtures or tests ran it. A line run outside every
+    test's and module's context (an import as the suite loads, a worker
+    starting) is no test's."""
+
     lines: dict[str, dict[int, frozenset[str]]] = {}
     for measured in data.measured_files():
         path = Path(measured)
         if not path.is_relative_to(root):
             continue
         held = {
-            line: frozenset(contexts) - {""}
+            line: frozenset(map(module_of, contexts)) - {""}
             for line, contexts in data.contexts_by_lineno(measured).items()
             if set(contexts) - {""}
         }
         if held:
             lines[path.relative_to(root).as_posix()] = held
-    return TestMap(frozenset(data.measured_contexts()) - {""}, lines)
+    return TestMap(frozenset(map(module_of, data.measured_contexts())) - {""}, lines)
 
 
 def kept(folder: Path, commit: str) -> Path:
@@ -179,6 +188,6 @@ def touched_bodies(source: str, lines: set[int]) -> set[int] | None:
 if __name__ == "__main__":
     # `python -m tools.gate.testmap`, which fast:map runs after the recording: its data, as the map.
     root = Path.cwd()
-    found = read(root / DATA, root)
+    found = read(combined(root / DATA, root), root)
     write(root / WRITTEN, found)
     print(f"the map of the tests that ran each line: {len(found.lines)} files, {len(found.ran)} test modules")

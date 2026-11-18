@@ -28,8 +28,7 @@
      it draws the edge. */
   :where(
   .table-scroll:has(> .data-table), .card, .section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)), .two-col > section:not(.section), .two-col > div, .section-flow > section:not(.section),
-  .facts-band,
-  .filter-bar, .kpi-grid, .insight-grid,
+  .filter-bar, .insight-grid,
   .form,
   .topology-workspace,
   .posture-repos, .route) {
@@ -49,36 +48,6 @@
       --surface-inset: 0;
     }
   }
-  /* Stats inside a card are the card's content: an even grid with real gaps,
-     no tile padding doubling the card's own. */
-  :is(.card > .kpi-grid, .section-body > .kpi-grid.is-featured) {
-    display: grid;
-    /* Exactly the card's --kpi-columns, which the card sets from how many
-       stats it holds and how wide it is (4 or 2+2, 6 or 3+3, never 3+1). A
-       fit-as-many-as-fit grid would not hold that. */
-    grid-template-columns: repeat(var(--kpi-columns, 2), minmax(0, 1fr));
-    gap: var(--space-6) var(--space-7);
-    /* A card as tall as its neighbor keeps its figures under their heading:
-       the room it has left falls below them, not between label and value. */
-    align-content: start;
-    background: none;
-  }
-  /* A row of stats shares its lines. Each stat takes the row's three tracks
-     (label, value, note), so the labels start level and the values stand
-     level, however many lines one label wraps to. */
-  :is(.card > .kpi-grid, .section-body > .kpi-grid.is-featured) > .kpi {
-    padding: 0;
-    display: grid;
-    grid-row: span 3;
-    grid-template-rows: subgrid;
-    row-gap: var(--space-2);
-  }
-  /* A stat here has no padding of its own, so a linked one's tint (cards.css)
-     reaches into the gap around it as a shadow, which moves nothing. */
-  :is(.card > .kpi-grid, .section-body > .kpi-grid.is-featured) > :is(a.kpi:is(:hover, :focus-visible), .kpi:has(> .kpi-figure > a.value:is(:hover, :focus-visible))) {
-    border-radius: var(--radius-sm);
-    box-shadow: 0 0 0 var(--space-3) var(--surface-2);
-  }
   /* What a figure looks like, beside it: dots for a part of a whole, a line
      for a direction. A filled dot is solid and an empty one is a ring, so the
      count does not rest on color. The line takes the room the value leaves,
@@ -88,89 +57,31 @@
      (page.css), beside it or under it. Dots that do not fit beside the value
      take the line under it, so they never reach past the figure's column, and
      the figure's lines pack at the top of its row so the values stand level. */
-  .kpi-figure { display: flex; flex-wrap: wrap; align-content: start; align-items: center; gap: var(--space-4) var(--space-6); min-width: 0; }
-  .kpi-dots { display: inline-flex; flex-wrap: wrap; gap: var(--space-3); }
-  /* Past six, dots are set in even rows filled column by column, never more
+  .figure-dots { display: inline-flex; flex-wrap: wrap; gap: var(--space-3); }
+  /* Past four, dots are set in even rows filled column by column, never more
      than four columns wide, rather than left to break wherever the column
-     ends: two rows to eight, three to the dozen that are ever drawn
-     (drawings.Dots.LIMIT). Four linked dots a target apart fit the narrowest
-     column a card sets (110px, layout.css). */
-  .kpi-dots:has(> :nth-child(7)) { display: inline-grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); }
-  .kpi-dots:has(> :nth-child(9)) { grid-template-rows: repeat(3, auto); }
-  /* Rows of dots stand taller than the value: it keeps to the top of its
+     ends (four over one): two rows to eight, three to the dozen that are ever
+     drawn (drawings.Dots.LIMIT). Four linked dots a target apart fit a band's
+     narrowest cell (`--band-floor`, figures.css). */
+  .figure-dots:has(> :nth-child(5)) { display: inline-grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); }
+  .figure-dots:has(> :nth-child(9)) { grid-template-rows: repeat(3, auto); }
+  /* Dots may wrap into rows taller than the value: it keeps to the top of its
      line, level with the values beside it, rather than at their middle. */
-  .kpi-figure:has(> .kpi-dots > :nth-child(7)) > .value { align-self: flex-start; }
-  .kpi-dot { position: relative; display: block; width: 10px; height: 10px; border: 1.5px solid var(--muted-2); border-radius: 50%; }
-  .kpi-dot.is-filled { border-color: var(--ok); background: var(--ok); }
+  .fact-figure:has(> .figure-dots) > span { align-self: flex-start; }
+  /* The dots keep to the top as well, at least the value's line tall, so a
+     single row of them stands at the middle of the value's line. */
+  .fact-figure > .figure-dots { align-self: flex-start; min-block-size: 1lh; align-content: center; align-items: center; }
+  .figure-dot { position: relative; display: block; width: 10px; height: 10px; border: 1.5px solid var(--muted-2); border-radius: 50%; }
+  .figure-dot.is-filled { border-color: var(--ok); background: var(--ok); }
   /* A dot that leads somewhere is hit through a square around it (page.css),
      so dots that lead somewhere are set a square apart. */
-  .kpi-dots:has(> a) { gap: calc(var(--target-min) - 10px); }
-  a.kpi-dot:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .kpi a.value, .kpi a.value:hover { color: inherit; text-decoration: none; }
-  .kpi-trend { flex: 1 1 6rem; min-width: 0; max-width: 260px; height: 28px; margin-left: auto; overflow: visible; }
-  .kpi-trend polyline { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-  .kpi-trend-hit { fill: transparent; }
-  .kpi-trend-dot { stroke: var(--accent); opacity: 0; }
-  .kpi-trend-dot.is-latest, .kpi-trend-hit:hover + .kpi-trend-dot { opacity: 1; }
-  .kpi-grid.is-featured > :first-child .kpi-trend { height: 40px; }
-
-  /* The contributor's first of four figures leads the overview. The same
-     values and links appear once; supporting facts form a compact second row. */
-  .kpi-grid.is-featured .value { color: var(--accent); }
-  .kpi-grid.is-featured > .kpi { gap: var(--space-3); }
-  .kpi-grid.is-featured:has(> :nth-child(4):last-child) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-content: start;
-    row-gap: var(--space-10);
-  }
-  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child {
-    grid-column: 1 / -1;
-    padding-bottom: var(--space-8);
-    border-bottom: 1px solid var(--line-2);
-  }
-  /* In a section's frame the lead's rule is a divider of the frame, so it
-     reaches the frame's sides, as the head's rule above it does. */
-  .section-body > .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child {
-    margin-inline: calc(-1 * var(--section-side));
-    padding-inline: var(--section-side);
-  }
-  /* A linked lead reaching the frame's sides tints a band across it, its
-     shadow above only, so nothing is drawn past the frame. */
-  .section-body > .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child:is(a.kpi:is(:hover, :focus-visible), .kpi:has(> .kpi-figure > a.value:is(:hover, :focus-visible))) {
-    border-radius: 0;
-    box-shadow: 0 calc(-1 * var(--space-3)) 0 0 var(--surface-2);
-  }
-  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child .value {
-    font-size: var(--text-display);
-    letter-spacing: -.04em;
-    overflow-wrap: anywhere;
-  }
-  /* A figure's token never breaks, so on a phone three supporting figures
-     would run into each other: each sizes its value to its own column, a
-     nine-character amount taking nine tenths of it, the rest for the pixel or
-     two one engine's text runs wider than another's. The column it measures
-     is the value's own line: a container on the stat would lay the stat's
-     lines out alone, off the row's shared tracks (WebKit), so a label that
-     wraps would drop its value below its neighbors'. */
-  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :not(:first-child) > .kpi-figure { container: figure / inline-size; }
-  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :not(:first-child) .value {
-    font-size: clamp(var(--text-sm), 18cqi, var(--text-2xl));
-    color: var(--ink);
-    overflow-wrap: anywhere;
-  }
-  /* A lone overview card across the page (an HQ with one contributor) puts
-     its four figures on one row, the first still the largest: led from a row
-     of its own, the three under it would sit beside a page width of nothing. */
-  @container featured (min-width: 46rem) {
-    .kpi-grid.is-featured:has(> :nth-child(4):last-child) { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
-    .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child { grid-column: auto; padding-bottom: 0; border-bottom: 0; }
-    .section-body > .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child { margin-inline: 0; padding-inline: 0; }
-    .section-body > .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child:is(a.kpi:is(:hover, :focus-visible), .kpi:has(> .kpi-figure > a.value:is(:hover, :focus-visible))) {
-      border-radius: var(--radius-sm);
-      box-shadow: 0 0 0 var(--space-3) var(--surface-2);
-    }
-  }
-
+  .figure-dots:has(> a) { gap: calc(var(--target-min) - 10px); }
+  a.figure-dot:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .figure-trend { flex: 1 1 6rem; min-width: 0; max-width: 260px; height: 28px; margin-left: auto; overflow: visible; }
+  .figure-trend polyline { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+  .figure-trend-hit { fill: transparent; }
+  .figure-trend-dot { stroke: var(--accent); opacity: 0; }
+  .figure-trend-dot.is-latest, .figure-trend-hit:hover + .figure-trend-dot { opacity: 1; }
   /* The last thing in a card ends the card: its own bottom margin would be
      dead space inside the card's padding. */
   /* A frame's own padding is its edge: the first and last thing in it keep no
@@ -245,24 +156,24 @@
   @media (scripting: none) { .row-fold { display: none; } }
 
   /* A band too narrow for two cells is a list, like every other summary:
-     each fact one row, its label and its value at the right edge, the detail
-     under both. Asked of the band's own width, so a band in a narrow card
-     reads the same as one on a phone. 27.5rem is two 220px cells; under it,
-     never at it, as the facts' own tracks switch (`--fact-min`), so a band
-     exactly that wide is laid out one way by both. */
-  @container band (width < 27.5rem) {
+     each fact a row of its own, its label and its value at the right edge,
+     the detail and its drawing under both. Asked of the band's own width, so
+     a band in a narrow card reads the same as one on a phone. Small figures
+     keep their grid, which holds a dozen across at any width, and a lead its
+     figure on a row of its own. */
+  @container band (width < 24rem) {
     /* The label keeps its words up to three fifths of the row and wraps past
        that, and the value never narrows past its longest run that cannot
        break (`min-content`, a count bound to its noun), so a long label never
        squeezes its value to a letter a line or parts a number from its unit. */
-    /* One fact to a row has no neighbor to share its lines with, so it lays out its own rows: rows the band sized would be asked of the fact before its columns have widths, a letter a line. */
-    .facts-band > .fact { grid-row: auto; grid-template-rows: none; grid-template-columns: auto fit-content(60%) minmax(min-content, 1fr); align-items: baseline; column-gap: var(--space-4); }
-    .facts-band > .fact:not(:has(.band-icon)) { grid-template-columns: fit-content(60%) minmax(min-content, 1fr); }
-    /* The icon stands on the label's row, beside the words it marks; across the fact's rows it would center below them. */
-    .facts-band .band-icon { grid-row: 1; align-self: center; width: 24px; height: 24px; font-size: var(--text-lg); border-radius: var(--radius-sm); }
-    .facts-band .fact-label { grid-row: 1; grid-column: -3; font-size: var(--text-sm); }
-    .facts-band .fact-value { grid-row: 1; grid-column: -2; text-align: right; font-size: var(--text-md); }
-    .facts-band .fact-detail { grid-row: 2; grid-column: -3 / -1; }
+    .facts-band:not(.is-small, .is-lead) > .fact { grid-column: 1 / -1; display: grid; grid-template-columns: fit-content(60%) minmax(min-content, 1fr); align-items: baseline; gap: var(--space-2) var(--space-4); padding-block: var(--space-5); }
+    .facts-band:where(:not(.card:not(.section-body) > :only-child)):not(.is-small, .is-lead) > .fact { padding-block: 0; }
+    .facts-band:not(.is-small, .is-lead) dt { font-size: var(--text-sm); }
+    .facts-band:not(.is-small, .is-lead) .fact-value { text-align: right; font-size: var(--text-md); }
+    .facts-band:not(.is-small, .is-lead) .fact-detail { grid-column: 1 / -1; }
+    /* A value's dots stand before it, so the value keeps the right edge. */
+    .facts-band:not(.is-small, .is-lead) .fact-figure { flex-direction: row-reverse; }
+    .facts-band:not(.is-small, .is-lead) .figure-dots { justify-content: end; }
   }
 
   /* On paper a pill in a section's head is a link, which cannot be followed
@@ -326,7 +237,7 @@
    parts come from: what either holds reaches the sides as the body's own part
    would. A flow of sections in the body reaches them too. */
 :is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .posture-repos,
-  .insight-grid, .sweep-grid,
+  .insight-grid,
   .month-grid, .list-rows, .section-flow, .timeline-list) {
   --frame-inset: var(--section-side);
   margin-inline: calc(-1 * var(--section-side));
@@ -343,7 +254,7 @@
    or a month, whose outer rows draw no edge there, keeps the frame's padding
    above and below it. */
 :is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .posture-repos,
-  .insight-grid, .sweep-grid) {
+  .insight-grid) {
   --section-corner: calc(var(--radius) - 1px);
   /* In a form that starts the body, its hidden fields draw nothing, so they
      do not count. */

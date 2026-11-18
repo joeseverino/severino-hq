@@ -5,6 +5,7 @@ import json
 from datetime import timedelta
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.providers import record_spec
 
 from .names import (
     ADGUARD,
@@ -108,7 +109,9 @@ def declare_rewrites():
     """Each name resolves on the LAN and the tailnet through AdGuard."""
 
     for hostname, container, _port, _image in SERVICES:
-        ManagedResource.objects.create(key=f"{container}-dns", kind="adguard.rewrite", spec=_rewrite(hostname))
+        # Declared as the rewrite AdGuard holds, which names the connection it was read through.
+        spec = record_spec("adguard.rewrite", _rewrite(hostname))
+        ManagedResource.objects.create(key=f"{container}-dns", kind="adguard.rewrite", spec=spec)
 
 
 def _rewrite(hostname):
@@ -118,7 +121,8 @@ def _rewrite(hostname):
 def declare_zone():
     ManagedResource.objects.create(key=ZONE_KEY, kind="cloudflare.zone", spec={"zone": ZONE, "connection_ref": DNS})
     for key, *fields in PUBLIC_RECORDS:
-        ManagedResource.objects.create(key=f"{ZONE_KEY}-{key}", kind="cloudflare.dns_record", spec=_record(*fields))
+        spec = record_spec("cloudflare.dns_record", _record(*fields))
+        ManagedResource.objects.create(key=f"{ZONE_KEY}-{key}", kind="cloudflare.dns_record", spec=spec)
 
 
 def _record(name, kind, content, priority, proxied):

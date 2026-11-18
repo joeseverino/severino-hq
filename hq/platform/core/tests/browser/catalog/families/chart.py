@@ -117,9 +117,8 @@ ENTRIES = {
     # Each chart partial, its head a section's: the heading, the line under
     # it, and its legend or a month's controls beside them; its data a folded
     # section in its frame.
-    "chart/line": Entry(
-        '{% include "partials/_chart.html" %}',
-        {"chart": _readings("Example pace", "Example readings over a week, two of them.", "Easy", "Hard")},
+    "part/chart": Entry(
+        context={"chart": _readings("Example pace", "Example readings over a week, two of them.", "Easy", "Hard")},
     ),
     # A rule at a day something began, its label over the rule.
     "chart/line-marked": Entry(
@@ -153,7 +152,7 @@ ENTRIES = {
         '{% include "partials/_chart.html" %}',
         {"chart": _weeks("Example sessions", "Each week's sessions by kind.")},
     ),
-    "chart/activity-calendar": Entry('{% include "partials/_activity_calendar.html" %}', {"calendar": _month()}),
+    "part/activity-calendar": Entry(context={"calendar": _month()}),
     "chart/tabs": Entry(
         '{% include "partials/_chart_tabs.html" with group="example" %}',
         {"charts": (_readings("Example pace", "A week of pace.", "Pace"), _weeks("Example load", "Load by week."))},
@@ -179,9 +178,8 @@ ENTRIES = {
     ),
     # Whether a thing happened, week by week: hits, a miss, a week counted
     # more than once, one nothing is known of, and a run up to now.
-    "chart/cadence": Entry(
-        '{% section "Example habits" %}{% include "partials/_cadence.html" %}{% endsection %}',
-        {
+    "part/cadence": Entry(
+        context={
             "cadence": Cadence(
                 "Example stretching",
                 "Each week it happened at least once.",
@@ -197,9 +195,8 @@ ENTRIES = {
         },
     ),
     # Several things over the same weeks, one a link with a line about it.
-    "chart/cadence-matrix": Entry(
-        '{% section "Example habits 2" %}{% include "partials/_cadence_matrix.html" %}{% endsection %}',
-        {"matrix": _matrix()},
+    "part/cadence-matrix": Entry(
+        context={"matrix": _matrix()},
     ),
     # The same, sharing a row with a chart.
     "chart/cadence-matrix-compact": Entry(
@@ -210,9 +207,8 @@ ENTRIES = {
     ),
     # The days of a week a thing is planned for: two on one day, a day with
     # its note, the notes under the week and the link that changes it.
-    "chart/week-plan": Entry(
-        '{% include "partials/_week_plan.html" %}',
-        {
+    "part/week-plan": Entry(
+        context={
             "plan": WeekPlan(
                 "Example week",
                 (
@@ -248,4 +244,10 @@ ENTRIES = {
             "few": ({"label": "example.org", "figure": "48", "share": 100},),
         },
     ),
+}
+
+# What each part's default entry, its Part.example, is given (catalog.default_name).
+ENTRIES |= {
+    "part/share-list": Entry(context={"rows": ENTRIES["chart/share-list"].context["rows"]}),
+    "part/chart-tabs": Entry(context={**ENTRIES["chart/tabs"].context, "group": "example"}),
 }

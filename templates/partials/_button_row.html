@@ -2,6 +2,6 @@
 A row of buttons that stands on its own, drawn by {% button_row %}: a form's
 closing row (partials/_form_actions.html), a card's decisions, a page's way
 on. Each button is {% button %}, an ask or a page action, and a sentence
-beside them is {% muted %}. `bar` pins the row to the bottom of the screen
-once its form has changed (pages.css).
+beside them is {% muted %}. Its options are its Part's (frame_tags,
+docs/Shared-UI.md).
 {% endcomment %}<div class="form-actions{% if bar %} save-bar{% endif %}">{{ content|safe }}</div>

@@ -1,20 +1,12 @@
 {% comment %}
-Whether the controller is still arriving. Every reading on this page is the
-controller's, so one that has stopped leaves them all as they were, which
-looks like a quiet estate. This says so: when it last reached HQ, and in the
-attention color once that is longer ago than a healthy controller ever goes.
-An installation it has never reached says that and nothing more.
+Whether the controller is still arriving, a fact of the glance. Every reading
+on this page is the controller's, so one that has stopped leaves them all as
+they were, which looks like a quiet estate. This says so: when it last reached
+HQ, and in the attention color once that is longer ago than a healthy
+controller ever goes. An installation it has never reached says that and
+nothing more. The dot is the one the connection carries, held to the same
+rule: green only while it arrives, the attention color once it has gone quiet,
+and gray where it has never run, which is not known to be either.
 {% endcomment %}
 {% url 'control_plane:controller' as address %}
-{% reading icon="activity" url=address %}
-  {% comment %}
-  The same dot the connection carries, and held to the same rule: green only while it is
-  arriving, the attention color once it has gone quiet, and gray where it has
-  never run, which is not known to be either. The words beside it say which.
-  {% endcomment %}
-  {% status "Controller" tone=controller.tone dot=True ink="context" %}
-{% lines %}
-  {% if not controller.known %}<span>Not configured</span>
-  {% elif controller.silent %}<strong>{% include "partials/_reading_age.html" with at=controller.seen_at only %}</strong>
-  {% else %}{% include "partials/_reading_age.html" with at=controller.seen_at only %}{% endif %}
-{% endreading %}
+{% fact "Controller" icon="activity" url=address %}{% if not controller.known %}{% status "Not configured" tone=controller.tone dot=True ink="context" %}{% elif controller.silent %}{% status "Silent" tone=controller.tone dot=True ink="context" %}{% else %}{% status "Arriving" tone=controller.tone dot=True ink="context" %}{% endif %}{% detail %}{% if controller.known %}<small>{% include "partials/_reading_age.html" with at=controller.seen_at only %}</small>{% endif %}{% endfact %}

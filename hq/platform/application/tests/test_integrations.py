@@ -1,6 +1,7 @@
 """Contract tests for the one compiled integration graph."""
 
 from dataclasses import dataclass
+from typing import TypedDict
 
 from django.test import TestCase
 
@@ -21,6 +22,10 @@ from ..plugins import clear_plugin_composition_cache
 from ..resources import EmptyQuery, ResourceSpec, describe_resources
 from ..search_contracts import SearchDefinition
 from ..security import Capability, Principal
+
+
+class SyntheticRecord(TypedDict):
+    name: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,8 +53,6 @@ class IntegrationGraphTests(TestCase):
         self.assertIsInstance(graph.resources, frozendict)
         self.assertIsInstance(graph.connections, frozendict)
         self.assertIsInstance(graph.search, frozendict)
-        with self.assertRaises(TypeError):
-            graph.connections["example.mutable"] = graph.connections["hq.nws"]
 
     def test_the_composed_graph_is_compiled_once_until_explicitly_cleared(self):
         first = integration_graph()
@@ -89,6 +92,7 @@ class IntegrationGraphTests(TestCase):
             Capability.READ,
             list_handler=lambda **kwargs: {"items": [], "count": 0},
             list_query_type=ProjectQuery,
+            item_type=SyntheticRecord,
         )
         capabilities = (
             CapabilitySpec(
@@ -151,7 +155,7 @@ class IntegrationGraphTests(TestCase):
     def test_two_commands_one_connection_offers_may_not_say_the_same_words(self):
         capabilities = tuple(
             CapabilitySpec(
-                f"example.lookup.{name}",
+                f"example.lookup.{name}.read",
                 "Look something up.",
                 "read",
                 Capability.READ,
@@ -187,7 +191,7 @@ class IntegrationGraphTests(TestCase):
 
         for build in (
             lambda effect: CapabilitySpec(
-                "example.bad", "Bad effect.", effect, Capability.READ, SyntheticCommand, execute_synthetic
+                "example.bad.read", "Bad effect.", effect, Capability.READ, SyntheticCommand, execute_synthetic
             ),
             lambda effect: ConnectionAbility("example.bad", "Bad", "Bad effect.", effect=effect),
         ):
@@ -205,7 +209,7 @@ class IntegrationGraphTests(TestCase):
             execute_synthetic,
         )
         malformed_capability = CapabilitySpec(
-            "example.bad",
+            "example.bad.read",
             "Bad variants.",
             "read",
             Capability.READ,
@@ -251,14 +255,14 @@ class IntegrationGraphTests(TestCase):
             )
 
         refused = (
-            wanting("example.untargeted", "keep {target}"),
-            wanting("example.missing", "keep the note", "slug"),
-            wanting("example.twice", "move {target} beside {target}", "slug"),
-            wanting("example.other", "keep {note}", "slug"),
+            wanting("example.untargeted.set", "keep {target}"),
+            wanting("example.missing.set", "keep the note", "slug"),
+            wanting("example.twice.set", "move {target} beside {target}", "slug"),
+            wanting("example.other.set", "keep {note}", "slug"),
         )
         with self.assertRaises(IntegrationGraphError) as raised:
             compile_integration_graph(
-                capabilities=(wanting("example.keep", "keep the note {target}", "slug"), *refused),
+                capabilities=(wanting("example.keep.set", "keep the note {target}", "slug"), *refused),
                 resources=(),
                 connections=(),
             )
@@ -355,6 +359,7 @@ class IntegrationGraphTests(TestCase):
             Capability.READ,
             list_handler=lambda: {"items": [], "count": 0},
             list_query_type=EmptyQuery,
+            item_type=SyntheticRecord,
         )
         capability = CapabilitySpec(
             "example.records.refresh",

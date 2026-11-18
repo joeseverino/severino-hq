@@ -39,10 +39,28 @@ def _coerce_date(value: Any) -> date | None:
         raise ManifestImportError(f"Invalid date {value!r}: {exc}") from exc
 
 
-def _validate_choice(value: str, allowed, *, field: str) -> str:
-    # `allowed` is a canonical set from frontmatter_schema: the same definition
-    # the MCP validates writes against, so HQ never rejects a value the MCP just
-    # wrote. Do not pass model `.choices` here; that would reintroduce drift.
+# The frontmatter field each canonical set validates. Each is a set from
+# frontmatter_schema: the same definition the MCP validates writes against, so
+# HQ never rejects a value the MCP just wrote. Model `.choices` stay out of it,
+# which would reintroduce drift.
+CHOICES = {
+    "doc_type": frontmatter_schema.DOC_TYPES,
+    "environment": frontmatter_schema.ENVIRONMENTS,
+    "status": frontmatter_schema.STATUSES,
+    "sensitivity": frontmatter_schema.SENSITIVITIES,
+}
+
+# What a content entry is, and what it carries beyond a doc's fields: the slug
+# of the item it mirrors to, and whether it is live, which may be false, so is
+# required present rather than filled.
+CONTENT_DOC_TYPE = DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
+CONTENT_FILLED = ("slug",)
+CONTENT_PRESENT = ("published",)
+
+
+def _validate_choice(entry: dict, field: str, *, default: str = "") -> str:
+    value = entry.get(field) or default
+    allowed = CHOICES[field]
     if value in allowed:
         return value
     raise ManifestImportError(f"Invalid {field}={value!r}. Allowed: {sorted(allowed)}")
@@ -56,13 +74,7 @@ def _is_content_entry(entry: dict) -> bool:
     CMS unless the manifest carries content_type. The one predicate for both
     the contract check and the ContentItem routing, so the two cannot disagree.
     """
-    is_article = entry.get("doc_type") == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
-    return is_article and bool(entry.get("content_type"))
-
-
-# The importer reads the service name from either key, so either satisfies the
-# schema's `system`.
-_FIELD_ALIASES = {"system": ("system", "system_service")}
+    return entry.get("doc_type") == CONTENT_DOC_TYPE and bool(entry.get("content_type"))
 
 
 def _is_blank(value: Any) -> bool:
@@ -77,11 +89,7 @@ def _enforce_contract(entry: dict, doc_id: str) -> None:
     doc_id, so one preflight run is enough to fix an entry.
     """
     label = doc_id or "(no doc_id)"
-    missing = [
-        field
-        for field in frontmatter_schema.REQUIRED_FIELDS
-        if all(_is_blank(entry.get(key)) for key in _FIELD_ALIASES.get(field, (field,)))
-    ]
+    missing = [field for field in frontmatter_schema.REQUIRED_FIELDS if _is_blank(entry.get(field))]
     if missing:
         raise ManifestImportError(
             f"{label}: {counted(len(missing), 'required field missing', 'required fields missing')}: "
@@ -98,16 +106,10 @@ def _enforce_contract(entry: dict, doc_id: str) -> None:
 
 
 def _enforce_content_contract(entry: dict, label: str) -> None:
-    """A content entry names the item it mirrors to and whether it is live.
+    """A content entry names the item it mirrors to and whether it is live."""
 
-    ``published`` may be false, so it is required present rather than truthy.
-    """
-
-    missing = []
-    if _is_blank(entry.get("slug")):
-        missing.append("slug")
-    if "published" not in entry:
-        missing.append("published")
+    missing = [field for field in CONTENT_FILLED if _is_blank(entry.get(field))]
+    missing += [field for field in CONTENT_PRESENT if field not in entry]
     if missing:
         raise ManifestImportError(
             f"{label}: {counted(len(missing), 'content field missing', 'content fields missing')}: {', '.join(missing)}"
@@ -124,31 +126,14 @@ def _build_record_defaults(entry: dict) -> dict:
     """
     doc_id = (entry.get("doc_id") or "").strip()
     _enforce_contract(entry, doc_id)
-    doc_type = _validate_choice(
-        entry["doc_type"],
-        frontmatter_schema.DOC_TYPES,
-        field="doc_type",
-    )
     return {
         "title": entry.get("title") or doc_id,
-        "doc_type": doc_type,
-        "system_service": entry.get("system") or entry.get("system_service") or "",
-        "environment": _validate_choice(
-            entry.get("environment") or "other",
-            frontmatter_schema.ENVIRONMENTS,
-            field="environment",
-        ),
-        "status": _validate_choice(
-            entry["status"],
-            frontmatter_schema.STATUSES,
-            field="status",
-        ),
-        "sensitivity": _validate_choice(
-            entry.get("sensitivity") or "internal",
-            frontmatter_schema.SENSITIVITIES,
-            field="sensitivity",
-        ),
-        "obsidian_path": entry.get("path") or entry.get("obsidian_path") or "",
+        "doc_type": _validate_choice(entry, "doc_type"),
+        "system_service": entry.get("system") or "",
+        "environment": _validate_choice(entry, "environment", default="other"),
+        "status": _validate_choice(entry, "status"),
+        "sensitivity": _validate_choice(entry, "sensitivity", default="internal"),
+        "obsidian_path": entry.get("path") or "",
         "github_path": entry.get("github_path") or "",
         "external_url": entry.get("external_url") or "",
         "last_reviewed": _coerce_date(entry.get("last_reviewed")),
@@ -233,14 +218,14 @@ def _upsert_content_item(
 
     item_status = ContentItem.Status.PUBLISHED if entry["published"] else ContentItem.Status.DRAFT
 
-    tags = entry.get("tags") or entry.get("technologies") or []
+    tags = entry.get("tags") or []
     tags_str = ", ".join(t for t in tags if t) if isinstance(tags, list) else str(tags)
 
     content_defaults = {
         "title": defaults["title"],
         "content_type": content_type,
         "status": item_status,
-        "topic": (entry.get("topic") or entry.get("description") or entry.get("excerpt") or entry.get("system") or ""),
+        "topic": entry.get("topic") or entry.get("system") or "",
         "tags": tags_str,
         "published_url": defaults.get("external_url") or "",
         "published_at": defaults.get("published_at"),
@@ -270,7 +255,7 @@ def _upsert_content_item(
 
 
 def _tag_list(entry: dict) -> list[str]:
-    tags = entry.get("tags") or entry.get("technologies") or []
+    tags = entry.get("tags") or []
     if isinstance(tags, list):
         return [str(tag).strip() for tag in tags if str(tag).strip()]
     if isinstance(tags, str):

@@ -15,9 +15,11 @@ from datetime import timedelta
 
 from hq.platform.application.routes import reverse
 
+from .action_links import read_link
 from .derivations import reached, whole
 from .entity_links import web_url
-from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, opens
+from .finding_model import Finding, FindingEstate, FindingRule, opens
+from .finding_steps import Do, Run
 from .github_estate import (
     ARTIFACT_ATTENTION_DAYS,
     ARTIFACT_SERIOUS_DAYS,
@@ -29,9 +31,10 @@ from .github_estate import (
 )
 from .github_posture import COMMANDS, REASONS, STANDARD, calls_workflows, left_out, postures
 from .moments import duration, moment
-from .standards import Check, Standing
+from .standard_findings import Help, Measured, Per, Standard
+from .standards import Check
 from .tone import Tone
-from .ui import counted, ended
+from .ui import counted
 lazy from .projects import projects_by_repository, repository_key
 
 PROJECTS = "hq.projects"
@@ -123,11 +126,7 @@ def _failing(repo: Repository) -> Iterator[Said]:
         # Where the reading does not hold the failing runs, the command that lists them.
         steps=()
         if runs or not sha
-        else (
-            OperatorStep(
-                label="See the failing runs", command=f"gh run list -R {repo.name} --commit {sha} --status failure"
-            ),
-        ),
+        else (Run("See the failing runs", f"gh run list -R {repo.name} --commit {sha} --status failure"),),
     )
     yield finding, f"{repo.short} was failing on {repo.default_branch}"
 
@@ -212,60 +211,56 @@ def _lapsing(repo: Repository) -> Iterator[Said]:
         yield finding, f"{repo.short}'s admission was due to lapse in {days} days"
 
 
-def _posture_steps(check: Check, missing: list[Repository]) -> tuple[tuple[OperatorStep, ...], str]:
+def _posture_help(check: Check, subjects: tuple[Measured, ...]) -> Help:
     """Each repository's exact commands, or why there are none; beside
     commands, what they leave out is the last step, in words."""
 
+    missing = [item.measurement.subject for item in subjects]
+    settings = tuple(read_link("open", repo.short, f"{repo.url}/settings") for repo in missing)
     derive = COMMANDS.get(check.id)
     if derive is None:
-        return (), REASONS[check.id]
-    runs = tuple(OperatorStep(label=label, command=command) for repo in missing for label, command in derive(repo))
+        return Help(no_help_reason=REASONS[check.id], offers=settings)
+    runs = tuple(Run(label, command) for repo in missing for label, command in derive(repo))
     called = tuple(
-        OperatorStep(label=f"{repo.short}: check that {workflow} pins its own actions, then require pinning.")
+        Do(f"{repo.short}: check that {workflow} pins its own actions, then require pinning.")
         for repo in missing
         for workflow in (calls_workflows(repo) if check.id == "actions-pinned" else ())
     )
     said = left_out(check, missing)
     if not runs:
-        return called, said
-    return runs + called + ((OperatorStep(label=said),) if said else ()), ""
+        return Help(steps=called, no_help_reason=said, offers=settings)
+    return Help(steps=runs + called + ((Do(said),) if said else ()), offers=settings)
 
 
-def _posture(_estate: FindingEstate) -> tuple[Finding, ...]:
-    """One finding per check not met, naming every repository that misses it,
-    so the queue grows with the gaps in the standard rather than with the estate."""
+def repositories_measured(_estate: FindingEstate | None = None) -> tuple[Measured, ...]:
+    """Each repository HQ is built from, measured against the repository standard."""
 
-    found = postures()
-    raised = []
-    for check in STANDARD:
-        unmet = [item.subject for item in found if item.state_of(check.id) == Standing.UNMET]
-        if not unmet:
-            continue
-        missing = [repo.short for repo in unmet]
-        steps, reason = _posture_steps(check, unmet)
-        raised.append(
-            Finding(
-                rule=POSTURE,
-                subject="",
-                part=check.id,
-                title=f"{check.label}: not met in {counted(len(missing), 'repository', 'repositories')}",
-                severity=Tone.SERIOUS if check.serious else Tone.ATTENTION,
-                explanation=f"{ended(', '.join(missing))} {check.fix}",
-                evidence=(("Not met in", ", ".join(missing)), ("Why it matters", check.why)),
-                primary=opens("Open repo checks", reverse("posture")),
-                steps=steps,
-                no_help_reason=reason,
-                # A setting to change in each repository that misses it.
-                count=len(missing),
-                # The oldest of the readings it names: the claim is no newer.
-                observed_at=min((repo.observed_at for repo in unmet if repo.observed_at), default=None),
-                reads=REPOSITORY_KIND,
-            )
+    return tuple(
+        Measured(
+            measurement=found, name=found.subject.short, observed_at=found.subject.observed_at, reads=REPOSITORY_KIND
         )
-    return tuple(raised)
+        for found in postures()
+    )
 
 
 CANNOT_WRITE = "HQ reads GitHub with read-only tokens and never writes to a repository."
+
+REPOSITORY_STANDARD = Standard(
+    name=POSTURE,
+    title="Repository checks",
+    severity=Tone.ATTENTION,
+    checks=STANDARD,
+    subjects=repositories_measured,
+    raises=Per.CHECK,
+    operator_action="Change the setting the check names in each repository that misses it.",
+    no_help_reason=CANNOT_WRITE,
+    bars={
+        Tone.SERIOUS: "a repository misses a check HQ's standard holds serious",
+        Tone.ATTENTION: "a repository misses a check of HQ's standard",
+    },
+    primary=lambda: opens("Open repo checks", reverse("posture")),
+    helps=_posture_help,
+)
 
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
@@ -342,18 +337,5 @@ RULES: tuple[FindingRule, ...] = (
         domain=PROJECTS,
         gathered=True,
     ),
-    FindingRule(
-        POSTURE,
-        "Repository checks",
-        Tone.ATTENTION,
-        _posture,
-        operator_action="Change the setting the check names in each repository that misses it.",
-        no_help_reason=CANNOT_WRITE,
-        bars={
-            Tone.SERIOUS: "a repository misses a check HQ's standard holds serious",
-            Tone.ATTENTION: "a repository misses a check of HQ's standard",
-        },
-        domain=PROJECTS,
-        gathered=True,
-    ),
+    REPOSITORY_STANDARD.rule(domain=PROJECTS),
 )

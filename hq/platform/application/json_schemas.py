@@ -28,13 +28,15 @@ import copy
 import functools
 import re
 from collections.abc import Iterable, Mapping
+from datetime import datetime
 from types import get_original_bases
-from typing import Any, TypedDict, is_typeddict, override
+from typing import Annotated, Any, TypedDict, is_typeddict, override
 
-from pydantic import GetCoreSchemaHandler, TypeAdapter
+from pydantic import GetCoreSchemaHandler, PlainSerializer, TypeAdapter
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE, GenerateJsonSchema, JsonRef, JsonSchemaMode, JsonSchemaValue
 from pydantic_core import core_schema
 
+from .answer_fields import ObservedAt
 from .labels import field_label
 
 # Where a schema's own definitions are, as Pydantic refers to them.
@@ -54,6 +56,7 @@ class PublishedSchema(GenerateJsonSchema):
     @override
     def generate(self, schema: core_schema.CoreSchema, mode: JsonSchemaMode = "validation") -> JsonSchemaValue:
         value = super().generate(schema, mode)
+        _standard_formats(value)
         _title_compositions(value.get("$defs", {}))
         _title_branches(value, value.get("$defs", {}))
         _point_inherited(value)
@@ -92,6 +95,7 @@ class PublishedSchema(GenerateJsonSchema):
     @override
     def generate_definitions(self, inputs: Any) -> tuple[dict[Any, JsonSchemaValue], dict[Any, JsonSchemaValue]]:
         refs, definitions = super().generate_definitions(inputs)
+        _standard_formats(definitions)
         _title_compositions(definitions)
         _title_branches([refs, definitions], definitions)
         _point_inherited(definitions)
@@ -103,7 +107,22 @@ class PublishedSchema(GenerateJsonSchema):
 
     @override
     def dataclass_schema(self, schema: core_schema.DataclassSchema) -> JsonSchemaValue:
-        return _untitled(super().dataclass_schema(schema), schema["cls"])
+        written = _untitled(super().dataclass_schema(schema), schema["cls"])
+        if self.mode == "serialization":
+            written["additionalProperties"] = False
+        return written
+
+    @override
+    def field_is_required(
+        self,
+        field: core_schema.ModelField | core_schema.DataclassField | core_schema.TypedDictField,
+        total: bool,
+    ) -> bool:
+        # A dataclass is written whole (``as_written``, ``asdict``): each answer
+        # holds every field it publishes, one at its default too, and no other.
+        if self.mode == "serialization" and field["type"] == "dataclass-field":
+            return field.get("serialization_exclude_if") is None
+        return super().field_is_required(field, total)
 
     @override
     def generate_inner(self, schema: Any) -> JsonSchemaValue:
@@ -113,6 +132,39 @@ class PublishedSchema(GenerateJsonSchema):
         if isinstance(schema, dict) and schema.get("type") == "enum":
             _untitled(self.resolve_ref_schema(value), schema["cls"])
         return value
+
+    @override
+    def handle_ref_overrides(self, json_schema: JsonSchemaValue) -> JsonSchemaValue:
+        kept = super().handle_ref_overrides(json_schema)
+        # Pydantic drops a sibling the referred definition already says, but
+        # labels are read beside the enum they label (``labeled_choices``).
+        if LABELS in kept and "enum" in json_schema:
+            kept["enum"] = json_schema["enum"]
+        return kept
+
+    @override
+    def decimal_schema(self, schema: core_schema.DecimalSchema) -> JsonSchemaValue:
+        value = super().decimal_schema(schema)
+        digits, places = schema.get("max_digits"), schema.get("decimal_places")
+        if digits is None or places is None or "anyOf" not in value:
+            return value
+        # Pydantic refuses past ``max_digits`` and ``decimal_places`` and says
+        # neither: a number is held to the same size by its bounds and step.
+        whole = 10 ** (digits - places)
+        number = value["anyOf"][0]
+        number.update({"exclusiveMinimum": -whole, "exclusiveMaximum": whole, "multipleOf": 10**-places})
+        return value
+
+    @override
+    def get_decimal_pattern(self, schema: core_schema.DecimalSchema) -> str | None:
+        # The digits Pydantic counts: leading zeros, and zeros ending the
+        # fraction, are none of them; an exponent is left unsaid.
+        digits, places = schema.get("max_digits"), schema.get("decimal_places")
+        if digits is None or places is None:
+            return None
+        whole = f"[0-9]{{1,{digits - places}}}" if digits > places else "0"
+        fraction = f"[0-9]{{1,{places}}}0*" if places else "0+"
+        return rf"^[+-]?(?:0*{whole}(?:\.(?:{fraction})?)?|0*\.{fraction})$"
 
     @override
     def dict_schema(self, schema: core_schema.DictSchema) -> JsonSchemaValue:
@@ -182,6 +234,23 @@ def _point_inherited(value: Any) -> None:
             _point_inherited(item)
 
 
+# Pydantic's own format names, which no validator reads, by the standard
+# formats that say the same: an address of either IP version.
+_STANDARD_FORMATS = {"ipvanyaddress": ("ipv4", "ipv6")}
+
+
+def _standard_formats(value: Any) -> None:
+    if isinstance(value, list):
+        for item in value:
+            _standard_formats(item)
+    elif isinstance(value, dict):
+        if isinstance(said := value.get("format"), str) and (standard := _STANDARD_FORMATS.get(said)) is not None:
+            del value["format"]
+            value["anyOf"] = [{"format": name} for name in standard]
+        for item in value.values():
+            _standard_formats(item)
+
+
 def _title_compositions(definitions: Mapping[str, JsonSchemaValue]) -> None:
     # A definition that is only a choice between shapes is an alias's: a class
     # always says its own shape. Its name is its declaration.
@@ -247,13 +316,8 @@ _WRITTEN = "hq_written"
 class Written:
     """``Annotated[dict[str, Any], Written(Kind)]``: a part the API document
     types whole, as ``Kind``, and an MCP tool's shape leaves an object. It is a
-    dataclass as ``asdict`` writes it: a dict to the type checker and ``Kind``
-    to every validator.
-
-    A stdlib dataclass with no config of its own takes the config of the
-    answer that holds it, so one held by several answers carries its own
-    (``pydantic.with_config``), or a closed holder and an open one write it as
-    two components of one name."""
+    dataclass as ``as_written`` writes it: a dict to the type checker and
+    ``Kind`` to every validator."""
 
     def __init__(self, kind: type) -> None:
         self.kind = kind
@@ -262,6 +326,26 @@ class Written:
         schema = handler(self.kind)
         schema["metadata"] = {**schema.get("metadata", {}), _WRITTEN: True}
         return schema
+
+
+def as_written(value: Any) -> dict[str, Any]:
+    """``value``, a dataclass a ``Written`` part types, as the part is
+    published: each field its type publishes (one marked ``Field(exclude=True)``
+    left out, a ``computed_field`` property in), as JSON writes it."""
+
+    written: dict[str, Any] = _writer(type(value)).dump_python(value, mode="json")
+    return written
+
+
+@functools.cache
+def _writer(kind: type) -> TypeAdapter[Any]:
+    return TypeAdapter(kind)
+
+
+# When a dataclass a ``Written`` part types last read its source, written as
+# ``ObservedAt`` says, as every answer writes a moment. An alias by assignment,
+# so the field refers to ``ObservedAt`` itself.
+ObservedMoment = Annotated[datetime, PlainSerializer(datetime.isoformat, return_type=ObservedAt, when_used="json")]
 
 
 def json_schema(

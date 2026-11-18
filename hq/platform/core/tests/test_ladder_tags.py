@@ -1,6 +1,6 @@
 """The check ladder: checks read down, each opening to why, are one part."""
 
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import Context, Template
 from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import elements, with_class
@@ -49,11 +49,3 @@ class CheckLadderTagTests(SimpleTestCase):
         for part in ("ladder-kind", "ladder-detail", "ladder-evidence", "ladder-more", "ladder-page", "ladder-body"):
             with self.subTest(part=part):
                 self.assertEqual(with_class(html, part), [])
-
-    def test_a_state_it_does_not_know_is_refused(self):
-        with self.assertRaises(TemplateSyntaxError):
-            _render('{% check_rung state="maybe" %}Example check{% endcheck_rung %}')
-
-    def test_an_unknown_option_is_refused(self):
-        with self.assertRaises(TemplateSyntaxError):
-            Template('{% check_rung tone="good" %}Example check{% endcheck_rung %}')

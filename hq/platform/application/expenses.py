@@ -9,8 +9,8 @@ from django.db.models import Sum
 
 from hq.domains.expenses.models import DEFAULT_CATEGORY, EXPENSE_CATEGORY_CHOICES, Expense
 
-from .answer_fields import BusinessUseShare
 from .assets import PaymentMethod
+from .business_use import BusinessUseShare
 from .card_items import Kpi
 from .command_fields import Describe, Names, Refers
 from .money import money
@@ -132,13 +132,13 @@ class ExpenseCommand:
     total_cost: TotalCost = Decimal("0.00")
     business_use_percentage: BusinessUseShare = 100
     payment_method: PaymentMethod = ""
+    paid_from: PaidFrom = ""
     business_purpose: BusinessPurpose = ""
     notes: Notes = ""
     related_project: ExpenseProject = None
     related_asset: ExpenseAsset = None
     related_content: ExpenseContent = None
     related_documentation: ExpenseDoc = None
-    paid_from: PaidFrom = ""
     about: ExpenseAbout = ""
 
 

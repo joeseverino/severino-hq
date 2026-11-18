@@ -12,11 +12,17 @@ order docs/Deployment.md gives it, for any operator's host.
 
 from typing import Any
 
-from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep
+lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
+
+from .finding_model import Finding, FindingEstate, FindingRule, opens
+from .finding_steps import Run
 from .moments import ago
 from .security import Capability, Principal
 from .tone import Tone
+lazy from .cadence import WorkerStanding, automation_standing
+lazy from .infrastructure import declared_resources
 lazy from .problems import About, problems_by_part
+lazy from .routes import reverse
 
 RULE = "automation-worker-absent"
 # Who is told: whoever may read the Playbooks page. It is about no record or
@@ -30,18 +36,18 @@ HOST_CONFIGURATION = "/etc/severino-hq/host.json"
 
 # As deploy/host.example.json shows it: the grant is one of the file's own,
 # and reads that repository's contents.
-_ENTRY = OperatorStep(
+_ENTRY = Run(
     label=(
         'On HQ\'s machine, add "automation": {"repository": "OWNER/REPOSITORY", "grant": "GRANT"}, '
         "naming the repository your playbooks are in and, for a private one, the grant that reads it"
     ),
     command=f"sudoedit {HOST_CONFIGURATION}",
 )
-_START = OperatorStep(
+_START = Run(
     label="Start the worker, which names anything still missing",
     command=f"sudo {HQ_HOST} automation",
 )
-_LOG = OperatorStep(
+_LOG = Run(
     label="Read why it stopped",
     command=f"sudo journalctl -u {AUTOMATION_UNIT} -n 50 --no-pager",
 )
@@ -57,10 +63,23 @@ def worker_problems(principal: Principal) -> tuple[dict[str, Any], ...]:
     return tuple(item for _part, item in problems_by_part({RULE: About(keys=(key,))}, principal))
 
 
+def _standing() -> WorkerStanding | None:
+    """HQ's playbook worker's standing, or None for an HQ that never had a
+    playbook source and never saw a worker: nobody set automation up there,
+    so its absence is nothing to raise."""
+
+    worker = automation_standing()
+    if worker.seen_at is None and not any(resource.kind == SOURCE_KIND for resource in declared_resources()):
+        return None
+    return worker
+
+
 def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
-    worker = estate.topology.automation_worker
+    worker = _standing()
     if worker is None or not worker.cannot("refresh", now=estate.now):
         return ()
+    # The page whose Refresh and runs it refuses, where its setup is shown.
+    playbooks = opens("Open playbooks", reverse("control_plane:playbooks"))
     if worker.seen_at is None:
         return (
             Finding(
@@ -72,6 +91,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 explanation="Refresh and playbook runs are refused until it is set up on HQ's machine.",
                 evidence=(("Last seen", "never"),),
                 steps=(_ENTRY, _START),
+                primary=playbooks,
             ),
         )
     return (
@@ -84,6 +104,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
             explanation="Refresh and playbook runs are refused until it reports again; start it on HQ's machine.",
             evidence=(("Last seen", ago(worker.seen_at, now=estate.now)),),
             steps=(_START, _LOG),
+            primary=playbooks,
         ),
     )
 
@@ -95,6 +116,7 @@ RULES: tuple[FindingRule, ...] = (
         "HQ's playbook worker is not reporting",
         Tone.ATTENTION,
         _absent,
+        gathered=True,
         operator_action=(
             f"On HQ's machine, add an automation entry to {HOST_CONFIGURATION}, then run {HQ_HOST} automation as root."
         ),

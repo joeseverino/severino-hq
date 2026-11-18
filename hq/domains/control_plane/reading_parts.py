@@ -11,13 +11,16 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from ipaddress import ip_address
-from typing import Any
+from typing import Annotated, Any
+
+from hq.platform.application.describe import Describe, listed
 
 from .connection_kinds import CONNECTION_LABELS
 from .names import in_zone, normalized_hostname
 from .observations import OBSERVATIONS, ReadingPart
 from .provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
+    FAILURES,
     PERMISSION_REFUSAL,
 )
 lazy from .models import ProviderInventory
@@ -63,20 +66,18 @@ def parts_of(kind: str) -> Mapping[str, ReadingPart]:
 
 
 @dataclass(frozen=True, slots=True)
-class PartRefusal:
+class RefusedPart:
     """One part of one kind that a sweep could not read, and on what."""
 
-    kind: str
+    kind: Annotated[str, Describe("The type the refused part belongs to.")]
     part: ReadingPart
-    # One of ``FAILURES``, or "" when the cause is unknown.
-    refusal: str
-    reason: str = ""
-    # The zone or hostname it was refused on, a record's name, a machine, or
-    # "" for all.
-    scope: str = ""
-    connection_ref: str = ""
-    # The machine's address, when the scope is a machine.
-    address: str = ""
+    refusal: Annotated[str, Describe(f"How it was refused, {listed(FAILURES)}; empty when the cause is unknown.")]
+    reason: Annotated[str, Describe("The service's words for the refusal; empty for none.")] = ""
+    scope: Annotated[
+        str, Describe("What it was refused on, such as a zone, a hostname or a machine; empty for all of it.")
+    ] = ""
+    connection_ref: Annotated[str, Describe("The connection it was refused to; empty for none.")] = ""
+    address: Annotated[str, Describe("The machine's address, when it was refused on a machine; else empty.")] = ""
 
     @property
     def missing(self) -> tuple[str, ...]:
@@ -150,7 +151,7 @@ def _address(value: Any) -> str:
         return ""
 
 
-def refused_parts(snapshot: ProviderInventory) -> tuple[PartRefusal, ...]:
+def refused_parts(snapshot: ProviderInventory) -> tuple[RefusedPart, ...]:
     """The parts a stored snapshot says were refused.
 
     A credential that read the rest of the kind is valid, so its refusal of a
@@ -168,7 +169,7 @@ def refused_parts(snapshot: ProviderInventory) -> tuple[PartRefusal, ...]:
         if refusal == CREDENTIAL_REFUSAL and snapshot.reachable and not part.provider:
             refusal = PERMISSION_REFUSAL
         found.append(
-            PartRefusal(
+            RefusedPart(
                 kind=snapshot.kind,
                 part=part,
                 refusal=refusal,

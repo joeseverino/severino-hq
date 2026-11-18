@@ -20,7 +20,7 @@ from hq.platform.application.labels import dotted
 from hq.platform.core.network import IGNORED, JUDGED, PROXY, split_host_port
 
 from .entity_links import entity_link
-from .path_model import Hop, HopSource, Route, ServicePath, last_machine
+from .path_model import Evidence, Hop, HopCheck, HopSource, Route, ServicePath, last_machine
 from .paths import hq_path, why_unread
 from .reach import NETWORKS, network_of
 from .request_addresses import Address, addresses_of, addresses_of_hq
@@ -36,17 +36,11 @@ lazy from .connection_security import request_readings
 lazy from .dashboard import finding_rows
 lazy from .derived_reads import serialize_hop
 lazy from .facts import Subject, readings
-lazy from .finding_model import Finding, OperatorStep
+lazy from .finding_model import Finding
+lazy from .finding_steps import Do
 lazy from .hq_self import own_addresses, served_at, served_port, site_label
 lazy from .locate import index_of
 lazy from .projection import complete, iso
-
-# A hop's check in the words the hop shows.
-_CHECK_LABELS = {
-    Standing.MET: "Confirmed by this request",
-    Standing.UNMET: "This request disagrees",
-    Standing.UNAVAILABLE: "Not confirmed",
-}
 
 # How each role in the forwarded chain was decided.
 _CHAIN_DETAIL = {
@@ -54,47 +48,6 @@ _CHAIN_DETAIL = {
     JUDGED: "Your address, as HQ sees it.",
     IGNORED: "Ignored: anyone can write this part of the header.",
 }
-
-
-@dataclass(frozen=True, slots=True)
-class HopCheck:
-    """Whether the request agrees with what the readings say about one hop."""
-
-    state: Standing
-    detail: str
-    # The operator step that resolves a contradiction.
-    step: str = ""
-
-    @property
-    def label(self) -> str:
-        return _CHECK_LABELS[self.state]
-
-    @property
-    def contradicted(self) -> bool:
-        """The request disagrees with the readings here, so the hop is shown opened."""
-
-        return self.state is Standing.UNMET
-
-
-# A forwarded hop's role as the tone its pill takes.
-_ROLE_TONES = {JUDGED: Tone.GOOD, IGNORED: Tone.SERIOUS}
-
-
-@dataclass(frozen=True, slots=True)
-class Evidence:
-    """One thing the request itself carried, at the hop it belongs to."""
-
-    label: str
-    value: str
-    detail: str = ""
-    # For an address in the forwarded chain: judged, proxy or ignored.
-    role: str = ""
-
-    @property
-    def tone(self) -> Tone:
-        """The address HQ judges by stands out, one it ignores reads as a warning."""
-
-        return _ROLE_TONES.get(self.role, Tone.NEUTRAL)
 
 
 # ----- The forwarded chain ----------------------------------------------------
@@ -643,7 +596,7 @@ class RequestPath:
                     severity=Tone.ATTENTION,
                     title=hop.label,
                     explanation=hop.check.detail,
-                    steps=(OperatorStep(label=hop.check.step),),
+                    steps=(Do(hop.check.step),) if hop.check.step else (),
                 )
                 for hop in self.findings
             ),

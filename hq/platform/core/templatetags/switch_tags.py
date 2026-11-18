@@ -1,15 +1,9 @@
 """The switch: a row of links to the same view, one of them current, as a
-reporting window, a status filter, a tool's tabs or a zone's siblings are.
-
-``{% switch label="Domains" %}{% choice url=u current=True count=3 note="not managed" mark="★" %}example.com{% endchoice %}{% summary %}What the current one is.{% endswitch %}``
-draws ``partials/_switch.html``: a labeled navigation list of chips, the
-current one marked with ``aria-current``, each choice's count beside its chip
-and inside its link, and the summary, when given, under the row.
-"""
+reporting window, a status filter, a tool's tabs or a zone's siblings are."""
 
 from django import template
 
-from hq.platform.core.templatetags.value_tags import slotted
+from hq.platform.core.template_parts import Option, Part, slotted
 
 register = template.Library()
 
@@ -17,46 +11,57 @@ SWITCH_PARTIAL = "partials/_switch.html"
 CHOICE_PARTIAL = "partials/_switch.html#choice"
 
 
-def _refuse_data(name: str, given: dict) -> None:
-    # A shape admits data_* options; nothing reads one on a switch, so one
-    # given is a mistake said at once rather than dropped.
-    if extra := sorted(option for option in given if option.startswith("data_")):
-        raise template.TemplateSyntaxError(f"{name} takes no {', '.join(extra)}")
-
-
-def switch_frame(name: str, given: dict) -> dict:
+def switch_frame(_name: str, given: dict) -> dict:
     """The navigation's name, which tells one switch on a page from another."""
 
-    _refuse_data(name, given)
-    if not given.get("label"):
-        raise template.TemplateSyntaxError(f"{name} is given label=, the name of what it switches between")
     return {"label": given["label"]}
 
 
-def choice_frame(name: str, given: dict) -> dict:
+def choice_frame(_name: str, given: dict) -> dict:
     """One choice: where it leads, whether it is the current one, and its
     count, which is drawn for any number given, nought included."""
 
-    _refuse_data(name, given)
-    if not given.get("url"):
-        raise template.TemplateSyntaxError(f"{name} is given url=, where the choice leads")
-    count = given.get("count")
+    count = given["count"]
     return {
         "url": given["url"],
-        "current": bool(given.get("current")),
+        "current": bool(given["current"]),
         "count": count,
         "counted": count is not None and count != "",
-        "note": given.get("note") or "",
-        "mark": given.get("mark") or "",
+        "note": given["note"] or "",
+        "mark": given["mark"] or "",
     }
 
 
-slotted("switch", SWITCH_PARTIAL, ("content", "summary"), frozenset(("label",)), shape=switch_frame, library=register)
 slotted(
-    "choice",
-    CHOICE_PARTIAL,
-    ("content",),
-    frozenset(("url", "current", "count", "note", "mark")),
-    shape=choice_frame,
+    Part(
+        name="switch",
+        example='{% switch label="Example domains" %}{% choice url="/example/one/" current=True %}example.com{% endchoice %}{% choice url="/example/two/" %}example.net{% endchoice %}{% endswitch %}',
+        classes=("scope-chip", "switch"),
+        partial=SWITCH_PARTIAL,
+        about=(
+            "A row of links to the same view, each a `{% choice %}`, the current one marked, and under it the "
+            "`{% summary %}` part, when given, saying what the current one is."
+        ),
+        parts=("content", "summary"),
+        options={"label": Option(required=True, about="The name of what it switches between.")},
+        shape=switch_frame,
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="choice",
+        example='{% switch label="Example views" %}{% choice url="/example/" current=True count=3 %}Example{% endchoice %}{% choice url="/example/all/" note="all" %}Every example{% endchoice %}{% endswitch %}',
+        partial=CHOICE_PARTIAL,
+        about="One choice of a `{% switch %}`, a chip leading to its view.",
+        options={
+            "url": Option(required=True, about="Where it leads."),
+            "current": Option(about="The view being drawn, marked `aria-current`."),
+            "count": Option(default=None, about="A figure beside its chip, nought included."),
+            "note": Option(about="A quiet word inside the chip."),
+            "mark": Option(about="A symbol before its words, hidden from a screen reader."),
+        },
+        shape=choice_frame,
+    ),
     library=register,
 )

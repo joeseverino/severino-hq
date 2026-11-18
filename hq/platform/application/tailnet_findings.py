@@ -3,7 +3,8 @@
 import json
 from dataclasses import dataclass
 
-from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
+from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
+from hq.domains.control_plane.providers import PROVIDERS
 
 from . import trusted_networks
 from .action_links import command_url
@@ -13,12 +14,11 @@ from .finding_model import (
     FindingEstate,
     FindingRemedy,
     FindingRule,
-    OperatorStep,
     Said,
-    connections_carrying,
     per_connection,
 )
-from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, LoopbackGrant, LoopbackPort
+from .finding_steps import Do, Run
+from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, LoopbackGrant, LoopbackPort, loopback_grants
 from .tone import Tone
 from .ui import counted, counted_forms, ended
 
@@ -80,7 +80,7 @@ class _GrantedToNobody:
             "title": self.one.format(names=joined) if one else f"{counted(len(names), *self.counted_as)} {self.many}",
             "explanation": self.because[0 if one else 1].format(names=joined),
             "remedies": remedies,
-            "steps": (OperatorStep(label=self.step.format(names=joined)),),
+            "steps": (Do(self.step.format(names=joined)),),
         }
 
 
@@ -178,11 +178,15 @@ def _grant_reaches_only_loopback(estate: FindingEstate) -> tuple[Finding, ...]:
     that accepts it keeps it so. What the card claims is only what HQ read.
     """
 
-    found = []
-    for node, values in connections_carrying(estate, GRANT_REACHES_ONLY_LOOPBACK):
-        grants = tuple(LoopbackGrant.of(value) for value in values)
-        found.append(_loopback_finding(node, grants))
-    return tuple(found)
+    grants = loopback_grants()
+    if not grants:
+        return ()
+    providers = PROVIDERS[TAILNET_KIND].connection_providers
+    return tuple(
+        _loopback_finding(node, grants)
+        for node in estate.nodes()
+        if node.kind == "connection" and node.provider in providers
+    )
 
 
 def _loopback_finding(node, grants: tuple[LoopbackGrant, ...]) -> Finding:
@@ -224,30 +228,28 @@ def _loopback_why(item: LoopbackGrant, port: LoopbackPort) -> str:
     )
 
 
-def _loopback_steps(item: LoopbackGrant) -> tuple[OperatorStep, ...]:
+def _loopback_steps(item: LoopbackGrant) -> tuple[Run | Do, ...]:
     """The grant without the ports, then each test that accepts them with them moved to deny."""
 
     whom = f"{', '.join(item.grant.get('src') or ())} to {', '.join(item.grant.get('dst') or ())}"
     fragment = item.fragment
     edit = (
-        OperatorStep(
-            label=f"In the Tailscale admin console, open Access controls and replace the grant from {whom} with this one.",
-            command=json.dumps(fragment),
+        Run(
+            f"In the Tailscale admin console, open Access controls and replace the grant from {whom} with this one.",
+            json.dumps(fragment),
         )
         if fragment
-        else OperatorStep(
-            label=ended(f"In the Tailscale admin console, open Access controls and remove the grant from {whom}"),
-        )
+        else Do(ended(f"In the Tailscale admin console, open Access controls and remove the grant from {whom}"))
     )
     tests = tuple(
-        OperatorStep(
+        Run(
             label="Replace the policy test that accepts the port with this one, which denies it.",
             command=json.dumps(test),
             notes=("Tailscale rejects a policy whose test fails, so the port cannot be opened again by mistake.",),
         )
         for test in item.tests
     )
-    last = (*tests, OperatorStep(label=THEN_CHECK_AGAIN))
+    last = (*tests, Do(THEN_CHECK_AGAIN))
     return (edit, *last)
 
 
@@ -300,6 +302,7 @@ RULES: tuple[FindingRule, ...] = (
         "A grant opens a port bound only to loopback",
         Tone.NEUTRAL,
         _grant_reaches_only_loopback,
+        gathered=True,
         operator_action=(
             "In Tailscale's admin console, remove the port from the grant and deny it in the test that accepts it."
         ),

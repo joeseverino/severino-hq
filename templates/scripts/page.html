@@ -1,0 +1,10 @@
+{% load static %}{% comment %}
+The scripts every page loads once its content is parsed, each deferred, in
+the order they run: base.html's and every page the catalog draws alone, so an
+entry with script on is the page a reader has. A script that clones frames
+loads with them, through its part.
+{% endcomment %}{% include "scripts/fragment.html" %}
+<script src="{% static 'js/tables.js' %}" {% csp_nonce_attr %} defer></script>
+<script src="{% static 'js/app.js' %}" {% csp_nonce_attr %} defer></script>
+{% include "scripts/ask.html" %}
+{% include "scripts/connection.html" %}

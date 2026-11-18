@@ -4,7 +4,7 @@ already showed is left closed there, and every other row is opened."""
 
 from django.test import SimpleTestCase
 
-from hq.platform.core.tests.browser.reference import opened_operation, opened_walk
+from hq.platform.core.tests.look_reference import opened_operation, opened_walk
 
 
 def _answer(schema):

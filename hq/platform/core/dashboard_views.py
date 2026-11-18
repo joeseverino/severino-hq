@@ -12,7 +12,7 @@ from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
 from hq.platform.application import action_items as queue_state, fragments, getting_started
-from hq.platform.application.asks import AskMixin
+from hq.platform.application.asks import ASK, AskMixin
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
@@ -53,6 +53,8 @@ class DashboardLinkChoiceView(View):
     no spec, no generation and no controller: the world does not change because
     somebody decided which shortcuts they want.
     """
+
+    runs = (CHOOSE,)
 
     def get(self, request):
         return render(
@@ -96,12 +98,14 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
     def _calendar(self) -> dict:
         today = timezone.localdate()
         month = month_of(self.request.GET.get("month"), today)
+        calendar = calendar_month(month, choices=calendar_choices(self.request.user), today=today)
         return {
-            "calendar": calendar_month(month, choices=calendar_choices(self.request.user), today=today),
+            "calendar": calendar,
             "calendar_paging": {
                 "previous": f"?month={(month - timedelta(days=1)):%Y-%m}",
                 "next": f"?month={(month + timedelta(days=32)):%Y-%m}",
-                "today": "?",
+                # Today leads back only from another month.
+                "today": "" if calendar.is_current else "?",
             },
         }
 
@@ -240,10 +244,21 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             **glance,
             **page_context(greeting),
             page_dateline=timezone.localdate(),
-            page_aside="core/_dashboard_readings.html",
+            page_aside="core/_dashboard_glance.html",
         )
         ctx["page_facts"] = render_to_string("dashboard.html#status", ctx)
         return ctx
+
+
+def _glance(request) -> dict[str, Any]:
+    """What the glance draws: how this browser reaches HQ, how the controller
+    stands, and the panels."""
+
+    return {
+        **glance_context(),
+        "request_connection": request_path(request).connection,
+        "controller": controller_standing(),
+    }
 
 
 class DashboardGlanceView(AskMixin, View):
@@ -252,12 +267,13 @@ class DashboardGlanceView(AskMixin, View):
     http_method_names: ClassVar[list[str]] = ["get", "post"]
     template_name = "core/_dashboard_glance.html"
     capability = DASHBOARD_REFRESH
+    runs = ((DASHBOARD_REFRESH, ASK), (DASHBOARD_REFRESH_STALE, ASK))
     back_to = "dashboard"
 
     def get(self, request):
         """The strip as it stands; "unchanged" to a poll while nothing was written."""
 
-        return fragments.render(request, self.template_name, glance_context, revision=every_revision())
+        return fragments.render(request, self.template_name, lambda: _glance(request), revision=every_revision())
 
     @override
     def post(self, request, *args, **kwargs):
@@ -268,9 +284,9 @@ class DashboardGlanceView(AskMixin, View):
             return super().post(request, *args, **kwargs)
         result = execute_posted(request, DASHBOARD_REFRESH_STALE, {})
         if not result["ok"]:
-            return render(request, self.template_name, glance_context(), status=403)
+            return render(request, self.template_name, _glance(request), status=403)
         # Drawn after the ask, so each panel asked for shows its refresh.
-        return render(request, self.template_name, glance_context(), status=202 if result["requested"] else 200)
+        return render(request, self.template_name, _glance(request), status=202 if result["requested"] else 200)
 
 
 def _settings_of(configuration) -> dict[str, str]:
@@ -278,6 +294,8 @@ def _settings_of(configuration) -> dict[str, str]:
 
 
 class DashboardGlanceSettingsView(View):
+    runs = (DASHBOARD_SETTINGS,)
+
     def get(self, request):
         return render(
             request,

@@ -15,16 +15,18 @@ as written. A source test in
 template the host or an extension ships.
 """
 
-from typing import Literal, get_args
+from typing import Annotated, Any, Literal, get_args
 
 from django import template
 from django.template.loader import render_to_string
 from django.utils.html import format_html
 from django.utils.safestring import SafeString, mark_safe
 
+from hq.platform.application.describe import Describe
 from hq.platform.application.labels import sentence
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.tone import Tone, Toned
+from hq.platform.core.template_parts import Part, slotted
 from hq.platform.core.templatetags.value_tags import breakable
 lazy from hq.platform.application.ui import ended, severity_tone as _severity_tone
 
@@ -229,9 +231,21 @@ def drift_tip(reading):
     return f"{reading.label}: HQ expects {reading.desired}, live is {reading.value}"
 
 
-@register.simple_tag(name="status")
 def status(
-    *parts, tone="", css="", href="", title="", tip="", pill=True, chip=False, dot=False, ink="tone", icon="", **data
+    *parts: Annotated[Any, Describe("Its words, several being one label, only the first sentence-cased.")],
+    tone: Annotated[Any, Describe("Its tone, or a subject's state in its own words and tone.")] = "",
+    css: Annotated[str, Describe("The classes of where it stands.")] = "",
+    href: Annotated[Any, Describe("Where it leads.")] = "",
+    title: Annotated[Any, Describe("Its `title`.")] = "",
+    tip: Annotated[Any, Describe("What a press or a hover shows.")] = "",
+    pill: Annotated[bool, Describe("A pill; with `False`, its words in its tone.")] = True,
+    chip: Annotated[bool, Describe("A neutral chip for a name, never a state.")] = False,
+    dot: Annotated[bool, Describe("Its words after a steady dot in its tone.")] = False,
+    ink: Annotated[
+        Ink, Describe("Whose ink its words take beside a dot or an icon: its tone's or the text's.")
+    ] = "tone",
+    icon: Annotated[str, Describe("Its words after an icon in its tone, beside `pill=False`.")] = "",
+    **data: Annotated[Any, Describe("Each a `data-` attribute.")],
 ):
     """``{% status "Blocked" tone="attention" %}``: a state as a pill in a Tone,
     a subject's state in its own words and tone (``{% status machine.state %}``),
@@ -259,3 +273,15 @@ def status(
         icon=str(icon or ""),
         **data,
     )
+
+
+slotted(
+    Part(
+        name="status",
+        about="One short state, drawn in its tone and said in sentence case, the one way a page draws a state.",
+        function=status,
+        public=True,
+        example='{% status "Blocked" tone="attention" %}',
+    ),
+    library=register,
+)

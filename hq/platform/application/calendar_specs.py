@@ -173,7 +173,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="title",
             ),
             web_route="calendar:month",
-            row_type=AgendaItem,
+            item_type=AgendaItem,
             record_type=EntryRecord,
         ),
     )

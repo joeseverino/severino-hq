@@ -275,7 +275,6 @@ func machine(stdout io.Writer) *host.Machine {
 		State:      host.StateDir,
 		Seal:       host.SealDir,
 		SealPublic: host.SealPublicKey,
-		Sbin:       "/usr/local/sbin",
 		Runtime:    runtimeDir(),
 		Sudoers:    "/etc/sudoers.d",
 		Command:    hostcore.Command,

@@ -7,10 +7,13 @@ socket, and the page says so as plainly as for anything else.
 """
 
 from collections.abc import Mapping
+from types import SimpleNamespace as Row
 from typing import Any
 
-from .standards import Check, Measurement, Reading, measure
-lazy from .containers import by_design, socket_holders
+from .standards import Check, Examples, Measurement, Reading, measure
+lazy from .container_hardening import hardening_of
+lazy from .containers import Container, ImageStanding, by_design, socket_holders
+lazy from .images import ImageRef
 
 # Host paths whose write access is the machine's, not the container's: the
 # path and everything under it.
@@ -132,6 +135,10 @@ def _bound_to_an_address(runtime: Mapping[str, Any]) -> bool:
     return not any(binding.get("host_ip", "") in _ANY_ADDRESS for binding in runtime.get("port_bindings") or ())
 
 
+def _bind(source: str, *, read_only: bool = False) -> dict[str, Any]:
+    return {"type": "bind", "source": source, "destination": source, "read_only": read_only}
+
+
 # A serious check is reach over the machine; the rest is hardening that limits
 # what a compromised container could do, or what an upgrade could be verified
 # by.
@@ -144,6 +151,7 @@ STANDARD: tuple[Check, ...] = (
         "Remove privileged mode and add only the capability it needs.",
         serious=True,
         unmet="Runs privileged",
+        breaks=({"privileged": True},),
     ),
     Check(
         "no-docker-socket",
@@ -153,6 +161,7 @@ STANDARD: tuple[Check, ...] = (
         "Put a socket proxy that allows only the calls it needs between it and the socket.",
         serious=True,
         unmet="Holds the Docker socket",
+        breaks=({"mounts": [_bind(DOCKER_SOCKETS[0], read_only=True)]},),
     ),
     Check(
         "own-process-namespace",
@@ -162,6 +171,7 @@ STANDARD: tuple[Check, ...] = (
         "Remove the host PID mode.",
         serious=True,
         unmet="Shares the host's process list",
+        breaks=({"pid_mode": "host"},),
     ),
     Check(
         "confined",
@@ -171,6 +181,7 @@ STANDARD: tuple[Check, ...] = (
         "Remove the unconfined security option.",
         serious=True,
         unmet="Not confined by seccomp and AppArmor",
+        breaks=({"security_opt": ["seccomp=unconfined", "no-new-privileges:true"]},),
     ),
     Check(
         "no-system-path-writable",
@@ -180,6 +191,15 @@ STANDARD: tuple[Check, ...] = (
         "Mount it read-only, or mount only the one file it needs.",
         serious=True,
         unmet="Can write a system path",
+        breaks=(
+            {"mounts": [_bind("/etc")]},
+            {"mounts": [_bind("/var/lib/docker/volumes")]},
+            {"mounts": [_bind("/run")]},
+        ),
+        keeps=(
+            {"mounts": [_bind("/etc/localtime", read_only=True), _bind("/opt/apps/web/data")]},
+            {"mounts": [_bind("/run/web")]},
+        ),
     ),
     Check(
         "no-powerful-capability",
@@ -189,6 +209,7 @@ STANDARD: tuple[Check, ...] = (
         "Drop the capability, or narrow it to the one operation it needs.",
         serious=True,
         unmet="Has an extra kernel capability",
+        breaks=({"cap_add": ["SYS_ADMIN"]},),
     ),
     Check(
         "not-root",
@@ -197,6 +218,7 @@ STANDARD: tuple[Check, ...] = (
         "A process running as root inside a container becomes root on the machine if it escapes.",
         "Set a non-root user in the compose file, or use an image that runs as one.",
         unmet="Runs as root",
+        breaks=({"user": "root"}, {"user": ""}),
     ),
     Check(
         "no-new-privileges",
@@ -210,6 +232,7 @@ STANDARD: tuple[Check, ...] = (
         "Without it, a setuid program inside the container can gain more privileges.",
         "Add no-new-privileges:true to its security options.",
         unmet="Can gain privileges",
+        breaks=({"security_opt": []}, {"security_opt": ["no-new-privileges:false"]}),
     ),
     Check(
         "no-devices",
@@ -218,6 +241,7 @@ STANDARD: tuple[Check, ...] = (
         "A passed-through device is direct access to that hardware.",
         "Remove the device unless the service cannot work without it.",
         unmet="Has a host device",
+        breaks=({"devices": ["/dev/ttyUSB0"]},),
     ),
     Check(
         "own-network",
@@ -226,6 +250,7 @@ STANDARD: tuple[Check, ...] = (
         "On the host network, every port it opens is the machine's, on every interface.",
         "Give it a bridge network and publish only the ports it serves.",
         unmet="On the host network",
+        breaks=({"network_mode": "host"},),
     ),
     Check(
         "ports-bound",
@@ -234,6 +259,7 @@ STANDARD: tuple[Check, ...] = (
         "A port published on every interface is reachable from every network the machine is on.",
         "Publish it on the address it is meant to be reached at, 127.0.0.1 behind a proxy.",
         unmet="Publishes a port on every interface",
+        breaks=({"port_bindings": [{"container_port": "80/tcp", "host_ip": "", "host_port": "8080"}]},),
     ),
     Check(
         "memory-limited",
@@ -242,6 +268,7 @@ STANDARD: tuple[Check, ...] = (
         "Without a limit, one runaway container can take the machine's memory from every other.",
         "Set a memory limit in the compose file.",
         unmet="No memory limit",
+        breaks=({"memory_limit": 0},),
     ),
     Check(
         "health-checked",
@@ -250,6 +277,9 @@ STANDARD: tuple[Check, ...] = (
         "Without a check, HQ can only see that it is running, and cannot tell whether an upgrade worked.",
         "Add a health check to the compose file, or serve it under a name HQ checks.",
         unmet="No health check",
+        breaks=({"healthcheck": False},),
+        # An image with no shell cannot run a check; a name HQ requests still says.
+        keeps=({"healthcheck": False, "serves": ["admin.example.com"]},),
     ),
 )
 
@@ -259,3 +289,42 @@ def posture_of(container: Any) -> Measurement:
 
 
 CHECK_IDS = frozenset(check.id for check in STANDARD)
+
+
+def example(runtime: Mapping[str, Any] | None = None, **standing: Any) -> Any:
+    """A container on example-box run as ``runtime`` says (``serves`` the
+    names HQ requests of it), nothing read of how when it is empty, and its
+    image as ``standing`` says."""
+
+    record = dict(runtime or {})
+    serves = tuple(record.pop("serves", ()))
+    return Container(
+        running=Row(name="web", check=None, watcher=""),
+        machine=Row(name="example-box"),
+        standing=ImageStanding(
+            **{"image": ImageRef("ghcr.io", "example/web", "1.0"), "tag": "1.0", "pinned": True, **standing}
+        ),
+        serves=serves,
+        runtime=record or None,
+    )
+
+
+def _fixed(container: Any, check: Check) -> bool:
+    hardening = hardening_of(container)
+    return hardening.covers(check.id) or any(gap.check == check.id and gap.reason for gap in hardening.unwritten)
+
+
+# How a well-run container reads: a user, no-new-privileges, a limit, a check.
+EXAMPLES = Examples(
+    checks=STANDARD,
+    subject=example,
+    kept={
+        "user": "1000",
+        "security_opt": ["no-new-privileges:true"],
+        "memory_limit": 268435456,
+        "healthcheck": True,
+        "network_mode": "bridge",
+        "port_bindings": [{"container_port": "80/tcp", "host_ip": "127.0.0.1", "host_port": "8080"}],
+    },
+    fixed=_fixed,
+)

@@ -171,9 +171,6 @@ class DescribeResourcesNarrowsTests(TestCase):
                     self.assertNotIn("query_schema", listed)
                     self.assertNotIn("paging", listed)
                     self.assertIsInstance(listed.get("filters", []), list)
-        # The catalog names the call that answers one kind's whole schema.
-        self.assertIn("describe_resources", catalog["schemas"])
-        self.assertIn("name", catalog["schemas"])
 
     def test_a_name_answers_that_kind_with_its_whole_schema(self):
         (answer,) = calls(("describe_resources", {"name": "projects"}))

@@ -11,11 +11,11 @@ and leads to the first.
 
 {% include "partials/_problems.html" with problems=hq.problems|urgent only %}
 
-{% facts layout="band" %}
+{% card element="div" %}{% facts layout="band" %}
   {% for tile in hq.tiles %}
   {% fact tile.label value=tile.value url=tile.url detail=tile.detail icon=tile.icon tone=tile.tone %}
   {% endfor %}
-{% endfacts %}
+{% endfacts %}{% endcard %}
 
 {% comment %}
 Where HQ runs, how it was reached and its release are each a few short

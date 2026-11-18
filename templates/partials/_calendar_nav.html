@@ -1,0 +1,11 @@
+{% comment %}
+A calendar's way through its periods: back a `unit` (month or day), Today
+where `today` names it, on a unit, and a close where `close` names it. An end
+with no address is drawn spent, so the arrows keep their places. `hotkeys`
+gives the arrows and Today their keys, on the one page that holds them.
+{% endcomment %}<nav class="calendar-nav" aria-label="Change {{ unit }}">
+  {% if previous %}<a href="{{ previous }}" rel="prev" aria-label="Previous {{ unit }}"{% if hotkeys %} data-hotkey="ArrowLeft k p"{% endif %}>&lsaquo;</a>{% else %}<span aria-hidden="true" aria-disabled="true">&lsaquo;</span>{% endif %}
+  {% if today %}<a class="calendar-now" href="{{ today }}"{% if hotkeys %} data-hotkey="t"{% endif %}{% if current %} aria-current="date"{% endif %}>Today</a>{% endif %}
+  {% if next %}<a href="{{ next }}" rel="next" aria-label="Next {{ unit }}"{% if hotkeys %} data-hotkey="ArrowRight j n"{% endif %}>&rsaquo;</a>{% else %}<span aria-hidden="true" aria-disabled="true">&rsaquo;</span>{% endif %}
+  {% if close %}<a href="{{ close }}" aria-label="Close this {{ unit }}" data-hotkey="Escape">&times;</a>{% endif %}
+</nav>

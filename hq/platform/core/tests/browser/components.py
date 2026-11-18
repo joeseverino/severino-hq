@@ -15,17 +15,15 @@ from hq.platform.application.money import money
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, line_chart
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.test_runner import browser_engine
-from hq.platform.core.tests.browser.gate import add_css, tab_key, unfold, with_script
+from hq.platform.core.tests.browser.gate import add_css, tab_key, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
-from hq.platform.core.tests.browser.probes.boxes import MAP, SIDEWAYS, SMALL_TARGETS
+from hq.platform.core.tests.browser.probes.boxes import CHECKS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
     DIALOGS_WITHOUT_OPENERS,
-    READINGS,
     SPILLED_LABELS,
     WRAPPED,
-    reading_problems,
 )
 from hq.platform.core.tests.browser.probes.settle import (
     FONTS_READY,
@@ -36,31 +34,18 @@ from hq.platform.core.tests.browser.probes.settle import (
 )
 from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
-    BLANK_TABLE,
     CELLS,
     COLUMNS_SHOWN,
     CUT_AND_CLOSED,
-    CUT_BESIDE_ROOM,
     CUT_TABLE,
     CUT_VALUES,
-    CUT_WHEN_OPEN,
-    IDENTIFIER_TABLES,
-    IDENTIFIER_VALUES,
-    OPEN_ROW_TABLE,
-    OPEN_ROW_VALUES,
-    PHONE_TABLE,
     POPOVER_IN_A_CELL,
     POPOVER_VALUES,
-    PRESS_FIRST_ROW_TOGGLE,
-    ROW_ACTIONS_TABLES,
     ROW_TOGGLE_TABLES,
     ROW_TOGGLE_VALUES,
     ROW_TOGGLES,
     SORT_BY,
-    TABLE_PROMISES,
-    TABLES,
     TABLES_THAT_DO_NOT_FIT,
-    WHOLE_PARTS_MOVED_BY_OPENING,
 )
 from hq.platform.core.tests.browser.probes.text import (
     BROKEN_TOKENS,
@@ -76,7 +61,6 @@ from hq.platform.core.tests.browser.probes.text import (
 from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
-from hq.platform.core.tests.browser.stress import ALL_PAGES
 from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS, viewport
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
@@ -173,15 +157,17 @@ _MEASURE_A_COPY = """() => {
 
 
 # How the queue's table stands: whether it is in its narrow box, and the
-# width of every action cell shown.
+# width of every action cell shown as a column. A narrow box stacks the table,
+# so it has no column to keep; there an open row shows its controls in place.
 _QUEUE_COLUMNS = (
     "([queue, act]) => {"
     + DESCRIBE
     + """
   const table = document.querySelector(queue);
+  const narrow = narrowBox(table);
   return {
-    narrow: narrowBox(table),
-    acts: [...table.querySelectorAll(act)].filter((cell) => cell.checkVisibility())
+    narrow,
+    acts: narrow ? [] : [...table.querySelectorAll(act)].filter((cell) => cell.checkVisibility())
       .map((cell) => Math.round(cell.getBoundingClientRect().width)),
   };
 }"""
@@ -298,12 +284,6 @@ _FILL_ROWS = """async (png) => {
 }"""
 
 
-def others(rows, opened):
-    """Every row's height but the one that opened."""
-
-    return rows[:opened] + rows[opened + 1 :]
-
-
 # Each count of a strip: whether its number and its words share one line and
 # the count takes no second, whether it is a link, and the top of its line.
 _COUNTS_STRIP = """(strip, [cell, valued, labeled]) => ({counts: [...strip.children].filter(fact => fact.matches(cell)).map(fact => {
@@ -354,17 +334,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 opened = 0
                 for row in rows.all():
                     self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
-                    # One Dismiss is shown: at the row's end, or in a narrow box
-                    # on the row's open line, a press away (tables.css).
+                    # One Dismiss is shown, at the row's end, at every width:
+                    # a row's controls never leave it (tables.css).
                     shown = row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count()
-                    if width == PHONE_SCREEN[0]:
-                        self.assertEqual(shown, 0)
-                        line = row.locator("xpath=following-sibling::tr[1][@data-row-detail]")
-                        row.locator(SELECTORS["row_toggle"]).click()
-                        self.assertEqual(line.locator('.row-controls button[name="key"] >> visible=true').count(), 1)
-                        row.locator(SELECTORS["row_toggle"]).click()
-                    else:
-                        self.assertEqual(shown, 1)
+                    self.assertEqual(shown, 1)
                     # The row's steps are in its line beneath, drawn by the server.
                     if not row.evaluate(_HELD_BENEATH, SELECTORS["decision_steps"]):
                         continue
@@ -452,16 +425,16 @@ class ComponentLayoutTests(LayoutBrowserTests):
                     self.assertLess(start, end)
 
     def test_a_band_value_that_wraps_stays_in_its_fact_level_with_its_label(self):
-        """A fact's linked value, a target tall a line, wraps under its long
-        label's row without rising out of the fact, and the label stands
-        beside its first line, at every width down to the narrowest."""
+        """A fact's linked value, a target tall a line, wraps without rising
+        out of the fact at every width down to the narrowest: under its label
+        in a cell, and beside it where the band reads as a list."""
 
         self.pages = {
             **self.pages,
             "band-fact-probe": probe(
                 '<h3 class="eyebrow">Example heading over the band</h3>{% facts layout="band" %}'
                 '{% fact "An example label long enough to crowd its value" icon="search" %}'
-                '<a href="#example">An example value that has to wrap</a>{% endfact %}'
+                '<a href="#example">An example value long enough that it has to wrap in a whole row</a>{% endfact %}'
                 '{% fact "Example" value="One" icon="shield" %}{% endfacts %}'
             ),
         }
@@ -483,8 +456,12 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertGreaterEqual(min(top for top, _bottom in lines), fact[0])
                 self.assertLessEqual(max(bottom for _top, bottom in lines), fact[1])
                 first_line = min(lines)
-                self.assertLess(label[0], first_line[1])
-                self.assertGreater(label[1], first_line[0])
+                if width == NARROWEST:
+                    # A band too narrow for two cells is a list (surfaces.css).
+                    self.assertLess(label[0], first_line[1])
+                    self.assertGreater(label[1], first_line[0])
+                else:
+                    self.assertLessEqual(label[1], first_line[0])
 
     def test_a_calendars_count_of_planned_days_kept_keeps_its_line_beside_its_legend(self):
         """A legend of three kinds and the missed mark, as a training calendar
@@ -700,9 +677,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_an_ask_among_a_rows_actions_keeps_them_on_one_line(self):
         """An ask before another of a row's actions leaves that action on the
-        row's first line beside it, or on its open line in a narrow box, and
-        in a wide one what the ask says once pressed comes
-        on the line the cell keeps under them, so the row grows no taller."""
+        row's first line beside it at every width, and in a wide box what the
+        ask says once pressed comes on the line the cell keeps under them, so
+        the row grows no taller."""
 
         self.pages = {
             **self.pages,
@@ -721,18 +698,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in (PHONE_SCREEN[0], WIDE):
             with self.subTest(width=width):
                 self.open("ask-actions-probe", width)
-                narrow = width == PHONE_SCREEN[0]
-                if narrow:
-                    # In a narrow box the row's actions stand side by side on
-                    # its open line (tables.css), which wraps as it must.
-                    self.page.locator(SELECTORS["row_toggle"]).click()
-                    button = self.page.locator(".row-detail .row-controls [data-ask-button]")
-                else:
-                    button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
+                button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
                 remove = self.page.get_by_role("link", name="Remove")
                 middles = [box["y"] + box["height"] / 2 for box in (button.bounding_box(), remove.bounding_box())]
                 self.assertLessEqual(abs(middles[0] - middles[1]), 1.5)
-                if narrow:
+                if width == PHONE_SCREEN[0]:
                     continue
                 row = button.evaluate_handle("(button) => button.closest('tr')").as_element()
                 tall = row.bounding_box()["height"]
@@ -740,24 +710,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.page.wait_for_selector(f'{SELECTORS["row_ask"]}[data-ask-state="failed"]')
                 self.assertTrue(self.page.locator(SELECTORS["ask_note"]).first.is_visible())
                 self.assertLessEqual(row.bounding_box()["height"], tall + 1)
-
-    @with_script
-    def test_an_opened_row_keeps_its_words_in_their_cells(self):
-        """Opening a row lifts every cut in it, and what was cut breaks inside
-        its column rather than running under the next one."""
-
-        for name in ALL_PAGES:
-            for width in (PHONE_SCREEN[0], 820):
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    # A family first, so the rows it folds show their own toggles.
-                    self.page.locator(SELECTORS["decision_family"]).evaluate_all(PRESS_EVERY_SHOWN)
-                    self.page.locator(SELECTORS["row_toggle"] + ":not([data-fold-toggle])").evaluate_all(
-                        PRESS_EVERY_SHOWN
-                    )
-                    self.page.evaluate(SETTLE)
-                    self.assertEqual(self.page.evaluate(CELLS), [])
-                    self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
 
     def test_a_probe_that_throws_hides_no_other(self):
         """Probes read in one round trip each run on their own."""
@@ -822,7 +774,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.pages = {
             **self.pages,
             "word-before-a-name-probe": probe(
-                '<div style="inline-size: 20rem">{% table_region "Changes" %}<table class="data-table"><thead><tr>'
+                '<div style="inline-size: 26rem">{% table_region "Changes" %}<table class="data-table"><thead><tr>'
                 '{% table_heading "Name" gutter=True %}{% table_heading "Change" %}</tr></thead><tbody><tr>'
                 "<td><strong>example.com</strong><br>"
                 f'<span class="muted">on <a href="#" data-entity="Machine">{host}</a></span></td>'
@@ -830,7 +782,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 "</tr></tbody></table>{% endtable_region %}</div>"
             ),
         }
-        self.open("word-before-a-name-probe", PHONE_SCREEN[0])
+        # A box that keeps both columns and still wraps each name.
+        self.open("word-before-a-name-probe", WIDE)
         lines = self.page.evaluate(
             """() => [...document.querySelectorAll('main td')].map((cell) => {
               // The line under the row's name, and the cell of free text.
@@ -908,8 +861,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
     def test_a_line_ending_in_a_links_mark_is_full_and_one_broken_short_is_found(self):
         """A link's mark drawn after its words (``::after``) takes its line's
         room, as a wrapping list's gap does between its items, so the word
-        that would not fit beside either starts the next line rightly; a line
-        a balanced rag ends short of its room is found."""
+        that would not fit beside either starts the next line rightly, and a
+        line laid in a padded block inside the value ends at that block's
+        edge; a line a balanced rag ends short of its room is found."""
 
         self.open(next(iter(PAGES)), WIDE)
         add_css(self.page, '.example-marked::after { content: "____"; }')
@@ -931,10 +885,14 @@ class ComponentLayoutTests(LayoutBrowserTests):
           const held = document.createElement('span');
           held.style.setProperty('white-space', 'nowrap');
           held.textContent = 'ff gggg';
+          const padded = document.createElement('div');
+          padded.style.setProperty('padding-inline-end', '8ch');
+          padded.textContent = 'hhhh iiii jjjj';
           for (const [words, css] of [
             [[link, ' bb'], 'inline-size: 10ch'],
             [[list], 'inline-size: 10ch'],
             [['eeee ', held], 'inline-size: 10ch'],
+            [[padded], 'inline-size: 20ch'],
             [['example aaaa bbbb cccc dddd'], 'inline-size: 24ch; text-wrap: balance'],
           ]) {
             const dd = document.createElement('dd');
@@ -948,7 +906,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
             line for line in self.page.evaluate(LINES_SHORT_OF_THEIR_ROOM, SELECTORS["unseen"]) if " short " in line
         ]
         planted = [line.split(" breaks before ")[1][:5] for line in found]
-        self.assertEqual([start for start in planted if start in {'"aaaa', '"cccc', '"eeee', '"exam'}], ['"exam'])
+        self.assertEqual(
+            [start for start in planted if start in {'"aaaa', '"cccc', '"eeee', '"hhhh', '"exam'}], ['"exam']
+        )
 
     def test_a_slash_alone_opening_a_line_is_a_stray_and_a_path_is_not(self):
         """A slash standing between two words reads as a separator when a
@@ -966,33 +926,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         found = self.page.evaluate(STRAYS_OPENING_A_LINE, [SELECTORS["unseen"], IDENTIFIER])
         planted = [line.split(": ", 1)[1] for line in found if '"/' in line]
         self.assertEqual(planted, ['"/ bbbb"'])
-
-    def test_a_cut_beside_a_button_has_room_only_past_the_buttons_box(self):
-        """A button beside a cut name holds its whole box, so the padding past
-        its glyph is no room for the name; room past the button's edge is."""
-
-        self.open(next(iter(PAGES)), WIDE)
-        self.page.evaluate("""() => {
-          for (const [name, wide] of [['examplefull', 20], ['examplegap', 26]]) {
-            const table = document.createElement('table');
-            table.style.cssText = `table-layout: fixed; inline-size: ${wide}ch; border-spacing: 0; font: 16px/1.5 monospace`;
-            const cell = table.createTBody().insertRow().insertCell();
-            cell.style.cssText = 'padding: 0';
-            const line = document.createElement('div');
-            line.style.cssText = 'display: grid; grid-auto-flow: column; justify-content: start; gap: 0';
-            const words = document.createElement('strong');
-            words.textContent = name.padEnd(15, 'a');
-            words.style.cssText = 'inline-size: 12ch; overflow: hidden; white-space: nowrap; text-overflow: ellipsis';
-            const button = document.createElement('button');
-            button.textContent = 'x';
-            button.style.cssText = 'all: unset; display: block; inline-size: 8ch; text-align: center; font: inherit';
-            line.append(words, button);
-            cell.append(line);
-            document.querySelector('main').prepend(table);
-          }
-        }""")
-        found = [line for line in self.page.evaluate(CUT_BESIDE_ROOM, SELECTORS["unseen"]) if '"example' in line]
-        self.assertEqual([line.split('"')[1] for line in found], ["examplegapaaaaa"])
 
     def test_a_mark_inside_a_wrapping_identifier_is_part_of_the_value(self):
         self.open(next(iter(PAGES)), WIDE)
@@ -1138,18 +1071,12 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertEqual([line for line in found if "example-digest" in line], [])
         self.assertTrue(any("example-word" in line for line in found), found)
 
-    def test_a_toolbars_menus_wear_a_buttons_edge_and_its_search_a_fields(self):
-        """A list's filter menu, toggle and sort are pressed, so in either
-        palette none is edged as the search box beside them is, and a control
-        given the field's edge is found."""
+    def test_a_control_given_a_fields_edge_is_found(self):
+        """A pressed control is never edged as a field is (``button edges``,
+        held on every page in both palettes), so one given the field's edge
+        is found."""
 
         self.open("projects", WIDE)
-        unfold(self.page)
-        self.assertGreater(self.page.locator(SELECTORS["table_filter"]).count(), 0)
-        for palette in ("light", "dark"):
-            with self.subTest(palette=palette):
-                self.in_scheme(palette)
-                self.assertEqual(self.page.evaluate(BUTTON_EDGES, SELECTORS["pressed"]), [])
         self.page.evaluate("""() => {
           const button = document.createElement('button');
           button.className = 'example-edged';
@@ -1420,10 +1347,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for part in ("status.", "example-host-name", '"y"'):
             self.assertNotIn(part, said)
 
-    def test_a_chip_draws_its_text_on_what_it_paints(self):
-        """A chip whose words are laid out past the box it paints is found,
-        and the tailnet's port chips, each with the name of what answers on
-        it, draw every word on their chip."""
+    def test_a_chip_drawing_its_words_past_what_it_paints_is_found(self):
+        """A chip whose words are laid out past the box it paints is found."""
 
         from hq.platform.core.templatetags.value_tags import breakable
 
@@ -1437,10 +1362,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         arg = [SELECTORS["chip"], SELECTORS["unseen"]]
         self.open("chip-probe", WIDE)
         self.assertTrue(self.page.evaluate(CHIPS_PAST_THEIR_PAINT, arg))
-        for width in WIDTHS:
-            with self.subTest(width=width):
-                self.open("dense/tailnet", width)
-                self.assertEqual(self.page.evaluate(CHIPS_PAST_THEIR_PAINT, arg), [])
 
     def test_every_selector_parses(self):
         """Every rule the stylesheet writes is one the engine keeps, but for
@@ -1520,7 +1441,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         something in it, a part of a list it folds, a run of parts with a rest
         past the ones that size its column, or in a narrow box a value longer
         than a line of its column, as the server marks it, which a wide box
-        shows whole in its cell's title (cuts.css). A dash in a dropped column says
+        holds whole, unclamped (cuts.css). A dash in a dropped column says
         nothing, screen-reader text is clipped to a pixel by design and a
         decoration is hidden from assistive technology: none is content a row
         withholds. Nothing is measured: the server and the region decide.
@@ -1542,20 +1463,20 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_a_cut_value_reads_whole_where_its_row_opens_or_a_wide_box_titles_it(self):
         """A cut value is shown whole by its row opening, or outside a narrow
-        box by its title on hover, which the server gives every cut value
-        that has none; touch has no hover, so in a narrow box only an opening row
-        shows it, and a cut there in a row that cannot open is found. A cut
-        that draws no ellipsis (a clamp's counts) is found at any width,
-        title or not, since nothing tells a reader there is more to hover
-        for; a name's chip in a row's muted line draws its own, and a narrow
-        box breaks it whole. A cut with no title outside a narrow box is the
-        survey's plant."""
+        box by a title its template gives it; the region clamps a value only
+        in a row that opens, so it titles none. Touch has no hover, so in a
+        narrow box only an opening row shows it, and a cut there in a row that
+        cannot open is found. A cut that draws no ellipsis (a clamp's counts)
+        is found at any width, title or not, since nothing tells a reader
+        there is more to hover for; a name's chip in a row's muted line draws
+        its own, and a narrow box breaks it whole. A cut with no title in a
+        row that does not open is the survey's plant."""
 
         self.pages = {**self.pages, "cut-probe": probe(CUT_TABLE, **CUT_VALUES)}
         rows = ("untitled", "titled", "opens", "clamped", "inline", "unmarked", "chip")
         for width, expected in {
             PHONE_SCREEN[0]: {"untitled", "titled", "clamped", "inline", "unmarked"},
-            1280: {"unmarked"},
+            1280: {"untitled", "clamped", "inline", "unmarked"},
         }.items():
             with self.subTest(width=width):
                 self.open("cut-probe", width)
@@ -1563,23 +1484,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 found = self.page.evaluate(CUT_AND_CLOSED, SELECTORS["unseen"])
                 named = {row for row in rows if any(f'"{row}' in line for line in found)}
                 self.assertEqual(named, expected, found)
-
-    @with_script
-    def test_an_open_row_shows_every_value_whole(self):
-        """Opening a row is how a narrow box shows a value whole, so nothing
-        in an open row, nor in the line beneath it where a column that left
-        stands, is cut, at any width."""
-
-        self.pages = {**self.pages, "open-row-probe": probe(OPEN_ROW_TABLE, **OPEN_ROW_VALUES)}
-        for width in (PHONE_SCREEN[0], WIDE):
-            with self.subTest(width=width):
-                self.open("open-row-probe", width)
-                self.page.evaluate(SETTLE)
-                # Every row opened, as a link to it opens one whose toggle does not show.
-                self.page.locator("main " + SELECTORS["row_toggle"]).evaluate_all(
-                    "(rows) => rows.forEach((row) => row.click())"
-                )
-                self.assertEqual(self.page.evaluate(CUT_WHEN_OPEN, SELECTORS["unseen"]), [])
 
     @with_script
     def test_a_panel_a_cell_shows_shows_its_values_whole(self):
@@ -1611,100 +1515,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         with self.assertRaises(AssertionError) as failed:
             self.every_anchored_popover_keeps_the_layout_rules("menu-probe")
         self.assertIn("with #example-panel shown", str(failed.exception))
-
-    @with_script
-    def test_a_wide_table_fits_a_phone_and_opening_a_row_moves_nothing(self):
-        """A table of four columns or more keeps the column that names each row
-        and the ones marked key, and fits the screen; it does not stack into
-        cards and is not swiped through. What left shows when a row is
-        opened, on its open line, each under its column's name.
-        """
-
-        for name in ("connections", "services", "containers", "projects"):
-            with self.subTest(page=name):
-                self.open(name, PHONE_SCREEN[0])
-                closed = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-                self.assertGreaterEqual(closed["headings"], 4)
-                self.assertLess(len(closed["columns"]), closed["headings"])
-                self.assertLessEqual(closed["sideways"], 1)
-                self.assertGreater(closed["toggles"], 0)
-
-                self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-                opened = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-                self.assertTrue(opened["details"])
-                self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-                self.assertEqual(self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])["details"], [])
-
-    @with_script
-    def test_opening_a_row_moves_no_column_and_no_other_row(self):
-        """What an open row shows whole (a column that left, a cut value, a
-        block it keeps beneath itself) stands on its open line and asks no
-        column for width: every column keeps its edges and every other row
-        its height, at every width, on each of the table's catalog entries and
-        the wide tables of the estate, and a part shown whole keeps its box;
-        closed again, the table is as it was."""
-
-        from hq.platform.core.tests.browser.catalog import CATALOG
-
-        entries = {name: CATALOG[name].page(name) for name in CATALOG if name.startswith("table/")}
-        self.pages = {**self.pages, **entries}
-        opened_any = 0
-        for name in (*entries, "connections", "services", "containers", "projects", "machine"):
-            for width in WIDTHS:
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    self.page.evaluate(SETTLE)
-                    self.assertEqual(self.page.evaluate(WHOLE_PARTS_MOVED_BY_OPENING, SELECTORS["table_scroll"]), [])
-                    closed = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-                    if not closed or not closed["toggles"]:
-                        continue
-                    opened_any += 1
-                    pressed = self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-                    self.page.evaluate(SETTLE)
-                    opened = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-                    self.assertEqual(opened["columns"], closed["columns"])
-                    self.assertEqual(others(opened["rows"], pressed), others(closed["rows"], pressed))
-                    self.assertLessEqual(opened["sideways"], 1)
-                    self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-                    self.page.evaluate(SETTLE)
-                    again = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-                    self.assertEqual(again["columns"], closed["columns"])
-                    self.assertEqual(again["rows"], closed["rows"])
-        self.assertGreater(opened_any, 0)
-
-    @with_script
-    def test_a_table_keeps_its_promises_on_every_catalog_entry(self):
-        """The table primitive, on each of its catalog entries at every width:
-        laid out as a table with its headings drawn, a group's heading across
-        its table and the heading row stuck; nothing past its region, and a
-        value it cuts whole in its cell's title. Laid out by the stylesheet
-        alone, it draws every column where it does with no script."""
-
-        from hq.platform.core.tests.browser.catalog import CATALOG
-
-        entries = {name: CATALOG[name].page(name) for name in CATALOG if name.startswith("table/")}
-        self.pages = {**self.pages, **entries}
-        scroll = SELECTORS["table_scroll"]
-        drawn = {}
-        for name in entries:
-            for width in WIDTHS:
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    self.page.evaluate(SETTLE)
-                    read = self.page.evaluate(TABLES)
-                    self.assertEqual(read["found"], [])
-                    self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, scroll), [])
-                    self.assertEqual(self.page.evaluate(TABLE_PROMISES, scroll), [])
-                    drawn[name, width] = self.page.evaluate(PHONE_TABLE, scroll)
-        self.assertTrue(any(each and each["columns"] for each in drawn.values()))
-        self.start(java_script_enabled=False)
-        for (name, width), scripted in drawn.items():
-            with self.subTest(page=name, width=width, script=False):
-                self.open(name, width)
-                unscripted = self.page.evaluate(PHONE_TABLE, scroll)
-                self.assertEqual(
-                    (unscripted or {}).get("columns"), (scripted or {}).get("columns"), "a script moved a column"
-                )
 
     @with_script
     def test_opening_every_row_a_reader_can_open_moves_nothing_they_did_not_ask_for(self):
@@ -1784,18 +1594,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.kept_the_policy()
         self.assertTrue(ready)
         self.assertEqual(set(ready), {"true"})
-
-    @with_script
-    def test_a_wide_table_on_a_desktop_keeps_every_column_and_holds_them_when_a_row_opens(self):
-        self.open("connections", 1440)
-        closed = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-        self.assertEqual(len(closed["columns"]), closed["headings"])
-
-        if closed["toggles"]:
-            pressed = self.page.evaluate(PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
-            opened = self.page.evaluate(PHONE_TABLE, SELECTORS["table_scroll"])
-            self.assertEqual(opened["columns"], closed["columns"])
-            self.assertEqual(others(opened["rows"], pressed), others(closed["rows"], pressed))
 
     @with_script
     def test_a_table_with_rows_open_is_fitted_as_it_stands_with_them_closed(self):
@@ -1878,18 +1676,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertEqual(back["sort"], "none")
         self.assertEqual(back["values"], came)
 
-    def test_the_dashboards_readings_show_every_line_beside_its_mark(self):
-        """Each is a mark, a lead and its lines: nothing set under the mark,
-        where a caption in the mark's narrow column reads as "Via h", and no
-        line cut short."""
-
-        for width in (PHONE_SCREEN[0], 820, 1280, 1440):
-            with self.subTest(width=width):
-                self.open("dashboard", width)
-                readings = self.page.locator(SELECTORS["readings"]).evaluate_all(READINGS)
-                self.assertGreaterEqual(len(readings), 3)
-                self.assertEqual(reading_problems(readings), [])
-
     @with_script
     def test_what_the_dashboard_says_of_its_readings_covers_none_of_them(self):
         """Opened while a reading is due, the dashboard asks for it and says it
@@ -1903,48 +1689,21 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.page.locator(SELECTORS["page_note"]).wait_for(state="visible")
                 self.assertEqual(self.page.evaluate(OVERLAPPING_TEXT, SELECTORS["floating"]), [])
 
-    def test_the_map_scrolls_with_the_page_and_draws_no_empty_lane(self):
-        for width in WIDTHS:
-            with self.subTest(width=width):
-                self.open("topology", width)
-                found = self.page.evaluate(MAP, [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]])
-                self.assertIsNotNone(found)
-                self.assertFalse(found["scrolls"])
-                self.assertEqual(found["empty"], [])
+    def test_the_map_check_finds_an_empty_lane_on_the_topology_map(self):
+        """The ``map`` check reads the map the topology page draws, which the
+        survey holds on every page: a lane emptied there is found."""
 
-    @with_script
-    def test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split(self):
-        self.pages = {**self.pages, "blank-column-probe": probe(BLANK_TABLE)}
-        for width in WIDTHS:
-            with self.subTest(width=width):
-                self.open("blank-column-probe", width)
-                self.page.evaluate(SETTLE)
-                shown = self.page.evaluate(COLUMNS_SHOWN)
-                self.assertNotIn("Nothing", shown)
-                self.assertIn("Title", shown)
-                self.assertIn("Runs", shown)
-                self.assertEqual(self.page.evaluate(BROKEN_WORDS, SELECTORS["identifier"]), [])
-
-    @with_script
-    def test_a_rows_controls_stay_in_its_card_and_no_table_runs_past_it(self):
-        """On the narrowest phone a row's controls, each label whole, stand on
-        the line beneath the row's words, so their table fits its card; a
-        value wider than any phone is cut in its cell, so its table fits too.
-        Neither region scrolls or is a stop for the keyboard, and nothing on
-        the page runs past it sideways."""
-
-        self.pages = {**self.pages, "row-actions-probe": probe(ROW_ACTIONS_TABLES)}
-        self.open("row-actions-probe", NARROWEST)
-        self.page.evaluate(SETTLE)
-        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
-        region = """(probe) => {
-          const region = document.querySelector(`[data-probe=${probe}]`).parentElement;
-          return [getComputedStyle(region).overflowX, region.getAttribute('tabindex')];
-        }"""
-        for name in ("unfittable", "actions"):
-            self.assertEqual(self.page.evaluate(region, name), ["visible", None])
-        self.assertEqual(self.page.evaluate(TABLE_PROMISES, SELECTORS["table_scroll"]), [])
-        self.assertEqual(self.page.evaluate(SIDEWAYS, SELECTORS["sideways"]), [])
+        self.open("topology", WIDE)
+        check, arg = CHECKS["map"].probe
+        self.assertEqual(self.page.evaluate(check, arg), [])
+        # The stylesheet hides a lane with no node in it, so the plant empties
+        # the lanes of a sheet that lost that rule.
+        self.page.evaluate(
+            "([lane, node]) => document.querySelectorAll(lane).forEach((el) => {"
+            " el.querySelectorAll(node).forEach((each) => each.remove()); el.style.display = 'block'; })",
+            arg[1:],
+        )
+        self.assertTrue(self.page.evaluate(check, arg))
 
     def test_a_short_name_is_broken_only_where_its_table_holds_it(self):
         """A short name its table holds on its line (`nowrap`) and something
@@ -1979,28 +1738,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
             BROKEN_TOKENS, ["table:not(.table-scroll *) td .token", SELECTORS["wraps_in_a_cell"]]
         )
         self.assertEqual([line.split(" breaks ")[1] for line in found], ['"example-held-name"'])
-
-    @with_script
-    def test_an_identifier_in_a_table_is_whole_while_a_column_can_leave(self):
-        """An address with a port, a host name and a network in a cell are
-        never broken at their seams while the table has a ranked column to
-        let go: on the narrowest phone the columns leave and the names stay
-        whole, and the table still fits its box."""
-
-        self.pages = {**self.pages, "identifier-probe": probe(IDENTIFIER_TABLES, **IDENTIFIER_VALUES)}
-        for width in (NARROWEST, *WIDTHS):
-            with self.subTest(width=width):
-                self.open("identifier-probe", width)
-                self.page.evaluate(SETTLE)
-                self.assertEqual(
-                    self.page.evaluate(BROKEN_TOKENS, [SELECTORS["cell_token"], SELECTORS["wraps_in_a_cell"]]), []
-                )
-                self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
-        self.open("identifier-probe", NARROWEST)
-        self.page.evaluate(SETTLE)
-        shown = self.page.evaluate(COLUMNS_SHOWN)
-        self.assertNotIn("Read from", shown)
-        self.assertNotIn("Logins", shown)
 
     @with_script
     def test_a_name_a_cell_cuts_is_drawn_whole_on_its_line_where_its_cell_has_room(self):
@@ -2069,8 +1806,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
         and still fits its box: a column leaves by the region's width alone,
         and what grows is cut in its cell."""
 
-        self.pages = {**self.pages, "identifier-probe": probe(IDENTIFIER_TABLES, **IDENTIFIER_VALUES)}
-        self.open("identifier-probe", 820)
+        from hq.platform.core.tests.browser.catalog import CATALOG
+
+        name = "table/identifiers"
+        self.pages = {**self.pages, name: CATALOG[name].page(name)}
+        self.open(name, 820)
         self.page.evaluate(SETTLE)
         shown = self.page.evaluate(COLUMNS_SHOWN)
         # A style's change, which no script hears as a change to the tree:

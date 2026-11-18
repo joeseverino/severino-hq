@@ -225,7 +225,7 @@
 }
 /* Its line is held while the work has nothing to say, so the panel keeps its
    height as the note comes and goes. */
-.job-note { min-block-size: 1lh; margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.job-note { display: block; min-block-size: 1lh; color: var(--muted); font-size: var(--text-sm); }
 .job-progress:is([data-state="failed"], [data-state="lost"]) .job-bar { color: var(--danger); }
 .job-progress[data-state="succeeded"] .job-bar { color: var(--ok, var(--accent)); }
 /* Reduced motion: the sweep is decoration. The bar still fills. */

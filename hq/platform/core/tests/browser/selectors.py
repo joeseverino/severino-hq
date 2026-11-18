@@ -8,7 +8,6 @@ SELECTORS = {
     # controls, whose controls sit on the row's first line.
     "row_actions_cell": 'main td.row-actions, main td[data-kind="control"]',
     # A table's row that offers controls: its actions or a column of controls.
-    "controls_row": '.data-table > tbody > tr:has(> :is(td.row-actions, td[data-kind="control"]))',
     # A device on the Agents page waiting for the reader's approval.
     "device_prompt": "[data-prompt]",
     # An agent's update streams: a full set warned of in its row's cell, and
@@ -48,7 +47,7 @@ SELECTORS = {
     # A table's own rows of records, the lines beneath them left out.
     "own_records": ":scope > tbody > tr:not(.row-detail)",
     # Read inside one row of the queue, so it names nothing above the row's own cell.
-    "decision_dismiss": 'td.row-actions > button[name="key"]',
+    "decision_dismiss": 'td.row-actions button[name="key"]',
     "decision_title": "[data-attention-title]",
     "decision_steps": ".resolution-workflow",
     # What an item means: never cut.
@@ -94,10 +93,9 @@ SELECTORS = {
     "nav_drawer": ".primary-nav",
     "nav_toggle": "[popovertarget=primary-navigation]",
     # The dashboard's domain overviews, and the row its calendar leads.
-    "highlights": ".section-flow > .section:has(> .section-body > .kpi-grid.is-featured)",
+    "highlights": ".section-flow > .section:has(> .section-body > .facts-band.is-lead)",
     "patterns": ".section-flow:has(> #dashboard-calendar) > .section",
-    # Each reading in the dashboard's row: a mark, then its lines.
-    "readings": ".readings .reading-head",
+    "glance": ".page-head .facts-band > .fact",
     # The dashboard's strip of counts across HQ, by the name it gives a reader.
     "dashboard_counts": "main dl[aria-label='Across HQ']",
     # A control a reader fills in or picks from, whose edge is what shows it.
@@ -183,7 +181,6 @@ SELECTORS = {
     "head_menu_panel": ".overflow-menu-panel",
     # The steps of a page's trail, and a figure's value.
     "trail_steps": "main .page-trail a",
-    "figure_value": ".kpi .value",
     # A "do this now" control, whose words are its button's.
     "ask": ".ask",
     # An ask's button.
@@ -211,8 +208,7 @@ SELECTORS = {
     # identifier does (cuts.css): a row's own name.
     "breaks_anywhere": '[data-cell~="name"]',
     "wraps_in_a_cell": (
-        "tr.row-detail, .row-gutter, [data-cell], .table-clamp, code.cell-whole, .btn,"
-        " .token:not(.cell-short *), [popover]"
+        "tr.row-detail, .row-gutter, [data-cell], code.cell-whole, .btn, .token:not(.cell-short *), [popover]"
     ),
     # Words said to a reader and never drawn.
     "unseen": ".visually-hidden",

@@ -24,13 +24,12 @@ from .finding_model import (
     FindingEstate,
     FindingRemedy,
     FindingRule,
-    OperatorStep,
-    carried,
-    carry,
+    distinct,
     fact_values,
     on_machine,
     opens,
 )
+from .finding_steps import Do, told
 from .tone import Tone
 from .ui import counted, ended
 lazy from . import exposure, zones
@@ -40,6 +39,7 @@ lazy from .infrastructure import enabled_resources
 lazy from .path_model import Route
 lazy from .paths import path_to, routed_names
 lazy from .services import find_service
+lazy from .topology_estate import machine_nodes
 
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 # A service's wiring fault (``services._faults``), one fact per fault on its node.
@@ -69,10 +69,20 @@ def _subject(hostname: str) -> str:
     return f"service:{hostname}"
 
 
+def _about(estate: FindingEstate, hostname: str, machine: str) -> dict[str, str]:
+    """What a claim about ``hostname`` is about: its service, or where HQ
+    lists no service of that name (a route it only read), the machine the
+    name reaches, with the name as the part of it the claim is about."""
+
+    if _subject(hostname) in {node.id for node in estate.nodes()}:
+        return {"subject": _subject(hostname)}
+    return {"subject": machine_nodes()(machine) or _subject(hostname), "part": hostname}
+
+
 # ----- A public name that a machine answers but nothing on it serves ---------
 
 
-def _answered_by_nothing() -> tuple[Finding, ...]:
+def _answered_by_nothing(estate: FindingEstate) -> tuple[Finding, ...]:
     # Only a machine whose containers HQ reads can be said to serve nothing:
     # elsewhere (shared hosting, a bare server) what answers is unknown. A
     # machine where a container answers on a web port serves names HQ cannot
@@ -101,7 +111,7 @@ def _answered_by_nothing() -> tuple[Finding, ...]:
             found.append(
                 Finding(
                     rule="public-name-served-by-nothing",
-                    subject=_subject(name),
+                    **_about(estate, name, last.name),
                     title=f"{name} points at {last.name}, which serves nothing for it",
                     severity=Tone.ATTENTION,
                     explanation=(
@@ -113,14 +123,14 @@ def _answered_by_nothing() -> tuple[Finding, ...]:
                     evidence=(("Name", name), ("Path", route.line), ("Machine", last.name)),
                     remedies=tuple(_update(key, intent="Change where it points") for key in keys),
                     steps=(
-                        OperatorStep(
-                            label=f"Remove the public record for {name} if nothing should answer "
+                        Do(
+                            f"Remove the public record for {name} if nothing should answer "
                             f"there, or add the proxy route on {last.name} that serves it."
                         ),
                     ),
                 )
             )
-    return tuple(found)
+    return distinct(found)
 
 
 # ----- A route to a container that is not running ----------------------------
@@ -155,7 +165,7 @@ def _said(state: str) -> str:
     return {"exited": "stopped", "dead": "stopped", "created": "not started"}.get(state, state)
 
 
-def _routed_to_stopped() -> tuple[Finding, ...]:
+def _routed_to_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
     containers = _containers_by_place()
     found = []
     for name in routed_names():
@@ -165,7 +175,7 @@ def _routed_to_stopped() -> tuple[Finding, ...]:
                 found.append(
                     Finding(
                         rule="route-to-stopped-container",
-                        subject=_subject(name),
+                        **_about(estate, name, machine),
                         title=f"{name} leads to {container} on {machine}, which is {_said(state)}",
                         severity=Tone.SERIOUS,
                         explanation=(
@@ -175,20 +185,20 @@ def _routed_to_stopped() -> tuple[Finding, ...]:
                         evidence=(("Name", name), ("Path", route.line), ("Container", _said(state))),
                         remedies=tuple(_update(key, intent="Change where it points") for key in proxies),
                         steps=(
-                            OperatorStep(
-                                label=f"Start {container} on {machine}",
-                                command=on_machine(machine, f"docker start {shlex.quote(container)}"),
+                            told(
+                                f"Start {container} on {machine}",
+                                on_machine(machine, f"docker start {shlex.quote(container)}"),
                             ),
                         ),
                     )
                 )
-    return tuple(found)
+    return distinct(found)
 
 
 # ----- An Access application guarding a name nothing answers -----------------
 
 
-def _gates_guarding_nothing() -> tuple[Finding, ...]:
+def _gates_guarding_nothing(_estate: FindingEstate) -> tuple[Finding, ...]:
     routed = set(routed_names())
     # Only a name in a domain HQ reads can be said to have no record: a gate on
     # the provider's own login domain names nothing HQ could have seen.
@@ -214,27 +224,22 @@ def _gates_guarding_nothing() -> tuple[Finding, ...]:
                             "later, this rule will apply to it without anyone reviewing it."
                         ),
                         evidence=(("Access rule", f"{spec.label} {title}"), ("Name", name)),
-                        steps=(
-                            OperatorStep(
-                                label=f"Remove {name} from {title}",
-                                notes=((console,) if console else ()),
-                            ),
-                        ),
+                        steps=(Do(f"Remove {name} from {title}", notes=((console,) if console else ())),),
                     )
                 )
-    return tuple(found)
+    return distinct(found)
 
 
 # ----- The internal and public answers disagree about where a name lives -----
 
 
-def _split_horizon() -> tuple[Finding, ...]:
+def _split_horizon(estate: FindingEstate) -> tuple[Finding, ...]:
     found = []
     for name in routed_names():
         routes = path_to(name).routes
         if apart := _machines_apart(routes):
-            found.append(_split_horizon_finding(name, routes, *apart))
-    return tuple(found)
+            found.append(_split_horizon_finding(estate, name, routes, *apart))
+    return distinct(found)
 
 
 def _machines_apart(routes: tuple[Route, ...]) -> tuple[set[str], set[str]] | None:
@@ -259,10 +264,12 @@ def _dns_kinds(*, public: bool) -> tuple[str, ...]:
     )
 
 
-def _split_horizon_finding(name: str, routes: tuple[Route, ...], public: set[str], internal: set[str]) -> Finding:
+def _split_horizon_finding(
+    estate: FindingEstate, name: str, routes: tuple[Route, ...], public: set[str], internal: set[str]
+) -> Finding:
     return Finding(
         rule="split-horizon-disagrees",
-        subject=_subject(name),
+        **_about(estate, name, min(public)),
         title=(
             f"{name} goes to {', '.join(sorted(public))} from the internet and {', '.join(sorted(internal))} from home"
         ),
@@ -276,9 +283,7 @@ def _split_horizon_finding(name: str, routes: tuple[Route, ...], public: set[str
             *(_update(key, intent="Change the public record") for key in _declared(name, _dns_kinds(public=True))),
         ),
         steps=(
-            OperatorStep(
-                label=f"Point the internal record for {name} at the machine the public one reaches, or the other way round."
-            ),
+            Do(f"Point the internal record for {name} at the machine the public one reaches, or the other way round."),
         ),
     )
 
@@ -286,7 +291,7 @@ def _split_horizon_finding(name: str, routes: tuple[Route, ...], public: set[str
 # ----- A port published on a machine that no proxy fronts --------------------
 
 
-def _unfronted_ports() -> tuple[Finding, ...]:
+def _unfronted_ports(_estate: FindingEstate) -> tuple[Finding, ...]:
     routed = exposure.routed_containers()
     found = []
     for item in containers():
@@ -317,21 +322,21 @@ def _unfronted_ports() -> tuple[Finding, ...]:
                     ("Open to the internet", ", ".join(str(port) for port in open_ports)),
                 ),
                 steps=(
-                    OperatorStep(
-                        label=f"Bind {item.running.name}'s ports to 127.0.0.1 in its compose file, "
+                    Do(
+                        f"Bind {item.running.name}'s ports to 127.0.0.1 in its compose file, "
                         "or put a proxy route in front of it.",
                         notes=(f"{item.running.name}'s page shows the exact change.",),
                     ),
                 ),
             )
         )
-    return tuple(found)
+    return distinct(found)
 
 
 # ----- A host serving a certificate other than the one HQ installed ---------
 
 
-def _served_not_held() -> tuple[Finding, ...]:
+def _served_not_held(_estate: FindingEstate) -> tuple[Finding, ...]:
     """A consumer the controller found serving a different certificate.
 
     The controller compares what each consumer serves with the fingerprint it
@@ -372,23 +377,7 @@ def _served_not_held() -> tuple[Finding, ...]:
                 ),
             )
         )
-    return tuple(found)
-
-
-_DETECTORS = (
-    _answered_by_nothing,
-    _routed_to_stopped,
-    _gates_guarding_nothing,
-    _split_horizon,
-    _unfronted_ports,
-    _served_not_held,
-)
-
-
-def add_contradiction_facts(nodes) -> None:
-    """Find every contradiction and carry each on its subject's node."""
-
-    carry(nodes, (finding for detect in _DETECTORS for finding in detect()))
+    return distinct(found)
 
 
 def _fault_title(hostname: str, faults: tuple[str, ...]) -> str:
@@ -431,7 +420,8 @@ RULES: tuple[FindingRule, ...] = (
         "served-certificate-not-held",
         "A site is serving a different certificate",
         Tone.SERIOUS,
-        carried("served-certificate-not-held"),
+        _served_not_held,
+        gathered=True,
         operator_action="Install HQ's certificate again, or point the site at it.",
         no_help_reason="HQ cannot tell why the site is serving another certificate.",
         bars={Tone.SERIOUS: "a site serves a certificate other than the one HQ holds for it"},
@@ -440,7 +430,8 @@ RULES: tuple[FindingRule, ...] = (
         "public-name-served-by-nothing",
         "A public name that leads nowhere",
         Tone.ATTENTION,
-        carried("public-name-served-by-nothing"),
+        _answered_by_nothing,
+        gathered=True,
         operator_action="Remove the public record, or add the proxy route that should serve the name.",
         no_help_reason="HQ cannot tell whether the name should still exist.",
         bars={Tone.ATTENTION: "a public name has no proxy route behind it"},
@@ -449,7 +440,8 @@ RULES: tuple[FindingRule, ...] = (
         "route-to-stopped-container",
         "A route to a container that is not running",
         Tone.SERIOUS,
-        carried("route-to-stopped-container"),
+        _routed_to_stopped,
+        gathered=True,
         operator_action="Start the container, or point the proxy route at what replaced it.",
         no_help_reason="HQ cannot start containers.",
         bars={Tone.SERIOUS: "a proxy route leads to a container that is not running"},
@@ -458,7 +450,8 @@ RULES: tuple[FindingRule, ...] = (
         "gate-guards-nothing",
         "Access rule for a name that no longer exists",
         Tone.NEUTRAL,
-        carried("gate-guards-nothing"),
+        _gates_guarding_nothing,
+        gathered=True,
         operator_action="Remove the name from the rule.",
         no_help_reason="HQ cannot edit Access applications or access lists.",
         bars={Tone.NEUTRAL: "an access rule names a name that no longer exists"},
@@ -467,7 +460,8 @@ RULES: tuple[FindingRule, ...] = (
         "split-horizon-disagrees",
         "One name, two different machines",
         Tone.ATTENTION,
-        carried("split-horizon-disagrees"),
+        _split_horizon,
+        gathered=True,
         operator_action="Point the internal and public records at the same machine.",
         no_help_reason="HQ cannot tell which one is right.",
         bars={Tone.ATTENTION: "a name's internal and public records point at different machines"},
@@ -476,7 +470,8 @@ RULES: tuple[FindingRule, ...] = (
         "published-port-unfronted",
         "A container is open to the internet",
         Tone.SERIOUS,
-        carried("published-port-unfronted"),
+        _unfronted_ports,
+        gathered=True,
         operator_action="Bind the published ports to 127.0.0.1, or put a proxy route in front of them.",
         no_help_reason=CANNOT_EDIT_COMPOSE,
         bars={Tone.SERIOUS: "a container publishes a port to the internet with no proxy in front"},

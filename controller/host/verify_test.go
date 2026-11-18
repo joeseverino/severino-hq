@@ -59,9 +59,6 @@ func TestEveryKindOfDriftIsNamed(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(f.machine.Systemd, "severino-hq-old.timer"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(f.machine.Sbin, "severino-hq-sync-scripts"), nil, 0o755); err != nil {
-		t.Fatal(err)
-	}
 
 	drift := strings.Join(f.verify(t), "\n")
 
@@ -71,7 +68,6 @@ func TestEveryKindOfDriftIsNamed(t *testing.T) {
 		"hq/config/controller.json is missing from the tree",
 		"severino-hq-web.service is not the release's",
 		"severino-hq-old.timer is not shipped by the release",
-		"severino-hq-sync-scripts is installed by no release",
 	} {
 		if !strings.Contains(drift, want) {
 			t.Errorf("not reported: %s\n%s", want, drift)

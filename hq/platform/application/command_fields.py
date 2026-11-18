@@ -17,15 +17,17 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, TypeAliasType, get_args, get_origin, get_type_hints
 
 from django.core.exceptions import ValidationError
+lazy from pydantic_core import PydanticCustomError, core_schema
 
 from .describe import Describe
+from .non_empty import NonEmpty, RequiredText
 
 # Lazy: it loads pydantic, which declaring a command does not.
 lazy from .json_schemas import choices
 
 if TYPE_CHECKING:
     from django.db.models import Model
-    from pydantic import GetJsonSchemaHandler
+    from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
     from pydantic_core import CoreSchema
 
 # The JSON Schema extension a record-naming field carries.
@@ -80,12 +82,25 @@ class Among:
 class Choices:
     """A field whose value is one of a fixed set declared elsewhere, each with
     the words a person reads for it: ``Choices(Appearance.Theme.choices)``.
-    The form offers only these; the handler refuses any other on every path."""
+    The form offers only these, and the command refuses any other as it is
+    validated, before anything else is done with it."""
 
     options: tuple[tuple[str, str], ...]
 
     def __init__(self, options: Iterable[tuple[Any, Any]]) -> None:
         object.__setattr__(self, "options", tuple((str(value), str(label)) for value, label in options))
+
+    def __get_pydantic_core_schema__(self, source: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
+        allowed = frozenset(value for value, _label in self.options)
+        # Worded as pydantic words a Literal's refusal, which input_errors says as "must be one of".
+        expected = " or ".join(", ".join(repr(value) for value, _label in self.options).rsplit(", ", 1))
+
+        def one_of(value: Any) -> Any:
+            if str(value) not in allowed:
+                raise PydanticCustomError("literal_error", "Input should be {expected}", {"expected": expected})
+            return value
+
+        return core_schema.no_info_after_validator_function(one_of, handler(source))
 
     def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
         return {**handler(schema), **choices(self.options)}
@@ -132,6 +147,22 @@ def among_now(kind: type) -> dict[str, Callable[[], Iterable[str]]]:
 
     found = {name: _marker(hint, AmongNow) for name, hint in get_type_hints(kind, include_extras=True).items()}
     return {name: marker.values for name, marker in found.items() if isinstance(marker, AmongNow)}
+
+
+# Where ``stored_in`` puts the model on the command it declares.
+STORED_IN = "__stored_in__"
+
+
+def stored_in[Command: type](model: type[Model]) -> Callable[[Command], Command]:
+    """Declare the model a command that is no record domain's writes, so each
+    of its fields named for one of the model's columns is held to that
+    column's rules as the command is validated (``records.stored_rules``)."""
+
+    def declare(command: Command) -> Command:
+        setattr(command, STORED_IN, model)
+        return command
+
+    return declare
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,7 +244,7 @@ def referred(schema: dict[str, Any]) -> tuple[str, str] | None:
     return (declared["model"], declared["field"]) if isinstance(declared, dict) else None
 
 
-# Every marker is imported from here, Describe too, though it lives in a leaf of its own.
+# Every marker is imported from here, Describe and NonEmpty too, though each lives in a leaf of its own.
 __all__ = [
     "AMONG",
     "CONFIRM_MISMATCH",
@@ -227,7 +258,9 @@ __all__ = [
     "Describe",
     "ForAgents",
     "Names",
+    "NonEmpty",
     "Refers",
+    "RequiredText",
     "Upload",
     "among",
     "among_now",
@@ -236,4 +269,5 @@ __all__ = [
     "is_upload",
     "named_records",
     "referred",
+    "stored_in",
 ]

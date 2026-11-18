@@ -5,7 +5,14 @@ from typing import Annotated, TypedDict
 from pydantic import Field, create_model
 
 from hq.platform.application import content
-from hq.platform.application.answer_fields import RecordSlug, UpdatedAt
+from hq.platform.application.answer_fields import (
+    LinkedAssets,
+    LinkedDocs,
+    LinkedProjects,
+    RecordedExpenses,
+    RecordSlug,
+    UpdatedAt,
+)
 from hq.platform.application.describe import Describe
 from hq.platform.application.integration_specs import ResourceSpec
 from hq.platform.application.record_fields import Notes, PublishedAt, PublishedUrl
@@ -38,6 +45,21 @@ class ContentRow(TypedDict):
     updated_at: UpdatedAt
 
 
+class ContentLinks(TypedDict):
+    """The records a writeup or page is linked to."""
+
+    projects: LinkedProjects
+    assets: LinkedAssets
+    expense_ids: RecordedExpenses
+    documentation: LinkedDocs
+
+
+class ContentRecord(ContentRow):
+    """One writeup, video or page with the records it is linked to."""
+
+    relationships: ContentLinks
+
+
 def resources() -> tuple[ResourceSpec, ...]:
     return (
         ResourceSpec(
@@ -47,6 +69,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             Capability.READ,
             content.list_content,
             ContentQuery,
+            content.get_content,
+            "slug",
             search=SearchDefinition(
                 "content",
                 ContentItem,
@@ -56,6 +80,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="title",
             ),
             web_route="content:list",
-            row_type=ContentRow,
+            item_type=ContentRow,
+            record_type=ContentRecord,
         ),
     )

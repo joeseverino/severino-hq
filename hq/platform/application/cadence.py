@@ -16,14 +16,15 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Exists, F, Max, OuterRef, Q
 from django.utils import timezone
-from pydantic import Field
+from pydantic import Field, GetJsonSchemaHandler
+from pydantic_core import CoreSchema
 
 from hq.domains.control_plane.models import (
     OPERATION_LAPSE,
@@ -44,11 +45,11 @@ lazy from hq.platform.core.doorbell import ask_soon
 
 from . import readings
 from .asks import Asked, AskedAnswer, Standing, asked_read
-from .command_fields import Describe, Names
+from .command_fields import Choices, Describe, Names
 from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import requested
 from .moments import duration
-from .record_errors import Sentence
+from .record_errors import NOT_FOUND, Sentence
 from .security import Principal
 from .tone import Tone
 from .ui import ended
@@ -57,6 +58,14 @@ lazy from .adoption import manages_through, observes_only
 lazy from .capabilities import command_spec
 lazy from .credential_sight import fed_kinds
 lazy from .facts import stored_snapshots
+
+# A kind HQ stores readings of, or none. Read as a schema is first built, so
+# declaring the command loads no registry.
+type SweptKind = Annotated[
+    str,
+    Choices([("", "None"), *((kind, registry_label(kind)) for kind in sorted({*OBSERVATIONS, *PROVIDERS}))]),
+    Describe("The one type of reading to read now, from every connection."),
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,12 +83,41 @@ class ControllerSweepCommand:
         Describe("The connection to read now, every type its credential reads."),
     ] = ""
     kind: Annotated[
-        str,
+        SweptKind,
         Names("readings"),
         Field(title="Type of reading"),
-        Describe("The one type of reading to read now, from every connection."),
     ] = ""
     every_connection: Annotated[bool, Describe("Read every connection now.")] = False
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        # The subject each shape of the command names, said beside its fields.
+        declared: dict[str, Any] = handler(schema)
+        handler.resolve_ref_schema(declared)["oneOf"] = [_naming(subject) for subject in (None, *_UNNAMED)]
+        return declared
+
+
+# Each subject a sweep names, and what it holds when it names none: a blank
+# connection, no kind, not every connection.
+_UNNAMED: dict[str, dict[str, Any]] = {
+    "connection_ref": {"pattern": r"^\s*$"},
+    "kind": {"const": ""},
+    "every_connection": {"const": False},
+}
+_NAMED: dict[str, dict[str, Any]] = {
+    "connection_ref": {"pattern": r"\S"},
+    "kind": {"minLength": 1},
+    "every_connection": {"const": True},
+}
+
+
+def _naming(subject: str | None) -> dict[str, Any]:
+    """The shape of a sweep that names ``subject`` alone, or none."""
+
+    return {
+        "properties": {field: (_NAMED if field == subject else _UNNAMED)[field] for field in _UNNAMED},
+        "required": [subject] if subject else [],
+    }
 
 
 def _seconds(name: str) -> int:
@@ -591,20 +629,19 @@ def settle_read_requests() -> int:
 def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
     """``(connection_ref, kind)`` the command forces, or None for a bare wake-up.
 
-    Fails closed: a ref no controller reported, or a kind HQ does not store.
+    Fails closed: a ref no controller reported. The command's type holds its
+    kind to one HQ stores.
     """
 
     ref = command.connection_ref.strip()
-    kind = command.kind.strip()
+    kind = command.kind
     named = [field for field, value in (("connection_ref", ref), ("kind", kind)) if value]
     if command.every_connection:
         named.append("every_connection")
     if len(named) > 1:
         raise ValidationError(dict.fromkeys(named, "Name one of connection_ref, kind or every_connection."))
     if ref and not connection_providers(ref):
-        raise ValidationError({"connection_ref": ValidationError("No such connection.", code="invalid_choice")})
-    if kind and kind not in OBSERVATIONS and kind not in PROVIDERS:
-        raise ValidationError({"kind": ValidationError("No such type.", code="invalid_choice")})
+        raise ValidationError({"connection_ref": ValidationError("No such connection.", code=NOT_FOUND)})
     return (ref, kind) if named else None
 
 

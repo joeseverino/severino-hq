@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
+from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
@@ -150,7 +151,7 @@ class FigureDrawingTests(SimpleTestCase):
     """What a figure looks like beside its value: dots for a part, a line for a direction."""
 
     def render(self, *items):
-        return render_to_string("partials/_kpi_grid.html", {"items": items})
+        return Template('{% facts layout="band" size="large" items=items %}').render(Context({"items": items}))
 
     # ----- dots
 
@@ -159,8 +160,8 @@ class FigureDrawingTests(SimpleTestCase):
         html = self.render(Kpi("Machines", "3", "2 offline", drawing=drawing))
 
         self.assertEqual([dot.filled for dot in drawing.shown], [True, True, True, False, False])
-        (dots,) = with_class(html, "kpi-dots")
-        shown = with_class(html, "kpi-dot")
+        (dots,) = with_class(html, "figure-dots")
+        shown = with_class(html, "figure-dot")
         self.assertEqual(len(shown), 5)
         self.assertEqual(["is-filled" in dot.classes for dot in shown], [True, True, True, False, False])
         # Decoration: the note already says it, so it is not announced.
@@ -170,7 +171,7 @@ class FigureDrawingTests(SimpleTestCase):
     def test_a_whole_too_large_to_count_at_a_glance_draws_no_dots(self):
         for drawing in (Dots.of(40, 90), Dots.of(0, 0)):
             self.assertEqual(drawing.shown, ())
-            self.assertEqual(with_class(self.render(Kpi("Records", "40", drawing=drawing)), "kpi-dot"), [])
+            self.assertEqual(with_class(self.render(Kpi("Records", "40", drawing=drawing)), "figure-dot"), [])
 
     def test_a_part_larger_than_its_whole_is_refused(self):
         for filled, whole in ((6, 5), (-1, 5)):
@@ -192,12 +193,11 @@ class FigureDrawingTests(SimpleTestCase):
         self.assertEqual(
             (alpha.attrs["href"], alpha.attrs["data-tip"]), ("/machines/alpha/", "alpha · 192.0.2.1 · online")
         )
-        # A link cannot hold links: the cell stops being one, and the value
-        # carries the figure's own page instead.
+        # The value carries the figure's own page, beside its dots' links.
         self.assertEqual(hrefs(html), ["/machines/", "/machines/alpha/", "/machines/beta/"])
         self.assertIn(("1", "/machines/"), links(html))
         # Links are announced, so these dots are not hidden from a reader.
-        (dots,) = with_class(html, "kpi-dots")
+        (dots,) = with_class(html, "figure-dots")
         self.assertNotIn("aria-hidden", dots.attrs)
 
     def test_dots_that_lead_nowhere_leave_the_figure_one_link(self):
@@ -205,7 +205,7 @@ class FigureDrawingTests(SimpleTestCase):
 
         (cell,) = elements(html, "a")
         self.assertEqual(cell.attrs["href"], "/machines/")
-        self.assertEqual(cell.words, "Machines 3")
+        self.assertEqual(cell.words, "3")
 
     # ----- trend
 
@@ -259,23 +259,26 @@ class FigureDrawingTests(SimpleTestCase):
 
         plain = self.render(Kpi("Domains", "4"))
 
-        self.assertEqual(elements(plain, "svg") + with_class(plain, "kpi-dot"), [])
+        self.assertEqual(elements(plain, "svg") + with_class(plain, "figure-dot"), [])
         self.assertEqual(text(plain), "Domains 4")
 
     def test_a_card_given_as_a_mapping_still_renders(self):
         html = self.render({"label": "First", "value": 1, "url": "/"})
 
         (cell,) = elements(html, "a")
-        self.assertEqual((cell.attrs["href"], cell.words), ("/", "First 1"))
-        self.assertEqual(elements(html, "svg") + with_class(html, "kpi-dot"), [])
+        self.assertEqual((cell.attrs["href"], cell.words), ("/", "1"))
+        self.assertEqual(elements(html, "svg") + with_class(html, "figure-dot"), [])
 
     def test_an_icon_goes_before_the_label_by_its_name(self):
         known = self.render(Kpi("Domains", "4", icon="globe"))
 
         page = all_elements(known)
-        (label,) = with_class(known, "label")
-        self.assertEqual(page[page.index(label) + 1].tag, "svg")
+        (label,) = with_class(known, "fact-label")
         (use,) = elements(known, "use")
+        self.assertLess(page.index(use), page.index(label))
+        (term,) = elements(known, "dt")
+        self.assertIn(term, use.ancestors)
+        self.assertIn(term, label.ancestors)
         self.assertTrue(use.attrs["href"].endswith("#globe"))
         self.assertEqual(label.words, "Domains")
 

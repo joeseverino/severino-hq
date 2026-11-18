@@ -31,7 +31,7 @@ class ContentItem(TimestampedModel):
     slug = models.SlugField(max_length=220, unique=True, blank=True)
     content_type = models.CharField(max_length=24, choices=Type.choices, default=Type.ARTICLE)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
-    topic = models.CharField(max_length=300, blank=True)
+    topic = models.CharField("description", max_length=300, blank=True)
     tags = models.CharField(
         max_length=300,
         blank=True,

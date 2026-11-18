@@ -2,13 +2,14 @@
 
 Every reading with the certificate facet that states an expiry counts, whichever
 provider holds it, and so does a certificate a proxy serves a name with, which
-may be loaded from a file on the proxy's host and read nowhere else. The fact
-sits on the connection that read it, where the certificate lives; the names it
-serves are evidence. Days left come from ``application.expiry``.
+may be loaded from a file on the proxy's host and read nowhere else. Each is
+about the connection that read it, where the certificate lives
+(``topology_estate.readers_of``); the names it serves are evidence. Days left
+come from ``application.expiry``.
 """
 
-from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
-from dataclasses import replace
+from collections.abc import Callable, Hashable, Iterable, Iterator
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -20,43 +21,51 @@ lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 from .action_links import command_url
 from .expiry import days_until
 from .facts import Joined, inventory_records
-from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingRemedy, FindingRule, fact_values, opens
+from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingRemedy, FindingRule, opens
 from .labels import lower_first
 from .moments import expiry_words, moment
 from .tone import Tone
+from .topology_model import TopologyNode
 from .ui import ended
-lazy from .estate import managed_certificates
+lazy from .estate import Expiry, managed_certificates
+lazy from .topology_estate import machine_nodes, readers_of
 
-CERTIFICATE_EXPIRES = "certificate-expires"
-# A certificate HQ renews, on its declaration: its name, expiry, renewal window and page.
-RENEWAL = "certificate-renewal"
 # A provider that renews on its own does so with thirty days left; a
 # certificate still inside three weeks of expiry missed that renewal.
 WARN_DAYS = 21
 SERIOUS_DAYS = 7
 
 
-def add(
-    nodes,
-    readers: Callable[[Joined], Iterable[str]],
-    holders: Callable[[Any, Mapping[str, Any]], Iterable[str]],
-) -> None:
-    """One fact per certificate that states an expiry, on each node that read it.
+@dataclass(frozen=True, slots=True)
+class HeldCertificate:
+    """One certificate that states an expiry, as a connection holds it."""
 
-    ``readers`` names the nodes behind a certificate reading; ``holders`` the
-    connection nodes a proxy's own record was read through.
+    kind: str
+    title: str
+    expires: str
+    names: tuple[str, ...] = ()
+    issuer: str = ""
+
+
+def held(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> tuple[tuple[str, HeldCertificate], ...]:
+    """Each certificate that states an expiry, by the node that holds it: each
+    a reading lists, then each a proxy serves with that its connection did not
+    already list. Placing one makes sure its reader's node stands in ``nodes``.
     """
 
-    for fact, node_ids in (*_read(readers), *_served(holders)):
-        _kind, name, expires, _names, _issuer = _parts(fact[1])
+    readers, holders = readers_of(nodes, machine)
+    found: list[tuple[str, HeldCertificate]] = []
+    seen: set[tuple[str, str, datetime | None]] = set()
+    for certificate, node_ids in (*_read(readers), *_served(holders)):
         for node_id in node_ids:
-            node = nodes.get(node_id)
-            # A proxy that also lists its certificates has already said this one.
-            if node is not None and not _stated(node, name, expires):
-                nodes[node_id] = replace(node, facts=(*node.facts, fact))
+            key = (node_id, certificate.title, moment(certificate.expires))
+            if node_id in nodes and key not in seen:
+                seen.add(key)
+                found.append((node_id, certificate))
+    return tuple(found)
 
 
-Found = Iterator[tuple[tuple[str, str], tuple[str, ...]]]
+Found = Iterator[tuple[HeldCertificate, tuple[str, ...]]]
 
 
 def _read(readers) -> Found:
@@ -76,12 +85,10 @@ def _read(readers) -> Found:
                 snapshot.observed_at,
                 controller_id=snapshot.controller_id,
             )
-            names = ",".join(spec.hostnames(record))
-            fact = "|".join((kind, spec.title(record), expires, names, spec.issuer(record)))
-            yield (
-                (CERTIFICATE_EXPIRES, fact),
-                tuple(readers(joined)),
+            certificate = HeldCertificate(
+                kind, spec.title(record), expires, tuple(spec.hostnames(record)), spec.issuer(record)
             )
+            yield certificate, tuple(readers(joined))
 
 
 def _served(holders) -> Found:
@@ -89,7 +96,7 @@ def _served(holders) -> Found:
     the nodes the proxy was read through. HQ neither issued nor manages one
     loaded from a file on the proxy's host, so no other reading lists it."""
 
-    found: dict[tuple[str, ...], tuple[set[str], tuple[str, ...], str]] = {}
+    found: dict[tuple[str, ...], tuple[set[str], tuple[str, str, str], str]] = {}
     for kind, provider in PROVIDERS.items():
         if provider.served_certificate is None:
             continue
@@ -104,25 +111,19 @@ def _served(holders) -> Found:
                 key = (kind, str(served.certificate.get("name", "")), expires)
                 found.setdefault((node_id, *key), (set(), key, served.issuer))[0].update(served.hostnames)
     for (node_id, *_), (names, key, issuer) in found.items():
-        yield (CERTIFICATE_EXPIRES, "|".join((*key, ",".join(sorted(names)), issuer))), (node_id,)
+        yield HeldCertificate(*key, tuple(sorted(names)), issuer), (node_id,)
 
 
-def _parts(value: str) -> list[str]:
-    """A fact's kind, certificate name, expiry, the names it serves and its issuer."""
+def _held_on(estate: FindingEstate) -> Iterator[tuple[TopologyNode, HeldCertificate]]:
+    """What ``held`` finds, by node in the projection's order."""
 
-    return (value.split("|") + [""] * 5)[:5]
-
-
-def _stated(node, name: str, expires: str) -> bool:
-    """Whether ``node`` already carries this certificate, by name and expiry."""
-
-    for key, value in node.facts:
-        if key != CERTIFICATE_EXPIRES:
-            continue
-        _kind, title, stamp, _names, _issuer = _parts(value)
-        if title == name and moment(stamp) == moment(expires):
-            return True
-    return False
+    nodes = {node.id: node for node in estate.nodes()}
+    by_node: dict[str, list[HeldCertificate]] = {}
+    for node_id, certificate in held(dict(nodes), machine_nodes()):
+        by_node.setdefault(node_id, []).append(certificate)
+    for node_id, node in nodes.items():
+        for certificate in by_node.get(node_id, ()):
+            yield node, certificate
 
 
 def serving[T](found: Iterable[tuple[Hashable, datetime, T]]) -> list[T]:
@@ -146,39 +147,40 @@ def expiring(estate: FindingEstate) -> tuple[Finding, ...]:
     none, inside three weeks of expiry or past it, then each HQ renews inside
     its renewal window."""
 
-    held = serving(
-        (_served_as(node, value), when, (node, value, days_until(when, estate.now)))
-        for node in estate.nodes()
-        for value, when in _expiries(node)
+    return judged(_held_on(estate), estate.now) + renewals_judged(_renewals(estate), estate.now)
+
+
+def judged(found: Iterable[tuple[Any, HeldCertificate]], now: datetime) -> tuple[Finding, ...]:
+    """Each certificate ``found``, by the node that holds it, inside three
+    weeks of expiry or past it as of ``now``."""
+
+    held_now = serving(
+        (_served_as(node, certificate), when, (node, certificate, days_until(when, now)))
+        for node, certificate in found
+        if (when := moment(certificate.expires)) is not None
     )
-    alike: dict[tuple[str, str, str], list[tuple[Any, str, int]]] = {}
-    for node, value, days in held:
+    alike: dict[tuple[str, str, str], list[tuple[Any, HeldCertificate, int]]] = {}
+    for node, certificate, days in held_now:
         if days <= WARN_DAYS:
-            alike.setdefault(_reads_as(value, days), []).append((node, value, days))
-    found = []
+            alike.setdefault(_reads_as(certificate, days), []).append((node, certificate, days))
+    findings = []
     for group in alike.values():
         said = _telling(group) if len(group) > 1 else None
-        found += [
-            _finding(node, value, days, apart=said(node, value) if said else ("", "")) for node, value, days in group
+        findings += [
+            _finding(node, certificate, days, apart=said(node, certificate) if said else ("", ""))
+            for node, certificate, days in group
         ]
-    return tuple(sorted(found, key=lambda item: item.title)) + renewal_due(estate)
+    return tuple(sorted(findings, key=lambda item: item.title))
 
 
-def _expiries(node) -> Iterator[tuple[str, datetime]]:
-    """Each certificate fact on ``node`` with a readable expiry, and that expiry."""
-
-    for key, value in node.facts:
-        if key == CERTIFICATE_EXPIRES and (when := moment(_parts(value)[2])) is not None:
-            yield value, when
-
-
-def _served_as(node, value: str) -> tuple[str, ...]:
-    """The name a certificate fact on ``node`` is judged under: its kind and
-    the first name it serves, as the estate's edge certificates are. One that
+def _served_as(node, certificate: HeldCertificate) -> tuple[Any, ...]:
+    """The name a certificate on ``node`` is judged under: its kind and the
+    first name it serves, as the estate's edge certificates are. One that
     serves no name stands for none, so it is judged alone."""
 
-    kind, _title, _stamp, names, _issuer = _parts(value)
-    return (node.id, kind, names.split(",")[0]) if names else (node.id, value)
+    if certificate.names:
+        return (node.id, certificate.kind, certificate.names[0])
+    return (node.id, certificate)
 
 
 def _label(kind: str) -> str:
@@ -187,15 +189,14 @@ def _label(kind: str) -> str:
     return spec.label if spec is not None else "Certificate"
 
 
-def _reads_as(value: str, days: int) -> tuple[str, str, str]:
+def _reads_as(certificate: HeldCertificate, days: int) -> tuple[str, str, str]:
     """What a finding's title says of a certificate before it is told apart."""
 
-    kind, title, *_rest = _parts(value)
-    return _label(kind), title, expiry_words(days)
+    return _label(certificate.kind), certificate.title, expiry_words(days)
 
 
-def _issued(_node, value: str) -> tuple[str, str]:
-    issuer = _parts(value)[4]
+def _issued(_node, certificate: HeldCertificate) -> tuple[str, str]:
+    issuer = certificate.issuer
     # An uploaded one has no issuer to name, so the word leads the title.
     return (UPLOADED.capitalize(), "") if issuer == UPLOADED else ("", f"from {issuer or 'an unnamed issuer'}")
 
@@ -204,29 +205,30 @@ def _issued(_node, value: str) -> tuple[str, str]:
 # one name (a zone's edge certificate and its backup) by who issued them or
 # what they serve, and one held in two places by where. Each says the words
 # that lead the title and those that follow the certificate's name.
-Telling = Callable[[Any, str], tuple[str, str]]
+Telling = Callable[[Any, HeldCertificate], tuple[str, str]]
 _TELLINGS: tuple[Telling, ...] = (
     _issued,
-    lambda _node, value: ("", f"for {_parts(value)[3].replace(',', ', ') or 'no name'}"),
-    lambda node, _value: ("", f"in {node.label}"),
+    lambda _node, certificate: ("", f"for {', '.join(certificate.names) or 'no name'}"),
+    lambda node, _certificate: ("", f"in {node.label}"),
 )
 
 
-def _telling(group: list[tuple[Any, str, int]]) -> Telling:
+def _telling(group: list[tuple[Any, HeldCertificate, int]]) -> Telling:
     """The first telling that says each of ``group`` differently, else the last."""
 
     for telling in _TELLINGS:
-        if len({telling(node, value) for node, value, _days in group}) == len(group):
+        if len({telling(node, certificate) for node, certificate, _days in group}) == len(group):
             return telling
     return _TELLINGS[-1]
 
 
-def _finding(node, value: str, days: int, apart: tuple[str, str] = ("", "")) -> Finding:
-    """The finding for one certificate fact with ``days`` left, ``apart``
-    saying what tells it from another whose title would read the same."""
+def _finding(node, certificate: HeldCertificate, days: int, apart: tuple[str, str] = ("", "")) -> Finding:
+    """The finding for one certificate with ``days`` left, ``apart`` saying
+    what tells it from another whose title would read the same."""
 
-    kind, title, stamp, names, issuer = _parts(value)
-    label, _title, said = _reads_as(value, days)
+    kind, title, stamp, issuer = certificate.kind, certificate.title, certificate.expires, certificate.issuer
+    names = ",".join(certificate.names)
+    label, _title, said = _reads_as(certificate, days)
     lead, tail = apart
     label = f"{lead} {lower_first(label)}" if lead else label
     day = when.date().isoformat() if (when := moment(stamp)) else stamp
@@ -247,7 +249,7 @@ def _finding(node, value: str, days: int, apart: tuple[str, str] = ("", "")) -> 
             ("Held in", node.label),
             ("Expires", expiry_phrase(stamp)),
             *((("Issued by", issuer),) if issuer else ()),
-            *((("Serves", names.replace(",", ", ")),) if names else ()),
+            *((("Serves", ", ".join(certificate.names)),) if names else ()),
         ),
     )
 
@@ -259,44 +261,40 @@ _SERVING_EXPLANATION = (
 _UNUSED_EXPLANATION = "It serves no name, so nothing breaks when it expires. Delete it where it is held."
 
 
-def add_renewals(nodes) -> None:
-    """Each certificate HQ renews, as a fact on its declaration's node."""
+def _renewals(estate: FindingEstate) -> Iterator[tuple[TopologyNode, Expiry]]:
+    """Each certificate HQ renews, with its declaration's node."""
 
+    nodes = {node.id: node for node in estate.nodes()}
     for expiry in managed_certificates():
-        node = nodes.get(f"resource:{expiry.resource_key}")
-        if node is not None:
-            said = (expiry.subject, expiry.expires.isoformat(), str(expiry.renewal_window_days), expiry.url)
-            fact = (RENEWAL, "|".join(said))
-            nodes[node.id] = replace(node, facts=(*node.facts, fact))
+        if (node := nodes.get(f"resource:{expiry.resource_key}")) is not None:
+            yield node, expiry
 
 
-def renewal_due(estate: FindingEstate) -> tuple[Finding, ...]:
-    """A certificate HQ renews, inside its renewal window: the renewal has not run."""
+def renewals_judged(found: Iterable[tuple[Any, Expiry]], now: datetime) -> tuple[Finding, ...]:
+    """A certificate HQ renews, inside its renewal window as of ``now``: the renewal has not run."""
 
-    found = []
-    for node in estate.nodes():
-        for value in fact_values(node, RENEWAL):
-            name, stamp, window, url = value.rsplit("|", 3)
-            if (when := moment(stamp)) is None or (days := days_until(when, estate.now)) > int(window):
-                continue
-            found.append(
-                Finding(
-                    rule="certificate-expiring",
-                    subject=node.id,
-                    severity=Tone.SERIOUS if days <= SERIOUS_DAYS else Tone.ATTENTION,
-                    title=f"{name} {expiry_words(days)}",
-                    explanation=f"Expires {ended(expiry_phrase(stamp))} Renewal has not run; renew it.",
-                    primary=opens("Open certificate", url),
-                    remedies=(
-                        FindingRemedy(
-                            capability="certificate.renew",
-                            target=node.label,
-                            url=command_url("certificate.renew", node.label),
-                        ),
+    findings = []
+    for node, expiry in found:
+        if (days := days_until(expiry.expires, now)) > expiry.renewal_window_days:
+            continue
+        findings.append(
+            Finding(
+                rule="certificate-expiring",
+                subject=node.id,
+                severity=Tone.SERIOUS if days <= SERIOUS_DAYS else Tone.ATTENTION,
+                title=f"{expiry.subject} {expiry_words(days)}",
+                explanation=f"Expires {ended(expiry_phrase(expiry.expires.isoformat()))} Renewal has not run; renew it.",
+                primary=opens("Open certificate", expiry.url),
+                remedies=(
+                    FindingRemedy(
+                        capability="certificate.renew",
+                        target=node.label,
+                        url=command_url("certificate.renew", node.label),
                     ),
-                )
+                ),
             )
-    return tuple(found)
+        )
+    return tuple(findings)
 
 
 # The rule this module raises: one family, whether HQ renews the certificate or
@@ -308,6 +306,7 @@ RULES: tuple[FindingRule, ...] = (
         "Certificate near or past expiry",
         Tone.ATTENTION,
         expiring,
+        gathered=True,
         operator_action=(
             "Renew the certificate from its page in HQ, or where it is held, or fix its automatic renewal. "
             f"{THEN_CHECK_AGAIN}"

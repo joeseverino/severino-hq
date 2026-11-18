@@ -517,9 +517,9 @@ class OperationRequest(TimestampedModel):
     # The tailnet device the asker called from (``Principal.device``), so a
     # block on that device holds what it asked for (``agent_access.held_askers``).
     requested_device = models.CharField(max_length=64, blank=True)
-    # A machine has no person (""); NULL means a legacy operation whose
-    # person was never recorded, so a block on its client still holds it.
-    requested_person_key = models.CharField(max_length=100, blank=True, null=True)
+    # The sign-in key of the person a token asked for, so a block on that
+    # person holds it; blank for a machine's token.
+    requested_person_key = models.CharField(max_length=100, blank=True)
     reason = models.CharField(max_length=300, blank=True)
     idempotency_key = models.CharField(max_length=200, unique=True)
     input = models.JSONField(default=dict, blank=True)

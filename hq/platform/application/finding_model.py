@@ -4,32 +4,29 @@ Every detector module builds its findings from these, and application.findings
 derives, resolves and serves them. Kept apart so a detector can import its
 vocabulary without importing the pipeline that collects it."""
 
-import json
 import re
 import shlex
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
-
-from pydantic import ConfigDict, with_config
+from typing import TYPE_CHECKING, NotRequired, TypedDict
 
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink, read_link
-from .command_fields import Describe
 from .core_capabilities import CONTROLLER_REFRESH
-from .display_words import as_members
+from .display_words import as_members, in_words
+from .finding_steps import Do, Press, Run, Step
 from .moments import moment
 from .tone import Tone
 from .topology_model import Topology, TopologyNode
 from .ui import ended
-from .workflows import WorkflowPlan
 lazy from .capabilities import capability_spec, capability_words
 lazy from .pages import command_reach
 
 if TYPE_CHECKING:
     from .cadence import ControllerSweepCommand
+    from .security import Principal
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +85,9 @@ class Finding:
     severity: Tone
     explanation: str
     evidence: tuple[tuple[str, str], ...] = ()
+    # The commands that would fix it, as its detector names them. Derivation
+    # resolves each once, into a ``Press`` among its steps for a reader who may
+    # run it, and empties this.
     remedies: tuple[FindingRemedy, ...] = ()
     # Safe reads that help with it: the detector's own (a container's upgrade
     # plan), then the subject node's. Delivery adapters render these; they do
@@ -101,12 +101,17 @@ class Finding:
     # Kinds this higher-order claim explains. They remain exact machine facts,
     # while a page can lead with the shared cause once.
     affected_scopes: tuple[str, ...] = ()
-    workflow: WorkflowPlan | None = None
-    # Commands an operator runs on their own machine; HQ never runs them.
-    steps: tuple[OperatorStep, ...] = ()
+    # What to do about it, in order: a command HQ runs (``Press``, which only
+    # derivation writes), one the operator runs (``Run``), or what to do in
+    # words (``Do``). Derivation adds its rule's ``operator_action`` where it
+    # leaves none.
+    steps: tuple[Step, ...] = ()
     # Why HQ can neither run a remedy nor name the exact command for this one.
     # Derivation fills it from the rule when the finding carries neither.
     no_help_reason: str = ""
+    # The press that reads again what it rests on and runs its check, set by
+    # derivation: a button, never a step.
+    check: ActionLink | None = None
     # When this was first seen open: when its condition began, where the
     # detector read it, else where a look recorded it (application.first_seen).
     since: datetime | None = None
@@ -143,11 +148,12 @@ class Finding:
     # it stays a finding, and the queue leaves it out until one does.
     awaiting_fix: bool = False
     # A request a person decides, by its Approve or Reject: it ends only when
-    # decided, so a reader can never set it aside (``Insight.held``).
+    # decided, so a reader can never set it aside, and a mark from before
+    # does not hide it.
     held: bool = False
     # What a finding no host rule raises says of itself, where a rule would:
     # an extension's or a held request's. A host rule's finding is worded by
-    # its rule alone (``attention.finding_insight``), which ignores these.
+    # its rule alone (``dashboard.finding_rows``), which ignores these.
     # Why it is as urgent as its severity says, in one sentence.
     why: str = ""
     # What clears it, a clause after "Clears once".
@@ -158,6 +164,35 @@ class Finding:
 
     def __post_init__(self) -> None:
         as_members(self)
+        # A card says it as written, so what it says is words, and each
+        # reading's label is drawn once with its values beside it.
+        for text in (self.title, self.explanation):
+            in_words(text)
+        for label, value in self.evidence:
+            in_words(label, label=True)
+            in_words(value)
+
+    @property
+    def one_press(self) -> bool:
+        """Whether HQ does what it asks in one press: the first command it offers would run now."""
+
+        lead = self.presses[0] if self.presses else None
+        return lead is not None and bool(lead.capability) and not lead.refusal
+
+    @property
+    def presses(self) -> tuple[ActionLink, ...]:
+        """The commands HQ runs for it, in the order offered."""
+
+        return tuple(step.link for step in self.steps if isinstance(step, Press))
+
+    @property
+    def pages(self) -> tuple[ActionLink, ...]:
+        """The pages that help look into it, each once by its label: its investigations, then its offers."""
+
+        seen: dict[str, ActionLink] = {}
+        for link in (*self.investigations, *self.offers):
+            seen.setdefault(link.label, link)
+        return tuple(seen.values())
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,7 +214,7 @@ class FindingRule:
     operator_action: str
     # Why HQ cannot resolve a finding of this rule itself: shown whenever one
     # carries no remedy and no exact command. Required, so no finding reaches
-    # an operator as bare prose (application.item_help).
+    # an operator as bare prose.
     no_help_reason: str = ""
     subsumes: tuple[str, ...] = ()
     # The card of its subject's page that draws it, where the page has one for
@@ -201,6 +236,8 @@ class FindingRule:
     # what the section declares. Empty for a rule about the estate, whose
     # subject gates it and which Infrastructure raises.
     domain: str = ""
+    # The resource whose gate joins its findings' read gate.
+    read_through: str = ""
     # Whether its detector reads HQ's own records (a model, a stored reading)
     # rather than the projection. It runs as the estate is gathered, before
     # derivation, which reads nothing of its own.
@@ -234,6 +271,8 @@ class FindingEstate:
     declared_kinds: frozenset[str]
     declared_counts: dict[str, int]
     controllers_by_kind: dict[str, frozenset[str]]
+    # Whom it was narrowed for, so a gathered rule reads only what they may.
+    principal: Principal | None = None
 
     def nodes(self) -> tuple[TopologyNode, ...]:
         return self.topology.nodes
@@ -304,7 +343,7 @@ class Said(TypedDict):
     title: str
     explanation: str
     remedies: NotRequired[tuple[FindingRemedy, ...]]
-    steps: NotRequired[tuple[OperatorStep, ...]]
+    steps: NotRequired[tuple[Run | Do, ...]]
 
 
 def per_connection(
@@ -335,107 +374,20 @@ def per_connection(
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
-# A finding worded while the topology is derived, which may read, carried on
-# its subject's node so its rule reads it back and deriving findings costs no
-# query.
-CARRIED = "finding"
-
-
-def carry(nodes: dict[str, TopologyNode], findings: Iterable[Finding]) -> None:
-    """Each of ``findings`` as a fact on its subject's node.
-
-    A subject with no node of its own (a name only a gate mentions) rides on
-    the first node: the rules read every node, so where it rides only has to
-    exist.
-    """
-
-    for finding in findings:
-        anchor = finding.subject if finding.subject in nodes else next(iter(nodes), "")
-        if anchor:
-            node = nodes[anchor]
-            nodes[anchor] = replace(node, facts=(*node.facts, (CARRIED, _encoded(finding))))
-
-
-def _encoded(finding: Finding) -> str:
-    return json.dumps(
-        {
-            "rule": finding.rule,
-            "subject": finding.subject,
-            "title": finding.title,
-            "severity": finding.severity,
-            "explanation": finding.explanation,
-            "part": finding.part,
-            "evidence": [list(pair) for pair in finding.evidence],
-            "remedies": [
-                [remedy.capability, remedy.target, remedy.intent, remedy.variant, remedy.url, remedy.method]
-                for remedy in finding.remedies
-            ],
-            "steps": [[step.label, step.command, list(step.notes)] for step in finding.steps],
-            "offers": [[offer.name, offer.label, offer.url, offer.reason] for offer in finding.offers],
-            "observed_at": finding.observed_at.isoformat() if finding.observed_at else "",
-            "reads": finding.reads,
-            "primary": [finding.primary.label, finding.primary.url] if finding.primary else [],
-        }
-    )
-
-
-def _decoded(value: str) -> Finding:
-    item = json.loads(value)
-    return Finding(
-        rule=item["rule"],
-        subject=item["subject"],
-        title=item["title"],
-        severity=item["severity"],
-        explanation=item["explanation"],
-        part=item["part"],
-        evidence=tuple(tuple(pair) for pair in item["evidence"]),
-        remedies=tuple(
-            FindingRemedy(capability=capability, target=target, intent=intent, variant=variant, url=url, method=method)
-            for capability, target, intent, variant, url, method in item["remedies"]
-        ),
-        steps=tuple(
-            OperatorStep(label=label, command=command, notes=tuple(notes)) for label, command, notes in item["steps"]
-        ),
-        offers=tuple(read_link(name, label, url, reason=reason) for name, label, url, reason in item["offers"]),
-        observed_at=moment(item["observed_at"]),
-        reads=item["reads"],
-        primary=opens(*item["primary"]) if item["primary"] else None,
-    )
-
-
 def opens(label: str, url: str) -> ActionLink:
     """The page a finding's card leads with, under ``label``."""
 
     return read_link("open", label, url)
 
 
-def carried(rule: str) -> Callable[[FindingEstate], tuple[Finding, ...]]:
-    """The detector of ``rule``: the findings of it the topology carries, each once, in title order."""
+def distinct(findings: Iterable[Finding]) -> tuple[Finding, ...]:
+    """Each of ``findings`` once by its subject, part and title, in that order:
+    a detector that walks several routes to one place may word it twice."""
 
-    def detect(estate: FindingEstate) -> tuple[Finding, ...]:
-        found = {}
-        for node in estate.nodes():
-            for value in fact_values(node, CARRIED):
-                finding = _decoded(value)
-                if finding.rule == rule:
-                    found.setdefault((finding.subject, finding.part, finding.title), finding)
-        return tuple(found[key] for key in sorted(found))
-
-    return detect
-
-
-# Its own config, so it is written one way under every answer that holds it.
-@with_config(ConfigDict(extra="forbid"))
-@dataclass(frozen=True, slots=True)
-class OperatorStep:
-    """A command an operator runs on their own machine. HQ never runs it."""
-
-    label: Annotated[str, Describe("What the step does, in a sentence; all there is to it when it names no command.")]
-    command: Annotated[
-        str,
-        Describe("The exact command to paste into a shell on the machine it names; empty for a step said in words."),
-    ] = ""
-    notes: Annotated[tuple[str, ...], Describe("What to know before or after running it, a sentence each.")] = ()
+    found: dict[tuple[str, str, str], Finding] = {}
+    for finding in findings:
+        found.setdefault((finding.subject, finding.part, finding.title), finding)
+    return tuple(found[key] for key in sorted(found))
 
 
 # A problem card's own button: read what the claim rests on again, then run
@@ -461,15 +413,15 @@ def on_machine(machine: str, command: str) -> str:
     return f'ssh {machine} "sudo {escaped}"'
 
 
-def machine_step(label: str, machine: str, command: str, notes: tuple[str, ...] = ()) -> tuple[OperatorStep, ...]:
+def machine_step(label: str, machine: str, command: str, notes: tuple[str, ...] = ()) -> tuple[Run, ...]:
     """One step that is a command on ``machine``, or none when the command
     cannot be written for it: a step with no command says nothing to run."""
 
     pasted = on_machine(machine, command)
-    return (OperatorStep(label=label, command=pasted, notes=notes),) if pasted else ()
+    return (Run(label=label, command=pasted, notes=notes),) if pasted else ()
 
 
-def journal_step(label: str, machine: str, unit: str, notes: tuple[str, ...] = ()) -> tuple[OperatorStep, ...]:
+def journal_step(label: str, machine: str, unit: str, notes: tuple[str, ...] = ()) -> tuple[Run, ...]:
     """The step that reads a background job's log on its machine."""
 
     return machine_step(label, machine, f"journalctl -u {shlex.quote(unit)} -n 50 --no-pager", notes)

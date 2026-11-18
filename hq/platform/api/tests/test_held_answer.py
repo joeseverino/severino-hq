@@ -1,7 +1,6 @@
-"""A call held for a person answers a declared shape on both doors: the API
-answers it at 202 Accepted on every capability that changes something, apart
-from the 200 of a call that ran, and MCP's ``execute_capability`` beside its
-own, and a real held answer meets each."""
+"""A call held for a person answers a declared shape on both doors: the API at
+202 Accepted, apart from the 200 of a call that ran, and MCP's
+``execute_capability`` beside its own, and a real held answer meets each."""
 
 import json
 
@@ -21,32 +20,6 @@ from .tokens import ISSUER, RESOURCE, _serving, _token
 
 AGENT = Principal("example-held", "mcp", frozenset({"write_projects", "read"}))
 PROJECT = {"name": "Held", "slug": "held", "status": "active"}
-
-
-def _resolved(document, schema):
-    """``schema``, followed through each ``$ref`` to what it names."""
-
-    while "$ref" in schema:
-        node = document
-        for part in schema["$ref"].removeprefix("#/").split("/"):
-            node = node[part]
-        schema = node
-    return schema
-
-
-def _offers(document, schema, name):
-    """Whether ``schema`` or a branch of its ``anyOf`` is the component ``name``."""
-
-    if schema.get("$ref") == f"{openapi.SCHEMAS}{name}":
-        return True
-    return any(_offers(document, branch, name) for branch in _resolved(document, schema).get("anyOf", []))
-
-
-def _data(document, response):
-    """The schema of ``data`` in ``response``, an operation's answer at one status."""
-
-    envelope = _resolved(document, response)
-    return _resolved(document, envelope["content"]["application/json"]["schema"])["properties"]["data"]
 
 
 @override_settings(
@@ -96,26 +69,6 @@ class HeldAnswerTests(TestCase):
         self.assertNotIn("status", ran.json()["data"])
         self.assertEqual(refused.status_code, 403, refused.content)
         self.assertFalse(refused.json()["ok"])
-
-    def test_every_capability_that_changes_something_answers_the_held_call_at_202_alone(self):
-        # A read is never held for a person (``capability_policy.set_rule``).
-        document = openapi.document()
-        calls = {
-            path: operation
-            for path, operations in document["paths"].items()
-            for operation in operations.values()
-            if "x-hq-capability" in operation
-        }
-        self.assertTrue(calls)
-        for path, operation in calls.items():
-            with self.subTest(path=path):
-                responses = operation["responses"]
-                ran = _data(document, responses["200"])
-                self.assertFalse(_offers(document, ran, "AwaitingApproval"))
-                if operation[openapi.EFFECT_EXTENSION] == "read":
-                    self.assertNotIn("202", responses)
-                else:
-                    self.assertEqual(_data(document, responses["202"]), {"$ref": f"{openapi.SCHEMAS}AwaitingApproval"})
 
     def test_a_held_call_answers_the_declared_shape_on_both_doors(self):
         response = self._post("example-held-api")

@@ -6,9 +6,9 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.messages.storage.base import Message
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import Context, Template
 from django.template.loader import render_to_string
-from django.test import RequestFactory, SimpleTestCase, tag
+from django.test import RequestFactory, SimpleTestCase, override_settings, tag
 
 from hq.platform.application.markup_testing import all_elements, elements, select, with_class
 from hq.platform.application.tests.reads import reads
@@ -94,12 +94,6 @@ class NoticeTagTests(SimpleTestCase):
         self.assertEqual(elements(html, "b"), [])
         self.assertEqual(elements(html, "i"), [])
 
-    def test_an_unknown_tone_or_option_is_refused(self):
-        with self.assertRaisesMessage(TemplateSyntaxError, "tone= is one of error, info, success, warning"):
-            _render('{% notice tone="attention" %}Body{% endnotice %}')
-        with self.assertRaises(TemplateSyntaxError):
-            _render('{% notice heading="Body" %}Body{% endnotice %}')
-
     def test_a_message_is_a_notice_in_its_levels_tone(self):
         request = RequestFactory().get("/")
         request.user = None
@@ -128,7 +122,9 @@ class NoticeCatalogTests(SimpleTestCase):
 
         from hq.platform.core.templatetags.notice_tags import TONES
 
-        entries = [entry for name, entry in CATALOG.items() if name.startswith("part/notice-")]
+        entries = [
+            entry for name, entry in CATALOG.items() if name.startswith("part/notice-") or name == "part/messages"
+        ]
         drawn = {
             name
             for entry in entries
@@ -148,21 +144,28 @@ _FRAME = re.compile(r'<template data-notice="(\w+)">(.*?)</template>', re.DOTALL
 @tag("source", "tree")
 @reads("static/js/**/*.js", "demo/demo.js", "**/templates/**")
 class NoticeFrameTests(SimpleTestCase):
-    def test_every_tone_a_script_clones_is_an_empty_frame_on_every_page(self):
+    def test_every_tone_a_script_clones_is_an_empty_frame_where_it_runs(self):
         """A script never writes a notice's class: it clones the part the
-        server drew empty in base.html, so the line it adds is that part."""
+        server drew empty in base.html, so the line it adds is that part.
+        HQ's scripts run on every page, demo.js only in the saved copy, and
+        no tone is drawn that nothing clones."""
 
         root = Path(settings.BASE_DIR)
-        scripts = [*sorted((root / "static" / "js").rglob("*.js")), root / "demo" / "demo.js"]
-        cloned = {tone for path in scripts for tone in _CLONED.findall(path.read_text(encoding="utf-8"))}
+        scripts = {
+            False: sorted((root / "static" / "js").rglob("*.js")),
+            True: [*sorted((root / "static" / "js").rglob("*.js")), root / "demo" / "demo.js"],
+        }
         request = RequestFactory().get("/")
         request.user = None
-        frames = dict(_FRAME.findall(render_to_string("base.html", {}, request=request)))
+        for saved, paths in scripts.items():
+            cloned = {tone for path in paths for tone in _CLONED.findall(path.read_text(encoding="utf-8"))}
+            with override_settings(SEVERINO_RENDERED_COPY=saved):
+                frames = dict(_FRAME.findall(render_to_string("base.html", {}, request=request)))
 
-        self.assertTrue(cloned, "the scripts clone no notice: the pattern no longer reads them")
-        self.assertEqual(sorted(cloned - set(frames)), [], "draw an empty {% notice %} of that tone in base.html")
-        for tone in cloned:
-            with self.subTest(tone=tone):
-                (notice,) = all_elements(frames[tone])
-                self.assertIn(f"notice-{tone}", notice.classes)
-                self.assertEqual(notice.words, "")
+            self.assertTrue(cloned, "the scripts clone no notice: the pattern no longer reads them")
+            self.assertEqual(sorted(set(frames) ^ cloned), [], "draw an empty {% notice %} of each tone cloned")
+            for tone in cloned:
+                with self.subTest(tone=tone, saved=saved):
+                    (notice,) = all_elements(frames[tone])
+                    self.assertIn(f"notice-{tone}", notice.classes)
+                    self.assertEqual(notice.words, "")

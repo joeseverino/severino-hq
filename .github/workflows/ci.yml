@@ -139,7 +139,7 @@ jobs:
           persist-credentials: false
           # The commit and its first parent: on a pull request the base its
           # merge commit merges into, on main the commit before the squash.
-          # lint:openapi-breaking compares the API document with that one.
+          # lint:sdk-breaking compares hq_sdk with that one.
           fetch-depth: 2
       - uses: ./.github/actions/toolchain
         with:
@@ -229,6 +229,16 @@ jobs:
         with:
           name: fast-map
           path: var/coverage/map/map.json
+          retention-days: 7
+          if-no-files-found: error
+      # The same recording holds each test's lines, read for the tests whose
+      # lines others cover; after the map's upload, so it never costs fast its map.
+      - name: Audit the tests
+        run: mise run audit:tests
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-audit
+          path: var/audit/tests/report.json
           retention-days: 7
           if-no-files-found: error
 

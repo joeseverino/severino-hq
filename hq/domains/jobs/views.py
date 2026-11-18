@@ -7,7 +7,7 @@ from django.http import Http404, JsonResponse
 from django.urls import reverse, reverse_lazy
 from django.views.generic import DetailView, ListView, TemplateView, View
 
-from hq.platform.application.pages import PageAction, PageBadge, PageMixin
+from hq.platform.application.pages import PageAction, PageBadge, PageMixin, RouteNamed
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Projected, TableColumn, TableFilter, TableListMixin, TableQuery, TableSort
 from hq.platform.application.tone import Tone
@@ -169,6 +169,7 @@ class WorkAskView(AskMixin, View):
     capability, so a press is authorized and recorded as the API's call is."""
 
     back_to = "jobs:list"
+    runs = RouteNamed()
 
     @override
     def setup(self, request, *args, **kwargs):

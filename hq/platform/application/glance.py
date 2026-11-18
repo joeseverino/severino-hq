@@ -2,12 +2,13 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from functools import cache
 from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
-from pydantic import BaseModel, ValidationError
+from pydantic import AfterValidator, BaseModel, Field, TypeAdapter, ValidationError
 
 from hq.domains.control_plane.glance_shapes import GlanceObservation, Hour, Machine, Weather
 from hq.domains.control_plane.models import (
@@ -24,14 +25,14 @@ from . import readings
 from .answer_fields import CallMessage
 from .asks import FAILED, QUEUED, REFRESHING, RUNNING, Ask, Asked, AskedAnswer, Standing
 from .cadence import ask
+from .card_items import Kpi
 from .command_fields import Describe
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
 from .contracts import Effect
-from .drawings import StripTile
 from .freshness import DASHBOARD_GLANCE, freshness
 from .labels import dotted, human_bytes
 from .moments import moment, when_hour
-from .record_errors import InputError, PolicyError
+from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 from .tone import Tone
 from .ui import MISSING, counted, measured, severity_tone
@@ -244,8 +245,10 @@ def select_dashboard_machine(
     command: DashboardMachineCommand, *, principal: Principal, current_key: str
 ) -> DashboardMachineSet:
     del principal
-    resource = ManagedResource.objects.filter(key=current_key, kind="machine", enabled=True).first()
+    resource = ManagedResource.objects.filter(key=current_key, kind="machine").first()
     if resource is None:
+        raise RecordNotFound("HQ has no machine by that key.")
+    if not resource.enabled:
         raise PolicyError("Dashboard telemetry requires an enabled machine record.")
     shown = DashboardMachine.objects.filter(machine=resource).exists()
     if command.selected == shown:
@@ -262,19 +265,25 @@ def select_dashboard_machine(
     return {"ok": True, "machine": resource.key if command.selected else ""}
 
 
-def _clean_point(value: str) -> str:
-    point = value.strip()
-    if not point:
-        return ""
-    parts = point.split(",")
-    if len(parts) != 2:
-        raise InputError("Weather location must be latitude, longitude.")
-    try:
-        latitude, longitude = (float(part.strip()) for part in parts)
-    except ValueError as exc:
-        raise InputError("Weather coordinates must be numbers.") from exc
-    if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
-        raise InputError("Weather coordinates are outside the valid range.")
+@cache
+def _coordinates() -> TypeAdapter[tuple[float, float]]:
+    return TypeAdapter(tuple[Annotated[float, Field(ge=-90, le=90)], Annotated[float, Field(ge=-180, le=180)]])
+
+
+_LATITUDE = r"[+-]?(?:90(?:\.0+)?|[1-8]?[0-9](?:\.[0-9]+)?)"
+_LONGITUDE = r"[+-]?(?:180(?:\.0+)?|(?:1[0-7][0-9]|[1-9]?[0-9])(?:\.[0-9]+)?)"
+# A point as text: latitude,longitude in decimal degrees, each within its
+# range, or nothing.
+POINT = rf"^\s*(?:{_LATITUDE}\s*,\s*{_LONGITUDE}\s*)?$"
+
+
+def _as_point(value: Any) -> Any:
+    """A point sent as text, as latitude,longitude each to four places, or
+    empty for none; anything else is refused as its type is validated."""
+
+    if not isinstance(value, str) or not value.strip():
+        return value.strip() if isinstance(value, str) else value
+    latitude, longitude = _coordinates().validate_python([part.strip() for part in value.split(",")])
     return f"{latitude:.4f},{longitude:.4f}"
 
 
@@ -285,7 +294,14 @@ DASHBOARD_SETTINGS = "dashboard.settings.update"
 class DashboardSettingsCommand:
     """Where the weather is read for, and what the glance strip calls its panels."""
 
-    weather_point: Annotated[str, Describe("Where the weather is read for, as latitude,longitude.")] = ""
+    weather_point: Annotated[
+        str,
+        # The schema says the form; the parser refuses outside it, naming the
+        # coordinate that is wrong, which a pattern's refusal cannot.
+        Field(json_schema_extra={"pattern": POINT}),
+        AfterValidator(_as_point),
+        Describe("Where the weather is read for, as latitude,longitude."),
+    ] = ""
     weather_label: Annotated[str, Describe("What the weather panel calls that place.")] = ""
     infrastructure_label: Annotated[str, Describe("What the infrastructure panel is called.")] = ""
 
@@ -300,9 +316,8 @@ class DashboardSettingsSaved(TypedDict):
 @transaction.atomic
 def save_dashboard_settings(command: DashboardSettingsCommand, *, principal: Principal) -> DashboardSettingsSaved:
     del principal
-    point = _clean_point(command.weather_point)
     configuration = DashboardConfiguration.objects.select_for_update().filter(pk=1).first() or DashboardConfiguration()
-    configuration.weather_point = point
+    configuration.weather_point = command.weather_point
     configuration.weather_label = command.weather_label.strip()[:40] or "Weather"
     configuration.infrastructure_label = command.infrastructure_label.strip()[:40] or "Homelab"
     configuration.audit_said = "Dashboard settings saved"
@@ -339,6 +354,8 @@ def _panel(
         "refreshing": refreshing,
         "refreshable": refreshable,
         "standing": _standing(payload, refreshing=refreshing),
+        # A panel is colored only for what needs a look; a healthy one reads in ink.
+        "tone": payload.get("status") if payload.get("status") in (Tone.ATTENTION, Tone.SERIOUS) else "",
         "readings": shown,
         "hours": payload.get("hours", ()),
         **_head(shown, spec),
@@ -469,10 +486,10 @@ def weather_words(weather: Weather) -> dict[str, Any]:
         # Each hour's time and temperature, and a chance of rain said only when
         # there is one.
         "hours": tuple(
-            StripTile(
+            Kpi(
                 when_hour(hour.start),
                 _degrees(hour),
-                note=measured(hour.chance, "%") if hour.chance else "",
+                measured(hour.chance, "%") if hour.chance else "",
                 tip=hour.forecast,
             )
             for hour in hours

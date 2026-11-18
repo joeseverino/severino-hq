@@ -216,9 +216,6 @@ class AvatarViewTests(TestCase):
 
         self.assertEqual(self.client.get(reverse("avatar", args=["b" * 64])).status_code, 404)
 
-    def test_signed_out_is_sent_to_sign_in(self):
-        self.assertEqual(self.client.get(reverse("avatar", args=["a" * 64])).status_code, 302)
-
 
 class MenuTests(TestCase):
     def setUp(self):

@@ -1,9 +1,10 @@
-"""Each host resource types every read it serves, and each answer is of its type.
+"""Each resource types every read it serves, and each answer is of its type.
 
-A list's items are its row and a read of one its record, both closed as the
-API document publishes them, so a key an answer holds that its type does not
-name fails here as much as one the type requires and the answer lacks. The
-answers are read on the data set the showcase serves, as JSON leaves HQ.
+A list's whole items are its item type and a read of one its record, both
+closed as the API document publishes them, so a key an answer holds that its
+type does not name fails here as much as one the type requires and the answer
+lacks. The answers are read on the data set the showcase serves, as JSON
+leaves HQ.
 """
 
 import json
@@ -18,6 +19,8 @@ from jsonschema import Draft202012Validator
 
 from hq.domains.calendars.models import Entry
 from hq.domains.control_plane.models import ApprovalRequest
+from hq.platform.api.openapi import document
+from hq.platform.api.testing import Contract
 from hq.platform.application.automation_adoption import catch_up
 from hq.platform.application.field_masks import WHOLE_RECORD
 from hq.platform.application.integration_specs import ResourceSpec
@@ -75,11 +78,10 @@ class RecordTypeTests(TestCase):
         with throwaway_media(), seeds.built("showcase"):
             pass
 
-    def test_every_host_resource_types_each_read_it_serves(self):
+    def test_every_host_resource_types_its_read_of_one(self):
+        # A list's item type is required of every resource as it registers.
         for name, spec in _host_resources().items():
             with self.subTest(resource=name):
-                if spec.list_handler:
-                    self.assertIsNotNone(spec.row_type)
                 if spec.detail_handler:
                     self.assertIsNotNone(spec.record_type)
 
@@ -91,13 +93,12 @@ class RecordTypeTests(TestCase):
         for name, spec in registry.items():
             if not spec.list_handler:
                 continue
-            query = QUERIES.get(name, {})
-            row = _validator(spec.row_type)
-            for item in list_resource(name, query, principal=READER)["items"]:
+            whole = list_resource(name, QUERIES.get(name, {}), principal=READER, fields=[WHOLE_RECORD])["items"]
+            declared = _validator(spec.item_type)
+            for item in whole:
                 with self.subTest(resource=name, item=item.get(spec.identifier or "")):
-                    row.validate(_sent(item))
+                    declared.validate(_sent(item))
             if spec.identifier:
-                whole = list_resource(name, query, principal=READER, fields=[WHOLE_RECORD])["items"]
                 identifiers[name] = [item[spec.identifier] for item in whole[:3] if spec.identifier in item]
         # The reads of one no list holds, by what names their records elsewhere.
         identifiers["relationships"] = [
@@ -130,7 +131,23 @@ class RecordTypeTests(TestCase):
         # Each read of one was checked on a real record, so none passes unread.
         self.assertEqual(read, {name for name, spec in registry.items() if spec.detail_handler})
 
-    def test_a_list_keeps_its_rows_keys_unless_asked_for_more(self):
+    def test_every_lists_whole_items_are_the_type_the_document_declares(self):
+        # Every list, an extension's too: a whole item holds no key beside
+        # those its list's answer in the API document declares.
+        catch_up()
+        contract = Contract(document())
+        listed = {name: spec for name, spec in resource_registry().items() if spec.list_handler}
+        # A reader of every list, those an extension's own capability guards too.
+        granted = {str(capability) for spec in listed.values() for capability in spec.required_capabilities}
+        reader = Principal("example-reader", "api", frozenset(Capability) | granted)
+        for name in listed:
+            page = list_resource(name, QUERIES.get(name, {}), principal=reader, fields=[WHOLE_RECORD])
+            pointer = contract.response_pointer(f"/api/v2/resources/{name}/", "get", 200)
+            with self.subTest(resource=name):
+                self.assertIsNotNone(pointer)
+                contract.validate(pointer, {"ok": True, "data": _sent(page)})
+
+    def test_a_list_keeps_its_list_fields_unless_asked_for_more(self):
         spec = resource_registry()["machines"]
         page = list_resource("machines", {}, principal=READER)
         whole = list_resource("machines", {}, principal=READER, fields=[WHOLE_RECORD])
@@ -142,20 +159,27 @@ class RecordTypeTests(TestCase):
 
 
 class RecordTypeContractTests(SimpleTestCase):
-    def test_a_rows_keys_are_its_lists_fields(self):
-        spec = _spec(row_type=_ExampleNote)
+    def test_an_items_keys_are_its_lists_fields_unless_it_names_some(self):
+        spec = _spec(item_type=_ExampleNote)
+        named = _spec(item_type=_ExampleNote, list_fields=("title",))
 
         validate_resource_spec(spec)
+        validate_resource_spec(named)
         self.assertEqual(spec.list_fields, ("slug", "title"))
+        self.assertEqual(named.list_fields, ("title",))
+
+    def test_a_list_of_no_declared_item_is_refused(self):
+        with self.assertRaisesRegex(ImproperlyConfigured, "item_type"):
+            validate_resource_spec(_spec())
 
     def test_a_type_that_is_no_typed_dict_is_refused(self):
         with self.assertRaisesRegex(ImproperlyConfigured, "TypedDict"):
-            validate_resource_spec(_spec(row_type=dict))
+            validate_resource_spec(_spec(item_type=dict))
 
     def test_a_record_for_a_read_the_resource_does_not_serve_is_refused(self):
         with self.assertRaisesRegex(ImproperlyConfigured, "does not serve"):
-            validate_resource_spec(_spec(record_type=_ExampleNote))
+            validate_resource_spec(_spec(item_type=_ExampleNote, record_type=_ExampleNote))
 
-    def test_list_fields_other_than_the_rows_keys_are_refused(self):
-        with self.assertRaisesRegex(ImproperlyConfigured, "row_type's keys"):
-            validate_resource_spec(_spec(list_fields=("title",), row_type=_ExampleNote))
+    def test_list_fields_its_item_does_not_declare_are_refused(self):
+        with self.assertRaisesRegex(ImproperlyConfigured, "not keys of its item_type"):
+            validate_resource_spec(_spec(list_fields=("body",), item_type=_ExampleNote))

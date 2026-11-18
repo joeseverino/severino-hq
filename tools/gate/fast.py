@@ -16,23 +16,20 @@ import re
 import subprocess
 import sys
 import tempfile
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from hq.platform.core.tests.task import Usage, changed_paths, usage
-from tests.mise_tasks import HEAVY_LOCK, body, locks, mise_tasks
+from tests.mise_tasks import HEAVY_LOCK, locks, mise_tasks
 from tools.gate import chain, turn as gate_turn
 from tools.gate.chain import SENT, fast_base, record_pass
 from tools.gate.selection import (
-    affected,
     group_tasks,
     group_tests,
     listed_change,
     python_files,
     selection,
     source_first,
-    test_labels,
     walk_for_tree,
     whole_suite,
     with_tree,
@@ -125,32 +122,37 @@ def usage_of(task: dict[str, Any]) -> str:
     return task.get("usage") or ""
 
 
-# The step that fails a run whose fixes rewrote a file it was not asked to fix, naming each.
-UNASKED = "the quick gates' fixes rewrote"
+# How a verdict names the files the fixes rewrote, which the checkout holds
+# uncommitted: a commit of them is the tree the run judged.
+REWROTE = "the fixes rewrote, uncommitted:"
 
 
 def fixed_first(
-    gate: Gate, tasks: tuple[str, ...], base: str, paths: tuple[list[str], list[str]], *, asked: bool
+    gate: Gate, tasks: tuple[str, ...], base: str, paths: tuple[list[str], list[str]]
 ) -> tuple[tuple[list[str], list[str]], list[str]]:
-    """The changed and deleted paths once the fix modes of ``tasks`` but the
-    recordings' have run, saying what they rewrote, and the files they rewrote
-    unasked. Asked (``--fix``), the gate is set to judge the tree they left;
-    unasked, the run fails on them, since the tree it passed would not be the
-    tree it was given, which a landing then refuses."""
+    """The changed and deleted paths once the fix modes of ``tasks`` have run,
+    and the files they rewrote. The gate is set to judge the tree they left,
+    the one a commit of those files gives."""
 
-    fixed = fix(tuple(task for task in tasks if task not in recordings()))
+    fixed = fix(tasks)
     if not fixed:
         return paths, []
-    if not asked:
-        print(
-            f"[fast] the quick gates' fixes rewrote: {' '.join(fixed)}. Commit them and run again, "
-            "or run fast --fix to judge the fixed tree",
-            flush=True,
-        )
-        return paths, fixed
     print(f"[fast] the quick gates' fixes rewrote: {' '.join(fixed)}", flush=True)
     gate.restart()
-    return changed_paths(base, chain.ROOT), []
+    return changed_paths(base, chain.ROOT), fixed
+
+
+def rewrote(fixed: list[str]) -> str:
+    return f"{REWROTE} {' '.join(sorted(set(fixed)))}"
+
+
+def fixed_before_sending(base: str) -> list[str]:
+    """The files the fix modes of the quick gates the change from ``base``
+    selects rewrote here, run before the tree is sent to another machine,
+    which only checks."""
+
+    changed, deleted = changed_paths(base, chain.ROOT)
+    return fix(selected_tasks([*changed, *deleted], base))
 
 
 def fix(tasks: tuple[str, ...]) -> list[str]:
@@ -160,7 +162,8 @@ def fix(tasks: tuple[str, ...]) -> list[str]:
 
     fixing = fixers(tasks)
     # A run sent from another machine only checks, as CI does: a fix written there never reaches the checkout
-    # that sent it, and the run would pass on a tree it changed (tools/gate/remote-host.sh).
+    # that sent it, and the run would pass on a tree it changed (tools/gate/remote-host.sh). The sender runs the
+    # fixes first (fixed_before_sending).
     if not fixing or os.environ.get(SENT):
         return []
     before = dirty()
@@ -169,74 +172,6 @@ def fix(tasks: tuple[str, ...]) -> list[str]:
     after = dirty()
     # A path in one alone was rewritten too: one the fix left as HEAD has it is no longer dirty.
     return sorted(path for path in before.keys() | after.keys() if before.get(path) != after.get(path))
-
-
-# A quick gate tagged this is a recording: it runs a set of test modules and
-# compares what they receive with a file (lint:drift-api-examples). It reads
-# Python only through those tests, so a change to Python alone selects it
-# where it selects one of them. Its fix is the same run written over the file,
-# so it runs only once the check has failed, and the gates and tests the
-# rewritten files select then judge what it left.
-RECORDING = "recording"
-# A run of the test labels named after it, and a task a run starts.
-TEST_RUN = re.compile(r"\bmanage\.py test((?:\s+[\w.]+)+)")
-RUNS_TASK = re.compile(r"\bmise run ([\w:-]+)")
-
-
-def recordings() -> tuple[str, ...]:
-    """Every quick gate tagged RECORDING."""
-
-    return tuple(name for name, task in quick_tasks().items() if RECORDING in (task.get("tags") or ()))
-
-
-def recorded_labels(name: str) -> list[str]:
-    """The test labels a recording runs, in its own run or one a task its run starts."""
-
-    tasks = mise_tasks()
-    own = body(tasks[name])
-    scripts = [own, *(body(tasks[started]) for started in RUNS_TASK.findall(own) if started in tasks)]
-    return [label for script in scripts for run in TEST_RUN.findall(script) for label in run.split()]
-
-
-def unreached_recordings(tasks: tuple[str, ...], paths: list[str], labels: list[str]) -> list[str]:
-    """The recordings among ``tasks`` that a change to Python files alone
-    (``paths``) selected, though the tests it selects (``labels``) hold none
-    of those they record. A recording that names no test is always kept."""
-
-    if not paths or not all(path.endswith(".py") for path in paths):
-        return []
-    return [
-        name
-        for name in tasks
-        if name in recordings()
-        and (recorded := recorded_labels(name))
-        and not any(label == held or label.startswith(f"{held}.") for label in labels for held in recorded)
-    ]
-
-
-def fixed_after(gate: Gate, steps: list[Step], files: list[Path], parallel: str, *, asked: bool) -> list[Step]:
-    """``steps``, and when a recording failed in one and the run was asked to
-    fix (``--fix``), its fix and the run again of the gates and tests the
-    files it rewrote select, the fixed recordings among them. A step's failure
-    stands unless it failed on the fixed recordings alone, and the run judges
-    the tree the fix left. Unasked, the recording's failure stands."""
-
-    failed = [task for each in steps for task in each.tasks if task in recordings()] if asked else []
-    fixed = fix(tuple(failed)) if failed else []
-    if not fixed:
-        return steps
-    print(f"[fast] {' '.join(failed)} failed, so its fix ran and rewrote: {' '.join(fixed)}", flush=True)
-    gate.restart()
-    # HEAD as the base: what the fix rewrote is in the checkout, beside any work not yet committed.
-    tasks = (*failed, *(task for task in selected_tasks(fixed, "HEAD") if task not in failed))
-    labels = with_tree(test_labels(files, *affected(fixed, [], files))[0], fixed)
-    kept = [
-        replace(each, ok=True, tasks=[])
-        if set(each.tasks) & set(failed) and set(each.tasks) <= set(failed) and not each.tests and not each.unimported
-        else each
-        for each in steps
-    ]
-    return [*kept, *gates_and_tests(tasks, labels, files, parallel, again=", again on the fix")]
 
 
 def dirty() -> dict[str, str]:
@@ -417,14 +352,15 @@ def extension_suites(parallel: str) -> list[Step]:
     return [step("extension suites, composed (shared UI changed)", command)]
 
 
-def judge(gate: Gate, steps: list[Step], base: str, *, whole: bool) -> int:
-    """Close the run on ``steps``: a pass records its tree."""
+def judge(gate: Gate, steps: list[Step], base: str, *, whole: bool, fixed: list[str]) -> int:
+    """Close the run on ``steps``, naming the files its fixes rewrote: a pass records its tree."""
 
     passed = all(s.ok for s in steps)
     if passed:
         judged = gate.judged()
         record_pass(judged, base, whole=whole)
-    gate.close(steps, " (full gate before push: `mise run check`)")
+    said = f"; {rewrote(fixed)}" if fixed else ""
+    gate.close(steps, f" (full gate before push: `mise run check`){said}", said)
     return 0 if passed else 1
 
 
@@ -439,20 +375,19 @@ def main(asked: Usage) -> int:
     changed, deleted = changed_paths(base, chain.ROOT)
     selected = selected_tasks([*changed, *deleted], base) if gate else ()
     # The quick gates the change selects run before the tests are selected, so
-    # a finding fails the run in the seconds they take. A recording waits on
-    # the selection, which says whether it runs.
+    # a finding fails the run in the seconds they take.
     early: tuple[str, ...] = ()
     first: list[Step] = []
+    fixed: list[str] = []
     if gate:
-        (changed, deleted), unasked = fixed_first(gate, selected, base, (changed, deleted), asked=asked.switch("fix"))
-        if unasked:
-            return judge(gate, [Step(f"{UNASKED} {' '.join(unasked)}", ok=False)], base, whole=False)
-        early = tuple(task for task in (quick_gates() if whole_asked else selected) if task not in recordings())
+        (changed, deleted), fixed = fixed_first(gate, selected, base, (changed, deleted))
+        early = quick_gates() if whole_asked else selected
         early = tuple(task for task in early if task not in heavy_gates(early))
         first = quick_stage(early, parallel)
         if not all(each.ok for each in first):
             print(QUICK_FAILED, flush=True)
-            return judge(gate, [*first, step("patch integrity", ["git", "diff", "--check", base])], base, whole=False)
+            steps = [*first, step("patch integrity", ["git", "diff", "--check", base])]
+            return judge(gate, steps, base, whole=False, fixed=fixed)
     walking = walk_for_tree() if changed or deleted else None
     files = python_files()
     labels, total, (reached, touched) = selection(changed, deleted, files)
@@ -464,28 +399,20 @@ def main(asked: Usage) -> int:
         labels, every_test = whole_suite(files), True
 
     paths = [*changed, *deleted]
-    # Read before the tests tagged tree join: their selection says nothing of the change's reach.
-    unreached = unreached_recordings(selected, paths, labels) if gate and not every_test else []
     labels = with_tree(labels, paths, listed_change(base, deleted) if paths else [], walking)
     if gate is None:
         print("\n".join(labels))
         return 0
 
-    if unreached:
-        print(
-            f"[fast] not run, as the change is Python alone and selects none of the tests each records: {' '.join(unreached)}"
-        )
     whole = (*quick_gates(), *group_tests().values())
-    kept = tuple(task for task in selected if task not in unreached)
-    tasks = whole if every_test else (*kept, *group_tasks(files, reached, touched))
+    tasks = whole if every_test else (*selected, *group_tasks(files, reached, touched))
     whole_run = every_test and set(tasks) == set(whole)
     rest = tuple(task for task in tasks if task not in early)
     steps = [*first, *gates_and_tests(rest, labels, files, parallel)]
-    steps = fixed_after(gate, steps, files, parallel, asked=asked.switch("fix"))
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
-    return judge(gate, steps, base, whole=whole_run)
+    return judge(gate, steps, base, whole=whole_run, fixed=fixed)
 
 
 if __name__ == "__main__":

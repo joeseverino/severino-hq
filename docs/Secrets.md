@@ -243,7 +243,7 @@ same-filesystem rename.
 The directory is never mounted into the web container; `/run/severino-hq` is
 reserved for its doorbells. `SEVERINO_CONTROLLER_SECRET_DIR`, if overridden,
 must be consistent across the renderer and all consumers, with matching
-systemd write permissions. A `SEVERINO_CONTROLLER_ENV` override is refused.
+systemd write permissions.
 
 The document's schema is emitted from the connection shapes HQ's registry
 declares (`controller/api/hq-connections.openapi.json`). Both the renderer and

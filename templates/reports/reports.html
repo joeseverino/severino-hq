@@ -2,7 +2,7 @@
 {% block page %}
 {% filter_bar %}{% select "year" available_years chosen=year label="Year" submit_on_change=True %}{% endfilter_bar %}
 
-{% include "partials/_kpi_grid.html" with items=figures only %}
+{% card element="div" %}{% facts layout="band" size="large" items=figures %}{% endcard %}
 
 {% comment %}
 A year with no expenses is said by the count above; its breakdowns do not draw.

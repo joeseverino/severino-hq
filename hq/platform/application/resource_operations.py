@@ -124,6 +124,11 @@ class OperationAsked(AskedAnswer):
     operation: OperationItem
 
 
+class RunAsked(OperationAsked):
+    """A playbook's run as asking for it or cancelling it answers: the run
+    that `runs` reads by its `operation.id`."""
+
+
 def operation_asked(
     operation: OperationRequest,
     *,

@@ -1,6 +1,7 @@
 """The widths the gates read a page at, and the table regions the stylesheet draws at them."""
 
 import re
+from dataclasses import dataclass
 
 from hq.platform.core.stylesheets import stylesheet
 
@@ -83,7 +84,7 @@ def first_viewports(css, region):
 _, WIDE_TABLES = wide_tables(stylesheet(), 1000)
 
 
-def with_wide_tables(widths, draws_a_table):
+def _with_wide_tables(widths, draws_a_table):
     """Each of ``widths`` and WIDE_TABLES, narrowest first, a WIDE_TABLES
     width only where ``draws_a_table()``, asked of the page the last width
     left loaded, says so: a table is in a page at every width, so the phone
@@ -93,6 +94,56 @@ def with_wide_tables(widths, draws_a_table):
         if width in WIDE_TABLES and not draws_a_table():
             continue
         yield width
+
+
+@dataclass(frozen=True)
+class Judged:
+    """How the gates judge one kind of page, which `dev:look --rule survey`
+    reads too, so a survey that passes is a sweep that passes: at
+    ``widths``, with WIDE_TABLES added on a page that draws a table when
+    ``wide_tables``, judged again with every fold open when ``opened`` (with
+    script, every row a reader can open opened too, by its own toggle), with
+    each popover hung from an anchor shown among the open folds at each of
+    ``popovers_at``, and when ``every_width``, its tables read at every
+    window width from its first load (`table_defects_at_every_width`)."""
+
+    widths: tuple[int, ...]
+    wide_tables: bool = False
+    opened: bool = False
+    popovers_at: tuple[int, ...] = ()
+    every_width: bool = False
+
+    def at(self, draws_a_table=lambda: False):
+        """Each width a page of this kind is judged at, narrowest first:
+        ``draws_a_table()`` asks the page the last width left loaded."""
+
+        if self.wide_tables:
+            return _with_wide_tables(self.widths, draws_a_table)
+        return iter(sorted(self.widths))
+
+
+# A page once its script has run.
+SCRIPTED = Judged(WIDTHS, wide_tables=True)
+
+# A dense page once its script has run, where tables hold the most rows: its
+# tables read at every width too.
+DENSE = Judged(WIDTHS, wide_tables=True, every_width=True)
+
+# A page as the server drew it: nothing reads the width it loaded at, and a
+# popover is read at the phone, where one has the least room.
+UNSCRIPTED = Judged(WIDTHS, opened=True, popovers_at=(WIDTHS[0],))
+
+# A catalog entry, drawn without script across the stylesheet's media queries.
+ENTRY = Judged(SPARSE_WIDTHS, opened=True, popovers_at=SPARSE_WIDTHS)
+
+# A catalog entry once its script has run, at the same widths and the laptop
+# window where a wide table has the least room: again with every fold and row
+# open, and its tables read at every width. Its popovers are the unscripted
+# entry's, which shows each.
+SCRIPTED_ENTRY = Judged(SPARSE_WIDTHS, wide_tables=True, opened=True, every_width=True)
+
+# A list filled with the longest values its model holds, its rows opened.
+LIST = Judged((NARROWEST, *WIDTHS, *WIDE_TABLES), opened=True)
 
 
 def viewport_queries(css):

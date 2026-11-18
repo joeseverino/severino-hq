@@ -15,7 +15,7 @@ from django.utils.html import escape
 from django.utils.safestring import SafeString, mark_safe
 
 from hq.platform.application.page_parts import html_attributes
-from hq.platform.core.templatetags.value_tags import slotted
+from hq.platform.core.template_parts import Option, Part, slotted
 
 register = template.Library()
 
@@ -61,28 +61,43 @@ def filter_bar_frame(name: str, given: dict) -> dict:
 
 
 slotted(
-    "filter_bar",
-    FILTER_BAR_PARTIAL,
-    ("content", "choices", "summary"),
-    frozenset(
-        (
-            "filtered",
-            "clear",
-            "verb",
-            "action",
-            "css",
-            "shown",
-            "total",
-            "held",
-            "more",
-            "id",
-            "search",
-            "query",
-            "keep",
-            "autofocus",
-        )
+    Part(
+        name="filter_bar",
+        classes=(
+            *("filter-bar-choices", "filter-bar-controls", "filter-bar-fit", "filter-bar-query"),
+            *("filter-bar-send", "filter-bar-sizer", "filter-bar-summary"),
+        ),
+        partial=FILTER_BAR_PARTIAL,
+        parts=("content", "choices", "summary"),
+        about=(
+            "Every query a page asks of what it lists, in one bar: its search and any controls of its own, its "
+            "`choices` part, the one button that sends them, then its `summary` part. A list's table toolbar is "
+            "the same bar."
+        ),
+        options={
+            "search": Option(about="The words the search is named by and shows empty; it is sent as `q`."),
+            "query": Option(about="The search's value."),
+            "autofocus": Option(about="The search takes focus."),
+            "filtered": Option(about="Something narrows the list, so Clear filters shows."),
+            "clear": Option(about="Where Clear filters leads: the page with nothing narrowed."),
+            "verb": Option(about="The words of the button that sends it, Filter unless told."),
+            "action": Option(about="The page it asks, when that is another."),
+            "css": Option(about="The classes of where it stands."),
+            "shown": Option(default=None, about="How many it shows, of `total`."),
+            "total": Option(default=None, about="How many there are."),
+            "held": Option(about="What the page holds back, each counted."),
+            "more": Option(about="The page that shows what it holds back."),
+            "id": Option(about="Its name, where a page draws two whose choices send the same names."),
+            "keep": Option(about="The query's other fields, each sent again as it stands."),
+        },
+        data=True,
+        public=True,
+        example=(
+            '{% filter_bar search="Filter by name" query=q filtered=narrowed clear=every_url %}'
+            '{% choices %}{% select "kind" kinds label="Kind" every="kind" %}{% endfilter_bar %}'
+        ),
+        shape=filter_bar_frame,
     ),
-    shape=filter_bar_frame,
     library=register,
 )
 

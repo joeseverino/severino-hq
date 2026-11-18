@@ -1,0 +1,29 @@
+# How the API property suite generates and judges (tests/fuzz/api_properties.py),
+# read by its path: Schemathesis's own discovery climbs past a worktree's root.
+
+[generation]
+# Cases per operation and per mode.
+max-examples = 10
+# The bearer is the configured auth alone; ignored_auth holds what HQ answers
+# without it, so no generated case spends its one mutation there.
+with-security-parameters = false
+
+# Every built-in check runs, these three held to HQ's answers.
+
+# No connection leaves the suite's process, so a call that reaches a service
+# outside HQ meets the 503 it documents for one that does not answer;
+# status_code_conformance still holds that the operation documents it.
+# Schemathesis: "Some operations return a 5xx by design, for example `503`
+# when an integration is not configured."
+[checks.not_a_server_error]
+expected-statuses = ["2xx", "3xx", "4xx", "503"]
+
+# A valid request is answered, or held for a person (202); a drawn identifier
+# names no record (404), and a service outside HQ does not answer (503).
+[checks.positive_data_acceptance]
+expected-statuses = ["2xx", "404", "503"]
+
+# An invalid one is refused as invalid: neither as forbidden, nor as a conflict
+# with what is stored, nor by failing.
+[checks.negative_data_rejection]
+expected-statuses = ["400", "401", "404", "405", "413", "415"]

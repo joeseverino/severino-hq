@@ -136,14 +136,6 @@ version = "0.7.5"
 lazy = true
 lazy_bins = ["otel-tui"]
 
-# Compares the machine API's document with its base's and names each change
-# that breaks a client (lint:openapi-breaking). Not in mise's registry. Lazy:
-# only that gate runs it.
-[tools."github:oasdiff/oasdiff"]
-version = "1.37.0"
-lazy = true
-lazy_bins = ["oasdiff"]
-
 # Each Go binary's bytes by package and module, read from its own symbol and
 # line tables (audit:dependency-weight). Not in mise's registry, so named by its
 # aqua package. Lazy, as age is.
@@ -355,7 +347,6 @@ usage = '''
 arg "[base]" env="CHECK_BASE" help="The ref to diff against; default the nearest commit whose tree passed, then the branch HEAD lands on"
 flag "--list" help="Print the selected test modules and run nothing"
 flag "--whole" help="Run the whole suite and every quick gate, whatever changed: a pass records the tree and the map of the tests that ran each line"
-flag "--fix" help="Judge the tree the quick gates' fixes leave: without it, a run whose fixes rewrote a file fails, naming each, so the tree a run passes is the tree it was given"
 flag "--parallel <workers>" env="CHECK_PARALLEL" default="auto" help="Test workers per suite; 1 rules out an order or isolation failure"
 '''
 run = ". ./tools/lib/remote.sh; uv run python -m tools.gate.fast"

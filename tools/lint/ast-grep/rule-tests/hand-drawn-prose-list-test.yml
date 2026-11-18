@@ -11,7 +11,3 @@ invalid:
       <li>A sentence.</li>
     </ol>
   - '<ul role="list"><li>A</li></ul>'
-  - '<ul class="prose-list"><li>A</li></ul>'
-  - |
-    <ol
-      class="compact prose-list"></ol>

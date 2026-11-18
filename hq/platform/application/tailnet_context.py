@@ -7,7 +7,7 @@ findings raised about the tailnet, and each tailnet reading HQ could not read
 with the reason. None of them derives a fact the others cannot return.
 """
 
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from typing import Any
 from urllib.parse import urlencode
 
@@ -18,6 +18,7 @@ from .credential_sight import READABLE, Sight, credential_sight
 from .entity_links import EntityLink, entity_link
 from .finding_model import Finding
 from .findings import estate_findings, serialize_finding
+from .json_schemas import as_written
 from .policy_links import PolicyName, PolicyNames, tagged
 from .projection import complete, projection_scope
 from .routes import reverse
@@ -35,6 +36,7 @@ from .tailnet import (
 )
 from .tailnet_signers import Signer, signers
 from .topology import derive_topology
+lazy from .connection_records import PolicyRulePart, Tailnet, UnreadPart
 
 TAILNET_KINDS = (TAILNET_KIND, TAILNET_POLICY_KIND)
 
@@ -98,7 +100,7 @@ class TailnetContext:
 
         return len(self.policy.groups) + len(self.tags)
 
-    def as_dict(self) -> dict[str, Any]:
+    def as_dict(self) -> Tailnet:
         """The derived facts, for the API, MCP, CLI and SDK."""
 
         found = self.policy
@@ -128,7 +130,7 @@ class TailnetContext:
                 {
                     "name": row.tag.get("name", ""),
                     "owners": list(row.tag.get("owners") or ()),
-                    "machines": [asdict(link) for link in row.devices],
+                    "machines": [as_written(link) for link in row.devices],
                 }
                 for row in self.tags
             ],
@@ -147,10 +149,10 @@ class TailnetContext:
 
 
 def _names(names: tuple[PolicyName, ...]) -> list[dict[str, Any]]:
-    return [{"text": name.text, "link": asdict(name.link) if name.link else None} for name in names]
+    return [as_written(name) for name in names]
 
 
-def _rule(item: NamedRule, *, ports: bool = False) -> dict[str, Any]:
+def _rule(item: NamedRule, *, ports: bool = False) -> PolicyRulePart:
     shown = {key: value for key, value in item.rule.items() if key not in ("src", "dst", "ports")}
     if ports:
         shown["ports"] = [{"entry": entry, "name": name} for entry, name in item.rule.get("ports") or ()]
@@ -163,7 +165,7 @@ def _rule(item: NamedRule, *, ports: bool = False) -> dict[str, Any]:
     }
 
 
-def _unread(sight: Sight) -> dict[str, Any]:
+def _unread(sight: Sight) -> UnreadPart:
     return {
         "kind": sight.kind,
         "label": sight.label,

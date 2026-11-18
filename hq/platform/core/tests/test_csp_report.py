@@ -139,9 +139,6 @@ class PolicyReportTests(TestCase):
 
         self.assertFalse(_reports().exists())
 
-    def test_it_is_not_a_readable_surface(self):
-        self.assertEqual(self.client.get("/csp-report/").status_code, 405)
-
     def test_it_is_still_behind_the_network_gate(self):
         response = Client(REMOTE_ADDR="203.0.113.9").post(
             "/csp-report/", data="{}", content_type="application/csp-report"

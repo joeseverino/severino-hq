@@ -15,12 +15,20 @@ which the schema's description adds after the meaning and a form leaves off
 (``meanings``). A field whose label says all a person needs has only the
 ``api`` part. ``lint:prose`` holds both, as every string under ``hq/``
 that can reach a page.
+
+A value a reader could not guess from the type (a name's pattern, a
+reference's shape) is the marker's ``examples``, which the schema carries as
+JSON Schema's ``examples``, through pydantic's ``Examples``: the API's viewer
+draws its sample answers and bodies from them, and generated API cases try
+them.
 """
 
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Annotated, Any, TypeAliasType, Union, get_args, get_origin, get_type_hints
+
+lazy from pydantic.json_schema import Examples
 
 if TYPE_CHECKING:
     from pydantic import GetJsonSchemaHandler
@@ -35,9 +43,15 @@ class Describe:
 
     text: str
     api: str = ""
+    examples: tuple[Any, ...] = ()
 
     def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
-        return {**handler(schema), "description": " ".join(part for part in (self.text, self.api) if part)}
+        said = (
+            Examples(list(self.examples)).__get_pydantic_json_schema__(schema, handler)
+            if self.examples
+            else handler(schema)
+        )
+        return {**said, "description": " ".join(part for part in (self.text, self.api) if part)}
 
 
 @cache

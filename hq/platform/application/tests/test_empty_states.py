@@ -81,7 +81,7 @@ class EmptyStateTemplateTests(SimpleTestCase):
     """Templates draw an empty state only through the partial."""
 
     def test_no_list_overrides_what_empty_means(self):
-        # An empty state drawn by hand is the hand-drawn-empty-state rule's.
+        # An empty state drawn by hand writes the part's class, which no page may.
         for name, text in _templates():
             with self.subTest(template=name):
                 self.assertNotIn("{% block empty %}", text, "a list says what empty means with table_empty")

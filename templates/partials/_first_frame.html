@@ -1,0 +1,23 @@
+{% load static stylesheet_tags %}{% comment %}
+What a document's head holds so its first frame is drawn whole, for base.html
+and every page the catalog draws alone.
+
+The face the stylesheet asks for is fetched beside it so the first paint
+already has it: the stylesheet shows it only if it is ready (optional), so
+text never changes face, and therefore never moves, after it is drawn.
+
+Nothing is drawn until the content is parsed whole: Chromium may paint a
+partly parsed page, and a table's later rows, or a toolbar's later parts,
+would then widen what is already drawn. The target follows `</main>`, since
+Chromium lets go once the element it names is inserted; a page with no such
+target is drawn once its parsing ends.
+
+The page transition is answered before the first frame too, so its listener
+loads here, without waiting (static/js/transitions.js says why).
+
+  {% include "partials/_first_frame.html" %}
+{% endcomment %}
+<link rel="preload" href="{% static 'fonts/inter/inter-variable-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
+<link rel="expect" href="#parsed" blocking="render">
+{% stylesheets %}
+<script src="{% static 'js/transitions.js' %}" {% csp_nonce_attr %}></script>

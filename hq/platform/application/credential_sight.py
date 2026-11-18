@@ -19,7 +19,7 @@ from hq.domains.control_plane.provider_adapters.contracts import (
     PERMISSION_REFUSAL,
 )
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.control_plane.reading_parts import PartRefusal, parts_of, refused_parts
+from hq.domains.control_plane.reading_parts import RefusedPart, parts_of, refused_parts
 
 from .labels import human_label
 from .projection import read_once
@@ -67,7 +67,7 @@ class Sight:
     # The permissions ``requires`` names, one each.
     permissions: tuple[str, ...] = ()
     # The declared parts refused while the rest read.
-    parts: tuple[PartRefusal, ...] = ()
+    parts: tuple[RefusedPart, ...] = ()
 
     @property
     def state_label(self) -> str:
@@ -236,7 +236,7 @@ def sight(
     permissions: tuple[str, ...] = (),
     credential_valid: bool = False,
     records: int | None = None,
-    parts: tuple[PartRefusal, ...] | None = None,
+    parts: tuple[RefusedPart, ...] | None = None,
 ) -> Sight:
     """One kind's standing. ``credential_valid`` turns a credential refusal of
     this kind into a permission refusal: the same credential read something.
@@ -355,7 +355,7 @@ def _attributed(
 PART_SOURCE = "part"
 
 
-def _parts_for(row: ProviderInventory, provider: str, connection_ref: str, *, own: bool) -> tuple[PartRefusal, ...]:
+def _parts_for(row: ProviderInventory, provider: str, connection_ref: str, *, own: bool) -> tuple[RefusedPart, ...]:
     """The row's refused parts this provider's credential read: its own kind's
     parts no other provider reads, or the parts it reads of another's."""
 

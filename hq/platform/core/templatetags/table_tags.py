@@ -13,8 +13,7 @@ show is the browser's to say (docs/Design.md, A table fits its box).
 
 import inspect
 import re
-from functools import wraps
-from typing import Any
+from typing import Annotated, Any
 
 from django import template
 from django.template.base import token_kwargs
@@ -23,6 +22,7 @@ from django.utils.html import escape, format_html
 from django.utils.safestring import SafeString, mark_safe
 from django.utils.text import slugify
 
+from hq.platform.application.describe import Describe
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.tables import TableColumn, check_drop, column_kind, ranked
 from hq.platform.core.table_cells import (
@@ -31,13 +31,19 @@ from hq.platform.core.table_cells import (
     Point,
     Position,
     Span,
-    without_ids,
 )
+from hq.platform.core.template_parts import Part, slotted
 lazy from hq.platform.application import history
 
 register = template.Library()
 
 _TAG_NAME = re.compile(r"<\w+")
+# The box of the region's own each kind of cell's content is held in (`Cells.boxes`).
+_BOXES = {
+    "cell-clamp": '<div class="cell-clamp">',
+    "cell-short": '<div class="cell-short">',
+    "cell-controls": '<div class="cell-controls">',
+}
 # The order a mark lists its roles in.
 _ROLES = ("name", "prose", "data")
 _END_TAG = re.compile(r"</\s*\w+\s*>")
@@ -101,25 +107,25 @@ class _Markup:
 def _detail_row(markup: _Markup, width: int, blocks: list[Span], entries: list[LineEntry]) -> str:
     """A row's open line, drawn after it and shown while it is open: a cell
     the table's width holding the blocks the row moves there, then each
-    entry under its label, each saying when it shows."""
+    labeled block under its label."""
 
-    drawn = [markup.content(block, whole=True) for block in blocks]
-    controls = [
-        f'<div class="row-controls"{entry.marks}>{_entry(markup, entry)}</div>'
-        for entry in entries
-        if entry.name is None
-    ]
-    listed = [(entry.name, entry.marks, _entry(markup, entry)) for entry in entries if entry.name is not None]
-    return _open_line(width, "".join(controls + drawn), listed)
+    drawn = "".join(markup.content(block, whole=True) for block in blocks)
+    return _open_line(width, drawn, [(entry.name, markup.content(entry.span, whole=True)) for entry in entries])
 
 
-def _open_line(width: int, held: str, listed: list[tuple[str, str, str]]) -> str:
+def _open_line(width: int, held: str, listed: list[tuple[str, str]]) -> str:
     """A row's open line: ``held`` first, then each listed entry's value
-    under its label, its ``marks`` saying when it shows."""
+    under its label."""
 
-    entries = [f"<div{marks}><dt>{escape(name)}</dt><dd>{value}</dd></div>" for name, marks, value in listed]
+    entries = [f"<div><dt>{escape(name)}</dt><dd>{value}</dd></div>" for name, value in listed]
     columns = f'<dl class="row-columns">{"".join(entries)}</dl>' if entries else ""
     return f'<tr class="row-detail" data-row-detail><td colspan="{width}">{held}{columns}</td></tr>'
+
+
+# The open line a region whose rows hold cells back draws once, which
+# tables.js clones for a row as it opens, an entry for each cell it holds back
+# and a box for what the row's line already shows of one.
+_LINE_FRAME = f"<template data-open-line>{_open_line(1, '', [('', '<span data-row-shows></span>')])}</template>"
 
 
 @register.simple_block_tag
@@ -128,14 +134,7 @@ def open_line(content):
     unlabeled entry, the frame a script clones for a row that comes to hold
     something beneath it once drawn (ask.js), setting the label and width."""
 
-    return mark_safe(_open_line(1, "", [("", "", content)]))  # noqa: S308 - the body is rendered template output, escaped there
-
-
-def _entry(markup: _Markup, entry: LineEntry) -> str:
-    """What an entry shows: a block moved whole, or a copy of a cell's
-    content, which draws no id its row draws."""
-
-    return markup.content(entry.span, whole=True) if entry.whole else without_ids(markup.content(entry.span))
+    return mark_safe(_open_line(1, "", [("", content)]))  # noqa: S308 - the body is rendered template output, escaped there
 
 
 def _unnamed(roles: list[tuple[int, str]]) -> list[tuple[int, str]]:
@@ -147,15 +146,18 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
 
     A blank body cell is ``data-blank``, a cell of a column blank in every
     row ``data-blank-column``; a cell says the width its column leaves at
-    (``data-drop``), a body cell its column's kind and a cut one its whole
-    value in its title, a long one held to a few lines (``cell-clamp``), a
-    short one held whole up to its column's share (``cell-short``), and
-    a group's heading row spans every declared column. After each row that
+    (``data-drop``), a body cell its column's kind, a long one held to a
+    few lines (``cell-clamp``), a short one held whole up to its column's
+    share (``cell-short``), each in a box of the region's own only where no
+    element of the cell can be it (``Cells._box``), and a group's heading
+    row spans every declared column. After each row that
     holds something back is its open line (``_detail_row``).
     What a part of a cell is, which decides how it wraps, is its ``data-cell``:
     ``name`` for what names the row, else the role its class declares
     (``table_cells.ROLE_CLASSES``), so the stylesheet never reads a cell's content.
     Without ``sorts`` no row sorts on the page, so no heading keeps its control.
+    A region whose rows hold a cell back draws the frame tables.js copies it
+    onto the row's open line with (``_LINE_FRAME``), once.
     None when the region holds tables and none of them a row beneath its head.
     """
 
@@ -164,7 +166,7 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     cells.close()
     if cells.bodies and not any(cells.bodies):
         return None
-    if not any((cells.marks, cells.details, cells.roles, cells.cuts, cells.gutters, cells.toggles, cells.shorts)):
+    if not any((cells.marks, cells.details, cells.roles, cells.cuts, cells.classed, cells.toggles, cells.boxes)):
         return markup
     text = _Markup(markup)
     cuts = sorted((text.point(start), text.point(end)) for start, end in cells.cuts)
@@ -177,6 +179,8 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
         parts += [_cut(markup, last, offset, cuts), insert]
         last = offset
     parts.append(_cut(markup, last, len(markup), cuts))
+    if cells.held:
+        parts.append(_LINE_FRAME)
     return "".join(parts)
 
 
@@ -194,12 +198,15 @@ def _inserts(cells: Cells, markup: str, text: _Markup) -> list[tuple[int, str]]:
     inserts += [(offset, f' data-cell="{role}"') for offset, role in roles]
     # A copy on the open line keeps what each part is, but names no row there.
     text.marks = sorted((offset, f' data-cell="{role}"') for offset, role in _unnamed(roles) if role)
-    for point, mark in cells.gutters + cells.opened:
-        inserts.append((after_name(point[0]) if point[1] is None else text.point(point), mark))
-    for opened, closed in cells.clamps:
-        inserts += [(text.at(opened), '<div class="cell-clamp">'), (text.at(closed), "</div>")]
-    for opened, closed in cells.shorts:
-        inserts += [(text.at(opened), '<div class="cell-short">'), (text.at(closed), "</div>")]
+    for point, names in cells.classed.items():
+        if point[1] is None:
+            inserts.append((after_name(point[0]), f' class="{" ".join(names)}"'))
+        else:
+            inserts.append((text.point(point), "".join(f"{name} " for name in names)))
+    for mark, spans in cells.boxes.items():
+        inserts += [
+            each for opened, closed in spans for each in ((text.at(opened), _BOXES[mark]), (text.at(closed), "</div>"))
+        ]
     if cells.toggles:
         # A row drawn open (its editor open) says so on its toggle.
         toggles = {shown: render_to_string("partials/_row_toggle.html", {"open": shown}) for shown in (False, True)}
@@ -223,18 +230,18 @@ def _cut(markup: str, start: int, end: int, cuts: list[tuple[int, int]]) -> str:
 
 
 def _region(
-    label: str,
+    label: Annotated[str, Describe("What the table holds, the name its box is a stop by.")],
     *,
-    css: str = "",
-    chart: bool = False,
-    pane: bool = False,
-    compare: bool = False,
-    empty: str = "",
-    remedy: Any = None,
-    action_url: str = "",
-    action_label: str = "",
-    filtered: bool = False,
-    clear: str = "",
+    css: Annotated[str, Describe("The classes of where it stands.")] = "",
+    chart: Annotated[bool, Describe("A chart's table, read whole in the chart's order and scrolled.")] = False,
+    pane: Annotated[bool, Describe("A box of its own height, which scrolls.")] = False,
+    compare: Annotated[bool, Describe("Two values side by side in each row, after the row's name.")] = False,
+    empty: Annotated[str, Describe("With no rows, what is missing.")] = "",
+    remedy: Annotated[Any, Describe("With no rows, what would fill it: a `label` and a `url`.")] = None,
+    action_url: Annotated[str, Describe("With no rows, where the link that fills it leads.")] = "",
+    action_label: Annotated[str, Describe("That link's label.")] = "",
+    filtered: Annotated[bool, Describe("Its own search narrows it, so no rows says nothing matches.")] = False,
+    clear: Annotated[str, Describe("The way back from that search.")] = "",
 ) -> dict[str, Any]:
     """The region a table sits in: the box it fits, named by ``label``.
 
@@ -267,7 +274,13 @@ def _region(
             "action_url": action_url,
             "action_label": action_label,
         }
-    return {"label": label, "css": " ".join(classes), "chart": chart, "scrolls": pane or chart, "empty": nothing}
+    return {
+        "label": label,
+        "css": " ".join(classes),
+        "chart": chart,
+        "scrolls": pane or chart,
+        "empty": nothing,
+    }
 
 
 class RegionNode(template.Node):
@@ -316,7 +329,6 @@ class RegionNode(template.Node):
 
 
 @register.tag("table_region")
-@wraps(_region)
 def table_region(parser: Any, token: Any) -> RegionNode:
     bits = token.split_contents()
     options = token_kwargs(bits[2:], parser)
@@ -329,6 +341,23 @@ def table_region(parser: Any, token: Any) -> RegionNode:
     nodelist = parser.parse(("endtable_region",))
     parser.delete_first_token()
     return RegionNode(nodelist, parser.compile_filter(bits[1]), options)
+
+
+# The template contract reads a tag's declaration from what it wraps.
+table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
+    name="table_region",
+    about=(
+        "The box a table fits, which draws what follows from its headings, and, with no rows, the one empty "
+        "state in its place."
+    ),
+    function=_region,
+    public=True,
+    example=(
+        '{% table_region "Hosts" empty="No hosts yet." %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Name" %}</tr></thead><tbody><tr><td>example-host</td></tr></tbody></table>'
+        "{% endtable_region %}"
+    ),
+)
 
 
 def _server_sort(context: Any, ascending: str, descending: str) -> dict[str, str]:
@@ -344,30 +373,28 @@ def _server_sort(context: Any, ascending: str, descending: str) -> dict[str, str
     }
 
 
-@register.inclusion_tag("partials/_table_heading.html", takes_context=True)
 def table_heading(
     context: Any,
-    label: str,
-    kind: str = "",  # one of COLUMN_KINDS, or follows from css when left out
+    label: Annotated[str, Describe("The column's name.")],
+    kind: Annotated[str, Describe("What the column holds, one of `COLUMN_KINDS`; left out, its classes say.")] = "",
     *,
-    css: str = "",
-    drop: int = 0,
-    beneath: bool = False,  # in a narrow box its cells stand beneath the row's words, under its name
-    sort: str = "",
-    descending: str = "",
-    local_sort: bool | None = None,  # left out, it follows from what the column holds
-    hidden: bool = False,  # the label for assistive technology only
-    title: str = "",
-    gutter: bool = False,  # its column's cells stand in the gutter and hold each row's toggle
-    select_all: bool = False,  # the tick-box that selects every row
+    css: Annotated[str, Describe("The column's classes.")] = "",
+    drop: Annotated[int, Describe("The rank it leaves by when the table is too wide, 1 first.")] = 0,
+    sort: Annotated[str, Describe("The field a server-sorted list orders this column by.")] = "",
+    descending: Annotated[str, Describe("Its reverse, when that is not `-field`.")] = "",
+    local_sort: Annotated[
+        bool | None, Describe("Sorts the rows on the page; left out, it follows from what the column holds.")
+    ] = None,
+    hidden: Annotated[bool, Describe("The name for assistive technology only.")] = False,
+    title: Annotated[str, Describe("Its `title`.")] = "",
+    gutter: Annotated[bool, Describe("Its cells stand in the gutter and hold each row's toggle.")] = False,
+    select_all: Annotated[bool, Describe("The tick-box that selects every row.")] = False,
 ) -> dict[str, Any]:
     """One column heading.
 
     ``drop`` is the order a table too wide for its region lets the column go
-    in, 1 first, the rightmost of a rank first. ``beneath`` keeps a column of
-    words every row must show (a change's two sides): in a narrow box each of
-    its cells stands on a line beneath the row's words, under the column's
-    name, as a row's controls do. ``sort`` names the field a
+    in, 1 first, the rightmost of a rank first; a ``key-col`` is kept at
+    every width. ``sort`` names the field a
     server-sorted list orders this column by (``descending`` when its reverse is
     not ``-field``). Any other column that says something sorts the rows
     already on the page, whose region keeps the control only where it holds
@@ -382,8 +409,6 @@ def table_heading(
     if local_sort is None:
         local_sort = not sort and kind != "control" and not hidden and bool(label)
     check_drop(drop, css, label)
-    if beneath and drop:
-        raise ValueError(f"Column {label!r} stands beneath its row or leaves by its rank, not both.")
     classes = [css] if css else []
     classes += ["select-column"] if select_all else []
     classes += ["row-gutter"] if gutter else []
@@ -392,7 +417,6 @@ def table_heading(
         "kind": kind,
         "css": " ".join(classes),
         "drop": drop,
-        "beneath": beneath,
         "server_sort": _server_sort(context, sort, descending) if sort else None,
         "local_sort": local_sort,
         "hidden": hidden,
@@ -401,9 +425,13 @@ def table_heading(
     }
 
 
-@register.inclusion_tag("partials/_row_group.html")
 def row_group(
-    label: str, count: int | None = None, *, folds: str = "", href: str = "", attention: bool = False
+    label: Annotated[str, Describe("The group's name.")],
+    count: Annotated[int | None, Describe("How many rows it holds.")] = None,
+    *,
+    folds: Annotated[str, Describe("The row's id, for a group that starts folded away.")] = "",
+    href: Annotated[str, Describe("The page its rows are dealt with on together, which its name links to.")] = "",
+    attention: Annotated[bool, Describe("A group a reader should weigh before the rest.")] = False,
 ) -> dict[str, Any]:
     """The heading row of one group of a table's rows, first in that group's
     ``tbody``: its name and, given one, how many rows it holds. It spans every
@@ -452,26 +480,38 @@ def history_row_attributes(row: Any, folds: str = "") -> SafeString:
     return html_attributes({"id": row.fold, "data-folds": True}) if row.grouped else SafeString("")
 
 
-@register.inclusion_tag("partials/_row_actions.html")
-def row_actions(actions: Any = (), *, gap: Any = None, first: int = 0, put_away: Any = None) -> dict[str, Any]:
+def row_actions(
+    actions: Annotated[Any, Describe("What can be done to the row's record, each a `PageAction`.")] = (),
+    *,
+    gap: Annotated[Any, Describe("A `WriteGap` standing in for every action the connection cannot make.")] = None,
+    put_away: Annotated[Any, Describe("The reader's own way to set the row aside, last of its buttons.")] = None,
+    mark: Annotated[Any, Describe("A `RowMark` the reader keeps on the row's record, first of its controls.")] = None,
+    order: Annotated[Any, Describe("A `RowOrder` that moves the row in an order the reader keeps.")] = None,
+) -> dict[str, Any]:
     """The cell that ends a row with what can be done to its record: each of
     ``actions`` (a ``PageAction``, as a ``ListRow``'s are) a compact control
     drawn by ``_page_action.html``, so a row's buttons look like every other
     and only a destructive one differs. Under a heading of kind ``control``
-    (``css="actions-col"``), so the region sizes the column to what it holds
-    and a narrow box sets it beneath the row's words. ``gap``, an
-    ``adoption.WriteGap``, stands in for every action when the connection
-    cannot make the change. Given ``first``, the actions past that many wait
-    in the row's open line. ``put_away``, a POST ``PageAction`` such as the
-    queue's Dismiss, is the reader's own way to set the row aside: the last
-    of its buttons, drawn as they are, and never waiting in the open line."""
+    (``css="actions-col"``), so the region sizes the column to what it holds.
+    ``gap``, an ``adoption.WriteGap``, stands in for every action when the
+    connection cannot make the change. Every control stands in the cell, and
+    they wrap between them only where the row has no room. ``put_away``, a
+    POST ``PageAction`` such as the queue's Dismiss, is the reader's own way to
+    set the row aside: the last of its buttons, drawn as they are.
+    ``mark`` (a ``RowMark``, such as a favorite's star) and ``order`` (a
+    ``RowOrder``) come first, the star last of the two, so a row's own
+    arrangement is a column the table sizes and counts, never a part of the
+    cell that names the row."""
 
-    actions = tuple(actions or ())
-    shown, later = (actions[:first], actions[first:]) if first else (actions, ())
-    return {"actions": shown, "later": later, "gap": gap, "put_away": put_away}
+    return {
+        "actions": tuple(actions or ()),
+        "gap": gap,
+        "put_away": put_away,
+        "mark": mark,
+        "order": order,
+    }
 
 
-@register.inclusion_tag("partials/_row_toggle.html")
 def row_toggle() -> dict[str, Any]:
     """The toggle that opens a row to all it holds, last in the cell that names
     the row, in a table with no headings; under a heading that keeps the gutter
@@ -481,7 +521,6 @@ def row_toggle() -> dict[str, Any]:
     return {}
 
 
-@register.inclusion_tag("partials/_row_select.html")
 def row_select(pk: Any) -> dict[str, Any]:
     """The cell that holds a row's tick-box, first in a row under the heading
     that selects every row (``select_all=True``), keyed by ``pk``. A row with
@@ -552,3 +591,82 @@ def line_list(parser: Any, token: Any) -> LineListNode:
     nodelist = parser.parse(("endline_list",))
     parser.delete_first_token()
     return LineListNode(nodelist, parser.compile_filter(bits[1]), bits[3], options.get("list"))
+
+
+slotted(
+    Part(
+        name="table_heading",
+        classes=("sort-indicator", "table-sort-link"),
+        about="One column heading of a table: its kind, the rank it leaves by and its sort control.",
+        partial="partials/_table_heading.html",
+        function=table_heading,
+        public=True,
+        example=(
+            '{% table_region "Example updates" %}<table class="data-table"><thead><tr>'
+            '{% table_heading "Name" %}{% table_heading "Updated" "status" drop=2 %}</tr></thead>'
+            "<tbody><tr><td>example-host</td><td>An hour ago</td></tr></tbody></table>{% endtable_region %}"
+        ),
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="row_group",
+        classes=("row-group",),
+        about="The heading row of one group of a table's rows, first in its `tbody`: its name and how many rows.",
+        partial="partials/_row_group.html",
+        function=row_group,
+        public=True,
+        example=(
+            '{% table_region "Example groups" %}<table class="data-table"><tbody>{% row_group "Example group" 3 %}'
+            "<tr><td>example-host</td></tr></tbody></table>{% endtable_region %}"
+        ),
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="row_actions",
+        about="The cell that ends a row with what can be done to its record, each a compact control.",
+        partial="partials/_row_actions.html",
+        function=row_actions,
+        public=True,
+        example=(
+            '{% table_region "Example actions" %}<table class="data-table"><tbody><tr><td>{{ row.name }}</td>'
+            "{% row_actions row.actions %}</tr></tbody></table>{% endtable_region %}"
+        ),
+        public_classes=("row-actions",),
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="row_select",
+        example=(
+            '{% table_region "Example selections" %}<table class="data-table" data-selectable-table><thead><tr>'
+            '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" "identifier" gutter=True %}'
+            '{% table_heading "State" "status" %}</tr></thead><tbody><tr>{% row_select 1 %}<td>example-01</td>'
+            '<td>{% status "Online" tone="good" %}</td></tr></tbody></table>{% endtable_region %}'
+        ),
+        about="The cell that holds a row's tick-box, first in a row under the heading that selects every row.",
+        partial="partials/_row_select.html",
+        function=row_select,
+        classes=("select-column",),
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="row_toggle",
+        classes=("row-expand",),
+        about="The toggle that opens a row to all it holds, last in the cell that names it, in a table with no headings.",
+        partial="partials/_row_toggle.html",
+        function=row_toggle,
+        public=True,
+        example=(
+            '{% table_region "Example toggles" %}<table class="data-table"><tbody><tr>'
+            "<td>{{ row.name }}{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}"
+        ),
+    ),
+    library=register,
+)

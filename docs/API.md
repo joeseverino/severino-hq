@@ -247,10 +247,10 @@ dotted snake_case:
   where the noun alone would not say whose records they are, and no resource
   is named `resources`: the path it is served at says so.
 
-`test_registered_names.py` in `hq/platform/application/tests` holds every
-registered name to these patterns, and the composed suite holds every
-installed extension's. A capability's verb is one of the `VERBS` declared
-there, so a new verb joins on purpose. A rename moves the rows HQ keeps under
+A declaration whose name is off these patterns, the host's or an
+extension's, does not compose: `hq/platform/application/integration_validation.py`
+refuses it as the integration graph is built. A capability's verb is one of
+the `VERBS` declared there, so a new verb joins on purpose. A rename moves the rows HQ keeps under
 the old name through `hq_sdk.migrations` ([Extensions](Plugins.md#renaming-a-capability)).
 
 ### The reference
@@ -280,9 +280,10 @@ reference, not a client:
   with no toggle of its own. No rule of HQ's own stylesheet reaches the
   markup the viewer draws: its mount carries `data-vendored`, where each of
   HQ's layers gives way (`tokens.css`).
-- **Facts are fields.** A capability's `x-hq-effect` and
-  `x-hq-required-capabilities` are drawn on its operation (`showExtensions`),
-  and each refusal's codes are its `code` field's `const`, or its `enum`
+- **Facts are fields.** The permission an operation needs is its `security`
+  requirement, the `bearer` scheme listing the HQ capabilities a token must
+  carry. A capability's `x-hq-effect` is drawn on its operation
+  (`showExtensions`), and each refusal's codes are its `code` field's `const`, or its `enum`
   where there are several.
 - **No request is sent from the page.** The API takes a bearer token from the
   identity provider and never the browser session, so the viewer's request
@@ -295,12 +296,10 @@ reference, not a client:
 `hq/platform/api/tests/test_reference.py` holds the configuration, the sheet
 and the policy to the bundle (every option and variable is one the bundle
 reads, every sample target it ships is hidden but curl, every style it writes
-admitted). `ReferenceBrowserTests` in the browser gate holds only what HQ gives
-the page, once each at the widest width in WebKit: the frame, the loading line,
-both palettes, the sidebar's outline and that nothing leaves HQ. The viewer's
-own markup is the vendor's, and the gate reads none of it; the document it
-draws is held by `lint:drift-api-document`, `lint:openapi` and the API's own
-tests. After replacing the bundle, `test_reference.py` says what moved.
+admitted). The viewer is the vendor's, so the browser gate opens none of it:
+`mise run dev:look api/docs` shows it drawn, `--open` with each tag opened. The
+document it draws is held by `lint:drift-api-document`, `lint:openapi` and the
+API's own tests. After replacing the bundle, `test_reference.py` says what moved.
 
 ### Descriptions
 
@@ -309,6 +308,13 @@ HTTP `request_schema`, including target and optimistic-concurrency fields,
 unknown-field rejection, and whether an idempotency key is required. Clients
 can therefore generate and validate requests from the deployed composition's
 actual registry. An extension keeps no API document of its own.
+
+A request the schema allows is one HQ accepts, past what only the stored
+records decide (a name that matches no record, a conflict). Each rule a schema
+keyword states is in the schema: a column's own rules, and the shapes a
+command takes as `anyOf` or `oneOf` branches. A rule between a row's columns
+that no keyword states (an end after its start) is listed in its own words
+under `x-hq-rules`, on the field it is reported beside.
 
 The envelope (`payload`, `target`, `expected_updated_at`) is one type,
 `CallEnvelope` in `hq/platform/application/call_envelope.py`, and
@@ -414,8 +420,9 @@ convention: `?fields=observed_at,items.waiting` over HTTP, a list of paths to
 the MCP tools and the SDK. Absent, a detail read returns the whole record. A
 list read keeps each item to its kind's `list_fields`, declared once on its
 `ResourceSpec` and named by `describe_resources` as the list's `fields`, so a
-page costs what it shows. A kind that declares none keeps whole items. `*`
-alone keeps every field. Selection happens after authorization.
+page costs what it shows. `*` alone keeps the whole item: the keys of the
+list's `item_type`, which is the only shape a list answers and the one the
+document types its items by. Selection happens after authorization.
 
 | Path | Selects |
 |---|---|
@@ -533,27 +540,29 @@ Remedies remain references to registered capabilities. Read-only "what HQ can
 do now" links come from the subject node's canonical actions, rather than a
 second workflow registry.
 
-Each serialized finding may include a domain-neutral `workflow`: ordered steps
-whose actions are canonical `ActionLink` contracts, plus a `claim_absent`
-outcome keyed to the finding's stable claim ID. The workflow is guidance, not a
+Each serialized finding carries its help as `steps`, in order, each told
+apart by its `kind`: `press`, a canonical `ActionLink` to a registered
+capability the reader may run; `run`, a command the operator runs on their own
+machine; `do`, what to do in words. `no_help_reason` says why HQ offers no
+command, and `check` is the link that reads it again. A step is guidance, not a
 second executor; every mutation still names and enters a registered capability.
 
 MCP's `get_findings` answers the same findings in a shape of its own
-(`hq/platform/mcp/finding_actions.py`, `schema_version` 3), since an agent
+(`hq/platform/mcp/finding_actions.py`, `schema_version` 4), since an agent
 cannot follow a web path. Every action is a tool call, `{label, tool,
 arguments}`, built from what the finding holds and never read out of a URL.
 
 | Action | Call |
 |---|---|
-| a remedy, or a workflow step's command | `execute_capability` with `name`, `target` (null where the capability takes none) and `payload`; a remedy adds its `effect` |
+| a `press` step | its `call`: `execute_capability` with `name`, `target` (null where the capability takes none), `payload` and the command's `effect` |
 | an offer of its subject's own page | `get_resource` of `relationships`, the subject's node id as `identifier` |
 | an investigation | `get_topology` with the subject as `focus`, and the trace `action_links.INVESTIGATIONS` declares |
-| a workflow's check | the read it asks for, through `execute_capability` with its `payload`, then `get_findings` with the finding's `rule` |
+| its `check` | the read it asks for, through `execute_capability` with its `payload`, then `get_findings` with the finding's `rule` |
 
 A `payload` holds what HQ already knows; the agent adds an `idempotency_key`
 for an effect other than `read`, and any field the capability's schema
 requires. An action none of these derives is left out, as is a page elsewhere
-(a connection's settings, outside documentation). `operator_steps` are the
+(a connection's settings, outside documentation). `run` and `do` steps are the
 same on both doors. The `status-brief` prompt carries the problems in this shape.
 
 The `analytics` resource reports `coverage` for the requested completed-day
@@ -565,11 +574,10 @@ freshness policy.
 
 ### Compatibility policy
 
-The path is the semantic major version. Additive fields may join an existing
-version; removing a field, tightening accepted input, or changing retry
-semantics requires a new path. Version 2 is the only contract and requires
-durable idempotency for state changes. HQ has no outside clients, so a new
-version replaces the old one rather than running beside it.
+Version 2 is the only contract and requires durable idempotency for state
+changes. HQ keeps no older shape beside the current one: a change that removes
+a field, tightens accepted input or changes retry semantics moves every caller
+in the same change, and the committed document shows it in review.
 
 ### Errors
 
@@ -624,12 +632,21 @@ at its path (`rules[0].scope is not a known field`), and its `input_schema` is
 closed at the same levels; only a part its type declares open takes any key.
 `details` holds the structured list the sentence was built from, under the same
 rule: `type`, `loc` and `msg` for a schema error, field names and error codes
-for a domain one, and no submitted value in either. A resource's read
+for a domain one, and no submitted value in either. A field that names a
+record HQ does not have (a `type:key` reference, a connection) is refused with
+its own code `not_found`, and a call whose only refusals are those is a 404
+`not_found` with the same `details`. A resource's read
 (`InvalidResourceInput` in `hq/platform/application/resources.py`, the one
 place every door's refusal is raised) puts that list under `details.errors`,
 beside `details.filters`, what the kind's list narrows by, and `details.next`,
 `describe_resources` with the kind's `name`, which answers each filter's type
 and choices.
+
+A call whose service outside HQ did not answer (a public resolver, a
+registry, the secrets store) is a 503 `upstream_unavailable`: the request was
+sound, and asking again may succeed. Every reader of such a service raises
+`UpstreamUnavailable` (`hq/platform/core/errors.py`), the one class
+`refusal_of` answers so.
 
 ### An agent's limits
 
@@ -738,19 +755,6 @@ Resource filters emit individual query parameters; an unknown one is refused
 `mise run lint:openapi` installs the locked Redocly from `tools/lint` and
 validates every description against the specification.
 
-`mise run lint:openapi-breaking` compares `hq-api.openapi.json` with the base's
-copy (fast's base; in CI the commit the change lands on) through oasdiff. It
-fails on each change that breaks a client: a removed path, operation or
-response field, a parameter or request field made required, a narrowed enum, a
-changed type. Each line it prints is oasdiff's account of one break. A
-deliberate break is admitted by copying that line into
-`hq/platform/api/hq-api.breaking-exemptions.md`, oasdiff's own `--err-ignore`
-file, followed by `Reason:` and why clients can take it; an entry with no
-reason fails the gate. The gate hands oasdiff only the lines the change adds
-since its base, so an entry already on main admits nothing, and any change may
-delete it. The controller's two documents are left out, since both of their
-ends ship in one image.
-
 ### The document
 
 `hq/platform/api/openapi.py` derives the document from the API's routes and
@@ -767,6 +771,17 @@ identical described fragments fails `test_described_once.py`, run in
 the host's suite and in the composed suite before a deploy, so an extension's
 declarations are held too. Serving the document never runs it.
 
+Each answer names the requests it leads to as OpenAPI links, derived in one
+place (`_Builder.links`) from what the registries say of it: a page links to
+the page after it, by its `next.cursor` with the same query; a page's first
+item and a record link to that record's read and to each command on its
+resource that takes it as the target, sending its `updated_at` as
+`expected_updated_at` where the command checks for a stale write; a held
+change links to its `approvals` read, and a playbook's run to its `runs`
+read. An operation whose answer has links writes its own response beside the
+answer's schema component, since a `$ref` response takes no other field.
+`tests.fuzz.api_links` walks these links with Schemathesis's stateful phase.
+
 `mise run fix:derived` rewrites the committed `hq-api.openapi.json`, and
 `mise run lint` names it when it is behind.
 
@@ -775,6 +790,13 @@ Django's real WSGI middleware, using Schemathesis from the tools dependency
 set. Host cases have read authority. A synthetic capability tests authorized
 writes and durable retry without provider effects. Each case rolls back
 database changes and blocks outbound connections.
+
+`manage.py test tests.fuzz.api_links` runs that walk over the example estate,
+with read authority and the writes of the records that live in HQ's database,
+each scenario rolled back. Besides conformance it fails a next page that
+repeats a record of the page before it, a read an answer named that finds
+nothing, and a write that took an `expected_updated_at` other than the one
+read. `mise run test:api-properties` runs both modules.
 
 These tooling tests run explicitly in the contributor gates. Production test
 discovery does not require development dependencies.
@@ -886,9 +908,12 @@ definitions are written out where they are used, without titles or descriptions
 answer by it as it comes, and a field the answer gains must not break the
 client. Only a type declared with `extra="forbid"` is closed (`get_findings`'),
 so a field its serializer adds fails the output-shape tests until it is
-declared. A part the application writes from a dataclass
-(`json_schemas.Written`, a topology node or a finding's operator steps) is
-typed whole in the API document and left an object in the tool's shape. The
+declared. A part the application writes whole from a dataclass
+(`json_schemas.Written`, a topology node, a hop's link or a finding's operator
+steps) is typed whole in the API document, every field it writes required, and
+left an object in the tool's shape. `json_schemas.as_written` writes it, so a
+field the type leaves out (`Field(exclude=True)`) and a `computed_field` it
+adds are written as the document says. The
 SDK's client checks a success against the schema and never a refusal. So
 `test_output_shapes.py` calls every tool both ways on the showcase's data and
 checks each answer with the client's own validator. It holds each success, its

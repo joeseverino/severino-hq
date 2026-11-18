@@ -24,6 +24,9 @@ from hq.platform.application.http_read import UNREACHABLE
 from hq.platform.core.tests.task import Usage
 lazy from hq.platform.application.entity_links import https_url
 
+# The secrets the wiring sets, as HQ's posture check names them.
+lazy from hq.platform.application.github_posture import APP_CLIENT_ID, APP_KEY
+
 HERE = Path(__file__).resolve().parent
 STORED = "Stored in {item} ({vault}); the controller reads it on its next render."
 
@@ -485,8 +488,6 @@ PROVIDERS: Mapping[str, Provider] = {"cloudflare": CLOUDFLARE, "tailscale": TAIL
 # ------------------------------------------------------------- the GitHub App
 
 ENVIRONMENT = "admission"
-# The secrets the wiring sets; HQ's posture check names them too.
-APP_KEY, APP_CLIENT_ID = "HQ_APP_KEY", "HQ_APP_CLIENT_ID"
 
 
 def private_key(programs: Programs, vault: str, item: str) -> str:

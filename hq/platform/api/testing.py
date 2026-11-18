@@ -1,19 +1,13 @@
 """Hold every API response a test receives to the OpenAPI document.
 
 ``ContractClient`` fails the test that receives an /api/ response, or has a
-capability accept a request body, the document does not describe; the same
-run can record the document's examples (beside ``_record``).
+capability accept a request body, the document does not describe.
 """
 
-import atexit
 import json
-import os
 import re
-import uuid
 from collections.abc import Mapping
-from datetime import UTC, datetime
 from functools import cached_property
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, override
 from urllib.parse import urlsplit
 
@@ -23,18 +17,13 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
-from .openapi import EXAMPLES_PATH, document
+from .openapi import document
 
 if TYPE_CHECKING:
     from django.test.client import _MonkeyPatchedWSGIResponse
     from django.utils.functional import _StrPromise
 
 URI = "urn:hq:api"
-# Large bodies (the registry catalogs, the document itself) are their own
-# example; recording them would copy the registry into the document.
-EXAMPLE_LIMIT = 2048
-
-_recorded: dict[str, dict[str, Any]] = {}
 
 
 class Contract:
@@ -72,9 +61,6 @@ class Contract:
 
 
 class ContractClient(Client):
-    # True in a test reading the showcase estate, whose successes are the recorded examples.
-    showcase = False
-
     @cached_property
     def contract(self) -> Contract:
         return Contract(document())
@@ -126,97 +112,8 @@ class ContractClient(Client):
                 f"{method.upper()} {path} answered {response.status_code}, which the document does not list."
             )
         contract.validate(pointer, body)
-        request = None
         if response.status_code < 300 and data and "requestBody" in operation:
-            request = json.loads(data)
             contract.validate(
                 ["paths", path, method, "requestBody", "content", "application/json", "schema"],
-                request,
+                json.loads(data),
             )
-        if os.environ.get("HQ_API_RECORD_EXAMPLES") == "1":
-            _record(operation["operationId"], response.status_code, body, request, showcase=self.showcase)
-
-
-def _small(value: object) -> bool:
-    return len(json.dumps(value)) <= EXAMPLE_LIMIT
-
-
-# With HQ_API_RECORD_EXAMPLES=1 (and --parallel 1, so one process holds them
-# all) the first response per operation and status (a success the showcase
-# estate answered first, and a large one with each list cut to its smallest
-# item, so a viewer never draws an empty record from the schema), and the first
-# accepted request body per operation, are written to openapi-examples.json
-# (or the path HQ_API_RECORD_EXAMPLES_TO names) when the run ends; `mise run
-# fix:api-examples` runs every module that uses this client so. A recording
-# reads the same every run, so lint:drift-api-examples can hold the file to it:
-# the clock stands still at RECORDED_AT from the moment this module is imported,
-# before any test makes a row, and each UUID is written as the one its place
-# among them derives, since a test's uuid4 reads randomness the clock does not
-# hold. Integer ids already repeat, the tests running in one order in one
-# process.
-RECORDING = os.environ.get("HQ_API_RECORD_EXAMPLES") == "1"
-RECORDED_AT = datetime(2026, 1, 15, 9, 30, tzinfo=UTC)
-_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-
-
-def _hold_the_clock() -> None:
-    import time_machine
-
-    time_machine.travel(RECORDED_AT, tick=False).start()
-
-
-if RECORDING:
-    _hold_the_clock()
-
-
-def _fixed_ids(text: str) -> str:
-    """``text`` with each distinct UUID replaced by one derived from the order it first appears in."""
-
-    seen: dict[str, str] = {}
-    return _UUID.sub(
-        lambda found: seen.setdefault(found[0], str(uuid.uuid5(uuid.NAMESPACE_URL, f"example/{len(seen)}"))), text
-    )
-
-
-def _drawn_size(value: object) -> int:
-    """How long ``value`` is as a viewer prints it: JSON indented by two."""
-
-    return len(json.dumps(value, indent=2, ensure_ascii=False))
-
-
-def _one_item(value: object) -> object:
-    """``value`` with each list cut to its smallest item, printed: one real
-    record standing for the rest, and the one least likely to bury the shape
-    it shows."""
-
-    if isinstance(value, list):
-        return [min((_one_item(item) for item in value), key=_drawn_size)] if value else []
-    if isinstance(value, dict):
-        return {key: _one_item(inner) for key, inner in value.items()}
-    return value
-
-
-# A success the showcase estate answered, which outranks one a test's own rows
-# answered: the estate is a whole one, so each list holds a real record.
-_showcase: dict[str, dict[str, Any]] = {}
-
-
-def _record(operation_id: str, status: int, body: object, request: object, *, showcase: bool = False) -> None:
-    example = body if _small(body) else _one_item(body)
-    # A cut answer is recorded whatever its size, one record standing for the
-    # rest; the document, which answers in no envelope, is its own example.
-    if _small(example) or (isinstance(body, dict) and "ok" in body):
-        held = _showcase if showcase and status < 300 else _recorded
-        held.setdefault(operation_id, {}).setdefault("responses", {}).setdefault(str(status), example)
-    if request is not None and _small(request):
-        _recorded.setdefault(operation_id, {}).setdefault("request", request)
-
-
-@atexit.register
-def _write_examples() -> None:
-    if not RECORDING or not _recorded:
-        return
-    for operation_id, entry in _showcase.items():
-        _recorded.setdefault(operation_id, {}).setdefault("responses", {}).update(entry["responses"])
-    path = os.environ.get("HQ_API_RECORD_EXAMPLES_TO") or EXAMPLES_PATH
-    Path(path).write_text(_fixed_ids(json.dumps(_recorded, indent=2, sort_keys=True)) + "\n", encoding="utf-8")

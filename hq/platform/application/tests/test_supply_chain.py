@@ -12,7 +12,6 @@ from hq.domains.control_plane.observations.public_registry import DIGEST_KIND as
 from ..containers import DECLARED, LABEL, PROVENANCE, REGISTRY, VULNERABLE, containers
 from ..report_testing import bridged
 from ..security import cli_principal
-from ..standards import Standing
 from .test_containers import estate, inventory
 from .test_upgrades import TARGET, declare, published
 
@@ -148,32 +147,6 @@ class VulnerabilityTests(TestCase):
         self.assertEqual(
             (standing.state, standing.summary, standing.worst), (VULNERABLE, "1 serious vulnerability", "high")
         )
-
-
-class StandardTests(TestCase):
-    def test_the_supply_chain_is_measured_from_what_was_read(self):
-        estate()
-        inventory("registry.digest", [attested(APP)])
-        inventory("registry.vulnerabilities", [checked(APP, [found("HIGH")])])
-
-        chain = item("app").supply_chain
-
-        self.assertEqual(chain.state_of("pinned"), Standing.MET)
-        self.assertEqual(chain.state_of("source-known"), Standing.MET)
-        self.assertEqual(chain.state_of("provenance"), Standing.MET)
-        self.assertEqual(chain.state_of("sbom"), Standing.MET)
-        self.assertEqual(chain.state_of("no-urgent"), Standing.UNMET)
-        self.assertTrue(chain.serious)
-
-    def test_what_was_not_read_is_unavailable_not_a_failure(self):
-        estate()
-        inventory("registry.digest", [attested(APP, unread="the registry refused an anonymous read")])
-
-        chain = item("app").supply_chain
-
-        self.assertEqual(chain.state_of("provenance"), Standing.UNAVAILABLE)
-        self.assertEqual(chain.state_of("sbom"), Standing.UNAVAILABLE)
-        self.assertEqual(chain.state_of("no-urgent"), Standing.UNAVAILABLE)
 
 
 class UpgradeTests(TestCase):

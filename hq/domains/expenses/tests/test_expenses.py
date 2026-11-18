@@ -62,7 +62,7 @@ class ExpenseListTests(_Signed):
                 ("Domains", "$8", "?year=2030&category=domains"),
             ],
         )
-        self.assertIn(("Hosting $24", "?year=2030&category=hosting"), links(whole))
+        self.assertIn(("$24", "?year=2030&category=hosting"), links(whole))
         self.assertIn("Matching: $32.00 total", text(whole))
         # A list already narrowed to one category is not divided by category.
         self.assertEqual(chosen.context["by_category"], ())

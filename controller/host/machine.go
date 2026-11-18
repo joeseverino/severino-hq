@@ -26,8 +26,6 @@ type Machine struct {
 	// Seal holds the controller's sealing keys (SealDir on a host), and
 	// SealPublic the public half the web seals with (SealPublicKey).
 	Seal, SealPublic string
-	// Sbin held programs earlier releases installed; none is installed now.
-	Sbin string
 	// Runtime is /run, where the deploy stages what it must not leave behind.
 	Runtime string
 	// Sudoers is where the runner's sudo rule is installed.

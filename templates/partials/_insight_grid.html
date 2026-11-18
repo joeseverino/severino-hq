@@ -2,8 +2,8 @@
 Insight grid: a decision-support panel: each item states a reading, what it
 means, and the next action.
 
-Use this when a number needs interpretation. Use _kpi_grid.html when the number
-speaks for itself.
+Use this when a number needs interpretation. Use a band of facts when the
+number speaks for itself.
 
 Each item accepts:
   eyebrow  short category label (e.g. "Data readiness")
@@ -35,11 +35,6 @@ same eyebrow in the same state.
       {% headed %}
       {% if item.body %}<p class="insight-body">{{ item.body|breakable }}</p>{% endif %}
       {% if item.action %}<p class="insight-action">{{ item.action|breakable }}</p>{% endif %}
-      {% if item.workflow %}{% with parts=item.workflow|workflow_parts %}
-        {% include "partials/_resolution_workflow.html" with steps=parts.steps fold=parts.fold only %}
-        {% if parts.reason %}<p class="attention-reason">{{ parts.reason|breakable }}</p>{% endif %}
-      {% endwith %}{% endif %}
-      {% remedies item.actions as shown %}{% if shown %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=shown only %}</div>{% endif %}
       {% endheaded %}
     </article>
   {% endfor %}

@@ -79,7 +79,6 @@ uv pip install --quiet --python "$python" --require-hashes -r "$host_requirement
 "$python" -m ruff format --check src
 # What the package's source may import, whatever its own Ruff config selects.
 "$python" -m ruff check --no-cache --config "$hq_root/tools/pipeline/extension-imports.toml" src
-PYTHONPATH="$hq_root" "$python" -m hq_sdk.validation src
 
 export DJANGO_DEBUG=true
 # Each template read once, as the host's gates and production read them.
@@ -92,6 +91,10 @@ export SEVERINO_DATABASE_PATH="$work/check.sqlite3"
 DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
 export DJANGO_SECRET_KEY
 export PYTHONPATH="$hq_root"
+# The package's templates are held to the host's declarations, read from
+# this host's tree with no extension installed: -P keeps the package root off
+# the path, so nothing the package ships can stand in for the host's.
+SEVERINO_HQ_PLUGINS='' "$python" -P -m hq.platform.application.plugin_validation src
 export SEVERINO_HQ_PLUGINS="$plugin_reference"
 # The package's own mypy against the host's typed hq_sdk; its django-stubs
 # settings are hq.config.settings_typecheck, with this package installed.

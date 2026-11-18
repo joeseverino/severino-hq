@@ -29,7 +29,7 @@ since the whole history is on the page the row links to.
             {% if row.detail %}{% muted css="cadence-detail wide-only" %}{{ row.detail|breakable }}{% endmuted %}{% endif %}
           </th>
           {% for week in row.weeks %}
-            <td class="cadence-cell{% if forloop.revcounter > 3 %} wide-only{% endif %}">
+            <td class="cadence-cell">
               <span class="cadence-mark{% if week.hit %} is-hit{% elif week.no_data %} is-no-data{% endif %}" data-tip="{{ week.said }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count|breakable }}{% endif %}</span>
               <span class="visually-hidden">{{ week.said|breakable }}</span>
             </td>

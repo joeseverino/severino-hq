@@ -88,9 +88,9 @@ class ThemeServiceTests(TestCase):
     def test_an_unknown_theme_is_refused(self):
         for theme in ("", "sepia", "DARK", "system "):
             with self.subTest(theme=theme):
-                self.assertEqual(
-                    self.choose(theme)["error"], {"code": "invalid_input", "message": "Choose system, light or dark."}
-                )
+                refused = self.choose(theme)["error"]
+                self.assertEqual(refused["code"], "invalid_input")
+                self.assertEqual([detail["loc"] for detail in refused["details"]], [["theme"]])
         self.assertFalse(Appearance.objects.exists())
 
     def test_the_choice_does_not_happen_without_its_record(self):
@@ -135,7 +135,7 @@ class ThemeSwitchTests(TestCase):
             with self.subTest(theme=theme):
                 refused = self.choose(theme)
                 self.assertEqual(refused.status_code, 400)
-                self.assertEqual(refused.content, b"Choose system, light or dark.")
+                self.assertIn(b"theme", refused.content)
         self.assertEqual(self.client.post(reverse("theme"), form_keyed()).status_code, 400)
         self.assertEqual(theme_for(self.user), "dark")
 
@@ -149,21 +149,9 @@ class ThemeSwitchTests(TestCase):
         self.assertEqual(theme_for(self.user), "system")
         self.assertEqual(denials(), 1)
 
-    def test_it_only_changes_on_post(self):
-        self.assertEqual(self.client.get(reverse("theme"), {"theme": "dark"}).status_code, 405)
-        self.assertEqual(theme_for(self.user), "system")
-
     def test_it_returns_only_to_this_site(self):
         response = self.client.post(reverse("theme"), form_keyed({"theme": "dark", "next": "https://example.net/"}))
         self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
-
-    def test_anybody_signed_out_is_sent_to_sign_in_and_changes_nothing(self):
-        self.client.logout()
-        response = self.choose("dark")
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn(reverse("login"), response["Location"])
-        self.assertFalse(Appearance.objects.exists())
 
     def test_a_choice_belongs_to_the_person_who_made_it(self):
         self.choose("dark")

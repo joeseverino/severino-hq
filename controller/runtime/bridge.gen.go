@@ -1546,6 +1546,7 @@ type GitHubDeliveryProduction string
 
 // GitHubDeliverySpec A github.delivery declaration. The defaults are the declaration a sweep reports and HQ adopts.
 type GitHubDeliverySpec struct {
+	// Branch The branch the workflow deploys from.
 	Branch string `json:"branch"`
 
 	// Production What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.
@@ -1553,7 +1554,9 @@ type GitHubDeliverySpec struct {
 
 	// Repository The repository whose deploy workflow deploys HQ.
 	Repository string `json:"repository"`
-	Workflow   string `json:"workflow"`
+
+	// Workflow The workflow file, in the repository, that deploys HQ.
+	Workflow string `json:"workflow"`
 }
 
 // GitHubDependencyRunRecord One account's update run: what root reported of it, never its log.

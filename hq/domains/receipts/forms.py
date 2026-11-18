@@ -6,7 +6,6 @@ from django.urls import reverse
 from hq.platform.application.labels import dotted
 from hq.platform.application.record_errors import InputError
 
-from .models import Receipt
 from .validation import (
     ALLOWED_RECEIPT_CONTENT_TYPES,
     MAX_RECEIPT_BYTES,
@@ -43,7 +42,10 @@ class ReceiptFileInput(forms.ClearableFileInput):
         return context
 
 
-class ReceiptUploadForm(forms.ModelForm):
+class ReceiptFileForm(forms.ModelForm):
+    """What a receipt's form adds to its command's fields: the file's control,
+    which links the file it holds, and the check of a new one."""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         receipt = self.instance
@@ -54,26 +56,11 @@ class ReceiptUploadForm(forms.ModelForm):
             )
 
     class Meta:
-        model = Receipt
-        fields = [
-            "file",
-            "vendor",
-            "date",
-            "amount",
-            "related_expense",
-            "related_asset",
-            "notes",
-        ]
-        widgets = {
-            "file": ReceiptFileInput(attrs={"accept": RECEIPT_ACCEPT}),
-            "date": forms.DateInput(attrs={"type": "date"}),
-            "notes": forms.Textarea(attrs={"rows": 3}),
-        }
+        widgets = {"file": ReceiptFileInput(attrs={"accept": RECEIPT_ACCEPT})}
         # The model's help text says where the file goes, which the page
         # already says above the form. What the operator cannot find out
         # anywhere else is what will be refused, so the field says that.
         help_texts = {"file": RECEIPT_SIZE_HINT}
-        labels = {"related_expense": "Expense", "related_asset": "Asset"}
 
     def clean_file(self):
         f = self.cleaned_data["file"]

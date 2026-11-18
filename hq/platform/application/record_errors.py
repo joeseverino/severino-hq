@@ -18,6 +18,11 @@ from typing import Any, ClassVar
 # held to be one, so a refusal may be built from it.
 Sentence = str
 
+# The code of a refusal for a record that is not there. A field's
+# ``ValidationError`` carries it where the field names a record (a model's
+# reference column), so the call is answered as ``RecordNotFound`` is.
+NOT_FOUND = "not_found"
+
 
 class HostRefusal(Exception):
     """A refusal whose ``reason`` every adapter may show as it stands."""
@@ -34,7 +39,7 @@ class HostRefusal(Exception):
 class RecordNotFound(HostRefusal, LookupError):
     """The record the request names does not exist, or the caller cannot see it."""
 
-    code = "not_found"
+    code = NOT_FOUND
 
 
 class RecordConflict(HostRefusal):

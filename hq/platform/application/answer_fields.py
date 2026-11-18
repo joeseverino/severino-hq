@@ -30,11 +30,20 @@ class Pinned:
         return {**handler(schema), "const": self.value}
 
 
+@dataclass(frozen=True, slots=True)
+class DateTime:
+    """A text that is an ISO 8601 date-time, said as the schema's ``format`` so a
+    client parses it as one and a generator draws one."""
+
+    def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        return {**handler(schema), "format": "date-time"}
+
+
 type Outcome = Annotated[bool, Describe("Whether HQ did what was asked: true beside `data`, false beside `error`.")]
 # Where nothing has read it yet a use says how, by its own type: ``ObservedAt |
 # None`` for null, a default of "" for empty.
-type ObservedAt = Annotated[str, Describe("When it was last read from its source, an ISO 8601 date-time.")]
-type UpdatedAt = Annotated[str, Describe("When it last changed in HQ, an ISO 8601 date-time.")]
+type ObservedAt = Annotated[str, DateTime(), Describe("When it was last read from its source, an ISO 8601 date-time.")]
+type UpdatedAt = Annotated[str, DateTime(), Describe("When it last changed in HQ, an ISO 8601 date-time.")]
 # The one sentence a write says of what it did: every door carries it, and a
 # page shows it once the write runs (``web_writes.said``).
 type CallMessage = Annotated[str, Describe("What the call did, in a sentence.")]
@@ -62,10 +71,7 @@ type RecordSlug = Annotated[
 ]
 # What an asset and an expense say of their cost alike.
 type TotalCostAmount = Annotated[
-    str, Describe("What it cost in all, a decimal string with two places such as `12.50`.")
-]
-type BusinessUseShare = Annotated[
-    int, Describe("How much of it is for the business, a whole percentage from 0 to 100.")
+    str, Describe("What it cost in all, a decimal string with two places.", examples=("12.50",))
 ]
 type DeductibleAmount = Annotated[
     str,
@@ -80,6 +86,10 @@ type LinkedDocs = Annotated[
 ]
 type LinkedContent = Annotated[list[str], Describe("The slugs of the writeups and pages linked to it, sorted.")]
 type LinkedExpenses = Annotated[list[int], Describe("The ids of the expenses linked to it, newest first.")]
+type LinkedProjects = Annotated[list[str], Describe("The slugs of the projects it is about, sorted.")]
+type LinkedAssets = Annotated[list[str], Describe("The slugs of the assets it is about, sorted.")]
+# The expenses a writeup or a doc records, in the order HQ took them in.
+type RecordedExpenses = Annotated[list[int], Describe("The ids of the expenses it records, oldest first.")]
 # A part HQ passes on in the shape its source gave it (a provider's record, a
 # policy entry as written, a reading type's record), so its keys are the
 # source's and HQ names none of them. Every part HQ builds says its fields.

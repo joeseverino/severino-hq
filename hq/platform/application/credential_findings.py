@@ -18,15 +18,8 @@ lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 
 from .connection_lifecycle import UNREPORTED_FACT
 from .derivations import reached
-from .finding_model import (
-    THEN_REFRESH,
-    Finding,
-    FindingEstate,
-    FindingRule,
-    OperatorStep,
-    connections_carrying,
-    fact_values,
-)
+from .finding_model import THEN_REFRESH, Finding, FindingEstate, FindingRule, connections_carrying, fact_values
+from .finding_steps import Do, Run, told
 from .moments import moment
 from .tone import Tone
 from .ui import counted, ended
@@ -65,23 +58,17 @@ def credential_facts(fix: Any) -> tuple[tuple[str, str], ...]:
 
 def operator_steps(
     command: str, notes: tuple[str, ...], by_hand: str, missing: tuple[str, ...]
-) -> tuple[OperatorStep, ...]:
+) -> tuple[Run | Do, ...]:
     """The mint step for one credential, or none when there is nothing to offer."""
 
     if not command and not notes and not by_hand:
         return ()
     if by_hand:
         notes += (ended(f"Or by hand: {by_hand}" + (f", adding {', '.join(missing)}" if missing else "")),)
-    return (
-        OperatorStep(
-            label="Make a new token on your Mac" if command else "Make a new token",
-            command=command,
-            notes=(*notes, THEN_REFRESH),
-        ),
-    )
+    return (told("Make a new token on your Mac" if command else "Make a new token", command, (*notes, THEN_REFRESH)),)
 
 
-def fix_steps(fix: Any) -> tuple[OperatorStep, ...]:
+def fix_steps(fix: Any) -> tuple[Run | Do, ...]:
     """The mint step a ``CredentialFix`` offers, for a page that holds the fix."""
 
     if fix is None or not fix.needed:
@@ -89,7 +76,7 @@ def fix_steps(fix: Any) -> tuple[OperatorStep, ...]:
     return operator_steps(fix.command, fix.gaps, fix.by_hand, fix.missing)
 
 
-def mint_steps(node: Any) -> tuple[OperatorStep, ...]:
+def mint_steps(node: Any) -> tuple[Run | Do, ...]:
     """The mint step a connection node's facts describe, for a finding."""
 
     return operator_steps(
@@ -115,15 +102,15 @@ def failure_of_node(node: Any) -> str:
     return next(iter(fact_values(node, FAILURE)), "")
 
 
-def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
+def answer_steps(node: Any) -> tuple[Run | Do, ...]:
     """The fix for a connection that does not answer, following why it did not."""
 
     failure = failure_of_node(node)
     endpoint = next(iter(fact_values(node, ENDPOINT)), "")
     if failure == ADDRESS_FAILURE:
         return (
-            OperatorStep(
-                label=f"Point the connection at {_service(node)}'s own API address",
+            Do(
+                f"Point the connection at {_service(node)}'s own API address",
                 notes=(
                     *((f"{endpoint} is not the API.",) if endpoint else ()),
                     ended(f"Set the address in the connection's 1Password item, {address_fields()}"),
@@ -133,18 +120,10 @@ def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
         )
     if failure == NETWORK_FAILURE:
         where = _host(endpoint) or "the machine it points at"
-        return (
-            OperatorStep(
-                label=f"Check that {where} is up and the controller can reach it",
-                notes=(THEN_REFRESH,),
-            ),
-        )
+        return (Do(f"Check that {where} is up and the controller can reach it", notes=(THEN_REFRESH,)),)
     if failure in REFUSALS:
         return mint_steps(node) or (
-            OperatorStep(
-                label="Replace the credential in the connection's 1Password item",
-                notes=(THEN_REFRESH,),
-            ),
+            Do("Replace the credential in the connection's 1Password item", notes=(THEN_REFRESH,)),
         )
     return ()
 

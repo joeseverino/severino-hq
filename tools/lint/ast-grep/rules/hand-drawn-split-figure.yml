@@ -3,7 +3,7 @@
 # the value filters join the two (line_breaks.held). A value is a figure
 # unless what it reads says it is words: a field that holds a name, or a
 # last filter that writes its own words (worded-value, which holds every
-# filter of hq_sdk.template_contract.WORDED_FIGURES, as
+# filter of hq.platform.core.template_contract.WORDED_FIGURES, as
 # test_template_values holds it to). The word after it is a unit or a
 # counted word unless it is one of the closed classes of words that follow
 # a name in a sentence. A run of text is read whole, so one that also holds a

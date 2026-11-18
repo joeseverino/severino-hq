@@ -33,7 +33,7 @@ from .freshness import LAST_READ, behind, freshness
 from .infrastructure import DRIFT_LABEL, NOT_READ_LABEL
 from .labels import field_label, lower_first, plural
 from .moments import ago, duration
-from .reading_facts import refusals_on
+from .reading_facts import refusals
 from .render_status_findings import RENDERER_UNITS
 from .tone import Tone
 from .topology_model import TopologyNode
@@ -743,13 +743,13 @@ def _report_refused(estate: FindingEstate) -> tuple[Finding, ...]:
             evidence=(
                 ("Report", refusal.action),
                 ("Reason", refusal.detail),
-                ("Last refused", ago(refusal.refused_at, estate.now) if refusal.refused_at else "never"),
+                ("Last refused", ago(refusal.refused_at, estate.now)),
             ),
             steps=_controller_steps(node.label),
             no_help_reason=cannot_run_commands(node.label),
         )
-        for node in estate.nodes()
-        for refusal in refusals_on(node)
+        for node, held in refusals(estate)
+        for refusal in held
     )
 
 
@@ -771,6 +771,7 @@ RULES: tuple[FindingRule, ...] = (
         "HQ refuses what the controller reports",
         Tone.SERIOUS,
         _report_refused,
+        gathered=True,
         operator_action=(
             "Read the reason, then deploy HQ so the controller and HQ are built from one release. "
             "If it stays, fix the side that departs from the contract."

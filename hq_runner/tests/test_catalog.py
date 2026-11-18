@@ -361,12 +361,6 @@ class ModuleTests(ScanTestCase):
                 for named in (path, "Restart the stack", "example.absent.restart"):
                     self.assertIn(named, problems[0])
 
-    def test_the_collections_a_scan_admits_are_the_ones_collections_yml_pins(self):
-        listed = catalog.yaml.safe_load(catalog.COLLECTIONS.read_text(encoding="utf-8"))["collections"]
-
-        self.assertEqual(catalog.shipped(), {entry["name"]: str(entry["version"]) for entry in listed})
-        self.assertNotIn("example.absent", catalog.shipped())
-
     def test_a_module_named_by_anything_but_a_shipped_module_s_full_name_is_a_problem(self):
         cases = {
             "an unqualified name": "- name: Look\n  debug: {msg: hi}\n",

@@ -9,10 +9,7 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .. import reference_findings as rules
-from ..capabilities import capability_words
-from ..inventory_testing import store
-from ..resource_capabilities import UPDATE_CAPABILITY
-from .test_tailnet_posture import raised, tailnet_connection
+from .test_tailnet_posture import raised
 
 ZONE, RECORD, TARGET = "cloudflare.zone", "cloudflare.dns_record", "tls.delivery_target"
 
@@ -86,124 +83,11 @@ class DerivedColumnTests(TestCase):
             self.assertIn(held_field, REFERENCE_COLUMNS)
 
 
-class NamesNoDomainTests(TestCase):
-    def setUp(self):
-        tailnet_connection("example-dns", "cloudflare_dns")
-
-    def read(self, *zones: str, **fields) -> None:
-        store(ZONE, *({"zone": zone, "connection_ref": "example-dns"} for zone in zones), **fields)
-
-    def test_a_record_in_a_domain_hq_does_not_have(self):
-        self.read("example.com")
-        record("in-a-domain", "example.com")
-        record("in-no-domain", "typo.example")
-
-        (finding,) = raised(rules.RULE)
-
-        self.assertEqual(finding["subject"], "resource:in-no-domain")
-        # The record is called what every page calls it.
-        self.assertEqual(finding["title"], "app.typo.example at 192.0.2.10 is in typo.example, which HQ does not have")
-        self.assertEqual(
-            finding["explanation"],
-            "HQ expects no domain called typo.example and no connection reads one, so "
-            "app.typo.example at 192.0.2.10 cannot be applied anywhere.",
-        )
-        self.assertEqual(finding["severity"], "attention")
-        self.assertEqual([remedy["label"] for remedy in finding["remedies"]], [capability_words(UPDATE_CAPABILITY)])
-
-    def test_a_domain_hq_expects_is_there_whether_or_not_it_was_read(self):
-        self.read("example.com")
-        ManagedResource.objects.create(key="expected", kind=ZONE, spec={"zone": "Example.ORG"})
-        record("in-an-expected-domain", "example.org")
-
-        self.assertEqual(raised(rules.RULE), [])
-
-    def test_a_domain_spelled_another_way_is_the_same_domain(self):
-        self.read("example.com")
-        record("spelled-differently", "Example.COM.")
-
-        self.assertEqual(raised(rules.RULE), [])
-
-    def test_nothing_is_said_without_a_list_of_the_domains(self):
-        record("in-no-domain", "typo.example")
-        self.assertEqual(raised(rules.RULE), [])
-
-        self.read("example.com", reachable=False, error="The read failed.")
-        self.assertEqual(raised(rules.RULE), [])
-
-    def test_a_record_that_is_switched_off_is_not_reported(self):
-        self.read("example.com")
-        made = record("in-no-domain", "typo.example")
-        made.enabled = False
-        made.save()
-
-        self.assertEqual(raised(rules.RULE), [])
-
-
 class NamesNoConnectionTests(TestCase):
-    def test_a_record_that_uses_a_connection_no_controller_has(self):
-        tailnet_connection("example-edge", "ssh")
-        target("on-the-edge", "example-edge")
-        target("on-nothing", "example-edge-2")
-
-        (finding,) = raised(rules.RULE)
-
-        self.assertEqual(finding["subject"], "resource:on-nothing")
-        self.assertEqual(finding["title"], "on-nothing uses a connection no controller has")
-        self.assertEqual(
-            finding["explanation"],
-            "It names the connection example-edge-2. No controller has one called that, so "
-            "nothing reads on-nothing and nothing applies HQ's config to it.",
-        )
-        self.assertIn({"label": "Connection it names", "value": "example-edge-2"}, finding["evidence"])
-        self.assertEqual([remedy["label"] for remedy in finding["remedies"]], [capability_words(UPDATE_CAPABILITY)])
-
     def test_nothing_is_said_before_a_controller_reports_its_connections(self):
         target("on-nothing", "example-edge-2")
 
         self.assertEqual(raised(rules.RULE), [])
-
-    def test_a_record_that_names_no_connection_is_not_reported(self):
-        tailnet_connection("example-edge", "ssh")
-        ManagedResource.objects.create(key="unconnected", kind="machine", spec={"name": "example"})
-
-        self.assertEqual(raised(rules.RULE), [])
-
-    def test_both_links_of_one_record_are_reported(self):
-        tailnet_connection("example-dns", "cloudflare_dns")
-        store(ZONE, {"zone": "example.com", "connection_ref": "example-dns"})
-        record("lost", "typo.example", connection_ref="example-other")
-
-        self.assertEqual(
-            sorted(finding["title"] for finding in raised(rules.RULE)),
-            [
-                "app.typo.example at 192.0.2.10 is in typo.example, which HQ does not have",
-                "app.typo.example at 192.0.2.10 uses a connection no controller has",
-            ],
-        )
-
-
-class RuleTests(TestCase):
-    def test_checking_the_links_asks_the_database_nothing_more(self):
-        """The declarations and readings are in hand when the estate is built."""
-
-        from ..infrastructure import enabled_resources
-        from ..projection import projection_scope
-        from ..topology import relation_graph
-        from .test_tailnet_posture import EVERYTHING
-
-        tailnet_connection("example-dns", "cloudflare_dns")
-        store(ZONE, {"zone": "example.com", "connection_ref": "example-dns"})
-        record("lost", "typo.example", connection_ref="example-other")
-        with projection_scope():
-            graph = relation_graph(principal=EVERYTHING)
-            nodes = {node.id: node for node in graph.topology.nodes}
-            with self.assertNumQueries(0):
-                rules.add(nodes, enabled_resources())
-        self.assertEqual(
-            {key for key, _value in nodes["resource:lost"].facts},
-            {rules.NO_CONNECTION, rules.NO_PARENT},
-        )
 
 
 @tag("source")

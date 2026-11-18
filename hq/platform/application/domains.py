@@ -6,6 +6,7 @@ list of its own. Group labels arrive from installed manifests at runtime, so
 nothing here names an extension (``test_domains`` holds it).
 """
 
+import itertools
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache, partial
@@ -13,7 +14,6 @@ from typing import Any, NamedTuple
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.module_loading import import_string
-from django.utils.text import capfirst
 
 from .derivations import derivation
 from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant, estate_variant
@@ -29,6 +29,7 @@ from .plugins import (
     ordered_attention,
     source_cards,
 )
+from .record_declaration import Control, Records
 from .routes import reverse
 lazy from . import attention
 lazy from .security import Capability, Principal, could_hold
@@ -50,58 +51,6 @@ class Mount(NamedTuple):
 
     prefix: str
     urlconf: str
-
-
-@dataclass(frozen=True, slots=True)
-class Records:
-    """A plain record domain: one model created, changed and deleted by command.
-
-    Declared once, it yields the create, update and delete capabilities, the
-    write and delete permissions, deletion itself and the count on the health
-    reading; anything else is a command through ``integration.capabilities``.
-    References are ``module:attribute`` strings so it stays importable from
-    settings, before any model is.
-    """
-
-    # Names the commands: "expense" gives expense.create, expense.delete.
-    noun: str
-    # The readable resource the commands act on. Also names the permissions:
-    # "expenses" gives write_expenses and delete_expenses.
-    resource: str
-    model: str
-    # A key of ``integration_specs.TARGET_KINDS``, and the model field it names.
-    target: str
-    lookup: str
-    command: str
-    # Creates when given no target, updates when given one.
-    save: str
-    upsert: str = ""
-    create: bool = True
-    # What a person calls one record, where the noun reads wrong.
-    title: str = ""
-    # Given the record about to go, returns what to run once the delete commits.
-    on_delete: str = ""
-    # The records any reader may count; every row when empty.
-    visible: str = ""
-    # (verb, summary, label) where the derived wording would say less than it
-    # should; an empty one keeps the derived.
-    wording: tuple[tuple[str, str, str], ...] = ()
-    # (verb, variant, words): a mode a page offers its command in (``CapabilitySpec.variants``).
-    variants: tuple[tuple[str, str, str], ...] = ()
-
-    @property
-    def called(self) -> str:
-        """What a sentence calls one record as it opens: "Content item", "Expense"."""
-
-        return capfirst(self.title or self.noun)
-
-    @property
-    def write(self) -> str:
-        return f"write_{self.resource}"
-
-    @property
-    def delete(self) -> str:
-        return f"delete_{self.resource}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +79,14 @@ class DomainDescriptor:
         # (``FindingRule.domain``), and the held requests are Approvals'.
         if self.integration.attention is not None:
             raise ImproperlyConfigured(f"{self.id} raises queue items as finding rules, not an attention provider.")
+        # The band below the floor is the extensions', which this repository
+        # cannot see; an ungrouped item renders inline and may lead.
+        for item in self.navigation:
+            if item.group and item.order < HOST_ORDER_FLOOR:
+                raise ImproperlyConfigured(
+                    f"{self.id}'s {item.label!r} is ordered {item.order}, in the extensions' band below "
+                    f"{HOST_ORDER_FLOOR}."
+                )
 
 
 # Runtime behavior is one typed, lazy ``PluginIntegration`` for both. The
@@ -372,6 +329,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 ("create", "writeup", "Add a writeup"),
                 ("create", "page", "Add a page"),
             ),
+            # Its description is written in sentences.
+            controls=(("topic", Control.LINES),),
         ),
     ),
     DomainDescriptor(
@@ -457,6 +416,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             save="hq.platform.application.receipts:update_receipt",
             create=False,
             on_delete="hq.platform.application.receipts:file_cleanup",
+            form="hq.domains.receipts.forms:ReceiptFileForm",
             wording=(
                 ("update", "Change a receipt's details. The file itself does not change.", ""),
                 ("delete", "Delete one receipt and its file.", ""),
@@ -825,7 +785,12 @@ def all_domains() -> tuple[Domain, ...]:
     presentation order asks ``domain_navigation`` for it.
     """
 
-    return tuple(sorted((*host_domains(), *extension_domains()), key=lambda domain: domain.id))
+    domains = tuple(sorted((*host_domains(), *extension_domains()), key=lambda domain: domain.id))
+    # An id keys attribution on every surface that composes the two.
+    shared = sorted({a.id for a, b in itertools.pairwise(domains) if a.id == b.id})
+    if shared:
+        raise ImproperlyConfigured(f"Two domains declare the id {', '.join(shared)}.")
+    return domains
 
 
 def composition() -> tuple[tuple[str, str, str], ...]:

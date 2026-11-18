@@ -1,7 +1,10 @@
 """Probes of tables: their cells, rows, columns and gutter, and the tables drawn to probe them."""
 
+import json
+
 from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, PAINTED_PART
+from hq.platform.core.tests.browser.probes.shifts import PROBE_MOVES
 from hq.platform.core.tests.browser.selectors import SELECTORS
 
 CELLS = (
@@ -39,18 +42,14 @@ TABLES = (
     "() => {"
     + DESCRIBE
     + """
-  // A table is laid out by the browser's table layout (tables.css), which
-  // keeps every cell under its column's heading, or stacked in a narrow box,
-  // where every value that has a column's name stands under it, and its
+  // A table is laid out by the browser's table layout (tables.css) at every
+  // width, which keeps every cell under its column's heading, and its
   // headings are drawn.
   const width = document.documentElement.clientWidth;
-  const stacked = (table) => {
-    if (getComputedStyle(table).display !== 'block') return false;
-    const rows = [...table.querySelectorAll(':scope > * > tr')].filter((row) => row.checkVisibility());
-    return rows.every((row) => !/^table/.test(getComputedStyle(row).display));
-  };
-  const unlabeled = (table) => [...table.querySelectorAll(':scope > tbody > tr > [data-label]')]
-    .filter((cell) => cell.checkVisibility() && getComputedStyle(cell, '::before').content === 'none');
+  const tabled = (table) => getComputedStyle(table).display === 'table'
+    && [...table.querySelectorAll(':scope > * > tr')].filter((row) => row.checkVisibility())
+      .every((row) => getComputedStyle(row).display === 'table-row'
+        && [...row.cells].every((cell) => !cell.checkVisibility() || getComputedStyle(cell).display === 'table-cell'));
   const found = [];
   let seen = 0;
   let undrawn = 0;
@@ -64,9 +63,7 @@ TABLES = (
     }
     seen += 1;
     const name = describe(table);
-    if (stacked(table)) {
-      for (const cell of unlabeled(table)) found.push(`${describe(cell)} stands stacked without its column's name`);
-    } else if (getComputedStyle(table).display !== 'table') found.push(`${name} is not laid out as a table`);
+    if (!tabled(table)) found.push(`${name} is not laid out as a table`);
     const head = table.querySelector('thead');
     const headings = head ? [...head.querySelectorAll(':scope > tr:last-child > th')] : [];
     if (headings.length && !headings.some((heading) => heading.checkVisibility())) {
@@ -86,70 +83,54 @@ TABLES = (
 }"""
 )
 
+# A table as a finding names it: its region's name, which only a region that
+# scrolls carries, else its first heading with words (a tick-box's says none).
+TABLE_NAME = """
+const tableName = (region, table) => (region.getAttribute('aria-label')
+  || [...table.querySelectorAll('th')].map((th) => th.textContent.replace(/\\s+/g, ' ').trim()).find(Boolean)
+  || 'a table with no headings').slice(0, 24);
+"""
+
 
 # What a table promises past what `TABLES` reads: a group's heading spans its
-# table, the heading row sticks, and a value its cell cuts on a closed row
-# carries its whole text as its cell's title. What breaks one, each named once.
-TABLE_PROMISES = """(scroll) => {
+# table and the heading row sticks. What breaks one, each named once. A value
+# cut in a closed row is `CUT_AND_CLOSED`'s.
+TABLE_PROMISES = (
+    "(scroll) => {"
+    + TABLE_NAME
+    + """
   const found = new Set();
-  const text = (el) => el.textContent.replace(/\\s+/g, ' ').trim();
   for (const region of document.querySelectorAll('main ' + scroll)) {
     const table = region.querySelector(':scope > table');
     if (!table || !table.checkVisibility()) continue;
-    const name = (region.getAttribute('aria-label') || text(table.querySelector('th') || table)).slice(0, 24);
+    const name = tableName(region, table);
     const width = table.getBoundingClientRect().width;
     for (const cell of table.querySelectorAll(':scope > tbody > tr > [colspan]')) {
       if (cell.checkVisibility() && cell.getBoundingClientRect().width < width - 2) found.add(`${name}: a cell across its row spans less`);
     }
-    // The headings stick as cells of their row, or as the line a stacked table draws them in.
+    // The headings stick as cells of their row.
     const head = table.querySelector(':scope > thead > tr');
     const sticks = (el) => el && getComputedStyle(el).position === 'sticky';
     if (head && !sticks(head.parentElement) && ![...head.children].every(sticks)) found.add(`${name}: its heading row does not stick`);
-    for (const row of table.querySelectorAll(':scope > tbody > tr:not(.is-expanded):not([data-row-detail])')) {
-      for (const cell of row.querySelectorAll(':scope > [data-kind]')) {
-        if (!cell.checkVisibility()) continue;
-        const parts = [cell, ...cell.querySelectorAll('*')].filter((el) => el.checkVisibility());
-        const cut = parts.some((el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1);
-        const said = text(cell);
-        if (cut && said && !(cell.title || '').replace(/\\s+/g, ' ').includes(said.slice(0, 24))) {
-          found.add(`${name}: ${said.slice(0, 24)} is cut with no title holding it whole`);
-        }
-      }
-    }
   }
   return [...found];
 }"""
-
-# The first table on a page as a phone lays it out: whether it runs past its
-# box, where each showing column starts and how wide it is, how tall each record's row is, how
-# many rows show their toggle, and the labels of the entries the open rows
-# show on their open lines.
-PHONE_TABLE = """(scroll) => {
-  const box = document.querySelector('main ' + scroll);
-  const table = box && box.querySelector('table');
-  if (!table) return null;
-  const showing = (el) => getComputedStyle(el).display !== 'none';
-  return {
-    sideways: Math.round(box.scrollWidth - box.clientWidth),
-    headings: table.querySelectorAll('thead th').length,
-    columns: [...table.querySelectorAll('thead th')].filter(showing)
-      .map((heading) => [heading.getBoundingClientRect().left, heading.getBoundingClientRect().width].map(Math.round)),
-    rows: [...table.querySelectorAll('tbody > tr:not([data-row-detail]):not(:has(> th[scope="rowgroup"]))')]
-      .map((row) => Math.round(row.getBoundingClientRect().height)),
-    toggles: [...table.querySelectorAll('tbody button[aria-expanded]:not([data-fold-toggle])')].filter((el) => el.checkVisibility()).length,
-    details: [...table.querySelectorAll('tbody > tr.row-detail .row-columns > * > dt')].filter((label) => label.checkVisibility()).map((label) => label.textContent.trim()),
-  };
-}"""
+)
 
 # Every table that is wider than the box it scrolls in, and for each table
 # that has row toggles, how many different left edges its rows' names start on.
-TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' + scroll)]
-  .filter((box) => box.checkVisibility() && !box.closest('details:not([open])'))
-  .map((box) => [box, box.querySelector(':scope > table')])
-  .filter(([box, table]) => table && table.querySelector('tbody td')
-    && table.getBoundingClientRect().width > box.clientWidth + 1)
-  .map(([box, table]) => (box.getAttribute('aria-label') || table.querySelector('th')?.textContent || '').trim().slice(0, 24)
-    + ' +' + Math.round(table.getBoundingClientRect().width - box.clientWidth))"""
+TABLES_THAT_DO_NOT_FIT = (
+    "(scroll) => {"
+    + TABLE_NAME
+    + """
+  return [...document.querySelectorAll('main ' + scroll)]
+    .filter((box) => box.checkVisibility() && !box.closest('details:not([open])'))
+    .map((box) => [box, box.querySelector(':scope > table')])
+    .filter(([box, table]) => table && table.querySelector('tbody td')
+      && table.getBoundingClientRect().width > box.clientWidth + 1)
+    .map(([box, table]) => `${tableName(box, table)} +${Math.round(table.getBoundingClientRect().width - box.clientWidth)}`);
+}"""
+)
 
 
 # A table region's layout at this width, as a value that changes only where the
@@ -526,9 +507,11 @@ ROWS_UNRULED = (
 )
 
 
-# What a row is (its state, a cell its pills say) and what a reader changes in it (a field)
-# never leave with a column a narrow box lets go: a row without them no
-# longer says what it is or does what it is for.
+# What a reader changes in a row (a field) never leaves with a column a narrow
+# box lets go, and what a row is (its state, a cell its pills say) leaves only
+# once no other column that can leave still stands: a row without them no
+# longer says what it is or does what it is for while a column it could
+# spare stands in their place.
 STATE_LEFT = (
     "() => {"
     + DESCRIBE
@@ -539,7 +522,8 @@ STATE_LEFT = (
     // A pill beside a value is a note on it; a cell its pills alone say is the row's state.
     const pills = [...cell.querySelectorAll('.pill')];
     const stated = pills.length && pills.map((pill) => pill.textContent).join('').replace(/\\s+/g, '') === cell.textContent.replace(/\\s+/g, '');
-    const held = cell.querySelector('select, textarea, input:not([type="hidden"])') || (stated ? pills[0] : null);
+    const spared = [...cell.parentElement.children].some((other) => other.matches('[data-drop]') && other.checkVisibility());
+    const held = cell.querySelector('select, textarea, input:not([type="hidden"])') || (stated && spared ? pills[0] : null);
     if (held) found.push(`${describe(cell)} "${(cell.dataset.label || '').slice(0, 30)}" leaves with its column, holding ${describe(held)}`);
   }
   return found;
@@ -611,8 +595,9 @@ CUT_WHEN_OPEN = (
 )
 
 
-# A row offers its toggle only where opening it shows something: an open line
-# with nothing drawn is a chevron that does nothing. A group's toggle opens
+# A row offers its toggle only where opening it shows something: an open row
+# whose toggle stands over a line with nothing drawn is a chevron that does
+# nothing. A group's toggle opens
 # the rows folded under it, so its line may hold nothing.
 OPENS_NOTHING = (
     "() => {"
@@ -621,7 +606,7 @@ OPENS_NOTHING = (
   const found = [];
   for (const row of document.querySelectorAll('main table > tbody > tr.is-expanded:not(:has([data-fold-toggle]))')) {
     const line = row.nextElementSibling;
-    if (!row.checkVisibility() || row.closest('details:not([open])') || !line?.matches('.row-detail')) continue;
+    if (!row.querySelector('[data-row-toggle]')?.checkVisibility() || row.closest('details:not([open])') || !line?.matches('.row-detail')) continue;
     const drawn = [...line.querySelectorAll(':scope > td *')]
       .some((part) => part.checkVisibility() && part.getClientRects().length && box(part).height > 0);
     if (!drawn) found.push(`${describe(row)} opens a line with nothing drawn`);
@@ -674,8 +659,12 @@ SORT_BY = """([scroll, column]) => {
 # each part of that row's cells that showed whole before it opened, a box
 # holding text that neither it nor anything up to its cell cuts: each that
 # moved or changed width once the row opened, as text. Opening a row only
-# lifts cuts, so a part that was whole keeps its box.
-WHOLE_PARTS_MOVED_BY_OPENING = """async (scroll) => {
+# lifts cuts, so a part that was whole keeps its box. The row is closed again,
+# and the time it stood open kept as the check's own move (`PROBE_MOVES`).
+WHOLE_PARTS_MOVED_BY_OPENING = (
+    "async (scroll) => {"
+    + f"const moves = {json.dumps(PROBE_MOVES)};"
+    + """
   const frame = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
   const cuts = (el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
   const whole = (part, cell) => {
@@ -702,6 +691,7 @@ WHOLE_PARTS_MOVED_BY_OPENING = """async (scroll) => {
         && [...part.childNodes].some((node) => node.nodeType === 3 && node.textContent.trim())
         && whole(part, cell)));
     const before = parts.map(edges);
+    const began = performance.now();
     toggle.click();
     await frame();
     parts.forEach((part, at) => {
@@ -710,19 +700,11 @@ WHOLE_PARTS_MOVED_BY_OPENING = """async (scroll) => {
     });
     toggle.click();
     await frame();
+    (window[moves] ??= []).push([began, performance.now()]);
   }
   return moved;
 }"""
-
-# Press the first row toggle (never a family fold) that shows in the page's first table, and say which
-# of its records (counted as PHONE_TABLE counts them) it opened.
-PRESS_FIRST_ROW_TOGGLE = """(scroll) => {
-  const table = document.querySelector('main ' + scroll).querySelector('table');
-  const records = [...table.querySelectorAll('tbody > tr:not([data-row-detail]):not(:has(> th[scope="rowgroup"]))')];
-  const toggle = [...table.querySelectorAll('tbody button[aria-expanded]:not([data-fold-toggle])')].find((el) => el.checkVisibility());
-  toggle.click();
-  return records.indexOf(toggle.closest('tr'));
-}"""
+)
 
 # A row folded under its family (`data-folded`) is drawn only once its family
 # is opened (`data-open`), at every width: a rule that sets a row's display (a
@@ -836,35 +818,6 @@ PAST_THE_GUTTER = (
 )
 
 
-# A table with a column of dashes, a column of marks with no words, and a
-# column of short words: the server marks the dashes blank and they are not
-# drawn, the marks are, and no word is split however the column's width rounds.
-BLANK_TABLE = """{% table_region "Runbooks" %}<table class="data-table">
-<thead><tr>{% table_heading "Title" %}{% table_heading "Type" %}{% table_heading "Nothing" %}
-{% table_heading "Runs" %}{% table_heading "Note" %}</tr></thead><tbody>
-<tr><td>Upgrade a container to a new release</td><td>Runbook</td><td><span class="empty-value">–</span></td>
-<td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td><td>A sentence long enough to take the room it is given and wrap.</td></tr>
-<tr><td>Rotate the signing keys</td><td>Runbook</td><td>–</td>
-<td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td><td>Another sentence that wraps in its column.</td></tr>
-</tbody></table>{% endtable_region %}"""
-
-# A row's two controls with labels of two words, beside a name and a status,
-# in a card: on the narrowest phone their column leaves for the line beneath
-# the row, each label whole. Beside it a table that nothing it gives can fit,
-# a cell asking more than a phone has, which scrolls in its region rather than
-# run past its card.
-ROW_ACTIONS_TABLES = """<section class="card">
-{% table_region "Devices" %}<table class="data-table" data-probe="actions"><thead><tr>
-{% table_heading "Device" "identifier" gutter=True %}{% table_heading "Approval" "status" %}
-{% table_heading "Calls" drop=1 %}{% table_heading "Approve or block" "control" hidden=True drop=2 %}</tr></thead><tbody>
-<tr><th scope="row">example-host-01</th><td><span class="pill">Needs approval</span></td><td>2 calls</td>
-<td class="row-actions"><form><button type="button" class="btn compact primary">Withdraw approval</button></form><form><button type="button" class="btn compact">Block device</button></form></td></tr>
-</tbody></table>{% endtable_region %}
-{% table_region "Unfittable" %}<table class="data-table" data-probe="unfittable"><thead><tr>{% table_heading "Name" %}</tr></thead><tbody>
-<tr><td><span style="display: inline-block; inline-size: 40rem">Example wider than any phone</span></td></tr>
-</tbody></table>{% endtable_region %}
-</section>"""
-
 COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
   .filter((th) => getComputedStyle(th).display !== 'none').map((th) => th.textContent.replace(/[^A-Za-z ]/g, '').trim())"""
 
@@ -952,20 +905,6 @@ CUT_TABLE = (
 # already safe, so `breakable` would pass it as plain words, which wrap.
 CUT_VALUES = {"chip": _CHIP}
 
-# Rows that open, as an event's log draws them: a host name in a column a
-# phone lets go, so an opened row shows it in the line beneath, and a value
-# its cell cuts while the row is closed.
-OPEN_ROW_TABLE = """{% load value_tags %}
-{% table_region "Opened" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" gutter=True %}{% table_heading "Object" drop=1 %}{% table_heading "Note" %}</tr></thead><tbody>
-<tr><td>Updated</td><td>{{ host|breakable }}</td>
-<td><span style="display: inline-block; inline-size: 14rem">A note that keeps its line</span></td></tr>
-<tr><td>Created</td><td>{{ host|breakable }}</td>
-<td>a value far too long to show whole on one line of its column, so its cell cuts it while the row is closed</td></tr>
-</tbody></table>{% endtable_region %}"""
-
-OPEN_ROW_VALUES = {"host": "example-hostname-with-a-long-descriptive-name-01.example.com"}
-
 # A panel shown from a cell, as an item's origin is: a key and a source too
 # long for the cell, which the panel has the room to show whole.
 POPOVER_IN_A_CELL = """{% load value_tags %}
@@ -987,64 +926,6 @@ ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-det
   shown: [...row.querySelectorAll('button[aria-expanded]')].some((toggle) => toggle.checkVisibility()),
   beside_name: row.querySelector('button[aria-expanded]')?.parentElement === row.cells[0],
 }))"""
-
-# A path's steps, as the service page draws them: an address with a port, a
-# host name and a list of networks beside sentences, in tables with ranked
-# columns to let go; what each prints is in IDENTIFIER_VALUES.
-IDENTIFIER_TABLES = """{% load value_tags %}
-{% table_region "Steps" %}<table class="data-table"><thead><tr>
-{% table_heading "Step" gutter=True %}{% table_heading "Name" "identifier" %}{% table_heading "State" "status" %}
-{% table_heading "Since" drop=3 %}{% table_heading "Impact" drop=2 %}{% table_heading "Read from" drop=1 %}</tr></thead><tbody>
-<tr><td>Proxy host</td><td><a href="/proxy/" data-entity="Proxy host">{{ address|breakable }}</a></td>
-<td><span class="pill">Up</span></td><td>1 day</td><td>If it is removed, the name stops reaching the app it serves.</td>
-<td>Read from the proxy's own list of hosts, a minute ago</td></tr>
-<tr><td>Forwards to</td><td>{{ address|breakable }}</td><td><span class="pill">Up</span></td><td>1 day</td>
-<td>If nothing listens there, a reader gets a gateway error.</td><td>Read from the container's ports</td></tr>
-<tr><td>Service</td><td><span data-entity="Service">{{ host|breakable }}</span></td><td></td><td>1 day</td>
-<td>The service stops answering at this name.</td><td>Declared in HQ</td></tr>
-</tbody></table>{% endtable_region %}
-{% table_region "Access" %}<table class="data-table"><thead><tr>
-{% table_heading "Access list" gutter=True %}{% table_heading "Admits by" drop=3 %}
-{% table_heading "Addresses" drop=2 %}{% table_heading "Logins" drop=1 %}</tr></thead><tbody>
-<tr><td>office only</td><td>Address rules</td><td>{{ networks|breakable }}</td><td>{{ logins|breakable }}</td></tr>
-</tbody></table>{% endtable_region %}"""
-
-IDENTIFIER_VALUES = {
-    "address": "203.0.113.214:8000",
-    "host": "status.example.com",
-    "networks": "allow 198.51.100.0/24; allow 2001:db8:a1e0::/48",
-    "logins": "none",
-}
-
-
-# A stacked row's field, and every value of a column a row fills a field in,
-# stands under its column's name: without it a reader of a row of choices
-# cannot tell whose each one is, as a rule's choice for each agent is. The
-# cell that names the row says what the row is, so it carries no name.
-VALUES_UNNAMED = (
-    "() => {"
-    + DESCRIBE
-    + """
-  const found = [];
-  const field = 'select, textarea, input:not([type="hidden"], [type="submit"], [type="button"])';
-  for (const table of document.querySelectorAll('main table.data-table')) {
-    if (!table.checkVisibility() || getComputedStyle(table).display !== 'block') continue;
-    const heads = [...table.querySelectorAll(':scope > thead > tr:last-child > th')];
-    const rows = [...table.querySelectorAll(':scope > tbody > tr:not(.row-detail)')].filter((row) => row.checkVisibility());
-    const valued = new Set(rows.flatMap((row) => [...row.cells].filter((cell) => cell.querySelector(field)).map((cell) => cell.cellIndex)));
-    for (const row of rows) {
-      const naming = row.querySelector(':scope > .select-column + *') || row.cells[0];
-      for (const cell of row.cells) {
-        const name = (heads[cell.cellIndex]?.textContent || '').trim();
-        if (cell === naming || !name || !valued.has(cell.cellIndex) || !cell.checkVisibility() || !cell.innerText.trim() && !cell.querySelector(field)) continue;
-        if (getComputedStyle(cell, '::before').content === 'none') found.push(`${describe(table)}: "${naming.innerText.trim().replace(/\\s+/g, ' ').slice(0, 24)}" stacks its value under "${name.slice(0, 24)}" without the column's name`);
-      }
-    }
-  }
-  return found;
-}"""
-)
-
 
 # The survey checks these probes answer (`probes/__init__.py`); the table
 # checks (`table=True`) are read again by the sweep of every width
@@ -1074,9 +955,6 @@ CHECKS = {
         table=True,
         reader_sees="words a few to a line beside a column holding room it does not need",
     ),
-    "values named": Check(
-        VALUES_UNNAMED, table=True, reader_sees="a row's choices stacked with no name saying whose each one is"
-    ),
     "empty panels": Check(EMPTY_PANELS, table=True, reader_sees="a panel in a table with nothing in it"),
     "rows unruled": Check(ROWS_UNRULED, table=True, reader_sees="two rows with no rule between them"),
     "row state kept": Check(
@@ -1089,6 +967,15 @@ CHECKS = {
         (CUT_WHEN_OPEN, SELECTORS["unseen"]), table=True, reader_sees="a value still cut in its opened row"
     ),
     "opens nothing": Check(OPENS_NOTHING, table=True, reader_sees="a row's toggle that opens nothing"),
+    "table promises": Check(
+        (TABLE_PROMISES, SELECTORS["table_scroll"]),
+        reader_sees="a table's heading row scrolling away, or a cell across its row stopping short",
+    ),
+    "whole parts moved by opening": Check(
+        (WHOLE_PARTS_MOVED_BY_OPENING, SELECTORS["table_scroll"]),
+        scripted=True,
+        reader_sees="a row's words moving when the row is opened",
+    ),
     "folded rows stay folded": Check(
         FOLDED_ROWS_SHOWN, table=True, scripted=True, reader_sees="a folded row drawn while its group is closed"
     ),

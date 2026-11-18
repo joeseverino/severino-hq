@@ -5,13 +5,15 @@ nothing inventories a printer, and how a place takes a certificate is a fact
 about the place that no provider reports.
 """
 
-from typing import Any, Literal
-lazy import ipaddress
+from typing import Annotated, Any, Literal, override
 
 from django.urls.converters import StringConverter
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, GetJsonSchemaHandler, WithJsonSchema, field_validator, model_validator
+from pydantic_core import CoreSchema
 
+from hq.platform.application.command_fields import RequiredText
 from hq.platform.application.labels import dotted
+from hq.platform.application.stored_columns import IPV4, IPV6
 from hq.platform.application.ui import ended
 lazy from hq.platform.application.expiry import days_until
 lazy from hq.platform.application.moments import moment, stamp_day
@@ -32,6 +34,10 @@ MACHINE_KIND = "machine"
 DELIVERY_TARGET_KIND = "tls.delivery_target"
 
 
+# An address, or a network with its prefix length, as ``ipaddress`` reads one.
+_CIDR = rf"^(?:{IPV4}(?:/(?:3[0-2]|[12]?[0-9]))?|{IPV6}(?:/(?:12[0-8]|1[01][0-9]|[1-9]?[0-9]))?)$"
+
+
 class NetworkSpec(ProviderModel):
     """A range of addresses this estate is built on, and what it means.
 
@@ -42,15 +48,14 @@ class NetworkSpec(ProviderModel):
     by different people, and only the ranges say which is which.
     """
 
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=120,
         title="Name",
         description="A short name for this range.",
     )
-    cidr: str = Field(
-        min_length=1,
+    cidr: RequiredText = Field(
         max_length=64,
+        pattern=_CIDR,
         title="Range",
         description="The range in CIDR form, e.g. 198.51.100.0/24.",
     )
@@ -67,15 +72,6 @@ class NetworkSpec(ProviderModel):
         description=("One line. What uses this range."),
     )
 
-    @field_validator("cidr")
-    @classmethod
-    def a_real_range(cls, value: str) -> str:
-        try:
-            ipaddress.ip_network(value, strict=False)
-        except ValueError as exc:
-            raise ValueError("Not a valid CIDR range.") from exc
-        return value
-
 
 class CertificateAuthoritySpec(ProviderModel):
     """A certificate authority this estate trusts, and where its key lives.
@@ -87,8 +83,7 @@ class CertificateAuthoritySpec(ProviderModel):
     watching is the failure this records.
     """
 
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=160,
         title="Authority",
         description="The issuer name, as it appears in certificates.",
@@ -99,11 +94,13 @@ class CertificateAuthoritySpec(ProviderModel):
         title="Issues",
         description="One line. The certificates this authority signs.",
     )
-    expires_on: str = Field(
-        default="",
-        max_length=10,
-        title="Expires",
-        description="ISO date, e.g. 2036-05-02. Blank if it does not expire.",
+    expires_on: Annotated[str, WithJsonSchema({"anyOf": [{"const": ""}, {"type": "string", "format": "date"}]})] = (
+        Field(
+            default="",
+            max_length=10,
+            title="Expires",
+            description="ISO date, e.g. 2036-05-02. Blank if it does not expire.",
+        )
     )
     key_location: str = Field(
         default="",
@@ -138,8 +135,7 @@ class MachineSpec(ProviderModel):
 
     # The machine page's `<str:name>` converter: a name it cannot route to
     # would be a machine with no page.
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=160,
         pattern=rf"^{StringConverter.regex}$",
         title="Name",
@@ -177,14 +173,12 @@ class TLSDeliveryTargetSpec(ProviderModel):
         title="Type",
         description="Sets how the certificate is delivered and verified.",
     )
-    connection_ref: str = Field(
-        min_length=1,
+    connection_ref: RequiredText = Field(
         max_length=160,
         title="Connection",
         description="The connection HQ uses to reach this target.",
     )
-    name: str = Field(
-        min_length=1,
+    name: RequiredText = Field(
         max_length=160,
         title="Name at target",
         description=("The certificate's name on the target. Used only by the certificate below."),
@@ -238,28 +232,60 @@ class TLSDeliveryTargetSpec(ProviderModel):
     def kind_decides_which_settings_apply(self) -> TLSDeliveryTargetSpec:
         # Refused rather than ignored. A directory typed against an NPM target
         # would sit there looking configured while nothing ever read it.
-        for field_name, kind in (
-            ("certificate_directory", "caddy"),
-            ("discover_covered_hosts", "npm"),
-            ("install_domains", "cpanel"),
-            ("vault", "onepassword"),
-            ("item", "onepassword"),
-        ):
+        for field_name, kind in _ONLY_FOR:
             if getattr(self, field_name) and self.kind != kind:
                 raise ValueError(
                     f"{TLSDeliveryTargetSpec.model_fields[field_name].title!r} "
                     f"applies only to {kind} targets. This one is {self.kind}."
                 )
-        if self.kind == "caddy" and not self.certificate_directory:
-            raise ValueError("A Caddy target needs a certificate directory.")
-        if self.kind == "onepassword" and not (self.vault and self.item):
-            raise ValueError("A 1Password target needs a vault and an item.")
+        for kind, needed in _NEEDS.items():
+            if self.kind == kind and not all(getattr(self, field_name) for field_name in needed):
+                titles = ((TLSDeliveryTargetSpec.model_fields[name].title or name).lower() for name in needed)
+                named = " and ".join(f"{'an' if title[0] in 'aeiou' else 'a'} {title}" for title in titles)
+                raise ValueError(f"A {_KIND_LABELS[kind]} target needs {named}.")
         # Nothing is served here, so there is nothing to connect to and check.
         # Refused rather than ignored, for the same reason as the rest: a name
         # typed here would read as verified and never be probed.
-        if self.kind == "onepassword" and self.verify_domains:
-            raise ValueError("A 1Password target serves nothing. Leave the names to check empty.")
+        if self.kind in _SERVES_NOTHING and self.verify_domains:
+            raise ValueError(f"A {_KIND_LABELS[self.kind]} target serves nothing. Leave the names to check empty.")
         return self
+
+    @classmethod
+    @override
+    def __get_pydantic_json_schema__(cls, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
+        declared: dict[str, Any] = handler(schema)
+        handler.resolve_ref_schema(declared)["anyOf"] = [_target_of(kind) for kind in _KIND_LABELS]
+        return declared
+
+
+# Each setting that applies to one kind of target alone, what each kind needs
+# filled, and the kinds that serve nothing to check.
+_ONLY_FOR = (
+    ("certificate_directory", "caddy"),
+    ("discover_covered_hosts", "npm"),
+    ("install_domains", "cpanel"),
+    ("vault", "onepassword"),
+    ("item", "onepassword"),
+)
+_NEEDS = {"caddy": ("certificate_directory",), "onepassword": ("vault", "item")}
+_SERVES_NOTHING = ("onepassword",)
+_KIND_LABELS = {"npm": "Nginx Proxy Manager", "caddy": "Caddy", "cpanel": "cPanel", "onepassword": "1Password"}
+# A setting left unset, by what it holds.
+_UNSET: dict[Any, dict[str, Any]] = {str: {"maxLength": 0}, bool: {"const": False}, list[str]: {"maxItems": 0}}
+
+
+def _target_of(kind: str) -> dict[str, Any]:
+    """What ``kind_decides_which_settings_apply`` holds a target of ``kind``
+    to, as a schema branch beside the spec's fields."""
+
+    fields = TLSDeliveryTargetSpec.model_fields
+    unset = [name for name, only in _ONLY_FOR if only != kind]
+    unset += ["verify_domains"] if kind in _SERVES_NOTHING else []
+    needed = _NEEDS.get(kind, ())
+    properties: dict[str, Any] = {"kind": {"const": kind}}
+    properties |= {name: _UNSET[fields[name].annotation] for name in unset}
+    properties |= {name: {"minLength": 1} for name in needed}
+    return {"properties": properties, "required": ["kind", *needed]}
 
 
 def _network_key_hint(spec: dict[str, Any]) -> str:

@@ -27,7 +27,10 @@ from .test_tailnet_posture import policy, raised, tailnet_connection
 def steps_text(finding) -> str:
     """Every word of a serialized finding's operator steps."""
 
-    return " ".join(" ".join((step["label"], step["command"], *step["notes"])) for step in finding["operator_steps"])
+    return " ".join(
+        " ".join((step.get("label", ""), step.get("text", ""), step.get("command", ""), *step.get("notes", ())))
+        for step in finding["steps"]
+    )
 
 
 def document(**parts) -> str:
@@ -74,7 +77,7 @@ class EveryRuleSaysHowTests(TestCase):
         (finding,) = raised("devices-join-without-approval")
 
         self.assertIn("Device approval", steps_text(finding))
-        self.assertEqual(finding["remedies"], [])
+        self.assertEqual([step["link"] for step in finding["steps"] if step["kind"] == "press"], [])
 
 
 def _detects_findings(detect) -> bool:
@@ -187,9 +190,9 @@ class ProductionFindingsTests(TestCase):
 
         (finding,) = raised("empty-group-granted")
 
-        self.assertEqual(without["remedies"], [])
+        self.assertEqual([step["link"] for step in without["steps"] if step["kind"] == "press"], [])
         self.assertIn("group:empty", steps_text(without))
-        (remedy,) = finding["remedies"]
+        (remedy,) = [step["link"] for step in finding["steps"] if step["kind"] == "press"]
         self.assertEqual(remedy["capability"], "tailnet.policy.remove_empty_groups")
         self.assertEqual(remedy["target"], POLICY_KEY)
 
@@ -234,7 +237,12 @@ class ProductionFindingsTests(TestCase):
         (finding,) = raised("unrecognized-container")
 
         self.assertIn("docker rm -f example-leftover", steps_text(finding))
-        self.assertTrue(any(remedy["label"] == "Adopt it" for remedy in finding["remedies"]))
+        self.assertTrue(
+            any(
+                remedy["label"] == "Adopt it"
+                for remedy in [step["link"] for step in finding["steps"] if step["kind"] == "press"]
+            )
+        )
 
 
 class FindingsPageTests(TestCase):

@@ -76,7 +76,10 @@ Rules:
   that read it, and a rule walks them with `connections_carrying(estate, key)`
   (`finding_model.py`), as `dns_findings.py` does. The estate already holds
   every connection's node, so a new finding of this kind needs no read of its
-  own.
+  own. A fact is one value: a rule that reads several fields of a record
+  together is `gathered` and reads the record as a typed row
+  (`github_findings.py`, `reading_facts.ReadingRow`), never a value packed
+  into a fact and split back.
 - **A refused read is an error.** The sweep stores the kind as unreachable with
   the reason, and the page shows it with `requires`. No records means the
   provider has none.

@@ -110,7 +110,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="name",
             ),
             web_route="projects:list",
-            row_type=ProjectRow,
+            item_type=ProjectRow,
             record_type=ProjectRecord,
         ),
     )

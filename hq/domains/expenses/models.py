@@ -54,6 +54,7 @@ class Expense(TimestampedModel):
 
     related_project = models.ForeignKey(
         "projects.Project",
+        verbose_name="project",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -61,6 +62,7 @@ class Expense(TimestampedModel):
     )
     related_asset = models.ForeignKey(
         "assets.Asset",
+        verbose_name="asset",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -68,6 +70,7 @@ class Expense(TimestampedModel):
     )
     related_content = models.ForeignKey(
         "content.ContentItem",
+        verbose_name="writeup or page",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -75,6 +78,7 @@ class Expense(TimestampedModel):
     )
     related_documentation = models.ForeignKey(
         "docs_index.DocumentationRecord",
+        verbose_name="document",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -92,7 +96,7 @@ class Expense(TimestampedModel):
     paid_from_name = models.CharField(max_length=200, blank=True, default="", editable=False)
     # What it was for, where that is not one of the four records above.
     about = ReferenceField(
-        "for",
+        "also for",
         but=("project", "asset", "writeup", "document", "expense", "receipt"),
         heading="Expenses",
         shows=("vendor", "item", "date", "total_cost"),

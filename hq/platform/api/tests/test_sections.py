@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass, replace
+from typing import TypedDict
 
 from django.test import SimpleTestCase
 
@@ -22,6 +23,10 @@ class _Nothing:
 
 class _ExampleQuery(TopQuery):
     pass
+
+
+class _ExampleRow(TypedDict):
+    name: str
 
 
 def _rows(*, limit: int = 50) -> dict:
@@ -48,9 +53,11 @@ def _trails():
         operator_capabilities=("example.trails.write",),
     )
     command = CapabilitySpec(
-        "example.trails.log", "Log a walk.", "remote_write", "example.trails.write", _Nothing, _run, label="Log a walk"
+        "example.walk.create", "Log a walk.", "remote_write", "example.trails.write", _Nothing, _run, label="Log a walk"
     )
-    rows = ResourceSpec("example.trails.walks", "Walks", "Every walk logged.", Capability.READ, _rows, _ExampleQuery)
+    rows = ResourceSpec(
+        "example.walks", "Walks", "Every walk logged.", Capability.READ, _rows, _ExampleQuery, item_type=_ExampleRow
+    )
     work = OutboundWork(
         name="example.trails.sync",
         label="Sync walks",
@@ -73,7 +80,13 @@ def _summits():
         navigation=(NavigationItem("Summits", "example_summits:home", "example_summits", 41, "Trails"),),
     )
     rows = ResourceSpec(
-        "example.summits.reached", "Reached", "Every summit reached.", Capability.READ, _rows, _ExampleQuery
+        "example.summits",
+        "Reached",
+        "Every summit reached.",
+        Capability.READ,
+        _rows,
+        _ExampleQuery,
+        item_type=_ExampleRow,
     )
     return manifest, replace(integration, resources=lambda: (rows,))
 
@@ -130,9 +143,9 @@ class SectionsTests(SimpleTestCase):
             document = openapi.document()
         paths = document["paths"]
         for where in (
-            paths["/api/v2/capabilities/example.trails.log/"]["post"],
+            paths["/api/v2/capabilities/example.walk.create/"]["post"],
             paths["/api/v2/capabilities/example.trails.sync/"]["post"],
-            paths["/api/v2/resources/example.trails.walks/"]["get"],
+            paths["/api/v2/resources/example.walks/"]["get"],
         ):
             self.assertEqual(where["tags"], ["example.trails"])
         self._sections_hold(document)

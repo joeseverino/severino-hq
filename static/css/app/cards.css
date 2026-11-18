@@ -42,39 +42,6 @@
 .cat-dot.cat-cybersecurity_labs { background: var(--cat-cybersecurity-labs); }
 .cat-dot.cat-other { background: var(--cat-other); }
 
-/* ── KPI grid ───────────────────────────────────────────────────── */
-
-/* Wrapping row, not a track grid. The 1px hairlines are the container's own
-   background showing through the gaps, so any track a grid left empty would
-   paint as a solid gray block. A flex row has no cells to leave empty:
-   whatever wraps grows to fill its row instead, at every width. */
-.kpi-grid { display: flex; flex-wrap: wrap; margin: 0 0 var(--stack-gap); }
-.kpi { flex: 1 1 150px; min-width: 0; padding: var(--space-7) var(--space-8); display: flex; flex-direction: column; gap: var(--space-2); }
-/* A linked figure reads as one target by its tile, which tints under the
-   pointer and the focus, so it wears no underline on its label or value. A
-   figure whose value is its link (it holds links of its own) tints the same
-   way while its value is pointed at or focused. */
-a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
-:is(a.kpi:is(:hover, :focus-visible), .kpi:has(> .kpi-figure > a.value:is(:hover, :focus-visible))) { background: var(--surface-2); }
-.kpi .label { color: var(--muted); font-size: var(--text-xs); }
-/* A mark for what the figure counts: quieter than the label it sits before.
-   The label is a row, so a label too long for its column wraps beside its
-   mark, never underneath it. */
-.kpi .label:has(> .icon) { display: flex; align-items: flex-start; gap: var(--space-3); }
-.kpi .label .icon { width: 14px; height: 14px; margin-top: 1px; color: var(--muted-2); }
-/* The supporting figures of an overview stand three to a row. In a card too
-   narrow for a mark and its label to fit one of those columns, the mark goes:
-   a label running into its neighbor costs more than the mark is worth. */
-.kpi-grid.is-featured > :not(:first-child) .label .icon { display: none; }
-@container kpi (min-width: 325px) {
-  .kpi-grid.is-featured > :not(:first-child) .label .icon { display: inline; }
-}
-/* Tall enough for the face's ascent and descent, so the lines of a value that
-   wraps (a range beside its unit, a phrase) never draw into each other. */
-.kpi .value { font-size: var(--text-4xl); font-weight: 650; letter-spacing: -.018em; line-height: 1.2; font-feature-settings: "tnum"; }
-.kpi.is-zero .value { color: var(--muted-2); font-weight: 500; }
-.kpi .muted { font-size: var(--text-2xs); }
-
 /* The tooltip: chart marks, and anything else carrying data-tip. Fixed to the viewport and inert to the pointer, so it can
    never sit between the cursor and the mark it is describing. */
 .chart-tip {
@@ -164,7 +131,8 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 .pill.is-mark { padding: 0 var(--space-3); font-size: var(--text-xs); line-height: 1.5; font-weight: 600; }
 /* A row dismissed in place (app.js): its title, quiet, and the way back, the button that posts its key (action_tags.triage). */
 [data-attention-item][data-dismissed] > .row-gutter > :not(.row-line),
-[data-attention-item][data-dismissed] > .row-actions > :not(button[name="key"]),
+[data-attention-item][data-dismissed] > .row-actions > :not(button[name="key"], .cell-controls),
+[data-attention-item][data-dismissed] > .row-actions > .cell-controls > :not(button[name="key"]),
 [data-attention-item][data-dismissed] .pill.is-mark { display: none; }
 [data-attention-item][data-dismissed] [data-attention-title] { color: var(--muted); font-weight: 400; }
 [data-attention-item][data-dismissed] [data-attention-title]::before { content: "Dismissed: " / "Dismissed: "; }

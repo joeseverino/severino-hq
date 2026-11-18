@@ -1,16 +1,9 @@
-"""The notice: every banner and message a page shows, in one of its tones.
-
-``{% notice tone="warning" title="2 jobs failed" %}<p>What to do.</p>{% endnotice %}``
-draws ``partials/_notice.html``. A title the page composes (words around a
-value, a loop) is its ``{% title %}`` part, after the body. A message among
-the page's messages is the same part in a toast's placement (``.messages``),
-never a second part.
-"""
+"""The notice: every banner and message a page shows, in one of its tones."""
 
 from django import template
 
 from hq.platform.application.page_parts import html_attributes
-from hq.platform.core.templatetags.value_tags import slotted
+from hq.platform.core.template_parts import Option, Part, slotted
 
 register = template.Library()
 
@@ -28,18 +21,16 @@ TONES = {
 }
 
 
-def notice_frame(name: str, given: dict) -> dict:
+def notice_frame(_name: str, given: dict) -> dict:
     """What the partial draws from what a page gave: the classes of its tone,
     the live region it is (an error interrupts, anything else waits its turn)
     and its ``data-`` attributes."""
 
-    tone = given.get("tone") or ""
-    if tone not in TONES:
-        raise template.TemplateSyntaxError(f"{name} tone= is one of {', '.join(sorted(filter(None, TONES)))}")
+    tone = given["tone"]
     return {
-        "classes": " ".join((TONES[tone], given.get("css") or "")).strip(),
+        "classes": " ".join((TONES[tone], given["css"] or "")).strip(),
         "role": "alert" if tone == "error" else "status",
-        "title": given.get("title") or "",
+        "title": given["title"] or "",
         "data": html_attributes(
             {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
         ),
@@ -47,10 +38,24 @@ def notice_frame(name: str, given: dict) -> dict:
 
 
 slotted(
-    "notice",
-    NOTICE_PARTIAL,
-    ("content", "title"),
-    frozenset(("tone", "title", "css")),
-    shape=notice_frame,
+    Part(
+        name="notice",
+        partial=NOTICE_PARTIAL,
+        about=(
+            "Every banner and message a page shows, in one of its tones; a message among the page's messages is "
+            "the same part in a toast's placement. A title the page composes is its `{% title %}` part, after "
+            "the body."
+        ),
+        parts=("content", "title"),
+        options={
+            "tone": Option(choices=tuple(TONES), about="Its tone, none for a neutral notice; an error is an alert."),
+            "title": Option(about="Its first line, in bold."),
+            "css": Option(about="The classes of where it stands."),
+        },
+        data=True,
+        public=True,
+        example='{% notice tone="warning" title="2 jobs failed" %}<p>What to do.</p>{% endnotice %}',
+        shape=notice_frame,
+    ),
     library=register,
 )

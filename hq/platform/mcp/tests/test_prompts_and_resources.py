@@ -11,9 +11,11 @@ from mcp import Client
 from mcp.shared.exceptions import MCPError
 from mcp.shared.uri_template import UriTemplate
 
-from hq.platform.application.finding_model import Finding, FindingRemedy
+from hq.platform.application.finding_model import Finding
+from hq.platform.application.finding_steps import Press
 from hq.platform.application.findings import RULES
 from hq.platform.application.security import Capability, Principal
+from hq.platform.application.tests.links import example_command
 
 from ..identity import set_principal
 from ..server import mcp
@@ -59,7 +61,19 @@ class PromptTests(TestCase):
             title="Example",
             severity="serious",
             explanation="Example.",
-            remedies=(FindingRemedy("infrastructure.resource.reconcile", "example-subject"),),
+            # As resolution leaves it: its remedy the press that runs it.
+            steps=(
+                Press(
+                    example_command(
+                        "remedy",
+                        "Reconcile",
+                        "remote_write",
+                        "/commands/infrastructure.resource.reconcile/",
+                        capability="infrastructure.resource.reconcile",
+                        target="example-subject",
+                    )
+                ),
+            ),
         )
 
         async def steps(client):
@@ -72,7 +86,7 @@ class PromptTests(TestCase):
         (problem,) = json.loads(said)["problems"]["findings"]
         # The same calls get_findings answers, so a brief's remedy is run as it reads.
         self.assertEqual(
-            [(remedy["tool"], remedy["arguments"]["name"]) for remedy in problem["remedies"]],
+            [(step["call"]["tool"], step["call"]["arguments"]["name"]) for step in problem["steps"]],
             [("execute_capability", "infrastructure.resource.reconcile")],
         )
 

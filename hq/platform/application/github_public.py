@@ -9,7 +9,7 @@ import json
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
-from pydantic import AfterValidator
+from pydantic import AfterValidator, Field
 
 from .http_read import UNREACHABLE, fetch
 lazy from .entity_links import https_url
@@ -76,5 +76,10 @@ def _repository_url(value: str) -> str:
     return value
 
 
-# A field holding a GitHub repository's URL, or blank.
-GitHubRepositoryURL = Annotated[str, AfterValidator(_repository_url)]
+# A field holding a GitHub repository's URL, or blank: its schema says the
+# owner and repository names GitHub gives, which ``_repository_url`` reads.
+GitHubRepositoryURL = Annotated[
+    str,
+    Field(pattern=r"^(?:https://(?:www\.)?github\.com/[A-Za-z0-9-]+/[A-Za-z0-9_-][A-Za-z0-9_.-]*/?)?$"),
+    AfterValidator(_repository_url),
+]

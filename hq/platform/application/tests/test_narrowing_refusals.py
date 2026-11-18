@@ -9,6 +9,7 @@ from hq.domains.control_plane.models import ManagedResource
 
 from ..findings import finding_rules, findings
 from ..projection import QueryRefusal
+from ..record_errors import RecordNotFound
 from ..refusal_status import refusal_of
 from ..security import Capability, Principal
 from ..topology import derive_topology, topology
@@ -30,7 +31,7 @@ class TopologyNarrowingTests(TestCase):
     def refusal(self, **narrowing) -> str:
         """What either door answers for ``narrowing``, which names get_topology."""
 
-        with host_only(), self.assertRaises((QueryRefusal, ValidationError)) as refused:
+        with host_only(), self.assertRaises((QueryRefusal, ValidationError, RecordNotFound)) as refused:
             topology(principal=READ, **narrowing)
         return refusal_of(refused.exception, name="get_topology").message
 
@@ -54,7 +55,9 @@ class TopologyNarrowingTests(TestCase):
             self.assertIn(lens.name, reason)
         self.assertNotIn("not-a-lens", reason)
 
-    def test_an_unknown_focus_is_refused_and_says_where_ids_come_from(self):
+    def test_an_unknown_focus_is_not_found_and_says_where_ids_come_from(self):
+        with host_only(), self.assertRaises(RecordNotFound):
+            topology(principal=READ, focus="resource:not-a-record")
         reason = self.refusal(focus="resource:not-a-record")
 
         self.assertIn("lens", reason)

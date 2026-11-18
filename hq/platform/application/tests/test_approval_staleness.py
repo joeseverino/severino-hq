@@ -12,7 +12,7 @@ from hq.platform.application.contracts import Closed
 from hq.platform.core.models import AuditLog
 
 from ..approval_review import preview
-from ..approvals import AUDIT_LABELS, ApprovalError, ApproveCommand, approve
+from ..approvals import AUDIT_LABEL, ApprovalError, ApproveCommand, approve
 from ..capabilities import execute_capability, run_capability
 from ..domains import records_of
 from ..projects import DEPENDENCY_UPDATES
@@ -156,7 +156,7 @@ class SettledThroughTheRunnerTests(TestCase):
     def settled_as(self, state: str) -> None:
         self.held.refresh_from_db()
         self.assertEqual(self.held.state, state)
-        said = AuditLog.objects.filter(object_type__in=AUDIT_LABELS, object_id=str(self.held.id))
+        said = AuditLog.objects.filter(object_type=AUDIT_LABEL, object_id=str(self.held.id))
         self.assertTrue(said.exclude(action=AuditLog.Action.CREATED).exists(), "the settle is in the audit log")
 
     def test_a_moved_baseline_is_refused_and_stays_stale(self):

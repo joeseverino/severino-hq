@@ -8,7 +8,6 @@ controller reports its connections, or a reachable read listed the domains.
 """
 
 from collections.abc import Iterable, Mapping
-from dataclasses import replace
 from typing import Any
 
 from hq.domains.control_plane.models import REFERENCE_COLUMNS
@@ -17,17 +16,14 @@ from hq.domains.control_plane.providers import PROVIDERS, read_record
 
 from .connection_lifecycle import UNREPORTED_NODE
 from .entity_links import node_name
-from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule, fact_values
+from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted, ended
 lazy from .facts import snapshots_of
+lazy from .infrastructure import declared_resources
 
 RULE = "names-nothing"
-NO_CONNECTION = "names-no-connection"
-# The kind of thing that is missing, beside its name, as ``kind\x1fname``.
-NO_PARENT = "names-no-parent"
-_SEPARATOR = "\x1f"
 
 
 def containments() -> tuple[tuple[str, str, str, str], ...]:
@@ -91,26 +87,6 @@ def _missing_parents(resources: Iterable[Any]) -> dict[str, tuple[str, str]]:
     return found
 
 
-def add(nodes: dict[str, TopologyNode], resources: Iterable[Any]) -> None:
-    """One fact on each declaration's node per link that names nothing."""
-
-    listed = tuple(resources)
-    reported = _reported_connections(nodes)
-    parents = _missing_parents(listed)
-    for resource in listed:
-        node = nodes.get(f"resource:{resource.key}")
-        if node is None:
-            continue
-        facts: list[tuple[str, str]] = []
-        ref = resource.connection_ref
-        if ref and reported and ref not in reported:
-            facts.append((NO_CONNECTION, ref))
-        if resource.key in parents:
-            facts.append((NO_PARENT, _SEPARATOR.join(parents[resource.key])))
-        if facts:
-            nodes[node.id] = replace(node, facts=node.facts + tuple(facts))
-
-
 def _edit(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     return (
         FindingRemedy(
@@ -156,23 +132,23 @@ def _no_parent(node: TopologyNode, kind: str, missing: str) -> Finding:
 
 
 def _names_nothing(estate: FindingEstate) -> tuple[Finding, ...]:
-    """A record whose connection or domain matches nothing HQ knows.
+    """A record whose connection or domain matches nothing HQ knows."""
 
-    The facts are added while the estate is built (``add``), where the
-    declarations and the readings are already in hand; a rule reads the
-    estate and asks nothing of its own.
-    """
-
-    reported = tuple(sorted(_reported_connections({node.id: node for node in estate.nodes()})))
+    nodes = {node.id: node for node in estate.nodes()}
+    reported = _reported_connections(nodes)
+    listed = declared_resources()
+    parents = _missing_parents(listed)
     found: list[Finding] = []
-    for node in estate.nodes():
-        if node.kind != "resource" or not node.managed:
+    for resource in listed:
+        node = nodes.get(f"resource:{resource.key}")
+        if node is None or node.kind != "resource" or not node.managed:
             continue
-        found.extend(_no_connection(node, ref, reported) for ref in fact_values(node, NO_CONNECTION))
-        for fact in fact_values(node, NO_PARENT):
-            kind, _, missing = fact.partition(_SEPARATOR)
-            if kind in PROVIDERS and missing:
-                found.append(_no_parent(node, kind, missing))
+        ref = resource.connection_ref
+        if ref and reported and ref not in reported:
+            found.append(_no_connection(node, ref, tuple(sorted(reported))))
+        kind, missing = parents.get(resource.key, ("", ""))
+        if kind in PROVIDERS and missing:
+            found.append(_no_parent(node, kind, missing))
     return tuple(sorted(found, key=lambda finding: (finding.title, finding.subject)))
 
 
@@ -183,6 +159,7 @@ RULES: tuple[FindingRule, ...] = (
         "A record names something that is not there",
         Tone.ATTENTION,
         _names_nothing,
+        gathered=True,
         operator_action=("Change the record to name a connection or a domain HQ has, or add the one it names."),
         no_help_reason="HQ cannot tell which one was meant.",
         bars={Tone.ATTENTION: "a record names a connection or domain HQ does not have"},

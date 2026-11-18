@@ -3,36 +3,31 @@
 An update that waits on a restart runs the code it replaced until the machine
 restarts, and the restart takes down everything on the machine while it
 happens, so this says both before either surprises anyone. It reads the
-``host.reboot`` reading's one fact for the controller's machine and the
+``host.reboot`` reading's one row for the controller's machine and the
 ``host.edge_reboot`` reading's for each edge (docs/Derived-Facts.md says how
 they are taken).
 """
 
-from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime
 from typing import Any
 
 from hq.domains.control_plane.observations.host import EDGE_REBOOT_KIND, REBOOT_KIND
 
-from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, cannot_run_commands, machine_step
+from .finding_model import Finding, FindingEstate, FindingRule, cannot_run_commands, machine_step
+from .finding_steps import Run
 from .moments import moment, when
-from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller, taken_at
+from .reading_facts import OnEachMachine, ReadingRow
 from .tone import Tone
 from .topology_model import TopologyNode
-
-REBOOT_STATE = "reboot-state"
-EDGE_REBOOT_STATE = "edge-reboot-state"
 
 # What logind's scheduled action does, as a sentence says it.
 _ACTIONS = {"reboot": "restart", "poweroff": "power off", "halt": "halt"}
 
 
 @dataclass(frozen=True, slots=True)
-class RebootState(FactRow):
-    """A machine's restart state as its fact carries it, in field order."""
+class RebootState(ReadingRow):
+    """A machine's restart state as its record says it."""
 
-    KEY = REBOOT_STATE
     KIND = REBOOT_KIND
 
     pending: str = ""
@@ -42,8 +37,10 @@ class RebootState(FactRow):
     scheduled_action: str = ""
     scheduled_at: str = ""
     read_at: str = ""
-    # Set when the reading itself failed; such a row says nothing of the machine.
-    reason: str = ""
+
+    @classmethod
+    def record(cls, record: dict[str, Any], snapshot: Any) -> RebootState:
+        return reboot_state(record)
 
     @property
     def waiting(self) -> bool:
@@ -65,10 +62,17 @@ class RebootState(FactRow):
 class EdgeRebootState(RebootState):
     """An edge's restart state, with the connection its receiver answered through."""
 
-    KEY = EDGE_REBOOT_STATE
     KIND = EDGE_REBOOT_KIND
 
     connection_ref: str = ""
+
+    @classmethod
+    def record(cls, record: dict[str, Any], snapshot: Any) -> EdgeRebootState:
+        return edge_reboot_state(record)
+
+    @property
+    def through(self) -> str:
+        return self.connection_ref
 
 
 def _said(record: dict[str, Any]) -> dict[str, str]:
@@ -94,25 +98,6 @@ def edge_reboot_state(record: dict[str, Any]) -> EdgeRebootState:
     """One ``host.edge_reboot`` record as the rule reads it."""
 
     return EdgeRebootState(**_said(record), connection_ref=str(record.get("connection_ref", "") or ""))
-
-
-def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
-    """The controller's machine's restart state on its node, and each edge's
-    on the machine its connection reaches."""
-
-    state_on_controller(
-        nodes,
-        machine,
-        RebootState,
-        lambda snapshot: rows_of(snapshot, reboot_state, lambda reason: RebootState(reason=reason)),
-    )
-    state_on_controller(
-        nodes,
-        machine,
-        EdgeRebootState,
-        lambda snapshot: rows_of(snapshot, edge_reboot_state, lambda reason: EdgeRebootState(reason=reason)),
-        through=lambda row: row.connection_ref,
-    )
 
 
 def _title(node: TopologyNode, rows: tuple[RebootState, ...]) -> str:
@@ -145,7 +130,7 @@ def _evidence(row: RebootState) -> tuple[tuple[str, str], ...]:
     )
 
 
-def _steps(node: TopologyNode, row: RebootState) -> tuple[OperatorStep, ...]:
+def _steps(node: TopologyNode, row: RebootState) -> tuple[Run, ...]:
     waits = (
         machine_step("See what waits on the restart", node.label, "cat /run/reboot-required.pkgs")
         if row.waiting
@@ -188,18 +173,13 @@ def _restarts(estate: FindingEstate) -> tuple[Finding, ...]:
     under the controller's reading's scope, so its identity holds while the
     two are read in turn."""
 
-    nodes = {node.id: node for node in estate.nodes()}
-
-    def read(finding: Finding) -> datetime | None:
-        return taken_at(nodes[finding.subject], finding.scope)
-
     kept: dict[str, Finding] = {}
     for finding in (*_waiting(estate), *_edge_waiting(estate)):
         held = kept.get(finding.subject)
         if held is None:
             kept[finding.subject] = finding
             continue
-        at, held_at = read(finding), read(held)
+        at, held_at = finding.observed_at, held.observed_at
         newer = finding if at is not None and (held_at is None or at > held_at) else held
         kept[finding.subject] = replace(newer, scope=REBOOT_KIND)
     return tuple(kept.values())
@@ -212,6 +192,7 @@ RULES: tuple[FindingRule, ...] = (
         "Waiting on a restart",
         Tone.ATTENTION,
         _restarts,
+        gathered=True,
         operator_action="On the machine, read what waits on the restart, then schedule it for a time that suits.",
         no_help_reason=cannot_run_commands(),
         bars={Tone.ATTENTION: "an update waits on a restart to take effect"},

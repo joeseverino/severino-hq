@@ -63,6 +63,10 @@ def recorded_ancestor(folder: Path, suffix: str, root: Path) -> tuple[str, int] 
     return None
 
 
+# The branches a release is cut from, the first that exists read.
+RELEASED = ("origin/main", "main")
+
+
 def merge_base(base: str | None) -> str:
     """The merge base with the named base, or else with the branch HEAD lands
     on, or else with the first default that exists.
@@ -71,7 +75,7 @@ def merge_base(base: str | None) -> str:
     quietly test a different change.
     """
 
-    for candidate in (base,) if base else (*landing(), "origin/main", "main"):
+    for candidate in (base,) if base else (*landing(), *RELEASED):
         try:
             return git("merge-base", "HEAD", candidate)[0]
         except RefError, IndexError:
@@ -107,6 +111,16 @@ def answered(*args: str, root: Path = ROOT) -> list[str]:
         return git(*args, root=root)
     except RefError:
         return []
+
+
+def released_fork(root: Path = ROOT) -> tuple[str, str] | None:
+    """The default branch and the commit of it HEAD left, or None where no default branch exists.
+    A pull request squashes to one commit there, so what a release adds is read against this one."""
+
+    for ref in RELEASED:
+        if fork := answered("merge-base", "HEAD", ref, root=root):
+            return ref, fork[0]
+    return None
 
 
 # Where a passed tree is recorded, under the repository's common git directory

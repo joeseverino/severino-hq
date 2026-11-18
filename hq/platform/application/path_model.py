@@ -5,35 +5,93 @@ and where each fact came from.
 """
 
 from dataclasses import dataclass, field, replace
-from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 from django.utils.text import capfirst
+from pydantic import Field, computed_field
 
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.network import IGNORED, JUDGED
 
+from .describe import Describe
 from .entity_links import EntityLink, entity_link, kind_label
+from .json_schemas import ObservedMoment
 from .labels import dotted, lower_first
+from .standards import Standing
+from .tone import Tone
 lazy from .freshness import Freshness, freshness as reading_freshness
 lazy from .moments import ago
 
 if TYPE_CHECKING:
-    from .request_path import Evidence, HopCheck
     from .standards import CheckResult
+
+
+# A hop's check in the words the hop shows.
+_CHECK_LABELS = {
+    Standing.MET: "Confirmed by this request",
+    Standing.UNMET: "This request disagrees",
+    Standing.UNAVAILABLE: "Not confirmed",
+}
+
+
+# Whether the request agrees with what the readings say about one hop. A
+# comment, since the hop that holds it says so where it is published.
+@dataclass(frozen=True, slots=True)
+class HopCheck:
+    state: Standing
+    detail: Annotated[str, Describe("What the request showed beside what was read.")]
+    step: Annotated[str, Describe("What you do to settle a disagreement; empty for none.")] = ""
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def label(self) -> Annotated[str, Describe("That, in the words the hop shows.")]:
+        return _CHECK_LABELS[self.state]
+
+    @property
+    def contradicted(self) -> bool:
+        """The request disagrees with the readings here, so the hop is shown opened."""
+
+        return self.state is Standing.UNMET
+
+
+# A forwarded hop's role as the tone its pill takes.
+_ROLE_TONES = {JUDGED: Tone.GOOD, IGNORED: Tone.SERIOUS}
+
+
+@dataclass(frozen=True, slots=True)
+class Evidence:
+    """One thing the request itself carried, at the hop it belongs to."""
+
+    label: Annotated[str, Describe("What the request carried, such as a header or an address.")]
+    value: Annotated[str, Describe("Its value, as the request carried it.")]
+    detail: Annotated[str, Describe("A line on what HQ makes of it; empty for none.")] = ""
+    role: Annotated[
+        str,
+        Describe("For an address the request was forwarded through: `judged`, `proxy` or `ignored`; else empty."),
+    ] = ""
+
+    @property
+    def tone(self) -> Tone:
+        """The address HQ judges by stands out, one it ignores reads as a warning."""
+
+        return _ROLE_TONES.get(self.role, Tone.NEUTRAL)
 
 
 @dataclass(frozen=True, slots=True)
 class HopSource:
-    """Where a hop was read: the kind, the connection, and when; or the declaration."""
+    """Where HQ read a hop: a reading, or HQ's own record."""
 
-    kind: str
-    connection: str = ""
-    observed_at: datetime | None = None
-    declared: str = ""
+    kind: Annotated[str, Describe("The type of the reading or record it was read from.")]
+    connection: Annotated[str, Describe("The connection the reading came through; empty for HQ's own record.")] = ""
+    observed_at: ObservedMoment | None = None
+    declared: Annotated[
+        str, Describe("The key of HQ's record it comes from, when HQ holds it rather than reads it; else empty.")
+    ] = ""
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
-    def label(self) -> str:
+    def label(self) -> Annotated[str, Describe("That type, in words.")]:
         spec = OBSERVATIONS.get(self.kind)
         return spec.label if spec is not None else kind_label(self.kind)
 
@@ -68,21 +126,23 @@ class HopSource:
 class Certificate:
     """The certificate one hop presents, or why HQ cannot say."""
 
-    role: str
-    name: str = ""
-    issuer: str = ""
-    expiry: str = ""
-    source: HopSource | None = None
-    unread: str = ""
+    role: Annotated[str, Describe("What the certificate is at the hop, such as the edge's or the origin's.")]
+    name: Annotated[str, Describe("The name the certificate is for; empty when not read.")] = ""
+    issuer: Annotated[
+        str, Describe("Who issued it, or 'uploaded' for one uploaded to the proxy that serves it; empty when not read.")
+    ] = ""
+    expiry: Annotated[str, Describe("When it runs out, as read; empty when not read.")] = ""
+    source: Annotated[HopSource | None, Describe("Where HQ read the certificate; null when nothing says.")] = None
+    unread: Annotated[str, Describe("Why HQ cannot say what certificate the hop presents; empty when it can.")] = ""
     # The declaration the name is served with, when HQ holds one.
-    record: str = ""
+    record: Annotated[str, Field(exclude=True)] = ""
     # What the controller found the name serving, when it matched what HQ
     # installed: an attestation, not a declaration.
-    verified_fingerprint: str = ""
+    verified_fingerprint: Annotated[str, Field(exclude=True)] = ""
     # The name it is served for, so a browser on that name can add what it saw.
-    serves: str = ""
+    serves: Annotated[str, Field(exclude=True)] = ""
     # "87 days left": the expiry as the one number worth reading at a glance.
-    left: str = ""
+    left: Annotated[str, Field(exclude=True)] = ""
 
     @property
     def link(self) -> EntityLink | None:

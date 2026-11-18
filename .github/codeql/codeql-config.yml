@@ -65,6 +65,6 @@ query-filters:
 # the host's settings with `import *`; the file never runs inside HQ.
 paths-ignore:
   - hq/config/settings_typecheck.py
-# The SDK as an extension calls it, for mypy alone: it never runs, and some of
-# its calls are wrong on purpose, as the cases mypy must refuse.
+# The SDK as an extension must not call it, for mypy alone: it never runs, and
+# each call is wrong on purpose, a case mypy must refuse.
   - tests/sdk_consumer

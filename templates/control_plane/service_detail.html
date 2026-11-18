@@ -7,7 +7,7 @@ The summary first: what it is, where it runs, and whether it is healthy. Each
 value comes from application.service_context.service_summary, walked from the
 readings. The path is the next section, drawn once.
 {% endcomment %}
-{% facts layout="band" %}
+{% card element="div" %}{% facts layout="band" %}
   {% for item in summary %}
     {% fact item.label icon=item.icon tone=item.tone detail=item.detail %}
       {% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value|breakable }}{% endif %}
@@ -16,7 +16,7 @@ readings. The path is the next section, drawn once.
   {% if service.aliases %}
     {% fact "Also at" value=service.aliases|length|counted:"other name,other names" detail=service.aliases icon="globe" %}
   {% endif %}
-{% endfacts %}
+{% endfacts %}{% endcard %}
 {% comment %}
 What is wrong with this name, as the queue says it. Its setup's finding
 carries the faults, so they are drawn as that finding when the queue has
@@ -61,7 +61,7 @@ readings add (one per reading kind, named unless the headline already is it)
 close every one.
 {% endcomment %}
 {% partialdef reading_lines %}{% for line in facet.reading_lines %}<small>{% if facet.present or facet.observed or not forloop.first %}{{ line.label|breakable }} {% endif %}{% if line.issued %}{{ line.detail|breakable }}{% else %}{% for link in line.entities %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% if line.expiry %}{% dot %}expires {{ line.expiry|breakable }}{% endif %}{% if line.stale %} {% status "Out of date" tone="attention" %}{% endif %}</small>{% endfor %}{% endpartialdef %}
-{% if missing_facets %}{% facts layout="band" label="Missing parts" %}
+{% if missing_facets %}{% card element="div" %}{% facts layout="band" label="Missing parts" %}
   {% for facet in missing_facets %}
     {% comment %}
     A facet HQ both declares and watches says it once. The container's key is
@@ -198,7 +198,7 @@ close every one.
       {% endfact %}
     {% endif %}
   {% endfor %}
-{% endfacts %}{% endif %}
+{% endfacts %}{% endcard %}{% endif %}
 
 {% comment %}
 What serves the name is in Relationships. Two things are said here because no

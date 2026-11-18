@@ -1,40 +1,5 @@
 from django import forms
 
-from .models import DocumentationRecord
-
-
-class DocumentationRecordForm(forms.ModelForm):
-    class Meta:
-        model = DocumentationRecord
-        fields = [
-            "doc_id",
-            "title",
-            "doc_type",
-            "system_service",
-            "environment",
-            "status",
-            "sensitivity",
-            "obsidian_path",
-            "github_path",
-            "external_url",
-            "last_reviewed",
-            "notes",
-            "related_projects",
-            "related_assets",
-            "related_expenses",
-        ]
-        widgets = {
-            "notes": forms.Textarea(attrs={"rows": 4}),
-            "last_reviewed": forms.DateInput(attrs={"type": "date"}),
-            "related_projects": forms.SelectMultiple(attrs={"size": 6}),
-            "related_assets": forms.SelectMultiple(attrs={"size": 6}),
-            "related_expenses": forms.SelectMultiple(attrs={"size": 6}),
-        }
-        help_texts = {
-            "notes": "Index notes only. No runbook text or secrets.",
-        }
-
-
 # Several thousand doc records are a few megabytes.
 MAX_MANIFEST_BYTES = 10 * 1024 * 1024
 

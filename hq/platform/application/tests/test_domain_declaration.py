@@ -20,9 +20,10 @@ from hq.platform.application.tests.writers import keyed
 
 from .. import domains
 from ..capabilities import execute_capability
-from ..domains import DomainDescriptor, Mount, Records, domain_navigation, load
+from ..domains import DomainDescriptor, Mount, domain_navigation, load
 from ..integrations import clear_integration_graph_cache, integration_graph
 from ..plugins import NavigationItem, PluginIntegration
+from ..record_declaration import Records
 from ..records import counts
 from ..security import mcp_principal, web_principal
 
@@ -104,17 +105,3 @@ class NewDomainDeclarationTests(TransactionTestCase):
         deleted = execute_capability("widget.delete", keyed({"confirm": "first"}), principal=operator, target="first")
         self.assertEqual(deleted["deleted"]["type"], "widget", deleted)
         self.assertFalse(self.model.objects.exists())
-
-    def test_its_commands_and_resource_are_in_the_api_document(self):
-        from hq.platform.api.openapi import document
-
-        api = document()
-        for name in ("widget.create", "widget.update", "widget.delete"):
-            operation = api["paths"][f"/api/v2/capabilities/{name}/"]["post"]
-            self.assertEqual(operation["x-hq-capability"], name)
-            self.assertEqual(operation["tags"][0], "test.widgets")
-        self.assertIn("WidgetCreateRequest", api["components"]["schemas"])
-        listing = api["paths"]["/api/v2/resources/widgets/"]["get"]
-        self.assertEqual(listing["x-hq-resource"], "widgets")
-        tags = {tag["name"]: tag for tag in api["tags"]}
-        self.assertEqual(tags["test.widgets"]["parent"], "nav.business")

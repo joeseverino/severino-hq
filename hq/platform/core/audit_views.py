@@ -28,7 +28,7 @@ from hq.platform.application.tables import (
     TableToggle,
     UncountedPaginator,
 )
-lazy from hq.platform.application.approvals import AUDIT_LABELS, awaiting_ids
+lazy from hq.platform.application.approvals import AUDIT_LABEL, awaiting_ids
 lazy from hq.platform.application.automation_adoption import procedures as adopted_procedures
 lazy from hq.platform.application.automation_sources import adopted_revision, decisions, of_audit_entry, playbook_rows
 
@@ -132,7 +132,7 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
         if self._awaiting():
             qs = qs.filter(
                 action=AuditLog.Action.CREATED,
-                object_type__in=AUDIT_LABELS,
+                object_type=AUDIT_LABEL,
                 object_id__in=awaiting_ids(),
             )
         day = self._day()

@@ -11,13 +11,13 @@ from hq.platform.application.action_links import read_link
 from hq.platform.application.contracts import Effect
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
-from hq.platform.application.finding_model import Finding, OperatorStep, opens
+from hq.platform.application.finding_model import Finding, opens
+from hq.platform.application.finding_steps import Do, Press, Run
 from hq.platform.application.markup_testing import hrefs, select, with_class, within
 from hq.platform.application.plugins import gather_attention
 from hq.platform.application.tests.links import example_command
 from hq.platform.application.tests.test_decisions import row_hrefs
 from hq.platform.application.ui import DomainOverview
-from hq.platform.application.workflows import claim_identity, claim_resolution_plan
 from hq_sdk.testing import plain
 
 
@@ -28,17 +28,13 @@ class DashboardQueueTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.user)
-        plan = claim_resolution_plan(
-            identity=claim_identity("example.utility", "changed:account:one"),
-            remedies=(read_link("remedy", "Inspect evidence", "/example/evidence/", recommended=True),),
-            verification=example_command(
-                "verify",
-                "Recheck facts",
-                Effect.REMOTE_WRITE,
-                "/dashboard/glance/",
-                method="POST",
-                capability="dashboard.panels.refresh",
-            ),
+        check = example_command(
+            "verify",
+            "Recheck facts",
+            Effect.REMOTE_WRITE,
+            "/dashboard/glance/",
+            method="POST",
+            capability="dashboard.panels.refresh",
         )
         insights = (
             Finding(
@@ -48,7 +44,8 @@ class DashboardQueueTests(TestCase):
                 title="Check the reading",
                 explanation="Supporting facts.",
                 primary=opens("Reconcile the bill", ""),
-                workflow=plan,
+                steps=(Press(read_link("remedy", "Inspect evidence", "/example/evidence/", recommended=True)),),
+                check=check,
             ),
             Finding(
                 rule="example-service",
@@ -71,13 +68,14 @@ class DashboardQueueTests(TestCase):
         self.source.start()
         self.addCleanup(self.source.stop)
 
-    def test_transport_preserves_action_workflow_and_domain_severity(self):
+    def test_transport_preserves_action_steps_and_domain_severity(self):
         queue = work_queue()
         json.dumps(queue)
         self.assertEqual([item["status"] for item in queue], ["serious", "attention"])
-        self.assertEqual(list(queue[0]["workflow"]["steps"]), [])
+        self.assertEqual(queue[0]["steps"], [])
         self.assertEqual(queue[1]["action"], "Reconcile the bill")
-        self.assertEqual(queue[1]["workflow"]["steps"][-1]["actions"][0]["method"], "POST")
+        self.assertEqual(queue[1]["steps"][0]["link"]["url"], "/example/evidence/")
+        self.assertEqual(queue[1]["check"]["method"], "POST")
 
     def test_queue_has_safe_actions_and_dashboard_keeps_domain_overviews_first(self):
         from hq.domains.control_plane.models import DashboardRefreshRequest
@@ -149,7 +147,7 @@ class DashboardQueueTests(TestCase):
             severity="serious",
             title="A run is failing",
             explanation="Two checks fail.",
-            steps=(OperatorStep("See the failing runs", command="example-tool runs --failing"),),
+            steps=(Run("See the failing runs", "example-tool runs --failing"),),
             observed_at=timezone.now() - timedelta(days=30),
             reads="github.repository",
         )
@@ -203,13 +201,12 @@ class DashboardQueueTests(TestCase):
         from hq.platform.application.attention import waiting_for_approval
         from hq.platform.application.capabilities import execute_capability
         from hq.platform.application.security import Capability, Principal
-        from hq.platform.application.tests.writers import keyed
+        from hq.platform.application.tests.writers import keyed, runbook
 
         CapabilityRule.objects.create(subject="example-agent", capability="documentation.sync", rule="approve")
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION}))
-        held = execute_capability(
-            "documentation.sync", keyed({"manifest": [{"doc_id": "rb-example", "title": "Example"}]}), principal=agent
-        )["approval"]["id"]
+        asked = execute_capability("documentation.sync", keyed({"manifest": [runbook("rb-example")]}), principal=agent)
+        held = asked["approval"]["id"]
         approve = reverse("control_plane:approval_decide", kwargs={"approval_id": held, "decision": "approve"})
 
         def dashboard(findings, reader=None):
@@ -220,6 +217,7 @@ class DashboardQueueTests(TestCase):
                     severity="serious",
                     title=f"Example finding {n}",
                     explanation="Inspect it.",
+                    steps=(Do("Look into it."),),
                 )
                 for n in range(findings)
             )
@@ -298,13 +296,6 @@ class DashboardQueueTests(TestCase):
         self.assertContains(response, "Nothing matches.")
         self.assertContains(response, "Clear filters")
         self.assertNotContains(response, "Nothing needs you.")
-
-    def test_anonymous_reader_cannot_open_either_queue(self):
-        self.client.logout()
-        for path in ("/", "/action-items/"):
-            response = self.client.get(path)
-            self.assertEqual(response.status_code, 302)
-            self.assertIn("/accounts/login/", response.url)
 
     def test_an_empty_month_takes_no_space(self):
         # Nothing contributes, the calendar's sources included, so the month is

@@ -73,7 +73,6 @@ POSTS = {
     # asks no one and writes nothing.
     "address-read": Posted("command", ("lookup.address.read",), lambda: {"address": "192.0.2.1"}, status=200),
     # The one question that starts publishing a service, answered with no name.
-    "service-start-not-a-name": Posted("control_plane:service_start", (), lambda: {"hostname": "not a hostname"}),
     # A domain's failed-mail policy applied to more than all of its mail: the
     # error under the field, and the policy as sent.
     "zone-mail-past-all": Posted(

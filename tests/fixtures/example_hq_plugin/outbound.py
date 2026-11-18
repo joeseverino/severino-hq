@@ -11,7 +11,7 @@ from hq_sdk.outbound import Failed, OutboundWork
 
 from . import registry
 
-LOOKUP = "example.lookup"
+LOOKUP = "example.lookup.run"
 REFRESH = "example.refresh"
 NOTES = ("first-note", "second-note")
 # A note the registry is never asked about, with the reason its control gives.

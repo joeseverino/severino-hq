@@ -17,7 +17,7 @@ from hq.platform.application.exposure_fixes import gate_links
 from hq.platform.application.hq_self import LABEL as HQ_LABEL, hq_service
 from hq.platform.application.inventory import inventory_state
 from hq.platform.application.labels import sentence
-from hq.platform.application.pages import PageAction, PageMixin, page_context
+from hq.platform.application.pages import PageAction, PageMixin, RowMark, RowOrder, page_context
 from hq.platform.application.resource_capabilities import (
     LIFECYCLE_VERBS,
     resource_capabilities,
@@ -46,6 +46,23 @@ from .names import normalized_hostname
 from .provider_adapters.portainer import CONTAINER_KIND
 from .providers import service_facets
 from .views import verb_action
+
+
+def _arranged(items, reorderable: bool) -> list[tuple]:
+    """Each service with the star that makes it a favorite and, among the
+    favorites (``reorderable``), the pair that moves it, where the order is
+    one the operator chose; the first has nowhere up to go, the last nowhere
+    down."""
+
+    last = len(items) - 1
+    return [
+        (
+            item,
+            RowMark.command(PIN, item.hostname, mode=SERVICE, on=item.pinned, among=FAVORITES),
+            RowOrder.command(MOVE, item.hostname, mode=SERVICE, up=at > 0, down=at < last) if reorderable else None,
+        )
+        for at, item in enumerate(items)
+    ]
 
 
 class ServiceListView(PageMixin, TemplateView):
@@ -79,7 +96,9 @@ class ServiceListView(PageMixin, TemplateView):
         pinned = [item for item in found if item.pinned]
         rest = [item for item in found if not item.pinned]
         context["service_groups"] = tuple(
-            group for group in ((sentence(FAVORITES), pinned, True), ("Other services", rest, False)) if group[1]
+            (label, _arranged(items, reorderable))
+            for label, items, reorderable in ((sentence(FAVORITES), pinned, True), ("Other services", rest, False))
+            if items
         )
         # Both groups are one table, sorted on the page with two rows in all.
         context["service_count"] = len(found)
@@ -253,10 +272,12 @@ class ServiceStartView(View):
     """
 
     def get(self, request):
-        return self._page(request, ServiceStartForm())
+        """The question, or with its answer the page that name leads to: a
+        lookup, so its form is a GET and sending it writes nothing."""
 
-    def post(self, request):
-        form = ServiceStartForm(request.POST)
+        if "hostname" not in request.GET:
+            return self._page(request, ServiceStartForm())
+        form = ServiceStartForm(request.GET)
         if not form.is_valid():
             return self._page(request, form, status=400)
         return redirect("control_plane:service", hostname=form.cleaned_data["hostname"])
@@ -278,6 +299,12 @@ class ServicePinView(View):
     """
 
     capability = PIN
+
+    # A pin of a service, the mode of the command its route runs: a domain's
+    # star is the command's own control.
+    @property
+    def runs(self) -> tuple[tuple[str, str], ...]:
+        return ((self.capability, SERVICE),)
 
     def payload(self, name: str) -> dict:
         return {"kind": SERVICE, "key": name}

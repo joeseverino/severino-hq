@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="The map of the tests that ran each line, which fast selects from: the whole suite, as fast runs it, measured with a context per test module; CI's Map job runs it (tools/gate/testmap.py)"
+#MISE description="The map of the tests that ran each line, which fast selects from: the whole suite, as fast runs it, measured with a context per test and one per test module's fixtures, read back by module; CI's Map job runs it (tools/gate/testmap.py), and audit:tests reads the same recording"
 #MISE hide=true
 #MISE outputs=[]
 

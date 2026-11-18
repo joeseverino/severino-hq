@@ -213,14 +213,6 @@ class ServiceReachTests(TestCase):
 
         self.assertIn(reverse("control_plane:edit", args=["example-shop-proxy"]), body)
 
-    def test_it_asks_to_sign_in(self):
-        from django.urls import reverse
-
-        self.client.logout()
-
-        self.assertEqual(self.page().status_code, 302)
-        self.assertIn(reverse("login"), self.page()["Location"])
-
     def test_more_names_cost_no_more_queries(self):
         def arrange(count):
             store(

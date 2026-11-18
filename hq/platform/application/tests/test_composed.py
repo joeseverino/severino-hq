@@ -17,6 +17,7 @@ from hq.platform.application.domains import (
     domain_dashboard_sections,
 )
 from hq.platform.application.finding_model import Finding
+from hq.platform.application.finding_steps import Do
 from hq.platform.application.plugin_testing import (
     ComposedPluginTestCase,
     installed,
@@ -37,7 +38,14 @@ from hq.platform.core.models import UpstreamReading
 from .test_derivations import MOMENT
 
 WINDOW = (date(2026, 1, 1), date(2026, 12, 31))
-ITEM = Finding(rule="alpha-wrong", subject="", severity="serious", title="Something is wrong", explanation="Body.")
+ITEM = Finding(
+    rule="alpha-wrong",
+    subject="",
+    severity="serious",
+    title="Something is wrong",
+    explanation="Body.",
+    steps=(Do("Look into it."),),
+)
 CARDS = (
     {"id": "alpha-open", "label": "Open", "value": 3, "url": "/alpha/"},
     {"id": "alpha-late", "label": "Late", "value": 1, "url": "/alpha/"},

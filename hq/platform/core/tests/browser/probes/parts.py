@@ -1,4 +1,4 @@
-"""Probes of a page's parts: disclosures, labels, the dashboard's readings and a check's evidence."""
+"""Probes of a page's parts: disclosures, labels, the dashboard's readings, drawings and a check's evidence."""
 
 from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
@@ -51,51 +51,6 @@ SPILLED_LABELS = (
     if (held > el.clientWidth + 1) {
       found.push(`${describe(el)} holds ${held}px of label in ${el.clientWidth}px`);
     }
-  }
-  return found;
-}"""
-)
-
-
-# Each reading's lines, as laid out: those that start under its mark rather
-# than beside it, and those cut short.
-READINGS = """(heads) => heads.map((head) => {
-  const [mark, ...lines] = [...head.children].filter((el) => el.checkVisibility());
-  const at = mark.getBoundingClientRect();
-  return {
-    under_the_mark: lines.filter((line) => line.getBoundingClientRect().left < at.right - 1)
-      .map((line) => line.textContent.trim().slice(0, 30)),
-    cut: lines.filter((line) => line.scrollWidth > line.clientWidth + 1)
-      .map((line) => line.textContent.trim().slice(0, 30)),
-  };
-})"""
-
-
-# A closed row of a table in a narrow box shows every control it shows in a
-# whole box: what a row offers stands in the row (beneath its words, on a
-# phone), never only behind its toggle. The row's own table is drawn in a
-# whole box for a moment to read what it offers there.
-ROW_ACTIONS_BEHIND_THE_TOGGLE = (
-    "([rows, pressed]) => {"
-    + DESCRIBE
-    + """
-  const found = [];
-  const said = (el) => el.textContent.trim().replace(/\\s+/g, ' ');
-  const offered = (row) => new Set([...row.querySelectorAll(pressed)]
-    .filter((el) => el.checkVisibility() && !el.matches('[data-row-toggle], [data-fold-toggle]') && said(el))
-    .map(said));
-  for (const row of document.querySelectorAll(rows)) {
-    if (!row.checkVisibility() || row.matches('.is-expanded')) continue;
-    const table = row.closest('table');
-    if (getComputedStyle(table).getPropertyValue('--box').trim() !== 'narrow') continue;
-    const narrow = offered(row);
-    const before = [table.style.getPropertyValue('--box'), table.style.getPropertyPriority('--box')];
-    table.style.setProperty('--box', 'whole', 'important');
-    const whole = offered(row);
-    table.style.setProperty('--box', ...before);
-    if (!before[0]) table.style.removeProperty('--box');
-    const held = [...whole].filter((label) => !narrow.has(label));
-    if (held.length) found.push(`${describe(row)} shows "${held.join(' / ')}" only once opened in its narrow box`);
   }
   return found;
 }"""
@@ -161,17 +116,6 @@ HEADINGS_PARTED = (
   return found;
 }"""
 )
-
-
-def reading_problems(readings):
-    """What a reader loses of the readings: a line drawn under its mark, or
-    cut short."""
-
-    found: list[str] = []
-    for reading in readings:
-        found.extend(f"under the mark: {line}" for line in reading["under_the_mark"])
-        found.extend(f"cut short: {line}" for line in reading["cut"])
-    return found
 
 
 # A check's evidence follows its statement: on the same line within a short
@@ -333,7 +277,14 @@ PILLS_IN_PIECES = (
 )
 
 
-_READINGS_OF = f"(selector) => ({READINGS})([...document.querySelectorAll(selector)])"
+# A chart, a trend, a bar or a calendar is drawn wherever what holds it is: a
+# drawing hidden for want of room is a figure that shows nothing, when the
+# table beside it or the line under it has the room to show it.
+UNDRAWN = """(drawings) => [...document.querySelectorAll(drawings)].filter((drawing) => {
+  const held = drawing.parentElement.getBoundingClientRect();
+  const drawn = drawing.getBoundingClientRect();
+  return held.width > 0 && held.height > 0 && (drawn.width < 1 || drawn.height < 1);
+}).map((drawing) => drawing.outerHTML.slice(0, 120))"""
 
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
@@ -351,10 +302,8 @@ CHECKS = {
         (LINKS_AT_REST, [SELECTORS["link"], SELECTORS["vendored"]]),
         reader_sees="a link among words told apart from them by color alone",
     ),
-    "readings": Check(
-        (_READINGS_OF, SELECTORS["readings"]),
-        findings=reading_problems,
-        reader_sees="a reading's line cut short or pushed under its mark",
+    "undrawn drawings": Check(
+        (UNDRAWN, SELECTORS["drawing"]), reader_sees="a chart or a calendar given room and drawing nothing"
     ),
     "pills in pieces": Check(
         PILLS_IN_PIECES, table=True, reader_sees="one pill's words drawn as two pills, a line each"
@@ -369,12 +318,5 @@ CHECKS = {
     ),
     "summaries hiding": Check(
         (HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"]), reader_sees="what a fold's handle names, hidden"
-    ),
-    "row actions behind the toggle": Check(
-        (
-            ROW_ACTIONS_BEHIND_THE_TOGGLE,
-            [f"main {SELECTORS['controls_row']}", SELECTORS["pressed"]],
-        ),
-        reader_sees="what a row offers hidden until the row is opened",
     ),
 }

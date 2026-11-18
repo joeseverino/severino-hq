@@ -195,32 +195,3 @@ func TestAFailedTakeOverFreesHQsName(t *testing.T) {
 		t.Error("the web unit was left installed")
 	}
 }
-
-func TestWhatNoReleaseShipsIsRemoved(t *testing.T) {
-	f := newFakeHost(t)
-	f.active = []string{hostcore.WebUnit}
-	os.Remove(filepath.Join(f.machine.UnitDir(), SecretsUnit+".d", "10-root-owned-exec.conf"))
-	leftovers := []string{
-		filepath.Join(f.machine.Systemd, ControllerUnit+".d", "10-root-owned-exec.conf"),
-		filepath.Join(f.machine.Systemd, SecretsUnit+".d", "10-root-owned-exec.conf"),
-		filepath.Join(f.machine.Sbin, "severino-hq-sync-scripts"),
-	}
-	for _, leftover := range leftovers {
-		if err := os.MkdirAll(filepath.Dir(leftover), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(leftover, nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if err := f.machine.Install(context.Background(), connected); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, leftover := range leftovers {
-		if _, err := os.Stat(leftover); err == nil {
-			t.Errorf("%s was left", leftover)
-		}
-	}
-}

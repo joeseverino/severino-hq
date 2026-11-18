@@ -4,23 +4,17 @@ of the browser harness."""
 
 from typing import override
 
-from hq.platform.core.tests.browser.catalog import CATALOG, PAGES, left_out_on, page
+from hq.platform.core.tests.browser.catalog import PAGES, left_out_on, page, premise_of
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
-from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.shards import sweep
-from hq.platform.core.tests.browser.widths import PHONE_SCREEN, SPARSE_WIDTHS
-
-_UNDRAWN = """(drawings) => [...document.querySelectorAll(drawings)].filter((drawing) => {
-  const held = drawing.parentElement.getBoundingClientRect();
-  const drawn = drawing.getBoundingClientRect();
-  return held.width > 0 && held.height > 0 && (drawn.width < 1 || drawn.height < 1);
-}).map((drawing) => drawing.outerHTML.slice(0, 120))"""
+from hq.platform.core.tests.browser.widths import ENTRY, SCRIPTED_ENTRY
 
 
-class CatalogLayoutTests(LayoutBrowserTests):
-    """Every catalog entry under the whole survey, without script, at the
-    sparse widths, which cross the stylesheet's media queries: closed, in both
-    palettes, and with every disclosure open.
+class EntryLayoutTests(LayoutBrowserTests):
+    """Every catalog entry under the whole survey, in one of the two states
+    its page is read in (`widths.ENTRY`, `widths.SCRIPTED_ENTRY`): as the
+    server drew it, and once HQ's scripts have run, which every entry's page
+    loads as base.html does.
 
     The gallery is held to the same: each part there is in a shadow root of
     its own, which no neighbor reaches, so the survey judges the page around
@@ -31,38 +25,45 @@ class CatalogLayoutTests(LayoutBrowserTests):
     def render(cls):
         return {name: page(name) for name in PAGES}
 
-    @sweep
-    def test_every_entry_keeps_the_layout_rules_without_script(self):
+    def sweep(self, judged, **where):
+        """Every page at each width ``judged`` reads: closed, with every fold
+        (and with script, every row) open, its tables at every width from its
+        first load where ``judged`` asks, and without script in both palettes."""
+
         for name in self.mine(PAGES):
-            for width in SPARSE_WIDTHS:
-                if not self.loaded(name, width):
+            for at, width in enumerate(judged.at(self.draws_a_table)):
+                if not self.loaded(name, width, **where):
                     continue
-                self.hold(name, width, [self.draws_the_state_it_stands_for, self.every_layout_check_holds])
+                self.settle()
+                self.hold(name, width, [self.every_layout_check_holds], **where)
                 # A palette is a color per token, the same at every width, so
                 # the narrowest and widest read every part either draws.
-                if width in (SPARSE_WIDTHS[0], SPARSE_WIDTHS[-1]):
+                if not self.runs_script and width in (judged.widths[0], judged.widths[-1]):
                     was = self.in_scheme("dark")
                     self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
                     self.in_scheme(was)
-                self.hold_opened(name, width)
-
-    @sweep
-    def test_every_drawing_is_drawn_on_a_phone(self):
-        """A chart, a trend, a bar or a calendar is drawn wherever what holds
-        it is: on a phone a drawing hidden for want of room is a figure that
-        shows nothing, when the table beside it or the line under it has the
-        room to show it."""
-
-        for name in self.mine(PAGES):
-            if not self.loaded(name, PHONE_SCREEN[0]):
-                continue
-            with self.subTest(page=name):
-                self.assertEqual(self.read([(_UNDRAWN, SELECTORS["drawing"])])[0], [])
+                self.hold_opened(name, width, popovers=width in judged.popovers_at, **where)
+                if judged.every_width and not at:
+                    self.hold(name, width, [self.a_table_fits_its_box_at_every_width], **where)
 
     @override
     def left_out_on(self, path):
         return left_out_on(path)
 
-    def draws_the_state_it_stands_for(self, name):
-        if name in CATALOG and (premise := CATALOG[name].premise):
-            self.assertEqual(self.read([premise])[0], [], f"{name} does not draw the state it stands for")
+    @override
+    def premise_on(self, path):
+        return premise_of(path)
+
+
+class CatalogLayoutTests(EntryLayoutTests):
+    @sweep
+    def test_every_entry_keeps_the_layout_rules_without_script(self):
+        self.sweep(ENTRY)
+
+
+class ScriptedCatalogLayoutTests(EntryLayoutTests):
+    scripted = True
+
+    @sweep
+    def test_every_entry_keeps_the_layout_rules_once_its_script_has_run(self):
+        self.sweep(SCRIPTED_ENTRY, script="on")

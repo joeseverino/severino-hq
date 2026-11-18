@@ -9,8 +9,9 @@ from django.test import SimpleTestCase, tag
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
 from hq.platform.core.table_cells import ROLE_CLASSES
+from hq.platform.core.template_contract import class_words
 
-from .hand_rolled import ONE_OF_A_KIND, hand_rolled_classes, literal_classes, needless_exemptions
+from .hand_rolled import hand_rolled_classes, needless_classes
 from .source import template_files
 
 
@@ -191,7 +192,7 @@ class StyleContractTests(SimpleTestCase):
         preloaded beside the stylesheet, where it usually is ready."""
 
         root = Path(__file__).resolve().parents[4]
-        head = (root / "templates" / "base.html").read_text(encoding="utf-8")
+        head = (root / "templates" / "partials" / "_first_frame.html").read_text(encoding="utf-8")
         faces = [
             (sheet, face)
             for sheet in sheet_paths()
@@ -579,8 +580,8 @@ class TemplateClassStyleTests(SimpleTestCase):
         offenders = sorted(
             f"{name}: .{word}"
             for name, path in template_files()
-            for word in literal_classes(path.read_text(encoding="utf-8"))
-            if word not in defined
+            for _, word in class_words(path.read_text(encoding="utf-8"))
+            if not word.endswith("*") and word not in defined
         )
         self.assertEqual(offenders, [], "define the class where its part is styled, or delete it")
 
@@ -605,49 +606,25 @@ class TemplateClassStyleTests(SimpleTestCase):
             "name a size the dialog offers (partials/_modal.html), or add it beside .modal-wide in forms.css",
         )
 
-    def test_literal_classes_reads_attributes_and_tag_options(self):
-
-        self.assertEqual(
-            literal_classes(
-                '<p class="note {{ tone }} tone-{{ x }}{% if a == "b" %} on {% endif %}">{% card css="frame wide" %}'
-                '{% comment %}<b class="gone">{% endcomment %}{# class="gone" #}'
-            ),
-            {"note", "on", "frame", "wide"},
-        )
-
-    def test_literal_classes_reads_a_word_glued_to_a_tag(self):
-
-        self.assertEqual(
-            literal_classes(
-                '<a class="tab{% if a %} tab-current{% endif %}"><b class="{% if a %}band{% else %}list{% endif %}">'
-                '<i class="table{% if dense %} is-dense{% endif %}"><s class="series-{{ slot }}{% if a %} is-start{% endif %}">'
-                '<u class="tone-{% if a %}ok{% endif %} mark-{% if a %}{% endif %}">'
-            ),
-            {"tab", "tab-current", "band", "list", "table", "is-dense", "is-start"},
-        )
-
 
 @tag("source", "tree")
-@reads("**/templates/**", "hq/**/*.py", "hq_sdk/**/*.py")
+@reads("**/templates/**", "hq/**/*.py")
 class HandRolledClassTests(SimpleTestCase):
-    """A host page writes only the classes the shared parts declare, and a
-    part is one that code or two pages draw (hand_rolled.parts), so the
-    Python that draws a part is read beside the templates."""
+    """A class is one part's own, declared on its ``Part``: a template writes
+    only the public classes, as an extension does, and a part's partial writes
+    besides them its own and those of the parts it draws."""
 
-    def test_host_templates_draw_only_the_shared_parts_classes(self):
-        """A host page is drawn from the shared parts, so a class of its own is
-        a hand-rolled part the survey never sees and an extension cannot draw."""
+    def test_host_templates_draw_only_the_classes_they_may(self):
+        """A class a template writes that no part lets it is a hand-rolled part
+        the survey never sees and an extension cannot draw."""
 
         self.assertEqual(
             sorted(f"templates/{name}: .{word}" for name, word in hand_rolled_classes()),
             [],
-            "draw it with a shared part or one of its options (hq_sdk.template_contract.CLASSES, or a part "
-            "under templates/partials/ that two pages or a tag draw); a widget with no part becomes one",
+            "a page writes only the public classes (template_contract.public_classes), as an extension does: draw "
+            "it through the part that owns it, or grow that part an option; a part's partial writes only the classes "
+            "its Part declares, or those of a part it draws",
         )
 
-    def test_a_one_of_a_kind_widget_is_listed_only_while_it_draws_its_own_classes(self):
-        """The list of one-of-a-kind widgets only shrinks: an entry whose
-        widget became a shared part, or is drawn from them, leaves it."""
-
-        self.assertTrue(ONE_OF_A_KIND)
-        self.assertEqual(sorted(needless_exemptions()), [], "remove it from hand_rolled.ONE_OF_A_KIND")
+    def test_a_part_declares_only_the_classes_its_partial_writes(self):
+        self.assertEqual(sorted(needless_classes()), [], "remove it from the Part's classes")

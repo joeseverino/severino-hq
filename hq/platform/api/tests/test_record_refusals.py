@@ -53,6 +53,27 @@ class RecordRefusalTransportTests(TestCase):
             self.assertEqual(error["code"], "not_found")
             self.assertNotIn(SENT, response.content.decode())
 
+    def test_a_field_naming_no_record_is_404_not_found_beside_the_field(self):
+        cases = (
+            ("calendar.entry.create", "write_calendar", {"title": "An event", "starts_on": "2026-03-01"}, "about"),
+            ("expense.create", "write_expenses", {"date": "2026-03-01", "vendor": "A", "item": "B"}, "paid_from"),
+            ("infrastructure.controller.refresh", "manage_infrastructure", {}, "connection_ref"),
+        )
+        for name, scope, payload, field in cases:
+            with self.subTest(name), _serving():
+                response = self.client.post(
+                    f"/api/v2/capabilities/{name}/",
+                    data=json.dumps({"payload": {**payload, field: f"project:{SENT}"}}),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=f"Bearer {_token(scope=scope)}",
+                    HTTP_IDEMPOTENCY_KEY=f"key-{name}",
+                )
+            self.assertEqual(response.status_code, 404, response.content)
+            error = response.json()["error"]
+            self.assertEqual(error["code"], "not_found")
+            self.assertEqual(error["details"], {field: ["not_found"]})
+            self.assertNotIn(SENT, error["message"])
+
     def test_a_stale_write_is_409_conflict(self):
         Project.objects.create(name="HQ", slug=SENT)
 
@@ -98,4 +119,4 @@ class RecordRefusalTransportTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 400, response.content)
-        self.assertEqual(response.json()["error"], {"code": "invalid_input", "message": "That is not an IP address."})
+        self.assertEqual(response.json()["error"]["message"], "lookup.address.read: address is invalid.")

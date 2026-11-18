@@ -1,0 +1,26 @@
+# A value that must hold something (a name, a key, a list of hosts) says so
+# through command_fields.NonEmpty, and required text is its RequiredText. A
+# min_length of 1 written beside a type is how one field comes to be held to
+# it and its sibling not, so a refusal the schema never stated reaches a client.
+id: non-empty-said-by-non-empty
+language: python
+severity: error
+message: A value that must not be empty is said with min_length=1 rather than NonEmpty.
+note: Type text as RequiredText, and anything else Annotated[<type>, NonEmpty()], from hq.platform.application.command_fields.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+rule:
+  kind: keyword_argument
+  all:
+    - has:
+        field: name
+        regex: ^min_length$
+    - has:
+        field: value
+        regex: ^1$

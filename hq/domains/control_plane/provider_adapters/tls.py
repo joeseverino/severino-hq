@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, field_validator, model_validator
 
+from hq.platform.application.command_fields import NonEmpty, RequiredText
 from hq.platform.application.expiry import DEFAULT_RENEWAL_WINDOW_DAYS
 
 from ..connection_shapes import ACME
@@ -27,25 +28,25 @@ UPLOADED_CERTIFICATE_KIND = "tls.uploaded_certificate"
 
 
 class TLSConsumerBase(ProviderModel):
-    name: str = Field(min_length=1, max_length=160)
+    name: RequiredText = Field(max_length=160)
     verify_domains: list[str] = Field(default_factory=list)
 
 
 class CaddyTLSConsumer(TLSConsumerBase):
     kind: Literal["caddy"]
-    connection_ref: str = Field(min_length=1, max_length=160)
-    certificate_directory: str = Field(min_length=1, max_length=500)
+    connection_ref: RequiredText = Field(max_length=160)
+    certificate_directory: RequiredText = Field(max_length=500)
 
 
 class NPMTLSConsumer(TLSConsumerBase):
     kind: Literal["npm"]
-    connection_ref: str = Field(min_length=1, max_length=160)
+    connection_ref: RequiredText = Field(max_length=160)
     discover_covered_hosts: bool = False
 
 
 class CPanelTLSConsumer(TLSConsumerBase):
     kind: Literal["cpanel"]
-    connection_ref: str = Field(min_length=1, max_length=160)
+    connection_ref: RequiredText = Field(max_length=160)
     # Names whose cPanel *sites* receive the certificate. Empty means every site
     # that serves one of `verify_domains`; the controller asks the account which
     # sites those are before anything is issued.
@@ -68,10 +69,10 @@ class OnePasswordPublication(ProviderModel):
     """
 
     kind: Literal["onepassword"]
-    name: str = Field(min_length=1, max_length=160)
-    connection_ref: str = Field(min_length=1, max_length=160)
-    vault: str = Field(min_length=1, max_length=160)
-    item: str = Field(min_length=1, max_length=160)
+    name: RequiredText = Field(max_length=160)
+    connection_ref: RequiredText = Field(max_length=160)
+    vault: RequiredText = Field(max_length=160)
+    item: RequiredText = Field(max_length=160)
 
 
 # A certificate's lineage name: the directory under live/ its certificate and
@@ -97,16 +98,14 @@ class TLSCertificateSpec(ProviderModel):
         title="Certificate name",
         description="Lowercase, no spaces.",
     )
-    domains: list[str] = Field(
-        default_factory=list,
+    domains: Annotated[list[str], NonEmpty()] = Field(
         title="Domains",
         description=(
             "Wildcards are allowed. Each domain must be in a Cloudflare zone "
             "HQ can edit, for the Let's Encrypt DNS challenge."
         ),
     )
-    install_on: list[str] = Field(
-        default_factory=list,
+    install_on: Annotated[list[str], NonEmpty()] = Field(
         title="Install it on",
         description=("Where the certificate is deployed. Delivery settings are on each target."),
     )
@@ -121,25 +120,11 @@ class TLSCertificateSpec(ProviderModel):
         ),
     )
 
-    @model_validator(mode="after")
-    def a_certificate_needs_names_and_somewhere_to_go(self) -> TLSCertificateSpec:
-        missing = [
-            label
-            for label, value in (
-                ("the names it covers", self.domains),
-                ("somewhere to install it", self.install_on),
-            )
-            if not value
-        ]
-        if missing:
-            raise ValueError(f"{self.certificate_name} still needs " + " and ".join(missing) + ".")
-        return self
-
 
 class ResolvedTLSCertificateSpec(ProviderModel):
-    certificate_name: str = Field(min_length=1, max_length=160)
-    domains: list[str] = Field(min_length=1)
-    consumers: list[TLSConsumer] = Field(min_length=1)
+    certificate_name: RequiredText = Field(max_length=160)
+    domains: Annotated[list[str], NonEmpty()]
+    consumers: Annotated[list[TLSConsumer], NonEmpty()]
     # Separate from the consumers, because a consumer is something that serves
     # the certificate and is checked by being connected to. These are places the
     # certificate is written *about*. Folded into the same list they would be
@@ -184,15 +169,13 @@ class UploadedCertificateSpec(ProviderModel):
     thing HQ cannot act on.
     """
 
-    certificate_name: str = Field(
-        min_length=1,
+    certificate_name: RequiredText = Field(
         max_length=160,
         pattern=r"^[a-z0-9][a-z0-9.-]*$",
         title="Name",
         description="The certificate's name where it is installed.",
     )
-    install_on: list[str] = Field(
-        min_length=1,
+    install_on: Annotated[list[str], NonEmpty()] = Field(
         title="Install it on",
         description="Where to deploy it. You can add more later.",
     )
@@ -204,9 +187,9 @@ class UploadedCertificateSpec(ProviderModel):
 
 
 class ResolvedUploadedCertificateSpec(ProviderModel):
-    certificate_name: str = Field(min_length=1, max_length=160)
-    install_on: list[str] = Field(min_length=1)
-    consumers: list[TLSConsumer] = Field(min_length=1)
+    certificate_name: RequiredText = Field(max_length=160)
+    install_on: Annotated[list[str], NonEmpty()]
+    consumers: Annotated[list[TLSConsumer], NonEmpty()]
     domains: list[str] = Field(default_factory=list)
 
 

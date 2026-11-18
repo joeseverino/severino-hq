@@ -12,6 +12,7 @@ from hq.platform.application.card_items import Kpi
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot, work_queue
 from hq.platform.application.domains import Domain, host_domains
 from hq.platform.application.finding_model import Finding
+from hq.platform.application.finding_steps import Do
 from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
@@ -37,7 +38,14 @@ def contributor(name, *, origin="extension", attention=None, dashboard=None, ove
 
 
 def urgent(title):
-    return Finding(rule="example", subject=title, severity="serious", title=title, explanation="Look into it.")
+    return Finding(
+        rule="example",
+        subject=title,
+        severity="serious",
+        title=title,
+        explanation="Look into it.",
+        steps=(Do("Look into it."),),
+    )
 
 
 def good_source(domain: str) -> tuple[Finding, ...]:

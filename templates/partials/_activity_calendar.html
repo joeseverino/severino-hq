@@ -53,11 +53,7 @@ can be linked to directly and works without JavaScript.
 {% aside %}{% if calendar.period_label or calendar.previous_url or calendar.next_url %}<div class="calendar-controls">
   {% if calendar.period_label %}<span class="calendar-period">{{ calendar.period_label|breakable }}</span>{% endif %}
   {% if calendar.previous_url or calendar.next_url %}
-    <nav class="calendar-nav" aria-label="Change month">
-      {% if calendar.previous_url %}<a href="{{ calendar.previous_url }}" rel="prev" aria-label="Previous month">&lsaquo;</a>{% else %}<span aria-hidden="true" aria-disabled="true">&lsaquo;</span>{% endif %}
-      {% if calendar.current_url %}<a class="calendar-now" href="{{ calendar.current_url }}">Today</a>{% endif %}
-      {% if calendar.next_url %}<a href="{{ calendar.next_url }}" rel="next" aria-label="Next month">&rsaquo;</a>{% else %}<span aria-hidden="true" aria-disabled="true">&rsaquo;</span>{% endif %}
-    </nav>
+    {% include "partials/_calendar_nav.html" with unit="month" previous=calendar.previous_url today=calendar.current_url next=calendar.next_url only %}
   {% endif %}
 </div>{% endif %}
 {% endsection %}

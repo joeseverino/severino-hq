@@ -15,9 +15,23 @@ from django.utils.html import escape
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 
+from hq.platform.application import references
+from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.pages import Page
 from hq.platform.core.templatetags import write_tags
-lazy from hq.platform.core.templatetags.stylesheet_tags import stylesheets
+from hq.platform.core.tests.browser.serving import NONCE
+
+# What names a thing, for {% referenced_by %}: the gallery is built with no
+# database, so the rows a reference is held in are these.
+EXAMPLE_MENTIONS = (
+    references.Mentions(
+        "Example records",
+        (
+            references.Mention(EntityLink("example-record-01", "/example/1/"), "An example note"),
+            references.Mention(EntityLink("example-record-02", "/example/2/")),
+        ),
+    ),
+)
 
 # The retry key every example form carries. The catalog draws no CSRF token,
 # so an entry's form can act nowhere, and one fixed key makes each entry the
@@ -34,19 +48,22 @@ class Entry:
     """A part as a template writes it, with what it is given.
 
     ``premise`` is what the entry must draw to stand for its state, as a probe
-    and its argument returning what falls short of it: a value meant to wrap
-    that fits on one line holds nothing the survey could find wrong.
+    and its argument returning what falls short of it, which the survey finds
+    (`BrowserGate.premise_on`): a value meant to wrap that fits on one line
+    holds nothing the survey could find wrong.
     ``heads_the_page`` says the part is a page's own head; any other is drawn
     under one, as every HQ page is. ``frame`` says the part is the page
     frame's own, which base.html draws beside the page's main rather than in
     it, ``"before"`` or ``"after"``, so it is drawn there, beside a main that
-    holds a page head alone."""
+    holds a page head alone; ``"main"`` is the main itself, drawn in place of
+    the one each entry is drawn in. One with no ``template`` is a part's default
+    entry, drawn from its ``Part.example`` (``default_name``)."""
 
-    template: str
+    template: str = ""
     context: dict[str, Any] = field(default_factory=dict)
     premise: tuple[str, Any] | None = None
     heads_the_page: bool = False
-    frame: Literal["", "before", "after"] = ""
+    frame: Literal["", "before", "after", "main"] = ""
     # The address the part is drawn at, for a part that reads its request: a
     # page's query, or the row its address opens.
     address: str = ""
@@ -67,6 +84,7 @@ class Entry:
             mock.patch.object(write_tags, "new_key", return_value=EXAMPLE_KEY),
             mock.patch.object(write_tags, "CsrfTokenNode", _NoToken),
             mock.patch.object(timezone, "now", return_value=DRAWN_AT),
+            mock.patch.object(references, "referenced_by", return_value=EXAMPLE_MENTIONS),
         ):
             # A form names its fields' ids after the entry, as a page drawing
             # two forms gives each its own.
@@ -79,6 +97,8 @@ class Entry:
         """The entry on a page of its own: in its main, or beside it for a part of the frame."""
 
         drawn = self.drawn(name)
+        if self.frame == "main":
+            return part_page(name, "", main=drawn)
         return part_page(name, head_of(name), **{self.frame: drawn}) if self.frame else part_page(name, drawn)
 
 
@@ -108,18 +128,24 @@ class _Asked(Context):
 
 HEAD = "partials/_page_head.html"
 COLOR_SCHEME = "partials/_color_scheme.html"
+FIRST_FRAME = "partials/_first_frame.html"
 MAIN = "partials/_page_main.html"
+SCRIPTS = "scripts/page.html"
 
 
-def part_page(name, markup, before="", after=""):
-    """A page titled ``name``, of HQ's stylesheets, with ``markup`` alone in
-    the content column base.html draws, and the frame's parts it draws before
-    and after it."""
+def part_page(name, markup, before="", after="", main=""):
+    """A page titled ``name``, of HQ's stylesheets and scripts, as base.html
+    loads them, with ``markup`` alone in the content column base.html draws,
+    or ``main`` drawn as that column, and the frame's parts it draws before
+    and after it. A browser with script off has the page as the server drew
+    it, one with script on the page a reader has: one document, both states."""
 
-    main = render_to_string(MAIN, {"content": mark_safe(markup)})  # noqa: S308 - the catalog's own rendered markup
+    main = main or render_to_string(MAIN, {"content": mark_safe(markup)})  # noqa: S308 - the catalog's own rendered markup
+    # The nonce the gates answer a page a test put together with (gate.policy).
+    nonce = {"csp_nonce": NONCE}
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"{render_to_string(COLOR_SCHEME)}<title>{escape(name)}</title>{stylesheets()}</head>"
-        f"<body>{before}{main}{after}</body></html>"
+        f"{render_to_string(COLOR_SCHEME)}<title>{escape(name)}</title>{render_to_string(FIRST_FRAME, nonce)}</head>"
+        f"<body>{before}{main}{after}{render_to_string(SCRIPTS, nonce)}</body></html>"
     )

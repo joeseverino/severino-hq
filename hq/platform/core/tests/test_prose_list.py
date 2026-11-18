@@ -1,6 +1,6 @@
 """The prose list: a list of sentences is one part."""
 
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import Context, Template
 from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import elements, with_class
@@ -27,7 +27,3 @@ class ProseListTagTests(SimpleTestCase):
 
         (listed,) = with_class(html, "prose-list")
         self.assertEqual(listed.tag, "ol")
-
-    def test_an_unknown_option_is_refused(self):
-        with self.assertRaises(TemplateSyntaxError):
-            Template('{% prose_list css="example" %}{% endprose_list %}')

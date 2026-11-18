@@ -12,7 +12,7 @@ from django.test import SimpleTestCase, TestCase, override_settings, tag
 
 from hq.domains.control_plane.models import ManagedResource
 
-from ..certificate_expiry import CERTIFICATE_EXPIRES, expiring as certificates_expiring
+from ..certificate_expiry import HeldCertificate, judged as certificates_judged
 from ..credential_findings import EXPIRES, expiring as credentials_expiring
 from ..registration_findings import RULES as REGISTRATION_RULES
 from ..tailnet_presence import Presence
@@ -90,8 +90,8 @@ class EveryCallerTests(TestCase):
 
     def test_a_certificate_finding(self):
         def read(when):
-            fact = "|".join(("", "example.com", when.isoformat(), "app.example.com"))
-            (finding,) = certificates_expiring(estate(node(**{CERTIFICATE_EXPIRES: fact})))
+            held = HeldCertificate("", "example.com", when.isoformat(), ("app.example.com",))
+            (finding,) = certificates_judged(((node(), held),), NOW)
             return finding.title
 
         self.assertSays(read)
@@ -114,12 +114,12 @@ class EveryCallerTests(TestCase):
         self.assertSays(read)
 
     def test_a_certificate_renewal_finding(self):
-        from ..certificate_expiry import RENEWAL, renewal_due
+        from ..certificate_expiry import renewals_judged
+        from ..estate import Expiry
 
         def read(when):
-            (finding,) = renewal_due(
-                estate(node(**{RENEWAL: f"example.com|{when.isoformat()}|30|/certificates/example/"}))
-            )
+            expiry = Expiry("example.com", "Certificate", when, renewal_window_days=30)
+            (finding,) = renewals_judged(((node(), expiry),), NOW)
             return finding.title
 
         self.assertSays(read)

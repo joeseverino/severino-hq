@@ -1,25 +1,25 @@
 """What a card lists, as data: figures, readings, rows and dated events.
 
-Each is the shape one shared partial draws (``_kpi_grid.html``,
+Each is the shape one shared part draws (a band of facts,
 ``_insight_grid.html``, ``_record_list.html``, ``_timeline.html``), which
 ``hq_sdk.ui`` exports so an extension fills the same part the host does.
 """
 
 from dataclasses import field
-from datetime import date, datetime
+from datetime import date
 from typing import Literal, Protocol
 
-from .display_words import QUOTED, display, in_words
+from .display_words import QUOTED, display
 from .drawings import AllocationBar, Dots, Trend
 from .tone import Tone
-from .workflow_contracts import ActionLink, WorkflowPlan
 
 
 @display
 class Kpi:
     """One figure: what it counts, its value, and a line saying more.
 
-    The shape ``partials/_kpi_grid.html`` draws, alone or as one of a row.
+    The shape a band of facts draws as one of its facts (``{% facts
+    items=... %}``).
     """
 
     label: str
@@ -37,7 +37,7 @@ class Kpi:
     # what the value and the note already say, so the words stay.
     drawing: Dots | Trend | AllocationBar | None = None
     # Which way a figure that is itself a change went, as a status tone: the
-    # value is drawn in it, in a featured row too, so a rise and a fall never
+    # value is drawn in it at any size, so a rise and a fall never
     # read alike.
     tone: Tone | Literal[""] = ""
     # The same for the line under the value, where the value is a level and
@@ -46,28 +46,23 @@ class Kpi:
     # Where the line under the value leads, when it counts things with a page
     # of their own ("12 expenses").
     detail_url: str = ""
+    # What pointing at the figure says, its whole sentence, where the cell
+    # holds only a word or two of it (an hour's forecast).
+    tip: str = ""
 
     def __post_init__(self) -> None:
         if self.detail_url and not self.detail:
             raise ValueError("Kpi detail_url needs a detail: a link is said by its words.")
 
-    @property
-    def holds_links(self) -> bool:
-        """Whether a link stands inside the figure: a dot or a legend row that
-        leads on, or its line under the value. A link does not hold links, so
-        such a figure's page is reached through its value instead of the whole
-        cell."""
-
-        return bool(self.detail_url or (self.drawing is not None and self.drawing.links))
-
 
 @display
 class Insight:
-    """A reading, what it means, and the next action.
+    """A reading, what it means, and the next action: the card
+    ``partials/_insight_grid.html`` draws, every field of it.
 
-    The shape extensions emit for ``partials/_insight_grid.html``. Provided by
-    the host so a surface needing decision support does not restate the card
-    markup or re-map its own status names onto styling.
+    Provided by the host so a surface needing decision support does not
+    restate the card markup or re-map its own status names onto styling. What
+    needs a person goes on the queue as a ``Finding``.
     """
 
     status: Tone
@@ -77,86 +72,6 @@ class Insight:
     body: str
     action: str = ""
     url: str = ""
-    # How many things this insight stands for, when it stands for a countable
-    # backlog. ``value`` is a display string and may be a balance or a distance,
-    # so a surface that totals a queue cannot infer a quantity from it. Left
-    # unset, the insight counts as the single thing it describes, which is
-    # what an alert is.
-    magnitude: int | None = None
-    # Optional closure loop emitted by any host or plugin domain. The queue and
-    # insight partials render it generically; the domain still owns every action.
-    workflow: WorkflowPlan | None = None
-    # Quick actions offered on the item itself, each going through its owner's
-    # route exactly as the owner's own page would.
-    actions: tuple[ActionLink, ...] = ()
-    # What this item is about, stable for as long as it is the same matter:
-    # "finding:<rule>:<subject>", "approval:<id>". Read state follows it, so it
-    # must not carry anything that changes while the matter stays the same: a
-    # count, a days-left figure, a message. Unique within its source. Left empty,
-    # the eyebrow and title stand in for it.
-    key: str = ""
-    # The thing this item is about, as a link to its own page.
-    subject: ActionLink | None = None
-    # The one thing on its subject it is about, where the subject holds many:
-    # a container's name on its machine. A page about one of them alone tells
-    # its own problems from its neighbors' by it.
-    part: str = ""
-    # A notice reports something that happened or was measured; there is
-    # nothing to resolve and no reading to refresh until it clears. The queue
-    # keeps notices apart from what needs doing and out of that count, and a
-    # reader who dismisses one is done with it: it returns only when what it
-    # reports (its ``body``) changes. So a notice's body says the occurrence
-    # (the run, the day, the figures), and a counter that moves on its own
-    # (days since) belongs in ``value``.
-    notice: bool = False
-    # A request a person decides, by its Approve or Reject: it ends only when
-    # decided, so a reader can never set it aside, and a mark from before
-    # does not hide it.
-    held: bool = False
-    # Its only remedy does not exist yet: nothing it counts has a fixed
-    # release. Nobody can act on it, so the queue leaves it out and its own
-    # page shows it.
-    awaiting_fix: bool = False
-    # What kind of matter this is, as its owner would head a list of them:
-    # "Image advisories", "Tailscale updates". Several open items of one family
-    # from one source are folded under that heading in the queue, so a dozen of
-    # the same thing read as one line until opened. Left empty, the item
-    # stands alone.
-    family: str = ""
-    # When this began, where its owner knows: the moment a condition was first
-    # seen, a request was made, a key ran out. A card says "Since Oct 3".
-    # Left unset when the owner knows only that it holds now: a card that
-    # guesses a start is worse than one that gives none.
-    since: datetime | None = None
-    # When the reading this item is drawn from was taken, where it is drawn
-    # from one, and its kind, whose cadence says when it is out of date: a
-    # card says how old what it claims is only then.
-    observed_at: datetime | None = None
-    reads: str = ""
-    # What was read that shows it, as (label, value) pairs: "Device address",
-    # "192.0.2.10". A card draws each label once with its values beside it.
-    facts: tuple[tuple[str, str], ...] = ()
-    # Pages that help look into it (where it sits, what depends on it), drawn
-    # as one line of links under its buttons. Never something that acts.
-    links: tuple[ActionLink, ...] = ()
-    # The capabilities a reader must hold to be shown it, for an item drawn
-    # from what only they may read. Empty, every reader of the queue sees it.
-    read_capabilities: tuple[str, ...] = ()
-    # Why it is as urgent as its status says, in one sentence a stranger
-    # understands: what HQ read and what makes that this urgent ("GitHub
-    # reports a failed check on main's newest commit, and a failing default
-    # branch is urgent"). The panel behind a queue card's urgency leads with
-    # it, so every item the queue shows says one; a finding's comes from its
-    # rule.
-    why: str = ""
-    # What clears it, for an item a threshold raises, worded from that same
-    # threshold as a clause after "Clears once" ("free space is back above
-    # 2 GB or 10% of the disk"). The panel says it after the why.
-    clears: str = ""
-
-    def __post_init__(self) -> None:
-        for label, _value in self.facts:
-            in_words(label, label=True)
 
 
 class RowLink(Protocol):

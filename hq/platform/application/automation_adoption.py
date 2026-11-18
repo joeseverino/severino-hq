@@ -46,6 +46,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    Strict,
     StrictBool,
     StrictFloat,
     StrictInt,
@@ -62,7 +63,7 @@ from . import automation_sources
 from .answer_fields import CallMessage
 from .automation_manifest import PLAYBOOK, REVISION, OperationManifest, ProcedureTerms, Statement
 from .automation_sources import InputBound, ProcedureDeclaration
-from .command_fields import Describe
+from .command_fields import Describe, RequiredText
 from .contracts import Closed, Effect
 from .integration_specs import CapabilitySpec
 from .projection import read_once
@@ -774,7 +775,7 @@ class Adopted(TypedDict):
 
 
 # A playbook as a change of a scan names it: its id, or its sidecar where two declare one id.
-PlaybookKey = Annotated[StrictStr, Field(min_length=1, max_length=200, title="Playbook")]
+PlaybookKey = Annotated[RequiredText, Strict(), Field(max_length=200, title="Playbook")]
 
 
 @dataclass(frozen=True, slots=True)

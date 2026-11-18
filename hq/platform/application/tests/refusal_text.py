@@ -15,7 +15,7 @@ built from one sentence. A sentence is:
 - a call to a function whose every definition under ``hq`` is annotated to
   return a ``Sentence``, each ``return`` of which is held to one;
 - ``ended`` of a sentence, the one closer the page sentence rule
-  (``hq_sdk.validation``) asks for where a sentence ends on a value;
+  (``hq.platform.application.plugin_validation``) asks for where a sentence ends on a value;
 - ``a or b``, ``a if c else b`` and ``a + b`` of sentences.
 
 A formatter coerces what it is given (a date, a number) into HQ's form, so its
@@ -33,7 +33,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from hq_sdk.validation import _CLOSERS
+from hq.platform.application.plugin_validation import _CLOSERS
 
 from .apart import apart
 

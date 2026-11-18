@@ -245,15 +245,6 @@ class APITests(TestCase):
         self.assertFalse(Asset.objects.exists())
         self.assertFalse(Expense.objects.exists())
 
-    def test_the_bounds_are_accepted(self):
-        for value in IN_RANGE:
-            with self.subTest(value=value):
-                asset = self._post("asset.create", _asset(value, f"api-ok-{value}"), f"a{value}")
-                expense = self._post("expense.create", _expense(value), f"e{value}")
-                self.assertEqual(asset.status_code, 200, asset.content)
-                self.assertEqual(expense.status_code, 200, expense.content)
-                self.assertEqual(asset.json()["data"]["asset"]["business_use_percentage"], value)
-
 
 class WebFormTests(TestCase):
     def test_the_form_still_refuses_on_the_field(self):

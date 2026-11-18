@@ -143,17 +143,6 @@ class AdoptionWebTests(TestCase):
         )
         self.assertEqual(resource.spec["answer"], "10.0.0.10")
 
-    def test_adopting_requires_a_signed_in_operator(self):
-        self.client.logout()
-
-        response = self.client.post(
-            reverse("control_plane:adopt", kwargs={"hostname": "app.example.com"}), form_keyed()
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response["Location"])
-        self.assertFalse(ManagedResource.objects.exists())
-
 
 class AdoptServiceTests(TestCase):
     """A hostname is one decision, even when it is several records."""

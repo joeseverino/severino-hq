@@ -63,13 +63,7 @@ def held_askers() -> Q:
     blocked = _blocked_clients().filter(
         client_id=OuterRef("requested_actor"), person_key=OuterRef("requested_person_key")
     )
-    held = Q(Exists(blocked)) | Q(
-        # An operation queued before person attribution cannot safely be
-        # assigned to one of a shared client's people. Keep its old brake.
-        requested_person_key__isnull=True,
-        requested_actor__in=_blocked_clients().values("client_id"),
-    )
-    held &= Q(requested_interface__in=TOKEN_INTERFACES)
+    held = Q(Exists(blocked)) & Q(requested_interface__in=TOKEN_INTERFACES)
     held |= agent_devices.blocked_askers()
     if paused := paused_interfaces():
         held |= Q(requested_interface__in=paused)

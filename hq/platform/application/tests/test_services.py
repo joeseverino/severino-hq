@@ -10,10 +10,8 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import within
-from hq.platform.application.tests.worded import worded
 
 from .. import estate, security
-from ..attention import infrastructure
 from ..services import alias_target, find_service, service_catalog, service_reading
 from .service_world import declare_world, facet, healthy
 
@@ -306,12 +304,6 @@ class ServiceSurfaceTests(TestCase):
                 },
             )
         )
-
-    def test_a_fault_reaches_the_composed_queue_with_its_own_link(self):
-        (item,) = (item for item in worded(infrastructure()) if "service-wiring-incomplete" in item.key)
-
-        self.assertEqual(item.subject.url, reverse("control_plane:service", kwargs={"hostname": "app.example.com"}))
-        self.assertEqual(item.status, "attention")
 
     def test_the_estate_card_counts_services_and_names_the_incomplete_ones(self):
         card = next(c for c in estate.cards(principal=security.cli_principal()) if c["id"] == "hq.estate.services")

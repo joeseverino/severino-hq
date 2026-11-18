@@ -39,12 +39,18 @@ class CommandDescriptionTests(SimpleTestCase):
         self.assertEqual(meanings(Asked), {"hosts": ""})
         self.assertEqual(Asked.model_json_schema()["properties"]["hosts"]["description"], "Each by its name.")
 
-    def test_every_host_command_field_is_described(self):
-        missing = sorted(
-            f"{spec.name}.{name}"
-            for spec in host_specs()
-            for name, field in fields(capability_schema(spec)).items()
-            if not str(field.get("description", "")).strip()
-        )
+    def test_a_declared_example_is_what_the_schema_offers_beside_the_description(self):
+        from typing import Annotated
 
-        self.assertEqual(missing, [], "Describe each field in its Annotated type with command_fields.Describe(...).")
+        from pydantic import BaseModel
+
+        from hq.platform.application.describe import Describe
+
+        class Asked(BaseModel):
+            about: Annotated[
+                str, Describe("What it is about.", api="A `type:key` reference.", examples=("machine:lab-1",))
+            ]
+
+        said = Asked.model_json_schema()["properties"]["about"]
+        self.assertEqual(said["examples"], ["machine:lab-1"])
+        self.assertEqual(said["description"], "What it is about. A `type:key` reference.")

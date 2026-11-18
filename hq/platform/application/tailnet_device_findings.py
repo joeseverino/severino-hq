@@ -4,24 +4,25 @@ Facts with no symptom until somebody needs them. A node key runs out on a date
 decided months earlier, and the machine, still running, stops being reachable.
 A route advertised but never approved is reported by the machine for as long
 as it runs and handed to nobody, so it can be configured, documented, believed
-and dead. ``add`` puts what the tailnet reading says of each device on the
-machine it belongs to, under the name its machine page uses, and the rules
-read the rows back.
+and dead. The rules are gathered: each reads what the tailnet says of a device
+about the machine it belongs to, under the name its machine page uses
+(``reading_facts.placed``), and ``add`` makes sure that machine's node stands.
 """
 
-import json
-from collections.abc import Callable, Iterator
-from dataclasses import asdict, dataclass
+from collections.abc import Callable
+from dataclasses import dataclass
 from functools import cmp_to_key
 from typing import Any
 
 from hq.domains.control_plane.consoles import tailscale_machine
 
 from .expiry import days_until
-from .finding_model import TAILNET_CARD, Finding, FindingEstate, FindingRemedy, FindingRule, OperatorStep, fact_values
+from .finding_model import TAILNET_CARD, Finding, FindingEstate, FindingRemedy, FindingRule
+from .finding_steps import Do, Run
 from .images import compare, version
 from .moments import moment, when_day
-from .reading_facts import onto_machine
+from .projection import read_once
+from .reading_facts import by_node, stands
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted, ended
@@ -35,15 +36,6 @@ lazy from .tailnet_signers import signers
 # which it stops being a plan and starts being a date.
 KEY_EXPIRY_ATTENTION_DAYS = 45
 KEY_EXPIRY_SERIOUS_DAYS = 14
-
-# A device tailnet lock filters out of the tailnet. It is a fact about the
-# tailnet rather than about the device's presence: a locked-out node is left
-# out of the device reading, so asking each device would never find one.
-LOCKED_OUT = "tailnet-locked-out"
-# What the tailnet says of a device, as one JSON fact on its machine.
-DEVICE = "tailnet-device"
-# The tailnet lock key a server signs with, on that server's machine.
-SERVER_SIGNS = "tailnet-lock-server-signs"
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,15 +62,6 @@ class TailnetDevice:
     # The device's page in the Tailscale admin console, where its key and approval are changed.
     console: str = ""
 
-    @property
-    def fact(self) -> tuple[str, str]:
-        return DEVICE, json.dumps(asdict(self))
-
-    @classmethod
-    def of(cls, value: str) -> TailnetDevice:
-        found = json.loads(value)
-        return cls(**{**found, "unapproved": tuple(found["unapproved"])})
-
 
 def _release(reported: str) -> str:
     """The numeric release a client reports, "1.102.3-t0abc" as "1.102.3"."""
@@ -104,26 +87,43 @@ def _row(presence: Presence, newest: str) -> TailnetDevice:
     )
 
 
-def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
-    """Each device's row on the machine it belongs to, and each device tailnet
-    lock keeps out on the machine of its name."""
+def _device_rows() -> tuple[tuple[str, TailnetDevice], ...]:
+    """Each device's row, by the name of the machine it belongs to, read once per projection."""
 
+    return read_once("tailnet_device_findings.rows", _read_rows)
+
+
+def _read_rows() -> tuple[tuple[str, TailnetDevice], ...]:
     present = tailnet_presence()
     reported = [presence.client_version for presence in present.values() if version(presence.client_version)]
     newest = _release(max(reported, key=_BY_RELEASE, default=""))
-    for name, presence in present.items():
-        onto_machine(nodes, machine, name, (_row(presence, newest).fact,))
-    for name in policy().locked_out:
-        onto_machine(nodes, machine, name, ((LOCKED_OUT, "true"),))
-    for signer in signers():
-        if signer.server:
-            onto_machine(nodes, machine, signer.machine, ((SERVER_SIGNS, signer.key),))
+    return tuple((name, _row(presence, newest)) for name, presence in present.items())
 
 
-def _devices(estate: FindingEstate) -> Iterator[tuple[TopologyNode, tuple[TailnetDevice, ...]]]:
-    for node in estate.nodes():
-        if values := fact_values(node, DEVICE):
-            yield node, tuple(TailnetDevice.of(value) for value in values)
+def _signing_servers() -> tuple[tuple[str, str], ...]:
+    """Each server tailnet lock trusts to sign, by its machine's name, with its key."""
+
+    return tuple((signer.machine, signer.key) for signer in signers() if signer.server)
+
+
+def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
+    """The node of each machine a device, a device tailnet lock keeps out,
+    or a signing server belongs to."""
+
+    # A device tailnet lock filters out is a fact about the tailnet rather than
+    # about the device's presence: a locked-out node is left out of the device
+    # reading, so asking each device would never find one.
+    names = (
+        *(name for name, _row in _device_rows()),
+        *policy().locked_out,
+        *(name for name, _key in _signing_servers()),
+    )
+    for name in names:
+        stands(nodes, machine, "", name)
+
+
+def _devices(estate: FindingEstate) -> tuple[tuple[TopologyNode, list[TailnetDevice]], ...]:
+    return by_node(estate, (("", name, row) for name, row in _device_rows()))
 
 
 def _each(estate: FindingEstate, says: Callable[[TopologyNode, TailnetDevice], Finding | None]) -> tuple[Finding, ...]:
@@ -155,8 +155,8 @@ def _key_expiring(estate: FindingEstate) -> tuple[Finding, ...]:
             else f"{name} has left the tailnet",
             explanation=ended(f"Its Tailscale key {'expires' if days > 0 else 'expired'} on {when_day(expires)}"),
             steps=(
-                OperatorStep(
-                    label=(
+                Do(
+                    (
                         f"Sign in to Tailscale again on {name}, or turn off key expiry for it in the Tailscale admin "
                         "console."
                         if days > 0
@@ -176,11 +176,11 @@ def _console(row: TailnetDevice) -> tuple[str, ...]:
     return (row.console,) if row.console else ()
 
 
-def _sign_key(name: str) -> tuple[OperatorStep, ...]:
+def _sign_key(name: str) -> tuple[Run, ...]:
     """Signing takes a tailnet lock key, which only a signing machine holds."""
 
     return (
-        OperatorStep(
+        Run(
             label=f"On a machine that can sign, list the keys waiting, then run tailscale lock sign with the key it "
             f"lists for {name}",
             command="tailscale lock status",
@@ -202,8 +202,7 @@ def _locked_out(estate: FindingEstate) -> tuple[Finding, ...]:
             ),
             steps=_sign_key(node.label),
         )
-        for node in estate.nodes()
-        if fact_values(node, LOCKED_OUT)
+        for node, _names in by_node(estate, (("", name, name) for name in policy().locked_out))
     )
 
 
@@ -219,11 +218,7 @@ def _unauthorized(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity=Tone.SERIOUS,
                 title=f"{node.label} is waiting for tailnet approval",
                 explanation="It cannot reach anything yet.",
-                steps=(
-                    OperatorStep(
-                        label="Approve it in the Tailscale admin console, under Machines.", notes=_console(row)
-                    ),
-                ),
+                steps=(Do("Approve it in the Tailscale admin console, under Machines.", notes=_console(row)),),
             )
             if row.unauthorized
             else None
@@ -266,15 +261,14 @@ def _server_signs(estate: FindingEstate) -> tuple[Finding, ...]:
             title=f"{node.label} can sign devices onto the tailnet",
             explanation=f"Whoever takes over {node.label} can add devices to the tailnet.",
             steps=tuple(
-                OperatorStep(
+                Run(
                     label="On another signing device, remove its key",
                     command=f"tailscale lock remove {key}",
                 )
                 for key in keys
             ),
         )
-        for node in estate.nodes()
-        if (keys := fact_values(node, SERVER_SIGNS))
+        for node, keys in by_node(estate, (("", name, key) for name, key in _signing_servers()))
     )
 
 
@@ -298,7 +292,7 @@ def _client_update(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity=Tone.ATTENTION,
                 title=f"Tailscale update available for {node.label}",
                 explanation=_update_said(row),
-                steps=(OperatorStep(label=f"On {node.label}, as an administrator", command="tailscale update"),),
+                steps=(Run(f"On {node.label}, as an administrator", "tailscale update"),),
             )
             if row.update
             else None
@@ -342,6 +336,7 @@ RULES: tuple[FindingRule, ...] = (
         "A tailnet key runs out soon",
         Tone.ATTENTION,
         _key_expiring,
+        gathered=True,
         operator_action=(
             "Sign in to Tailscale again on the machine, or turn off key expiry for it in the Tailscale admin console."
         ),
@@ -358,6 +353,7 @@ RULES: tuple[FindingRule, ...] = (
         "A device locked out by tailnet lock",
         Tone.SERIOUS,
         _locked_out,
+        gathered=True,
         operator_action="On a machine that can sign, run tailscale lock sign with the machine's key.",
         no_help_reason="Only a machine holding a tailnet lock key can sign.",
         card=TAILNET_CARD,
@@ -368,6 +364,7 @@ RULES: tuple[FindingRule, ...] = (
         "A device waiting for tailnet approval",
         Tone.SERIOUS,
         _unauthorized,
+        gathered=True,
         operator_action="Approve it in the Tailscale admin console, under Machines.",
         no_help_reason="HQ cannot approve a device on the tailnet.",
         card=TAILNET_CARD,
@@ -378,6 +375,7 @@ RULES: tuple[FindingRule, ...] = (
         "A device not signed for tailnet lock",
         Tone.SERIOUS,
         _lock_unsigned,
+        gathered=True,
         operator_action="On a machine that can sign, run tailscale lock sign with the machine's key.",
         no_help_reason="Only a machine holding a tailnet lock key can sign.",
         card=TAILNET_CARD,
@@ -388,6 +386,7 @@ RULES: tuple[FindingRule, ...] = (
         "A server can sign for tailnet lock",
         Tone.SERIOUS,
         _server_signs,
+        gathered=True,
         operator_action="On a signing device other than the server, run tailscale lock remove with the server's key.",
         no_help_reason="Only a device that can sign changes the keys tailnet lock trusts.",
         card=TAILNET_CARD,
@@ -398,6 +397,7 @@ RULES: tuple[FindingRule, ...] = (
         "A tailnet client update is available",
         Tone.ATTENTION,
         _client_update,
+        gathered=True,
         operator_action="Run tailscale update on the machine, as an administrator.",
         no_help_reason="HQ cannot run commands on the machine.",
         card=TAILNET_CARD,
@@ -408,6 +408,7 @@ RULES: tuple[FindingRule, ...] = (
         "Routes offered but not approved",
         Tone.ATTENTION,
         _routes_unapproved,
+        gathered=True,
         operator_action="Approve the routes you want on the machine's page, and stop offering the rest.",
         no_help_reason="HQ approves only the routes a machine already offers, and a person decides which.",
         card=TAILNET_CARD,

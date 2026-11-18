@@ -42,7 +42,7 @@ def _objects(schema: Mapping[str, Any], definitions: Mapping[str, Any], seen: fr
         if name not in seen:
             yield from _objects(definitions[name], definitions, seen | {name})
     for branch in (*schema.get("anyOf", ()), *schema.get("oneOf", ()), *schema.get("allOf", ())):
-        yield from _objects(branch, definitions, seen)
+        yield from _objects(_within(schema, branch, definitions), definitions, seen)
     for step, wrap, inner in _members(schema):
         for path, payload, node in _objects(inner, definitions, seen):
             yield (step, *path), wrap(payload), node
@@ -53,6 +53,21 @@ def _objects(schema: Mapping[str, Any], definitions: Mapping[str, Any], seen: fr
         for name, field in properties.items():
             for path, payload, node in _objects(field, definitions, seen):
                 yield (name, *path), {**tags, name: payload}, node
+
+
+def _within(parent: Mapping[str, Any], branch: Mapping[str, Any], definitions: Mapping[str, Any]) -> Mapping[str, Any]:
+    """``branch`` as the object a payload is: beside an object's own fields, a
+    branch narrows that object (a declaration's spec, by its kind), so it is
+    those fields with the branch's over them, closed or open as the object is."""
+
+    if "properties" not in parent:
+        return branch
+    if (ref := branch.get("$ref", "")).startswith(LOCAL):
+        branch = definitions[ref.removeprefix(LOCAL)]
+    if "properties" not in branch:
+        return branch
+    held = {key: value for key, value in parent.items() if key not in ("anyOf", "oneOf", "allOf")}
+    return {**held, "properties": {**parent["properties"], **branch["properties"]}}
 
 
 def _members(schema: Mapping[str, Any]) -> Iterator[tuple[Any, Any, Mapping[str, Any]]]:

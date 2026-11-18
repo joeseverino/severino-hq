@@ -46,7 +46,30 @@ from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, est
 from hq.platform.core.tests.browser.gate import LIFTED, BrowserGate, add_css
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.audit import AUDIT
-from hq.platform.core.tests.browser.reference import (
+from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
+from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
+from hq.platform.core.tests.browser.survey import (
+    BUSY,
+    CLOSE_OPENED,
+    open_every_fold,
+    palette_probes,
+    survey_checks,
+)
+from hq.platform.core.tests.browser.widths import (
+    DENSE,
+    ENTRY,
+    LIST,
+    PHONE_SCREEN,
+    SCRIPTED,
+    SCRIPTED_ENTRY,
+    UNSCRIPTED,
+    WIDTHS,
+    Judged,
+)
+from hq.platform.core.tests.look_posts import Posted, is_post, post_names, posted
+from hq.platform.core.tests.look_records import EstatePages
+from hq.platform.core.tests.look_reference import (
     REFERENCE,
     REFERENCE_DARK,
     OpenedTag,
@@ -58,19 +81,6 @@ from hq.platform.core.tests.browser.reference import (
     served_document,
     wait_for_reference,
 )
-from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
-from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
-from hq.platform.core.tests.browser.survey import (
-    BUSY,
-    CLOSE_OPENED,
-    open_every_fold,
-    palette_probes,
-    survey_checks,
-)
-from hq.platform.core.tests.browser.widths import PHONE_SCREEN
-from hq.platform.core.tests.look_posts import Posted, is_post, post_names, posted
-from hq.platform.core.tests.look_records import EstatePages
 from hq.platform.core.tests.look_report import (
     Found,
     Measured,
@@ -84,6 +94,7 @@ from hq.platform.core.tests.look_report import (
 )
 from hq.platform.core.tests.look_tables import COLUMNS, TABLES, columns_line
 from hq.platform.core.tests.task import PREFIX, TEMPLATE, Usage, estate_name, estate_path, is_estate, usage
+from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.agents import example_viewer
@@ -137,7 +148,7 @@ GATE_RERUN = "HQ_GATE_RERUN"
 # change to what was drawn. Out are the tests and the tools, lint and type
 # config (pyproject.toml, since uv.lock holds what a request imports), the
 # committed OpenAPI document, which only its drift gate reads (the served one
-# is built from the routes and openapi-examples.json), and the Go controller,
+# is built from the routes and registries), and the Go controller,
 # a separate program.
 SURVEY_INPUTS = (
     ".",
@@ -982,8 +993,6 @@ DRAWN_BY_NOTHING = {
     "control_plane/zone_index.html": "drawn only where no zone is managed, and the estate manages one",
     "control_plane/certificate_upload.html": "the estate holds no certificate to upload one for",
     "calendars/entry_confirm_delete.html": "an entry's page is linked only from a day opened beside the month",
-    "partials/_attention_list.html": "no template or view draws it; only a test renders it",
-    "partials/_row_field.html": "only itself includes it, and no form names it as its table body",
 }
 
 
@@ -1230,8 +1239,12 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     on_reference = False
     # Whether the run takes its screenshots, as ``asked_for`` decides.
     shooting = True
-    # The catalog entries asked, which are drawn without script (``scripted_for``).
-    unscripted: frozenset[str] = frozenset()
+    # The catalog entries asked, judged as the catalog's gate judges them (``judged_as``).
+    entries: frozenset[str] = frozenset()
+    # The pages whose tables were read at every width (``at_every_width``).
+    tables_swept: frozenset[str] = frozenset()
+    # The lists asked, filled with the longest values their models hold (``judged_as``).
+    lists: tuple[str, ...] = ()
     # A look's record is its findings and shots; a trace would snapshot the
     # page at every step of every page the look reads.
     traced = False
@@ -1355,7 +1368,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         cls.addresses = {name: estate_path(name) for name in {*estate, *filter(is_estate, pages)}}
         cls.addresses |= {name: posted(name).address() for name in filter(is_post, pages)}
         entries = catalog_pages(pages)
-        cls.unscripted = frozenset(entries)
+        cls.entries = frozenset(entries)
+        cls.lists = tuple(name for name in derived_pages() if name in pages)
         rendered = stress_pages(pages) | entries
         if set(pages) & set(REFERENCE_PAGES):
             rendered |= render_reference()
@@ -1466,8 +1480,6 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @override
     def open(self, name, width):
-        # Every page, since one after a catalog entry would be drawn as it was.
-        self.draw_scripted_as(name)
         if is_estate(name):
             self.visit(self.addresses[name], width)
         elif is_post(name):
@@ -1491,58 +1503,39 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @override
     def left_out_on(self, path):
-        return catalog.left_out_on(path) if path in self.unscripted else super().left_out_on(path)
+        return catalog.left_out_on(path) if path in self.entries else super().left_out_on(path)
 
-    def scripted_for(self, name) -> bool:
-        """Whether ``name`` is drawn with script: a page is unless
-        ``--no-script``, and a catalog entry never is, as the catalog's gate
-        judges it (``CatalogLayoutTests``), so a look at one sees the state
-        that gate does."""
-
-        return not _asked().switch("no_script") and name not in self.unscripted
-
-    def draw_scripted_as(self, name):
-        """A context that runs script as ``name`` is drawn with, started
-        afresh only when the one open does not."""
-
-        if (scripted := self.scripted_for(name)) != self.runs_script:
-            self.draw_with_script(scripted)
+    @override
+    def premise_on(self, path):
+        return catalog.premise_of(path) if path in self.entries else None
 
     def draw_with_script(self, scripted):
         self.start(java_script_enabled=scripted, color_scheme="dark" if _asked().switch("dark") else "light")
 
-    @override
-    def settle(self):
-        # A page without script runs no frame callback or timer, so a wait on
-        # one never ends; nothing there moves but an animation, which the shot
-        # finishes itself (``animations="disabled"``).
-        if self.runs_script:
-            BrowserGate.settle(self)
-
     def test_look(self):
-        widths, rule = self.asked_for()
+        rule = self.asked_for()
         self.draw_with_script(not _asked().switch("no_script"))
         self.errors: Found = {}
         self.unanswered_pages: dict[str, int | None] = {}
         # Each page and width the rule ran to its end on, whatever it found.
         self.judged_at: dict[tuple[str, int], None] = {}
         if _asked().switch("deep"):
-            self.follow(widths[0])
+            self.follow((self.widths_asked or WIDTHS)[0])
         self.measured: Measured = {}
-        found = self.look_at_every_page(widths, rule)
+        found = self.look_at_every_page(rule)
         looked = look_shares.Looked(
             found, self.measured, self.errors, list(self.judged_at), self.printed, self.unanswered_pages
         )
         if (at := look_shares.this_share()) and (shared := look_shares.folder()):
             looked.write(look_shares.record(shared, at[0]))
             return
-        found = self.merge(looked, widths)
+        found = self.merge(looked)
         if into := _asked().text(_FINDINGS):
             _write_found(Path(into), drawn_at_base(found, self.unanswered_pages), self.measured, self.errors)
         if failed := self.close(rule, found):
             self.fail("\n".join(failed))
 
-    def merge(self, looked, widths) -> Found:
+    def merge(self, looked) -> Found:
         """What every share found, this one's included, as one look in the
         order the pages were asked, each page's lines said in that order; each
         share that ended without its findings, and each page no share or more
@@ -1552,11 +1545,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             return looked.found
         with stall_watch.paused():
             theirs, failed = look_shares.collected(self.shares, this_run(), self.dealt, _why_it_ended)
-        whole, wrong = look_shares.merged(self.dealt, widths, [looked, *theirs])
+        whole, wrong = look_shares.merged(self.dealt, [looked, *theirs])
         self.unlooked = (*failed, *wrong)
-        self.unlooked_pages = tuple(
-            name for name in self.dealt if any((name, width) not in whole.found for width in widths)
-        )
+        looked_at = {name for name, _width in whole.found}
+        self.unlooked_pages = tuple(name for name in self.dealt if name not in looked_at)
         self.measured, self.errors, self.unanswered_pages = whole.measured, whole.errors, whole.unanswered
         self.judged_at = dict.fromkeys(whole.judged)
         look_shares.say(whole.printed)
@@ -1644,7 +1636,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if rerun := os.environ.get(GATE_RERUN):
             Path(rerun).write_text(" ".join(again) + "\n", encoding="utf-8")
 
-    def look_at_every_page(self, widths, rule) -> Found:
+    def look_at_every_page(self, rule) -> Found:
         """Each page at each width, said as it starts, so a look that hangs
         names where, and once it has been looked at: its shots, its findings
         (kept beside its screenshot) and every error and refusal it had. Split
@@ -1658,7 +1650,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         # A share's own lines are said after its share by the run that started it.
         progress = look_shares.said_by(index, total) if total > 1 and not look_shares.this_share() else ""
         for name in self.asked:
-            for width in widths:
+            for width in self.widths_of(name):
                 stall_watch.mark(f"dev:look {name} at {width}")
                 began = f"Looking at {name} at {width}"
                 if total == 1:
@@ -1705,9 +1697,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.refusals_so_far()
 
     def asked_for(self):
-        """The widths and rule the task was given, and the CSS it adds."""
+        """The rule the task was given, with the widths, the CSS it adds and
+        what else it reads as it looks."""
 
-        widths = [int(width) for width in _listed("widths")] or [PHONE_SCREEN[0], 820, 1360]
+        self.widths_asked = [int(width) for width in _listed("widths")]
         rule = self.rule_asked()
         self.css = _css(_asked().text("css"))
         self.script = _script(_asked().text("eval"))
@@ -1715,7 +1708,27 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.dialogs = _listed("dialog")
         unnamed = [dialog for dialog in self.dialogs if not re.fullmatch(r"[\w-]+", dialog)]
         self.assertFalse(unnamed, f"--dialog takes dialog ids (connection) or all, not {unnamed}")
-        return widths, rule
+        return rule
+
+    def judged_as(self, name) -> Judged:
+        """How the gate that reads ``name`` judges it, as drawn here, with
+        script unless ``--no-script``: a catalog entry, a page without script,
+        a list filled with its longest values, a dense page, or a page once its
+        script has run."""
+
+        if name in self.entries:
+            return SCRIPTED_ENTRY if self.runs_script else ENTRY
+        if not self.runs_script:
+            return UNSCRIPTED
+        if name in self.lists:
+            return LIST
+        return DENSE if name in DENSE_PAGES else SCRIPTED
+
+    def widths_of(self, name):
+        """The widths ``--widths`` names, or else each its gate judges
+        ``name`` at, a wide table's asked of the page once it has loaded."""
+
+        return iter(self.widths_asked) if self.widths_asked else self.judged_as(name).at(self.draws_a_table)
 
     def look(self, name, width, rule) -> list[str]:
         """Screenshot ``name`` at ``width``, and what ``rule`` finds there."""
@@ -1739,7 +1752,20 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         said += self.with_each_dialog(name, width, rule, said)
         if self.on_reference and _asked().switch("open"):
             said += self.with_each_tag_opened(name, width, rule, said)
+        # Last, since the sweep leaves every fold open: the next width loads afresh.
+        said += self.at_every_width(name, width, rule)
         return said
+
+    def at_every_width(self, name, width, rule) -> list[str]:
+        """What the survey finds in the page's tables at every window width,
+        from the first width it is looked at, where its gate reads them so
+        (``Judged.every_width``)."""
+
+        if rule != "survey" or not self.judged_as(name).every_width or name in self.tables_swept:
+            return []
+        self.tables_swept = self.tables_swept | {name}
+        stall_watch.mark(f"dev:look {name} at every width from {width}")
+        return [f"at every width: {line}" for line in self.judged(name, width, "a_table_fits_its_box_at_every_width")]
 
     def judged(self, name, width, rule) -> list[str]:
         """What ``rule`` finds on the page as it stands."""
@@ -1754,12 +1780,13 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.judged_at[name, width] = None
         return []
 
-    def with_each_popover(self, name, width, rule, beneath) -> list[str]:
+    def with_each_popover(self, name, width, rule, beneath, *, anchored=False) -> list[str]:
         """What ``rule`` finds with one popover of each kind shown
-        (``each_popover_kind``), past what it finds on the page ``beneath``."""
+        (``each_popover_kind``), only those hung from an anchor when
+        ``anchored``, past what it finds on the page ``beneath``."""
 
         found = []
-        for (label, slug), alike in self.each_popover_kind():
+        for (label, slug), alike in self.each_popover_kind(anchored=anchored):
             self.settle()
             named = f"{label} and {alike} like it" if alike else label
             shows = f"with {named} shown"
@@ -1981,20 +2008,33 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     def with_every_fold_open(self, name, width, rule, beneath) -> list[str]:
         """What the survey finds with every fold open, past what it finds on
-        the page ``beneath``, when ``--open-folds`` asks, shot so
-        (``.folds-open``) when the run shoots; the folds closed again after,
-        so a dialog is opened from the page as it loaded. A page with no fold
-        closed is not judged twice."""
+        the page ``beneath``, wherever the page's gate judges it so
+        (``Judged.opened``) or ``--open-folds`` asks, shot so (``.folds-open``)
+        when the run shoots, and with each popover hung from an anchor shown
+        among them at the widths its gate shows one (``Judged.popovers_at``);
+        the folds closed again after, so a dialog is opened from the page as
+        it loaded. A page with no fold closed is not judged twice."""
 
-        if rule != "survey" or not _asked().switch("open_folds") or not self.open_everything(name, width):
+        if rule != "survey":
             return []
-        stall_watch.mark(f"dev:look {name} at {width} with every fold open")
-        shows = "with every fold open"
-        part = "folds-open"
-        self.take_shot(name, width, functools.partial(self.screenshot, name, width, part, shows), part, shows)
-        found = [f"{shows}: {line}" for line in unmatched(self.judged(name, width, rule), beneath)]
-        self.page.evaluate(CLOSE_OPENED)
-        self.settle()
+        judged = self.judged_as(name)
+        if not (judged.opened or _asked().switch("open_folds")):
+            return []
+        found: list[str] = []
+        open_said: list[str] = []
+        if opened := self.open_everything(name, width):
+            stall_watch.mark(f"dev:look {name} at {width} with every fold open")
+            shows = "with every fold open"
+            part = "folds-open"
+            self.take_shot(name, width, functools.partial(self.screenshot, name, width, part, shows), part, shows)
+            open_said = self.judged(name, width, rule)
+            found = [f"{shows}: {line}" for line in unmatched(open_said, beneath)]
+        # --open has shown one popover of every kind already.
+        if width in judged.popovers_at and not _asked().switch("open"):
+            found += self.with_each_popover(name, width, rule, open_said if opened else beneath, anchored=True)
+        if opened:
+            self.page.evaluate(CLOSE_OPENED)
+            self.settle()
         return found
 
     def screenshot(self, name, width, part="", shows="") -> list[Band]:

@@ -12,12 +12,13 @@ from pydantic import ValidationError
 
 from .connection_contracts import ConnectionSpec
 from .contracts import DOTTED_NAME
-from .integration_specs import CapabilitySpec, ResourceSpec
+from .integration_specs import CapabilitySpec, ResourceSpec, command_schema
 from .integration_validation import (
     validate_capability_spec,
     validate_connection_spec,
     validate_resource_spec,
 )
+from .json_schemas import fields
 from .search_contracts import SearchDefinition
 from .ui import ended
 lazy from . import automation_adoption, automation_runs, outbound_work, plugins
@@ -329,8 +330,27 @@ def _compiled_integration_graph(generation: str) -> IntegrationGraph:
                 )
             ]
         )
+    capabilities = (*fixed, *automation_runs.capability_specs(generation))
+    # Each field of HQ's own commands says what it is, on its form and to a
+    # client; an extension's words are its own repository's to hold.
+    if undescribed := sorted(
+        f"{spec.name}.{name}"
+        for spec in capabilities
+        if spec.command_type.__module__.startswith("hq.")
+        for name, said in fields(command_schema(spec.command_type)).items()
+        if not str(said.get("description", "")).strip()
+    ):
+        raise IntegrationGraphError(
+            [
+                IntegrationViolation(
+                    "undescribed_command_field",
+                    f"Describe {', '.join(undescribed)} in its Annotated type with Describe(...).",
+                    tuple(undescribed),
+                )
+            ]
+        )
     return compile_integration_graph(
-        capabilities=(*fixed, *automation_runs.capability_specs(generation)),
+        capabilities=capabilities,
         resources=(*core_resource_specs(), *host_specs("resources"), *plugins.plugin_resource_specs()),
         connections=(*host_specs("connections"), *plugins.plugin_connection_specs()),
         search=plugin_search_definitions(),

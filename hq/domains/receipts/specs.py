@@ -33,7 +33,9 @@ class ReceiptRow(TypedDict):
     size_bytes: Annotated[int, Describe("How big the file is, in bytes.")]
     vendor: Annotated[str, Describe("Who was paid, as the receipt names them; empty when not recorded.")]
     date: Annotated[str | None, Describe("The day on the receipt, an ISO 8601 date; null when not recorded.")]
-    amount: Annotated[str, Describe("The amount on the receipt, a decimal string with two places such as `12.50`.")]
+    amount: Annotated[
+        str, Describe("The amount on the receipt, a decimal string with two places.", examples=("12.50",))
+    ]
     notes: Notes
     related_expense: receipts.ReceiptExpense
     related_asset: receipts.ReceiptAsset
@@ -58,6 +60,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 label="Receipts",
             ),
             web_route="receipts:list",
-            row_type=ReceiptRow,
+            item_type=ReceiptRow,
         ),
     )

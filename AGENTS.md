@@ -138,14 +138,15 @@ architecture test, a glob) fails when its path matches nothing.
   in whole cents, exact integers, and rounds there, as
   `business_use.deductible` does: SQLite holds a decimal as a double, where a
   half cent is inexact. A test holds it to `quantize_money` over every cent.
-- A change to `hq_sdk`'s shape (`hq_sdk/contract.json`) reaches every
-  extension: decide whether `PLUGIN_API_VERSION` moves, and give a new
-  export a case in `tests/sdk_consumer/consumer.py`
-  ([Plugins](docs/Plugins.md)).
+- A change to `hq_sdk`'s shape reaches every extension: a break fails
+  `lint:sdk-breaking` until `PLUGIN_API_VERSION` moves with it, and mypy over
+  the extensions holds what each export accepts and returns. A use an
+  extension must not be able to write gets a case in
+  `tests/sdk_consumer/consumer.py` ([Plugins](docs/Plugins.md)).
 - The shared mechanisms (a list view's table, a command's link, the derived
   files, plugin imports) are held by the architecture tests, the
-  `lint:drift-*` gates and `hq_sdk.validation`, whose failures name the one
-  way to do it.
+  `lint:drift-*` gates and `hq.platform.application.plugin_validation`, whose
+  failures name the one way to do it.
 - An href built from data HQ did not write (a reading, an attestation, a
   manifest, the public contact form) passes through `web_url`, in Python or as
   the template filter. It is then an http(s) address or no link at all.
@@ -210,11 +211,9 @@ A piece of work is done when `mise run fast` passes on its tip, with the
 tests its change touches (`mise run test <labels>`). A change to what a page
 shows also needs `mise run dev:look` on each page its templates draw.
 
-The whole-tree runs belong to the branch the work lands on. A change to what
-pages draw is followed there by `mise run dev:look --rule survey all` in
-WebKit and in Chromium (`--engine`), since a shared sheet or part reaches
-pages the change never named.
-The browser suite and the release check run once before the branch ships.
+The whole-tree runs belong to CI. A shared sheet or part reaches pages the
+change never named, so the browser suite on the pushed branch judges every
+page in both engines; no whole-tree run is repeated on the Mac.
 
 That branch is ready when `mise run check --release` exits 0, or
 `mise run check --release --remote` for a pushed commit: every CI gate, the
@@ -226,7 +225,7 @@ says how to verify it.
 - Tests cover success, denial, invalid input, and the regression class where
   applicable, not only the happy path.
 - A change to templates or CSS is walked in a real browser through the
-  workflow it serves, and the branch it lands on passes `mise run browser`.
+  workflow it serves, and the branch it lands on passes CI's browser suite.
 - Docs change when a supported contract changes.
 - No private identifiers, generated artifacts, secrets, or unrelated edits
   enter the diff.

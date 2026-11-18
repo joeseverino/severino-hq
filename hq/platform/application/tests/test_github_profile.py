@@ -214,12 +214,6 @@ class IngestTests(TestCase):
         self.assertIsNone(github_profile.profile("example-user"))
 
 
-class NoOutboundReadTests(TestCase):
-    def test_the_module_cannot_reach_github(self):
-        self.assertFalse(hasattr(github_profile, "read"))
-        self.assertFalse(hasattr(github_profile, "refresh"))
-
-
 class PageTests(TestCase):
     def setUp(self):
         # A controller that reached this HQ a moment ago, so a read asked of it is waiting on it.

@@ -8,7 +8,6 @@ controller: the world does not change because somebody starred a domain.
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal, TypedDict
 
-from django.core.exceptions import ValidationError
 from django.db import transaction
 from pydantic import Field
 lazy from django.db.models import Max
@@ -16,7 +15,7 @@ lazy from django.db.models import Max
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog, Pin
 
-from .command_fields import Describe
+from .command_fields import Choices, Describe
 from .projection import read_once
 from .security import Principal, person
 
@@ -35,6 +34,11 @@ SERVICE = "service"
 # shows what has been chosen and falls back to everything when nothing has.
 DASHBOARD_LINK = "dashboard_link"
 KINDS = (DOMAIN, SERVICE, DASHBOARD_LINK)
+_KIND_NAMES = {DOMAIN: "Domain", SERVICE: "Service", DASHBOARD_LINK: "Dashboard link"}
+# The type of thing a pin is of, which a command refuses any other value for.
+_KIND = Annotated[str, Choices((kind, _KIND_NAMES[kind]) for kind in KINDS), Field(title="Type")]
+# A key with something in it: a blank one names nothing to pin.
+_NAMED = Field(pattern=r"\S")
 
 # The capabilities a person keeps their pins through.
 PIN = "pin.toggle"
@@ -45,20 +49,20 @@ AUDIT_LABEL = "Pin"
 
 @dataclass(frozen=True, slots=True)
 class PinCommand:
-    kind: Annotated[str, Field(title="Type"), Describe("What type of thing to pin.")]
-    key: Annotated[str, Describe("The one to pin or unpin.")]
+    kind: Annotated[_KIND, Describe("What type of thing to pin.")]
+    key: Annotated[str, _NAMED, Describe("The one to pin or unpin.")]
 
 
 @dataclass(frozen=True, slots=True)
 class MoveCommand:
-    kind: Annotated[str, Field(title="Type"), Describe("What type of pin to move.")]
-    key: Annotated[str, Describe("Which pin.")]
+    kind: Annotated[_KIND, Describe("What type of pin to move.")]
+    key: Annotated[str, _NAMED, Describe("Which pin.")]
     up: Annotated[bool, Describe("Move it up; otherwise down.")] = False
 
 
 @dataclass(frozen=True, slots=True)
 class ChooseCommand:
-    kind: Annotated[str, Field(title="Type"), Describe("What type of pins to set.")]
+    kind: Annotated[_KIND, Describe("What type of pins to set.")]
     keys: Annotated[list[str], Describe("Every pin of that type, in order.")] = field(default_factory=list)
 
 
@@ -178,18 +182,6 @@ def replace(user, target_kind: str, keys) -> None:
     )
 
 
-def _kind(kind: str) -> str:
-    if kind not in KINDS:
-        raise ValidationError({"kind": ValidationError("Not a type of pin.", code="invalid_choice")})
-    return kind
-
-
-def _key(key: str) -> str:
-    if not key.strip():
-        raise ValidationError({"key": ValidationError("Name what to pin.", code="required")})
-    return key
-
-
 def _audit(user, message: str, **metadata: Any) -> None:
     record_event(
         action=AuditLog.Action.UPDATED,
@@ -205,7 +197,7 @@ def _audit(user, message: str, **metadata: Any) -> None:
 def pin(command: PinCommand, *, principal: Principal) -> PinToggled:
     """Pin or unpin one thing for the person asking: the ``pin.toggle`` capability."""
 
-    kind, key = _kind(command.kind), _key(command.key)
+    kind, key = command.kind, command.key
     user = person(principal)
     pinned_now = toggle(user, kind, key)
     _audit(user, "Pinned." if pinned_now else "Unpinned.", kind=kind, key=key, pinned=pinned_now)
@@ -216,7 +208,7 @@ def pin(command: PinCommand, *, principal: Principal) -> PinToggled:
 def move_pin(command: MoveCommand, *, principal: Principal) -> PinsChanged:
     """Move one of the person's pins past its neighbor: the ``pin.move`` capability."""
 
-    kind, key = _kind(command.kind), _key(command.key)
+    kind, key = command.kind, command.key
     user = person(principal)
     move(user, kind, key, -1 if command.up else 1)
     _audit(user, "Moved a pin.", kind=kind, key=key, up=command.up)
@@ -244,7 +236,7 @@ class PinToggled(PinsChanged):
 def choose(command: ChooseCommand, *, principal: Principal) -> PinsChanged:
     """Set exactly which things of a kind the person pins: the ``pin.choose`` capability."""
 
-    kind = _kind(command.kind)
+    kind = command.kind
     user = person(principal)
     replace(user, kind, command.keys)
     _audit(user, "Chose what to pin.", kind=kind, count=len(command.keys))

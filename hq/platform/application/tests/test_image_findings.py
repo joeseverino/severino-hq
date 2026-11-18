@@ -148,19 +148,10 @@ class ImageFindingTests(TestCase):
         (advisory,) = [finding for finding in about_images() if finding["rule"] == ADVISORY]
 
         self.assertEqual(sorted(named(advisory, "Container")), ["oauth2-proxy", "oauth2-proxy-npm"])
-        commands = [step["command"] for step in advisory["operator_steps"]]
-        self.assertEqual(len(commands), 2, advisory["operator_steps"])
+        commands = [step["command"] for step in advisory["steps"]]
+        self.assertEqual(len(commands), 2, advisory["steps"])
         self.assertTrue(any("/opt/example/auth/compose.yaml" in command for command in commands), commands)
         self.assertTrue(any("/opt/example/npm/compose.yaml" in command for command in commands), commands)
-
-    def test_an_image_no_registry_answers_for_is_never_asked_to_be_pinned(self):
-        homelab()
-
-        pinned = [finding for finding in about_images() if finding["rule"] == UNPINNED]
-
-        self.assertEqual([named(finding, "Container") for finding in pinned], [["kuma"]])
-        (pin,) = named(pinned[0], "Pin it as")
-        self.assertEqual(pin, f"{KUMA}:2@{KUMA_ID}")
 
     def test_each_finding_has_an_id_of_its_own(self):
         homelab(

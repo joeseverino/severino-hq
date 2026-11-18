@@ -1,9 +1,8 @@
-"""For a fix an extension offers a reported problem: the plan, its steps and links, and what closes it.
+"""For a link an extension offers on a page or a problem: to a page, or to an HQ command.
 
 A link that only opens a page is ``read_link``'s, which gives it no effect or command of its own.
 """
 
 from hq.platform.application.action_links import ActionLink, read_link
-from hq.platform.application.workflows import WorkflowOutcome, WorkflowPlan, WorkflowStep
 
-__all__ = ["ActionLink", "WorkflowOutcome", "WorkflowPlan", "WorkflowStep", "read_link"]
+__all__ = ["ActionLink", "read_link"]

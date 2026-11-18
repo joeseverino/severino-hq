@@ -8,21 +8,19 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
-from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
+from hq.domains.control_plane.observations.host import FILESYSTEM_KIND, RENDER_STATUS_KIND, UNIT_KIND
 from hq.domains.control_plane.tests import bridge_client
 
 from ..derivation_testing import frozen, uncached
 from ..filesystem_findings import FilesystemSpace
-from ..findings import RULES, derive_findings
+from ..findings import RULES, estate_findings
 from ..freshness import stale_after
 from ..moments import when
-from ..reading_facts import FactRow
+from ..reading_facts import ReadingRow
 from ..reboot_findings import EdgeRebootState, RebootState
 from ..render_status_findings import Rendering
-from ..topology import derive_topology
 from ..unit_findings import UnitState
 from . import (
-    test_filesystem_findings as filesystems,
     test_reboot_findings as reboots,
     test_render_status as render,
     test_unit_findings as units,
@@ -32,7 +30,7 @@ from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
 # Past the line every reading of a machine is out of date at, so nothing it
 # says is current.
 AGED = max(
-    stale_after(kind) for kind in (RENDER_STATUS_KIND, UNIT_KIND, filesystems.KIND, reboots.KIND, reboots.EDGE_KIND)
+    stale_after(kind) for kind in (RENDER_STATUS_KIND, UNIT_KIND, FILESYSTEM_KIND, reboots.KIND, reboots.EDGE_KIND)
 ) + timedelta(minutes=10)
 OUT_OF_DATE = stale_after(RENDER_STATUS_KIND)
 JUST_BEFORE = timedelta(minutes=50)
@@ -123,7 +121,8 @@ def _aged_units() -> None:
 
 
 def _aged_filesystems() -> None:
-    filesystems.sweep(filesystems.filesystem(free=59 * 1000 * 1000, read_at=units.stamp(AGED)), age=AGED)
+    nearly_full = {"mount": "/", "free_bytes": 59 * 1000 * 1000, "total_bytes": 29 << 30, "read_at": units.stamp(AGED)}
+    reboots.sweep(nearly_full, kind=FILESYSTEM_KIND, age=AGED)
 
 
 def _aged_reboot() -> None:
@@ -140,7 +139,7 @@ def _aged_edge_reboot() -> None:
 READINGS = {
     Rendering: (RENDER_STATUS_KIND, _aged_render_status),
     UnitState: (UNIT_KIND, _aged_units),
-    FilesystemSpace: (filesystems.KIND, _aged_filesystems),
+    FilesystemSpace: (FILESYSTEM_KIND, _aged_filesystems),
     RebootState: (reboots.KIND, _aged_reboot),
     EdgeRebootState: (reboots.EDGE_KIND, _aged_edge_reboot),
 }
@@ -151,7 +150,7 @@ def said(now) -> dict[tuple[str, str, str], tuple]:
     """What every rule says about the machine readings at ``now``, by rule, subject and kind."""
 
     with frozen(now), uncached():
-        raised = derive_findings(derive_topology(principal=EVERYTHING), principal=EVERYTHING)
+        raised = estate_findings(principal=EVERYTHING)
     return {
         (finding.rule, finding.subject, finding.scope): (finding.title, finding.explanation, finding.evidence)
         for finding in raised
@@ -176,7 +175,7 @@ class AgedReadingGuardTests(TestCase):
         self.taken = {row.kind: row.observed_at for row in ProviderInventory.objects.filter(kind__in=KINDS)}
 
     def test_every_reading_of_a_machine_is_covered(self):
-        self.assertEqual(set(READINGS), _descendants(FactRow))
+        self.assertEqual(set(READINGS), _descendants(ReadingRow))
         self.assertTrue(RULES)
 
     def test_the_readings_raise_their_rules_when_judged_as_they_were_taken(self):

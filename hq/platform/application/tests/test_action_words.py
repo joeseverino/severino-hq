@@ -22,7 +22,6 @@ from hq.platform.application.tests.reads import reads
 
 from ..action_links import capability_action_link, command_action, read_now_link
 from ..capabilities import capability_registry
-from ..item_help import remedy_link
 from ..outbound_work import ask, declared_work
 from .facts import ROOT, grouped, scan
 from .source import template_files
@@ -31,7 +30,7 @@ from .source import template_files
 LABEL_POSITION = {"Ask": 0, "PageAction": 0, "ActionLink": 1, "TopologyAction": 1}
 # What builds a control for a command or a piece of outbound work.
 COMMAND_BUILDERS = {
-    builder.__name__: builder for builder in (ask, command_action, capability_action_link, read_now_link, remedy_link)
+    builder.__name__: builder for builder in (ask, command_action, capability_action_link, read_now_link)
 }
 # Calls that name a command and one of its declared variants.
 VARIANT_CALLS = ("capability_words", "command_action", "capability_action_link", "FindingRemedy")

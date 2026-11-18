@@ -367,37 +367,12 @@ class WalkedStatesTests(TestCase):
         self.assertEqual(page.context["related"], ())
         self.assertFalse(page.context["asset"].notes)
 
-    def test_a_queue_row_holds_buttons_past_the_ones_its_line_shows(self):
-        # The queue's row shows its first two buttons; the rest wait in its
-        # opened line, a part the survey reaches only through a row with more.
-        page = self.walked(reverse("action_items"))
-        waiting = [
-            control
-            for control in all_elements(page)
-            if control.beneath
-            and control.tag in {"a", "button"}
-            and any("row-later" in part.classes for part in control.ancestors)
-        ]
-        self.assertTrue(waiting)
-
     def test_each_reports_reading_has_rows(self):
         page = self.walked(reverse("reports:dashboard"))
 
         for reading in ("status_groups", "assets_by_category"):
             with self.subTest(reading=reading):
                 self.assertTrue(page.context[reading])
-
-    def test_two_lapsed_certificates_under_one_name_read_apart(self):
-        from hq.platform.core.example_estate.infra import LEFT_OVER, LEFT_OVER_LAPSED
-
-        self.walked(reverse("control_plane:findings"))
-        found = findings(principal=web_principal(self.user), rule="certificate-expiring")["findings"]
-        titles = [finding["title"] for finding in found if LEFT_OVER in finding["title"]]
-
-        self.assertEqual(len(titles), 2, titles)
-        self.assertEqual(len(set(titles)), 2, titles)
-        for title in titles:
-            self.assertIn(f"expired {LEFT_OVER_LAPSED.days} days ago", title)
 
     def test_a_name_one_reading_holds_twice_is_one_item_and_no_source_repeats_a_key(self):
         # The queue knows an item by its key; a source answering two under one

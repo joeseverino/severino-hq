@@ -1,27 +1,5 @@
 id: hand-drawn-prose-list
 snapshots:
-  "<ol\n  class=\"compact prose-list\"></ol>\n":
-    labels:
-    - source: |-
-        <ol
-          class="compact prose-list"></ol>
-      style: primary
-      start: 0
-      end: 38
-    - source: ol
-      style: secondary
-      start: 1
-      end: 3
-    - source: class="compact prose-list"
-      style: secondary
-      start: 6
-      end: 32
-    - source: |-
-        <ol
-          class="compact prose-list">
-      style: secondary
-      start: 0
-      end: 33
   "<ol>\n  <li>A sentence.</li>\n</ol>\n":
     labels:
     - source: |-
@@ -39,24 +17,6 @@ snapshots:
       style: secondary
       start: 0
       end: 4
-  <ul class="prose-list"><li>A</li></ul>:
-    labels:
-    - source: <ul class="prose-list"><li>A</li></ul>
-      style: primary
-      start: 0
-      end: 38
-    - source: ul
-      style: secondary
-      start: 1
-      end: 3
-    - source: class="prose-list"
-      style: secondary
-      start: 4
-      end: 22
-    - source: <ul class="prose-list">
-      style: secondary
-      start: 0
-      end: 23
   <ul role="list"><li>A</li></ul>:
     labels:
     - source: <ul role="list"><li>A</li></ul>

@@ -5,17 +5,17 @@ containers HQ read on each, and where HQ's own image serves. A finding
 raises it (``tailnet_findings``); this module only derives it.
 """
 
-import json
 import re
 from dataclasses import dataclass
 
 from hq.config.networks import is_loopback
+from hq.config.serve import LISTENS_AT
 
 from . import connections
 from .projection import projection_scope, read_once
 from .tailnet import _by_name, _grant_machines, _PortNamer, _service_ports, _ssh_ports, devices, policy
 lazy from .containers import containers
-lazy from .hq_self import LISTENS_AT, own_container
+lazy from .hq_self import own_container
 
 # A fact on the tailnet connection: a grant port only loopback listens on.
 GRANT_REACHES_ONLY_LOOPBACK = "grant-reaches-only-loopback"
@@ -45,14 +45,6 @@ class LoopbackGrant:
     ports: tuple[LoopbackPort, ...]
     # Each policy test that accepts one of those ports, with it moved to deny.
     tests: tuple[dict, ...]
-
-    @classmethod
-    def of(cls, fact: str) -> LoopbackGrant:
-        """One read back from the fact the topology carries it in."""
-
-        said = json.loads(fact)
-        ports = tuple(LoopbackPort(**port) for port in said["ports"])
-        return cls(said["grant"], said["machine"], ports, tuple(said["tests"]))
 
     @property
     def fragment(self) -> dict:

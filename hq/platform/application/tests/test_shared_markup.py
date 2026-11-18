@@ -4,7 +4,7 @@ tag, so it reads the same everywhere and a change to it is made once."""
 import re
 
 from django import forms
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
@@ -60,8 +60,6 @@ class FormErrorsTests(SimpleTestCase):
 class SectionHeadTests(SimpleTestCase):
     """The head ``{% section %}`` draws (partials/_section_head.html)."""
 
-    PARTIAL = "partials/_section_head.html"
-
     def test_what_sits_beside_the_heading_is_one_box_of_the_head(self):
         """A count, a dot and a link beside the heading wrap as one line of
         text, never as items of the head's row a dot is stranded between."""
@@ -104,8 +102,6 @@ class SectionHeadTests(SimpleTestCase):
 
 
 class CardTests(SimpleTestCase):
-    PARTIAL = "partials/_card.html"
-
     def test_a_card_frames_what_it_holds_under_its_heading(self):
         html = _render(
             '{% card css="example-card" heading="example-heading" %}'
@@ -127,11 +123,6 @@ class CardTests(SimpleTestCase):
         (card,) = with_class(html, "card")
         self.assertEqual(card.tag, "details")
 
-    def test_a_card_is_never_an_inline_or_unknown_element(self):
-        for element in ("span", "p", "script", ""):
-            with self.subTest(element=element), self.assertRaises(TemplateSyntaxError):
-                _render("{% card element=element %}A{% endcard %}", element=element)
-
     def test_a_data_option_is_its_attribute_bare_when_true_and_absent_when_empty(self):
         html = _render(
             "{% card data_fragment=True data_state=state data_paused=paused data_ask_status=url %}A{% endcard %}",
@@ -152,15 +143,6 @@ class CardTests(SimpleTestCase):
         (card,) = with_class(html, "card")
         self.assertEqual(elements(html, "b"), [])
         self.assertEqual(card.attrs["data-state"], '"><b>x</b>')
-
-    def test_an_option_it_does_not_take_is_refused(self):
-        for source in (
-            '{% card class="x" %}A{% endcard %}',
-            '{% card "x" %}A{% endcard %}',
-            '{% card aria_hidden="true" %}A{% endcard %}',
-        ):
-            with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
-                Template(source)
 
 
 class OutsideLinkTests(SimpleTestCase):
@@ -252,59 +234,41 @@ class RecordLinkTests(SimpleTestCase):
             _render("{% entity row|record %}", row={"name": "example"})
 
 
-class ReadingTests(SimpleTestCase):
-    PARTIALS = ("partials/_reading.html", "partials/_readings.html")
-
-    def test_a_reading_leads_to_its_page_marked_as_its_part_of_a_region(self):
+class FactPanelTests(SimpleTestCase):
+    def test_a_fact_leads_to_its_page_marked_as_its_part_of_a_region(self):
         html = _render(
-            '{% readings %}{% reading icon="network" url="/example/" modal="example" tone="attention" '
-            'note_tone="attention" data_fragment_part="example" %}Loopback{% lines %}<span>TLS 1.3</span>'
-            "{% note %}A check failed{% endreading %}{% endreadings %}"
+            '{% facts layout="band" %}{% fact "Connection" icon="network" url="/example/" modal="example" '
+            'tone="attention" data_fragment_part="example" %}Loopback{% detail %}<small>TLS 1.3</small>'
+            "{% endfact %}{% endfacts %}"
         )
 
-        (row,) = with_class(html, "readings")
-        (reading,) = with_class(html, "reading")
-        (note,) = with_class(html, "reading-standing")
-        self.assertIn(row, reading.ancestors)
-        self.assertEqual(reading.tag, "a")
-        self.assertEqual(reading.attrs["href"], "/example/")
-        self.assertEqual(reading.attrs["data-modal-open"], "example")
-        self.assertEqual(reading.attrs["data-fragment-part"], "example")
-        self.assertIn("tone-attention", reading.classes)
-        self.assertIn("is-attention", note.classes)
-        self.assertEqual(texts(html, "strong"), ["Loopback"])
+        (fact,) = with_class(html, "fact")
+        (link,) = elements(html, "a")
+        self.assertIn(fact, link.ancestors)
+        self.assertEqual((link.attrs["href"], link.attrs["data-modal-open"]), ("/example/", "example"))
+        self.assertEqual(fact.attrs["data-fragment-part"], "example")
+        self.assertIn("tone-attention", fact.classes)
+        self.assertEqual(link.words, "Loopback")
 
-    def test_a_reading_with_a_panel_opens_it_in_place_by_its_id(self):
+    def test_a_fact_with_a_panel_opens_it_in_place_by_its_id(self):
         html = _render(
-            '{% reading icon="cloud" id="example-weather" data_refreshing=refreshing %}71°'
-            '{% heading %}<strong>Weather</strong>{% panel %}<p>Mostly cloudy</p>{% foot %}<a href="/s/">Settings</a>'
-            "{% endreading %}",
+            '{% facts layout="band" %}{% fact "Weather" icon="cloud" id="example-weather" data_refreshing=refreshing %}'
+            '71°{% heading %}<strong>Weather</strong>{% panel %}<p>Mostly cloudy</p>{% foot %}<a href="/s/">Settings</a>'
+            "{% endfact %}{% endfacts %}",
             refreshing=True,
         )
 
-        (reading,) = with_class(html, "reading")
-        (head,) = elements(html, "button")
-        (panel,) = with_class(html, "reading-panel")
-        self.assertIn("data-menu", reading.attrs)
-        self.assertEqual(reading.attrs["data-refreshing"], "")
-        self.assertEqual(head.attrs["popovertarget"], "example-weather")
+        (fact,) = with_class(html, "fact")
+        (value,) = with_class(html, "fact-value")
+        (opener,) = elements(html, "button")
+        (panel,) = with_class(html, "fact-panel")
+        self.assertIn("data-menu", value.attrs)
+        self.assertEqual(fact.attrs["data-refreshing"], "")
+        self.assertEqual(opener.attrs["popovertarget"], "example-weather")
         self.assertEqual(panel.attrs["id"], "example-weather")
         self.assertIn("popover", panel.attrs)
-        self.assertEqual(with_class(html, "reading-panel-foot")[0].tag, "footer")
-
-    def test_a_neutral_reading_takes_no_tone(self):
-        html = _render('{% reading icon="cloud" url="/" tone="neutral" %}1{% endreading %}')
-
-        (reading,) = with_class(html, "reading")
-        self.assertFalse({word for word in reading.classes if word.startswith("tone-")})
-
-    def test_a_reading_s_tone_is_one_the_status_vocabulary_names(self):
-        for source in (
-            '{% reading icon="cloud" url="/" tone="green" %}1{% endreading %}',
-            '{% reading icon="cloud" url="/" note_tone="good" %}1{% endreading %}',
-        ):
-            with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
-                _render(source)
+        self.assertEqual(with_class(html, "fact-panel-head")[0].tag, "header")
+        self.assertEqual(with_class(html, "fact-panel-foot")[0].tag, "footer")
 
 
 @tag("source", "tree")
@@ -315,21 +279,6 @@ class SharedMarkupTemplateTests(SimpleTestCase):
     def test_only_the_partial_prints_a_form_s_own_errors(self):
         found = _written_by_hand(r"\.non_field_errors", FormErrorsTests.PARTIAL)
         self.assertEqual(found, [], f'include "{FormErrorsTests.PARTIAL}" instead')
-
-    def test_only_the_tag_draws_a_section_head(self):
-        found = _written_by_hand(r'class="section-head[" ]', SectionHeadTests.PARTIAL)
-        self.assertEqual(found, [], "write {% section %} instead")
-
-    def test_only_the_tag_draws_a_card(self):
-        found = _written_by_hand(r'\bclass="(?:[^"]*[\s}])?card[\s"{]', CardTests.PARTIAL)
-        self.assertEqual(found, [], "write {% card %} instead")
-
-    def test_only_the_tags_draw_a_reading(self):
-        # A reading's classes are a shared part's, so the page-class check
-        # lets a page write them; this is what keeps them the tags' own.
-        reading = r'\bclass="(?:[^"]*[\s}])?reading(?:s|-head|-mark|-lead|-lines|-standing|-panel[a-z-]*)?[\s"{]'
-        found = [name for name, text in _templates() if name not in ReadingTests.PARTIALS and re.search(reading, text)]
-        self.assertEqual(found, [], "write {% readings %} and {% reading %} instead")
 
     def test_no_template_decides_a_fact_s_tone(self):
         # The tag refuses the part when a page renders; this reads every

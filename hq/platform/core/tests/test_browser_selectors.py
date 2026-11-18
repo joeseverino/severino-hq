@@ -114,8 +114,8 @@ def markup() -> tuple[set[str], set[str], str]:
         for value in re.findall(r'\bclass="([^"]*)"', opening):
             classes.update(value.split())
     # The notice tag writes its class in code too: each tone a script clones
-    # is drawn by the tag in the frames every page carries.
-    frames = engines["django"].get_template("partials/_notice_frames.html").render({})
+    # is drawn by the tag in the frames the pages carry.
+    frames = engines["django"].get_template("partials/_notice_frames.html").render({"saved_copy": True})
     text.append(frames)
     for value in re.findall(r'\bclass="([^"]*)"', frames):
         classes.update(value.split())

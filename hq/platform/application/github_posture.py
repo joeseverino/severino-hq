@@ -18,7 +18,7 @@ lazy from django.conf import settings
 from .derivations import passed
 from .github_estate import Repository, repositories
 from .moments import moment
-from .standards import Check as _Check, Measurement, Reading, measure
+from .standards import Check as _Check, Examples, Measurement, Reading, measure
 from .ui import ended
 lazy from .projects import repository_key
 
@@ -32,23 +32,22 @@ def _public(repo: Repository) -> bool:
     return not repo.private
 
 
-def Check(id: str, label: str, scope: str, test, why: str, fix: str, *, unmet: str, serious: bool = False) -> _Check:
+def Check(id: str, label: str, scope: str, test, why: str, fix: str, *, serious: bool = False, **said: Any) -> _Check:
     """A repository check: every repository's, or a public one's besides."""
 
     return _Check(
-        id,
-        label,
-        test,
-        why,
-        fix,
-        serious=serious,
-        scope=scope,
-        applies=_public if scope == PUBLIC else None,
-        unmet=unmet,
+        id, label, test, why, fix, serious=serious, scope=scope, applies=_public if scope == PUBLIC else None, **said
     )
 
 
 ACCESS_UNREAD = "Its access has not been read"
+
+# The secrets the host's own wiring sets (mise run wire-github-app). A
+# variable by one of these names is one of them kept in the wrong place.
+APP_KEY, APP_CLIENT_ID = "HQ_APP_KEY", "HQ_APP_CLIENT_ID"
+WIRED_SECRETS = frozenset({APP_KEY, APP_CLIENT_ID})
+# The owner, the one collaborator a kept repository has.
+_OWNER = {"login": "example", "role": "admin"}
 
 
 def _access(repo: Repository) -> dict[str, Any] | None:
@@ -134,6 +133,7 @@ STANDARD: tuple[Check, ...] = (
         "Remove the collaborator in the repository's access settings.",
         serious=True,
         unmet="Others have access",
+        breaks=({"access": {"collaborators": [_OWNER, {"login": "guest", "role": "write"}]}},),
     ),
     Check(
         "keys-read-only",
@@ -144,6 +144,7 @@ STANDARD: tuple[Check, ...] = (
         "Replace the key with a read-only one.",
         serious=True,
         unmet="A deploy key can write",
+        breaks=({"access": {"deploy_keys": [{"title": "deploy", "read_only": False}]}},),
     ),
     Check(
         "keys-in-use",
@@ -153,6 +154,7 @@ STANDARD: tuple[Check, ...] = (
         f"A key unused for {KEY_IDLE_DAYS} days is access nothing needs.",
         "Delete the key, or find what stopped using it.",
         unmet=f"A deploy key has gone unused for {KEY_IDLE_DAYS} days",
+        breaks=({"access": {"deploy_keys": [{"title": "deploy", "read_only": True, "last_used": "2000-01-01"}]}},),
     ),
     Check(
         "token-read-only",
@@ -162,6 +164,7 @@ STANDARD: tuple[Check, ...] = (
         "A writable default token lets any workflow change the repository.",
         "Set workflow permissions to read in the Actions settings.",
         unmet="The workflow token can write",
+        breaks=({"access": {"token": "write"}},),
     ),
     Check(
         "token-no-approvals",
@@ -171,6 +174,7 @@ STANDARD: tuple[Check, ...] = (
         "A workflow that approves its own pull request skips review.",
         "Turn off approving pull requests in the Actions settings.",
         unmet="Workflows can approve pull requests",
+        breaks=({"access": {"token_approves_reviews": True}},),
     ),
     Check(
         "actions-pinned",
@@ -180,6 +184,7 @@ STANDARD: tuple[Check, ...] = (
         "A tag can be moved to different code; a commit cannot.",
         "Pin every action its workflows use to a commit, then require pinning in the Actions settings.",
         unmet="Actions need not be pinned to a commit",
+        breaks=({"access": {"pinning_required": False}},),
     ),
     Check(
         "vulnerability-alerts",
@@ -189,6 +194,7 @@ STANDARD: tuple[Check, ...] = (
         "Renovate opens its security fixes from these alerts; without them a vulnerable dependency stays until you notice it.",
         "Turn on Dependabot alerts in the security settings.",
         unmet="Vulnerability alerts are off",
+        breaks=({"access": {"vulnerability_alerts": False}},),
     ),
     Check(
         "no-variables",
@@ -198,6 +204,7 @@ STANDARD: tuple[Check, ...] = (
         "A variable is state outside the repository that changes what a build does.",
         "Move it into the workflow or a secret, or delete it.",
         unmet="Actions variables are set",
+        breaks=({"variables": ["DEPLOY_TARGET"]}, {"variables": [APP_CLIENT_ID]}),
     ),
     Check(
         "pull-request-required",
@@ -207,6 +214,7 @@ STANDARD: tuple[Check, ...] = (
         "A direct push to the default branch skips every check.",
         "Require a pull request in the default branch's ruleset.",
         unmet="Changes can be pushed without a pull request",
+        breaks=({"rules": {"pull_request": False}},),
     ),
     Check(
         "force-push-blocked",
@@ -216,6 +224,7 @@ STANDARD: tuple[Check, ...] = (
         "A force push rewrites history others have already built on.",
         "Block force pushes in the default branch's ruleset.",
         unmet="The default branch can be rewritten",
+        breaks=({"rules": {"blocks_force_push": False}},),
     ),
     Check(
         "deletion-blocked",
@@ -225,6 +234,7 @@ STANDARD: tuple[Check, ...] = (
         "Deleting the default branch takes every deploy with it.",
         "Block deletion in the default branch's ruleset.",
         unmet="The default branch can be deleted",
+        breaks=({"rules": {"blocks_deletion": False}},),
     ),
     Check(
         "secret-scanning",
@@ -234,6 +244,7 @@ STANDARD: tuple[Check, ...] = (
         "A credential committed to a public repository is found by others first.",
         "Turn on secret scanning.",
         unmet="Leaked credentials are not scanned for",
+        breaks=({"access": {"security": {"secret_scanning": "disabled"}}},),
     ),
     Check(
         "push-protection",
@@ -243,6 +254,7 @@ STANDARD: tuple[Check, ...] = (
         "Scanning finds a leak after it is public; push protection stops it.",
         "Turn on push protection.",
         unmet="Credentials are not stopped before they are pushed",
+        breaks=({"access": {"security": {"secret_scanning_push_protection": "disabled"}}},),
     ),
     Check(
         "code-scanning",
@@ -252,13 +264,10 @@ STANDARD: tuple[Check, ...] = (
         "Code scanning finds vulnerable patterns before a reviewer does.",
         "Turn on code scanning.",
         unmet="Code is not scanned",
+        breaks=(),
     ),
 )
 
-
-# The secrets the host's own wiring sets (mise run wire-github-app). A
-# variable by one of these names is one of them kept in the wrong place.
-WIRED_SECRETS = frozenset({"HQ_APP_KEY", "HQ_APP_CLIENT_ID"})
 
 Runs = tuple[tuple[str, str], ...]
 
@@ -510,6 +519,37 @@ def posture_of(repo: Repository) -> Measurement | None:
     read-only and so has nothing more to protect."""
 
     return None if repo.archived else measure(repo, STANDARD, intended=_intended(repo))
+
+
+def _offered(repo: Repository, check: _Check) -> bool:
+    derive = COMMANDS.get(check.id)
+    return bool(derive and derive(repo)) or bool(REASONS.get(check.id) or left_out(check, [repo]))
+
+
+# A kept public repository: only its owner, one read-only key, a read-only
+# token that approves nothing, pinned actions, fixes and scanning on, and its
+# default branch protected.
+EXAMPLES = Examples(
+    checks=STANDARD,
+    subject=lambda record: Repository("example/alpha", record, None),
+    kept={
+        "private": False,
+        "access": {
+            "collaborators": [_OWNER],
+            "deploy_keys": [{"title": "deploy", "read_only": True}],
+            "token": "read",
+            "token_approves_reviews": False,
+            "pinning_required": True,
+            "vulnerability_alerts": True,
+            "security": {"secret_scanning": "enabled", "secret_scanning_push_protection": "enabled"},
+        },
+        "variables": [],
+        "rules": {"pull_request": True, "blocks_force_push": True, "blocks_deletion": True},
+        "alerts": {"code_scanning": {}},
+    },
+    unread=({}, {"private": False}),
+    fixed=_offered,
+)
 
 
 def postures() -> list[Measurement]:

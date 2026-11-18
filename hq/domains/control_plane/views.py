@@ -7,7 +7,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.views.generic import DetailView, ListView
 
-from hq.platform.application.approvals import AUDIT_LABELS
 from hq.platform.application.capabilities import capability_words, command_spec
 from hq.platform.application.certificates import UPLOAD as CERTIFICATE_UPLOAD
 from hq.platform.application.conditions import DRIFTED, holding
@@ -450,7 +449,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         # A change a credential asked for that nobody has answered, said on the
         # page an operator opens when a declaration has not moved.
         # Each said as who asked for it, from the audit row that opened it.
-        asked = asked_by(ApprovalRequest, derived.awaiting_approval, formerly=AUDIT_LABELS)
+        asked = asked_by(ApprovalRequest, derived.awaiting_approval)
         context["awaiting_approval"] = tuple(asked.get(str(held.pk), NOBODY) for held in derived.awaiting_approval)
         # Nothing for a container: its panel is the sweep's answer and a
         # container declares identity and nothing else.

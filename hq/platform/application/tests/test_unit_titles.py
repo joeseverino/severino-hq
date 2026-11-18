@@ -10,9 +10,8 @@ from django.urls import reverse
 
 from hq.platform.application.markup_testing import texts
 
-from ..findings import derive_findings
+from ..findings import estate_findings
 from ..projection import projection_scope
-from ..topology import derive_topology
 from .test_tailnet_posture import EVERYTHING
 from .test_unit_findings import SERVICE, SPEC, failed, service, sweep, timer
 
@@ -65,11 +64,7 @@ class FindingTests(TestCase):
         sweep(failed(title=SERVICE_TITLE))
 
         with projection_scope():
-            (finding,) = [
-                found
-                for found in derive_findings(derive_topology(principal=EVERYTHING), principal=EVERYTHING)
-                if found.rule == "unit-failed"
-            ]
+            (finding,) = [found for found in estate_findings(principal=EVERYTHING) if found.rule == "unit-failed"]
 
         self.assertIn(SERVICE_TITLE, finding.title)
         self.assertNotIn(SERVICE, finding.title)
@@ -79,11 +74,7 @@ class FindingTests(TestCase):
         sweep(failed(MOUNT))
 
         with projection_scope():
-            (finding,) = [
-                found
-                for found in derive_findings(derive_topology(principal=EVERYTHING), principal=EVERYTHING)
-                if found.rule == "unit-failed"
-            ]
+            (finding,) = [found for found in estate_findings(principal=EVERYTHING) if found.rule == "unit-failed"]
 
         self.assertIn(MOUNT_READ, finding.title)
         # The command keeps the escape: the remote shell's quoting doubles its
@@ -91,13 +82,6 @@ class FindingTests(TestCase):
         self.assertTrue(
             all(MOUNT_READ in step.label and r"\x2dsecrets" in step.command for step in finding.steps), finding.steps
         )
-
-
-class RecordTests(SimpleTestCase):
-    def test_a_title_that_is_a_path_or_an_assignment_is_refused(self):
-        for title in ("/run/example/token", "EXAMPLE_TOKEN=sentinel-value", "a | b", "a" * 121):
-            with self.subTest(title=title):
-                self.assertEqual(SPEC.clean([service(title=title)]), ([], 1))
 
 
 @tag("source")

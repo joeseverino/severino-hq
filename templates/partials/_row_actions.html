@@ -1,6 +1,7 @@
 {% comment %}
 A row's actions, from `{% row_actions %}` (table_tags.row_actions): one cell,
-each action a compact control, the reader's own way to set the row aside
-(`put_away`, the queue's Dismiss) the last of them and quiet, and those past
-the first few moved to the row's open line (`row-later`).
-{% endcomment %}<td class="row-actions">{% if gap %}{% include "partials/_write_gap.html" with gap=gap only %}{% else %}{% for action in actions %}{% include "partials/_page_action.html" with action=action extra="compact" only %}{% endfor %}{% endif %}{% if put_away %}{% include "partials/_page_action.html" with action=put_away extra="compact ghost" only %}{% endif %}{% if later and not gap %}<div class="row-later">{% for action in later %}{% include "partials/_page_action.html" with action=action extra="compact" only %}{% endfor %}</div>{% endif %}</td>
+the pair that moves the row in the reader's order (`order`) and the reader's
+own mark on it (`mark`, a star) first, the star last of them so it keeps the
+column's edge in every row, then each action a compact control, the reader's
+own way to set the row aside the last of them and quiet.
+{% endcomment %}<td class="row-actions">{% if order %}{% if order.up %}{% button "↑" order.url post=True name="direction" value="up" css="icon-link" hit=True title=order.up_title %}{% endif %}{% if order.down %}{% button "↓" order.url post=True name="direction" value="down" css="icon-link" hit=True title=order.down_title %}{% endif %}{% endif %}{% if mark %}{% button mark.on|yesno:"★,☆" mark.url post=True css="icon-link" pressed=mark.on hit=True title=mark.title %}{% endif %}{% if gap %}{% include "partials/_write_gap.html" with gap=gap only %}{% else %}{% for action in actions %}{% include "partials/_page_action.html" with action=action extra="compact" only %}{% endfor %}{% endif %}{% if put_away %}{% include "partials/_page_action.html" with action=put_away extra="compact ghost" only %}{% endif %}</td>

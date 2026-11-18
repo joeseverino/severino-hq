@@ -21,6 +21,7 @@ from .describe import Describe
 from .integration_specs import CommandFact, ResourceSpec
 from .projection import complete, iso
 from .record_errors import RecordNotFound
+from .record_fields import RecordId
 from .resources import EmptyQuery
 from .security import Capability, Principal
 
@@ -71,6 +72,8 @@ class ScanChange(TypedDict):
 
 
 class ScanResult(TypedDict):
+    """One scan of the playbooks' repository: the commit it read and what it found there."""
+
     id: Annotated[int, Describe("The scan result's id.")]
     revision: Annotated[str, Describe("The commit it read, by its full id.")]
     branch: Annotated[str, Describe("The branch that commit is on.")]
@@ -190,7 +193,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "playbook",
             web_route=PAGE,
             pass_principal=True,
-            row_type=PlaybookRow,
+            item_type=PlaybookRow,
             record_type=PlaybookRecord,
         ),
         ResourceSpec(
@@ -203,9 +206,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             EmptyQuery,
             get_scan,
             "id",
-            identifier_type=int,
+            identifier_type=RecordId,
             web_route=PAGE,
-            row_type=ScanResult,
+            item_type=ScanResult,
             record_type=ScanResult,
         ),
     )

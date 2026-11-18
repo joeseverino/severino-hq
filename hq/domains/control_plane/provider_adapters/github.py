@@ -6,10 +6,11 @@ GitHub and reports each stage there; HQ starts nothing.
 """
 
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
+from hq.platform.application.describe import Describe
 from hq.platform.application.ui import ended
 
 from ..connection_shapes import GITHUB_APP
@@ -68,18 +69,22 @@ def _console(record: dict[str, Any]) -> str:
 
 
 class GitHubDeliverySpec(ProviderModel):
+    """The repository and workflow that deploy HQ, which HQ checks production against."""
+
     repository: str = Field(
         pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
         title="Repository",
         description="The repository whose deploy workflow deploys HQ.",
     )
-    workflow: str = Field(
+    workflow: Annotated[str, Describe("", api="The workflow file, in the repository, that deploys HQ.")] = Field(
         default=COMPOSE_WORKFLOW,
         pattern=r"^\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml$",
         title="Deploy workflow",
     )
-    branch: str = Field(default=MAIN_BRANCH, pattern=r"^[A-Za-z0-9_./-]+$", title="Branch")
-    production: Literal[CURRENT] = Field(  # type: ignore[valid-type]  # the shared constant, which mypy reads as a value
+    branch: Annotated[str, Describe("", api="The branch the workflow deploys from.")] = Field(
+        default=MAIN_BRANCH, pattern=r"^[A-Za-z0-9_./-]+$", title="Branch"
+    )
+    production: Annotated[Literal[CURRENT], Describe("", api="What production is held to.")] = Field(  # type: ignore[valid-type]  # the shared constant, which mypy reads as a value
         default=CURRENT, title="Production"
     )
 

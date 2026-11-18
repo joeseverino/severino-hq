@@ -340,13 +340,12 @@ NARROW_FRAMES = (
 # The map scrolls with the page, and draws no lane with nothing in it.
 MAP = """([map, lane, node]) => {
   const box = document.querySelector(map);
-  if (!box) return null;
-  return {
-    scrolls: ['auto', 'scroll'].includes(getComputedStyle(box).overflowY),
-    empty: [...box.querySelectorAll(lane)]
-      .filter((el) => el.checkVisibility() && !el.querySelector(node))
-      .map((el) => el.textContent.trim().slice(0, 30)),
-  };
+  if (!box) return [];
+  const found = [...box.querySelectorAll(lane)]
+    .filter((el) => el.checkVisibility() && !el.querySelector(node))
+    .map((el) => `an empty lane: ${el.textContent.trim().slice(0, 30)}`);
+  if (['auto', 'scroll'].includes(getComputedStyle(box).overflowY)) found.unshift('the map scrolls inside itself');
+  return found;
 }"""
 
 # The insets a sticky part sits under are the stylesheet's, never measured by a
@@ -453,6 +452,10 @@ CHECKS = {
     "cut rings": Check((CUT_RINGS, SELECTORS["target"]), reader_sees="a focus ring cut off by what holds its control"),
     "frames short of their box": Check(
         (NARROW_FRAMES, SELECTORS["table_scroll"]), reader_sees="a table's frame ending short of the box it heads"
+    ),
+    "map": Check(
+        (MAP, [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]]),
+        reader_sees="a map scrolling inside the page, or a lane with nothing in it",
     ),
     "chrome insets": Check(CHROME_INSETS, reader_sees="a sticky part drawn under the header or the page's nav"),
 }

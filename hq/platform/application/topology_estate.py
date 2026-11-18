@@ -27,6 +27,7 @@ from .facts import Joined, Subject, inventory_records, readings
 from .inventory import record_identity
 from .locate import Machines, index_of
 from .paths import path_to
+from .projection import read_once
 from .tone import Tone
 from .topology_model import (
     RELATIONS,
@@ -39,13 +40,10 @@ from .topology_model import (
 )
 lazy from . import (
     certificate_expiry,
-    container_findings,
     contradiction_findings,
-    docker_estate,
     filesystem_findings,
     reading_facts,
     reboot_findings,
-    reference_findings,
     render_status_findings,
     tailnet,
     tailnet_device_findings,
@@ -64,11 +62,47 @@ _FOLDS_INTO_MACHINE = {"controller": "Runs the controller", "target": RELATIONS[
 _JOINS_WHEN_KEPT = {"controller": "runs_on", "target": "stands_for"}
 
 
+@dataclass(frozen=True, slots=True)
+class MachineNodes:
+    """The machine node each name or address stands for, from the machine catalog."""
+
+    ids: dict[str, str]
+    index: Machines
+
+    def __call__(self, value: Any) -> str:
+        """The machine node a name or address stands for, or ""."""
+
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        return self.ids.get(text) or self.ids.get(self.index.resolve(text), "")
+
+    def at(self, address: Any) -> str:
+        """The machine node answering at ``address``, or ""."""
+
+        return self.ids.get(self.index.at(address), "")
+
+
+def machine_nodes() -> MachineNodes:
+    """How the topology places what names a machine, read once per projection,
+    so a finding gathered beside it places its subject the same way."""
+
+    return read_once("topology.machine_nodes", _machine_nodes)
+
+
+def _machine_nodes() -> MachineNodes:
+    catalog = machines_once()
+    ids: dict[str, str] = {}
+    for machine in catalog:
+        for name in (machine.name, *machine.aliases):
+            ids.setdefault(name, f"machine:{machine.name}")
+    return MachineNodes(ids, index_of(declared=[{"name": item.name, "addresses": item.addresses} for item in catalog]))
+
+
 @dataclass
 class _Estate:
     subjects: dict[str, Subject]
-    machine_ids: dict[str, str]
-    index: Machines
+    machine: MachineNodes
     # When a reading or an inventory record describing each node was taken.
     seen: dict[str, list[str]] = field(default_factory=dict)
 
@@ -81,14 +115,6 @@ class _Estate:
                 stamps.append(moment.isoformat())
             elif moment:
                 stamps.append(str(moment))
-
-    def machine(self, value: Any) -> str:
-        """The machine node a name or address stands for, or ""."""
-
-        text = str(value or "").strip()
-        if not text:
-            return ""
-        return self.machine_ids.get(text) or self.machine_ids.get(self.index.resolve(text), "")
 
 
 def add_estate(
@@ -108,7 +134,7 @@ def add_estate(
     _hosted(nodes, edges, resources, estate)
     _reading_edges(nodes, edges, estate)
     _connects_edges(nodes, edges, estate)
-    _derived_from_readings(nodes, resources, estate)
+    _derived_from_readings(nodes, estate)
     _observed(nodes, edges, estate)
     return dict(estate.subjects)
 
@@ -145,7 +171,6 @@ def _machines(nodes, edges) -> _Estate:
         if node.kind == "connection":
             connections.setdefault(node.connection_ref, []).append(node.id)
     subjects: dict[str, Subject] = {}
-    machine_ids: dict[str, str] = {}
     for machine in catalog:
         node_id = f"machine:{machine.name}"
         nodes[node_id] = TopologyNode(
@@ -159,8 +184,6 @@ def _machines(nodes, edges) -> _Estate:
             kind_key="machine",
             actions=_open(machine.url),
         )
-        for name in (machine.name, *machine.aliases):
-            machine_ids.setdefault(name, node_id)
         if machine.declaration:
             _declared_by(edges, node_id, f"resource:{machine.declaration}", nodes)
         # The connections the catalog says reach it, the same answer as the
@@ -170,8 +193,7 @@ def _machines(nodes, edges) -> _Estate:
                 relation = edge_between(connection_id, node_id, "reaches")
                 edges[relation.id] = relation
         subjects[node_id] = machine.subject
-    index = index_of(declared=[{"name": item.name, "addresses": item.addresses} for item in catalog])
-    estate = _Estate(subjects=subjects, machine_ids=machine_ids, index=index)
+    estate = _Estate(subjects=subjects, machine=machine_nodes())
     # Its device reading, its telemetry and its containers.
     for machine in catalog:
         estate.saw(
@@ -413,9 +435,7 @@ def _tailnet_edges(nodes, edges, resources, estate: _Estate) -> None:
 def _device_hosts(device, estate: _Estate) -> set[str]:
     """The machines holding any of a tailnet device's addresses."""
 
-    return {
-        estate.machine_ids.get(estate.index.at(address), "") for address in (device.addresses if device else ())
-    } - {""}
+    return {estate.machine.at(address) for address in (device.addresses if device else ())} - {""}
 
 
 def _holder_edges(nodes, edges, resources) -> None:
@@ -499,26 +519,34 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     return by_ref, by_provider
 
 
-def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
-    """What provider-specific joins add: container edges, and image, render
-    status, unit, filesystem, restart, tailnet device, refused report, certificate and renewal facts,
-    and the findings about each container."""
+def _derived_from_readings(nodes, estate: _Estate) -> None:
+    """The node each machine reading, refused report, tailnet device and
+    certificate is about, where none stands yet."""
 
-    if estate.machine_ids:
-        docker_estate.add(nodes, estate.machine)
-        container_findings.add(nodes, estate.machine)
-    render_status_findings.add(nodes, estate.machine)
-    unit_findings.add(nodes, estate.machine)
-    filesystem_findings.add(nodes, estate.machine)
-    reboot_findings.add(nodes, estate.machine)
-    tailnet_device_findings.add(nodes, estate.machine)
-    reading_facts.add_refusals(nodes, estate.machine)
-    reference_findings.add(nodes, resources)
-    certificate_expiry.add_renewals(nodes)
-    by_ref, by_provider = _reader_index(nodes)
-    certificate_expiry.add(
+    reading_facts.add_readers(
         nodes,
-        lambda joined: _readers(joined, by_ref, by_provider, nodes, estate.machine),
+        estate.machine,
+        (
+            render_status_findings.Rendering,
+            unit_findings.UnitState,
+            filesystem_findings.FilesystemSpace,
+            reboot_findings.RebootState,
+            reboot_findings.EdgeRebootState,
+        ),
+    )
+    tailnet_device_findings.add(nodes, estate.machine)
+    certificate_expiry.held(nodes, estate.machine)
+
+
+def readers_of(
+    nodes: dict[str, TopologyNode], machine: Callable[[Any], str]
+) -> tuple[Callable[[Joined], tuple[str, ...]], Callable[[Any, Any], tuple[str, ...]]]:
+    """Who took a reading, and whom a provider's record was read through,
+    among ``nodes``, making sure a node stands for each."""
+
+    by_ref, by_provider = _reader_index(nodes)
+    return (
+        lambda joined: _readers(joined, by_ref, by_provider, nodes, machine),
         lambda provider, record: _holding(provider, record, by_ref, by_provider, nodes),
     )
 

@@ -9,7 +9,8 @@ that wraps whole.
 from django import template
 
 from hq.platform.application.page_parts import html_attributes
-from hq.platform.core.templatetags.value_tags import slotted
+from hq.platform.core.template_parts import Part, slotted
+from hq.platform.core.templatetags.stack_tags import DOT_LIST
 
 register = template.Library()
 
@@ -38,10 +39,15 @@ def title_parts(content: str) -> str:
 
 
 slotted(
-    "title_meta",
-    TITLE_META_PARTIAL,
-    ("content",),
-    frozenset(),
-    shape=title_meta_frame,
+    Part(
+        name="title_meta",
+        example='{% title_meta %}<li>{% status "Online" tone="good" %}</li><li><code>example-host</code></li>{% endtitle_meta %}',
+        classes=("page-title-meta",),
+        draws=(DOT_LIST,),
+        partial=TITLE_META_PARTIAL,
+        about="The line of facts on a page's title line, each an `<li>` that wraps whole, a dot between each.",
+        data=True,
+        shape=title_meta_frame,
+    ),
     library=register,
 )

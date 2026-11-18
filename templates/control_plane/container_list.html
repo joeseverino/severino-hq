@@ -9,7 +9,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
 {% endcomment %}
 {% block page %}
 {% if containers %}
-  {% facts layout="band" %}
+  {% card element="div" %}{% facts layout="band" %}
     {% fact "Running" icon="container" %}{{ tally.running|breakable }}{% detail %}<small>on {{ machines|counted:"machine" }}</small>{% endfact %}
     {% fact "Known vulnerabilities" icon="shield" tone=tally.vulnerable_tone %}
       {% if tally.vulnerable %}{{ tally.vulnerable|counted:"container" }}{% else %}None serious{% endif %}
@@ -26,7 +26,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
     {% detail %}
       <small>{% if tally.pinned == tally.running %}All by digest{% else %}The rest run by tag{% endif %}</small>
     {% endfact %}
-  {% endfacts %}
+  {% endfacts %}{% endcard %}
 
   {% for need in need_sections %}
     {% section need.heading count=need.groups|length|counted:"image" lede=need.lede %}

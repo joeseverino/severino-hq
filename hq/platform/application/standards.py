@@ -13,9 +13,10 @@ from typing import Any, Self
 
 from .labels import dotted
 from .tone import Tone
+from .ui import ended
 lazy from . import dashboard
-lazy from .finding_model import Finding, OperatorStep
-lazy from .workflow_contracts import ActionLink
+lazy from .finding_model import Finding
+lazy from .standard_findings import worded
 
 
 class Standing(StrEnum):
@@ -108,6 +109,53 @@ class Check:
     # The security boundary it belongs to, and what enforces it.
     boundary: str = field(default="", kw_only=True)
     mechanism: str = field(default="", kw_only=True)
+    # Its examples, for a check of a standard that has them (``Examples``):
+    # changes to the kept record it alone fails (none for a check that is only
+    # ever met or not read), and changes it still meets.
+    breaks: tuple[Mapping[str, Any], ...] | None = field(default=None, kw_only=True)
+    keeps: tuple[Mapping[str, Any], ...] = field(default=(), kw_only=True)
+
+    @property
+    def why_said(self) -> str:
+        """Why it matters as a sentence, where ``why`` may be a clause of what it stops."""
+
+        if not self.why or self.why.endswith("."):
+            return self.why
+        return ended(f"Stops {self.why}")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Examples:
+    """A standard decided from its subject alone, shown at work as every Part
+    shows itself in its example: the record of a subject that meets every
+    check, those of one nothing was read for, and how a subject is built from
+    a record. Each check's ``breaks`` and ``keeps`` change the kept record,
+    and one test walks them all."""
+
+    checks: tuple[Check, ...]
+    subject: Callable[[Mapping[str, Any]], Any]
+    kept: Mapping[str, Any]
+    unread: tuple[Mapping[str, Any], ...] = ({},)
+    # Whether a subject is offered the fix of a check it fails as it is done
+    # (commands, a change to paste) or told why not.
+    fixed: Callable[[Any, Check], bool] | None = None
+
+    def of(self, change: Mapping[str, Any]) -> Any:
+        """The subject of the kept record with ``change`` laid over it."""
+
+        return self.subject(_laid(self.kept, change))
+
+
+def _laid(record: Mapping[str, Any], change: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        **record,
+        **{
+            key: _laid(record[key], value)
+            if isinstance(value, Mapping) and isinstance(record.get(key), Mapping)
+            else value
+            for key, value in change.items()
+        },
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,7 +267,7 @@ class Measurement:
         fails by design with why."""
 
         unmet = sorted(self.unmet, key=lambda result: not result.check.serious)
-        return tuple(unmet_finding(result.check) for result in unmet) + tuple(
+        return tuple(worded(_rule(result.check), (result.check,), [(None, result)]) for result in unmet) + tuple(
             Finding(
                 rule=_rule(result.check),
                 subject="",
@@ -263,24 +311,6 @@ def measure(
         reason = (intended or {}).get(check.id, "") if reading.standing is Standing.UNMET else ""
         results.append(CheckResult(check, reading, reason, enforced and not any(check is held for held in quiet)))
     return Measurement(subject, tuple(results), enforced)
-
-
-def unmet_finding(
-    check: Check, *, evidence: tuple[tuple[str, str], ...] = (), offers: tuple[ActionLink, ...] = ()
-) -> Finding:
-    """A check not met: what is wrong, why it matters, and its fix as the step
-    to take; ``evidence`` and ``offers`` say where it fails."""
-
-    return Finding(
-        rule=_rule(check),
-        subject="",
-        title=check.unmet,
-        severity=Tone.SERIOUS if check.serious else Tone.ATTENTION,
-        explanation=check.why,
-        evidence=evidence,
-        offers=offers,
-        steps=(OperatorStep(label=check.fix),),
-    )
 
 
 def _rule(check: Check) -> str:

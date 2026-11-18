@@ -18,12 +18,12 @@ class RecordBoundsTests(SimpleTestCase):
         registry = capability_registry()
         for name in ("asset.create", "asset.update", "expense.create", "expense.update"):
             with self.subTest(name):
-                field = capability_schema(registry[name])["properties"][business_use.FIELD]
+                field = fields(capability_schema(registry[name]))[business_use.FIELD]
                 self.assertEqual((field["minimum"], field["maximum"]), (business_use.MINIMUM, business_use.MAXIMUM))
 
     def test_a_number_its_model_leaves_to_the_column_says_no_bound(self):
         # The column type's own range is the database's, not a rule a client works within.
-        schema = capability_schema(capability_registry()["asset.create"])["properties"]
+        schema = fields(capability_schema(capability_registry()["asset.create"]))
         self.assertNotIn("maximum", schema["total_cost"])
 
 

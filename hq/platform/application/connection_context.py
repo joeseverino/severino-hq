@@ -8,7 +8,7 @@ path. None of them derives a fact the others cannot return.
 """
 
 from collections import Counter
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 lazy from urllib.parse import urlencode
@@ -26,9 +26,8 @@ from .connection_catalog import (
     ConnectionView,
     connection_catalog,
     serialize_ability,
-    serialize_connection,
 )
-from .connection_contracts import ConnectionInstance
+from .connection_contracts import UNKNOWN_CREDENTIAL, ConnectionInstance
 from .connection_lifecycle import WORKING, Lifecycle, standing
 from .connection_reach import ConnectionReach, connection_reach
 from .connection_security import ConnectionSecurityPosture, connection_security_posture
@@ -36,13 +35,20 @@ from .connection_setup import ProviderSetup, guide_url, setups
 from .connections import connection_rows
 from .credential_mint import CredentialFix, credential_fixes
 from .credential_sight import PART_SOURCE, ProviderSight, Sight, fed_kinds, sight_by_connection
-from .derived_reads import serialize_check, serialize_path, serialize_provider_sight, serialize_sight
+from .derived_reads import (
+    serialize_check,
+    serialize_measurement,
+    serialize_path,
+    serialize_provider_sight,
+    serialize_sight,
+)
 from .entity_links import entity_link
 from .freshness import freshness
+from .json_schemas import as_written
 from .moments import ago
 from .path_model import ServicePath
 from .paths import hq_path
-from .posture import as_part, estate_inputs, guide, posture
+from .posture import estate_inputs, guide, posture
 from .problems import problem_counts
 from .projection import complete, projection_scope, read_once
 from .record_errors import RecordNotFound
@@ -54,6 +60,13 @@ from .tone import Tone
 from .ui import counted
 from .workflow_contracts import ActionLink
 lazy from . import domains
+lazy from .connection_records import (
+    ConnectionStandingRecord,
+    CredentialFixPart,
+    CredentialSightPart,
+    ReadPart,
+    SeenPart,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,14 +204,29 @@ class ConnectionRow:
 
         return Tone.SERIOUS if self._permissions_missing or self.connection.authority == "missing" else ""
 
-    def as_dict(self) -> dict[str, Any]:
+    def as_dict(self) -> ConnectionStandingRecord:
         # Every ability and every sight is under ``reads`` or ``changes``, the
         # lists the page draws, so no client rebuilds them from the parts.
-        connection = serialize_connection(self.connection)
-        del connection["abilities"]
-        sight = self.sight
+        connection, instance, sight = self.connection, self.instance, self.sight
         return {
-            **connection,
+            "id": instance.id,
+            "label": instance.label,
+            "kind": instance.kind,
+            "status": instance.status,
+            "status_label": instance.status_label,
+            "detail": instance.detail,
+            "endpoint": instance.endpoint or None,
+            "observed_at": _moment(instance.observed_at),
+            "scopes_known": instance.scopes_known,
+            "granted_scopes": list(instance.granted_scopes),
+            "credential_model": None if instance.credential_model == UNKNOWN_CREDENTIAL else instance.credential_model,
+            "lifecycle": connection.lifecycle,
+            "authority": connection.authority,
+            "targets": [as_written(link) for link in instance.targets],
+            "dependencies": [as_written(link) for link in instance.dependencies],
+            "facts": [as_written(fact) for fact in instance.facts],
+            "controller_id": instance.controller_id or None,
+            "actions": [as_written(action) for action in connection.actions],
             "reads": [_read(read) for read in self.reads],
             "changes": [serialize_ability(state) for state in self.changes],
             "family": self.group.spec.name,
@@ -220,7 +248,7 @@ class ConnectionRow:
                 if self.last_event is not None
                 else None
             ),
-            "read_now": asdict(self.read_now) if self.read_now else None,
+            "read_now": as_written(self.read_now) if self.read_now else None,
             "read_requested_at": _moment(self.read_requested_at),
         }
 
@@ -229,13 +257,13 @@ def _moment(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
-def _sight(sight: ProviderSight) -> dict[str, Any]:
+def _sight(sight: ProviderSight) -> CredentialSightPart:
     found = serialize_provider_sight(sight)
     del found["sights"]
     return found
 
 
-def _read(read: Read) -> dict[str, Any]:
+def _read(read: Read) -> ReadPart:
     return {
         "label": read.label,
         "sight": _seen(read.sight) if read.sight is not None else None,
@@ -243,12 +271,12 @@ def _read(read: Read) -> dict[str, Any]:
     }
 
 
-def _seen(sight: Sight) -> dict[str, Any]:
+def _seen(sight: Sight) -> SeenPart:
     aged = freshness(sight.kind, sight.observed_at)
     return {**serialize_sight(sight), "freshness": aged.state, "freshness_label": aged.label}
 
 
-def _fix(fix: CredentialFix) -> dict[str, Any]:
+def _fix(fix: CredentialFix) -> CredentialFixPart:
     return {
         "missing": list(fix.missing),
         "unseen": list(fix.unseen),
@@ -257,7 +285,7 @@ def _fix(fix: CredentialFix) -> dict[str, Any]:
         "expiring": fix.expiring,
         "expired": fix.expired,
         "permissions": list(fix.permissions),
-        "steps": [asdict(step) for step in fix.steps],
+        "steps": [as_written(step) for step in fix.steps],
     }
 
 
@@ -365,7 +393,7 @@ class ConnectionsContext:
                     else None
                 ),
             },
-            "standard": as_part(self.standard),
+            "standard": {"advanced": self.standard.enforced, **serialize_measurement(self.standard)},
             "not_connected": [
                 {
                     "family": group.spec.name,
@@ -394,7 +422,7 @@ class ConnectionsContext:
                 "dependencies": estate.dependency_count,
             },
             "hq_path": serialize_path(self.hq_path) if self.hq_path else None,
-            "read_all": asdict(self.read_all) if self.read_all else None,
+            "read_all": as_written(self.read_all) if self.read_all else None,
             "reading_everything_since": _moment(self.reading_everything_since),
             # The posture's request half (how the request being answered
             # reached HQ) exists only where there is a request; the estate
@@ -557,7 +585,7 @@ def list_connection_standing(*, principal: Principal) -> dict[str, Any]:
     return connections_context(principal=principal).as_dict()
 
 
-def get_connection_standing(connection_ref: str, *, principal: Principal) -> dict[str, Any]:
+def get_connection_standing(connection_ref: str, *, principal: Principal) -> ConnectionStandingRecord:
     """One connection as its row says it, by connection ref or instance id."""
 
     found = next(

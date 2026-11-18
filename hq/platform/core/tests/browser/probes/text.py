@@ -620,7 +620,12 @@ LINES_SHORT_OF_THEIR_ROOM = (
     // open) keep the boxes they last had, which are no line of the page.
     if (style.contentVisibility === 'hidden') continue;
     if (style.whiteSpace.startsWith('nowrap') || style.textWrapMode === 'nowrap') continue;
-    const edge = block.getBoundingClientRect().right - parseFloat(style.paddingRight);
+    // A line ends at the content edge of the block it is laid in (a notice's padded body inside a
+    // value), never the value's own.
+    const edgeOf = (home) => {
+      const css = getComputedStyle(home);
+      return home.getBoundingClientRect().right - parseFloat(css.borderRightWidth) - parseFloat(css.paddingRight);
+    };
     // The edges of the inline boxes a piece of a word opens and closes (a
     // `code`'s padding and border): those whose words start or end with it.
     const bare = document.createRange();
@@ -750,6 +755,7 @@ LINES_SHORT_OF_THEIR_ROOM = (
       if (next[0].rect.top < last.bottom - 1) continue;
       const width = next.reduce((sum, piece) => sum + piece.before + piece.rect.width + piece.after, 0) + (next.at(-1).closes ?? 0);
       const right = last.right + lastPiece.after;
+      const edge = edgeOf(words[at].home);
       if (right + (next.gap ?? space) + width < edge - 1) {
         found.push(`${describe(block)} breaks before "${block.textContent.trim().slice(0, 24)}…" ${Math.round(edge - right)}px short of its row's room`);
         break;
@@ -760,8 +766,22 @@ LINES_SHORT_OF_THEIR_ROOM = (
 }"""
 )
 
+# A block written inside a <p> closes it early and leaves an empty <p> where
+# its end tag was: the rest of the line falls out of it.
+BROKEN_PARAGRAPHS = (
+    "(selector) => {"
+    + DESCRIBE
+    + """
+  return [...document.querySelectorAll(selector)].map((p) => `${describe(p.parentElement)} holds an empty paragraph`
+    + (p.previousElementSibling ? ` after ${describe(p.previousElementSibling)}` : ''));
+}"""
+)
+
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
+    "broken paragraphs": Check(
+        (BROKEN_PARAGRAPHS, SELECTORS["broken_paragraph"]), reader_sees="a line of text split off its paragraph"
+    ),
     "broken words": Check(
         (BROKEN_WORDS, SELECTORS["identifier"]), table=True, reader_sees="a word split across the lines of a cell"
     ),

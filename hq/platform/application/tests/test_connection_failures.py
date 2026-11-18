@@ -62,36 +62,36 @@ class FixFollowsCauseTests(TestCase):
         found = finding()
 
         self.assertEqual(found["title"], "example-npm: the address is not Nginx Proxy Manager's API")
-        (step,) = found["operator_steps"]
-        self.assertEqual(step["label"], "Point the connection at Nginx Proxy Manager's own API address")
+        (step,) = found["steps"]
+        self.assertEqual(step["text"], "Point the connection at Nginx Proxy Manager's own API address")
         self.assertIn(address_fields(), " ".join(step["notes"]))
         self.assertIn("https://proxy.example.com is not the API.", step["notes"])
         self.assertIn({"label": "Cause", "value": "The address is not the API"}, found["evidence"])
-        self.assertNotIn("credential", step["label"].lower())
+        self.assertNotIn("credential", step["text"].lower())
 
     def test_no_answer_asks_to_check_the_machine_and_route(self):
         report(detail="Provider request failed: URLError.", failure="network")
 
-        (step,) = finding()["operator_steps"]
+        (step,) = finding()["steps"]
 
         self.assertEqual(
-            step["label"],
+            step["text"],
             "Check that proxy.example.com is up and the controller can reach it",
         )
 
     def test_a_refused_credential_asks_for_a_replacement(self):
         report(detail="Provider request failed: HTTPError.", failure="credential")
 
-        (step,) = finding()["operator_steps"]
+        (step,) = finding()["steps"]
 
-        self.assertIn("Replace the credential", step["label"])
+        self.assertIn("Replace the credential", step["text"])
 
     def test_an_unclassified_failure_falls_back_to_the_rule(self):
         report(detail="Something else")
 
-        (step,) = finding()["operator_steps"]
+        (step,) = finding()["steps"]
 
-        self.assertIn("fix what its error says", step["label"])
+        self.assertIn("fix what its error says", step["text"])
 
     def test_the_page_leads_with_the_cause_specific_fix(self):
         report(detail=SIGN_IN, failure="address")
@@ -118,9 +118,9 @@ class SshTransportTests(TestCase):
             observed_at=timezone.now(),
         )
 
-        (step,) = finding()["operator_steps"]
+        (step,) = finding()["steps"]
 
-        self.assertEqual(step["label"], "Check that 192.0.2.9 is up and the controller can reach it")
+        self.assertEqual(step["text"], "Check that 192.0.2.9 is up and the controller can reach it")
 
 
 class FindingCardTests(TestCase):
@@ -175,6 +175,5 @@ class FindingCardTests(TestCase):
     def test_the_api_shape_is_unchanged(self):
         found = finding()
 
-        self.assertIn("operator_steps", found)
-        self.assertIn("workflow", found)
-        self.assertEqual([step["phase"] for step in found["workflow"]["steps"]][-1], "verify")
+        self.assertIn("steps", found)
+        self.assertEqual(found["check"]["name"], "verify")

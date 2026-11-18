@@ -6,6 +6,7 @@ the use it would try is refused.
 """
 
 from dataclasses import dataclass
+from typing import TypedDict
 
 from django.test import TestCase
 
@@ -27,6 +28,10 @@ from ..security import (
 CALLERS = ("api", "mcp", "web", DEVICE_INTERFACE)
 
 
+class _ExampleRecord(TypedDict):
+    name: str
+
+
 @dataclass(frozen=True, slots=True)
 class _Nothing:
     pass
@@ -40,6 +45,7 @@ def _resource(name: str, capability: str) -> ResourceSpec:
         capability,
         list_handler=lambda: {"items": [], "count": 0},
         list_query_type=EmptyQuery,
+        item_type=_ExampleRecord,
     )
 
 
@@ -58,7 +64,7 @@ GRAPH = compile_integration_graph(
             lambda command, *, principal: {"ok": True},
         ),
         CapabilitySpec(
-            "example.records.change",
+            "example.records.update",
             "Change example records.",
             "remote_write",
             Capability.MANAGE_INFRASTRUCTURE,
@@ -110,7 +116,7 @@ class CatalogPermittedTests(TestCase):
         reader = _as("api", frozenset({Capability.READ}))
         permitted = _permitted(describe_capabilities(principal=reader)["capabilities"])
 
-        self.assertEqual(permitted, {"example.records.read": True, "example.records.change": False})
+        self.assertEqual(permitted, {"example.records.read": True, "example.records.update": False})
         for name, allowed in permitted.items():
             with self.subTest(name):
                 ran = execute_capability(name, {}, principal=reader)

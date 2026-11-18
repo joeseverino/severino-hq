@@ -7,6 +7,7 @@ inside another form without belonging to it: HTML has no nested forms, and a
 form written inside another silently detaches every control after it.
 """
 
+from typing import Annotated, Any
 from urllib.parse import parse_qsl, urlsplit
 lazy from dataclasses import asdict, is_dataclass
 
@@ -16,6 +17,7 @@ from django.template.loader import render_to_string
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
+from hq.platform.application.describe import Describe
 from hq.platform.application.tone import Tone
 lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
@@ -24,6 +26,7 @@ lazy from hq.platform.application.dashboard import gathered_rows
 lazy from hq.platform.application.page_parts import html_attributes
 lazy from hq.platform.application.pages import PageAction, offered_now
 lazy from hq.platform.application.ui import button_classes
+lazy from hq.platform.core.template_parts import Part, slotted
 lazy from hq.platform.core.templatetags.value_tags import (
     _request,
     arrow as onward_arrow,
@@ -80,13 +83,6 @@ def urgency(status):
     """``{{ item.status|urgency }}``: how urgent, in the words every pill says."""
 
     return Tone(status).urgency
-
-
-@register.filter
-def workflow_parts(plan):
-    """A plan's steps and its reason, apart, as a card shows them."""
-
-    return decisions.workflow_parts(plan)
 
 
 @register.filter
@@ -166,29 +162,30 @@ def _button_words(label, icon="", count=None, onward=False):
     return words
 
 
-@register.simple_tag(takes_context=True)
 def button(
     context,
-    label,
-    url="",
+    label: Annotated[Any, Describe("Its words.")],
+    url: Annotated[Any, Describe("Where it leads, or with `post` where it posts.")] = "",
     *,
-    post=False,
-    submit=False,
-    look="",
-    css="",
-    title="",
-    disabled=False,
-    current=False,
-    name="",
-    value="",
-    pressed=None,
-    hit=False,
-    fields=None,
-    modal="",
-    icon="",
-    count=None,
-    arrow=False,
-    **attributes,
+    post: Annotated[bool, Describe("Posts to its url.")] = False,
+    submit: Annotated[bool, Describe("Sends its own form.")] = False,
+    look: Annotated[str, Describe("How it looks, its words from `ui.BUTTON_LOOKS`.")] = "",
+    css: Annotated[str, Describe("Classes in place of its look, for a control not drawn as a button.")] = "",
+    title: Annotated[Any, Describe("Its `title`, read where it stands.")] = "",
+    disabled: Annotated[bool, Describe("Neither a link nor a form, kept in the tab order.")] = False,
+    current: Annotated[bool, Describe("It names the page being drawn.")] = False,
+    name: Annotated[str, Describe("The field it sends.")] = "",
+    value: Annotated[Any, Describe("That field's value.")] = "",
+    pressed: Annotated[bool | None, Describe("A toggle, and which way it stands.")] = None,
+    hit: Annotated[bool, Describe("Drawn smaller than a target, so it asks for its hit area.")] = False,
+    fields: Annotated[Any, Describe("What a posting one sends besides its own field, as a form of its own.")] = None,
+    modal: Annotated[str, Describe("The dialog a link opens where script runs.")] = "",
+    icon: Annotated[str, Describe("The icon its words open with.")] = "",
+    count: Annotated[Any, Describe("A count of what it holds, after its words.")] = None,
+    arrow: Annotated[bool, Describe("Ends with the arrow of a link onward.")] = False,
+    **attributes: Annotated[
+        Any, Describe("Each `data_*` hook, and the popover, dialog command or `hidden` a script acts on.")
+    ],
 ):
     """Every control that looks like a button, and the only thing that writes
     one: a link to ``url``; with ``post``, one that posts to it; with
@@ -311,8 +308,10 @@ def as_ask(action):
     return Ask(values["label"], values["url"], title=values.get("reason", ""), compact=True)
 
 
-@register.simple_tag
-def words(capability, variant=""):
+def words(
+    capability: Annotated[Any, Describe("The command, by name.")],
+    variant: Annotated[str, Describe("Which of its words, where it has more than one.")] = "",
+):
     """``{% words "name" %}``: what a button for that command says, from its
     declaration, for prose that tells a person which one to press."""
 
@@ -391,3 +390,28 @@ def link_icon(link):
     """The icon a card draws for ``link`` in place of its words, or ""."""
     name = link.get("name", "") if isinstance(link, dict) else getattr(link, "name", "")
     return _LINK_ICONS.get(name, "")
+
+
+slotted(
+    Part(
+        name="button",
+        about=(
+            "Every control that looks like a button: a link, a post through the page's one shared form, its "
+            "form's own, or one a script acts on."
+        ),
+        function=button,
+        public=True,
+        example='{% button "Restart" url post=True look="primary" %}',
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="words",
+        about="What a button for a command says, from its declaration, for prose that names the one to press.",
+        function=words,
+        public=True,
+        example='Press {% words "agent.access.set" %}.',
+    ),
+    library=register,
+)

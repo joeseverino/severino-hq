@@ -26,7 +26,6 @@ def _templates() -> list[str]:
     "**/templates/**",
     "static/**",
     "hq/domains/control_plane/bridge_base.json",
-    "hq/platform/api/openapi-examples.json",
     "hq/platform/core/browser_audit.js",
     "mise-tasks/**",
     "mise*.toml",

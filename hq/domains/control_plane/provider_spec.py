@@ -10,10 +10,11 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from functools import cache
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from django.urls import NoReverseMatch
 from pydantic import (
+    BaseModel,
     ConfigDict,
     Field,
     TypeAdapter,
@@ -21,6 +22,7 @@ from pydantic import (
     model_validator,
 )
 
+from hq.platform.application.command_fields import NonEmpty
 from hq.platform.application.contracts import Closed
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.labels import dotted
@@ -199,7 +201,7 @@ class ControllerActionPolicy(ProviderModel):
 
 
 class ControllerProviderCapability(ProviderModel):
-    actions: dict[str, ControllerActionPolicy] = Field(min_length=1)
+    actions: Annotated[dict[str, ControllerActionPolicy], NonEmpty()]
 
 
 class ControllerCapabilityRegistry(ProviderModel):
@@ -613,6 +615,11 @@ class ProviderSpec:
             raise ValueError(
                 f"{self.kind!r} describes hostnames but names no part of a service, so nothing would ever read them."
             )
+        # The form prints each effect under the field it names, and a name no
+        # field has prints nowhere.
+        fields = self.spec_type.model_fields if issubclass(self.spec_type, BaseModel) else {}
+        if unknown := [name for name, _ in self.change_effects if name not in fields]:
+            raise ValueError(f"{self.kind!r} says what changing {', '.join(unknown)} does, a field its spec lacks.")
 
     def why_not_adoptable(self) -> Sentence:
         """Why a found record of this kind is never taken on, as a refusal says it."""

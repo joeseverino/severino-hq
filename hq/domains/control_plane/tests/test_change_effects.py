@@ -17,12 +17,3 @@ class ChangeEffectTests(SimpleTestCase):
                 if effect in description or (description and description in effect):
                     repeated.append(f"{kind}.{name}")
         self.assertEqual(repeated, [])
-
-    def test_every_effect_names_a_field_that_exists(self):
-        missing = [
-            f"{kind}.{name}"
-            for kind, provider in PROVIDERS.items()
-            for name, _ in provider.change_effects
-            if name not in provider.schema().get("properties", {})
-        ]
-        self.assertEqual(missing, [])

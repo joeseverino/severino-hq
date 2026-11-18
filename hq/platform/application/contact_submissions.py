@@ -58,11 +58,11 @@ class ContactReviewCommand:
     admin_notes: AdminNotes = ""
 
 
-def _status(value: str, *, allow_blank: bool = False) -> str:
+def _status(value: str) -> str:
+    """A list's status filter, or "" for every status."""
+
     value = value.strip()
-    if not value and allow_blank:
-        return ""
-    if value not in CONTACT_STATUSES:
+    if value and value not in CONTACT_STATUSES:
         raise ValidationError({"status": ValidationError("Unknown contact status.", code="invalid_choice")})
     return value
 
@@ -74,7 +74,7 @@ def _matches(row: dict[str, Any], status: str, wanted: str) -> bool:
 
 
 def list_contact_submissions(*, status: str | None = None, query: str = "", limit: int = 100) -> dict[str, Any]:
-    status = _status(status or "", allow_blank=True)
+    status = _status(status or "")
     if limit < 1 or limit > MOST_SHOWN:
         raise ValueError(f"limit must be between 1 and {MOST_SHOWN}")
     wanted = query.strip().casefold()
@@ -211,7 +211,7 @@ def execute_contact_review(
         **_review_of(before),
         **written(command, sent),
     }
-    status = review["status"] = _status(review["status"])
+    status = review["status"]
     review["assigned_to"] = review["assigned_to"].strip()
     _declare(
         _change(current, review),

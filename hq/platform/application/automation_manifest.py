@@ -12,6 +12,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstra
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.platform.application.contracts import DOTTED_NAME, Closed, Effect
+from hq.platform.application.non_empty import NonEmpty, RequiredText
 
 # An hour: a procedure that needs longer is more than one procedure, and a
 # stalled run holds what it acts on no longer than this.
@@ -101,8 +102,8 @@ def sorted_unique(names: tuple[str, ...]) -> tuple[str, ...]:
 DottedName = Annotated[str, StringConstraints(pattern=DOTTED_NAME.pattern)]
 # A finding rule's name, in the spelling every rule has (``filesystem-nearly-full``).
 RuleName = Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=64)]
-Statement = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
-Statements = Annotated[tuple[Statement, ...], Field(min_length=1)]
+Statement = Annotated[RequiredText, StringConstraints(strip_whitespace=True, max_length=500)]
+Statements = Annotated[tuple[Statement, ...], NonEmpty()]
 
 
 def _annotations(annotation: Any) -> Iterator[Any]:
@@ -142,7 +143,7 @@ class ProcedureTerms(Closed):
     model_config = ConfigDict(frozen=True, strict=True)
 
     id: DottedName
-    target_kinds: Annotated[tuple[DottedName, ...], Field(min_length=1), AfterValidator(sorted_unique)]
+    target_kinds: Annotated[tuple[DottedName, ...], NonEmpty(), AfterValidator(sorted_unique)]
     # Empty: any host of those kinds.
     hosts: Annotated[tuple[str, ...], AfterValidator(host_names)] = ()
     # None, or the reviewed profile a run escalates through.
