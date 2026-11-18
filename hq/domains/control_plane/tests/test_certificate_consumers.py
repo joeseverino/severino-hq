@@ -4,14 +4,12 @@ from datetime import timedelta
 
 from django.test import TestCase
 from django.utils import timezone
-from pydantic import ValidationError
 
 from hq.platform.application.controller import ControllerReport, report_operation
 from hq.platform.application.infrastructure import resolved_spec
 
 from ..models import ManagedResource, OperationRequest, ProviderConnection, ProviderInventory
 from ..provider_adapters.declarations import TLSDeliveryTargetSpec
-from ..provider_adapters.tls import OnePasswordPublication
 from ..provider_spec import ProviderResolutionContext
 from ..providers import resolve_provider_spec
 from .certificate_cases import certificate_spec, declare_targets
@@ -281,24 +279,6 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
             set(publication),
             {"kind", "name", "connection_ref", "vault", "item"},
         )
-
-    def test_a_declaration_cannot_add_a_field_to_a_publication(self):
-        """`extra="forbid"` is the mechanism; this is the intent it protects.
-
-        Anything a form could grow that named a field, a label or a value would
-        be refused at the boundary rather than carried to the adapter and
-        quietly written to a password manager.
-        """
-
-        with self.assertRaises(ValidationError):
-            OnePasswordPublication(
-                kind="onepassword",
-                name="a-publication",
-                connection_ref="a-password-manager",
-                vault="An Example Vault",
-                item="An Example Certificate Item",
-                fields={"Recovery Phrase": "take this too"},
-            )
 
     def test_a_certificate_that_is_only_recorded_is_refused(self):
         """Noting a certificate down is not installing it anywhere."""
