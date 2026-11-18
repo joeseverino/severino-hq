@@ -7,16 +7,15 @@ from typing import Annotated, Any
 from django.db.models import Sum
 
 from hq.domains.expenses.models import DEFAULT_CATEGORY, EXPENSE_CATEGORY_CHOICES, Expense
+lazy from hq.domains.expenses.specs import ExpenseRow
 
 from .assets import PaymentMethod
 from .business_use import BusinessUseShare
 from .card_items import Kpi
 from .command_fields import Day, Describe, Names, Refers
 from .money import money
-from .projection import iso
 from .record_fields import Notes, TotalCost, one_of
-from .record_saves import Held, Link, linked_saver
-from .sensitivity import SAFE_SENSITIVITIES
+from .record_saves import Held, Link, linked_saver, row
 from .url_query import with_query
 
 # An expense's fields as its command writes them and its row reads them back, each said once.
@@ -142,28 +141,8 @@ class ExpenseCommand:
     about: ExpenseAbout = ""
 
 
-def serialize_expense(expense: Expense) -> dict[str, Any]:
-    doc = expense.related_documentation
-    return {
-        "id": expense.id,
-        "date": iso(expense.date),
-        "vendor": expense.vendor,
-        "item": expense.item,
-        "category": expense.category,
-        "total_cost": str(expense.total_cost),
-        "business_use_percentage": expense.business_use_percentage,
-        "estimated_deductible_amount": str(expense.estimated_deductible_amount),
-        "payment_method": expense.payment_method,
-        "business_purpose": expense.business_purpose,
-        "notes": expense.notes,
-        "related_project": expense.related_project.slug if expense.related_project else None,
-        "related_asset": expense.related_asset.slug if expense.related_asset else None,
-        "related_content": expense.related_content.slug if expense.related_content else None,
-        "related_documentation": (doc.doc_id if doc and doc.sensitivity in SAFE_SENSITIVITIES else None),
-        "paid_from": expense.paid_from,
-        "about": expense.about,
-        "updated_at": iso(expense.updated_at),
-    }
+def serialize_expense(expense: Expense) -> ExpenseRow:
+    return row(expense, ExpenseRow)
 
 
 save_expense = linked_saver(
