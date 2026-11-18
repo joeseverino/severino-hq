@@ -5737,7 +5737,8 @@
               "title": {
                 "$ref": "#/components/schemas/CalendarEntryTitle",
                 "maxLength": 160,
-                "minLength": 1
+                "minLength": 1,
+                "pattern": "[^ ]"
               },
               "weekdays": {
                 "$ref": "#/components/schemas/CalendarEntryWeekdays",
@@ -5924,7 +5925,8 @@
               "title": {
                 "$ref": "#/components/schemas/CalendarEntryTitle",
                 "maxLength": 160,
-                "minLength": 1
+                "minLength": 1,
+                "pattern": "[^ ]"
               },
               "weekdays": {
                 "$ref": "#/components/schemas/CalendarEntryWeekdays",

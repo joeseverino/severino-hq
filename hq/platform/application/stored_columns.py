@@ -192,7 +192,8 @@ def stored_rules(command_type: type) -> tuple[tuple[str, Any], ...]:
 
     ``held`` lays each on its field, so the command refuses what
     the model's ``full_clean`` would before anything else is done with it, at
-    every door, and its schema says so. The model is a record domain's, or the
+    every door, and its schema says so, with the pattern of each ``Rule``
+    about that column alone. The model is a record domain's, or the
     one a command names with ``stored_in``. A rule pydantic has no constraint
     for (a URL's or an address's validator, a unique column) stays the
     model's alone.
@@ -214,7 +215,12 @@ def stored_rules(command_type: type) -> tuple[tuple[str, Any], ...]:
         # An empty value is the model's to fill when the command's default is
         # one (a slug derived from the name), as when the column allows it.
         empty = column.blank or (item.default is not MISSING and item.default in column.empty_values)
-        if rules := _column_rules(column, empty=empty):
+        patterns = [
+            rule.pattern
+            for rule in model._meta.constraints
+            if isinstance(rule, Rule) and rule.pattern and rule.field == item.name
+        ]
+        if rules := (*_column_rules(column, empty=empty), *(Field(pattern=pattern) for pattern in patterns)):
             found.append((item.name, StoredColumn(base, rules)))
     return tuple(found)
 

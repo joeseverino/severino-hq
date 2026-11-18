@@ -10,15 +10,13 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
-from django.db.models.functions import Length, Trim
-from django.db.models.lookups import GreaterThan
 from django.urls import reverse
 
 from hq.platform.application.lists import split_list
 from hq.platform.application.references import ReferenceField
 from hq.platform.application.url_query import with_query
 from hq.platform.core.models import TimestampedModel
-from hq.platform.core.rules import Rule
+from hq.platform.core.rules import Rule, has_text
 lazy from hq.platform.application.calendar_entries import repeat_label
 lazy from hq.platform.application.moments import when_day
 
@@ -71,12 +69,7 @@ class Entry(TimestampedModel):
         ordering = ("starts_on", "starts_at", "title")
         indexes = [models.Index(fields=("starts_on",)), models.Index(fields=("repeat",))]
         constraints = [
-            Rule(
-                condition=Q(GreaterThan(Length(Trim("title")), 0)),
-                name="calendar_entry_has_a_title",
-                violation_error_message="Give the entry a title.",
-                field="title",
-            ),
+            has_text("title", name="calendar_entry_has_a_title", message="Give the entry a title."),
             Rule(
                 condition=Q(ends_on__isnull=True) | Q(ends_on__gte=F("starts_on")),
                 name="calendar_entry_ends_after_it_starts",
