@@ -13,7 +13,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
-from demo.examples import own
+from demo.examples import examples, own
 from demo.serve import serving
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDTHS
@@ -25,6 +25,9 @@ OUT = Path(os.environ.get("HQ_DEMO_OUT") or Path(__file__).resolve().parents[1] 
 _POLICY = re.compile(r'<meta http-equiv="Content-Security-Policy" content="([^"]*)">')
 _SCRIPT = re.compile(r"<script\b[^>]*>", re.IGNORECASE)
 _ADDRESS = re.compile(r'(?:href|src|data-[\w-]+-url)="(/[^"#?]*)')
+# Where a form sends a press. A page's own form posts nowhere in the demo,
+# since its scripts answer the press, but they never reach an example's.
+_SENDS = re.compile(r'\s(?:action|formaction)="(/[^"#?]*)')
 # The main pages, including the one with cards to dismiss.
 _VISITED = ("/", "/hq/", "/infrastructure/findings/", "/action-items/", "/infrastructure/", "/connection/")
 # What a healthy homelab never says on its dashboard.
@@ -256,10 +259,12 @@ class DemoSiteTests(unittest.TestCase):
         cls.origin = cls.enterClassContext(serving(OUT))
 
     def test_every_address_a_page_names_is_in_the_demo(self):
-        # The examples the Design page draws in shadow roots included.
+        # The examples the Design page draws in shadow roots included, and
+        # where each of their forms would send a press.
         missing = set()
         for page in OUT.rglob("*.html"):
-            for address in _ADDRESS.findall(page.read_text(encoding="utf-8")):
+            text = page.read_text(encoding="utf-8")
+            for address in [*_ADDRESS.findall(text), *_SENDS.findall(examples(text))]:
                 if not _exists(unescape(address)):
                     missing.add(f"{page.relative_to(OUT)} -> {address}")
         self.assertEqual(sorted(missing)[:20], [])

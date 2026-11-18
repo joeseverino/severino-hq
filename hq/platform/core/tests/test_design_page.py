@@ -94,6 +94,24 @@ class DesignPageTests(TestCase):
         self.assertEqual(focused(catalog.CATALOG["form/filter-bar"].part("form/filter-bar")), ["input"])
         self.assertEqual(focused(self.gallery), [])
 
+    def test_no_example_form_sends_a_press_anywhere(self):
+        # The page's scripts never reach a shadow root, so a pressed example
+        # would leave the page for its made-up address.
+        def sends(html):
+            return [
+                (element.tag, name, element.attrs[name])
+                for element in all_elements(html)
+                for name in ("action", "formaction", "method", "formmethod")
+                if name in element.attrs and not (name == "method" and element.attrs[name] == "dialog")
+            ]
+
+        drawn = {name: entry.part(name) for name, entry in catalog.CATALOG.items() if not entry.frame}
+        self.assertTrue([name for name, html in drawn.items() if sends(html)])
+        self.assertEqual(sends(self.gallery), [])
+        forms = [element for element in all_elements(self.gallery) if element.tag == "form"]
+        self.assertTrue(forms)
+        self.assertEqual({form.attrs.get("method") for form in forms}, {"dialog"})
+
     def test_a_signed_in_reader_is_drawn_what_the_build_drew_and_nothing_is_written(self):
         recorded = AuditLog.objects.count()
 
