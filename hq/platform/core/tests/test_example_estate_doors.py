@@ -45,6 +45,19 @@ class ExampleEstateDoorTests(TestCase):
         self.assertTrue(doors)
         self.assertLessEqual(doors, {API_INTERFACE, MCP_INTERFACE})
 
+    def test_the_agent_asks_for_its_held_changes_over_mcp(self):
+        from hq.domains.control_plane.models import ApprovalRequest
+
+        asked = [str(pk) for pk in ApprovalRequest.objects.filter(requested_actor=AGENT).values_list("pk", flat=True)]
+        doors = set(
+            AuditLog.objects.filter(object_id__in=asked, action=AuditLog.Action.CREATED).values_list(
+                "interface", flat=True
+            )
+        )
+
+        self.assertTrue(asked)
+        self.assertEqual(doors, {MCP_INTERFACE})
+
     def test_each_thing_done_by_hand_is_a_request_of_its_own(self):
         moments: dict[str, set] = {}
         for operation, at in AuditLog.objects.filter(user=self.owner).values_list("operation_id", "created_at"):

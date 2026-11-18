@@ -34,12 +34,6 @@ def page(route: str, /, **kwargs: Any) -> AbstractContextManager[None]:
     return request(reverse(route, kwargs=kwargs or None))
 
 
-def called(capability: str) -> AbstractContextManager[None]:
-    """An agent's call to run ``capability`` through the machine API."""
-
-    return page("hq_api:execute", name=capability)
-
-
 def mcp() -> AbstractContextManager[None]:
     """A request to the MCP server, as its mount binds one."""
 

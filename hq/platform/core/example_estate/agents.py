@@ -114,13 +114,13 @@ def seen(owner=None):
     _decide(owner)
     if owner is not None:
         _approve(owner, AGENT)
-    agent = _from(token_principal(CLAIMS, API_INTERFACE), MACHINE)
-    with doors.called("tailnet.reach.allow"):
+    agent = _from(token_principal(CLAIMS, MCP_INTERFACE), MACHINE)
+    with doors.mcp():
         reach = run_capability(
             "tailnet.reach.allow", {}, principal=agent, target=CERTIFICATE, idempotency_key="example-reach"
         ).answer
     _expect(reach, reach.get("error", {}).get("code") == PolicyDenied.code, "refused by the operator's rule")
-    with doors.called("infrastructure.resource.update"):
+    with doors.mcp():
         update = run_capability(
             "infrastructure.resource.update",
             _tailnet_only(),
@@ -151,8 +151,8 @@ def asks_to_open_the_policy():
         **POLICY,
         "grants": [*POLICY["grants"], {"src": ["group:admins"], "dst": ["tag:server"], "ip": ["22"]}],
     }
-    agent = _from(token_principal(CLAIMS, API_INTERFACE), MACHINE)
-    with doors.called("infrastructure.resource.update"):
+    agent = _from(token_principal(CLAIMS, MCP_INTERFACE), MACHINE)
+    with doors.mcp():
         update = run_capability(
             "infrastructure.resource.update",
             {"key": POLICY_KEY, "kind": "tailscale.policy", "spec": {"document": json.dumps(opened)}},
