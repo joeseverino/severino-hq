@@ -7,6 +7,7 @@ controller, after a page rather than during one, and stores them through the
 same ingest as a sweep.
 """
 
+from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any
 
@@ -128,12 +129,12 @@ class VulnerabilitiesRecord(ObservationRecord):
     unread: str = ""
 
 
-def _address(record) -> tuple[str, ...]:
+def _address(record: Mapping[str, Any]) -> tuple[str, ...]:
     address = str(record.get("address", "") or "").strip()
     return (address,) if address else ()
 
 
-def _domain(record) -> tuple[str, ...]:
+def _domain(record: Mapping[str, Any]) -> tuple[str, ...]:
     domain = normalized_hostname(record.get("domain"))
     return (domain,) if domain else ()
 

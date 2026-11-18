@@ -13,7 +13,14 @@ from ..certificate_authorities import npm_issuer
 from ..connection_shapes import LOGIN
 from ..names import normalized_hostname
 from ..observations import npm as readings
-from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
+from ..provider_spec import (
+    ConnectionKind,
+    NameContext,
+    ProviderModel,
+    ProviderResolutionContext,
+    ProviderSpec,
+    applies,
+)
 from .contracts import IngressPolicy, ServedCertificate
 
 # The corroborating headers NPM adds beside X-Forwarded-For: client, then scheme.
@@ -126,7 +133,7 @@ class ResolvedNPMProxyHostSpec(NPMProxyHostSpec):
     certificate_id: int | None = Field(default=None, ge=1)
 
 
-def _resolve(authored, context):
+def _resolve(authored: dict[str, Any], context: ProviderResolutionContext) -> dict[str, Any]:
     resource_key = authored.get("certificate_resource")
     status = (
         context.resource_status(resource_key, ("tls.certificate", "tls.uploaded_certificate"))
@@ -139,7 +146,7 @@ def _resolve(authored, context):
     }
 
 
-def _from_record(record):
+def _from_record(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "domain_names": list(record["domain_names"]),
         "forward_scheme": record["forward_scheme"],
@@ -160,9 +167,9 @@ def _from_record(record):
     }
 
 
-def _seed(context):
+def _seed(context: NameContext) -> dict[str, Any]:
     host, port = split_host_port(context.origin_address or context.origin)
-    result = {"domain_names": [context.hostname]}
+    result: dict[str, Any] = {"domain_names": [context.hostname]}
     if host and port.isdigit():
         result.update(forward_host=host, forward_port=int(port))
     if len(context.certificates) == 1:

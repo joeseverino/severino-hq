@@ -7,7 +7,7 @@ compose's own, and registry credentials are never named, so the schema drops
 them.
 """
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from pydantic.json_schema import SkipJsonSchema
@@ -240,7 +240,7 @@ def _host(record: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(value for value in (str(record.get("host", "") or ""),) if value)
 
 
-def _users(field: str, of=lambda item: item):
+def _users(field: str, of: Callable[[Any], Any] = lambda item: item) -> Callable[[Mapping[str, Any]], tuple[str, ...]]:
     """The containers a record names, each keyed on the record's machine."""
 
     def keys(record: Mapping[str, Any]) -> tuple[str, ...]:

@@ -5,8 +5,11 @@ order: a module outside it contributes nothing. What each module declares, and
 what admitting one takes, is docs/Architecture.md#providers.
 """
 
+from collections.abc import Collection, Iterable, Mapping
+from typing import Any
+
 from ..observations import host, hq, public_registry
-from ..observations.contract import registry
+from ..observations.contract import ObservationSpec, registry
 from ..provider_spec import ConnectionKind
 from . import (
     adguard,
@@ -43,10 +46,12 @@ ADMITTED = (
 
 DECLARATIONS = tuple(definition for module in ADMITTED for definition in getattr(module, "DEFINITIONS", ()))
 
-OBSERVATIONS = registry(tuple(spec for module in ADMITTED for spec in getattr(module, "OBSERVATIONS", ())))
+OBSERVATIONS: Mapping[str, ObservationSpec] = registry(
+    tuple(spec for module in ADMITTED for spec in getattr(module, "OBSERVATIONS", ()))
+)
 
 
-def admitted_connections(modules) -> dict[str, ConnectionKind]:
+def admitted_connections(modules: Iterable[object]) -> dict[str, ConnectionKind]:
     """Every connection provider, named once, in admission order."""
 
     found: dict[str, ConnectionKind] = {}
@@ -57,7 +62,7 @@ def admitted_connections(modules) -> dict[str, ConnectionKind]:
     return found
 
 
-def undeclared_connections(definitions, connections) -> list[str]:
+def undeclared_connections(definitions: Iterable[Any], connections: Collection[str]) -> list[str]:
     """Connection providers a kind names that no admitted module declares."""
 
     return sorted(

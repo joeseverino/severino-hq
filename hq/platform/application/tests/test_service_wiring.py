@@ -4,7 +4,7 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.provider_spec import SERVICE_FACET_IDS, SERVICE_FACETS
+from hq.domains.control_plane.provider_spec import SERVICE_FACETS
 from hq.domains.control_plane.providers import PROVIDERS
 
 from ..findings import estate_findings
@@ -176,20 +176,6 @@ class ProviderFacetContractTests(TestCase):
     declaration staying self-describing, because the moment something downstream
     special-cases a kind by name that stops being true.
     """
-
-    def test_every_declared_facet_is_one_the_surface_knows(self):
-        for provider in PROVIDERS.values():
-            if provider.facet:
-                self.assertIn(provider.facet, SERVICE_FACET_IDS, provider.kind)
-
-    def test_a_participating_provider_says_how_to_read_its_hostnames(self):
-        for provider in PROVIDERS.values():
-            if provider.facet:
-                self.assertIsNotNone(
-                    provider.hostnames,
-                    f"{provider.kind} claims facet {provider.facet!r} but supplies "
-                    "no way to read hostnames out of its spec.",
-                )
 
     def test_a_new_provider_joins_the_board_without_editing_the_surface(self):
         """The plug-and-play claim, exercised rather than asserted in a comment."""

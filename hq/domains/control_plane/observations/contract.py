@@ -3,7 +3,7 @@
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, get_args, override
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainSerializer, ValidationError, WithJsonSchema
 
@@ -68,6 +68,12 @@ def container_key(host: Any, name: Any) -> str:
     return f"{machine}/{container}" if machine and container else ""
 
 
+# The facets a service is assembled from, in the order its columns render and a
+# name is wired in: something has to run before ingress can reach it, and
+# ingress before a certificate secures it. A provider names the one it supplies.
+ServiceFacet = Literal["runtime", "dns", "proxy", "certificate"]
+
+
 def _blank(_record: Mapping[str, Any]) -> str:
     return ""
 
@@ -78,10 +84,12 @@ def _nowhere(_record: Mapping[str, Any], _hostname: str) -> str:
 
 # What a reading can supply to a subject beyond the relation it states: the
 # service facets, a domain's registration, and who holds a network.
-READING_FACETS = frozenset({"runtime", "dns", "proxy", "certificate", "registration", "network"})
+ReadingFacet = Literal[ServiceFacet, "registration", "network"]
+READING_FACETS: tuple[str, ...] = get_args(ReadingFacet)
 # Who takes a reading: a controller through a connection credential, HQ itself
 # from a keyless public registry, or HQ from the requests it serves.
-READERS = ("controller", "hq", "request")
+Reader = Literal["controller", "hq", "request"]
+READERS: tuple[str, ...] = get_args(Reader)
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,18 +128,16 @@ class ObservationSpec:
     # network does, unless the runtime made it for every container. Set, the
     # topology draws "talks to" between each pair it names that are declared.
     connects: Callable[[Mapping[str, Any]], bool] | None = None
-    # What a joined record supplies, from ``READING_FACETS``, or blank. A
-    # service shows a record under the facet it supplies; "runtime" and
-    # "network" name what serves an origin.
-    facet: str = ""
+    # What a joined record supplies, or blank. A service shows a record under
+    # the facet it supplies; "runtime" and "network" name what serves an origin.
+    facet: ReadingFacet | Literal[""] = ""
     # The label under a column that already names the facet: "Edge" under
     # Certificate. Blank falls back to ``label``.
     short_label: str = ""
     # When the record stops being valid, as ISO 8601, and who vouches for it.
     expires: Callable[[Mapping[str, Any]], str] = _blank
     issuer: Callable[[Mapping[str, Any]], str] = _blank
-    # One of ``READERS``.
-    read_by: str = "controller"
+    read_by: Reader = "controller"
     # How often HQ reads it itself; for a controller's, a clock of its own,
     # slower than the sweep's, for a reading whose provider rations calls: read
     # when it is this old or somebody asks, and carried by every sweep between.
@@ -172,6 +178,23 @@ class ObservationSpec:
     # new records with its fields set.
     from_last: Callable[[Iterable[Mapping[str, Any]], list[dict[str, Any]]], list[dict[str, Any]]] | None = None
 
+    def __post_init__(self) -> None:
+        if self.every is not None and self.read_by == "request":
+            raise ValueError(f"{self.kind!r}: a request's reading keeps no clock.")
+        if self.every is None and self.read_by == "hq":
+            raise ValueError(f"{self.kind!r}: a reading HQ takes itself declares how often.")
+        if self.connects is not None and self.containers is _none:
+            raise ValueError(f"{self.kind!r}: connects needs the containers it names.")
+        names = [part.name for part in self.parts]
+        if any(not name.strip() for name in names) or len(names) != len(set(names)):
+            raise ValueError(f"{self.kind!r}: parts have unique, non-blank names.")
+        for part in self.parts:
+            if not set(part.requires) <= set(self.requires):
+                raise ValueError(f"{self.kind!r}: part {part.name!r} requires more than the reading declares.")
+            if part.provider and part.provider != self.provider:
+                raise ValueError(f"{self.kind!r}: part {part.name!r} is read by the reading's provider.")
+
+    @override
     def __reduce__(self) -> tuple[Any, tuple[str]]:
         # A spec is a declaration, not data. A stored value that refers to one
         # keeps its kind, and loading it finds the registered spec again.
@@ -273,31 +296,6 @@ def _registered(kind: str) -> ObservationSpec:
 def registry(specs: tuple[ObservationSpec, ...]) -> Mapping[str, ObservationSpec]:
     found: dict[str, ObservationSpec] = {}
     for spec in specs:
-        if spec.kind in found:
+        if found.setdefault(spec.kind, spec) is not spec:
             raise ValueError(f"Duplicate observation kind {spec.kind!r}.")
-        if not all(isinstance(name, Permission) for name in spec.requires):
-            raise ValueError(f"{spec.kind!r}: requires names members of its provider's permissions table.")
-        if spec.facet and spec.facet not in READING_FACETS:
-            raise ValueError(f"{spec.kind!r}: unknown facet {spec.facet!r}.")
-        if spec.read_by not in READERS:
-            raise ValueError(f"{spec.kind!r}: read_by is one of {READERS}.")
-        if spec.every is not None and spec.read_by == "request":
-            raise ValueError(f"{spec.kind!r}: a request's reading keeps no clock.")
-        if spec.every is None and spec.read_by == "hq":
-            raise ValueError(f"{spec.kind!r}: a reading HQ takes itself declares how often.")
-        if spec.connects is not None and spec.containers is _none:
-            raise ValueError(f"{spec.kind!r}: connects needs the containers it names.")
-        _check_parts(spec)
-        found[spec.kind] = spec
     return frozendict(found)
-
-
-def _check_parts(spec: ObservationSpec) -> None:
-    names = [part.name for part in spec.parts]
-    if any(not name.strip() for name in names) or len(names) != len(set(names)):
-        raise ValueError(f"{spec.kind!r}: parts have unique, non-blank names.")
-    for part in spec.parts:
-        if not set(part.requires) <= set(spec.requires):
-            raise ValueError(f"{spec.kind!r}: part {part.name!r} requires more than the reading declares.")
-        if part.provider and part.provider != spec.provider:
-            raise ValueError(f"{spec.kind!r}: part {part.name!r} is read by the reading's provider.")

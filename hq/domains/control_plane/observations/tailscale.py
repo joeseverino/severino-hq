@@ -1,5 +1,8 @@
 """Readings from the tailnet credential."""
 
+from collections.abc import Mapping
+from typing import Any
+
 from hq.platform.application.labels import dotted
 
 from ..permissions import Tailscale
@@ -9,7 +12,7 @@ from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 EXIT_ROUTES = frozenset({"0.0.0.0/0", "::/0"})
 
 
-def _dns_title(record) -> str:
+def _dns_title(record: Mapping[str, Any]) -> str:
     """The resolvers and what the tailnet does with them."""
 
     parts = [", ".join(record.get("nameservers") or ()) or "No global resolvers"]
@@ -66,7 +69,7 @@ class TailnetUserRecord(ObservationRecord):
     last_seen: Stamp = None
 
 
-def _resolvers(record) -> tuple[str, ...]:
+def _resolvers(record: Mapping[str, Any]) -> tuple[str, ...]:
     found = list(record.get("nameservers") or ())
     for resolvers in (record.get("split_dns") or {}).values():
         found.extend(resolvers or ())
