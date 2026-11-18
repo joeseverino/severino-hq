@@ -716,8 +716,8 @@ one stable identifier, a `SearchDefinition`, or any combination. Its list read
 is one `hq_sdk.resources.ListRead`: its reader, the `ResourceQuery` subclass
 it takes, the TypedDict one item is whole, and the `fields` a list keeps when
 the caller names none, every key of the item where it names none. A list
-answers only its item's keys, and the API document types each item by it. HQ validates names, permissions, query
-and handler compatibility, identifier contracts, and duplicate resources and
+answers only its item's keys, and the API document types each item by it. HQ validates names, permissions, a query
+that refuses any field it does not declare, query and handler compatibility, identifier contracts, and duplicate resources and
 search scopes at startup. The API, MCP and global search derive from the spec.
 A search projection that belongs to no resource comes from
 `PluginIntegration.search`. A list that reads its first `limit` rows

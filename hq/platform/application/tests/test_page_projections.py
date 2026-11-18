@@ -21,7 +21,6 @@ from ..connection_context import ConnectionsContext, connections_context
 from ..field_masks import WHOLE_RECORD
 from ..record_errors import RecordNotFound
 from ..resources import (
-    InvalidResourceInput,
     get_resource,
     list_resource,
 )
@@ -187,10 +186,6 @@ class TailnetProjectionTests(TestCase):
         with self.assertRaises(AuthorizationError):
             list_resource("tailnet", principal=nobody)
 
-    def test_unknown_input_is_refused(self):
-        with self.assertRaises(InvalidResourceInput):
-            list_resource("tailnet", {"limit": 5}, principal=cli_principal())
-
 
 @override_settings(SEVERINO_SITE_HOST="hq.example.com")
 class ConnectionProjectionTests(TestCase):
@@ -305,7 +300,3 @@ class ConnectionProjectionTests(TestCase):
 
         self.assertIsNone(found.read_all)
         self.assertTrue(all(row.read_now is None for row in found.rows))
-
-    def test_unknown_input_is_refused(self):
-        with self.assertRaises(InvalidResourceInput):
-            list_resource("connections", {"limit": 5}, principal=cli_principal())

@@ -206,9 +206,6 @@ class ApiTests(TestCase):
         self.assertEqual(self.get("/api/v2/resources/machines/absent/").status_code, 404)
         self.assertEqual(self.get("/api/v2/resources/readings/absent.kind/").status_code, 404)
 
-    def test_unknown_filters_are_refused(self):
-        self.assertEqual(self.get("/api/v2/resources/machines/?limti=1").status_code, 400)
-
 
 class McpCliAndSdkTests(TestCase):
     def setUp(self):

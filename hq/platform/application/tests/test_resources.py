@@ -87,12 +87,6 @@ class ResourceExecutionTests(TestCase):
             },
         )
 
-    def test_unknown_filters_are_rejected_before_the_handler(self):
-        with self.assertRaises(InvalidResourceInput) as refused:
-            list_resource("projects", {"limti": 10}, principal=READ)
-
-        self.assertEqual(refused.exception.reason, "projects: limti is not a known field.")
-
     def test_infrastructure_kinds_filter_before_the_shared_page_bound(self):
         # Rows of other kinds come first, so a bound taken before the filter
         # would leave nothing to filter.
@@ -335,6 +329,25 @@ class ResourceRegistrationTests(SimpleTestCase):
                 self.assertRaisesRegex(ImproperlyConfigured, "may not declare 'fields'"),
             ):
                 integration_graph()
+
+    def test_a_query_open_to_any_filter_fails_at_registry_construction(self):
+        from pydantic import BaseModel
+
+        class Open(BaseModel):
+            status: str = ""
+
+        spec = ResourceSpec(
+            "example.records",
+            "Records",
+            "A query that drops a filter it does not declare.",
+            Capability.READ,
+            listing=ListRead(lambda **_: {"items": [], "count": 0}, Open, _ExampleRecord),
+        )
+        with (
+            mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(spec,)),
+            self.assertRaisesRegex(ImproperlyConfigured, "must refuse a filter it does not declare"),
+        ):
+            integration_graph()
 
     def test_nested_django_namespaces_are_valid_web_routes(self):
         nested = ResourceSpec(

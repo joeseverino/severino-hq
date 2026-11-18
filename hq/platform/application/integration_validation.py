@@ -236,6 +236,10 @@ def _validate_list_contract(spec: ResourceSpec) -> None:
     if spec.listing is None:
         return
     read = spec.listing
+    if read.query.model_config.get("extra") != "forbid":
+        raise ImproperlyConfigured(
+            f"Resource {spec.name!r} query must refuse a filter it does not declare: base it on ResourceQuery."
+        )
     if RESERVED_QUERY_FIELD in _query_names(read.query):
         raise ImproperlyConfigured(
             f"Resource {spec.name!r} query may not declare {RESERVED_QUERY_FIELD!r}: it selects the keys returned."

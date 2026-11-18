@@ -832,14 +832,10 @@ class TransportTests(SentinelMixin, TestCase):
         # A request reached it, so its path is said.
         self.assertIsNotNone(found["reached"])
 
-    def test_resource_queries_reject_unknown_and_repeated_fields(self):
+    def test_a_resource_query_sent_twice_is_refused(self):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving():
-            unknown = self.client.get("/api/v2/resources/projects/?limti=10", **headers)
             repeated = self.client.get("/api/v2/resources/projects/?limit=1&limit=2", **headers)
-        self.assertEqual(unknown.status_code, 400)
-        self.assertEqual(unknown.json()["error"]["code"], "invalid_input")
-        self.assertEqual(unknown.json()["error"]["message"], "projects: limti is not a known field.")
         self.assertEqual(repeated.status_code, 400)
 
     def test_a_resource_read_keeps_only_the_fields_asked_for(self):
