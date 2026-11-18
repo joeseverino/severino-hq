@@ -16,7 +16,7 @@ the report that would have replaced it, why.
 """
 
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
@@ -101,32 +101,29 @@ def _reached(nodes: Mapping[str, TopologyNode], machine: Callable[[Any], str], r
     return nodes.get(node_id) or TopologyNode(id=node_id, kind="target", label=ref, subtitle="Machine")
 
 
-def onto_machine(
-    nodes: dict[str, TopologyNode], machine: Callable[[Any], str], ref: str, found: tuple[tuple[str, str], ...]
-) -> None:
-    """Put ``found`` on the machine the connection ``ref`` reaches."""
+def stands(nodes: dict[str, TopologyNode], machine: Callable[[Any], str], controller: str, through: str = "") -> None:
+    """Make sure the node ``placed`` picks stands, so a finding about it has a
+    node to be read through."""
 
-    node = _reached(nodes, machine, ref)
-    nodes[node.id] = replace(node, facts=node.facts + found)
+    node = placed(nodes, machine, controller, through)
+    nodes.setdefault(node.id, node)
 
 
 def add_readers(
     nodes: dict[str, TopologyNode], machine: Callable[[Any], str], rows: Iterable[type[ReadingRow]]
 ) -> None:
     """The node each stored row of ``rows``, and each open refusal, is about,
-    where none stands yet, so a finding about it has a node to be read through."""
+    where none stands yet."""
 
     for row in rows:
         for snapshot in snapshots_of(row.KIND):
             for item in row.rows(snapshot):
-                node = placed(nodes, machine, snapshot.controller_id, item.through)
-                nodes.setdefault(node.id, node)
+                stands(nodes, machine, snapshot.controller_id, item.through)
     for refusal in open_refusals():
-        node = placed(nodes, machine, refusal.controller_id)
-        nodes.setdefault(node.id, node)
+        stands(nodes, machine, refusal.controller_id)
 
 
-def _about[T](estate: FindingEstate, items: Iterable[tuple[str, str, T]]) -> tuple[tuple[TopologyNode, list[T]], ...]:
+def by_node[T](estate: FindingEstate, items: Iterable[tuple[str, str, T]]) -> tuple[tuple[TopologyNode, list[T]], ...]:
     """Each ``(controller, through, item)`` on the node ``placed`` puts it on,
     by node in the projection's order."""
 
@@ -143,7 +140,7 @@ def _about[T](estate: FindingEstate, items: Iterable[tuple[str, str, T]]) -> tup
 def refusals(estate: FindingEstate) -> tuple[tuple[TopologyNode, tuple[RefusedReport, ...]], ...]:
     """Each open refusal (``refused_reports``), by the node of the controller it refused."""
 
-    found = _about(estate, ((refusal.controller_id, "", refusal) for refusal in open_refusals()))
+    found = by_node(estate, ((refusal.controller_id, "", refusal) for refusal in open_refusals()))
     return tuple((node, tuple(items)) for node, items in found)
 
 
@@ -159,7 +156,7 @@ class Read[R: ReadingRow]:
 def read[R: ReadingRow](estate: FindingEstate, row: type[R]) -> tuple[Read[R], ...]:
     """Each node the stored rows of ``row.KIND`` are about, in the projection's order."""
 
-    found = _about(
+    found = by_node(
         estate,
         (
             (snapshot.controller_id, item.through, (item, snapshot.observed_at))
