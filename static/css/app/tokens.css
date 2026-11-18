@@ -267,7 +267,8 @@
   --series-8: light-dark(#a0603a, #d39470);
   --series-9: light-dark(#2f8f8a, #6cc9c2);
   --series-10: light-dark(#8a8f2f, #c2c76c);
-  /* A calendar source's color, set by its series class; the accent until then. */
+  /* A series' color, set by its `.series-N` class (a route's band by its
+     `.chart-band-N`); the accent until then. */
   --source: var(--accent);
   --radius: 8px;
   --radius-sm: 5px;
