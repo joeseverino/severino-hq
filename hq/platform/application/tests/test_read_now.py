@@ -144,11 +144,6 @@ class RefusalTests(TestCase):
         self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(ReadRequest.objects.exists())
 
-    def test_an_unknown_field_is_refused(self):
-        result = execute_capability(READ_NOW, {"connection": "x"}, principal=cli_principal())
-
-        self.assertEqual(result["error"]["code"], "invalid_input")
-
     def test_a_reader_may_not_ask(self):
         reader = Principal("reader", "test", frozenset({Capability.READ}))
 

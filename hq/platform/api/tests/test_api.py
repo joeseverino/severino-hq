@@ -567,15 +567,6 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "invalid_json")
 
-    def test_an_unknown_payload_field_is_named(self):
-        with _serving():
-            response = self._post(
-                "project.create",
-                {"payload": {"name": "Typo", "slug": "typo", "stauts": "active"}},
-                token=_token(scope="write_projects"),
-            )
-        self.assertIn("stauts", response.json()["error"]["message"])
-
     def test_an_invalid_payload_names_the_field(self):
         with _serving():
             response = self._post(

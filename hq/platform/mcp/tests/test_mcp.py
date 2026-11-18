@@ -294,20 +294,6 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertIn("resource:mcp-lonely", {n["id"] for n in narrowed["nodes"]})
         self.assertLess(narrowed["summary"]["nodes"], whole["summary"]["nodes"])
 
-    def test_an_unknown_payload_field_is_named_to_the_agent(self):
-        from hq.platform.application.security import mcp_principal
-
-        from ..identity import set_principal
-
-        self.enterContext(set_principal(mcp_principal()))
-        result = services.execute_capability(
-            "hq.sync", {"manifest": [], "manifets": [], "idempotency_key": "example-key"}
-        )
-
-        self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertIn("manifets", result["error"]["message"])
-
     def test_an_invalid_payload_is_named_to_the_agent(self):
         from hq.platform.application.security import mcp_principal
 

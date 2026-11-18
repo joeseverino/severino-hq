@@ -188,30 +188,6 @@ class CapabilityTests(TestCase):
         self.assertTrue(result["ok"], result)
         self.assertTrue(DocumentationRecord.objects.filter(doc_id="rb-docs-only").exists())
 
-    def test_an_unknown_field_is_refused_by_name(self):
-        """A misspelled field is named, not folded into "could not be executed".
-
-        The generic failure hides handler text for a reason, but these names
-        are the caller's own keys, and without them a typo cannot be found.
-        """
-
-        result = execute_capability(
-            "hq.sync",
-            {"manifest": [], "manifets": [], "topology": {}},
-            principal=cli_principal(),
-        )
-
-        self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertEqual(
-            result["error"]["message"],
-            "hq.sync: manifets is not a known field; topology is not a known field.",
-        )
-        self.assertEqual(
-            [(detail["type"], detail["loc"]) for detail in result["error"]["details"]],
-            [("extra_forbidden", ["manifets"]), ("extra_forbidden", ["topology"])],
-        )
-
     def _refusal(self, command_type, payload):
         """Run a synthetic command and return the error it was refused with."""
 

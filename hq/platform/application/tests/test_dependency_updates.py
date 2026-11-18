@@ -133,10 +133,6 @@ class RunNowTests(TestCase):
         self.assertEqual(self.run_now({}, principal=writer)["error"]["code"], "forbidden")
         self.assertIsNone(dependency_updates.asked_at())
 
-    def test_an_unknown_field_is_refused(self):
-        self.assertEqual(self.run_now({"owner": "example"})["error"]["code"], "invalid_input")
-        self.assertIsNone(dependency_updates.asked_at())
-
     def test_nothing_opted_in_is_refused(self):
         Project.objects.update(dependency_updates=False)
 

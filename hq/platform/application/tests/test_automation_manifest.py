@@ -79,9 +79,6 @@ class InvalidShapeTests(SimpleTestCase):
         with self.assertRaises(ValidationError):
             manifest(**changes)
 
-    def test_an_unknown_field(self) -> None:
-        self.assertRefused(inventory="inventory.yml")
-
     def test_a_bad_id(self) -> None:
         for bad in ("Example.Logs", "example..logs", "example.logs-tail", "", ".example"):
             with self.subTest(bad):

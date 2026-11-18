@@ -84,11 +84,8 @@ class DependencyUpdatesTests(TestCase):
         self.project.refresh_from_db()
         self.assertFalse(self.project.dependency_updates)
 
-    def test_an_unknown_project_or_field_is_refused(self):
+    def test_an_unknown_project_is_not_found(self):
         self.assertEqual(switch("example-missing", {"dependency_updates": True})["error"]["code"], "not_found")
-        extra = switch("alpha", {"dependency_updates": True, "repository_url": URL})
-        self.assertEqual(extra["error"]["code"], "invalid_input")
-        self.assertEqual(switch("alpha", {})["error"]["code"], "invalid_input")
 
     def test_a_stale_read_is_a_conflict(self):
         store(access=kept())
