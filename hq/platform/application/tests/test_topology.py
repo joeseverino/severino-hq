@@ -13,6 +13,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import ConnectionInstance, ConnectionLink, ConnectionSpec
+from ..findings import estate_findings
 from ..plugin_testing import offering
 from ..report_testing import bridged
 from ..security import Capability
@@ -424,12 +425,12 @@ class AnUnrecognizedContainerIsCarriedByItsMachineTests(TestCase):
         with host_only():
             self.nodes = {node.id: node for node in derive_topology(principal=READ).nodes}
 
-    def test_it_is_a_fact_on_its_machine_node_and_a_declared_one_is_not(self):
-        facts = self.nodes["machine:a-docker-host"].facts
+    def test_it_is_raised_about_its_machine_and_a_declared_one_is_not(self):
+        with host_only():
+            raised = estate_findings(principal=READ, rule="unrecognized-container")
 
         self.assertEqual(
-            [value for key, value in facts if key == "unrecognized-container"],
-            ["a-stray@a-docker-host"],
+            [(finding.subject, finding.part) for finding in raised], [("machine:a-docker-host", "a-stray")]
         )
 
     def test_it_has_no_node_of_its_own(self):

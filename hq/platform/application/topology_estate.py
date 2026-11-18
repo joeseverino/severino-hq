@@ -41,7 +41,6 @@ from .topology_model import (
 lazy from . import (
     certificate_expiry,
     contradiction_findings,
-    docker_estate,
     filesystem_findings,
     reading_facts,
     reboot_findings,
@@ -522,12 +521,9 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
 
 
 def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
-    """What provider-specific joins add: unrecognized container, tailnet
-    device, certificate and renewal facts, and the node each machine reading
-    and refused report is about."""
+    """The node each machine reading, refused report, tailnet device and
+    certificate is about, where none stands yet."""
 
-    if estate.machine.ids:
-        docker_estate.add(nodes, estate.machine)
     reading_facts.add_readers(
         nodes,
         estate.machine,

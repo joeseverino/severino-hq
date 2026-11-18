@@ -1,15 +1,14 @@
 """The Docker readings joined into the relation graph, and what they imply.
 
-A container no compose project declares is a fact on its machine, and a
-finding reads it from there. A container running an image its own tag no
-longer names locally, or an image with no tag at all, is read from the image
-records as the findings are gathered. Nothing here calls a registry: "behind"
+A container no compose project declares, a container running an image its
+own tag no longer names locally, and an image with no tag at all are each
+read from the records as the findings are gathered, about the machine they
+are on. Nothing here calls a registry: "behind"
 means behind the image already pulled onto the machine.
 """
 
 import shlex
-from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import replace
+from collections.abc import Iterable, Iterator, Mapping
 from typing import Any
 
 lazy from django.urls import NoReverseMatch
@@ -39,22 +38,6 @@ lazy from .topology_estate import machine_nodes
 
 IMAGE_BEHIND = "image-behind"
 IMAGE_UNTAGGED = "image-untagged"
-
-
-def add(nodes, machine: Callable[[Any], str]) -> None:
-    """A container on a machine that no compose project declares, as its fact.
-
-    The sweep did not adopt it, so it has no node of its own; its machine
-    carries it, and a finding reads it from there.
-    """
-
-    for item in unmanaged():
-        if item.adoptable or item.kind != CONTAINER_KIND:
-            continue
-        host = str(item.spec.get("host", ""))
-        fact = ("unrecognized-container", f"{item.spec.get('name', '')}@{host}")
-        if (machine_id := machine(host)) and fact not in (node := nodes[machine_id]).facts:
-            nodes[machine_id] = replace(node, facts=(*node.facts, fact))
 
 
 def reference_tag(reference: str) -> str:
@@ -104,12 +87,17 @@ def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
     container nobody declared must never look like one somebody did.
     """
 
+    nodes = {node.id: node for node in estate.nodes()}
+    machine = machine_nodes()
     found: list[Finding] = []
-    for node in estate.nodes():
-        for key, value in node.facts:
-            if key != "unrecognized-container":
-                continue
-            name, _, host = value.rpartition("@")
+    seen: set[tuple[str, str, str]] = set()
+    for item in unmanaged():
+        if item.adoptable or item.kind != CONTAINER_KIND:
+            continue
+        name, host = str(item.spec.get("name", "")), str(item.spec.get("host", ""))
+        # The sweep did not adopt it, so it has no node of its own; its machine stands for it.
+        if (node := nodes.get(machine(host))) is not None and (node.id, name, host) not in seen:
+            seen.add((node.id, name, host))
             try:
                 adopt_url = reverse(
                     "control_plane:adopt_record",
@@ -244,6 +232,7 @@ RULES: tuple[FindingRule, ...] = (
         "Container started outside compose",
         Tone.SERIOUS,
         unrecognized_containers,
+        gathered=True,
         operator_action=("Adopt it if you started it. Otherwise remove it on its machine."),
         no_help_reason=("HQ cannot remove a container it did not start."),
         card=CONTAINERS_CARD,

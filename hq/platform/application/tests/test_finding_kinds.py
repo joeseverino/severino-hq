@@ -5,9 +5,8 @@ from django.test import TestCase
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.plugin_testing import form_keyed
 
-from ..findings import derive_findings
+from ..findings import estate_findings
 from ..report_testing import bridged
-from ..topology import derive_topology
 from .finding_principals import MANAGE
 from .host_only import host_only
 
@@ -77,25 +76,9 @@ class UnrecognizedContainerTests(TestCase):
             },
         )
 
-    def projected(self):
-        with host_only():
-            return derive_topology(principal=MANAGE)
-
     def found(self):
-        return [f for f in derive_findings(self.projected(), principal=MANAGE) if f.rule == "unrecognized-container"]
-
-    def test_it_is_gathered_with_the_topology(self):
-        """The fact is gathered while the topology is built, not by the rule."""
-
-        from django.db import connection as database_connection
-        from django.test.utils import CaptureQueriesContext
-
-        projection = self.projected()
-        with CaptureQueriesContext(database_connection) as captured:
-            raised = derive_findings(projection, principal=MANAGE)
-
-        self.assertEqual(len(captured), 0)
-        self.assertEqual(len([f for f in raised if f.rule == "unrecognized-container"]), 1)
+        with host_only():
+            return [f for f in estate_findings(principal=MANAGE) if f.rule == "unrecognized-container"]
 
     def test_the_remedy_adopts_exactly_that_record(self):
         from django.urls import reverse
