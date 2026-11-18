@@ -272,8 +272,16 @@ class GroupImportTests(SimpleTestCase):
             "hq_runner/build-constraints.{in,txt} pin the build of a package with no wheel; with none left, delete them",
         )
         if wheelless:
-            (python,) = re.findall(r"--python-version=(\S+)", constraints.read_text())
+            header = constraints.read_text()
+            (python,) = re.findall(r"--python-version=(\S+)", header)
             self.assertEqual(f"=={python}.*", self.lock.requires_python, "compiled for the Python the image runs")
+            # Renovate moves the file by running the command its header
+            # records, and its parser loses an option's argument given after a space.
+            self.assertEqual(
+                re.findall(r"--output-file(\S*)", header),
+                ["=hq_runner/build-constraints.txt"],
+                "the header names its own file, after =, so Renovate can compile it again",
+            )
 
     def test_a_module_the_image_suite_loads_imports_only_the_runtime_as_it_loads(self):
         forbidden = import_names(self.lock.installs(list(self.lock.groups)) - self.lock.installs([]))
