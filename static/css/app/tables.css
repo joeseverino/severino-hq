@@ -122,7 +122,8 @@
 .data-table > tbody > tr:not(.row-detail) > [data-kind="control"] > .cell-controls {
   display: inline-block; vertical-align: top; white-space: normal; margin-block-start: calc(-1 * var(--space-2));
   inline-size: max-content; max-inline-size: min(2 * var(--share) + 2 * var(--cell-pad) - var(--row-inset, var(--cell-pad)), 45cqi);
-  & > * { margin-block-start: var(--space-2); }
+  /* An ask draws no box of its own (pages.css), so its button takes the step. */
+  & > *, & > [data-ask] > [data-ask-button] { margin-block-start: var(--space-2); }
 }
 /* Figures right-aligned on fixed digit widths compare by eye; the heading too, so the label sits over them. A cell is a figure by its heading's kind, which the region writes on it (table_tags). */
 .data-table > * > tr > [data-kind="numeric"] { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

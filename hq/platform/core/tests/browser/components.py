@@ -334,20 +334,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 opened = 0
                 for row in rows.all():
                     self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
-                    # One Dismiss is shown: at the row's end, or in a narrow box
-                    # once the row opens, in place, a press away (tables.css).
+                    # One Dismiss is shown, at the row's end, at every width:
+                    # a row's controls never leave it (tables.css).
                     shown = row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count()
-                    if width == PHONE_SCREEN[0]:
-                        self.assertEqual(shown, 0)
-                        line = row.locator("xpath=following-sibling::tr[1][@data-row-detail]")
-                        row.locator(SELECTORS["row_toggle"]).click()
-                        self.assertEqual(row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count(), 1)
-                        # The line holds the row's steps, moved there whole with their
-                        # Copy controls; nothing else on it is a control.
-                        self.assertEqual(line.locator("button:not(.row-below button) >> visible=true").count(), 0)
-                        row.locator(SELECTORS["row_toggle"]).click()
-                    else:
-                        self.assertEqual(shown, 1)
+                    self.assertEqual(shown, 1)
                     # The row's steps are in its line beneath, drawn by the server.
                     if not row.evaluate(_HELD_BENEATH, SELECTORS["decision_steps"]):
                         continue
@@ -435,16 +425,16 @@ class ComponentLayoutTests(LayoutBrowserTests):
                     self.assertLess(start, end)
 
     def test_a_band_value_that_wraps_stays_in_its_fact_level_with_its_label(self):
-        """A fact's linked value, a target tall a line, wraps under its long
-        label's row without rising out of the fact, and the label stands
-        beside its first line, at every width down to the narrowest."""
+        """A fact's linked value, a target tall a line, wraps without rising
+        out of the fact at every width down to the narrowest: under its label
+        in a cell, and beside it where the band reads as a list."""
 
         self.pages = {
             **self.pages,
             "band-fact-probe": probe(
                 '<h3 class="eyebrow">Example heading over the band</h3>{% facts layout="band" %}'
                 '{% fact "An example label long enough to crowd its value" icon="search" %}'
-                '<a href="#example">An example value that has to wrap</a>{% endfact %}'
+                '<a href="#example">An example value long enough that it has to wrap in a whole row</a>{% endfact %}'
                 '{% fact "Example" value="One" icon="shield" %}{% endfacts %}'
             ),
         }
@@ -466,8 +456,12 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertGreaterEqual(min(top for top, _bottom in lines), fact[0])
                 self.assertLessEqual(max(bottom for _top, bottom in lines), fact[1])
                 first_line = min(lines)
-                self.assertLess(label[0], first_line[1])
-                self.assertGreater(label[1], first_line[0])
+                if width == NARROWEST:
+                    # A band too narrow for two cells is a list (surfaces.css).
+                    self.assertLess(label[0], first_line[1])
+                    self.assertGreater(label[1], first_line[0])
+                else:
+                    self.assertLessEqual(label[1], first_line[0])
 
     def test_a_calendars_count_of_planned_days_kept_keeps_its_line_beside_its_legend(self):
         """A legend of three kinds and the missed mark, as a training calendar
@@ -683,9 +677,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_an_ask_among_a_rows_actions_keeps_them_on_one_line(self):
         """An ask before another of a row's actions leaves that action on the
-        row's first line beside it, or on its open line in a narrow box, and
-        in a wide one what the ask says once pressed comes
-        on the line the cell keeps under them, so the row grows no taller."""
+        row's first line beside it at every width, and in a wide box what the
+        ask says once pressed comes on the line the cell keeps under them, so
+        the row grows no taller."""
 
         self.pages = {
             **self.pages,
@@ -704,18 +698,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in (PHONE_SCREEN[0], WIDE):
             with self.subTest(width=width):
                 self.open("ask-actions-probe", width)
-                narrow = width == PHONE_SCREEN[0]
-                if narrow:
-                    # In a narrow box the row's actions stand side by side in
-                    # place once it opens (tables.css), wrapping as they must.
-                    self.page.locator(SELECTORS["row_toggle"]).click()
-                    button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
-                else:
-                    button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
+                button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
                 remove = self.page.get_by_role("link", name="Remove")
                 middles = [box["y"] + box["height"] / 2 for box in (button.bounding_box(), remove.bounding_box())]
                 self.assertLessEqual(abs(middles[0] - middles[1]), 1.5)
-                if narrow:
+                if width == PHONE_SCREEN[0]:
                     continue
                 row = button.evaluate_handle("(button) => button.closest('tr')").as_element()
                 tall = row.bounding_box()["height"]
@@ -787,7 +774,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.pages = {
             **self.pages,
             "word-before-a-name-probe": probe(
-                '<div style="inline-size: 20rem">{% table_region "Changes" %}<table class="data-table"><thead><tr>'
+                '<div style="inline-size: 26rem">{% table_region "Changes" %}<table class="data-table"><thead><tr>'
                 '{% table_heading "Name" gutter=True %}{% table_heading "Change" %}</tr></thead><tbody><tr>'
                 "<td><strong>example.com</strong><br>"
                 f'<span class="muted">on <a href="#" data-entity="Machine">{host}</a></span></td>'
@@ -795,7 +782,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 "</tr></tbody></table>{% endtable_region %}</div>"
             ),
         }
-        self.open("word-before-a-name-probe", PHONE_SCREEN[0])
+        # A box that keeps both columns and still wraps each name.
+        self.open("word-before-a-name-probe", WIDE)
         lines = self.page.evaluate(
             """() => [...document.querySelectorAll('main td')].map((cell) => {
               // The line under the row's name, and the cell of free text.

@@ -285,6 +285,8 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .fact-figure > span { min-width: 0; }
 /* A drawing beside a value never sets its cell's width: it has none of its own (`contain`), and takes what the cell's words leave, its dots wrapping there. */
 .facts-band .fact-figure > .figure-dots { flex: 1 1 0; contain: inline-size; }
+/* Dots set in rows (past six, surfaces.css) cannot wrap, so they keep their own width, which fits the narrowest cell, and take the line under the value where that is all the room left. */
+.facts-band .fact-figure > .figure-dots:has(> :nth-child(7)) { flex: none; contain: none; }
 .facts-band.is-lead > .fact:first-child .figure-trend { height: 40px; }
 .facts-band .fact:is(.tone-good, .tone-attention, .tone-serious) :is(.band-icon .icon, .fact-value) { color: var(--tone-ink); }
 /* A linked fact tints under the pointer and the focus on its value, ; in a frame the tint reaches into the gap as a shadow, so nothing moves. */

@@ -1402,10 +1402,13 @@ ENTRIES = {
     ),
     # A range beside its unit, and a phrase, in a cell held narrow, as three
     # figures to a row on a phone hold it: each wraps, its lines clear of each other.
+    # The values come as a view hands them, so the filter reads them as text:
+    # a literal in a template is already markup, which it passes as it is.
     "part/facts-band-wrapped": Entry(
         '<div style="inline-size: 110px">{% facts layout="band" size="large" %}'
-        '{% fact "Example range" value="10.5–12.5 mi" %}{% fact "Example phrase" value="up to 2 a week" %}'
+        '{% fact "Example range" value=range %}{% fact "Example phrase" value=phrase %}'
         "{% endfacts %}</div>",
+        {"range": "10.5–12.5 mi", "phrase": "up to 2 a week"},
         premise=(_ONE_LINE, SELECTORS["fact_value"]),
     ),
     # A detail given as lines, one of them holding a link among its words.
