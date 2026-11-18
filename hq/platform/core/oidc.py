@@ -2,7 +2,7 @@
 
 import logging
 from typing import Any, override
-lazy from urllib.parse import urlsplit
+lazy from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from django.conf import settings
@@ -347,5 +347,5 @@ def _page_behind(request) -> str:
     referer = request.headers.get("referer", "")
     if url_has_allowed_host_and_scheme(referer, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
         parts = urlsplit(referer)
-        return parts.path + (f"?{parts.query}" if parts.query else "")
+        return urlunsplit(("", "", parts.path, parts.query, ""))
     return "/"

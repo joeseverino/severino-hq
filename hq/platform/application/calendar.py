@@ -16,6 +16,7 @@ from typing import Any
 
 from django.utils import timezone
 
+from hq.platform.application.url_query import with_query
 lazy from hq.platform.application.routes import reverse
 
 from .entity_links import link_url
@@ -307,13 +308,15 @@ class CalendarDayView:
 def month_url(month: date, day: date | None = None) -> str:
     """A month, with ``day`` open beside it."""
 
-    return f"{reverse('calendar:month')}?month={month:%Y-%m}{f'&day={day.isoformat()}' if day else ''}"
+    return with_query(
+        reverse("calendar:month"), {"month": f"{month:%Y-%m}", **({"day": day.isoformat()} if day else {})}
+    )
 
 
 def new_entry_url(day: date) -> str:
     """The form for a new entry, on ``day``."""
 
-    return f"{reverse('calendar:entry_new')}?on={day.isoformat()}"
+    return with_query(reverse("calendar:entry_new"), {"on": day.isoformat()})
 
 
 # ----- Sources ----------------------------------------------------------------

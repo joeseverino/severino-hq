@@ -11,6 +11,8 @@ from typing import Any, TypedDict
 
 from django.utils import timezone
 
+from hq.platform.application.url_query import with_query
+
 from . import sections
 from .attention import finding_why, readable_by
 from .derivations import derivation
@@ -189,7 +191,7 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "status": finding.severity,
         "action": primary.label if primary else "",
         # A finding of a page's own (an unmet check, a step a request contradicts) has no rule the findings page lists.
-        "url": primary.url if primary else f"{findings_url}?rule={finding.rule}" if rule else "",
+        "url": primary.url if primary else with_query(findings_url, {"rule": finding.rule}) if rule else "",
         "steps": [as_written(step) for step in finding.steps],
         "no_help_reason": finding.no_help_reason,
         "check": as_written(finding.check) if finding.check else None,

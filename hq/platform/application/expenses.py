@@ -18,6 +18,7 @@ from .projection import iso
 from .record_fields import Notes, TotalCost, one_of
 from .record_saves import Held, Link, linked_saver
 from .sensitivity import SAFE_SENSITIVITIES
+from .url_query import with_query
 
 # An expense's fields as its command writes them and its row reads them back, each said once.
 _CATEGORY = one_of(EXPENSE_CATEGORY_CHOICES)
@@ -111,7 +112,7 @@ def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTota
 
     def narrowed_to(category: str) -> str:
         kept["category"] = category
-        return f"?{kept.urlencode()}"
+        return with_query("", kept)
 
     return totals, tuple(
         Kpi(

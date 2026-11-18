@@ -1,8 +1,8 @@
 """Links that remember where they were followed from."""
 
-from urllib.parse import quote, urlencode, urlsplit, urlunsplit
-
 from django import template
+
+from hq.platform.application.url_query import with_query
 
 register = template.Library()
 
@@ -17,12 +17,7 @@ def returning_to(url: str, origin: str) -> str:
     redirect uses it: a query parameter is not evidence of anything.
     """
 
-    if not origin:
-        return url
-    parts = urlsplit(str(url))
-    query = f"{parts.query}&" if parts.query else ""
-    query += urlencode({"next": str(origin)}, quote_via=quote)
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+    return with_query(url, {"next": str(origin)}) if origin else url
 
 
 @register.filter

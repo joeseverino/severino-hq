@@ -6,7 +6,7 @@ reader of what that section declares (``FindingRule.domain``).
 A record whose reference names nothing is one finding of its own.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from django.db.models import Count, Q
@@ -18,6 +18,7 @@ from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.platform.application.routes import reverse
+from hq.platform.application.url_query import with_query
 
 from . import sections
 from .entity_links import EntityLink, entity_link
@@ -60,7 +61,7 @@ class _Backlog:
     counts: str
     opens_as: str
     route: str
-    query: str
+    query: Mapping[str, str]
     count: Callable[[], int] | None = None
     named: Callable[[], tuple[EntityLink, ...]] | None = None
     said: str = ""
@@ -85,7 +86,7 @@ class _Backlog:
                 severity=Tone.ATTENTION,
                 explanation=" ".join(part for part in (ended(names), self.said) if part),
                 evidence=((self.counts, f"{count:,}"),),
-                primary=opens(self.opens_as, f"{reverse(self.route)}?{self.query}"),
+                primary=opens(self.opens_as, with_query(reverse(self.route), self.query)),
                 offers=tuple(opens(link.label, link.url) for link in first if link.url),
                 count=count,
                 notice=self.notice,
@@ -176,7 +177,7 @@ RULES: tuple[FindingRule, ...] = (
             counts="Drafts",
             opens_as="Open drafts",
             route="content:list",
-            query="status=draft",
+            query={"status": "draft"},
             count=lambda: sections.content_reading()["drafts"],
             notice=True,
         ),
@@ -194,7 +195,7 @@ RULES: tuple[FindingRule, ...] = (
             counts="Published with no doc",
             opens_as="Link a doc",
             route="content:list",
-            query="no_docs=1",
+            query={"no_docs": "1"},
             # Published only: a draft already has its own finding and is too
             # early to be missing documentation.
             count=lambda: (
@@ -218,7 +219,7 @@ RULES: tuple[FindingRule, ...] = (
             counts="Unread",
             opens_as="Read messages",
             route="contacts:list",
-            query="status=unread",
+            query={"status": "unread"},
             count=_unread,
         ),
         domain="hq.contacts",
@@ -235,7 +236,7 @@ RULES: tuple[FindingRule, ...] = (
             counts="With no receipt",
             opens_as="Attach receipts",
             route="expenses:list",
-            query="no_receipts=1",
+            query={"no_receipts": "1"},
             count=lambda: Expense.objects.filter(receipts__isnull=True).distinct().count(),
         ),
         domain="hq.expenses",
@@ -253,7 +254,7 @@ RULES: tuple[FindingRule, ...] = (
             counts="Attached to nothing",
             opens_as="Attach receipts",
             route="receipts:list",
-            query="unlinked=1",
+            query={"unlinked": "1"},
             count=lambda: Receipt.objects.filter(related_expense__isnull=True, related_asset__isnull=True).count(),
         ),
         domain="hq.receipts",
@@ -270,7 +271,7 @@ RULES: tuple[FindingRule, ...] = (
             counts="With no purchase date or cost",
             opens_as="Fill in details",
             route="assets:list",
-            query="missing_purchase=1",
+            query={"missing_purchase": "1"},
             named=_unpriced,
             said="Depreciation cannot be calculated without both.",
         ),

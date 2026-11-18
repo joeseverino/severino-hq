@@ -1,7 +1,6 @@
 """Operator tools: lookups HQ runs on request."""
 
 from typing import override
-lazy from urllib.parse import urlencode
 
 from django.shortcuts import redirect
 from django.views.generic import TemplateView
@@ -14,6 +13,7 @@ lazy from hq.domains.control_plane.forms import LOOKUP_FORMS
 lazy from hq.platform.application import security
 lazy from hq.platform.application.lookup import LOOK_UP_ADDRESS
 lazy from hq.platform.application.toolkit import tab_named, tabs_for
+lazy from hq.platform.application.url_query import with_query
 
 
 class ToolsView(PageMixin, TemplateView):
@@ -80,5 +80,6 @@ class ToolsView(PageMixin, TemplateView):
         address = request.POST.get("address", "").strip()
         if address:
             refused(request, execute_posted(request, LOOK_UP_ADDRESS, {"address": address, "refresh": True}))
-        query = urlencode({"tab": request.POST.get("tab", ""), "address": address})
-        return redirect(f"{reverse('control_plane:tools')}?{query}")
+        return redirect(
+            with_query(reverse("control_plane:tools"), {"tab": request.POST.get("tab", ""), "address": address})
+        )

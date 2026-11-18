@@ -16,6 +16,7 @@ from django.urls import reverse
 
 from hq.platform.application.lists import split_list
 from hq.platform.application.references import ReferenceField
+from hq.platform.application.url_query import with_query
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule
 lazy from hq.platform.application.calendar_entries import repeat_label
@@ -133,7 +134,7 @@ class Entry(TimestampedModel):
     def get_absolute_url(self) -> str:
         """An entry is read on the calendar: its day, with it open beside the month."""
 
-        return f"{reverse('calendar:month')}?day={self.starts_on.isoformat()}&entry={self.uid}"
+        return with_query(reverse("calendar:month"), {"day": self.starts_on.isoformat(), "entry": self.uid})
 
     @property
     def when_note(self) -> str:

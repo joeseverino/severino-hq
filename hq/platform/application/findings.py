@@ -15,7 +15,6 @@ from datetime import datetime
 from functools import cache
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict, cast
-from urllib.parse import urlencode
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
@@ -91,6 +90,7 @@ from .topology_model import (
     TopologyNode,
 )
 from .ui import ended
+from .url_query import with_query
 from .workflows import WrittenAction, claim_identity
 lazy from . import cadence
 lazy from .automation_runs import playbook_remedies
@@ -480,13 +480,12 @@ def _verification(
         return None, None
     wanted = _read_subject(finding, subject)
     read = read_now_link(principal, **asdict(wanted)) if wanted is not None else None
-    again = f"{findings_url}?{urlencode({'rule': finding.rule})}"
+    again = with_query(findings_url, {"rule": finding.rule})
     if read is not None:
-        separator = "&" if "?" in read.url else "?"
         verify = command_action(
             "verify",
             read.capability,
-            f"{read.url}{separator}{urlencode({'next': again})}",
+            with_query(read.url, {"next": again}),
             method="POST",
             target=read.target,
             intent=CHECK_AGAIN,

@@ -13,10 +13,10 @@ import json
 import socket
 from contextlib import closing
 from typing import Any
-from urllib.parse import quote
 
 from django.conf import settings
 
+from hq.platform.application.url_query import with_query
 from hq.platform.core.outbound import allowed
 
 from .tailnet import Device
@@ -51,7 +51,7 @@ def whois(address: str) -> Device | None:
     """
 
     try:
-        status, body = get(f"/localapi/v0/whois?addr={quote(address, safe='')}")
+        status, body = get(with_query("/localapi/v0/whois", {"addr": address}))
     except (OSError, http.client.HTTPException) as exc:
         raise Unavailable(str(exc) or type(exc).__name__) from exc
     # The daemon's own word for an address it holds no node for (client/local, WhoIs).

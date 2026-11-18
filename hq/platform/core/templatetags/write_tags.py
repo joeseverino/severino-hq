@@ -23,6 +23,7 @@ from django.utils.html import format_html
 from django.utils.text import slugify
 
 from hq.platform.application.describe import Describe
+from hq.platform.application.url_query import with_query
 from hq.platform.core.template_parts import Part, slotted
 lazy from hq.platform.application.web_writes import RETRY_KEY_FIELD, new_key
 
@@ -87,7 +88,7 @@ def row_editor(
     asked = request.GET.copy()
     is_open = asked.get(ROW_EDIT) == str(key)
     asked.pop(ROW_EDIT, None)
-    close_url = f"{request.path}?{asked.urlencode()}" if asked else request.path
+    close_url = with_query(request.path, asked)
     asked[ROW_EDIT] = str(key)
     drawn = None
     if is_open:
@@ -101,7 +102,7 @@ def row_editor(
         "label": label,
         "slug": slug,
         "open": is_open,
-        "open_url": f"{request.path}?{asked.urlencode()}#row-{slug}",
+        "open_url": with_query(request.path, asked, fragment=f"row-{slug}"),
         "close_url": close_url,
         "form": drawn,
         "action": action,

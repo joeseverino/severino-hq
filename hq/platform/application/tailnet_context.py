@@ -9,10 +9,10 @@ with the reason. None of them derives a fact the others cannot return.
 
 from dataclasses import dataclass, replace
 from typing import Any
-from urllib.parse import urlencode
 
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.url_query import with_query
 
 from .credential_sight import READABLE, Sight, credential_sight
 from .entity_links import EntityLink, entity_link
@@ -225,7 +225,7 @@ def _setting_problems(findings: tuple[Finding, ...]) -> dict[str, str]:
     for finding in findings:
         label = _SETTING_RULES.get(finding.rule)
         if label:
-            found[label] = f"{reverse('control_plane:findings')}?{urlencode({'rule': finding.rule})}"
+            found[label] = with_query(reverse("control_plane:findings"), {"rule": finding.rule})
     return found
 
 

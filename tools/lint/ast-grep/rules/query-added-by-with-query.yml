@@ -1,0 +1,38 @@
+# An address gets its query from with_query (hq/platform/application/
+# url_query.py), which joins the query the address already holds, keeps it
+# before the fragment and encodes every value of a key. One built by hand
+# leaves a value unencoded, puts a second "?" where one already stands, or
+# lands after a "#". The tools build `gh api` paths whose placeholders gh
+# fills, so they stay out of scope.
+id: query-added-by-with-query
+language: python
+severity: error
+message: A query is added to an address by hand.
+note: Use with_query(url, query, fragment=...) from hq.platform.application.url_query.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "hq/platform/application/url_query.py"
+rule:
+  any:
+    # f"{url}?{query}", f"{url}?next={value}", f"?month={month}", f"{a}&year={y}"
+    - kind: string
+      regex: '(?s)^[fF]("|'').*(\?([\w.-]+=)?|&[\w.-]+=)\{[^{]'
+    # f"{url}?{urlencode(query)}", "?" + urlencode(query), "?" + query.urlencode()
+    - kind: call
+      has:
+        field: function
+        regex: (^|\.)urlencode$
+      inside:
+        any:
+          - kind: interpolation
+          - kind: binary_operator
+    # "&" if "?" in url else "?"
+    - kind: comparison_operator
+      has:
+        kind: string
+        regex: ^["']\?["']$

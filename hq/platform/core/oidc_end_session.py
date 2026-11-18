@@ -6,12 +6,12 @@ library's ``OIDCLogoutView`` calls before it ends HQ's session (OpenID Connect
 RP-Initiated Logout 1.0).
 """
 
-from urllib.parse import urlencode
-
 from django.conf import settings
 from django.http import HttpRequest
 from django.shortcuts import resolve_url
 from mozilla_django_oidc.utils import absolutify
+
+from hq.platform.application.url_query import with_query
 
 ID_TOKEN_SESSION_KEY = "oidc_id_token"  # noqa: S105 - a session key's name, no credential
 
@@ -26,13 +26,13 @@ def end_session_url(request: HttpRequest) -> str:
     id_token = request.session.get(ID_TOKEN_SESSION_KEY)
     if not id_token:
         return landing
-    query = urlencode(
+    return with_query(
+        settings.OIDC_OP_LOGOUT_ENDPOINT,
         {
             "id_token_hint": id_token,
             "client_id": settings.OIDC_RP_CLIENT_ID,
             # Pocket ID sends the person back here only when it is one of the
             # client's registered Logout Callback URLs (docs/Security.md).
             "post_logout_redirect_uri": absolutify(request, landing),
-        }
+        },
     )
-    return f"{settings.OIDC_OP_LOGOUT_ENDPOINT}?{query}"

@@ -26,6 +26,7 @@ from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import connection, transaction
+from django.http import QueryDict
 from django.test import Client, override_settings
 from django.test.utils import CaptureQueriesContext, setup_databases, teardown_databases
 from django.urls import URLPattern, reverse
@@ -39,6 +40,7 @@ from hq.platform.application.resources import describe_resources
 from hq.platform.application.routes import routed
 from hq.platform.application.security import host_capabilities
 from hq.platform.application.tokens import KEYS
+from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import RETRY_KEY_FIELD, new_key
 from hq.platform.core.bench import ZONES, Seeded, seed, unchanged_sweep
 from hq.platform.core.example_estate import automation
@@ -240,7 +242,9 @@ def _pages(seeded: Seeded) -> tuple[list[tuple[str, str]], list[tuple[str, str]]
         else:
             url = reverse(name, kwargs=SAMPLES[name](seeded) if name in SAMPLES else None)
             pages.append((name, url))
-            pages.extend((f"{name}?{query}", f"{url}?{query}") for query in VARIANTS.get(name, ()))
+            # A variant is named as its address reads, a label of the report.
+            # ast-grep-ignore: query-added-by-with-query
+            pages.extend((f"{name}?{query}", with_query(url, QueryDict(query))) for query in VARIANTS.get(name, ()))
     for name, (route, sample) in ALSO.items():
         if (kwargs := sample(seeded)) is not None:
             pages.append((name, reverse(route, kwargs=kwargs)))

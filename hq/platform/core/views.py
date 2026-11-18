@@ -2,7 +2,6 @@
 
 import re
 from typing import ClassVar, override
-from urllib.parse import quote, urlencode
 lazy from datetime import timedelta
 
 from django.conf import settings
@@ -39,6 +38,7 @@ from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.search import global_search
 from hq.platform.application.security import Capability, agent_grantable, safe_next, web_principal
 from hq.platform.application.ui import PageNavigation, PageSection, counted
+from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused, run_posted
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
 lazy from hq.platform.application.connection_catalog import connection_catalog
@@ -89,7 +89,7 @@ class ThrottledLoginView(LoginView):
             # notice that it does not.
             nxt = safe_next(request)
             if nxt:
-                return redirect(f"{target}?next={quote(nxt)}")
+                return redirect(with_query(target, {"next": nxt}))
             return redirect(target)
         return super().get(request, *args, **kwargs)
 
@@ -517,7 +517,7 @@ class SearchView(PageMixin, TemplateView):
 
         # An audit entry has no page of its own: its row opens the log at the
         # same search.
-        audit = f"{reverse('core:audit_list')}?{urlencode({'q': q})}"
+        audit = with_query(reverse("core:audit_list"), {"q": q})
         sections = [
             {
                 "id": f"scope-{SCOPE_ID.sub('-', group['scope'].lower()).strip('-')}",
@@ -551,7 +551,7 @@ class SearchView(PageMixin, TemplateView):
                         for item in contacts
                     ],
                     "more_label": "Search messages",
-                    "more_url": f"{reverse('contacts:list')}?{urlencode({'q': q})}",
+                    "more_url": with_query(reverse("contacts:list"), {"q": q}),
                 }
             )
         return sections

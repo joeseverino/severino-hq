@@ -83,9 +83,13 @@ NOTHING_ASKED = {"ok": True, "standing": Standing().as_json(), "status_url": "",
 def followed(status: str) -> Standing:
     """How the read behind a status address stands, as its resource would say."""
 
+    from urllib.parse import urlsplit
+
+    from django.http import QueryDict
+
     from ..moments import moment
 
-    found = watched(status.partition("watch=")[2])
+    found = watched(QueryDict(urlsplit(status).query)["watch"])
     return read_standing(found["read"], moment(found["asked"]), connection_ref=found["ref"])
 
 

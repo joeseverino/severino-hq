@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
+from hq.platform.application.url_query import with_query
 
 from .calendar import CalendarEvent, CalendarSource
 from .derivations import derivation
@@ -227,7 +228,7 @@ def change_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
                 "changes made in HQ" if where != OUTSIDE_HQ else "changes made elsewhere",
             ),
             starts=day,
-            url=f"{reverse('core:audit_list')}?on={day.isoformat()}&source={where}",
+            url=with_query(reverse("core:audit_list"), {"on": day.isoformat(), "source": where}),
             state="done",
         )
         for (day, where), count in sorted(per_day.items())

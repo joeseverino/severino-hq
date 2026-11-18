@@ -9,10 +9,10 @@ page's sections and cells, so a band renders identically on both.
 
 from collections.abc import Callable
 from dataclasses import replace
-from urllib.parse import urlencode
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.labels import dotted
+from hq.platform.application.url_query import with_query
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.models import ManagedResource
 lazy from hq.domains.control_plane.providers import service_facets
@@ -204,7 +204,7 @@ def _runs(machine, *, principal: Principal | None) -> ServiceSection | None:
     """
 
     name = normalized_hostname(machine.name)
-    every = f"{reverse('jobs:list')}?{urlencode({'host': name})}"
+    every = with_query(reverse("jobs:list"), {"host": name})
     return recent_work(runs_on(name), by_machine=True, more_url=every, principal=principal)
 
 

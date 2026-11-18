@@ -26,6 +26,7 @@ from hq.platform.application.moments import moment, when
 from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.security import safe_next
 from hq.platform.application.ui import counted
+from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted, refused
 
 from . import inbox
@@ -44,6 +45,9 @@ def reply_mailto(address: str, subject: str = "Re: your message") -> str:
 
     address = "".join(ch for ch in str(address or "") if ch not in "\r\n")
     subject = "".join(ch for ch in subject if ch not in "\r\n")
+    # A mail client reads a "+" in the subject as itself (RFC 6068), so a space
+    # is %20 here, never the "+" a web query encodes it as.
+    # ast-grep-ignore: query-added-by-with-query
     return f"mailto:{quote(address, safe='@')}?subject={quote(subject, safe='')}"
 
 
@@ -104,7 +108,9 @@ def contact_list(request):
             "status_kept": {"status": selected_status},
             "q": q,
             # The search cleared, on the tab it was asked on.
-            "search_cleared": reverse("contacts:list") + (f"?status={selected_status}" if selected_status else ""),
+            "search_cleared": with_query(
+                reverse("contacts:list"), {"status": selected_status} if selected_status else None
+            ),
             # What the search narrows: the messages of the tab it was asked on.
             "status_total": next(tab["count"] for tab in status_tabs if tab["current"]),
             "total_count": sum(current.counts.values()),

@@ -18,6 +18,7 @@ from hq.domains.control_plane.models import (
     ManagedResource,
     ProviderConnection,
 )
+from hq.platform.application.url_query import with_query
 lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 lazy from hq.platform.application.routes import reverse
 
@@ -148,7 +149,7 @@ def condition_icon(words: str, fallback: str) -> str:
 
 def _forecast_url(point: str) -> str:
     latitude, longitude = point.split(",")
-    return f"https://forecast.weather.gov/MapClick.php?lat={latitude}&lon={longitude}"
+    return with_query("https://forecast.weather.gov/MapClick.php", {"lat": latitude, "lon": longitude})
 
 
 def panel_specs(

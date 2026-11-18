@@ -16,7 +16,7 @@ from collections.abc import Callable, Iterable, Mapping
 from copy import copy
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlsplit
 from weakref import WeakKeyDictionary
 
 from django.core.exceptions import ImproperlyConfigured
@@ -27,6 +27,7 @@ from .asks import Ask
 from .fragments import FragmentMixin
 from .tone import Tone
 from .ui import PageNavigation, button_classes
+from .url_query import with_query
 lazy from .action_links import command_url
 lazy from .capabilities import command_spec
 lazy from .contracts import Effect
@@ -136,7 +137,7 @@ class PageAction:
         # the page its view draws, or posts to a view that draws none.
         posts = bool(value or sends) or not answers_get
         if query:
-            url = f"{url}{'&' if '?' in url else '?'}{urlencode(query, doseq=True)}"
+            url = with_query(url, query)
         if field in sends:
             raise ValueError(f"A POST action's button sends {field!r}; its fields cannot send it too.")
         if modal and posts:

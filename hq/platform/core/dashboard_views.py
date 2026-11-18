@@ -34,6 +34,7 @@ from hq.platform.application.pages import PageVisit, page_context
 from hq.platform.application.request_path import request_path
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.tone import Tone
+from hq.platform.application.url_query import with_query
 from hq.platform.application.visit_refresh import worth_asking
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
@@ -102,8 +103,8 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         return {
             "calendar": calendar,
             "calendar_paging": {
-                "previous": f"?month={(month - timedelta(days=1)):%Y-%m}",
-                "next": f"?month={(month + timedelta(days=32)):%Y-%m}",
+                "previous": with_query("", {"month": f"{(month - timedelta(days=1)):%Y-%m}"}),
+                "next": with_query("", {"month": f"{(month + timedelta(days=32)):%Y-%m}"}),
                 # Today leads back only from another month.
                 "today": "" if calendar.is_current else "?",
             },

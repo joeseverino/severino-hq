@@ -1,9 +1,9 @@
 """Reports dashboard + exports."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import override
+from typing import Any, override
 
 from django.db.models import Count, Sum
 from django.http import HttpResponse, HttpResponseBadRequest
@@ -23,6 +23,7 @@ from hq.platform.application.projection import years_of
 from hq.platform.application.reports import exported
 from hq.platform.application.security import web_principal
 from hq.platform.application.ui import counted
+from hq.platform.application.url_query import with_query
 
 from . import exports as exporters
 
@@ -33,13 +34,13 @@ def status_counts(model, list_url: str) -> list[dict]:
     labels = dict(model.Status.choices)
     counted = dict(model.objects.values_list("status").annotate(n=Count("id")))
     return [
-        {"label": labels[status], "count": counted[status], "url": f"{list_url}?status={status}"}
+        {"label": labels[status], "count": counted[status], "url": with_query(list_url, {"status": status})}
         for status in labels
         if counted.get(status)
     ]
 
 
-def by_category(rows, choices, list_url: str, query: str = "") -> list[dict]:
+def by_category(rows, choices, list_url: str, query: Mapping[str, Any] | None = None) -> list[dict]:
     """Aggregate rows keyed by ``category``, named as the forms name them and
     linked to the list filtered to that category."""
 
@@ -48,7 +49,7 @@ def by_category(rows, choices, list_url: str, query: str = "") -> list[dict]:
         {
             **row,
             "label": labels.get(row["category"], row["category"]),
-            "url": f"{list_url}?category={row['category']}{query}",
+            "url": with_query(list_url, {"category": row["category"], **(query or {})}),
         }
         for row in rows
     ]
@@ -78,7 +79,7 @@ class ReportsView(PageMixin, TemplateView):
         asset_summary = assets.aggregate(n=Count("id"), total=Sum("total_cost"))
 
         expenses_count = expense_summary["n"] or 0
-        expenses_url = f"{reverse('expenses:list')}?year={year}"
+        expenses_url = with_query(reverse("expenses:list"), {"year": year})
 
         ctx.update(
             figures=(
@@ -109,7 +110,7 @@ class ReportsView(PageMixin, TemplateView):
                 .order_by("-total"),
                 EXPENSE_CATEGORY_CHOICES,
                 reverse("expenses:list"),
-                f"&year={year}",
+                {"year": year},
             ),
             largest_expenses=[
                 ListRow(

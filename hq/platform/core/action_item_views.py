@@ -13,6 +13,7 @@ from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.tone import Tone
+from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted, refused
 
 ACTION_ITEM_FILTERS = ("q", "status", "source", "about")
@@ -51,7 +52,7 @@ class ActionItemsView(PageMixin, TemplateView):
             if name not in ACTION_ITEM_FILTERS:
                 del shown[name]
         shown["part"] = part
-        return f"{reverse('action_items_set_aside')}?{shown.urlencode()}"
+        return with_query(reverse("action_items_set_aside"), shown)
 
     @override
     def get_context_data(self, **kwargs):
