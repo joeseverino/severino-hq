@@ -4,7 +4,7 @@ A list: the toolbar, the table and its empty state, drawn from the view's
 TableListMixin. The header comes from `table.columns`; a page writes only the
 cells of one row in `{% block row %}`, which renders once per row with `row`
 set. Its rows are one page of a list the server orders, so a heading sorts
-there (`sort=`) or not at all, never on the page. Its first cell stands in the gutter and holds the row's toggle, both drawn by the region from its heading, and `{% block row_attributes %}` gives its `tr` attributes (a fold's `id` and `data-folds`, a folded row's `data-folded`), and `{% block row_select %}` its tick-box, which a row of one cell across the table leaves out. `{% block summary %}` sits between the toolbar and the table.
+there (`sort=`) or not at all, never on the page. Its first cell stands in the gutter and holds the row's toggle, both drawn by the region wherever a row can hold anything back, and `{% block row_attributes %}` gives its `tr` attributes (a fold's `id` and `data-folds`, a folded row's `data-folded`), and `{% block row_select %}` its tick-box, which a row of one cell across the table leaves out. `{% block summary %}` sits between the toolbar and the table.
 The view's `table_empty` says what an empty list means ("No assets yet."), with
 `table_empty_why` beside it and `get_table_empty_remedy()` where the derived remedy
 is not the one,
@@ -30,7 +30,7 @@ the pages.
       <tr>
         {% if table.selectable %}{% table_heading "Select all rows" select_all=True %}{% endif %}
         {% for column in table.columns %}
-          {% table_heading column.label|default:"Actions" column.kind css=column.css drop=column.drop sort=column.sort local_sort=False gutter=forloop.first hidden=column.label|yesno:",True" %}
+          {% table_heading column.label|default:"Actions" column.kind css=column.css drop=column.drop sort=column.sort local_sort=False hidden=column.label|yesno:",True" %}
         {% endfor %}
       </tr>
     </thead>

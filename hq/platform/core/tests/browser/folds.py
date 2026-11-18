@@ -10,7 +10,7 @@ from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE
 MESSAGE = "A sentence about the event, long enough that a phone has no room for it beside the rest"
 EVENT = (
     '{% table_region "Events" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "What" gutter=True %}{% table_heading "When" css="date-col key-col" %}'
+    '{% table_heading "What" %}{% table_heading "When" css="date-col key-col" %}'
     '{% table_heading "Who" css="optional-col" drop=1 %}{% table_heading "Message" drop=2 %}</tr></thead><tbody>'
     '<tr id="example-event" data-folds><td class="row-gutter">'
     '{% include "partials/_row_fold.html" with label="Example event" only %}<strong>Example event</strong>'

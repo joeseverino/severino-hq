@@ -331,7 +331,7 @@ class TableTagTests(SimpleTestCase):
         # The stylesheet shows a cut row's toggle as the gutter cell's own child.
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-            '{% table_heading "When" "status" gutter=True %}{% table_heading "Note" %}</tr></thead><tbody>'
+            '{% table_heading "When" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
             "<tr><td>Nov 2</td><td>b</td></tr>"
             "</tbody></table>{% endtable_region %}"
         )
@@ -342,13 +342,13 @@ class TableTagTests(SimpleTestCase):
 
     def test_only_a_cut_cell_with_a_long_line_is_clamped(self):
         """A value with a long line is held to a few lines where its row
-        opens; a status is never held, and a short line, a blank cell or a
-        row with no toggle to show it whole is not."""
+        opens, and its row holds the toggle that shows it whole; a status is
+        never held, nor is a short line or a blank cell."""
 
         long = "A sentence long enough to stand <em>several</em> lines tall in a narrow column"
         lines = "Two lines, each of them short<br>and the second one as short"
         source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
             '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
             f'<tr><td data-col="name">{long}</td><td data-col="status">{long}</td><td data-col="long">{long}</td></tr>'
             f'<tr><td>b</td><td>Up</td><td data-col="lines">{lines}</td></tr>'
@@ -361,8 +361,8 @@ class TableTagTests(SimpleTestCase):
         # An open row releases its clamp in place, so the value is never
         # copied to the open line.
         self.assertFalse([each for each in found if each.tag == "dl"])
-        closed = all_elements(_render(source.replace(" gutter=True", "")))
-        self.assertEqual([each for each in closed if "cell-clamp" in each.classes], [])
+        (row, *_) = [each for each in found if each.tag == "tr" and any(up.tag == "tbody" for up in each.ancestors)]
+        self.assertTrue([each for each in found if row in each.ancestors and "data-row-toggle" in each.attrs])
         self.assertFalse(any("data-below" in each.attrs for each in found if each.tag == "tr"))
 
     def test_a_row_that_holds_something_back_has_its_line_beneath(self):
@@ -372,7 +372,7 @@ class TableTagTests(SimpleTestCase):
         server draws no copy of a cell."""
 
         source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
             '{% table_heading "Note" drop=1 %}{% table_heading "State" "status" css="key-col" %}'
             '{% table_heading "Blank" drop=2 %}{% table_heading "Act" hidden=True css="actions-col" drop=3 %}'
             "</tr></thead><tbody>"
@@ -442,7 +442,7 @@ class TableTagTests(SimpleTestCase):
         an ask that has said nothing adds nothing to it."""
 
         source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
             '{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
             '<tr><td>A</td><td>{% include "partials/_ask.html" with ask=ask %}</td>'
             "</tr></tbody></table>{% endtable_region %}"
@@ -474,7 +474,7 @@ class TableTagTests(SimpleTestCase):
         does, the label beside the value."""
 
         source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
             '{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
             '<tr><td>A</td><td>{% include "partials/_ask.html" with ask=ask %}</td>'
             "</tr></tbody></table>{% endtable_region %}"

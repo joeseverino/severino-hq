@@ -396,12 +396,15 @@ and `CHROME_BYTES`.
   the table primitive sets on its cells, and never names the table: an ask's
   note says its word alone on the row's line and its sentence beneath.
 
-Every row that can open has its toggle drawn by the server. The region draws
-it, last in the row's cell under the heading that keeps the gutter
-(`table_heading ... gutter=True`), and marks that column's cells `row-gutter`;
-a toggle written by hand there is refused. Only a table with no headings to
-name its gutter draws its own (`{% row_toggle %}`), last in its cell, outside
-the cell's clamp and its copy. It shows only where opening the row shows
+Every row that can open has its toggle drawn by the server. A table with
+headings whose rows can hold anything back (a column that leaves, by its
+rank or the region's, a long value a narrow box clamps, a part only the open
+line shows, a block moved there, an editor or a fold) keeps the gutter in the
+column that names each row: the region marks that column's cells
+`row-gutter` and draws each row's toggle last in its cell, so no table can
+hide a value without the way to read it whole. A toggle written by hand in a
+table with headings is refused. Only a table with no headings draws its own
+(`{% row_toggle %}`), last in its cell, outside the cell's clamp and its copy. It shows only where opening the row shows
 something now: a cell whose column has left, a `narrow-more` part in a
 narrow box, a `row-below` part, a part the row never
 shows, a clamp in a narrow box, or a fold. A wide box clamps nothing, so
@@ -467,7 +470,7 @@ layout survey's `cut and closed`, `cut when open` and `cut beside room`.
 A long value in a cell (a line past `table_cells.LONG`) wraps, and in a
 narrow box is held to its third line by a clamp with its mark (`.cell-clamp`,
 cuts.css), its whole value where its row opens; a wide box holds it whole. A row with no toggle (a table with
-no gutter heading, a fold's head) clamps nothing, so its value wraps whole,
+no headings, a fold's head) clamps nothing, so its value wraps whole,
 and no cell carries its value again as a title. Only words are held: each
 part of words in it (`data-cell`) is clamped on its own, so a pill or a
 toggle beside them stays whole, and a cell holding such parts is the clamp

@@ -224,7 +224,6 @@ fails when this file falls behind. The rules around it are in
 | `table_heading` | `css` |  |  | The column's classes. |
 | `table_heading` | `descending` |  |  | Its reverse, when that is not `-field`. |
 | `table_heading` | `drop` | `0` |  | The rank it leaves by when the table is too wide, 1 first. |
-| `table_heading` | `gutter` | `False` |  | Its cells stand in the gutter and hold each row's toggle. |
 | `table_heading` | `hidden` | `False` |  | The name for assistive technology only. |
 | `table_heading` | `kind` |  |  | What the column holds, one of `COLUMN_KINDS`; left out, its classes say. |
 | `table_heading` | `local_sort` | `None` |  | Sorts the rows on the page; left out, it follows from what the column holds. |

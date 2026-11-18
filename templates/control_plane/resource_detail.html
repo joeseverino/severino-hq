@@ -54,7 +54,7 @@ declaration's machinery: the controller's actions are the buttons above, and
       {% if display_consumers %}
       {% table_region "Installed on" %}
       <table class="data-table compact-table">
-        <thead><tr>{% table_heading "Place" "identifier" gutter=True local_sort=True %}{% table_heading "Names checked" "identifier" local_sort=True %}</tr></thead>
+        <thead><tr>{% table_heading "Place" "identifier" local_sort=True %}{% table_heading "Names checked" "identifier" local_sort=True %}</tr></thead>
         <tbody>
           {% for consumer in display_consumers %}
             <tr>

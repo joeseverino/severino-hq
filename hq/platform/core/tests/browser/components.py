@@ -386,7 +386,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             **self.pages,
             "fold-probe": probe(
                 '{% table_region "Folding" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>'
+                '{% table_heading "Name" %}{% table_heading "Value" %}</tr></thead><tbody>'
                 '{% row_group "Example group" 1 folds="example-fold" %}'
                 '<tr id="example-cut" data-folded="example-fold"><td>Name</td>'
                 "<td>a value far too long to show whole on one line of its column</td>"
@@ -631,7 +631,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             **self.pages,
             "ask-probe": probe(
                 '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Name" gutter=True %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
+                '{% table_heading "Name" %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
                 "<tr><td>A</td>"
                 '<td>{% include "partials/_ask.html" with ask=ask %}</td></tr></tbody></table>{% endtable_region %}'
                 "<div data-example-region><p>An example line.</p></div>"
@@ -659,7 +659,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             **self.pages,
             "ask-actions-probe": probe(
                 '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Name" gutter=True %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
+                '{% table_heading "Name" %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
                 '<tr><td>A</td><td class="row-actions">{% include "partials/_ask.html" with ask=ask %}'
                 '<a class="btn ghost compact" href="/example/remove/">Remove</a></td></tr></tbody></table>'
                 "{% endtable_region %}"
@@ -750,7 +750,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             **self.pages,
             "word-before-a-name-probe": probe(
                 '<div style="inline-size: 26rem">{% table_region "Changes" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Name" gutter=True %}{% table_heading "Change" %}</tr></thead><tbody><tr>'
+                '{% table_heading "Name" %}{% table_heading "Change" %}</tr></thead><tbody><tr>'
                 "<td><strong>example.com</strong><br>"
                 f'<span class="muted">on <a href="#" data-entity="Machine">{host}</a></span></td>'
                 f'<td class="cell-data">Created {record} from a request</td>'

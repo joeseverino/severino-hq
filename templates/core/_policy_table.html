@@ -10,7 +10,7 @@ The default is words every row is read by: a key, which wraps.
   <table class="data-table">
     <thead>
       <tr>
-        {% table_heading "Action" local_sort=True gutter=True %}
+        {% table_heading "Action" local_sort=True %}
         {% table_heading "Default" css="key-col" local_sort=True %}
         {% for column in columns %}{% table_heading column.label "control" css="wide-only" local_sort=True title=column.detail %}{% endfor %}
       </tr>

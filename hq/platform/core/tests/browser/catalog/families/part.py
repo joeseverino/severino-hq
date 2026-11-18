@@ -537,7 +537,7 @@ def _edited_rows(name, first, second):
 
     return (
         f'{{% section "{name}" %}}{{% table_region "{name}" %}}<table class="data-table"><thead><tr>'
-        '{% table_heading "Run" "identifier" gutter=True %}{% table_heading "Miles" "numeric" %}'
+        '{% table_heading "Run" "identifier" %}{% table_heading "Miles" "numeric" %}'
         '{% table_heading "Distance check" "control" %}</tr></thead><tbody>'
         f'<tr><td>{first}</td><td>3.10</td><td>{{% row_editor form "{first}" label="Correct distance" '
         'action="/example/distance/" verb="Save distance" distance_miles="3.10" %}</td></tr>'
@@ -1214,7 +1214,7 @@ ENTRIES = {
     # row, its fix opened beneath it.
     "part/credential-fix": Entry(
         '{% section "Example connections" %}{% table_region "Example connections" %}<table class="data-table">'
-        '<thead><tr>{% table_heading "Name" "identifier" gutter=True %}{% table_heading "Provider" %}</tr></thead>'
+        '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Provider" %}</tr></thead>'
         '<tbody><tr><td>example-main{% include "control_plane/_credential_fix.html" %}</td><td>Example</td></tr>'
         "</tbody></table>{% endtable_region %}{% endsection %}",
         {
@@ -1250,7 +1250,7 @@ ENTRIES = {
     ),
     "part/stack-list-in-a-row": Entry(
         '{% section "Example checks" %}{% table_region "Example checks" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Check" gutter=True %}{% table_heading "Result" %}</tr></thead><tbody>'
+        '{% table_heading "Check" %}{% table_heading "Result" %}</tr></thead><tbody>'
         "<tr><td>Example reading"
         '{% stack_list %}<li class="muted">An example reason it is not read.</li>'
         '<li class="muted">Another example reason.</li>{% endstack_list %}</td>'
@@ -1595,7 +1595,7 @@ ENTRIES = {
     # tasks that stated readings.
     "part/run-evidence": Entry(
         '{% section "Example runs" %}{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Procedure" gutter=True %}{% table_heading "State" "status" %}'
+        '{% table_heading "Procedure" %}{% table_heading "State" "status" %}'
         '{% table_heading "Result" %}</tr></thead><tbody>'
         "{% for title, word, tone, note, evidence in runs %}<tr><td><strong>{{ title|breakable }}</strong></td>"
         "<td>{% status word tone=tone %}</td><td>{{ note }}{% run_evidence evidence %}</td></tr>{% endfor %}"
@@ -2363,7 +2363,7 @@ ENTRIES = {
     # and a row that is not one, which draws its star alone.
     "part/row-arrangement": Entry(
         '{% section "Example services" %}{% table_region "Example services" %}<table class="data-table"><thead>'
-        '<tr>{% table_heading "Service" "identifier" gutter=True %}{% table_heading "Open to" %}'
+        '<tr>{% table_heading "Service" "identifier" %}{% table_heading "Open to" %}'
         '{% table_heading "Actions" css="actions-col" hidden=True %}</tr></thead>'
         "<tbody>{% for name, mark, order in rows %}<tr><td><strong>{{ name|breakable }}</strong></td>"
         "<td>Example network</td>{% row_actions mark=mark order=order %}</tr>{% endfor %}"

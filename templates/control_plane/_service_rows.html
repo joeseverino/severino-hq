@@ -14,7 +14,7 @@ sizes and counts, so the service's name keeps its column's whole line.
   <table class="data-table">
     <thead>
       <tr>
-        {% table_heading "Service" "identifier" gutter=True local_sort=True %}
+        {% table_heading "Service" "identifier" local_sort=True %}
         {% table_heading "Open to" drop=facets|length|add:3 local_sort=True %}
         {% for id, label in facets %}{% table_heading label drop=forloop.revcounter|add:2 local_sort=True %}{% endfor %}
         {% table_heading "Runs on" drop=2 local_sort=True %}
