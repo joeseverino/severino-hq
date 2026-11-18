@@ -314,6 +314,19 @@ class TailnetLockTests(TestCase):
 
         self.assertTrue(self.layer(connection(a_request())).met)
 
+    def test_a_device_the_tailnet_calls_unsigned_fails_the_layer_with_no_lock_reading(self):
+        # The device sweep says lock filters this node; the lock layer alone
+        # judges that, so it is drawn before the host's lock reading exists.
+        a_tailnet(
+            a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test", lock_error="No signature."),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+
+        layer = self.layer(connection(a_request()))
+
+        self.assertIsNotNone(layer)
+        self.assertFalse(layer.met)
+
     def test_no_device_means_no_signature_line(self):
         # The device layer above has already said no node answers here. A line
         # about that node's signature would be describing nothing.

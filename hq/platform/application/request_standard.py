@@ -253,11 +253,6 @@ def _device(facts: RequestFacts) -> Reading:
     named = device.dns_name or device.name
     if not device.authorized:
         return Reading.unmet(named, detail=f"{device.label} is on the tailnet but has not been approved.")
-    if device.lock_error:
-        return Reading.unmet(
-            named,
-            detail=f"{device.label} is not signed for tailnet lock, so other devices ignore it. {device.lock_error}",
-        )
     expiry = (
         ended(f" Its node key {_expiry_phrase(device.key_expires)}")
         if device.key_expires
@@ -267,10 +262,11 @@ def _device(facts: RequestFacts) -> Reading:
 
 
 def _locked(facts: RequestFacts) -> bool:
-    """A device with a lock reading: with no device, the check above already
-    said no node answers; with no reading, lock is not known to be off."""
+    """A device with a lock reading, or one the tailnet calls unsigned: with no
+    device, the check above already said no node answers; with neither, lock
+    is not known to be off."""
 
-    return facts.device is not None and bool(facts.lock)
+    return facts.device is not None and (bool(facts.lock) or bool(facts.device.lock_error))
 
 
 def _lock(facts: RequestFacts) -> Reading:
@@ -280,13 +276,15 @@ def _lock(facts: RequestFacts) -> Reading:
 
     device = facts.device
     lock = facts.lock
-    if not lock.get("enabled"):
-        return Reading.unavailable("Lock off", detail="Tailnet lock is off, so node keys are not signed.")
+    # The device sweep's own word that lock filters this node, which holds
+    # with no lock reading, or against an older one that read lock off.
     if device.lock_error:
         return Reading.unmet(
             "Unsigned",
             detail=f"{device.label} has no valid tailnet lock signature, so other devices ignore it. {device.lock_error}",
         )
+    if not lock.get("enabled"):
+        return Reading.unavailable("Lock off", detail="Tailnet lock is off, so node keys are not signed.")
     return Reading.met(
         dotted("Signed", counted(len(lock.get("signers") or ()), "signing key", "signing keys")),
         detail=f"Tailnet lock is on and {device.label}'s node key has a valid signature.",
@@ -447,14 +445,10 @@ def _expiry_phrase(stamp: str) -> str:
 
 
 def _gate(facts: RequestFacts) -> Reading:
-    """Whether HQ refuses everything else before it authenticates anything."""
+    """Whether HQ refuses everything else before it authenticates anything,
+    and this request's own address is in a private range it lets in."""
 
     enforced = settings.SEVERINO_ENFORCE_TRUSTED_NETWORK
-    if enforced and facts.channel.id == "opaque":
-        return Reading.unmet(
-            "Checking a proxy",
-            detail="The proxy did not pass your address on. Anyone who can reach the proxy passes.",
-        )
     return Reading.judged(
         enforced and facts.channel.private,
         evidence="Enforced" if enforced else "Not enforced",
@@ -572,11 +566,7 @@ GATE = Check(
     hop="hq",
     boundary="Application edge",
     mechanism="HQ's trusted-network setting",
-    breaks=(
-        {"settings": {"SEVERINO_ENFORCE_TRUSTED_NETWORK": False}},
-        # A chain of proxies alone names no caller, so the gate is judging a proxy.
-        Break({"channel": "opaque"}, also=("channel",)),
-    ),
+    breaks=({"settings": {"SEVERINO_ENFORCE_TRUSTED_NETWORK": False}},),
 )
 TRANSPORT = Check(
     "transport",
@@ -656,7 +646,12 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         hop="network",
         boundary="Network",
         mechanism="The tailnet address range",
-        breaks=({"channel": "network"},),
+        breaks=(
+            {"channel": "network"},
+            # A chain of proxies alone names no caller, so the gate let in the
+            # proxy's private address, not the caller's.
+            Break({"channel": "opaque"}, also=("gate",)),
+        ),
     ),
     # Against the address claim above, because that is what it qualifies:
     # whether the packet had to arrive on the tailnet to be let in.
@@ -718,11 +713,6 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         breaks=(
             # Listed, and admitted to nothing until approved.
             {"devices": {"a-laptop": {"authorized": False}}},
-            # Under lock an unsigned node is ignored by every peer.
-            Break(
-                {"devices": {"a-laptop": {"lock_error": "No signature chains to a trusted key."}}},
-                also=("tailnet-lock",),
-            ),
             # A current reading with no device at the address.
             {"caller": "", "identity": {"tailnet_user": ""}},
         ),
@@ -740,7 +730,13 @@ REQUEST_STANDARD: tuple[Check, ...] = (
         boundary="Device identity",
         mechanism="Tailnet lock signature",
         breaks=(
-            Break({"devices": {"a-laptop": {"lock_error": "No signature chains to a trusted key."}}}, also=("device",)),
+            # Under lock an unsigned node is ignored by every peer.
+            {"devices": {"a-laptop": {"lock_error": "No signature chains to a trusted key."}}},
+            # The device sweep's word stands against a lock reading of off.
+            {
+                "devices": {"a-laptop": {"lock_error": "No signature chains to a trusted key."}},
+                "lock": {"enabled": False},
+            },
         ),
     ),
     Check(
