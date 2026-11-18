@@ -155,25 +155,28 @@
   /* With no script a fold cannot open or close, and every row it would fold shows (tables.css), so it is not drawn. */
   @media (scripting: none) { .row-fold { display: none; } }
 
-  /* A band too narrow for two cells is a list, like every other summary:
-     each fact a row of its own, its label and its value at the right edge,
-     the detail and its drawing under both. Asked of the band's own width, so
-     a band in a narrow card reads the same as one on a phone. Small figures
-     keep their grid, which holds a dozen across at any width, and a lead its
-     figure on a row of its own. */
+  /* A band in a frame on a phone is a list, like every other summary: each
+     fact a row of its own, its label and its value at the right edge, the
+     detail and its drawing under both, so a long value or detail has the
+     whole row. Asked of the band's own width, so a band in a narrow card
+     reads the same as one on a phone. Small figures keep their grid, which
+     holds a dozen across at any width, a lead its figure on a row of its
+     own, and the readings beside a page's title, each a word or a number,
+     their counted rows, two to a row where four no longer fit. */
   @container band (width < 24rem) {
-    /* The label keeps its words up to three fifths of the row and wraps past
-       that, and the value never narrows past its longest run that cannot
-       break (`min-content`, a count bound to its noun), so a long label never
-       squeezes its value to a letter a line or parts a number from its unit. */
-    .facts-band:not(.is-small, .is-lead) > .fact { grid-column: 1 / -1; display: grid; grid-template-columns: fit-content(60%) minmax(min-content, 1fr); align-items: baseline; gap: var(--space-2) var(--space-4); padding-block: var(--space-5); }
-    .facts-band:where(:not(.card:not(.section-body) > :only-child)):not(.is-small, .is-lead) > .fact { padding-block: 0; }
-    .facts-band:not(.is-small, .is-lead) dt { font-size: var(--text-sm); }
-    .facts-band:not(.is-small, .is-lead) .fact-value { text-align: right; font-size: var(--text-md); }
-    .facts-band:not(.is-small, .is-lead) .fact-detail { grid-column: 1 / -1; }
-    /* A value's dots stand before it, so the value keeps the right edge. */
-    .facts-band:not(.is-small, .is-lead) .fact-figure { flex-direction: row-reverse; }
-    .facts-band:not(.is-small, .is-lead) .figure-dots { justify-content: end; }
+    .facts-band:not(.is-small, .is-lead, .page-head *) {
+      /* The label keeps its words up to three fifths of the row and wraps past
+         that, and the value never narrows past its longest run that cannot
+         break (`min-content`, a count bound to its noun), so a long label never
+         squeezes its value to a letter a line or parts a number from its unit. */
+      & > .fact { grid-column: 1 / -1; display: grid; grid-template-columns: fit-content(60%) minmax(min-content, 1fr); align-items: baseline; gap: var(--space-2) var(--space-4); }
+      & dt { font-size: var(--text-sm); }
+      & .fact-value { text-align: right; font-size: var(--text-md); }
+      & .fact-detail { grid-column: 1 / -1; }
+      /* A value's dots stand before it, so the value keeps the right edge. */
+      & .fact-figure { flex-direction: row-reverse; }
+      & .figure-dots { justify-content: end; }
+    }
   }
 
   /* On paper a pill in a section's head is a link, which cannot be followed

@@ -271,7 +271,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* A band of facts beside a page's title (the dashboard's glance) stands on the page's ground: beside the title while its facts fit there, on a line of its own under it, from the page's edge, where not. */
 :is(.page-head, .page-title-row) > :has(> .facts-band) { flex: 1 1 32rem; min-width: 0; }
 .page-head .facts-band { margin-block: 0; }
-/* There each reading stands at the middle of its column, so the readings spread through the room beside the greeting rather than crowding it; under 24rem they are a list (surfaces.css). */
+/* There each reading stands at the middle of its column, so the readings spread through the room beside the greeting rather than crowding it; under 24rem they stand two to a row from the page's edge. */
 @container band (width >= 24rem) { .page-head .facts-band > .fact { justify-self: center; } }
 /* What names a value is sentence case in the muted voice; capitals are for a kicker over a group (`.eyebrow`), never a value's name. Its mark is quieter than its words, and a label too long for its cell wraps beside its mark, never under it. */
 .facts-band dt { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; color: var(--muted); font-size: var(--text-xs); }

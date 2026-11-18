@@ -581,7 +581,8 @@ is the button that opens the panel in place, as a menu does, and each
 `data_*` option is its attribute, so a fragment region in the band holds
 facts refreshed in place as its own (`core/_dashboard_glance.html`). Under
 24rem a band reads as a list, each fact a row of its own; small figures keep
-their grid, and a lead its figure on a row of its own.
+their grid, a lead its figure on a row of its own, and a band beside a page's
+title its counted rows, two to a row.
 
 Every label and its value is a fact: `{% fact "Label" value=n url=...
 detail=... %}` inside `{% facts %}`, or the block form `{% fact "Label"
