@@ -273,7 +273,11 @@ class _Builder:
                 _list_id(resource), {f"query.{PAGE_FIELD}": f"$response.body#/data/next/{PAGE_FIELD}", **parameters}
             )
         record = spec.record_type
-        carried = spec.list_fields if listed else (typed_keys(record) if record is not None else ())
+        carried = (
+            (spec.listing.fields if spec.listing else ())
+            if listed
+            else (typed_keys(record) if record is not None else ())
+        )
         identifier = spec.identifier
         if spec.detail_handler is None or identifier not in carried:
             return found

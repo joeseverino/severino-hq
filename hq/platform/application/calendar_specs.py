@@ -30,7 +30,7 @@ from .calendar_entries import (
 from .contracts import Effect
 from .deletion import DeleteCommand, delete_calendar_entry
 from .describe import Describe, listed
-from .integration_specs import CapabilitySpec, ResourceSpec
+from .integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from .record_fields import Notes
 from .records import EDIT, KEPT
 from .resources import BoundedQuery, limit_words
@@ -160,10 +160,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Calendar",
             "Everything on the calendar over a span of days, and your own events.",
             Capability.READ_CALENDAR,
-            calendar_entries.list_agenda,
-            AgendaQuery,
-            calendar_entries.get_entry,
-            "uid",
+            listing=ListRead(calendar_entries.list_agenda, AgendaQuery, AgendaItem),
+            detail_handler=calendar_entries.get_entry,
+            identifier="uid",
             search=SearchDefinition(
                 "calendar",
                 Entry,
@@ -173,7 +172,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="title",
             ),
             web_route="calendar:month",
-            item_type=AgendaItem,
             record_type=EntryRecord,
         ),
     )

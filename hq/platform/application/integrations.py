@@ -141,7 +141,7 @@ def _validate_capability_resources(
         if capability.subject_resource not in resources:
             continue
         resource = resources[capability.subject_resource]
-        if not resource.list_handler or not resource.list_query_type:
+        if resource.listing is None:
             violations.append(
                 IntegrationViolation(
                     "capability.unlistable_target_resource",
@@ -151,7 +151,7 @@ def _validate_capability_resources(
             )
             continue
         try:
-            resource.list_query_type.model_validate(dict(capability.target_query), strict=True)
+            resource.listing.query.model_validate(dict(capability.target_query), strict=True)
         except ValidationError as exc:
             violations.append(
                 IntegrationViolation(

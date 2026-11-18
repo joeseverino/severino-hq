@@ -46,7 +46,7 @@ from .contracts import Closed
 from .describe import Describe
 from .field_masks import FieldMaskRefusal, Fields, asks_whole, field_paths, selected
 from .input_errors import pydantic_refusal
-from .integration_specs import PAGE_FIELD, ResourceSpec, typed_keys
+from .integration_specs import PAGE_FIELD, ListRead, ResourceSpec, typed_keys
 from .integration_validation import required_capability_names
 from .integrations import held_graph
 from .json_schemas import json_schema, narrowed
@@ -310,10 +310,14 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "Records",
             "Everything HQ manages: what HQ expects and what is live.",
             Capability.READ,
-            infrastructure.list_managed_resources,
-            InfrastructureResourceQuery,
-            resource_context.get_managed_resource,
-            "key",
+            listing=ListRead(
+                infrastructure.list_managed_resources,
+                InfrastructureResourceQuery,
+                ManagedResourceItem,
+                fields=typed_keys(ManagedResourceRow),
+            ),
+            detail_handler=resource_context.get_managed_resource,
+            identifier="key",
             search=ResourceSearchDefinition(
                 "infrastructure",
                 ManagedResource,
@@ -325,8 +329,6 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
                 snippet_field="search_summary",
             ),
             web_route="control_plane:list",
-            item_type=ManagedResourceItem,
-            list_fields=typed_keys(ManagedResourceRow),
             record_type=ManagedResourceRecord,
         ),
         ResourceSpec(
@@ -334,13 +336,10 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "Services",
             "Every service name and the state of its DNS, proxy and certificate.",
             Capability.READ,
-            service_list.list_services,
-            EmptyQuery,
-            service_list.get_service,
-            "hostname",
+            listing=ListRead(service_list.list_services, EmptyQuery, ServiceItem, fields=typed_keys(ServiceRow)),
+            detail_handler=service_list.get_service,
+            identifier="hostname",
             web_route="control_plane:services",
-            item_type=ServiceItem,
-            list_fields=typed_keys(ServiceRow),
             record_type=ServiceRecord,
         ),
         ResourceSpec(
@@ -348,24 +347,19 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "Estate",
             "Machines online, services, domains, next renewals and connections needing attention.",
             Capability.READ,
-            derived_reads.list_estate,
-            EmptyQuery,
+            listing=ListRead(derived_reads.list_estate, EmptyQuery, EstateFigure),
             web_route="dashboard",
             pass_principal=True,
-            item_type=EstateFigure,
         ),
         ResourceSpec(
             "machines",
             "Machines",
             "Every machine anything reported, its roles, addresses and what runs on it.",
             Capability.READ,
-            derived_reads.list_machines,
-            BoundedQuery,
-            derived_reads.get_machine,
-            "name",
+            listing=ListRead(derived_reads.list_machines, BoundedQuery, MachineRecord, fields=typed_keys(MachineRow)),
+            detail_handler=derived_reads.get_machine,
+            identifier="name",
             web_route="control_plane:machines",
-            item_type=MachineRecord,
-            list_fields=typed_keys(MachineRow),
             record_type=MachineRecord,
         ),
         ResourceSpec(
@@ -374,13 +368,12 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "Every running container: its image and whether it is current and safe, its runtime, "
             "memory and CPU, and its posture.",
             Capability.READ,
-            container_reads.list_containers,
-            BoundedQuery,
-            container_reads.get_container,
-            "address",
+            listing=ListRead(
+                container_reads.list_containers, BoundedQuery, ContainerRecord, fields=typed_keys(ContainerRow)
+            ),
+            detail_handler=container_reads.get_container,
+            identifier="address",
             web_route="control_plane:containers",
-            item_type=ContainerRecord,
-            list_fields=typed_keys(ContainerRow),
             record_type=ContainerRecord,
         ),
         ResourceSpec(
@@ -389,13 +382,10 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "Every running container with a newer release: target digest, fixes, data, verification, "
             "blockers and steps. Read-only.",
             Capability.READ,
-            container_reads.list_upgrades,
-            BoundedQuery,
-            container_reads.get_upgrade,
-            "address",
+            listing=ListRead(container_reads.list_upgrades, BoundedQuery, UpgradeRecord, fields=typed_keys(UpgradeRow)),
+            detail_handler=container_reads.get_upgrade,
+            identifier="address",
             web_route="control_plane:containers",
-            item_type=UpgradeRecord,
-            list_fields=typed_keys(UpgradeRow),
             record_type=UpgradeRecord,
         ),
         ResourceSpec(
@@ -403,12 +393,10 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "Domains",
             "Every domain HQ manages or has read, its services and registration.",
             Capability.READ,
-            derived_reads.list_domains,
-            BoundedQuery,
-            derived_reads.get_domain,
-            "name",
+            listing=ListRead(derived_reads.list_domains, BoundedQuery, DomainRow),
+            detail_handler=derived_reads.get_domain,
+            identifier="name",
             web_route="zones:index",
-            item_type=DomainRow,
             record_type=DomainRecord,
         ),
         ResourceSpec(
@@ -438,24 +426,19 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "HQ itself: its release and branch, machine and container, background jobs, "
             "what it reads and open problems.",
             Capability.READ,
-            hq_context.read_hq,
-            EmptyQuery,
+            listing=ListRead(hq_context.read_hq, EmptyQuery, Problem),
             web_route="hq_self",
             pass_principal=True,
-            item_type=Problem,
         ),
         ResourceSpec(
             READINGS,
             "Readings",
             "Each type of reading, when it was last read, and the records it holds.",
             Capability.READ,
-            derived_reads.list_readings,
-            ReadingQuery,
-            derived_reads.get_reading,
-            "kind",
+            listing=ListRead(derived_reads.list_readings, ReadingQuery, ReadingItem, fields=typed_keys(ReadingRow)),
+            detail_handler=derived_reads.get_reading,
+            identifier="kind",
             web_route="control_plane:connections",
-            item_type=ReadingItem,
-            list_fields=typed_keys(ReadingRow),
             record_type=ReadingRecord,
         ),
         ResourceSpec(
@@ -463,13 +446,12 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "Credential access",
             "What each connection's credential can read, and what it would need to read more.",
             Capability.READ,
-            derived_reads.list_credentials,
-            EmptyQuery,
-            derived_reads.get_credential,
-            "provider",
+            listing=ListRead(
+                derived_reads.list_credentials, EmptyQuery, CredentialRecord, fields=typed_keys(CredentialRow)
+            ),
+            detail_handler=derived_reads.get_credential,
+            identifier="provider",
             web_route="control_plane:connections",
-            item_type=CredentialRecord,
-            list_fields=typed_keys(CredentialRow),
             record_type=CredentialRecord,
         ),
         ResourceSpec(
@@ -478,11 +460,9 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "The tailnet policy: settings, grants, shell rules, groups, tags and their machines, "
             "services, app connectors, tests, problems and read failures.",
             Capability.READ,
-            tailnet_context.get_tailnet,
-            EmptyQuery,
+            listing=ListRead(tailnet_context.get_tailnet, EmptyQuery, Tailnet),
             web_route="control_plane:tailnet",
             pass_principal=True,
-            item_type=Tailnet,
         ),
         ResourceSpec(
             "connections",
@@ -490,14 +470,16 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "Each connection with what its credential sees, how fresh each reading is, what "
             "was refused and the fix. It also gives the counts, the security posture and HQ's path.",
             Capability.READ,
-            connection_context.list_connection_standing,
-            EmptyQuery,
-            connection_context.get_connection_standing,
-            "connection_ref",
+            listing=ListRead(
+                connection_context.list_connection_standing,
+                EmptyQuery,
+                ConnectionStandingRecord,
+                fields=typed_keys(ConnectionStandingRow),
+            ),
+            detail_handler=connection_context.get_connection_standing,
+            identifier="connection_ref",
             web_route="control_plane:connections",
             pass_principal=True,
-            item_type=ConnectionStandingRecord,
-            list_fields=typed_keys(ConnectionStandingRow),
             record_type=ConnectionStandingRecord,
         ),
     )
@@ -514,12 +496,11 @@ def dashboard() -> tuple[ResourceSpec, ...]:
             "Needs you",
             "The composed action queue: what needs doing, from every domain.",
             Capability.READ,
-            derived_reads.list_action_items,
-            action_item_query(),
+            listing=ListRead(
+                derived_reads.list_action_items, action_item_query(), ActionItem, fields=typed_keys(ActionItemRow)
+            ),
             web_route="action_items",
             pass_principal=True,
-            item_type=ActionItem,
-            list_fields=typed_keys(ActionItemRow),
         ),
     )
 
@@ -531,11 +512,9 @@ def connections() -> tuple[ResourceSpec, ...]:
             "Request path",
             "How the calling request reached HQ, hop by hop, and the request standard's checks decided at each.",
             Capability.READ,
-            derived_reads.list_request_path,
-            EmptyQuery,
+            listing=ListRead(derived_reads.list_request_path, EmptyQuery, HopRow),
             web_route="connection",
             pass_principal=True,
-            item_type=HopRow,
         ),
     )
 
@@ -547,11 +526,9 @@ def search() -> tuple[ResourceSpec, ...]:
             "Search",
             "Machines, services and domains, then records, matching a query.",
             Capability.READ,
-            derived_reads.search,
-            SearchQuery,
+            listing=ListRead(derived_reads.search, SearchQuery, Match),
             web_route="search",
             pass_principal=True,
-            item_type=Match,
         ),
     )
 
@@ -565,8 +542,8 @@ class InvalidResourceInput(ResourceError):
         refusal = pydantic_refusal(name, errors)
         spec = resource_registry().get(name)
         details: dict[str, Any] = {"errors": refusal.details, "next": next_call("describe_resources", name=name)}
-        if spec is not None and spec.list_query_type:
-            details["filters"] = list(list_filters(spec.list_query_type))
+        if spec is not None and spec.listing:
+            details["filters"] = list(list_filters(spec.listing.query))
         super().__init__(refusal.message)
         self.details = details
 
@@ -575,9 +552,9 @@ def _held(spec: ResourceSpec, principal: Principal) -> list[object]:
     """The identifiers on the first page of ``spec``'s list read as
     ``principal``, so a miss never names a record the caller could not list."""
 
-    if not (spec.list_handler and spec.list_query_type and spec.identifier):
+    if not (spec.listing and spec.identifier):
         return []
-    query = {"limit": MAX_PAGE_SIZE} if "limit" in spec.list_query_type.model_fields else {}
+    query = {"limit": MAX_PAGE_SIZE} if "limit" in spec.listing.query.model_fields else {}
     try:
         page = list_resource(spec.name, query, principal=principal, fields=[spec.identifier])
     except HostRefusal, ResourceError:
@@ -590,7 +567,7 @@ def _held(spec: ResourceSpec, principal: Principal) -> list[object]:
 # Each resource tool, and the refusal of a resource that does not serve its read.
 _TOOL_READS: dict[str, Callable[[ResourceSpec], UnsupportedResourceOperation | None]] = {
     "describe_resources": lambda _spec: None,
-    "list_resource": lambda spec: None if spec.list_handler and spec.list_query_type else unlisted(spec),
+    "list_resource": lambda spec: None if spec.listing else unlisted(spec),
     "get_resource": lambda spec: None if spec.detail_handler and spec.identifier else undetailed(spec),
 }
 
@@ -708,11 +685,12 @@ def describe_resources(*, principal: Principal | None = None, name: str = "") ->
 
 
 def _listing(spec: ResourceSpec, *, whole: bool) -> ListOperation | None:
-    if not spec.list_query_type:
+    if not spec.listing:
         return None
-    listing: ListOperation = {"filters": list(list_filters(spec.list_query_type)), "fields": list(spec.list_fields)}
+    query = spec.listing.query
+    listing: ListOperation = {"filters": list(list_filters(query)), "fields": list(spec.listing.fields)}
     if whole:
-        schema = json_schema(spec.list_query_type)
+        schema = json_schema(query)
         properties = schema.get("properties", {})
         listing["query_schema"] = narrowed(schema, properties.keys() - PAGING)
         if PAGING & properties.keys():
@@ -764,14 +742,15 @@ def list_resource(
     fields: Fields | None = None,
 ) -> ResourceCollection:
     """One page of a resource; ``fields`` is a field mask read in each item,
-    ``["*"]`` the whole item, and none its kind's ``list_fields``."""
+    ``["*"]`` the whole item, and none its kind's ``ListRead.fields``."""
 
     spec = _resource(name)
     spec.authorize(principal)
-    if not spec.list_handler or not spec.list_query_type:
+    if spec.listing is None:
         raise unlisted(spec)
+    read = spec.listing
     try:
-        parsed = spec.list_query_type.model_validate(query or {}, strict=strict)
+        parsed = read.query.model_validate(query or {}, strict=strict)
     except ValidationError as exc:
         raise InvalidResourceInput(name, exc.errors()) from exc
     asked = parsed.model_dump()
@@ -779,7 +758,7 @@ def list_resource(
     bound = _bound(parsed)
     with paging(_opened(name, token, bound) if token else None) as scope:
         try:
-            result = spec.list_handler(**asked, **_caller(spec, principal))
+            result = read.reader(**asked, **_caller(spec, principal))
         except CursorRefusal as exc:
             raise _cursor_refused(name, exc.reason) from exc
     # A schema that offers a cursor is a promise every full page issues one.
@@ -792,12 +771,10 @@ def list_resource(
         raise invalid from None
     if handled["count"] != len(handled["items"]):
         raise invalid
-    if spec.item_type is None:
-        raise RuntimeError(f"Resource {name!r} lists items of no declared type.")
     page: ResourceCollection = {**handled, **_page(spec, parsed, handled, scope, bound)}
     # Each item holds only what its type declares, whatever its handler built,
-    # and by default only its kind's list_fields of that.
-    kept = frozenset(spec.list_fields if fields is None else typed_keys(spec.item_type))
+    # and by default only its kind's fields of that.
+    kept = frozenset(read.fields if fields is None else typed_keys(read.item))
     items = [{key: value for key, value in item.items() if key in kept} for item in page["items"]]
     if fields is not None and not asks_whole(fields):
         items = _masked(spec, items, fields, listed=True)
@@ -908,7 +885,9 @@ def masked_kind(spec: ResourceSpec, *, listed: bool) -> type | None:
     """The type a field mask over ``spec``'s records declares paths from: a
     list's item, or a read of one's record; none where it types neither."""
 
-    return spec.item_type if listed else spec.record_type
+    if listed:
+        return spec.listing.item if spec.listing else None
+    return spec.record_type
 
 
 def mask_paths(spec: ResourceSpec, *, listed: bool) -> tuple[str, ...]:

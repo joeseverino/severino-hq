@@ -418,11 +418,11 @@ renders, and a parity test holds the two equal.
 Every list and detail read takes `fields`, a field mask in the AIP-161
 convention: `?fields=observed_at,items.waiting` over HTTP, a list of paths to
 the MCP tools and the SDK. Absent, a detail read returns the whole record. A
-list read keeps each item to its kind's `list_fields`, declared once on its
-`ResourceSpec` and named by `describe_resources` as the list's `fields`, so a
-page costs what it shows. `*` alone keeps the whole item: the keys of the
-list's `item_type`, which is the only shape a list answers and the one the
-document types its items by. Selection happens after authorization.
+list read keeps each item to its kind's list fields, declared once on its
+`ResourceSpec`'s `ListRead` and named by `describe_resources` as the list's
+`fields`, so a page costs what it shows. `*` alone keeps the whole item: the
+keys of the list's item type, which is the only shape a list answers and the
+one the document types its items by. Selection happens after authorization.
 
 | Path | Selects |
 |---|---|

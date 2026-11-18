@@ -1,6 +1,6 @@
 from typing import TypedDict
 
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.resources import BoundedQuery
 from hq.platform.application.security import Capability
 
@@ -19,9 +19,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Widgets",
             "The fixture domain's records.",
             Capability.READ,
-            list_widgets,
-            BoundedQuery,
+            listing=ListRead(list_widgets, BoundedQuery, WidgetRow),
             web_route="widgets:list",
-            item_type=WidgetRow,
         ),
     )

@@ -23,7 +23,7 @@ from hq.platform.api.openapi import document
 from hq.platform.api.testing import Contract
 from hq.platform.application.automation_adoption import catch_up
 from hq.platform.application.field_masks import WHOLE_RECORD
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.integration_validation import validate_resource_spec
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.plugins import plugin_resource_specs
@@ -68,8 +68,9 @@ def _host_resources() -> dict[str, ResourceSpec]:
     return {name: spec for name, spec in resource_registry().items() if name not in provided}
 
 
-def _spec(**types: Any) -> ResourceSpec:
-    return ResourceSpec("example.notes", "Notes", "Example notes.", "example.read", _notes, BoundedQuery, **types)
+def _spec(item: type = dict, fields: tuple[str, ...] = (), **types: Any) -> ResourceSpec:
+    listing = ListRead(_notes, BoundedQuery, item, fields)
+    return ResourceSpec("example.notes", "Notes", "Example notes.", "example.read", listing, **types)
 
 
 class RecordTypeTests(TestCase):
@@ -91,10 +92,10 @@ class RecordTypeTests(TestCase):
         registry = _host_resources()
         identifiers: dict[str, list[Any]] = {}
         for name, spec in registry.items():
-            if not spec.list_handler:
+            if not spec.listing:
                 continue
             whole = list_resource(name, QUERIES.get(name, {}), principal=READER, fields=[WHOLE_RECORD])["items"]
-            declared = _validator(spec.item_type)
+            declared = _validator(spec.listing.item)
             for item in whole:
                 with self.subTest(resource=name, item=item.get(spec.identifier or "")):
                     declared.validate(_sent(item))
@@ -136,7 +137,7 @@ class RecordTypeTests(TestCase):
         # those its list's answer in the API document declares.
         catch_up()
         contract = Contract(document())
-        listed = {name: spec for name, spec in resource_registry().items() if spec.list_handler}
+        listed = {name: spec for name, spec in resource_registry().items() if spec.listing}
         # A reader of every list, those an extension's own capability guards too.
         granted = {str(capability) for spec in listed.values() for capability in spec.required_capabilities}
         reader = Principal("example-reader", "api", frozenset(Capability) | granted)
@@ -154,32 +155,28 @@ class RecordTypeTests(TestCase):
 
         self.assertTrue(page["items"])
         for item in page["items"]:
-            self.assertLessEqual(set(item), set(spec.list_fields))
-        self.assertGreater(set(whole["items"][0]), set(spec.list_fields))
+            self.assertLessEqual(set(item), set(spec.listing.fields))
+        self.assertGreater(set(whole["items"][0]), set(spec.listing.fields))
 
 
 class RecordTypeContractTests(SimpleTestCase):
     def test_an_items_keys_are_its_lists_fields_unless_it_names_some(self):
-        spec = _spec(item_type=_ExampleNote)
-        named = _spec(item_type=_ExampleNote, list_fields=("title",))
+        spec = _spec(_ExampleNote)
+        named = _spec(_ExampleNote, ("title",))
 
         validate_resource_spec(spec)
         validate_resource_spec(named)
-        self.assertEqual(spec.list_fields, ("slug", "title"))
-        self.assertEqual(named.list_fields, ("title",))
-
-    def test_a_list_of_no_declared_item_is_refused(self):
-        with self.assertRaisesRegex(ImproperlyConfigured, "item_type"):
-            validate_resource_spec(_spec())
+        self.assertEqual(spec.listing.fields, ("slug", "title"))
+        self.assertEqual(named.listing.fields, ("title",))
 
     def test_a_type_that_is_no_typed_dict_is_refused(self):
         with self.assertRaisesRegex(ImproperlyConfigured, "TypedDict"):
-            validate_resource_spec(_spec(item_type=dict))
+            validate_resource_spec(_spec(dict))
 
     def test_a_record_for_a_read_the_resource_does_not_serve_is_refused(self):
         with self.assertRaisesRegex(ImproperlyConfigured, "does not serve"):
-            validate_resource_spec(_spec(item_type=_ExampleNote, record_type=_ExampleNote))
+            validate_resource_spec(_spec(_ExampleNote, record_type=_ExampleNote))
 
-    def test_list_fields_its_item_does_not_declare_are_refused(self):
-        with self.assertRaisesRegex(ImproperlyConfigured, "not keys of its item_type"):
-            validate_resource_spec(_spec(list_fields=("body",), item_type=_ExampleNote))
+    def test_fields_its_item_does_not_declare_are_refused(self):
+        with self.assertRaisesRegex(ImproperlyConfigured, "not keys of its item"):
+            validate_resource_spec(_spec(_ExampleNote, ("body",)))

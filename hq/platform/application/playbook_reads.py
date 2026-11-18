@@ -18,7 +18,7 @@ from . import automation_adoption, automation_runs
 from .automation_manifest import OperationManifest, PlaybookEffect
 from .automation_sources import PLAYBOOKS as PAGE, Reviewed, standing
 from .describe import Describe
-from .integration_specs import CommandFact, ResourceSpec
+from .integration_specs import CommandFact, ListRead, ResourceSpec
 from .projection import complete, iso
 from .record_errors import RecordNotFound
 from .record_fields import RecordId
@@ -187,13 +187,11 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Playbooks",
             "Every adopted playbook: the command that runs it, what it does, and the machines it can run on now.",
             Capability.READ,
-            list_playbooks,
-            EmptyQuery,
-            get_playbook,
-            "playbook",
+            listing=ListRead(list_playbooks, EmptyQuery, PlaybookRow),
+            detail_handler=get_playbook,
+            identifier="playbook",
             web_route=PAGE,
             pass_principal=True,
-            item_type=PlaybookRow,
             record_type=PlaybookRecord,
         ),
         ResourceSpec(
@@ -202,13 +200,11 @@ def resources() -> tuple[ResourceSpec, ...]:
             "The newest scan of your playbooks' repository, or one by its id. It says what adopting it widens; "
             "an operator adopts or rejects it in HQ.",
             Capability.READ,
-            list_scans,
-            EmptyQuery,
-            get_scan,
-            "id",
+            listing=ListRead(list_scans, EmptyQuery, ScanResult),
+            detail_handler=get_scan,
+            identifier="id",
             identifier_type=RecordId,
             web_route=PAGE,
-            item_type=ScanResult,
             record_type=ScanResult,
         ),
     )

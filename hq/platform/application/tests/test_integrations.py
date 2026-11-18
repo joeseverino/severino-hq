@@ -19,7 +19,7 @@ from ..integrations import (
     integration_graph,
 )
 from ..plugins import clear_plugin_composition_cache
-from ..resources import EmptyQuery, ResourceSpec, describe_resources
+from ..resources import EmptyQuery, ListRead, ResourceSpec, describe_resources
 from ..search_contracts import SearchDefinition
 from ..security import Capability, Principal
 
@@ -90,9 +90,7 @@ class IntegrationGraphTests(TestCase):
             "Records",
             "Synthetic records.",
             Capability.READ,
-            list_handler=lambda **kwargs: {"items": [], "count": 0},
-            list_query_type=ProjectQuery,
-            item_type=SyntheticRecord,
+            listing=ListRead(lambda **kwargs: {"items": [], "count": 0}, ProjectQuery, SyntheticRecord),
         )
         capabilities = (
             CapabilitySpec(
@@ -357,9 +355,7 @@ class IntegrationGraphTests(TestCase):
             "Synthetic records",
             "Synthetic extension records.",
             Capability.READ,
-            list_handler=lambda: {"items": [], "count": 0},
-            list_query_type=EmptyQuery,
-            item_type=SyntheticRecord,
+            listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, SyntheticRecord),
         )
         capability = CapabilitySpec(
             "example.records.refresh",

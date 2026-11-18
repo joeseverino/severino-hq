@@ -67,7 +67,7 @@ class View:
 
 
 def action_queue(principal: Principal) -> ResourceCollection:
-    """The whole queue, page after page, as its kind's list_fields keep each
+    """The whole queue, page after page, as its kind's list fields keep each
     item: what a person reads it by, and its page in HQ."""
 
     page = registry.list_resource("action_items", None, principal=principal)
@@ -161,14 +161,9 @@ def completed(uri_template: str, argument: str, typed: str, principal: Principal
     reads it; nothing for a kind the caller may not read or cannot list."""
 
     spec = next((spec for template, spec in _records().values() if template.template == uri_template), None)
-    if (
-        spec is None
-        or argument != spec.identifier
-        or not (spec.list_handler and spec.list_query_type)
-        or not registry.readable(spec, principal)
-    ):
+    if spec is None or argument != spec.identifier or spec.listing is None or not registry.readable(spec, principal):
         return types.Completion(values=[])
-    query = {"limit": COMPLETIONS} if "limit" in spec.list_query_type.model_fields else None
+    query = {"limit": COMPLETIONS} if "limit" in spec.listing.query.model_fields else None
     page = registry.list_resource(spec.name, query, principal=principal, fields=[spec.identifier])
     found = [str(item[argument]) for item in page["items"] if argument in item]
     matches = [value for value in found if value.startswith(typed)]

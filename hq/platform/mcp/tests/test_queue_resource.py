@@ -45,7 +45,7 @@ class QueueResourceTests(TestCase):
         self.assertEqual(attached["items"][: first["count"]], first["items"])
         self.assertTrue(attached["items"])
         self.assertEqual(
-            {key for item in attached["items"] for key in item}, set(resource_registry()["action_items"].list_fields)
+            {key for item in attached["items"] for key in item}, set(resource_registry()["action_items"].listing.fields)
         )
 
     def test_a_queue_longer_than_a_page_is_attached_whole(self):

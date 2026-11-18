@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.capabilities import InvalidCapabilityQuery
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.projection import PageScope
 from hq.platform.application.resources import BoundedQuery, InvalidResourceInput, _page
 from hq.platform.application.security import mcp_principal
@@ -86,7 +86,7 @@ class CutOffListSaysSoTests(TestCase):
                 services.list_resource("infrastructure", filters)
 
     def test_a_full_page_from_a_list_that_does_not_count_is_read_as_cut_off(self):
-        spec = ResourceSpec("example.things", "Things", "Things.", "read", lambda **_: {}, BoundedQuery)
+        spec = ResourceSpec("example.things", "Things", "Things.", "read", ListRead(lambda **_: {}, BoundedQuery, dict))
         full = {"items": [{}, {}], "count": 2}
 
         def page(limit):

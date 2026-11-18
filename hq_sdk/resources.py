@@ -1,6 +1,7 @@
 """For exposing an extension's records to the API, MCP and the CLI as read resources with strict filters."""
 
 from hq.platform.application.resources import (
+    ListRead,
     ResourceQuery,
     ResourceSpec,
     StatusFilter,
@@ -12,6 +13,7 @@ from hq.platform.application.resources import (
 )
 
 __all__ = [
+    "ListRead",
     "ResourceQuery",
     "ResourceSpec",
     "StatusFilter",

@@ -70,7 +70,7 @@ def found_by(spec: ResourceSpec) -> dict[str, Any]:
     addressed by, and the listing that holds each record's value."""
 
     details: dict[str, Any] = {"identifier": spec.identifier}
-    if spec.list_query_type:
+    if spec.listing:
         details["next"] = next_call("list_resource", name=spec.name)
     return details
 
@@ -93,7 +93,7 @@ def served(spec: ResourceSpec) -> dict[str, Any]:
     """The read a resource does serve, for a refusal of one it does not: its
     listing, or one record by the field it is addressed by, or else the catalog."""
 
-    if spec.list_handler and spec.list_query_type:
+    if spec.listing:
         return {"next": next_call("list_resource", name=spec.name)}
     if spec.detail_handler and spec.identifier:
         return {"identifier": spec.identifier, "next": next_call("get_resource", name=spec.name)}

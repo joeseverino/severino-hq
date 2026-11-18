@@ -3,7 +3,7 @@
 from pydantic import Field, create_model
 
 from hq.platform.application import documentation
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.resource_records import DocumentationItem, DocumentationRow
 from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
 from hq.platform.application.search_contracts import SearchDefinition
@@ -26,10 +26,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Docs",
             "Sensitivity-aware documentation pointers indexed by HQ.",
             Capability.READ,
-            documentation.list_documentation,
-            DocumentationQuery,
-            documentation.get_documentation,
-            "doc_id",
+            listing=ListRead(documentation.list_documentation, DocumentationQuery, DocumentationRow),
+            detail_handler=documentation.get_documentation,
+            identifier="doc_id",
             search=SearchDefinition(
                 "documentation",
                 DocumentationRecord,
@@ -47,7 +46,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 badge_field="doc_id",
             ),
             web_route="docs_index:list",
-            item_type=DocumentationRow,
             record_type=DocumentationItem,
         ),
     )

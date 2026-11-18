@@ -14,7 +14,7 @@ from hq.platform.application.answer_fields import (
     UpdatedAt,
 )
 from hq.platform.application.describe import Describe
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.record_fields import Notes, PublishedAt, PublishedUrl
 from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
 from hq.platform.application.search_contracts import SearchDefinition
@@ -67,10 +67,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Content",
             "Content records indexed by HQ.",
             Capability.READ,
-            content.list_content,
-            ContentQuery,
-            content.get_content,
-            "slug",
+            listing=ListRead(content.list_content, ContentQuery, ContentRow),
+            detail_handler=content.get_content,
+            identifier="slug",
             search=SearchDefinition(
                 "content",
                 ContentItem,
@@ -80,7 +79,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="title",
             ),
             web_route="content:list",
-            item_type=ContentRow,
             record_type=ContentRecord,
         ),
     )

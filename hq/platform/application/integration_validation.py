@@ -233,32 +233,28 @@ def _query_names(query_type: type[BaseModel]) -> set[str]:
 
 
 def _validate_list_contract(spec: ResourceSpec) -> None:
-    if bool(spec.list_handler) != bool(spec.list_query_type):
-        raise ImproperlyConfigured(f"Resource {spec.name!r} must declare its list handler and query together.")
-    if spec.list_query_type and RESERVED_QUERY_FIELD in _query_names(spec.list_query_type):
+    if spec.listing is None:
+        return
+    read = spec.listing
+    if RESERVED_QUERY_FIELD in _query_names(read.query):
         raise ImproperlyConfigured(
             f"Resource {spec.name!r} query may not declare {RESERVED_QUERY_FIELD!r}: it selects the keys returned."
         )
     # An extension's declaration is read as it arrived, which its annotation does not promise.
-    declared: tuple[object, ...] = spec.list_fields
-    if declared and (
-        not spec.list_handler
-        or len(declared) != len(set(declared))
-        or any(not isinstance(field, str) or not field.isidentifier() for field in declared)
+    declared: tuple[object, ...] = read.fields
+    if len(declared) != len(set(declared)) or any(
+        not isinstance(field, str) or not field.isidentifier() for field in declared
     ):
         raise ImproperlyConfigured(
-            f"Resource {spec.name!r} list_fields must be the unique top-level names of a list's items."
+            f"Resource {spec.name!r} fields must be the unique top-level names of a list's items."
         )
-    if spec.list_handler and spec.list_query_type:
-        try:
-            values = spec.list_query_type().model_dump(exclude={PAGE_FIELD})
-            inspect.signature(spec.list_handler, annotation_format=Format.STRING).bind(
-                **values, **_principal_argument(spec)
-            )
-        except (TypeError, ValidationError) as exc:
-            raise ImproperlyConfigured(
-                f"Resource {spec.name!r} list handler does not implement its query contract."
-            ) from exc
+    try:
+        values = read.query().model_dump(exclude={PAGE_FIELD})
+        inspect.signature(read.reader, annotation_format=Format.STRING).bind(**values, **_principal_argument(spec))
+    except (TypeError, ValidationError) as exc:
+        raise ImproperlyConfigured(
+            f"Resource {spec.name!r} list handler does not implement its query contract."
+        ) from exc
 
 
 def _validate_detail_contract(spec: ResourceSpec) -> None:
@@ -273,7 +269,7 @@ def _validate_detail_contract(spec: ResourceSpec) -> None:
 
 
 def _validate_search_contract(spec: ResourceSpec) -> None:
-    if not any((spec.list_handler, spec.detail_handler, spec.search)):
+    if not any((spec.listing, spec.detail_handler, spec.search)):
         raise ImproperlyConfigured(f"Resource {spec.name!r} exposes no operations.")
     if spec.search and not isinstance(spec.search, SearchDefinition):
         raise ImproperlyConfigured(f"Resource {spec.name!r} has an invalid search definition.")
@@ -290,24 +286,16 @@ def _validate_record_types(spec: ResourceSpec) -> None:
     one may answer the item beside what it is read with (a service and its
     path), so that is not required."""
 
-    if spec.list_handler and spec.item_type is None:
-        raise ImproperlyConfigured(
-            f"Resource {spec.name!r} must declare item_type, the TypedDict its list's items are."
-        )
-    for kind, operation, served in (
-        (spec.item_type, "list", spec.list_handler),
-        (spec.record_type, "detail", spec.detail_handler),
-    ):
-        if kind is None:
-            continue
+    typed: tuple[tuple[type, str], ...] = ((spec.listing.item, "list"),) if spec.listing else ()
+    if spec.record_type is not None:
+        if not spec.detail_handler:
+            raise ImproperlyConfigured(f"Resource {spec.name!r} types a detail read it does not serve.")
+        typed += ((spec.record_type, "detail"),)
+    for kind, operation in typed:
         if not is_typeddict(kind):
             raise ImproperlyConfigured(f"Resource {spec.name!r} must type its {operation} read with a TypedDict.")
-        if not served:
-            raise ImproperlyConfigured(f"Resource {spec.name!r} types a {operation} read it does not serve.")
-    if spec.item_type is not None and (undeclared := set(spec.list_fields) - set(typed_keys(spec.item_type))):
-        raise ImproperlyConfigured(
-            f"Resource {spec.name!r} list_fields {sorted(undeclared)} are not keys of its item_type."
-        )
+    if spec.listing and (undeclared := set(spec.listing.fields) - set(typed_keys(spec.listing.item))):
+        raise ImproperlyConfigured(f"Resource {spec.name!r} fields {sorted(undeclared)} are not keys of its item.")
 
 
 def validate_resource_spec(spec: ResourceSpec) -> None:

@@ -9,7 +9,7 @@ from hq.platform.application.answer_fields import DeductibleAmount, TotalCostAmo
 from hq.platform.application.assets import PaymentMethod
 from hq.platform.application.business_use import BusinessUseShare
 from hq.platform.application.describe import Describe
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.record_fields import Notes
 from hq.platform.application.resources import BoundedQuery, one_of
 from hq.platform.application.search_contracts import SearchDefinition
@@ -58,8 +58,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Expenses",
             "Expense records with stable relationship identifiers.",
             Capability.READ,
-            read_models.list_expenses,
-            ExpenseQuery,
+            listing=ListRead(read_models.list_expenses, ExpenseQuery, ExpenseRow),
             search=SearchDefinition(
                 "expenses",
                 Expense,
@@ -68,6 +67,5 @@ def resources() -> tuple[ResourceSpec, ...]:
                 label="Expenses",
             ),
             web_route="expenses:list",
-            item_type=ExpenseRow,
         ),
     )

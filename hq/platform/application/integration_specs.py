@@ -428,6 +428,26 @@ def typed_keys(kind: type) -> tuple[str, ...]:
 
 
 @dataclass(frozen=True, slots=True)
+class ListRead:
+    """A resource's list read, declared whole: the reader that answers it,
+    the query it takes, the TypedDict one item is whole (``fields=*``), and
+    the keys each item keeps when the caller names none, so a page costs what
+    it shows (every key of ``item`` where it names none). A list answers only
+    its item's keys, and the API document types each item by it."""
+
+    # It may come from an extension, so its result is checked at the call
+    # (application.resources) rather than trusted from the annotation.
+    reader: Callable[..., object]
+    query: type[BaseModel]
+    item: type
+    fields: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.fields and is_typeddict(self.item):
+            object.__setattr__(self, "fields", typed_keys(self.item))
+
+
+@dataclass(frozen=True, slots=True)
 class ResourceSpec(Requires):
     """One declaration of a readable domain and every operation it supports."""
 
@@ -435,10 +455,8 @@ class ResourceSpec(Requires):
     label: str
     summary: str
     required_capability: Capability | str | tuple[Capability | str, ...]
-    # Handlers may come from an extension, so their result is checked at the
-    # call (application.resources) rather than trusted from the annotation.
-    list_handler: Callable[..., object] | None = None
-    list_query_type: type[BaseModel] | None = None
+    listing: ListRead | None = None
+    # Like a list's handler, checked at the call.
     detail_handler: Callable[..., object] | None = None
     identifier: str | None = None
     # A type, or one an ``Annotated`` bounds (``RecordId``).
@@ -452,15 +470,5 @@ class ResourceSpec(Requires):
     # The handlers also take ``principal=``: the answer depends on what the
     # caller may see, not only on whether it may read the resource.
     pass_principal: bool = False
-    # The TypedDict one item of a list read is whole (``fields=*``): a list
-    # answers only its keys, and the API document types each item by it.
-    item_type: type | None = None
-    # The fields each item keeps when the caller names none, so a page costs
-    # what it shows; every key of ``item_type`` where the spec names none.
-    list_fields: tuple[str, ...] = ()
     # The TypedDict a read of one record answers.
     record_type: type | None = None
-
-    def __post_init__(self) -> None:
-        if self.item_type is not None and not self.list_fields and is_typeddict(self.item_type):
-            object.__setattr__(self, "list_fields", typed_keys(self.item_type))

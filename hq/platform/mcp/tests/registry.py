@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from typing import Any, TypedDict
 
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import integration_graph
 from hq.platform.application.resources import EmptyQuery, resource_registry
@@ -41,11 +41,9 @@ def example_kind(seen: list[str] | None = None) -> ResourceSpec:
         "Example records",
         "Records an extension declares.",
         "example_read",
-        lambda: {"items": [], "count": 0},
-        EmptyQuery,
-        detail,
-        "name",
-        item_type=ExampleRecord,
+        listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, ExampleRecord),
+        detail_handler=detail,
+        identifier="name",
     )
 
 

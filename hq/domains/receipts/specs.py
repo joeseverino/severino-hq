@@ -7,7 +7,7 @@ from pydantic import Field
 from hq.platform.application import read_models, receipts
 from hq.platform.application.answer_fields import UpdatedAt
 from hq.platform.application.describe import Describe, listed
-from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.record_fields import Notes
 from hq.platform.application.resources import BoundedQuery
 from hq.platform.application.search_contracts import SearchDefinition
@@ -50,8 +50,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Receipts",
             "Receipt metadata without file contents, storage paths, or URLs.",
             Capability.READ,
-            read_models.list_receipts,
-            ReceiptQuery,
+            listing=ListRead(read_models.list_receipts, ReceiptQuery, ReceiptRow),
             search=SearchDefinition(
                 "receipts",
                 Receipt,
@@ -60,6 +59,5 @@ def resources() -> tuple[ResourceSpec, ...]:
                 label="Receipts",
             ),
             web_route="receipts:list",
-            item_type=ReceiptRow,
         ),
     )

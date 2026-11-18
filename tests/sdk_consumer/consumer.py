@@ -375,7 +375,11 @@ def an_allocation(cash: Decimal, owed: Decimal) -> None:
 
 
 def a_list_with_its_own_fields(rows: Callable[..., dict[str, Any]]) -> None:
-    resources.ResourceSpec("example.things", "Things", "Example things.", "example.read", list_fields="name")  # type: ignore[arg-type]
+    resources.ListRead(rows, resources.TopQuery, dict, fields="name")  # type: ignore[arg-type]
+
+
+def a_list_without_its_query_or_item(rows: Callable[..., dict[str, Any]]) -> None:
+    resources.ListRead(rows)  # type: ignore[call-arg]
 
 
 def a_list_with_the_deployment_ceiling(rows: Callable[..., dict[str, Any]]) -> None:

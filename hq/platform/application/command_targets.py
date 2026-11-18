@@ -142,17 +142,17 @@ def resource_options(
 
     resource = held_graph().resources.get(resource_name)
     key = key or (resource.identifier if resource else "") or ""
-    if not resource or not resource.list_handler or not key:
+    if not resource or not resource.listing or not key:
         return None
 
     query = dict(query or {})
     # A choice list is the whole catalog: a default-sized page would leave
     # every resource past it unselectable.
-    if "limit" in resource.list_query_type.model_fields:
+    if "limit" in resource.listing.query.model_fields:
         query.setdefault("limit", MAX_PAGE_SIZE)
     kinds_applied = False
     if governed_kinds:
-        query_fields = resource.list_query_type.model_fields
+        query_fields = resource.listing.query.model_fields
         if "kinds" in query_fields and "kind" not in query:
             query["kinds"] = ",".join(governed_kinds)
             kinds_applied = True

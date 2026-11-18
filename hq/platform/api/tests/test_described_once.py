@@ -23,7 +23,7 @@ from django.test import SimpleTestCase
 from pydantic import Field, WithJsonSchema
 
 from hq.platform.application.command_fields import Describe
-from hq.platform.application.integration_specs import CapabilitySpec, ResourceSpec
+from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import compile_integration_graph
 from hq.platform.application.json_schemas import json_schemas
@@ -309,7 +309,11 @@ class DescribedOnceTests(SimpleTestCase):
 
         specs = tuple(
             ResourceSpec(
-                f"example.{kind}", kind.title(), f"Example {kind}.", "example.read", rows, query, item_type=ExampleRow
+                f"example.{kind}",
+                kind.title(),
+                f"Example {kind}.",
+                "example.read",
+                listing=ListRead(rows, query, ExampleRow),
             )
             for kind, query in (("notes", ExampleNoteQuery), ("tasks", ExampleTaskQuery))
         )

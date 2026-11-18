@@ -28,9 +28,7 @@ def served_resources() -> ResourceContract:
 
     specs = sorted(resource_registry().values(), key=lambda spec: spec.name)
     return ResourceContract(
-        tuple(
-            Resource(spec.name, filters=list_filters(spec.list_query_type)) for spec in specs if spec.list_query_type
-        ),
+        tuple(Resource(spec.name, filters=list_filters(spec.listing.query)) for spec in specs if spec.listing),
         tuple(Resource(spec.name, spec.identifier) for spec in specs if spec.identifier),
         tuple(Resource(spec.name) for spec in specs),
     )

@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=17,
+    api_version=18,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -709,9 +709,12 @@ caller's read and not sent stands. Its summary ends with `KEPT`. All five
 come from `hq_sdk.capabilities`, and the host's composed suite refuses an
 update that would reset a field it was not sent.
 
-**Resources.** A `ResourceSpec` may expose a list handler with a
-`ResourceQuery` subclass, a detail handler with one stable identifier, a
-`SearchDefinition`, or any combination. HQ validates names, permissions, query
+**Resources.** A `ResourceSpec` may expose a list read, a detail handler with
+one stable identifier, a `SearchDefinition`, or any combination. Its list read
+is one `hq_sdk.resources.ListRead`: its reader, the `ResourceQuery` subclass
+it takes, the TypedDict one item is whole, and the `fields` a list keeps when
+the caller names none, every key of the item where it names none. A list
+answers only its item's keys, and the API document types each item by it. HQ validates names, permissions, query
 and handler compatibility, identifier contracts, and duplicate resources and
 search scopes at startup. The API, MCP and global search derive from the spec.
 A search projection that belongs to no resource comes from
@@ -724,8 +727,7 @@ the words every list's does, so the API reference writes them once.
 
 | Field | Set it |
 | --- | --- |
-| `item_type` | to the TypedDict one list item is whole, which every list declares: a list answers only its keys, and the API document types each item by it |
-| `list_fields` | to the keys a list keeps when the caller names none, where that is fewer than its item's |
+| `listing` | to its `ListRead` |
 | `record_type` | to the TypedDict a read of one record answers |
 | `pass_principal=True` | when the answer depends on what the caller may see; both handlers then also receive `principal=` |
 | `web_route` | to the resource's list route, which must reverse without arguments, to link it from the Command Center |
@@ -939,7 +941,10 @@ never `min_length=1`, and its schema says `minLength` (`minItems`).
 It also retires `ResourceSpec`'s `row_type`: a list declares `item_type`, the
 TypedDict one item is whole, and answers no key beside it; `list_fields`
 names the ones a list keeps by default, every key of the item where it names
-none.
+none. And it retires `ResourceSpec`'s `list_handler`, `list_query_type`,
+`item_type` and `list_fields`: a list read is one `listing=ListRead(reader,
+query, item, fields=...)`, so none of them can be declared without the
+others.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
