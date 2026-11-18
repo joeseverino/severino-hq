@@ -83,7 +83,7 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
             <td>{{ reading.attempted_at|when:"ago" }}</td>
             <td>{% include "partials/_reading_age.html" with reading=reading.reading only %}</td>
             <td>{{ reading.records|breakable }}</td>
-            <td>{% if reading.ok %}{% status reading.result tone="good" %}{% else %}{% status "Failed" tone="serious" %}{% endif %}{% if not reading.ok %}<br>{% muted %}{% cell_line text=reading.result %}{% endmuted %}{% endif %}</td>
+            <td>{% if reading.ok %}{% status reading.result tone="good" %}{% else %}{% stack_list %}<li>{% status "Failed" tone="serious" %}</li><li>{% muted %}{% cell_line text=reading.result %}{% endmuted %}</li>{% endstack_list %}{% endif %}</td>
           </tr>
         {% endfor %}
       </tbody>

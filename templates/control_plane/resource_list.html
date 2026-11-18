@@ -24,11 +24,11 @@ offers every type.
         <tr>
           <td>
             <strong>{% entity "resource"|entity_of:resource.key label=resource.shown_name %}</strong>
-            {% if resource.summary %}<br>{% muted css="cell-data" %}{{ resource.summary|breakable }}{% endmuted %}{% endif %}
+            {% stack_list %}{% if resource.summary %}<li>{% muted css="cell-data" %}{{ resource.summary|breakable }}{% endmuted %}</li>{% endif %}
             {% comment %}
             Whose address a proxy forwards to, when HQ knows the machine.
             {% endcomment %}
-            {% if resource.origin_machine %}<br>{% muted %}on {% entity resource.origin_machine.link %}{% endmuted %}{% endif %}
+            {% if resource.origin_machine %}<li>{% muted %}on {% entity resource.origin_machine.link %}{% endmuted %}</li>{% endif %}{% endstack_list %}
           </td>
           <td>
             {% with status=resource.record_status %}

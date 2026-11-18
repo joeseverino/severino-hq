@@ -1,7 +1,7 @@
 from django.test import SimpleTestCase
 from django.urls import reverse
 
-from hq.platform.application.markup_testing import elements
+from hq.platform.application.markup_testing import elements, with_class
 from hq.platform.application.tables import ranked
 from hq.platform.core.audit_views import AuditLogListView
 from hq.platform.core.models import AuditLog
@@ -30,9 +30,7 @@ class AuditWhatTests(_AuthedTestCase):
         page = self.client.get(reverse("core:audit_list")).content.decode()
         (row,) = [row for row in elements(page, "tr") if record in plain(row.text)]
         cell = next(cell for cell in elements(page, "td") if row in cell.ancestors and record in plain(cell.text))
-        narrow = [
-            part.words for part in elements(page, "span") if "narrow-only" in part.classes and cell in part.ancestors
-        ]
+        narrow = [part.words for part in with_class(page, "narrow-only") if cell in part.ancestors]
         return cell.words, " ".join(narrow)
 
     def test_an_event_says_its_action_only_where_the_action_column_has_left(self):

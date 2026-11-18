@@ -43,9 +43,6 @@
    box, no wider than its cell, so a sentence it holds is never drawn as two
    pills. */
 .data-table > tbody > tr > :not([data-kind="status"]) .pill { white-space: normal; max-inline-size: 100%; }
-/* Links one to a line in a cell are a target apart (`--target-min`): each line that tall, and the link's box with it. */
-.data-table td :is(a, .cell-line):is(:has(+ br), br + *) { line-height: var(--target-min); }
-.data-table td a:not([data-entity], .cell-line):is(:has(+ br), br + *) { display: inline-block; }
 /* A cell line's quiet second line (`{% cell_line %}`) is a line of its own under the first; either line that holds something to press is a target tall. */
 .cell-detail { display: block; }
 :is(.cell-line:has(+ .cell-detail), .cell-line + .cell-detail):is(a[href], :has(a[href], [tabindex])) { line-height: var(--target-min); }
@@ -388,8 +385,10 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 
 /* A stack list ({% stack_list %}): items read down, each its parts inline. */
 .stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; }
-/* One that opens its cell (a status and the line under it) starts on the row's first line, as its neighbors do. */
-[data-kind] > .stack-list:first-child { margin-block-start: 0; }
+/* In a table's cell its items are the cell's own lines, read at the row's rhythm: one that opens the cell starts on the row's first line, and one that holds something to press is a target tall, so links one to a line are a target apart. Each wraps as its cell does, so a state's lines keep theirs as the state does (tables.css), where a list's items in a cell otherwise wrap. */
+.data-table td .stack-list { gap: 0; margin: 0; }
+.data-table td .stack-list > li { text-wrap-mode: inherit; }
+.data-table td .stack-list > li:has(a[href], [tabindex]) { line-height: var(--target-min); }
 /* A raw answer kept for the open row scrolls inside it rather than lengthening it. */
 .row-below > pre { max-block-size: 18rem; }
 

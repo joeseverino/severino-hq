@@ -64,6 +64,7 @@ fails when this file falls behind. The rules around it are in
 | `{% row_group %}` | nothing | The heading row of one group of a table's rows, first in its `tbody`: its name and how many rows. | `{% table_region "Example groups" %}<table class="data-table"><tbody>{% row_group "Example group" 3 %}<tr><td>example-host</td></tr></tbody></table>{% endtable_region %}` |
 | `{% row_toggle %}` | nothing | The toggle that opens a row to all it holds, last in the cell that names it, in a table with no headings. | `{% table_region "Example toggles" %}<table class="data-table"><tbody><tr><td>{{ row.name }}{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}` |
 | `{% section %}` | `aside`, `empty`, `foot` | A titled part of a page in its frame, its head on the page and its body in the frame. | `{% section "Agents" count=n %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}` |
+| `{% stack_list %}` | nothing | A list read down, each `<li>` a line of its own: the notes under a row's name, the statuses a record carries, the records a section lists. | `{% stack_list %}<li>{% status "High" tone="serious" %}</li><li>An example advisory</li>{% endstack_list %}` |
 | `{% status %}` | nothing | One short state, drawn in its tone and said in sentence case, the one way a page draws a state. | `{% status "Blocked" tone="attention" %}` |
 | `{% table_heading %}` | nothing | One column heading of a table: its kind, the rank it leaves by and its sort control. | `{% table_region "Example updates" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}{% table_heading "Updated" "status" drop=2 %}</tr></thead><tbody><tr><td>example-host</td><td>An hour ago</td></tr></tbody></table>{% endtable_region %}` |
 | `{% table_region %}` | nothing | The box a table fits, which draws what follows from its headings, and, with no rows, the one empty state in its place. | `{% table_region "Hosts" empty="No hosts yet." %}<table class="data-table"><thead><tr>{% table_heading "Name" %}</tr></thead><tbody><tr><td>example-host</td></tr></tbody></table>{% endtable_region %}` |
@@ -204,6 +205,8 @@ fails when this file falls behind. The rules around it are in
 | `section` | `remedy_url` |  |  | Where the empty line's link leads. |
 | `section` | `when` |  |  | The `when` form the moment is drawn in. |
 | `section` | `data_*` | | | Each a `data-` attribute. |
+| `stack_list` | `below` |  |  | The open row's label, for a list the open row shows under it. |
+| `stack_list` | `data_*` | | | Each a `data-` attribute. |
 | `status` | `*parts`, first and unnamed |  |  | Its words, several being one label, only the first sentence-cased. |
 | `status` | `chip` | `False` |  | A neutral chip for a name, never a state. |
 | `status` | `css` |  |  | The classes of where it stands. |
@@ -256,6 +259,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `hand-drawn-form` | A form that writes drawn by hand, where the form part draws it. | Write `{% include "partials/_form.html" %}`, or `{% include "partials/_page_action.html" with action=... %}` of a PageAction.command for a single verb. |
 | `hand-drawn-heading` | A heading drawn by hand, where the section part or the page frame draws it. | Write the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it (it heads itself a level down); the page's own title is the frame's, from page. |
 | `hand-drawn-icon` | An icon drawn by hand, where the icon part draws it. | Write `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img". |
+| `hand-drawn-line-break` | A line broken by hand with `<br>`, where the cell line or the stack list part draws the lines. | Write `{% cell_line %}`first line`{% detail %}`quiet second line`{% endcell_line %}`, or `{% stack_list %}``<li>`...`</li>``<li>`...`</li>``{% endstack_list %}` for lines read down. |
 | `hand-drawn-missing-value` | A missing value's mark drawn by an if, where the value's own tag or filter draws it. | Write {{ x\|or_empty }} for a plain value, {{ x\|money }} (or measured, seconds, bytes, when) alone for a figure or a moment, and `{% present x %}`...`{% endpresent %}` for a value shown in markup. |
 | `hand-drawn-prose-list` | A list of sentences drawn by hand, where the prose list part draws it. | Write `{% prose_list %}``<li>`...`</li>``{% endprose_list %}`, with numbered=True for items read in order. |
 | `hand-drawn-record-link` | A link to a record's page drawn by hand, where the entity tag names the record by the page its model declares. | Write `{% entity row\|record label=row.name %}`, or row\|record:"section" for a part of its page. |

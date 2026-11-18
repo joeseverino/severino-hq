@@ -655,7 +655,19 @@ its icon would be, so its steps take no icon.
 
 A plain list read down (a row's notes, a record's statuses, a section's
 records) is `{% stack_list %}`. Its `<li>`s each run their parts inline a small
-gap apart, and an item that reads as a sentence is marked `.prose`.
+gap apart, and an item that reads as a sentence is marked `.prose`. In a
+table's cell its items are the cell's own lines: a status and the line under
+it, links one to a line, a name's notes. They sit at the row's rhythm with no
+gap, and a line that holds a link is a target tall. A list with no item draws
+nothing, so a page writes each `<li>` under its own test.
+
+A fact in a cell with a quiet line under it (a name over its kind, a change
+over its risk) is `{% cell_line %}`. Its words alone are `{% cell_line
+text=... url=... %}`. Markup is its block, its second line after `{% detail
+%}`: `{% cell_line %}{% entity link %}{% detail %}Docker host{% endcell_line
+%}`. The part draws that line on its own, so no page writes a break or
+styles a line of its own. No template writes a `<br>`: `hand-drawn-line-break`
+refuses one, in an extension too. *Catalog:* `part/cell-line`.
 A run of whole parts read across one line (a fact's links, a row's context
 line, a band's details) is `{% dot_list %}`, each part an `<li>`, with
 `muted=True` for one said quietly. The stylesheet draws the dot in the gap

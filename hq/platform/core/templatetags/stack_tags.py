@@ -47,6 +47,7 @@ slotted(
         ),
         options={"below": Option(about="The open row's label, for a list the open row shows under it.")},
         data=True,
+        public=True,
         shape=stack_list_frame,
     ),
     library=register,

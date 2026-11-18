@@ -115,13 +115,13 @@
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }
-/* A link on a line of its own in a name or a sentence is text of its
-   lines, its target as tall as its line (figures.css) by its padding: an
-   inline box is its face's glyph box tall, never less than 1.2em. A button
-   (`.btn`) is a target already, drawn as every button is (page.css), so
-   none of these reach it. */
-.data-table > tbody > tr > :is([data-kind="name"], [data-kind="prose"]) a:not(.btn):is(:has(+ br), br + *) {
-  display: inline; padding-block: calc((var(--target-min) - 1.2em) / 2);
+/* A link on one of a cell's lines (a stack list's item, a cell line) is
+   text of its line, its target as tall as the line (figures.css) by its
+   padding: an inline box is its face's glyph box tall, never less than
+   1.2em. A button (`.btn`) is a target already, drawn as every button is
+   (page.css), so none of these reach it. */
+.data-table > tbody > tr > td :is(.stack-list > li, .cell-line, .cell-detail) a[href]:not(.btn) {
+  padding-block: calc((var(--target-min) - 1.2em) / 2);
 }
 /* A box a reader presses or tabs to is a target tall, as a link on a line of its own is (figures.css); a short value's box (`cell-short`, tables.css) is the cell's own. */
 .data-table > tbody > tr > [data-kind="identifier"] > :is(a[href], [tabindex]):not(.btn),

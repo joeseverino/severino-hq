@@ -23,11 +23,10 @@ anyway, and would go on meaning nothing after it stopped being.
       {% for machine in machines %}
         <tr>
           <td>
-            <strong>{% entity machine.link %}</strong>{% for role in machine.roles %} {% status role.label chip=True title=role.detail %}{% endfor %}
-            {% if machine.role %}<br>{% muted %}{{ machine.role|breakable }}{% endmuted %}{% endif %}
+            {% cell_line %}<strong>{% entity machine.link %}</strong>{% for role in machine.roles %} {% status role.label chip=True title=role.detail %}{% endfor %}{% detail %}{% if machine.role %}{{ machine.role|breakable }}{% endif %}{% endcell_line %}
           </td>
           <td>
-            {% for ref in machine.reached_by %}{% entity "connection"|entity_of:ref code=True %}{% if ref in machine.unanswered %} {% muted %}not answering{% endmuted %}{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}
+            {% present machine.reached_by %}{% stack_list %}{% for ref in machine.reached_by %}<li>{% entity "connection"|entity_of:ref code=True %}{% if ref in machine.unanswered %} {% muted %}not answering{% endmuted %}{% endif %}</li>{% endfor %}{% endstack_list %}{% endpresent %}
           </td>
           <td>
             {% if machine.containers %}
@@ -37,17 +36,17 @@ anyway, and would go on meaning nothing after it stopped being.
             {% endif %}
           </td>
           <td>
-            {% if machine.runs_hq %}{{ hq_label|breakable }}{% if machine.hostnames %}<br>{% endif %}{% endif %}
             {% comment %}Two names and a count: a machine serving ten would make its row ten lines tall. Its page lists them all.{% endcomment %}
-            {% for hostname in machine.hostnames|slice:":2" %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
-            {% if machine.hostnames|length > 2 %}<br><a href="{{ machine.link.url }}#names">{% muted %}+{{ machine.hostnames|length|add:"-2"|measured:"more" }}{% endmuted %}</a>{% endif %}
+            {% stack_list %}{% if machine.runs_hq %}<li>{{ hq_label|breakable }}</li>{% endif %}
+            {% for hostname in machine.hostnames|slice:":2" %}<li>{% entity "service"|entity_of:hostname %}</li>{% endfor %}
+            {% if machine.hostnames|length > 2 %}<li><a href="{{ machine.link.url }}#names">{% muted %}+{{ machine.hostnames|length|add:"-2"|measured:"more" }}{% endmuted %}</a></li>{% endif %}{% endstack_list %}
           </td>
           <td>
             {% comment %}
             One state. Presence decides when the tailnet reports the machine;
             the connection that sees it is in "Read through".
             {% endcomment %}
-            {% status machine.state %}{% if machine.state_since %}<br>{% muted css="cell-part" %}since {{ machine.state_since|breakable }}{% endmuted %}{% endif %}
+            {% stack_list %}<li>{% status machine.state %}</li>{% if machine.state_since %}<li>{% muted css="cell-part" %}since {{ machine.state_since|breakable }}{% endmuted %}</li>{% endif %}{% endstack_list %}
           </td>
         </tr>
       {% endfor %}

@@ -25,15 +25,17 @@ part's heading shows only when there is more than one.
           <tr id="{{ connection.instance.label|connection_anchor }}">
             <td>
               <strong>{% entity connection.name_link %}</strong>
-              {% if connection.instance.endpoint %}<br><code title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint|breakable }}</code>{% endif %}
+              {% stack_list %}
+              {% if connection.instance.endpoint %}<li><code title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint|breakable }}</code></li>{% endif %}
               {% comment %}Where a group starts: every row under it shares this, and repeating it on each says nothing new.{% endcomment %}
-              {% ifchanged group.spec.label group.spec.secret_store connection.instance.keyless %}{% muted css="narrow-more prose" %}<br>{% if group.spec.label != connection.instance.label %}{{ group.spec.label|breakable:"·" }}{% endif %}{% if connection.instance.keyless %}No key needed{% else %}Secrets in {{ group.spec.secret_store|breakable }}{% endif %}{% if group.spec.documentation_url %}{% dot %}<a href="{{ group.spec.documentation_url }}">Docs</a>{% endif %}{% if group.spec.management_route %}{% dot %}<a href="{% url group.spec.management_route %}">Manage</a>{% endif %}{% endmuted %}{% endifchanged %}
+              {% ifchanged group.spec.label group.spec.secret_store connection.instance.keyless %}<li>{% muted css="narrow-more prose" %}{% if group.spec.label != connection.instance.label %}{{ group.spec.label|breakable:"·" }}{% endif %}{% if connection.instance.keyless %}No key needed{% else %}Secrets in {{ group.spec.secret_store|breakable }}{% endif %}{% if group.spec.documentation_url %}{% dot %}<a href="{{ group.spec.documentation_url }}">Docs</a>{% endif %}{% if group.spec.management_route %}{% dot %}<a href="{% url group.spec.management_route %}">Manage</a>{% endif %}{% endmuted %}</li>{% endifchanged %}
               {% comment %}How HQ reaches it, a refusal, then the count of what it reads, said once for the connection, which alone stays in a narrow box: each read is in the Reads column.{% endcomment %}
-              {% if row.reach.summary or connection.instance.facts %}{% muted css="narrow-more" %}<br>{% if row.reach.summary %}{% with mark=row.reach.relay|then:"," %}{% if row.reach.machine %}{{ row.reach.label|breakable }} {{ row.reach.machine_word|breakable }} {% entity row.reach.machine mark=mark %}{% else %}{{ row.reach.label|breakable:mark }}{% endif %}{% endwith %}{% if row.reach.relay %} {{ row.reach.relay|breakable }}{% endif %}{% if connection.instance.facts %}{% dot %}{% endif %}{% endif %}{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value|breakable }}{% else %}{{ fact.label|breakable:":" }} {{ fact.value|breakable }}{% endif %}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}{% endif %}
+              {% if row.reach.summary or connection.instance.facts %}<li>{% muted css="narrow-more" %}{% if row.reach.summary %}{% with mark=row.reach.relay|then:"," %}{% if row.reach.machine %}{{ row.reach.label|breakable }} {{ row.reach.machine_word|breakable }} {% entity row.reach.machine mark=mark %}{% else %}{{ row.reach.label|breakable:mark }}{% endif %}{% endwith %}{% if row.reach.relay %} {{ row.reach.relay|breakable }}{% endif %}{% if connection.instance.facts %}{% dot %}{% endif %}{% endif %}{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value|breakable }}{% else %}{{ fact.label|breakable:":" }} {{ fact.value|breakable }}{% endif %}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}</li>{% endif %}
               {% with sight=row.sight %}
-              {% if sight.credential_refusal %}<br>{% status sight.label "refused this credential:" sight.credential_refusal tone="serious" pill=False %}{% endif %}
-              {% if sight.sights %}<br>{% muted %}{{ sight.summary|breakable }}{% if sight.read_at %}{% dot %}{% include "partials/_reading_age.html" with at=sight.read_at only %}{% endif %}{% endmuted %}{% endif %}
+              {% if sight.credential_refusal %}<li>{% status sight.label "refused this credential:" sight.credential_refusal tone="serious" pill=False %}</li>{% endif %}
+              {% if sight.sights %}<li>{% muted %}{{ sight.summary|breakable }}{% if sight.read_at %}{% dot %}{% include "partials/_reading_age.html" with at=sight.read_at only %}{% endif %}{% endmuted %}</li>{% endif %}
               {% endwith %}
+              {% endstack_list %}
               {% if row.more_scope %}<div class="row-below" data-label="Also sees">{% line_list row.more_scope as line list="dot-list" %}<li>{{ line|breakable }}</li>{% endline_list %}</div>{% endif %}
               {% if row.fix %}{% include "control_plane/_credential_fix.html" with fix=row.fix %}{% endif %}
             </td>
@@ -76,12 +78,12 @@ part's heading shows only when there is more than one.
             lifecycle and authority, so they cannot disagree.
             {% endcomment %}
             <td class="tight-col">
-              {% status row.state_label tone=row.lifecycle.tone dot=True %}
-              {% if row.read_requested_at %}{% muted css="narrow-more" %}<br>Read asked {{ row.read_requested_at|when_text:"ago" }}{% endmuted %}
-              {% elif row.state_line %}{% muted css=row.state_line_quiet|yesno:"row-more,narrow-more" %}<br>{% if row.state_line_tone %}{% status row.state_line tone=row.state_line_tone pill=False %}{% else %}{{ row.state_line|breakable }}{% endif %}{% endmuted %}
-              {% elif row.changes_only and connection.instance.observed_at %}{% muted css="narrow-more" %}<br>Checked {{ connection.instance.observed_at|when_text:"ago" }}{% endmuted %}
-              {% elif not row.sight.sights and connection.instance.observed_at %}{% muted css="narrow-more" %}<br>{% include "partials/_reading_age.html" with at=connection.instance.observed_at only %}{% endmuted %}{% endif %}
-              {% if row.problems %}<br>{% status row.problems|counted:"problem" tone="attention" pill=False href=row.problems_url %}{% endif %}
+              {% stack_list %}<li>{% status row.state_label tone=row.lifecycle.tone dot=True %}</li>
+              {% if row.read_requested_at %}<li>{% muted css="narrow-more" %}Read asked {{ row.read_requested_at|when_text:"ago" }}{% endmuted %}</li>
+              {% elif row.state_line %}<li>{% muted css=row.state_line_quiet|yesno:"row-more,narrow-more" %}{% if row.state_line_tone %}{% status row.state_line tone=row.state_line_tone pill=False %}{% else %}{{ row.state_line|breakable }}{% endif %}{% endmuted %}</li>
+              {% elif row.changes_only and connection.instance.observed_at %}<li>{% muted css="narrow-more" %}Checked {{ connection.instance.observed_at|when_text:"ago" }}{% endmuted %}</li>
+              {% elif not row.sight.sights and connection.instance.observed_at %}<li>{% muted css="narrow-more" %}{% include "partials/_reading_age.html" with at=connection.instance.observed_at only %}{% endmuted %}</li>{% endif %}
+              {% if row.problems %}<li>{% status row.problems|counted:"problem" tone="attention" pill=False href=row.problems_url %}</li>{% endif %}{% endstack_list %}
             </td>
             <td>
               {% if connection.recommended_action %}{% include "partials/_page_action.html" with action=connection.recommended_action|workflow_action extra="compact" only %}{% endif %}

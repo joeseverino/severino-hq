@@ -37,7 +37,7 @@ wider, the Action column says it.
     <td>{% status row.moment.source %}</td>
     <td class="cell-data">{% muted %}{{ row.moment.detail|breakable }}{% endmuted %}</td>
   {% else %}
-    <td>{% if row.grouped %}{% include "partials/_row_fold.html" with label=row.title only %}{% endif %}<a href="{{ row.url }}"><strong>{% if row.head %}{{ row.title|readout }}{% else %}{{ row.named.0|readout }}{{ row.named.1|breakable }}{% endif %}</strong></a>{% if row.grouped and row.head %} <span class="count">{{ row.total|breakable }}</span>{% endif %}{% if row.type_label %}<br>{% muted %}{{ row.type_label|breakable }}<span class="narrow-only">{% dot %}{{ row.action_label|breakable }}</span>{% endmuted %}{% else %}<span class="narrow-only"><br>{% muted %}{{ row.action_label|breakable }}{% endmuted %}</span>{% endif %}</td>
+    <td>{% if row.grouped %}{% include "partials/_row_fold.html" with label=row.title only %}{% endif %}<a href="{{ row.url }}"><strong>{% if row.head %}{{ row.title|readout }}{% else %}{{ row.named.0|readout }}{{ row.named.1|breakable }}{% endif %}</strong></a>{% if row.grouped and row.head %} <span class="count">{{ row.total|breakable }}</span>{% endif %}{% stack_list %}{% if row.type_label %}<li>{% muted %}{{ row.type_label|breakable }}<span class="narrow-only">{% dot %}{{ row.action_label|breakable }}</span>{% endmuted %}</li>{% else %}<li class="narrow-only">{% muted %}{{ row.action_label|breakable }}{% endmuted %}</li>{% endif %}{% endstack_list %}</td>
     <td class="date-col">{% muted %}{{ row.at|when:"clock" }}{% endmuted %}</td>
     {% if not hide_who %}<td>{% cell_line text=row.who.words %}</td>{% endif %}
     <td>{% status row.state %}</td>
