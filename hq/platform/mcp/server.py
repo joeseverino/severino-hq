@@ -116,16 +116,15 @@ CACHE_HINTS: dict[CacheableMethod, CacheHint] = {
 }
 
 
-def _answer(result: Any, tool: Tool | None = None) -> types.CallToolResult:
-    """An answer as a client reads it: the object, and the same as compact JSON text.
+def structured(result: Any, tool: Tool | None = None) -> tuple[Any, Refusal | None]:
+    """``result`` as JSON a caller reads it, MCP's and the operator's shell's
+    alike, and the refusal it stands for.
 
-    A refusal (``ok`` false) is a tool error. A held change is ``ok`` with
-    ``status: "awaiting_approval"``, and stays a success: its status, not
-    ``isError``, is what a client keys on. A refusal is answered as the
-    ``Refusal`` it stands for, so a code the contract does not hold reaches
-    the client as ``operation_failed``, as it does from every other door. A
-    success leaves out each field that holds its default, as ``tool`` answers
-    it; a refusal is answered whole.
+    A held change is ``ok`` with ``status: "awaiting_approval"``, and stays a
+    success. A refusal (``ok`` false) is answered whole, as the ``Refusal`` it
+    stands for, so a code the contract does not hold reaches the caller as
+    ``operation_failed``, as it does from every other door. A success leaves
+    out each field that holds its default, as ``tool`` answers it.
     """
 
     refusal = refusal_of(result) if isinstance(result, dict) and result.get("ok") is False else None
@@ -134,6 +133,15 @@ def _answer(result: Any, tool: Tool | None = None) -> types.CallToolResult:
     value = _ANSWER.dump_python(result, mode="json", by_alias=True, fallback=str)
     if refusal is None and tool is not None:
         value = tool.answered(value)
+    return value, refusal
+
+
+def _answer(result: Any, tool: Tool | None = None) -> types.CallToolResult:
+    """An answer as a client reads it: the object, and the same as text. A
+    refusal is a tool error; a held change's status, not ``isError``, is what
+    a client keys on."""
+
+    value, refusal = structured(result, tool)
     return types.CallToolResult(
         content=[types.TextContent(type="text", text=_ANSWER.dump_json(value).decode())],
         structured_content=value,

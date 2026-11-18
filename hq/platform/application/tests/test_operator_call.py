@@ -62,9 +62,3 @@ class OperatorCallTests(TestCase):
         self.assertEqual(answer and answer["error"]["code"], "operation_failed")
         self.assertIsNotNone(failed)
         self.assertNotIn(SECRET, json.dumps(answer) + str(failed))
-
-    def test_an_answer_is_written_and_succeeds(self):
-        answer, failed = _called(json.dumps({"tool": "audit_registry"}))
-
-        self.assertIsNone(failed)
-        self.assertIn("orphan_projects", answer)

@@ -42,7 +42,7 @@ from hq.platform.application.refusal_status import refusal_of, refuse
 from hq.platform.application.security import Principal, cli_principal
 from hq.platform.core import strict_json
 from hq.platform.mcp.identity import set_principal
-from hq.platform.mcp.server import mcp
+from hq.platform.mcp.server import mcp, structured
 lazy from hq.platform.application import agent_admission
 lazy from hq.platform.application.security import MCP_INTERFACE, agent_grantable, agent_principal
 lazy from hq.platform.core.attribution import outside_every_door
@@ -77,7 +77,8 @@ def _request(text: str) -> tuple[Any, dict[str, Any]] | dict[str, Any]:
 
 
 def answered(text: str) -> Any:
-    """The answer to the request ``text`` holds: the tool's result, or the refusal a door gives."""
+    """The answer to the request ``text`` holds, as an MCP caller reads it: the
+    tool's result, or the refusal a door gives."""
 
     asked = _request(text)
     if isinstance(asked, dict):
@@ -86,9 +87,10 @@ def answered(text: str) -> Any:
     principal = cli_principal()
     with set_principal(principal):
         try:
-            return async_to_sync(tool.call)(arguments)
+            result = async_to_sync(tool.call)(arguments)
         except Exception as exc:  # noqa: BLE001 - a tool's failure is its answer, as at the doors
-            return adapter_refusal(tool.name, exc, principal=principal)
+            result = adapter_refusal(tool.name, exc, principal=principal)
+    return structured(result, tool)[0]
 
 
 def agent_door(client: str, grant: Iterable[str]) -> Principal:
@@ -169,6 +171,6 @@ class Command(BaseCommand):
         else:
             principal = agent_door(options["agent"], options["grant"])
             answer = answered_as(sys.stdin.read(), principal)
-        self.stdout.write(json.dumps(answer, separators=(",", ":"), default=str))
+        self.stdout.write(json.dumps(answer, separators=(",", ":")))
         if isinstance(answer, dict) and answer.get("ok") is False:
             raise CommandError(refusal_of(answer).message)
