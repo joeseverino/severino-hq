@@ -13070,6 +13070,40 @@
         ],
         "type": "object"
       },
+      "InputProblem": {
+        "additionalProperties": false,
+        "description": "One field that was wrong and why, as Pydantic reports it.",
+        "properties": {
+          "loc": {
+            "description": "Where in the request it is.",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "msg": {
+            "description": "Pydantic's sentence for it.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Pydantic's error type.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "loc",
+          "msg"
+        ],
+        "type": "object"
+      },
       "InsightPart": {
         "additionalProperties": false,
         "properties": {
@@ -14697,6 +14731,24 @@
         ],
         "type": "object"
       },
+      "MissingConnection": {
+        "additionalProperties": false,
+        "properties": {
+          "machine": {
+            "description": "The machine the runner cannot reach.",
+            "type": "string"
+          },
+          "profile": {
+            "description": "The login the playbook runs as.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "machine",
+          "profile"
+        ],
+        "type": "object"
+      },
       "MountPart": {
         "additionalProperties": false,
         "properties": {
@@ -14944,6 +14996,25 @@
         "required": [
           "name",
           "cidr"
+        ],
+        "type": "object"
+      },
+      "NextCall": {
+        "additionalProperties": false,
+        "description": "A call that gets past a refusal: an MCP tool and its arguments, which\nthe machine API serves as the route of that name.",
+        "properties": {
+          "arguments": {
+            "description": "The tool's arguments, as its input schema names them.",
+            "type": "object"
+          },
+          "tool": {
+            "description": "The MCP tool's name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "arguments"
         ],
         "type": "object"
       },
@@ -15956,6 +16027,31 @@
         "required": [
           "ok",
           "data"
+        ],
+        "type": "object"
+      },
+      "PlaybookAdmits": {
+        "additionalProperties": false,
+        "description": "What a playbook is written for.",
+        "properties": {
+          "hosts": {
+            "description": "The machines it names.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "target_kinds": {
+            "description": "The kinds of record it runs against.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "target_kinds",
+          "hosts"
         ],
         "type": "object"
       },
@@ -18037,6 +18133,39 @@
         ],
         "type": "object"
       },
+      "RecordProblem": {
+        "additionalProperties": false,
+        "description": "One record of a document HQ refused, and why.",
+        "properties": {
+          "doc_id": {
+            "description": "The doc it is, for a vault sync.",
+            "type": "string"
+          },
+          "errors": {
+            "description": "Each problem the record has.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "index": {
+            "description": "Its place among the records of its kind, from 0.",
+            "type": "integer"
+          },
+          "kind": {
+            "description": "The kind of record it is.",
+            "type": "string"
+          },
+          "slug": {
+            "description": "The slug it names.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "errors"
+        ],
+        "type": "object"
+      },
       "RecordSlug": {
         "description": "Its address in HQ, unique among records of its type: what its page and its links name it by.",
         "type": "string"
@@ -18053,11 +18182,132 @@
         "type": "string"
       },
       "RefusalDetails": {
-        "description": "What gets past the refusal, where something does: `next`, the call that finds what was missing; `closest`, the read of each record or list named nearest the one asked for; `field`, the argument to send; `scope`, the permission to grant the token's client; for `invalid_input`, each field that was wrong and why, which a list or record read puts under `errors`, beside the `filters` its list takes."
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/RefusalPointers",
+            "title": "Refusal pointers"
+          },
+          {
+            "description": "For `invalid_input`, each field that was wrong and why.",
+            "items": {
+              "$ref": "#/components/schemas/InputProblem"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "For `invalid_input` or `not_found`, each field a record refused, with its error codes.",
+            "type": "object"
+          },
+          {
+            "description": "Each record of a document refused.",
+            "items": {
+              "$ref": "#/components/schemas/RecordProblem"
+            },
+            "type": "array"
+          }
+        ],
+        "description": "What gets past the refusal, where something does.",
+        "title": "Refusal details"
       },
       "RefusalMessage": {
         "description": "HQ's sentence for the refusal, naming no value the request carried.",
         "type": "string"
+      },
+      "RefusalPointers": {
+        "description": "What gets past a refusal, each part where the refusal has it: `next`\nis the call that finds what was missing, `holding` the run in the way,\n`operation` the one the refused change asked for, and `admits` what the\nplaybook refused is written for.",
+        "properties": {
+          "admits": {
+            "$ref": "#/components/schemas/PlaybookAdmits"
+          },
+          "closest": {
+            "description": "The read of each record or list named nearest the one asked for.",
+            "items": {
+              "$ref": "#/components/schemas/NextCall"
+            },
+            "type": "array"
+          },
+          "errors": {
+            "description": "Each field of a list or record read that was wrong.",
+            "items": {
+              "$ref": "#/components/schemas/InputProblem"
+            },
+            "type": "array"
+          },
+          "field": {
+            "description": "The argument to send.",
+            "type": "string"
+          },
+          "filters": {
+            "description": "What the resource's list narrows by.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "holding": {
+            "$ref": "#/components/schemas/OperationItem"
+          },
+          "identifier": {
+            "description": "The field the resource's records are addressed by.",
+            "type": "string"
+          },
+          "machines": {
+            "description": "The machines the run in the way is on.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "missing": {
+            "description": "Each machine the runner has no connection to.",
+            "items": {
+              "$ref": "#/components/schemas/MissingConnection"
+            },
+            "type": "array"
+          },
+          "next": {
+            "$ref": "#/components/schemas/NextCall"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/OperationItem"
+          },
+          "playbook": {
+            "description": "The playbook of the run in the way.",
+            "type": "string"
+          },
+          "refused": {
+            "description": "Each machine, or each reason, refused.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "description": "The permission to grant the token's client.",
+            "type": "string"
+          },
+          "shared": {
+            "description": "The machines asked for that the run in the way holds.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unknown": {
+            "description": "Each host named that is no machine HQ knows.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       },
       "RefusedPart": {
         "additionalProperties": false,
