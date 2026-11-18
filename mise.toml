@@ -86,6 +86,8 @@ jactionlint = "2.6.0"
 zizmor = "1.32.0"
 # The prose linter: HQ's wording rules, in tools/lint/vale/.vale.ini (lint:prose).
 vale = "3.27.0"
+# The spelling check, American English, in _typos.toml (lint:spelling).
+typos = "1.52.2"
 # Structural rules over the source, in tools/lint/ast-grep/ (lint:ast-grep), and the
 # counts Ruff has no rule for (audit:ast).
 ast-grep = "0.51.3"
@@ -413,6 +415,7 @@ sources = [
   "Dockerfile.dockerignore",
   "LICENSE",
   "README.md",
+  "_typos.toml",
   "entrypoint.sh",
   "manage.py",
   "mise.fast.toml",

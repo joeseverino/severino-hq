@@ -96,7 +96,7 @@ def is_address(text: str) -> bool:
 def parse_ip(value: str):
     """An address object, or None if this is not one.
 
-    Unparseable input returns None and is treated as untrusted everywhere it is
+    Unparsable input returns None and is treated as untrusted everywhere it is
     used: a hop that fails to parse must never be mistaken for a trusted one.
     """
 

@@ -232,7 +232,7 @@ class PolicyDocumentTests(TestCase):
 
         self.assertEqual([group["name"] for group in read_policy().groups], ["group:read"])
 
-    def test_an_unparseable_document_leaves_the_lists_alone(self):
+    def test_an_unparsable_document_leaves_the_lists_alone(self):
         from ..tailnet import policy as read_policy
 
         policy(document="{ not json", grants=[{"src": ["*"], "dst": ["*"]}])

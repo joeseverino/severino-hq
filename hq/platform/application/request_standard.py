@@ -180,7 +180,7 @@ def _policy(facts: RequestFacts) -> Reading:
 
     A reverse proxy on HQ's own host forwards from loopback, which the tailnet
     never sees, so the one hop it governs is the caller's device to HQ's node
-    on the port they dialled."""
+    on the port they dialed."""
 
     port = _scheme_port(facts) if facts.forwarded else _port_of(facts)
     return _may_reach(facts.device, facts.serves, port, facts.known)

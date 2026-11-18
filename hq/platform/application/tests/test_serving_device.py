@@ -244,7 +244,7 @@ class LocalProxyPolicyTests(TestCase):
     nothing and the Zero trust policy boundary vanished from the page entirely,
     on the deployment where it matters most.
 
-    The hop the policy governs is the one the caller dialled: their device to
+    The hop the policy governs is the one the caller dialed: their device to
     the node HQ runs on. One tailnet hop, so one layer: claiming a second for
     proxy-to-HQ would describe a loopback socket as a policed crossing.
     """

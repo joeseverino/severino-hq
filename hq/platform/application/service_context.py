@@ -711,7 +711,7 @@ def routes_for(service, request) -> tuple:
     viewed through that very name, the first is the route this request took,
     each hop joined to what the request showed (``paths.hq_path``).
 
-    Only then: a request for another name travelled a different path and proves
+    Only then: a request for another name traveled a different path and proves
     nothing about this one. The evidence itself is the connection page's.
     """
 

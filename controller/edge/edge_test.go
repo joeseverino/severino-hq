@@ -289,7 +289,7 @@ func TestDeployRefusesWhatCaddyWouldServeWrongly(t *testing.T) {
 	expired := issue(t, "expired.example.test", now.Add(-time.Hour))
 	for name, body := range map[string][]byte{
 		"a key that does not match the certificate": Bundle([]byte(good.chain), []byte(other.key)),
-		"unparseable input":                         Bundle([]byte("not a certificate\n"), []byte("not a key\n")),
+		"unparsable input":                          Bundle([]byte("not a certificate\n"), []byte("not a key\n")),
 		"empty files":                               Bundle(nil, nil),
 		"an expired certificate":                    Bundle([]byte(expired.chain), []byte(expired.key)),
 		"no body":                                   nil,

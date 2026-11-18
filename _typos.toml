@@ -1,0 +1,63 @@
+# The spelling check (lint:spelling), here and over each extension's project
+# (tools/pipeline/check-plugin.sh): HQ writes American English.
+
+[files]
+extend-exclude = [
+  # Other projects' words.
+  "static/vendor/",
+  "controller/api/vendor/",
+  # Generated: their sources carry the words.
+  "*.gen.go",
+  "**/migrations/",
+  # A sealed test vector, base64.
+  "controller/runtime/testdata/",
+]
+
+[default]
+locale = "en-us"
+# A terminal color escape in a recorded run's output.
+extend-ignore-re = ['\\u001b\[[0-9;]*m']
+
+[default.extend-words]
+# British spellings typos's dictionary leaves out.
+catalogue = "catalog"
+catalogued = "cataloged"
+whilst = "while"
+amongst = "among"
+grey = "gray"
+greyed = "grayed"
+memoise = "memoize"
+memoised = "memoized"
+parameterise = "parameterize"
+parameterised = "parameterized"
+canonicalise = "canonicalize"
+canonicalised = "canonicalized"
+serialiser = "serializer"
+serialisable = "serializable"
+# Both American spellings.
+queueing = "queueing"
+# A health savings account.
+hsa = "hsa"
+# The accessibility engine the browser gates run.
+axe = "axe"
+# A test name's possessive, written without its apostrophe.
+anothers = "anothers"
+advisorys = "advisorys"
+childs = "childs"
+directorys = "directorys"
+entrys = "entrys"
+proxys = "proxys"
+registrys = "registrys"
+repositorys = "repositorys"
+# Names other formats give: DMARC's failure option, difflib's opcode bounds,
+# the Mach timebase's field, and bash in a shebang's pattern.
+ba = "ba"
+fo = "fo"
+alo = "alo"
+numer = "numer"
+# A test's planted misspellings, refused by the code under test.
+advnced = "advnced"
+feilds = "feilds"
+goood = "goood"
+limti = "limti"
+optinal = "optinal"

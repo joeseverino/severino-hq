@@ -70,7 +70,7 @@ _REACHED_KINDS = frozenset({"target", "service", "zone"})
 def _perimeter_open(estate: FindingEstate) -> tuple[Finding, ...]:
     """A port answering from the public internet that nothing means to publish.
 
-    Not a disagreement about configuration. The port was dialled from outside
+    Not a disagreement about configuration. The port was dialed from outside
     and it answered, so this is the invariant already broken rather than a
     prediction that it might be.
     """

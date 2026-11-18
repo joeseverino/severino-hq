@@ -155,7 +155,7 @@ class DocumentTests(SimpleTestCase):
         with self.assertRaisesRegex(openapi.OpenAPIError, "Record"):
             components.hoist({"$defs": {"Record": {"type": "string"}}})
 
-    def test_a_parameterised_route_without_an_expansion_fails_the_build(self):
+    def test_a_parameterized_route_without_an_expansion_fails_the_build(self):
         with patch.dict(openapi.EXPANSIONS, clear=True), self.assertRaises(openapi.OpenAPIError):
             openapi.document()
 

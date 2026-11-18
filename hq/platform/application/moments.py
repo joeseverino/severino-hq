@@ -5,7 +5,7 @@ chart tip and an extension all say a time the same way. ``hq_sdk.ui`` hands the
 words to extensions, and ``core.templatetags.value_tags`` owns the filters that
 put them in a page, ``when`` and its plain-text twin ``when_text``.
 
-A stamp that is unparseable, empty or missing reads as ``None``: a reading is a
+A stamp that is unparsable, empty or missing reads as ``None``: a reading is a
 fact about the world, and a caller for whom that is an error raises its own.
 The edges where callers differ (a naive stamp, Go's zero time) are parameters,
 so a caller states which answer it needs.

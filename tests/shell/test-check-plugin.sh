@@ -14,6 +14,7 @@ mkdir -p "$work/bin" "$work/package/src/example_plugin"
 host="$work/host"
 mkdir -p "$host/tools/pipeline" "$host/tools/gate" "$host/hq/platform/application"
 cp "$repo_dir/hq/platform/application/plugins.py" "$host/hq/platform/application/"
+cp "$repo_dir/_typos.toml" "$host/"
 cp "$repo_dir/tools/__init__.py" "$host/tools/"
 cp "$repo_dir/tools/pipeline/__init__.py" "$repo_dir/tools/pipeline/check-plugin.sh" \
   "$repo_dir/tools/pipeline/plugin_identity.py" "$host/tools/pipeline/"

@@ -479,7 +479,7 @@ class DecisionTests(TestCase):
     def test_a_declaration_that_moves_invalidates_the_approval(self):
         """An approval covers a comparison, not a resource.
 
-        Without this the hold is a delayed blank cheque: ask for a reconcile of
+        Without this the hold is a delayed blank check: ask for a reconcile of
         something harmless, wait for the amendment to land, and the click that
         was read as approving one thing applies another.
         """

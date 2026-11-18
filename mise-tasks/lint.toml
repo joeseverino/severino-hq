@@ -71,6 +71,16 @@ usage = 'flag "--fix" help="Write what each rule that carries a fix: rewrites in
 # more fails, so each is removed as its page moves.
 run = 'if [ "${usage_fix:-}" = true ]; then ast-grep scan -c tools/lint/ast-grep/sgconfig.yml --update-all . >/dev/null; else ast-grep test -c tools/lint/ast-grep/sgconfig.yml --skip-snapshot-tests && ast-grep test -c tools/lint/ast-grep/sgconfig.yml --filter "^hand-drawn-" && ast-grep scan -c tools/lint/ast-grep/sgconfig.yml --error=unused-suppression .; fi'
 
+["lint:spelling"]
+description = "typos holds every file of the checkout to American English and its spelling, as _typos.toml says"
+hide = true
+tags = ["fast"]
+sources = ["**/*"]
+outputs = []
+# No fix mode: a correction can rename an identifier in one file and not
+# where it is used.
+run = "typos"
+
 ["lint:openapi"]
 description = "Both OpenAPI descriptions pass specification lint"
 hide = true
