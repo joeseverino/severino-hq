@@ -159,19 +159,16 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
 /* The dot's size, which a page's note keeps room for beside its words (cuts.css). */
 .visit-status, .visit-slot { --mark-size: 6px; }
 .visit-status { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; overflow-wrap: anywhere; }
-/* A dot before what it says, in the tone of how the read stands: moving
+/* A dot before what it says, in the tone its note carries (ask.js): moving
    while it is read, the way a live reading does (connection.css). A page's
-   note stands apart from its ask, so it reads the state off the form it
-   names. */
+   note stands apart from its ask, so it reads whether the read is under way
+   off the form it names. */
 .visit-status:not(:empty)::before {
   content: "" / ""; margin-inline-end: var(--space-4); vertical-align: .1em;
   background: var(--muted-2);
 }
+.visit-status:is(.tone-good, .tone-attention, .tone-serious)::before { background: var(--tone-mark); }
 .visit-status:is(.ask[aria-busy="true"] > *, :root:has(.ask[aria-busy="true"] > #page-visit) [form="page-visit"])::before { background: var(--accent); animation: conn-pulse 1.8s ease-in-out infinite; }
-/* stylelint-disable-next-line declaration-property-value-disallowed-list -- an ask's outcome is the state word ask.js writes as the work stands, which no tone class follows */
-.visit-status:is(.ask[data-ask-state="done"] > *, :root:has(.ask[data-ask-state="done"] > #page-visit) [form="page-visit"])::before { background: var(--ok); }
-/* stylelint-disable-next-line declaration-property-value-disallowed-list -- an ask's outcome is the state word ask.js writes as the work stands, which no tone class follows */
-.visit-status:is(.ask[data-ask-state="failed"] > *, :root:has(.ask[data-ask-state="failed"] > #page-visit) [form="page-visit"])::before { background: var(--danger); }
 /* An ask: a button and how the work it asked for stands (partials/_ask.html).
    It lays nothing out of its own, so its button stands wherever a button
    does. What it says takes a line under the row the button stands in, as
@@ -206,8 +203,9 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
   .ask-why { display: inline; overflow-wrap: anywhere; }
 }
 .ask-elapsed { font-variant-numeric: tabular-nums; }
-/* stylelint-disable-next-line declaration-property-value-disallowed-list -- an ask's outcome is the state word ask.js writes as the work stands, which no tone class follows */
-.ask[data-ask-state="failed"] .ask-note { color: var(--danger); }
+/* A note that says the work went wrong is in its tone; one that went well
+   stays quiet. */
+.ask-note:is(.tone-attention, .tone-serious) { color: var(--tone-mark); }
 /* Busy keeps the button focusable, so it is marked rather than disabled. */
 .ask [aria-disabled="true"],
 form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity: .6; }

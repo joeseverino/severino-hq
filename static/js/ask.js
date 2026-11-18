@@ -72,6 +72,14 @@
     control.querySelector("[data-ask-note]") ||
     [...control.querySelectorAll("form")].flatMap((form) => [...form.elements]).find((field) => field.matches("[data-ask-note]"));
 
+  // A note and a label take the state's tone class, as the server draws them
+  // (`tone_class`, work_runs.TONES), and no color of their own.
+  const retone = (element, tone) => {
+    const toned = [...element.classList].filter((name) => name.startsWith("tone-"));
+    element.classList.remove(...toned);
+    if (tone) element.classList.add(`tone-${tone}`);
+  };
+
   const say = (control, text, word = "") => {
     const note = noteOf(control);
     if (!note) return;
@@ -214,13 +222,14 @@
       else button.removeAttribute("aria-disabled");
     });
     say(control, standing.note || "", standing.label || "");
+    const note = noteOf(control);
+    if (note) retone(note, standing.tone || "");
     tick(control);
     const label = control.querySelector("[data-ask-label]");
     if (label && standing.label) {
       label.textContent = standing.label;
-      // Its pill takes the state's tone with its word (work_runs.TONES).
-      const toned = [...label.classList].find((name) => name.startsWith("tone-"));
-      if (toned && standing.tone) label.classList.replace(toned, `tone-${standing.tone}`);
+      // A pill always has a tone, so an answer with none leaves it its own.
+      if (standing.tone) retone(label, standing.tone);
     }
     const bar = control.querySelector("[data-ask-bar]");
     if (bar) {
@@ -251,6 +260,7 @@
       const offered = frame("template[data-ask-newer]");
       offered.querySelector("a").href = window.location.href;
       note.replaceChildren(offered);
+      retone(note, "");
       note.hidden = false;
       note.closest(".visually-hidden")?.classList.remove("visually-hidden");
       control.dataset.askState = "idle";

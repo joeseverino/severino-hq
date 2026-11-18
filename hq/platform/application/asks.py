@@ -116,6 +116,12 @@ class Standing:
         return self.word or standing_word(self.state)
 
     @property
+    def tone(self) -> str:
+        """The tone its label is colored in, the one the page and the script draw; "" while idle."""
+
+        return standing_tone(self.state, self.label)
+
+    @property
     def seconds(self) -> int:
         if self.since is None:
             return 0
@@ -132,7 +138,7 @@ class Standing:
         return {
             "state": self.state,
             "label": self.label,
-            "tone": standing_tone(self.state, self.label),
+            "tone": self.tone,
             "live": self.live,
             "note": self.note,
             "seconds": self.seconds,

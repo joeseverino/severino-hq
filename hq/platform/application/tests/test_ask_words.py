@@ -88,3 +88,19 @@ class CatalogAskWordsTests(TestCase):
                         self.assertTrue(sentence.strip(), f"{name}'s line under its row says only {why!r}")
                         self.assertNotEqual(_bare(word), _bare(sentence), f"{name}'s line says {why!r}")
         self.assertTrue(checked)
+
+    def test_every_note_that_says_how_its_work_stands_carries_its_tone(self):
+        # ask.js retones a note from the answer's tone, so the server's note
+        # holds the class the script writes, and no rule colors a state.
+        toned = 0
+        for name, entry in CATALOG.items():
+            found = all_elements(entry.drawn(name))
+            for control in (element for element in found if "data-ask" in element.attrs):
+                if control.attrs.get("data-ask-state", "idle") == IDLE:
+                    continue
+                for note in _notes(control, found):
+                    with self.subTest(entry=name):
+                        tones = [each for each in note.classes if each.startswith("tone-")]
+                        self.assertEqual(len(tones), 1, f"{name}'s note is drawn with {sorted(note.classes)}")
+                        toned += 1
+        self.assertTrue(toned)
