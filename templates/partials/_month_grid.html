@@ -12,7 +12,7 @@ and a table cell outside a grid takes no aria-selected.
   <caption class="visually-hidden">{{ calendar.month|when:"month" }}</caption>
   <thead>
     <tr>
-      {% for short, name in calendar.weekdays %}<th class="month-weekday" scope="col"><span aria-hidden="true">{{ short|breakable }}</span><span class="visually-hidden">{{ name|breakable }}</span></th>{% endfor %}
+      {% for short, name in calendar.weekdays %}<th class="month-weekday eyebrow" scope="col"><span aria-hidden="true">{{ short|breakable }}</span><span class="visually-hidden">{{ name|breakable }}</span></th>{% endfor %}
     </tr>
   </thead>
   <tbody>

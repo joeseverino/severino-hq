@@ -30,7 +30,6 @@
   box-shadow: 0 -1px 0 var(--line-2);
 }
 .timeline-item time { display: flex; flex-direction: column; align-items: center; font-feature-settings: "tnum"; }
-.timeline-month { color: var(--muted); }
 .timeline-day { color: var(--ink); font-size: var(--text-2xl); font-weight: 650; line-height: 1.1; }
 .timeline-year { color: var(--muted-2); font-size: var(--text-3xs); font-weight: 600; letter-spacing: .04em; }
 .timeline-copy { display: flex; flex-direction: column; min-width: 0; gap: var(--space-1); font-size: var(--text-sm); }

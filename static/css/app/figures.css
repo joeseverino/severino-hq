@@ -183,7 +183,7 @@ i:is([class*="series-"], [class*="chart-band-"]) { background: var(--slot); }
    a kicker for each direction. The whole row is the link, so walking the
    graph is one click per hop. */
 .relation-list { display: grid; gap: var(--space-1); }
-.relation-list > .eyebrow { margin: var(--space-2) 0 0; }
+.relation-list > .eyebrow { display: block; margin: var(--space-2) 0 0; }
 .relation-list > ul { display: grid; gap: var(--space-1); }
 /* One edge: the link to the other end on its own line, then each value it
    carries on a line of its own with its kind and age. */

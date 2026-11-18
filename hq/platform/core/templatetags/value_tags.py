@@ -219,7 +219,7 @@ def _dated_mark(value: date):
         "" if value.year == this_year() else format_html('<span class="timeline-year">{}</span>', breakable(value.year))
     )
     return format_html(
-        '<span class="timeline-month">{}</span><span class="timeline-day">{}</span>{}',
+        '<span class="eyebrow">{}</span><span class="timeline-day">{}</span>{}',
         breakable(dateformat.format(value, "M")),
         breakable(value.day),
         year,

@@ -150,8 +150,7 @@
 }
 /* Seven equal columns: the one fixed grid here, because weeks must line up. */
 .month-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
-/* stylelint-disable-next-line property-disallowed-list -- a kicker: the weekday row over a month grid's days */
-.month-weekday { padding: 0 var(--space-2) var(--space-3); color: var(--muted); font-size: var(--text-2xs); font-weight: 600; text-align: left; text-transform: uppercase; letter-spacing: .04em; }
+.month-weekday { padding: 0 var(--space-2) var(--space-3); text-align: left; }
 .month-day {
   height: 6.5rem;
   padding: var(--space-2);
@@ -290,7 +289,6 @@
   border-radius: 9px;
 }
 .week-plan-day.is-planned { background: var(--surface-2); border-color: var(--line-2); }
-.week-plan-label { color: var(--muted-2); }
 .week-plan-day.is-planned .week-plan-label { color: var(--ink); }
 .week-plan-mark { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 8px; }
 .week-plan-mark i { width: 8px; height: 8px; border-radius: 50%; display: block; }
@@ -350,7 +348,6 @@
 .activity-calendar { width: 100%; border-collapse: separate; border-spacing: 3px; table-layout: fixed; }
 .calendar-weekday {
   padding: 0 0 var(--space-1);
-  color: var(--muted-2);
   text-align: center;
 }
 .calendar-day {
@@ -522,11 +519,9 @@ td .facts-list { font-size: var(--text-xs); gap: var(--space-1) var(--space-6); 
 .address-list { display: grid; grid-template-columns: max-content minmax(0, max-content); gap: var(--space-1) var(--space-3); align-items: baseline; }
 .address-list li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
 .address-list span { color: var(--muted); }
-/* The kicker: over a heading or a group of facts (`.eyebrow`), a timeline's
-   month, a week plan's and the activity calendar's weekdays, and Command
-   Center's group heads. */
-/* stylelint-disable-next-line property-disallowed-list -- the kicker primitive */
-.eyebrow, .timeline-month, .week-plan-label, .calendar-weekday, .command-center-group-label { font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.eyebrow { display: block; margin-bottom: var(--space-1); color: var(--muted-2); }
+/* The kicker, the one voice in capitals: over a heading or a group of facts,
+   a timeline's month, a calendar's weekdays, Command Center's group heads.
+   Where it stands is its part's rule. */
+.eyebrow { font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-2); }
 
 }

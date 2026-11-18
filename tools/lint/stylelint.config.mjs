@@ -97,19 +97,15 @@ const strandedMark =
   "/(?<!\\\\[0-9a-f]{1,6}) (?:[·•→←↗›‹»«]|\\\\0*(?:b7|2022|2192|2190|2197|203a|2039|bb|ab)(?![0-9a-f]))/i";
 const unspokenContent = { "/^content$/": [`/^\\s*(["'])(?:(?!\\1).)+\\1\\s*$/`, strandedMark] };
 
-// Capitals are for a kicker over a group (`.eyebrow`), never a value's name,
-// a state or a tag, which are said in sentence case (docs/Design.md). A rule
-// that sets a kicker's case says what it heads in a disable comment.
+// Capitals are for a kicker over a group, never a value's name, a state or a
+// tag, which are said in sentence case (docs/Design.md). The kicker is one
+// rule, `.eyebrow`, the only one that may set a text's case: a part that heads
+// a group writes the class.
 const caseProperties = ["text-transform", "font-variant-caps"];
-const disallowedProperties = (properties) => [
-  properties,
-  {
-    message: (property) =>
-      caseProperties.includes(property)
-        ? `"${property}" changes a text's case: capitals are for a kicker over a group, so say it in sentence case, or say in a disable comment what the kicker heads`
-        : `Disallowed property "${property}"`,
-  },
-];
+const caseOutsideKicker = { "/^(?!\\.eyebrow$)/": caseProperties };
+const caseMessage = (selector, property) =>
+  `"${property}" changes a text's case in "${selector}": capitals are the kicker's, so write the \`eyebrow\` class on what heads a group, or say it in sentence case`;
+const disallowedProperties = (properties) => [properties, { message: (property) => `Disallowed property "${property}"` }];
 // A reader who asks for less motion gets it from one rule in base.css, which
 // stops every transition and animation, so a part never writes its own. A
 // part that draws something else in place of a motion says so in a disable
@@ -265,8 +261,12 @@ export default {
     // preloaded beside the stylesheet so it usually is (StyleContractTests).
     "at-rule-property-required-list": { "font-face": ["font-display"] },
     "declaration-property-value-allowed-list": { "font-display": ["optional"] },
-    "property-disallowed-list": disallowedProperties(caseProperties),
-    "rule-selector-property-disallowed-list": { [`/${inTable}/`]: boxWidth },
+    "rule-selector-property-disallowed-list": [
+      // The first key a selector matches decides, so a table's selector is
+      // held to the kicker's rule too.
+      { [`/${inTable}/`]: [...boxWidth, ...caseProperties], ...caseOutsideKicker },
+      { message: (selector, property) => (caseProperties.includes(property) ? caseMessage(selector, property) : `Disallowed property "${property}" for selector "${selector}"`) },
+    ],
     "selector-disallowed-list": selectorRule([], () => childInIsMessage),
   },
   overrides: [
@@ -274,7 +274,7 @@ export default {
       // The table primitive sizes what a table holds.
       files: tablePrimitive,
       rules: {
-        "rule-selector-property-disallowed-list": null,
+        "rule-selector-property-disallowed-list": [caseOutsideKicker, { message: caseMessage }],
         "selector-disallowed-list": selectorRule(
           cellRoles,
           (selector) =>
@@ -314,6 +314,7 @@ export default {
       rules: {
         "function-disallowed-list": [`/^(${colorFunctions}|color-mix)$/i`],
         "property-disallowed-list": disallowedProperties([...caseProperties, "font-family"]),
+        "rule-selector-property-disallowed-list": null,
         "declaration-property-value-disallowed-list": disallowedValues({
           "/(^|-)font-size$/": ["/^[\\d.]/"],
           ...spacingLiteral,

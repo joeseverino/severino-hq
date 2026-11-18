@@ -35,7 +35,7 @@ the fragment `group`. Scripts and tests find each piece by its
       {% for group in palette_search_groups %}
         {# The palette's search groups, the same listbox group as the group fragment below. #}
         <div role="group" aria-labelledby="command-center-group-search-{{ group.scope }}">
-          <div class="command-center-group-label" id="command-center-group-search-{{ group.scope }}">{{ group.label|breakable }}</div>
+          <div class="command-center-group-label eyebrow" id="command-center-group-search-{{ group.scope }}">{{ group.label|breakable }}</div>
           {% for item in group.items %}
             <a id="command-center-option-search-{{ group.scope }}-{{ forloop.counter }}"
                class="command-center-option" href="{% if item.url %}{{ item.url }}{% else %}{% url 'core:audit_list' %}?q={{ q|urlencode }}{% endif %}"
@@ -80,7 +80,7 @@ label names a run of options inside the one list, so it is the group's
 label and never a heading, which a listbox would not expose.
 {% endcomment %}
 <div role="group" aria-labelledby="command-center-group-{{ group.key }}">
-  <div class="command-center-group-label" id="command-center-group-{{ group.key }}">{{ group.label|breakable }}</div>
+  <div class="command-center-group-label eyebrow" id="command-center-group-{{ group.key }}">{{ group.label|breakable }}</div>
   {% for item in group.items %}
     <a id="command-center-option-{{ group.key }}-{{ forloop.counter }}"
        class="command-center-option" href="{{ item.url }}" role="option"

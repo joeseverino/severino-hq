@@ -198,7 +198,7 @@ PARTS = (
         "connection_peering",
         "The connection page's peering of you, the link and HQ.",
         *("conn-carriage", "conn-carriage-*", "conn-headline", "conn-link", "conn-link-*", "conn-link-line"),
-        *("conn-peer", "conn-peer-name", "conn-peer-role", "conn-peering", "conn-peering-frame", "conn-row-note"),
+        *("conn-peer", "conn-peer-name", "conn-peering", "conn-peering-frame", "conn-row-note"),
         "conn-sub",
     ),
     _part(

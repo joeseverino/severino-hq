@@ -633,9 +633,11 @@ in the muted voice. Words in that voice anywhere else (a context line beside
 a value, a sentence under it) are `{% muted %}...{% endmuted %}`, a line among
 other words, or a paragraph with `element="p"`; `css` adds the classes of where
 it stands (`narrow-more`, `row-more`, `cell-part`). *Catalog:* `part/muted`.
-Capitals are for a kicker over a group (`.eyebrow`), never
-a value's name, a state or a tag; `lint:css` refuses a change of case
-anywhere but a kicker, whose rule says what it heads in its disable comment.
+Capitals are for a kicker over a group, never a value's name, a state or a
+tag. The kicker is the `eyebrow` class, one voice wherever it heads a group (a
+timeline's month, a calendar's weekdays, Command Center's group heads), and
+its part's own class says only where it stands; `lint:css` refuses a change of
+case in any rule but `.eyebrow`'s.
 
 A list of short steps (`{% steps %}`) is read down its columns, so its columns
 end within a step of each other. Each step is `{% step icon=... %}`: its icon,

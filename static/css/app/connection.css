@@ -137,10 +137,6 @@ textarea.code {
 }
 .conn-peer { display: grid; gap: var(--space-1); justify-items: start; min-width: 0; }
 .conn-peering > .conn-peer:last-child { justify-items: end; text-align: right; }
-.conn-peer-role {
-  /* stylelint-disable-next-line property-disallowed-list -- a kicker: which end of the connection (you, HQ) over that end's facts */
-  font-size: var(--text-3xs); letter-spacing: .07em; text-transform: uppercase; color: var(--muted-2);
-}
 .conn-peer strong { font-size: var(--text-md); }
 .conn-peer code { font-size: var(--text-xs); }
 .conn-link { display: grid; gap: var(--space-2); justify-items: center; min-width: 120px; }
