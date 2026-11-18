@@ -475,7 +475,6 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
   padding: var(--space-5);
   max-block-size: 70dvh;
   overflow: auto; overscroll-behavior: contain;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow-pop);
 }
 .filter-bar-choices:popover-open > .toggle-set { flex-wrap: wrap; }
 .filter-bar-choices:popover-open > .filter-bar-send { margin-inline-start: auto; }

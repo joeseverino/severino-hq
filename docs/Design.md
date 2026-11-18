@@ -1017,6 +1017,14 @@ the pointer can hover, and a press then keeps it open. WebKit has no
 opens, closes and dismisses the popover. Inside a menu every control is a plain
 row; a destructive one is only its color.
 
+Every popover open is one floating panel, a menu's, a fact's, the sections
+drawer, a filter bar's folded choices and a table's filter alike: its frame,
+corners, fill and shadow are base.css's `:popover-open` rule, and its own rule
+says only how it is laid out. Closed, a popover is part of the page, so one
+drawn in its row (the header's sections, a filter bar's choices) carries no
+frame to undo. A select's picker is drawn the same. *Gate:* `lint:css` refuses
+a floating panel's shadow anywhere but base.css.
+
 **A table's filter is a popover.** Its button names its panel with
 `popovertarget`. The panel (`popover`, its id `table-filter-<name>`) opens in
 the top layer, placed against the button by anchor positioning. It sits below

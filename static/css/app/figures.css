@@ -330,7 +330,7 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .facts-band .fact-open:is(:hover, :focus-visible) { text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: .18em; }
 .facts-band > .fact:has(> .fact-value > .fact-open:is(:hover, :focus-visible), :popover-open) { background: var(--bg-tint); }
 /* The panel: what the figure stands for, read in place, its head over it and its foot under it. */
-.fact-panel { display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); font-size: var(--text-sm); font-weight: 400; letter-spacing: normal; line-height: 1.4; text-align: start; }
+.fact-panel { display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); font-size: var(--text-sm); font-weight: 400; letter-spacing: normal; line-height: 1.4; text-align: start; }
 .fact-panel > p { margin: 0; color: var(--muted); font-size: var(--text-xs); }
 .fact-panel-head { display: grid; gap: 1px; font-size: var(--text-xs); color: var(--muted); }
 .fact-panel-head strong { color: var(--ink); font-size: var(--text-sm); }

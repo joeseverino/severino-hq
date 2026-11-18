@@ -27,9 +27,6 @@
 .overflow-menu-panel {
   min-width: 200px; max-width: min(320px, calc(100vw - 32px));
   display: flex; flex-direction: column; gap: 1px;
-  padding: var(--space-2); background: var(--surface);
-  border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: var(--shadow);
   text-align: left;
 }
 /* The nav panel's own item metrics *and* its type: same color, weight, size

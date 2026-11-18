@@ -243,14 +243,22 @@ pre ::selection { color: var(--code-ink); }
   background: var(--accent); display: inline-block;
 }
 .brand:hover { text-decoration: none; }
-/* A popover set in a row (the header's nav, base.html; a filter bar's
-   choices unfolded, forms.css): what the browser gives a popover (hidden,
-   fixed, framed, painted Canvas) is undone here; open, each is a panel
-   (routes.css, forms.css). `overflow` stays visible: the popover's own
-   `overflow: auto` would make the row a scroll container. */
-.primary-nav, .filter-bar-choices {
+/* A popover is a panel while it is open and part of the page while it is
+   not: the header's nav and a filter bar's unfolded choices are drawn in
+   their row closed (base.html, forms.css). So what the browser gives every
+   popover (fixed, framed, painted Canvas) is undone while closed, and `overflow`
+   stays visible, since the popover's own `overflow: auto` would make the row a
+   scroll container. Open, every popover is one floating panel; each says only
+   how it is laid out, and the select's picker, which no selector list can hold,
+   is drawn the same below. */
+[popover]:not(:popover-open) {
   position: static; inset: auto; inline-size: auto; block-size: auto;
   margin: 0; padding: 0; border: 0; background: none; color: inherit; overflow: visible;
+}
+:popover-open {
+  padding: var(--space-2);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow-pop);
 }
 .primary-nav {
   grid-area: nav;
@@ -357,8 +365,8 @@ select:not([multiple], [size]) { appearance: none; }
   select:not([multiple], [size])::picker-icon { display: none; }
   select:not([multiple], [size])::picker(select) {
     margin-block: var(--space-1); padding: var(--space-2);
-    border: 1px solid var(--line); border-radius: var(--radius-sm);
-    background: var(--surface); color: var(--ink); box-shadow: var(--shadow);
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--surface); color: var(--ink); box-shadow: var(--shadow-pop);
   }
   select:not([multiple], [size]) option { gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: 4px; white-space: normal; }
   select:not([multiple], [size]) option:is(:hover, :focus-visible) { outline: none; background: var(--bg-tint); }

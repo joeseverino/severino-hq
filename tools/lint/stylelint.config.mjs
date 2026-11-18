@@ -67,13 +67,19 @@ const flowGrid = { "/./": [`/${autoGrid.source}/i`] };
 const capsuleRadius = {
   "/^border(-[a-z]+)*-radius$/": ["/(?<![-\\w.])(\\d{3,}|[1-9]\\d)(\\.\\d+)?px|(?<![-\\w.])[\\d.]+r?em\\b/"],
 };
+// An open popover is one floating panel, drawn by base.css's `:popover-open`
+// rule, so no other rule casts the shadow of a panel over the page.
+const floatingShadow = { "box-shadow": ["/var\\(--shadow-pop\\)/"] };
 // One list holds every disallowed value, so its message tells an auto grid, a
-// cut and a measure from the rest. Every sheet's list holds the capsule's.
-const disallowedValues = (keys) => [
-  { ...keys, ...flowGrid, ...capsuleRadius },
+// cut and a measure from the rest. Every sheet's list holds the capsule's, and
+// every sheet's but base.css's the floating panel's.
+const disallowedValues = (keys, { floating = true } = {}) => [
+  { ...keys, ...flowGrid, ...capsuleRadius, ...(floating ? floatingShadow : {}) },
   {
     message: (property, value) =>
-      autoGrid.test(value)
+      matches(floatingShadow, property) && /--shadow-pop/.test(value)
+        ? `"${property}: ${value}" draws a floating panel of its own: an open popover is the panel base.css's \`:popover-open\` rule draws, so lay it out and leave its frame`
+        : autoGrid.test(value)
         ? `"${property}: ${value}" lays out its own auto-fit grid: a run of sibling sections or cards is the flow (\`.section-flow\`, docs/Design.md); a part that lays out something else inside itself says so in a disable comment`
         : matches(capsuleRadius, property)
         ? `"${property}: ${value}" rounds a corner with a literal: a capsule's ends are var(--radius-pill), a card's corners var(--radius) or var(--radius-sm)`
@@ -96,6 +102,9 @@ const disallowedValues = (keys) => [
 const strandedMark =
   "/(?<!\\\\[0-9a-f]{1,6}) (?:[·•→←↗›‹»«]|\\\\0*(?:b7|2022|2192|2190|2197|203a|2039|bb|ab)(?![0-9a-f]))/i";
 const unspokenContent = { "/^content$/": [`/^\\s*(["'])(?:(?!\\1).)+\\1\\s*$/`, strandedMark] };
+
+// What every component sheet holds its values to.
+const everySheet = { ...literalFontSize, ...spacingLiteral, ...systemColor, ...unspokenContent, ...cutText, ...readingMeasure };
 
 // Capitals are for a kicker over a group, never a value's name, a state or a
 // tag, which are said in sentence case (docs/Design.md). The kicker is one
@@ -248,14 +257,7 @@ export default {
       { message: "A rule keyed on data-theme paints a chosen theme apart from the system's: write the color as a light-dark() token in tokens.css" },
     ],
     "function-disallowed-list": [`/^(${colorFunctions})$/i`],
-    "declaration-property-value-disallowed-list": disallowedValues({
-      ...literalFontSize,
-      ...spacingLiteral,
-      ...systemColor,
-      ...unspokenContent,
-      ...cutText,
-      ...readingMeasure,
-    }),
+    "declaration-property-value-disallowed-list": disallowedValues(everySheet),
     // A face that arrives late and is swapped in moves every line it sets, so
     // each is shown only if it is ready for the first paint. Its file is
     // preloaded beside the stylesheet so it usually is (StyleContractTests).
@@ -286,7 +288,10 @@ export default {
     {
       // The one sheet that answers a reader who asks for less motion.
       files: [sheet("base")],
-      rules: { "media-feature-name-disallowed-list": mediaFeatures(["prefers-color-scheme"]) },
+      rules: {
+        "media-feature-name-disallowed-list": mediaFeatures(["prefers-color-scheme"]),
+        "declaration-property-value-disallowed-list": disallowedValues(everySheet, { floating: false }),
+      },
     },
     {
       // The tokens layer is where colors are written.

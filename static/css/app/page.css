@@ -377,9 +377,6 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 .nav-group > .nav-group-panel {
   position-area: block-end span-inline-end;
   min-width: 176px; display: flex; flex-direction: column; gap: 1px;
-  padding: var(--space-2); background: var(--surface);
-  border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: var(--shadow);
 }
 
 /* ── User menu ────────────────────────────────────────────────────
@@ -429,11 +426,6 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   max-width: 248px;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  box-shadow: var(--shadow);
 }
 .user-menu-panel form { margin: 0; }
 .menu-item {
