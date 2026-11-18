@@ -54,6 +54,7 @@ from hq.platform.application.findings import Findings, FindingsQuery, findings a
 from hq.platform.application.held_answer import AwaitingApproval
 from hq.platform.application.integration_specs import (
     CURRENT_API_VERSION,
+    IDEMPOTENCY_FIELD,
     IDEMPOTENCY_HEADER,
     RESERVED_QUERY_FIELD,
     TARGET_KINDS,
@@ -283,6 +284,15 @@ def _target(kind: str, words: str) -> dict[str, Any]:
     }
 
 
+def _over_http(command: Mapping[str, Any]) -> dict[str, Any]:
+    """``command``'s schema as this API takes it: its retry key in the header, never the payload."""
+
+    if IDEMPOTENCY_FIELD not in command.get("properties", {}):
+        return dict(command)
+    properties = {name: field for name, field in command["properties"].items() if name != IDEMPOTENCY_FIELD}
+    return {**command, "properties": properties}
+
+
 def request_schema(spec: Mapping[str, Any]) -> dict[str, Any]:
     """The body one capability takes: ``CallEnvelope``, its command under ``payload`` and its target typed by kind."""
 
@@ -290,7 +300,7 @@ def request_schema(spec: Mapping[str, Any]) -> dict[str, Any]:
     # schema is nested under ``payload`` those refs still resolve from the
     # document root, so hoist its definitions into the envelope root instead
     # of publishing a schema that only looks valid for flat commands.
-    command = {key: value for key, value in spec["input_schema"].items() if key != "$defs"}
+    command = {key: value for key, value in _over_http(spec["input_schema"]).items() if key != "$defs"}
     properties = dict(ENVELOPE_SCHEMA["properties"])
     envelope_payload = properties["payload"]
     # The command's own words say more than the envelope's, where it has them.
@@ -510,6 +520,7 @@ def capabilities(request: APIRequest) -> HttpResponse:
         "capabilities": [
             {
                 **spec,
+                "input_schema": _over_http(spec["input_schema"]),
                 "idempotency_key_required": key_required(Effect(spec["effect"]), request.principal),
                 "request_schema": request_schema(spec),
             }
@@ -882,6 +893,7 @@ def execute(request: APIRequest, name: str) -> HttpResponse:
         target=envelope.get("target"),
         expected_updated_at=envelope.get("expected_updated_at"),
         idempotency_key=request.headers.get(IDEMPOTENCY_HEADER),
+        key_in_payload=False,
     )
     if result.get("ok", False):
         data = {key: value for key, value in result.items() if key != "ok"}

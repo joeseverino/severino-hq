@@ -23,7 +23,6 @@ from hq.platform.application.field_masks import FIELD_PATH_PATTERN, WHOLE_RECORD
 from hq.platform.application.held_answer import HELD, AwaitingApproval
 from hq.platform.application.integration_specs import (
     FIELD_MASK,
-    IDEMPOTENCY_FIELD,
     IDEMPOTENCY_FIELD_SCHEMA,
     IDEMPOTENCY_HEADER,
     PAGE_FIELD,
@@ -391,22 +390,15 @@ class _Builder:
                 ),
             )
 
-    def retry_key(self, request: dict[str, Any]) -> dict[str, Any]:
-        """``request`` with its payload's retry key the one shared schema the header's is."""
-
-        payload = request["properties"]["payload"]
-        declared = payload.get("properties", {}).get(IDEMPOTENCY_FIELD)
-        if declared is None:
-            return request
-        if declared != IDEMPOTENCY_FIELD_SCHEMA:
-            raise OpenAPIError(f"A payload's {IDEMPOTENCY_FIELD} is not the retry key's one shape.")
-        shared = {"$ref": self.components.add(IDEMPOTENCY_KEY, dict(IDEMPOTENCY_FIELD_SCHEMA))}
-        properties = {**payload["properties"], IDEMPOTENCY_FIELD: shared}
-        return {**request, "properties": {**request["properties"], "payload": {**payload, "properties": properties}}}
-
     # Expansions: one templated operation for the route itself, then one
     # concrete path per registry entry it serves. OpenAPI matches a concrete
     # path before its template.
+
+    def retry_key(self, *, required: bool) -> dict[str, Any]:
+        """The header a change's retry key is sent in, the one way the machine API takes it."""
+
+        schema = {"$ref": self.components.add(IDEMPOTENCY_KEY, dict(IDEMPOTENCY_FIELD_SCHEMA))}
+        return {"name": IDEMPOTENCY_HEADER, "in": "header", "required": required, "schema": schema}
 
     def capability_paths(self, template: str, method: str, view: Any) -> None:
         generic = self.components.hoist(views.request_schema({"input_schema": {"type": "object"}, "target": None}))
@@ -417,19 +409,17 @@ class _Builder:
             view,
             _camel(view.__name__),
             self.tags.use(API_TAG),
-            # A parameter cannot depend on the path's name, so the key is said
-            # here as every change's own operation says it: taken, never required.
+            # A parameter cannot depend on the path's name, and this path runs
+            # reads too, so here the key every change's own operation requires
+            # is taken, never required.
             parameters=[
                 _named("capability", [spec["name"] for spec in self.capabilities], "call"),
-                {"$ref": f"#/components/parameters/{IDEMPOTENCY_KEY}"},
+                self.retry_key(required=False),
             ],
             requestBody=_body(generic),
         )
         registry = capability_registry()
-        requests = {
-            spec["name"]: self.retry_key(self.components.hoist(views.request_schema(spec)))
-            for spec in self.capabilities
-        }
+        requests = {spec["name"]: self.components.hoist(views.request_schema(spec)) for spec in self.capabilities}
         # A target several capabilities take in the same words is written once,
         # as the component named for the first of them.
         targets: dict[str, list[str]] = {}
@@ -831,12 +821,7 @@ def document() -> dict[str, Any]:
             "parameters": dict(
                 sorted(
                     {
-                        IDEMPOTENCY_KEY: {
-                            "name": IDEMPOTENCY_HEADER,
-                            "in": "header",
-                            "required": False,
-                            "schema": {"$ref": builder.components.add(IDEMPOTENCY_KEY, dict(IDEMPOTENCY_FIELD_SCHEMA))},
-                        },
+                        IDEMPOTENCY_KEY: builder.retry_key(required=True),
                         **builder.parameters,
                         "Fields": _mask({"type": "string", "pattern": FIELD_PATH_PATTERN}),
                     }.items()

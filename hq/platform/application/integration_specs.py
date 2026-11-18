@@ -88,8 +88,8 @@ def command_schema(command_type: type) -> dict[str, Any]:
 # request fingerprint names, so a key never replays across contracts.
 CURRENT_API_VERSION = 2
 
-# The one retry field every capability that changes or queues something takes,
-# the header that is its other spelling, and the one shape both hold to.
+# The one retry field every capability that changes or queues something takes
+# over MCP, the header the machine API takes it in, and the one shape both hold to.
 IDEMPOTENCY_FIELD = "idempotency_key"
 IDEMPOTENCY_HEADER = "Idempotency-Key"
 IDEMPOTENCY_KEY_LENGTH = 128
@@ -104,10 +104,9 @@ IDEMPOTENCY_KEY_SCHEMA: dict[str, Any] = {
 IDEMPOTENCY_FIELD_SCHEMA: dict[str, Any] = {
     **IDEMPOTENCY_KEY_SCHEMA,
     "description": (
-        f"One key per logical change, kept when it is retried: a repeat returns the first result instead of "
-        f"acting again. It is sent as the payload's `{IDEMPOTENCY_FIELD}` or the `{IDEMPOTENCY_HEADER}` header; "
-        "a change needs one of the two, and is refused `idempotency_key_required` with neither. Only the host's "
-        "shell is not asked."
+        "One key per logical change, kept when it is retried: a repeat returns the first result instead of "
+        "acting again. A change sent without one is refused `idempotency_key_required`; only the host's shell "
+        "is not asked."
     ),
 }
 

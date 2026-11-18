@@ -63,7 +63,7 @@ Every write goes through `execute_capability` in
 | Authorized against the caller's grant, before its payload or target is read | `_authorized_run` calls `spec.authorize` first |
 | Validated against the command's schema; an unknown field is an error | `_authorized_run` then calls `validate_command`, whose `command_adapter` closes the command's dataclass or TypedDict at every depth |
 | Run once, with every audit event naming the caller and the capability | `_run` sets the actor, interface and operation for the handler |
-| Safe to retry | an `Idempotency-Key` header on the API, or `idempotency_key` in the payload on every interface ([Safe retries](API.md#safe-retries)) |
+| Safe to retry | an `Idempotency-Key` header on the API, `idempotency_key` in the payload over MCP ([Safe retries](API.md#safe-retries)) |
 
 ### An agent is its own identity
 

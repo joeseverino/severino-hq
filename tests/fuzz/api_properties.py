@@ -10,7 +10,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import Mock, patch
-from uuid import uuid4
 
 import schemathesis
 from django.core.wsgi import get_wsgi_application
@@ -29,7 +28,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.application.capabilities import CapabilitySpec
 from hq.platform.application.domains import load, records_of
-from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD, IDEMPOTENCY_HEADER, STALE_WRITE_KEYWORD
+from hq.platform.application.integration_specs import STALE_WRITE_KEYWORD
 from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import compile_integration_graph
 from hq.platform.application.linked_accounts import bind_sign_in, sign_in_subject
@@ -122,16 +121,15 @@ def ruled(operation) -> frozenset[str]:
     return frozenset(name for name, field in payload.get("properties", {}).items() if ROW_RULES in field)
 
 
-def one_key(context, case):
-    """A valid change carries one idempotency key, by the header or the payload,
-    and each field held to a rule between its row's columns at its default.
+def as_issued(context, case):
+    """A valid call with each field held to a rule between its row's columns
+    at its default, and each value only HQ issues left out or HQ's own.
 
-    The document cannot say that the two keys, when both are sent, are the
-    same key, nor that one of them is required. Nor can it compare two fields:
-    it says such a rule in words, and the default is what every rule allows.
-    Schemathesis's way for a field that depends on another is a hook ("Use
-    `flatmap_<part>` when the strategy for one field depends on the value of
-    another", ``map_`` where the change is deterministic).
+    The document cannot compare two fields: it says such a rule in words, and
+    the default is what every rule allows. Schemathesis's way for a field that
+    depends on another is a hook ("Use `flatmap_<part>` when the strategy for
+    one field depends on the value of another", ``map_`` where the change is
+    deterministic).
     """
 
     if case.meta is None or not case.meta.generation.mode.is_positive:
@@ -140,12 +138,6 @@ def one_key(context, case):
     if isinstance(payload, dict):
         for name in ruled(case.operation):
             payload.pop(name, None)
-    if IDEMPOTENCY_HEADER in {parameter.name for parameter in case.operation.headers}:
-        sent = payload.get(IDEMPOTENCY_FIELD) if isinstance(payload, dict) else None
-        case.headers = {
-            **(case.headers or {}),
-            IDEMPOTENCY_HEADER: sent or (case.headers or {}).get(IDEMPOTENCY_HEADER) or str(uuid4()),
-        }
     # A cursor and a stale-write token are values HQ issued, which no schema
     # draws: a drawn one names no page and no version.
     if case.query:
@@ -245,7 +237,7 @@ class APIPropertyTests(InProcessAPITestCase):
         )
         schema.auth(refresh_interval=None)(Grant)
         # Named from its spec, which reading it loads: hooks.py's own import of the specs is lazy here.
-        schema.hooks.register_hook_with_name(one_key, map_case.__name__)
+        schema.hooks.register_hook_with_name(as_issued, map_case.__name__)
         schema.hooks.register_hook_with_name(by_name, flatmap_case.__name__)
         return schema
 

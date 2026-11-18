@@ -365,22 +365,17 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertTrue(response.json()["ok"])
         self.assertTrue(Project.objects.filter(slug="machine-sync").exists())
 
-    def test_a_machine_write_requires_an_idempotency_key(self):
-        with _serving():
-            response = self._post(
-                "project.create",
-                {
-                    "payload": {
-                        "name": "Once",
-                        "slug": "once",
-                        "status": "active",
-                    }
-                },
-                token=_token(scope="write_projects"),
-                idempotency_key=None,
-            )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error"]["code"], "idempotency_key_required")
+    def test_a_retry_key_in_the_payload_is_refused_over_the_api(self):
+        from hq.domains.projects.models import Project
+
+        payload = {"name": "Once", "slug": "once", "status": "active", "idempotency_key": "example-once"}
+        for header in (None, "example-once"):
+            with self.subTest(header=header), _serving():
+                response = self._post(
+                    "project.create", {"payload": payload}, token=_token(scope="write_projects"), idempotency_key=header
+                )
+                self.assertEqual(response.status_code, 400, response.content)
+        self.assertFalse(Project.objects.exists())
 
     def test_retrying_a_machine_write_replays_the_committed_response(self):
         from hq.domains.projects.models import Project

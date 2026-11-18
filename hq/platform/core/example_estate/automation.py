@@ -43,7 +43,6 @@ from hq.platform.application.automation_sources import REFRESH
 from hq.platform.application.cadence import AUTOMATION_HEARTBEAT, AUTOMATION_WORK, note_automation
 from hq.platform.application.capabilities import run_capability
 from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
-from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD
 from hq.platform.application.machines import machine_catalog
 from hq.platform.application.refusal_status import refused
 from hq.platform.application.security import MCP_INTERFACE, Principal, cli_principal, web_principal
@@ -474,9 +473,7 @@ def _held(manifest, host, agent, owner) -> None:
     ruled(owner, name, CapabilityRule.Rule.APPROVE)
     key = f"example-held-run-{manifest.id}"
     with doors.mcp():
-        answer = run_capability(
-            name, {"hosts": [host], IDEMPOTENCY_FIELD: key}, principal=agent, idempotency_key=key
-        ).answer
+        answer = run_capability(name, {"hosts": [host]}, principal=agent, idempotency_key=key).answer
     if not is_held(answer):
         raise RuntimeError(f"The agent's run was not held for a person: {answer}")
 

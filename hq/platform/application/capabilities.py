@@ -35,6 +35,7 @@ from .idempotency import (
 from .integration_specs import (
     CONSENT_KEYWORD,
     IDEMPOTENCY_FIELD,
+    IDEMPOTENCY_HEADER,
     SENT_KEYWORD,
     STALE_WRITE_KEYWORD,
     TARGET_KINDS,
@@ -266,6 +267,7 @@ def run_capability(
     target: str | int | None = None,
     expected_updated_at: str | None = None,
     idempotency_key: str | None = None,
+    key_in_payload: bool = True,
 ) -> Ran:
     """Run one capability: the one place a retry key is read, required and kept.
 
@@ -273,8 +275,9 @@ def run_capability(
     is this with the answer alone: that is the signature ``hq_sdk`` publishes to
     the extensions, while a door also hands over the key it carries beside the
     payload (the API's header, a form's hidden field) and says whether the
-    answer was replayed. A key in the payload's ``idempotency_key`` is the same
-    key sent in the command.
+    answer was replayed. A door with no place beside the payload (an MCP tool
+    call) sends the key as the payload's ``idempotency_key``; one that takes it
+    beside the payload alone says ``key_in_payload=False`` (the API's header).
     """
 
     with span(f"capability {name}", **{"hq.capability": name, "hq.interface": principal.interface}):
@@ -285,6 +288,7 @@ def run_capability(
             target=target,
             expected_updated_at=expected_updated_at,
             idempotency_key=idempotency_key,
+            key_in_payload=key_in_payload,
         )
         failed = refused(ran.answer)
         note(
@@ -302,6 +306,7 @@ def _named_run(
     target: str | int | None,
     expected_updated_at: str | None,
     idempotency_key: str | None,
+    key_in_payload: bool,
 ) -> Ran:
     spec = capability_spec(name)
     if spec is None:
@@ -320,6 +325,7 @@ def _named_run(
             target=target,
             expected_updated_at=expected_updated_at,
             sent_key=idempotency_key,
+            key_in_payload=key_in_payload,
         )
     except InvalidIdempotencyKey as exc:
         return Ran(refuse("invalid_idempotency_key", exc.reason))
@@ -345,6 +351,7 @@ def _authorized_run(
     target: str | int | None,
     expected_updated_at: str | None,
     sent_key: str | None,
+    key_in_payload: bool,
 ) -> Ran:
     """Check authority, the target, the retry key, shape and consent, then run once under the caller's key."""
 
@@ -355,15 +362,16 @@ def _authorized_run(
     refused = _target_refusal(spec, target, expected_updated_at)
     if refused is not None:
         return Ran(refused)
-    key, payload = _retry_key(spec, payload, sent_key)
+    key, payload = _retry_key(spec, payload, sent_key, key_in_payload=key_in_payload)
     if not key and key_required(spec.effect, principal):
         # A retry of a change sent without a key could act twice.
+        where = f"payload.{IDEMPOTENCY_FIELD}" if key_in_payload else f"{IDEMPOTENCY_HEADER} header"
         return Ran(
             refuse(
                 "idempotency_key_required",
-                "A capability that changes something needs an idempotency key. Send a new "
-                "payload.idempotency_key, and the same one when you retry this change.",
-                {"field": "payload.idempotency_key"},
+                f"A capability that changes something needs an idempotency key. Send a new {where}, "
+                "and the same one when you retry this change.",
+                {"field": where.removesuffix(" header")},
             )
         )
     command = validate_command(spec, payload, target)
@@ -413,26 +421,24 @@ def key_required(effect: Effect, principal: Principal) -> bool:
 KEYLESS_INTERFACES = frozenset({CLI_INTERFACE})
 
 
-def _retry_key(spec: CapabilitySpec, payload: dict[str, Any], sent: str | None) -> tuple[str, dict[str, Any]]:
+def _retry_key(
+    spec: CapabilitySpec, payload: dict[str, Any], sent: str | None, *, key_in_payload: bool
+) -> tuple[str, dict[str, Any]]:
     """``(key, payload)``: the caller's retry key, and the payload its command reads.
 
-    The key arrives beside the payload (``sent``), in it, or both alike. A read
-    takes none, so one in its payload is an unknown field. No command sees the
-    key: a retry is this runner's to answer.
+    A call's key arrives one way: beside the payload (``sent``), or, where none
+    is and the door takes one there, in it. A key in the payload otherwise, or
+    of a read, is a field the command does not have. No command sees the key:
+    a retry is this runner's to answer.
     """
 
     if not spec.effect.changes or not isinstance(payload, dict):
         return "", payload
+    if sent is not None or not key_in_payload or IDEMPOTENCY_FIELD not in payload:
+        return ("" if sent is None else _valid_key(sent)), payload
     # A payload's key is judged whenever the field is there: a null is a key
     # of the wrong shape, as the document declares it, never a key left out.
-    given = (
-        *(() if sent is None else (sent,)),
-        *((payload[IDEMPOTENCY_FIELD],) if IDEMPOTENCY_FIELD in payload else ()),
-    )
-    keys = {_valid_key(key) for key in given}
-    if len(keys) > 1:
-        raise InvalidIdempotencyKey("The request sent two different idempotency keys.")
-    key = keys.pop() if keys else ""
+    key = _valid_key(payload[IDEMPOTENCY_FIELD])
     return key, {name: value for name, value in payload.items() if name != IDEMPOTENCY_FIELD}
 
 

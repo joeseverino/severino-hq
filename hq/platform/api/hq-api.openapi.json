@@ -1114,7 +1114,7 @@
       "IdempotencyKey": {
         "in": "header",
         "name": "Idempotency-Key",
-        "required": false,
+        "required": true,
         "schema": {
           "$ref": "#/components/schemas/IdempotencyKey"
         }
@@ -4163,9 +4163,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "keys": {
                 "description": "The set-aside items to bring back into the queue.",
                 "items": {
@@ -4238,9 +4235,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "keys": {
                 "description": "Items to set aside as the queue holds them now.",
                 "items": {
@@ -4655,9 +4649,6 @@
             "additionalProperties": false,
             "description": "The theme to draw your pages in.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "theme": {
                 "description": "The theme to draw your pages in.",
                 "enum": [
@@ -4711,9 +4702,6 @@
               "approval_id": {
                 "description": "The held request to withdraw. The `approval.id` its held answer carried.",
                 "type": "string"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               }
             },
             "required": [
@@ -4867,9 +4855,6 @@
               "tools": "Tools",
               "training": "Training"
             }
-          },
-          "idempotency_key": {
-            "$ref": "#/components/schemas/IdempotencyKey"
           },
           "infrastructure": {
             "$ref": "#/components/schemas/AssetInfrastructure",
@@ -5311,9 +5296,6 @@
                   "training": "Training"
                 }
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "infrastructure": {
                 "$ref": "#/components/schemas/AssetInfrastructure",
                 "maxLength": 300
@@ -5446,9 +5428,6 @@
             "additionalProperties": false,
             "description": "The run to cancel, by its operation id.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "operation_id": {
                 "description": "The run to cancel. Its `operation.id`, from the answer that queued it, or its held request's `operation` once approved.",
                 "type": "string"
@@ -5476,9 +5455,6 @@
             "additionalProperties": false,
             "description": "A Refresh takes nothing but why it was asked: the repository is the\nhost's configuration.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "reason": {
                 "default": "",
                 "description": "Why it is refreshed, kept with the scan.",
@@ -5690,9 +5666,6 @@
                   "It cannot end before it starts."
                 ]
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "interval": {
                 "$ref": "#/components/schemas/CalendarEntryInterval",
                 "default": 1
@@ -5884,9 +5857,6 @@
                   "It cannot end before it starts."
                 ]
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "interval": {
                 "$ref": "#/components/schemas/CalendarEntryInterval"
               },
@@ -5971,9 +5941,6 @@
             "additionalProperties": false,
             "description": "One calendar source, and whether the month shows it.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "shown": {
                 "description": "Whether the month shows it.",
                 "type": "boolean"
@@ -7645,9 +7612,6 @@
               "assigned_to": {
                 "$ref": "#/components/schemas/Assignee"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "status": {
                 "$ref": "#/components/schemas/ReviewStatus"
               }
@@ -8057,9 +8021,6 @@
                   "video": "Video"
                 }
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
                 "default": "",
@@ -8449,9 +8410,6 @@
                   "service_page": "Service page",
                   "video": "Video"
                 }
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
@@ -8846,9 +8804,6 @@
             "additionalProperties": false,
             "description": "Whether the machine's telemetry is shown on the dashboard.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "selected": {
                 "description": "Whether the dashboard shows this machine's telemetry.",
                 "type": "boolean"
@@ -8925,11 +8880,7 @@
       "DashboardRefreshCommand": {
         "additionalProperties": false,
         "description": "A refresh names nothing: which panels it asks for is HQ's to work out.",
-        "properties": {
-          "idempotency_key": {
-            "$ref": "#/components/schemas/IdempotencyKey"
-          }
-        },
+        "properties": {},
         "type": "object"
       },
       "DashboardSettingsSaved": {
@@ -8973,9 +8924,6 @@
             "additionalProperties": false,
             "description": "Where the weather is read for, and what the glance strip calls its panels.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "infrastructure_label": {
                 "default": "",
                 "description": "What the infrastructure panel is called.",
@@ -9266,9 +9214,6 @@
         "properties": {
           "confirm": {
             "$ref": "#/components/schemas/Confirm"
-          },
-          "idempotency_key": {
-            "$ref": "#/components/schemas/IdempotencyKey"
           }
         },
         "required": [
@@ -9531,9 +9476,6 @@
                 "default": "",
                 "maxLength": 400,
                 "title": "GitHub path"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "last_reviewed": {
                 "$ref": "#/components/schemas/LastReviewed",
@@ -9902,9 +9844,6 @@
                 "default": false,
                 "title": "Confirm the delete"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "manifest": {
                 "description": "The documentation records to sync, one per doc.",
                 "items": {
@@ -10054,9 +9993,6 @@
                 "$ref": "#/components/schemas/GithubPath",
                 "maxLength": 400,
                 "title": "GitHub path"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "last_reviewed": {
                 "$ref": "#/components/schemas/LastReviewed"
@@ -10787,9 +10723,6 @@
               "date": {
                 "$ref": "#/components/schemas/ExpenseDate"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "item": {
                 "$ref": "#/components/schemas/ExpenseItem",
                 "maxLength": 200,
@@ -11137,9 +11070,6 @@
               },
               "date": {
                 "$ref": "#/components/schemas/ExpenseDate"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "item": {
                 "$ref": "#/components/schemas/ExpenseItem",
@@ -11588,9 +11518,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "login": {
                 "description": "The GitHub login whose profile to read.",
                 "type": "string"
@@ -12036,9 +11963,6 @@
                 "description": "Check the import without saving anything.",
                 "type": "boolean"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "projects": {
                 "description": "Projects to import, each laid over the one of its slug.",
                 "items": {
@@ -12120,9 +12044,6 @@
                 "default": false,
                 "title": "Confirm the delete"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "manifest": {
                 "description": "The records to sync, one per entry.",
                 "items": {
@@ -12189,7 +12110,7 @@
         "type": "object"
       },
       "IdempotencyKey": {
-        "description": "One key per logical change, kept when it is retried: a repeat returns the first result instead of acting again. It is sent as the payload's `idempotency_key` or the `Idempotency-Key` header; a change needs one of the two, and is refused `idempotency_key_required` with neither. Only the host's shell is not asked.",
+        "description": "One key per logical change, kept when it is retried: a repeat returns the first result instead of acting again. A change sent without one is refused `idempotency_key_required`; only the host's shell is not asked.",
         "examples": [
           "7d9f3c2e-4b1a-4e8f-9a6d-0c5b2e1f8a73"
         ],
@@ -12591,9 +12512,6 @@
                 "description": "Read every connection now.",
                 "type": "boolean"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "kind": {
                 "$ref": "#/components/schemas/SweptKind",
                 "default": "",
@@ -12648,9 +12566,6 @@
                 "default": "",
                 "description": "The hostname whose record to adopt.",
                 "type": "string"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "key": {
                 "default": "",
@@ -12764,9 +12679,6 @@
                 "default": true,
                 "description": "Whether HQ keeps the live record as it expects.",
                 "type": "boolean"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "key": {
                 "$ref": "#/components/schemas/ManagedResourceKey",
@@ -12965,9 +12877,6 @@
                 "description": "Whether HQ keeps the live record as it expects.",
                 "type": "boolean"
               },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "key": {
                 "$ref": "#/components/schemas/ManagedResourceKey",
                 "maxLength": 180,
@@ -13019,9 +12928,6 @@
                 "x-hq-records": {
                   "resource": "services"
                 }
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               }
             },
             "required": [
@@ -13046,9 +12952,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "token": {
                 "description": "The token HQ gave the live domain when it read it.",
                 "type": "string"
@@ -15267,9 +15170,6 @@
         "additionalProperties": false,
         "description": "The command: the fields its input schema names.",
         "properties": {
-          "idempotency_key": {
-            "$ref": "#/components/schemas/IdempotencyKey"
-          },
           "reason": {
             "default": "",
             "description": "Why it is done, kept with the operation it queues.",
@@ -15820,9 +15720,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "keys": {
                 "description": "Every pin of that type, in order.",
                 "items": {
@@ -15872,9 +15769,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "key": {
                 "description": "Which pin.",
                 "pattern": "\\S",
@@ -15924,9 +15818,6 @@
             "additionalProperties": false,
             "description": "The command: the fields its input schema names.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "key": {
                 "description": "The one to pin or unpin.",
                 "pattern": "\\S",
@@ -16683,9 +16574,6 @@
             "default": "",
             "format": "textarea"
           },
-          "idempotency_key": {
-            "$ref": "#/components/schemas/IdempotencyKey"
-          },
           "name": {
             "$ref": "#/components/schemas/ProjectName",
             "maxLength": 160,
@@ -16801,11 +16689,7 @@
           "payload": {
             "additionalProperties": false,
             "description": "A run of every opted-in repository now.",
-            "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              }
-            },
+            "properties": {},
             "type": "object"
           }
         },
@@ -16825,9 +16709,6 @@
             "properties": {
               "dependency_updates": {
                 "$ref": "#/components/schemas/DependencyUpdates"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               }
             },
             "required": [
@@ -16972,11 +16853,7 @@
           "payload": {
             "additionalProperties": false,
             "description": "What is acted on is the target; there is nothing else to say.",
-            "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              }
-            },
+            "properties": {},
             "type": "object"
           },
           "target": {
@@ -17177,9 +17054,6 @@
               "description": {
                 "$ref": "#/components/schemas/ProjectDescription",
                 "format": "textarea"
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "name": {
                 "$ref": "#/components/schemas/ProjectName",
@@ -18054,9 +17928,6 @@
                   }
                 ],
                 "description": "The date on the receipt."
-              },
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
               },
               "notes": {
                 "$ref": "#/components/schemas/Notes",
@@ -22129,9 +22000,6 @@
             "additionalProperties": false,
             "description": "The page that was opened: what it is about, and which one.",
             "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
               "name": {
                 "description": "Which one.",
                 "type": "string"
@@ -27396,7 +27264,12 @@
             }
           },
           {
-            "$ref": "#/components/parameters/IdempotencyKey"
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/IdempotencyKey"
+            }
           }
         ],
         "requestBody": {
