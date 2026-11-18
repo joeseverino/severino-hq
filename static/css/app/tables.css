@@ -152,7 +152,7 @@
   background-repeat: no-repeat;
 }
 /* Hung below its button from the button's left edge; one that would cross the screen's right edge hangs from the button's right edge instead, which the browser decides against the viewport the top layer places it in. */
-.table-filter-options { position-anchor: --filter; inset: auto; top: calc(anchor(bottom) + 4px); left: anchor(left); position-try-fallbacks: flip-inline; margin: 0; min-width: min(220px, anchor-size(width)); max-width: calc(100vw - 32px); max-height: 280px; overflow: auto; color: inherit; gap: var(--space-1); padding: var(--space-4); }
+.table-filter-options { position-anchor: --filter; inset: auto; top: calc(anchor(bottom) + 4px); left: anchor(left); position-try-fallbacks: flip-inline; margin: 0; min-width: min(220px, anchor-size(width)); max-width: calc(100vw - 32px); max-height: 280px; gap: var(--space-1); }
 .table-filter-options:popover-open { display: grid; }
 .table-filter-options label { display: flex; gap: var(--space-4); align-items: center; padding: var(--space-3); border-radius: 4px; font-size: var(--text-sm); }
 .table-filter-options label:hover { background: var(--surface-2); }

@@ -308,7 +308,6 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   position-try-fallbacks: flip-inline;
   inset: auto;
   margin: var(--space-3) 0 0 var(--content-pad);
-  color: inherit;
 }
 /* Each panel says how it is laid out open; closed, it is not drawn. */
 [data-menu] > [popover]:not(:popover-open) { display: none; }

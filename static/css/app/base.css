@@ -212,7 +212,7 @@ pre ::selection { color: var(--code-ink); }
   margin: 0; padding: 0; border: 0; background: none; color: inherit; overflow: visible;
 }
 :popover-open {
-  padding: var(--space-2);
+  padding: var(--space-2); color: inherit;
   border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--surface); box-shadow: var(--shadow-pop);
 }
