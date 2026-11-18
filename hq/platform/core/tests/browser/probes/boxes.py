@@ -249,23 +249,26 @@ SMALL_TARGETS = (
 
 
 OVERLAPS = (
-    "() => {"
+    "(floating) => {"
     + DESCRIBE
     + """
   // What a reader sees of an item is what it draws: its words and the boxes
   // of what it holds to press or fill in, else its own box, so two items
-  // whose boxes cross are judged by what each draws there.
+  // whose boxes cross are judged by what each draws there. A dialog or a
+  // popover it holds is drawn in the top layer, over the page by design, so
+  // none of what that shows is the item's.
   const pressed = 'img, svg, canvas, video, iframe, input, select, textarea, button, a.btn, .pill';
+  const own = (el, part) => { const layer = part.closest(floating); return !layer || layer === el || !el.contains(layer); };
   const drawn = (el) => {
     const rects = [];
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (!node.textContent.trim() || !node.parentElement.checkVisibility()) continue;
+      if (!node.textContent.trim() || !node.parentElement.checkVisibility() || !own(el, node.parentElement)) continue;
       const range = document.createRange();
       range.selectNodeContents(node);
       rects.push(...range.getClientRects());
     }
-    for (const part of el.querySelectorAll(pressed)) if (part.checkVisibility()) rects.push(part.getBoundingClientRect());
+    for (const part of el.querySelectorAll(pressed)) if (part.checkVisibility() && own(el, part)) rects.push(part.getBoundingClientRect());
     return rects.length ? rects : [el.getBoundingClientRect()];
   };
   const cross = (ra, rb) => [
@@ -467,7 +470,7 @@ CHECKS = {
     "sideways": Check(
         (SIDEWAYS, SELECTORS["sideways"]), reader_sees="content past the page's edge or clipped out of its box"
     ),
-    "overlaps": Check(OVERLAPS, reader_sees="one box drawn over another"),
+    "overlaps": Check((OVERLAPS, SELECTORS["floating"]), reader_sees="one box drawn over another"),
     "into a neighbor": Check(INTO_A_NEIGHBOR, reader_sees="what a box holds drawn over the box beside it"),
     "small targets": Check(
         (SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN, SELECTORS["floating"]]),

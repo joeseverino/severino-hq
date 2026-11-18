@@ -799,6 +799,53 @@ class ComponentLayoutTests(LayoutBrowserTests):
         found = [line for line in self.page.evaluate(CELLS) if "example-" in line]
         self.assertEqual([line.split(" runs ")[0] for line in found], ["div.example-box"])
 
+    def test_a_popover_an_item_holds_is_not_drawn_over_its_neighbor_and_the_item_s_own_words_are(self):
+        """A grid item laid across the track of the item beside it (a phone
+        row's name cell under its buttons) is judged by what it draws: a
+        popover it holds (the name's origin panel) is drawn in the top layer,
+        so shown over the neighbor it is no overlap, while the item's own
+        words run under the neighbor are."""
+
+        from hq.platform.core.tests.browser.probes.boxes import OVERLAPS
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          for (const name of ['example-held', 'example-spilled']) {
+            const grid = document.createElement('div');
+            grid.style.cssText = 'display: grid; grid-template-columns: 200px 200px; inline-size: 400px';
+            const item = document.createElement('div');
+            item.className = name;
+            item.style.cssText = 'grid-area: 1 / 1 / 2 / 3; align-self: start; margin: 0; white-space: nowrap';
+            item.textContent = name === 'example-held' ? 'A name' : 'A name long enough to run on under the button';
+            const neighbor = document.createElement('button');
+            neighbor.style.cssText = 'grid-area: 1 / 2 / 2 / 3; align-self: start; margin: 0';
+            neighbor.textContent = 'Approve';
+            grid.append(item, neighbor);
+            document.querySelector('main').append(grid);
+            if (name === 'example-held') {
+              const panel = document.createElement('div');
+              panel.popover = 'manual';
+              panel.textContent = 'Why it needs you';
+              const at = neighbor.getBoundingClientRect();
+              panel.style.cssText = `margin: 0; inset: auto; left: ${at.left}px; top: ${at.top}px`;
+              item.append(panel);
+              panel.showPopover();
+            }
+          }
+        }""")
+        found = self.page.evaluate(OVERLAPS, SELECTORS["floating"])
+        self.assertEqual(
+            [line.split(" by ")[0] for line in found if "example-" in line], ["div.example-spilled overlaps button"]
+        )
+        held = self.page.evaluate("""() => {
+          const item = document.querySelector('.example-held');
+          const neighbor = item.nextElementSibling;
+          const panel = item.querySelector('[popover]').getBoundingClientRect();
+          const at = neighbor.getBoundingClientRect();
+          return panel.left < at.right && panel.right > at.left && panel.top < at.bottom && panel.bottom > at.top;
+        }""")
+        self.assertTrue(held, "the held panel is shown over the neighbor")
+
     def test_a_word_wider_than_its_chip_may_break_and_a_short_one_in_a_wide_chip_may_not(self):
         """A run is measured against the box it lays out in: a digest that
         fits its cell but not the padded chip in it breaks wherever the column
