@@ -72,6 +72,10 @@ COLUMN = '<div class="content">{}</div>'
 # it stands on; in the gallery that page is every part's, which the first
 # such part would scroll to on load, so the gallery draws none.
 AUTOFOCUS = re.compile(r"(<[a-zA-Z][^<>]*?)\s+autofocus(?:=(?:\"[^\"]*\"|'[^']*'|[^\s>]*))?(?=[\s/>])")
+# A link of a part to an address of HQ's, as a tag draws it. An example's
+# addresses are made up, so in the gallery each such link points at the
+# example's own region on the page, which every HQ has.
+OWN_LINK = re.compile(r'(<a\b[^<>]*?\shref=")/(?!/)[^"]*(")')
 
 
 def gallery_body() -> str:
@@ -85,7 +89,8 @@ def gallery_body() -> str:
     dialog, a button's form), are the part's alone there, so no example meets
     another or the page around it, and the page's scripts, which read the
     document, never act on one. Focus does cross a shadow root, so no part
-    keeps its autofocus (``AUTOFOCUS``)."""
+    keeps its autofocus (``AUTOFOCUS``), and a link does leave the page, so
+    each of HQ's addresses points at the entry's region (``OWN_LINK``)."""
 
     drawn: list[str] = []
     families: list[str] = []
@@ -93,14 +98,16 @@ def gallery_body() -> str:
     for name, entry in CATALOG.items():
         if entry.frame:
             continue
-        anchor = ""
+        anchor = f"design-{name}"
         if (family := name.partition("/")[0]) not in families:
             families.append(family)
-            anchor = f' id="design-{family}"'
+            anchor = f"design-{family}"
         heading = render_to_string(NAME, {"heading": escape(name)})
-        part = COLUMN.format(AUTOFOCUS.sub(r"\1", entry.part(name)))
+        markup = OWN_LINK.sub(rf"\g<1>#{escape(anchor)}\g<2>", entry.part(name))
+        part = COLUMN.format(AUTOFOCUS.sub(r"\1", markup))
         drawn.append(
-            f'<div{anchor} role="region" aria-label="{escape(name)}"><div class="specimen-name">{heading}</div>'
+            f'<div id="{escape(anchor)}" role="region" aria-label="{escape(name)}">'
+            f'<div class="specimen-name">{heading}</div>'
             f'<div class="specimen"><template shadowrootmode="open">{sheets}{part}</template></div></div>'
         )
     navigation = PageNavigation(tuple(PageSection(f"design-{family}", family) for family in families), label="Families")

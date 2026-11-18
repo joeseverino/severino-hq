@@ -72,7 +72,7 @@ class DesignPageTests(TestCase):
         # a shadow root, so nothing of an example meets the page or another.
         regions = [element for element in _light(self.gallery) if element.attrs.get("role") == "region"]
         roots = self.gallery.count('<template shadowrootmode="open">')
-        ours = {f"design-{name.partition('/')[0]}" for name in catalog.CATALOG}
+        ours = {f"design-{part}" for name in catalog.CATALOG for part in (name, name.partition("/")[0])}
 
         self.assertEqual(roots, len(regions))
         self.assertEqual(

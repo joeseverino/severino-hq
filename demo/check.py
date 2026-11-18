@@ -13,7 +13,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
-from demo.examples import own, split
+from demo.examples import own
 from demo.serve import serving
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDTHS
@@ -256,14 +256,10 @@ class DemoSiteTests(unittest.TestCase):
         cls.origin = cls.enterClassContext(serving(OUT))
 
     def test_every_address_a_page_names_is_in_the_demo(self):
-        # An example the Design page draws in a shadow root links where it
-        # links in HQ, nowhere for its synthetic addresses; what it loads (a
-        # sheet, an image) is held as the page's own addresses are.
+        # The examples the Design page draws in shadow roots included.
         missing = set()
         for page in OUT.rglob("*.html"):
-            mine, examples = split(page.read_text(encoding="utf-8"))
-            loaded = [address for address in _ADDRESS.findall(examples) if address.startswith("/static/")]
-            for address in [*_ADDRESS.findall(mine), *loaded]:
+            for address in _ADDRESS.findall(page.read_text(encoding="utf-8")):
                 if not _exists(unescape(address)):
                     missing.add(f"{page.relative_to(OUT)} -> {address}")
         self.assertEqual(sorted(missing)[:20], [])
