@@ -123,7 +123,16 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* A legend after the drawing it keys stands apart from it; one that opens what holds it (a figure's head, the row over a calendar's days) takes its place from that. */
 .chart-legend:not(:first-child) { margin-block: var(--space-6) var(--space-1); }
 .chart-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
-.chart-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; }
+/* A mark: a dot for a state or a kind, a key (`swatch-key`, square) for a series
+   or a category, one size wherever it stands, colored by its slot or what its
+   part sets. A part that draws one writes the class; one drawn as generated
+   content is named here. */
+.swatch, .swatch-key, .toned-dot::before, .month-item::before, .visit-status:not(:empty)::before, .brand::before {
+  display: inline-block; flex: none;
+  inline-size: var(--mark-size, 8px); block-size: var(--mark-size, 8px);
+  border-radius: 50%; background: var(--slot, currentColor);
+}
+.swatch-key, .brand::before { border-radius: 2px; }
 /* `.chart-scroll` has no rule on purpose: a chart has no floor, so there is nothing to scroll, and an end label hangs into the card's padding. */
 /* Fills the card at a height this sheet decides: its parts are rectangles and rules, so `preserveAspectRatio="none"` stretches them truthfully, the labels are HTML so no type stretches, and a floor could only ever turn into a scrollbar. */
 .bar-chart {
@@ -143,8 +152,6 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .series-8 { --slot: var(--series-8); }
 .series-9 { --slot: var(--series-9); }
 .series-10 { --slot: var(--series-10); }
-/* A swatch is an `<i>` carrying a slot (a legend's key, a calendar's dot, a week's mark); a route's band sets the same property. */
-i:is([class*="series-"], [class*="chart-band-"]) { background: var(--slot); }
 .bar-chart rect, .allocation rect { fill: var(--slot); }
 /* A 2px surface gap between stacked segments, so adjacent fills read as separate marks; also carries the CVD relief for close hues. */
 .bar-chart rect { stroke: var(--surface); stroke-width: 2; paint-order: stroke; transition: opacity .08s ease; }

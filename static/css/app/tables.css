@@ -255,7 +255,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .allocation-legend.stacked b { min-inline-size: 5.5em; }
 .allocation-legend > * { display: inline-flex; align-items: baseline; gap: var(--space-4); color: inherit; }
 .allocation-legend a:hover { color: var(--accent); }
-.allocation-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; flex: none; align-self: center; }
+.allocation-legend i { align-self: center; }
 .allocation-legend b { font-weight: 650; font-feature-settings: "tnum"; }
 .allocation-legend > * > span { color: var(--muted); }
 

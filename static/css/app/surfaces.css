@@ -71,7 +71,7 @@
   /* The dots keep to the top as well, at least the value's line tall, so a
      single row of them stands at the middle of the value's line. */
   .fact-figure > .figure-dots { align-self: flex-start; min-block-size: 1lh; align-content: center; align-items: center; }
-  .figure-dot { position: relative; display: block; width: 10px; height: 10px; border: 1.5px solid var(--muted-2); border-radius: 50%; }
+  .figure-dot { --mark-size: 10px; position: relative; display: block; border: 1.5px solid var(--muted-2); background: none; }
   .figure-dot.is-filled { border-color: var(--ok); background: var(--ok); }
   /* A dot that leads somewhere is hit through a square around it (page.css),
      so dots that lead somewhere are set a square apart. */

@@ -43,7 +43,7 @@
   & > .strut { display: contents; }
   & > .strut::after {
     content: attr(data-strut); display: block; grid-area: 1 / 1; visibility: hidden; block-size: 0; overflow: hidden;
-    padding-inline: calc(var(--visit-dot) + var(--space-4)) var(--space-2); white-space: nowrap;
+    padding-inline: calc(var(--mark-size) + var(--space-4)) var(--space-2); white-space: nowrap;
   }
   & > .visit-status {
     grid-area: 1 / 1;

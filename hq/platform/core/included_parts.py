@@ -130,7 +130,7 @@ PARTS = (
         "activity_calendar",
         "One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`.",
         *("activity-calendar", "calendar-controls", "calendar-date", "calendar-day", "calendar-dot"),
-        *("calendar-key-missed", "calendar-legend", "calendar-marks", "calendar-period", "calendar-weekday"),
+        *("calendar-legend", "calendar-marks", "calendar-period", "calendar-weekday"),
         *("is-filler", "is-missed"),
         draws=(CHART, MONTH_GRID, WEEK_PLAN),
         public=True,
@@ -163,7 +163,7 @@ PARTS = (
     _part(
         "calendar_sources",
         "The calendar's sources, each a toggle with its color swatch.",
-        *("calendar-source", "calendar-source-failure", "calendar-source-note", "calendar-sources", "calendar-swatch"),
+        *("calendar-source", "calendar-source-failure", "calendar-source-note", "calendar-sources"),
         draws=(CHART, MONTH_GRID),
     ),
     _part(

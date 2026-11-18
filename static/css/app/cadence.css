@@ -154,7 +154,7 @@
    heading's or a menu's own words do. It never moves, since a moving dot says
    a thing is live. */
 .toned-dot { display: inline-flex; align-items: center; gap: var(--space-3); }
-.toned-dot::before { content: "" / ""; inline-size: 8px; block-size: 8px; flex: none; border-radius: 50%; background: var(--toned); }
+.toned-dot::before { content: "" / ""; background: var(--toned); }
 /* A state led by its mark (`icon=`) in place of the dot: inline, so a cell
    still cuts its words beside it, set on the words' baseline, and in the
    state's tone even where the words take the ink around them. */

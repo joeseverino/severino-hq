@@ -1223,6 +1223,14 @@ and new value share one baseline. A narrow line breaks only between the two
 values, with the arrow kept beside the new one, and a reader hears "1.2.3 to
 1.3.0" rather than an arrow.
 
+**A dot is a swatch.** A dot for a state or a kind, and a key for a series
+or a category (`swatch-key`, square), is the `swatch` class, colored by its
+`series-N` slot or what its part sets, one size wherever it stands: a legend's
+key is the mark it keys, and no part writes a dot's size or shape of its own.
+A mark drawn as generated content joins the swatch's rule in figures.css. A
+smaller one in a dense calendar day, or the dots figure's larger one, sets
+`--mark-size`.
+
 **A mark drawn by CSS is not read.** Generated content (`content:`) says what
 a reader hears after a slash: `"›" / ""` for a chevron, a separator or an
 arrow, the words themselves for text that means something. *Gate:* `lint:css`

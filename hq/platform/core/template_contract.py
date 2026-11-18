@@ -118,6 +118,8 @@ CLASSES = (
     "section-foot",
     "split",
     "subtle-link",
+    "swatch",
+    "swatch-key",
     "table-scroll",
     "tight-col",
     "two-col",

@@ -43,7 +43,7 @@
 .topology-node-list { padding-block-end: var(--space-6); }
 .topology-lane:not(:has(.topology-node:not([hidden]))) { display: none; }
 .topology-node-list > * { break-inside: avoid; }
-.topology-kind-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.topology-kind-mark { background: var(--muted); }
 .topology-kind-controller { background: var(--topology-controller); }
 .topology-kind-connection { background: var(--accent-2); }
 .topology-kind-ability { background: var(--topology-ability); }
@@ -157,15 +157,14 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
 }
 .ask.ask-quiet[hidden] { display: none; }
 /* The dot's size, which a page's note keeps room for beside its words (cuts.css). */
-.visit-status, .visit-slot { --visit-dot: 6px; }
+.visit-status, .visit-slot { --mark-size: 6px; }
 .visit-status { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; overflow-wrap: anywhere; }
 /* A dot before what it says, in the tone of how the read stands: moving
    while it is read, the way a live reading does (connection.css). A page's
    note stands apart from its ask, so it reads the state off the form it
    names. */
 .visit-status:not(:empty)::before {
-  content: ""; display: inline-block; inline-size: var(--visit-dot); block-size: var(--visit-dot);
-  margin-inline-end: var(--space-4); border-radius: 50%; vertical-align: .1em;
+  content: "" / ""; margin-inline-end: var(--space-4); vertical-align: .1em;
   background: var(--muted-2);
 }
 .visit-status:is(.ask[aria-busy="true"] > *, :root:has(.ask[aria-busy="true"] > #page-visit) [form="page-visit"])::before { background: var(--accent); animation: conn-pulse 1.8s ease-in-out infinite; }

@@ -25,10 +25,7 @@
 
 /* A record list row's category as its color (`ListRow.category`), before
    its title; the row says the category in words too. */
-.cat-dot {
-  width: 7px; height: 7px; border-radius: 2px; display: inline-block; flex-shrink: 0;
-  background: var(--muted-2);
-}
+.cat-dot { background: var(--muted-2); }
 .cat-dot.cat-homelab { background: var(--cat-homelab); }
 .cat-dot.cat-automation { background: var(--cat-automation); }
 .cat-dot.cat-wordpress_security { background: var(--cat-wordpress-security); }

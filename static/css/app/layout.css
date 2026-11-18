@@ -195,7 +195,6 @@
 /* A mark is a dot in its source's color: filled once done, a ring while
    planned, a ring struck through once missed. Shape carries the state, so the
    source's color stays the only color. */
-.month-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--slot); }
 .month-item-dot { display: none; }
 .month-mark.is-planned { background: transparent; box-shadow: inset 0 0 0 1.5px var(--slot); }
 .month-mark.is-missed {
@@ -209,7 +208,7 @@
 /* A title cut on its one line: its names are text the cut takes, not boxes,
    so no part of one draws past the cut, beyond the day's edge. */
 :is(.month-item > span, .month-span) :is(.token, .whole, .part) { display: contents; }
-.month-item::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--slot); transform: translateY(-1px); }
+.month-item::before { content: "" / ""; --mark-size: 6px; transform: translateY(-1px); }
 .month-item.is-planned::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--slot); }
 .month-item time { color: var(--muted); font-variant-numeric: tabular-nums; }
 .month-item:hover > span { color: var(--accent); }
@@ -219,7 +218,6 @@
 .month-more { display: block; color: var(--muted); font-size: var(--text-3xs); font-weight: 600; text-decoration: none; }
 .month-more:hover { color: var(--accent); }
 /* A source's color alone (partials/_calendar_sources.html#swatch). */
-.calendar-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
 .calendar-sources { display: grid; gap: var(--space-1); }
 /* A source is a toggle ({% button %} with `post` and `pressed`): the whole line is
    the button, its box drawn before the name and filled in its color when
@@ -256,7 +254,7 @@
 /* A day drawn small is still drawn the size of a target, so its own box is
    what is hit, and a dot that names it stands in on it. */
 .month-grid.is-compact .month-date { min-width: var(--target-min); height: var(--target-min); font-size: var(--text-2xs); }
-.month-grid.is-compact .month-mark { width: 6px; height: 6px; }
+.month-grid.is-compact .month-mark { --mark-size: 6px; }
 /* A narrow day's marks narrow to slivers before they would leave its head. */
 .month-grid.is-compact .month-day-head > .month-mark { flex: 0 1 auto; min-width: 0; }
 /* A phone shows where things are, not what: dots and slivers, and the day
@@ -265,7 +263,7 @@
   .month-day { height: 3.25rem; }
   :is(.month-item, .month-more) { display: none; }
   .month-item-dot { display: inline-block; }
-  .month-mark { width: 6px; height: 6px; }
+  .month-mark { --mark-size: 6px; }
   .month-day-head > .month-mark { flex: 0 1 auto; min-width: 0; }
   .month-span { height: 4px; padding: 0; background: var(--slot); font-size: 0; }
   .month-date { min-width: var(--target-min); height: var(--target-min); }
@@ -291,7 +289,6 @@
 .week-plan-day.is-planned { background: var(--surface-2); border-color: var(--line-2); }
 .week-plan-day.is-planned .week-plan-label { color: var(--ink); }
 .week-plan-mark { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 8px; }
-.week-plan-mark i { width: 8px; height: 8px; border-radius: 50%; display: block; }
 .week-plan-note { color: var(--muted); font-size: var(--text-3xs); line-height: 1.2; text-align: center; }
 .week-plan-notes { margin: var(--space-6) 0 0; display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-9); }
 .week-plan-notes li { display: flex; align-items: baseline; gap: var(--space-3); font-size: var(--text-sm); }
@@ -337,14 +334,6 @@
 /* The count of planned days kept is one phrase: it keeps its line, beside the
    legend while both fit and under it once they do not. */
 .calendar-legend > .count { flex: none; white-space: nowrap; }
-.calendar-key-missed {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: transparent;
-  border: 1.5px solid var(--muted-2);
-}
 .activity-calendar { width: 100%; border-collapse: separate; border-spacing: 3px; table-layout: fixed; }
 .calendar-weekday {
   padding: 0 0 var(--space-1);
@@ -360,7 +349,6 @@
 }
 .calendar-date { display: block; color: var(--muted); font-size: var(--text-2xs); line-height: 1; font-weight: 550; font-feature-settings: "tnum"; }
 .calendar-marks { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 10px; margin-top: var(--space-3); }
-.calendar-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .calendar-dot.is-missed { background: transparent; border: 1.5px solid var(--muted-2); }
 /* A day still ahead is drawn faintly: information, not a verdict. Drawn like a
    miss, every plan would look broken early in the week. */

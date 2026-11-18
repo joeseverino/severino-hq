@@ -179,10 +179,7 @@ pre ::selection { color: var(--code-ink); }
   font-size: var(--text-xs); font-weight: 600; white-space: nowrap;
 }
 .demo-about:hover { color: var(--accent); text-decoration: none; border-color: var(--accent-2); }
-.demo-about-dot {
-  inline-size: 7px; block-size: 7px; border-radius: 50%;
-  background: var(--accent-2); box-shadow: 0 0 0 3px var(--accent-tint);
-}
+.demo-about-dot { background: var(--accent-2); box-shadow: 0 0 0 3px var(--accent-tint); }
 
 /* ── Header ─────────────────────────────────────────────────────── */
 
@@ -238,10 +235,7 @@ pre ::selection { color: var(--code-ink); }
   display: inline-flex; align-items: center; gap: var(--space-4);
   white-space: nowrap;
 }
-.brand::before {
-  content: ""; width: 9px; height: 9px; border-radius: 2px;
-  background: var(--accent); display: inline-block;
-}
+.brand::before { content: "" / ""; --slot: var(--accent); }
 .brand:hover { text-decoration: none; }
 /* A popover is a panel while it is open and part of the page while it is
    not: the header's nav and a filter bar's unfolded choices are drawn in

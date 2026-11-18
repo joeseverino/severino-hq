@@ -107,10 +107,7 @@ textarea.code {
 /* A live reading, so it reads as a measurement being taken rather than a
    number that was true once. */
 .conn-live { display: inline-flex; align-items: center; gap: var(--space-4); }
-.conn-pulse {
-  width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
-  animation: conn-pulse 1.8s ease-in-out infinite;
-}
+.conn-pulse { background: var(--ok); animation: conn-pulse 1.8s ease-in-out infinite; }
 @keyframes conn-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: .35; transform: scale(.72); }

@@ -11,7 +11,7 @@ source's color alone, beside what of it a day holds:
 
   {% include "partials/_calendar_sources.html#swatch" with source=source %}
 {% endcomment %}
-{% partialdef swatch %}<i class="calendar-swatch series-{{ source.slot }}" aria-hidden="true"></i>{% endpartialdef %}
+{% partialdef swatch %}<i class="swatch-key series-{{ source.slot }}" aria-hidden="true"></i>{% endpartialdef %}
 <ul class="calendar-sources">
   {% for source in sources %}
     <li class="series-{{ source.slot }}">
