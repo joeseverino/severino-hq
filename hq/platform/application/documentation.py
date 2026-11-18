@@ -3,7 +3,6 @@
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from datetime import date
 from functools import partial
 from typing import Annotated, Any, Literal, NotRequired, Required, TypeAliasType, TypedDict, final
 
@@ -23,7 +22,7 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
 from .answer_fields import CallMessage
-from .command_fields import Describe, Names, NonEmpty
+from .command_fields import Day, Describe, Names, NonEmpty
 from .entity_links import EntityLink, entity_link
 from .labels import plural
 from .projection import listing
@@ -146,7 +145,7 @@ type DocSensitivity = Annotated[_SENSITIVITY, Describe("Who may read it; a restr
 type ObsidianPath = Annotated[str, Describe("Its path in the vault.", api="Empty for none.")]
 type GithubPath = Annotated[str, Describe("Its path in a repository.", api="Empty for none.")]
 type ExternalUrl = Annotated[str, Describe("Where it is published outside HQ.", api="Empty for none.")]
-type LastReviewed = Annotated[date | None, Describe("When the doc last changed in the vault.", api="Null for unknown.")]
+type LastReviewed = Annotated[Day | None, Describe("When the doc last changed in the vault.", api="Null for unknown.")]
 type DocNotes = Annotated[str, Describe("Index notes only. No runbook text or secrets.")]
 
 
@@ -168,8 +167,8 @@ _ENTRY_FIELDS: dict[str, tuple[Any, Describe] | TypeAliasType] = {
     "path": (str, Describe("Where the doc is in the vault.")),
     "github_path": (str, Describe("Its path in a repository.")),
     "external_url": (str, Describe("Where it is published outside HQ.")),
-    "last_reviewed": (date, Describe("When the doc last changed in the vault.")),
-    "published_at": (date, Describe("When it was published.")),
+    "last_reviewed": (Day, Describe("When the doc last changed in the vault.")),
+    "published_at": (Day, Describe("When it was published.")),
     "notes": DocNotes,
     "related_projects": (list[str], Describe("The slugs of the projects the doc is about.")),
     "related_assets": (list[str], Describe("The slugs of the assets the doc is about.")),
