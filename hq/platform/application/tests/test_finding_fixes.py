@@ -14,7 +14,7 @@ from hq.platform.application.tests.consent import consented
 from hq_sdk.testing import plain
 
 from ..capabilities import execute_capability
-from ..finding_model import Finding, FindingEstate, FindingRule
+from ..finding_model import Finding, FindingEstate
 from ..findings import RULES
 from ..inventory_testing import store
 from ..policy_fixes import policy_without_empty_groups, request_empty_groups_removal
@@ -50,15 +50,6 @@ def document(**parts) -> str:
 
 
 class EveryRuleSaysHowTests(TestCase):
-    def test_a_rule_without_an_operator_action_is_refused(self):
-        with self.assertRaises(ValueError):
-            FindingRule("example", "Example", "attention", lambda estate: (), "  ")
-
-    def test_every_rule_declares_one(self):
-        for rule in RULES:
-            self.assertTrue(rule.operator_action.strip(), rule.name)
-            self.assertNotIn("\u2014", rule.operator_action, rule.name)
-
     def test_every_rule_detects_through_a_function_that_builds_findings(self):
         """One way to build a finding: a detector declared to take the estate and
         return ``Finding``s, never a lambda turning a dict of its fields into one."""

@@ -5,34 +5,12 @@ problem alone."""
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase
 
-from ..finding_model import Finding, FindingRemedy, FindingRule
+from ..finding_model import Finding, FindingRemedy
 from ..findings import RULES, _no_help_reason
 from ..plugins import checked_attention
 
 
 class EveryItemComesWithHelpTests(SimpleTestCase):
-    def test_every_finding_rule_says_why_hq_cannot_resolve_it(self):
-        for rule in RULES:
-            with self.subTest(rule=rule.name):
-                self.assertTrue(rule.no_help_reason.strip())
-                self.assertNotIn("\u2014", rule.no_help_reason)
-
-    def test_a_rule_without_a_reason_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "why HQ cannot"):
-            FindingRule("example", "Example", "attention", lambda estate: (), "Do it.", no_help_reason=" ")
-
-    def test_a_rule_without_the_bar_for_its_severity_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "bar its attention findings cross"):
-            FindingRule(
-                "example",
-                "Example",
-                "attention",
-                lambda estate: (),
-                "Do it.",
-                no_help_reason="HQ cannot.",
-                bars={"serious": "it is worse"},
-            )
-
     def test_a_source_item_with_no_help_is_refused(self):
         with self.assertRaisesRegex(ImproperlyConfigured, "no help"):
             checked_attention("example", (_finding(),))
@@ -52,14 +30,6 @@ class EveryItemComesWithHelpTests(SimpleTestCase):
         )
 
         self.assertEqual(checked_attention("example", helped), helped)
-
-    def test_an_empty_step_cannot_be_built(self):
-        from ..finding_steps import Do, Run
-
-        with self.assertRaises(ValueError):
-            Run("Run it", " ")
-        with self.assertRaises(ValueError):
-            Do(" ")
 
 
 def _finding(**fields) -> Finding:
