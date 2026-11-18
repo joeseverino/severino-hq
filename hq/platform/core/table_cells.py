@@ -458,8 +458,9 @@ class Cells(HTMLParser):
         # every row must show (`key-col`). The first two never leave: a row
         # without them no longer says what it is or does what it is for, and
         # the open line copies what leaves, where a control would be drawn
-        # twice. A key-col stands while any column can, and leaves at the
-        # narrowest rank, after every other.
+        # twice. Key-cols leave after every other column and together, at
+        # the widest rank any of them would take, since one side of a change
+        # without the other says nothing.
         states = {
             place
             for row in records
@@ -486,8 +487,13 @@ class Cells(HTMLParser):
             raise ValueError(f"A table's columns leave in at most {RANKS} ranks.")
         levels = {at: order.index(rank) + 1 for at, rank in ranked.items()}
         if heads:
-            levels |= _narrow_levels(heads[-1], kinds, kept | pressed | empty | {named} | set(drops), after=len(order))
-            levels |= {at: RANKS for at in keys - states - does - pressed - empty - {named}}
+            levels |= _narrow_levels(
+                heads[-1],
+                kinds,
+                kept | pressed | empty | {named} | set(drops),
+                keys - states - does - pressed - empty - {named},
+                after=len(order),
+            )
         self.opens = False
         self.cuts += [cell.drop for row in self.rows if row.section == "thead" for cell in row.cells if cell.drop]
         if not (self.sorts and _sorts(records)):
@@ -737,16 +743,21 @@ def leaving_order(columns: Sequence[tuple[str, Sequence[str]]]) -> list[int]:
     return sorted(far_first, key=lambda index: "optional-col" not in columns[index][1])
 
 
-def _narrow_levels(heading: list[_Cell], kinds: dict[int, str], kept: set[int], *, after: int) -> dict[int, int]:
+def _narrow_levels(
+    heading: list[_Cell], kinds: dict[int, str], kept: set[int], keys: set[int], *, after: int
+) -> dict[int, int]:
     """The levels of the columns a table's headings rank none for: each
     column a row can do without (`leaving_order`) leaves at the narrowest
     widths, after every ranked one (``after`` levels), the first to go at the
     widest of them and the last below the narrowest rank's width, so a table
-    stands whole until a narrow box and is never wider than its region there."""
+    stands whole until a narrow box and is never wider than its region there.
+    The ``keys`` go last, all at the first of the levels they would take."""
 
     columns = [(kinds.get(at, ""), _classes(cell.attrs)) for at, cell in enumerate(heading)]
-    spare = [at for at in leaving_order(columns) if at not in kept]
-    return {at: min(RANKS, max(after + 1, RANKS - len(spare) + place)) for place, at in enumerate(spare, 1)}
+    spare = [at for at in leaving_order(columns) if at not in kept] + sorted(keys, reverse=True)
+    levels = {at: min(RANKS, max(after + 1, RANKS - len(spare) + place)) for place, at in enumerate(spare, 1)}
+    together = min((levels[at] for at in keys), default=RANKS)
+    return levels | dict.fromkeys(keys, together)
 
 
 def _columns(heading: list[_Cell]) -> tuple[dict[int, int], int | None]:
