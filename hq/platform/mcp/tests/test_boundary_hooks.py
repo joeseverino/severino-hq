@@ -9,7 +9,7 @@ from ..security import MCPBoundary, TailnetGate
 from . import test_mcp
 
 
-class DoorAdmissionTests(test_mcp.MCPBoundaryTests):
+class DoorAdmissionTests(test_mcp.BoundaryRequests):
     A_JWT = "header.payload.signature"
 
     def test_a_bad_credential_reaches_the_admission_with_its_source(self):

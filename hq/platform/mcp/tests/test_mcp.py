@@ -405,7 +405,9 @@ def admitting(verifier, seen=None):
     return admit
 
 
-class MCPBoundaryTests(TestCase):
+class BoundaryRequests(TestCase):
+    """One request through the boundary, for the door's test classes; it has no tests of its own."""
+
     @staticmethod
     async def _allowed_app(scope, receive, send):
         await send(
@@ -480,6 +482,8 @@ class MCPBoundaryTests(TestCase):
         body = b"".join(message.get("body", b"") for message in sent)
         return status, json.loads(body) if body else {}
 
+
+class MCPBoundaryTests(BoundaryRequests):
     @override_settings(ALLOWED_HOSTS=["hq.example.test"])
     def test_every_resource_reads_for_a_caller_on_a_host_only_the_boundary_serves(self):
         """The boundary's hosts are not the web's, and no read holds a caller
@@ -578,7 +582,7 @@ class MCPBoundaryTests(TestCase):
                 self.assertEqual(body["error"], "not_found")
 
 
-class AgentIdentityTests(MCPBoundaryTests):
+class AgentIdentityTests(BoundaryRequests):
     """A Pocket ID token names the agent that presented it.
 
     A static bearer names nobody, so every call it made would land in the
