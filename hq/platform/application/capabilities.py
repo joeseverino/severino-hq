@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal, NamedTuple, TypedDict, final
 from uuid import UUID
 
 from jsonschema import Draft202012Validator, validators
+from jsonschema.exceptions import ValidationError as JSONSchemaError
 from pydantic import ConfigDict, ValidationError as PydanticValidationError, with_config
 
 from hq.platform.core.audit import audit_connection, audit_operation, record_event, tallied
@@ -563,17 +564,41 @@ def _mistyped(command_type: type, payload: Any) -> list[Any]:
 
     found = []
     for error in _published(command_type).iter_errors(payload):
-        if error.validator == "type":
-            wanted = error.validator_value
-        elif error.validator in {"anyOf", "oneOf"} and all(
-            branch.validator == "type" and not branch.relative_path for branch in error.context or ()
-        ):
-            wanted = error.context[0].validator_value
-        else:
+        wrong = _wrong_type(error)
+        if wrong is None:
             continue
+        wanted, held = wrong
         first = wanted[0] if isinstance(wanted, list) else wanted
-        found.append({"type": _TYPE_ERRORS[first], "loc": tuple(error.absolute_path), "input": error.instance})
+        found.append({"type": _TYPE_ERRORS[first], "loc": tuple(held.absolute_path), "input": held.instance})
     return found
+
+
+def _wrong_type(error: JSONSchemaError) -> tuple[Any, JSONSchemaError] | None:
+    """The JSON type ``error`` says a value should have been sent in, and the
+    error that holds the value; ``None`` for an error of another kind.
+
+    A union whose every branch is only a type (``boolean`` or ``null``) is
+    that type; a union of shapes, such as a manifest entry's, none of which
+    the value fits, is the deepest type error found when every branch finds
+    one. A branch refusing the value on another keyword alone (a number past
+    its maximum) admits its type, so Pydantic judges it.
+    """
+
+    if error.validator == "type":
+        return error.validator_value, error
+    if error.validator not in {"anyOf", "oneOf"} or not error.context:
+        return None
+    if all(branch.validator == "type" and not branch.relative_path for branch in error.context):
+        return error.context[0].validator_value, error
+    by_branch: dict[Any, list[tuple[Any, JSONSchemaError]]] = {}
+    for found in error.context:
+        wrong = _wrong_type(found)
+        by_branch.setdefault(found.relative_schema_path[0], []).extend(() if wrong is None else (wrong,))
+    if not all(by_branch.values()):
+        return None
+    return max(
+        (wrong for found in by_branch.values() for wrong in found), key=lambda wrong: len(wrong[1].absolute_path)
+    )
 
 
 # What a declaration write the consent does not admit is refused with.
