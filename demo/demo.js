@@ -80,6 +80,10 @@
     if (partial) {
       const name = headers.get("X-Fragment") || "";
       const [saved, found] = await Promise.all([answers(), demo.routes()]);
+      // This page is being replaced by its address's saved copy
+      // (demo-theme.js), and a request it sent would be cut off with it: it
+      // is never answered, as hqFetch leaves one a renewal takes away.
+      if (demo.leaving) return new Promise(() => {});
       const answer = saved[`${demo.key(url, found)}|${name}`];
       if (answer) return plainFetch(answer);
       const asked = url.pathname === "/search/" ? url.searchParams.get("q")?.trim() : "";

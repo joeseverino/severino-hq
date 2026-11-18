@@ -368,9 +368,11 @@ class DemoSiteTests(unittest.TestCase):
                         if opener.is_visible():
                             opener.click()
                     name, value = choice.get_attribute("name"), choice.get_attribute("value")
-                    choice.check()
+                    # Answered in place from the saved copy, the page busy until it lands.
+                    with page.expect_response(lambda response: "/__q/" in response.url):
+                        choice.check()
                     page.wait_for_url(re.compile(rf"[?&]{re.escape(name)}="))
-                    page.wait_for_load_state("networkidle")
+                    page.wait_for_function("() => !document.querySelector('main[aria-busy]')")
                     self.assertEqual(page.locator("#content > .messages").count(), 0, "the filter was saved")
                     ticked = page.locator(f'[data-table-toolbar] input[name="{name}"][value="{value}"]')
                     self.assertTrue(ticked.is_checked(), "the copy shows the filter it answers")
@@ -529,7 +531,13 @@ class DemoSiteTests(unittest.TestCase):
             uncaught = Uncaught(page, lambda: at[0])
             page.on("console", lambda message: message.type == "error" and errors.append(f"{at[0]}: {message.text}"))
             page.on("request", lambda request: request.url.startswith(self.origin) or elsewhere.append(request.url))
-            for path in dict.fromkeys([*_VISITED, *_sample()]):
+            # A request cut off is one a page asked for and threw away: the
+            # page demo-theme.js leaves for an address's saved copy asks for none.
+            page.on("requestfailed", lambda request: errors.append(f"{at[0]}: {request.url} {request.failure}"))
+            # Every address with a query is opened through the one saved-copy
+            # lookup in demo-theme.js, so one of them stands for all.
+            queried = min(json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))["variants"])
+            for path in dict.fromkeys([*_VISITED, *_sample(), queried]):
                 at[0] = path
                 page.goto(self.origin + path, wait_until="networkidle")
                 if path not in _VISITED:
