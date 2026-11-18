@@ -137,7 +137,7 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
     elif snapshot is not None and not snapshot.reachable and now - snapshot.updated_at < RETRY_AFTER:
         due = False
     else:
-        due = started is None or freshness(KIND, started, now).due
+        due = freshness(KIND, started, now).due
     return {**found, "due": due}
 
 

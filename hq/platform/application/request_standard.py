@@ -135,7 +135,7 @@ class RequestFacts:
         it is now; otherwise as it was when last read, which is no fault."""
 
         observed = self.tailnet_observed_at
-        return observed is not None and not freshness(PAGE_VISIT, observed).due
+        return not freshness(PAGE_VISIT, observed).due
 
 
 def measure_request(facts: RequestFacts) -> Measurement:

@@ -360,11 +360,6 @@ class DashboardGlanceTests(TestCase):
 
         self.assertEqual(dashboard_panels(DashboardConfiguration(infrastructure_label="Homelab")), ())
 
-    def test_never_observed_panels_are_not_reported_as_stale_readings(self):
-        panels = dashboard_panels()
-        self.assertTrue(all(not panel["due"] for panel in panels))
-        self.assertTrue(all(panel["observed_at"] is None for panel in panels))
-
     def test_unknown_machine_is_rejected_and_not_created(self):
         DashboardRefreshRequest.objects.create(panel_id=self.machine_request_id)
         with self.assertRaisesMessage(ValueError, "No machine HQ knows matched"):
@@ -732,6 +727,15 @@ class GlanceEndpointTests(TestCase):
         )
         (part,) = select(response, "data-fragment-part", f"machine-{self.machine.pk}")
         self.assertIn("data-refreshing", part.attrs)
+
+    def test_a_stale_post_asks_for_the_weather_never_read(self):
+        # A point set and no forecast stored: the machine's reading is current.
+        DashboardConfiguration.objects.create(weather_point="41.0000,-87.0000")
+        readings.record(readings.machine_telemetry(self.machine.key), reported_machine("app-server", host=HOST))
+
+        self.client.post(reverse("dashboard_glance"), form_keyed({"scope": "stale"}))
+
+        self.assertEqual(list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)), ["weather"])
 
     def test_a_stale_post_with_nothing_stale_requests_nothing(self):
         readings.record(readings.machine_telemetry(self.machine.key), reported_machine("app-server", host=HOST))

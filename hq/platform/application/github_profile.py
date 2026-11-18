@@ -113,11 +113,7 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
         return {"accounts": list(wanted), "due": True}
     now = now or timezone.now()
     held = {login.lower() for login in profiles()}
-    behind = (
-        snapshot.observed_at is None
-        or freshness(KIND, snapshot.observed_at, now).due
-        or any(login.lower() not in held for login in wanted)
-    )
+    behind = freshness(KIND, snapshot.observed_at, now).due or any(login.lower() not in held for login in wanted)
     return {"accounts": list(wanted), "due": behind and now - snapshot.updated_at >= RETRY_AFTER}
 
 
