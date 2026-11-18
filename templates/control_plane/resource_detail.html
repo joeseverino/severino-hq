@@ -21,7 +21,7 @@ held request writes nothing and queues nothing by design.
 {% if awaiting_approval %}
   {% notice tone="warning" title=awaiting_approval|length|counted:"change waiting for your approval,changes waiting for your approval" %}
     <p>Requested by {% for who in awaiting_approval %}{% with mark=forloop.last|then:".|;" %}{{ who.words|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Nothing is written or queued yet.</p>
-    {% url 'core:audit_list' as audit_url %}<p>{% button "Review and decide" audit_url|add:"?awaiting=1" look="compact primary" %}</p>
+    {% url 'core:audit_list' as audit_url %}{% with_query audit_url awaiting=1 as held_url %}<p>{% button "Review and decide" held_url look="compact primary" %}</p>
   {% endnotice %}
 {% endif %}
 
@@ -254,7 +254,7 @@ one thing worth doing then is reading what it was. The certificate's link only w
 saying a thing cannot be done yet is a status report filed in the wrong place.
 {% endcomment %}
 {% muted element="p" %}
-  <a class="subtle-link" href="{% url 'core:audit_list' %}?about={{ resource.key|urlencode }}">Audit log</a>{% dot %}<a class="subtle-link" href="{% url 'control_plane:report_download' resource.key %}">Download JSON</a>{% if resource.status.certificate_pem %}{% dot %}<a class="subtle-link" href="{% url 'control_plane:certificate_download' resource.key %}">Download PEM</a>
+  {% url 'core:audit_list' as audit_url %}<a class="subtle-link" href="{% with_query audit_url about=resource.key %}">Audit log</a>{% dot %}<a class="subtle-link" href="{% url 'control_plane:report_download' resource.key %}">Download JSON</a>{% if resource.status.certificate_pem %}{% dot %}<a class="subtle-link" href="{% url 'control_plane:certificate_download' resource.key %}">Download PEM</a>
   {% endif %}
 {% endmuted %}
 

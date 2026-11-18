@@ -84,7 +84,7 @@ the zone at the top of the page.
   (``zones.adopt_discovered_records``).
   {% endcomment %}
   {% if zone.managed and public_dns_enabled %}
-    {% with zone_name=zone.zone|urlencode %}{% button "Add record" create_url|add:"?kind="|add:record_kind|add:"&zone="|add:zone_name look="primary" %}{% endwith %}
+    {% with_query create_url kind=record_kind zone=zone.zone as add_url %}{% button "Add record" add_url look="primary" %}
   {% endif %}
 {% endsection %}
 

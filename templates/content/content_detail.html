@@ -13,13 +13,13 @@
 {% endfacts %}{% endcard %}
 
 {% if traffic.path and traffic.measured %}
-  {% url 'analytics:overview' as analytics_url %}{% with days=traffic.days|stringformat:"s" %}
-  {% section "Traffic" more_label="All analytics" more_url=analytics_url|add:"?days="|add:days %}
+  {% url 'analytics:overview' as analytics_url %}{% with_query analytics_url days=traffic.days as analytics_url %}
+  {% section "Traffic" more_label="All analytics" more_url=analytics_url %}
     {% facts layout="band" %}
       {% fact "Page views" %}{{ traffic.pageviews|breakable }}{% detail %}in the last {{ traffic.days|counted:"day" }}{% endfact %}
       {% fact "Visits" %}{{ traffic.visits|breakable }}{% detail %}in the last {{ traffic.days|counted:"day" }}{% endfact %}
     {% endfacts %}
-  {% endsection %}{% endwith %}
+  {% endsection %}
 {% endif %}
 
 {% if item.notes %}{% section "Notes" %}<p>{{ item.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}

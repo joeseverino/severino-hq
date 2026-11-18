@@ -1,5 +1,4 @@
 {% extends "page.html" %}
-{% load nav_tags %}
 {% block page %}
 <div id="overview">
 {% comment %}
@@ -159,7 +158,7 @@ close every one.
     {% elif facet.not_visible and not facet.reading_lines %}
       {% fact facet.label %}{% status "Not visible" tone="neutral" pill=False %}{% detail %}
         <small>{% status facet.not_visible tone="neutral" pill=False %}</small>
-        {% if not read_only %}{% for kind, label in facet.declarable %}<small><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}{% endif %}
+        {% if not read_only %}{% for kind, label in facet.declarable %}{% url 'control_plane:create' as create_url %}<small><a class="subtle-link" href="{% with_query create_url kind=kind hostname=service.hostname %}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}{% endif %}
       {% endfact %}
     {% elif read_only %}
       {% fact facet.label %}{% status "Not set up" tone="neutral" pill=False %}{% detail %}{% partial reading_lines %}{% endfact %}
@@ -177,7 +176,7 @@ close every one.
       {% endcomment %}
       {% fact facet.label %}{% status "Not set up" tone="neutral" pill=False %}{% detail %}
         <small>{% status "HQ has none for" service.hostname|add:"." tone="neutral" pill=False %}</small>
-        {% for kind, label in facet.declarable %}<small><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}
+        {% for kind, label in facet.declarable %}{% url 'control_plane:create' as create_url %}<small><a class="subtle-link" href="{% with_query create_url kind=kind hostname=service.hostname %}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}
         {% for label, reason in facet.unavailable %}<small>{{ label|breakable }} {{ reason|breakable }}</small>{% endfor %}
         {% partial reading_lines %}
       {% endfact %}

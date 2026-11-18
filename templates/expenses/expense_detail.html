@@ -18,10 +18,8 @@
 {% if expense.notes %}{% section "Notes" %}<p>{{ expense.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 
 {% if not expense.receipts.all %}
-  {% url 'receipts:create' as upload_url %}
-  {% with expense_pk=expense.pk|stringformat:"s" %}
-  {% section "Receipts" remedy_label="Upload one" remedy_url=upload_url|add:"?related_expense="|add:expense_pk %}{% empty %}No receipts.{% endsection %}
-  {% endwith %}
+  {% url 'receipts:create' as upload_url %}{% with_query upload_url related_expense=expense.pk as upload_url %}
+  {% section "Receipts" remedy_label="Upload one" remedy_url=upload_url %}{% empty %}No receipts.{% endsection %}
 {% endif %}
 {% include "partials/_related.html" with groups=related %}
 </div>

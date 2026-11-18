@@ -3,15 +3,17 @@
 # before the fragment and encodes every value of a key. One built by hand
 # leaves a value unencoded, puts a second "?" where one already stands, or
 # lands after a "#". The tools build `gh api` paths whose placeholders gh
-# fills, so they stay out of scope.
+# fills, so they stay out of scope. An extension's src/ is read by the plugin
+# check, from the package root.
 id: query-added-by-with-query
 language: python
 severity: error
 message: A query is added to an address by hand.
-note: Use with_query(url, query, fragment=...) from hq.platform.application.url_query.
+note: Use with_query(url, query, fragment=...) from hq.platform.application.url_query, or hq_sdk.web in an extension.
 files:
   - "hq/**"
   - "hq_sdk/**"
+  - "src/**"
 ignores:
   - "**/tests/**"
   - "**/test_*.py"

@@ -52,8 +52,8 @@ internet, a lookup of the address it crosses from.
     {% endcomment %}<details data-peering-detail>
       <summary>
         About <code>{{ peering.address|breakable }}</code>
-      </summary>
-      <div data-fragment="{% url 'tool_public_address' %}?address={{ peering.address|urlencode }}"
+      </summary>{% url 'tool_public_address' as lookup_url %}
+      <div data-fragment="{% with_query lookup_url address=peering.address %}"
            data-fragment-load
            data-fragment-failure="Lookup failed.">
         {% muted element="p" %}Loading…{% endmuted %}

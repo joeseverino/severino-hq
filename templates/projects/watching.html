@@ -15,10 +15,10 @@ would be a page about anybody.
   {% card label="Your GitHub profile" %}
     {% include "partials/_identity.html" with picture=profile.avatar name=profile.name|default:profile.login handle="@"|add:profile.login url=profile.url badge="Your account" tone="good" tip=account_tip about=profile.bio only %}
     {% facts layout="band" label="On GitHub" %}
-      {% fact "Followers" %}{% entity profile.url|add:"?tab=followers"|outside label=profile.followers %}{% endfact %}
-      {% fact "Following" %}{% entity profile.url|add:"?tab=following"|outside label=profile.following %}{% endfact %}
-      {% fact "Public repos" %}{% entity profile.url|add:"?tab=repositories"|outside label=profile.public_repos %}{% endfact %}
-      {% fact "Starred" %}{% entity profile.url|add:"?tab=stars"|outside label=profile.starred %}{% endfact %}
+      {% with_query profile.url tab="followers" as tab_url %}{% fact "Followers" %}{% entity tab_url|outside label=profile.followers %}{% endfact %}
+      {% with_query profile.url tab="following" as tab_url %}{% fact "Following" %}{% entity tab_url|outside label=profile.following %}{% endfact %}
+      {% with_query profile.url tab="repositories" as tab_url %}{% fact "Public repos" %}{% entity tab_url|outside label=profile.public_repos %}{% endfact %}
+      {% with_query profile.url tab="stars" as tab_url %}{% fact "Starred" %}{% entity tab_url|outside label=profile.starred %}{% endfact %}
     {% endfacts %}
   {% endcard %}
 

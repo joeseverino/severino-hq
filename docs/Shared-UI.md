@@ -68,6 +68,7 @@ fails when this file falls behind. The rules around it are in
 | `{% status %}` | nothing | One short state, drawn in its tone and said in sentence case, the one way a page draws a state. | `{% status "Blocked" tone="attention" %}` |
 | `{% table_heading %}` | nothing | One column heading of a table: its kind, the rank it leaves by and its sort control. | `{% table_region "Example updates" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}{% table_heading "Updated" "status" drop=2 %}</tr></thead><tbody><tr><td>example-host</td><td>An hour ago</td></tr></tbody></table>{% endtable_region %}` |
 | `{% table_region %}` | nothing | The box a table fits, which draws what follows from its headings, and, with no rows, the one empty state in its place. | `{% table_region "Hosts" empty="No hosts yet." %}<table class="data-table"><thead><tr>{% table_heading "Name" %}</tr></thead><tbody><tr><td>example-host</td></tr></tbody></table>{% endtable_region %}` |
+| `{% with_query %}` | nothing | An address with a query added to its own, each value encoded: written where it stands, or kept with `as` for the part that links it. | `{% with_query "/example/" kind="host" as hosts_url %}{% button "Hosts" hosts_url %}` |
 | `{% words %}` | nothing | What a button for a command says, from its declaration, for prose that names the one to press. | `Press {% words "agent.access.set" %}.` |
 | `{% write_token %}` | nothing | What every write form carries in place of `{% csrf_token %}`, so the form sent twice acts once. | `<form method="post">{% write_token %}...</form>` |
 
@@ -241,6 +242,8 @@ fails when this file falls behind. The rules around it are in
 | `table_region` | `filtered` | `False` |  | Its own search narrows it, so no rows says nothing matches. |
 | `table_region` | `pane` | `False` |  | A box of its own height, which scrolls. |
 | `table_region` | `remedy` | `None` |  | With no rows, what would fill it: a `label` and a `url`. |
+| `with_query` | `url`, first and unnamed | required |  | The address, which may hold a query of its own. |
+| `with_query` | `**query` |  |  | Each name=value added to it. |
 | `words` | `capability`, first and unnamed | required |  | The command, by name. |
 | `words` | `variant` |  |  | Which of its words, where it has more than one. |
 
@@ -262,6 +265,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `hand-drawn-line-break` | A line broken by hand with `<br>`, where the cell line or the stack list part draws the lines. | Write `{% cell_line %}`first line`{% detail %}`quiet second line`{% endcell_line %}`, or `{% stack_list %}``<li>`...`</li>``<li>`...`</li>``{% endstack_list %}` for lines read down. |
 | `hand-drawn-missing-value` | A missing value's mark drawn by an if, where the value's own tag or filter draws it. | Write {{ x\|or_empty }} for a plain value, {{ x\|money }} (or measured, seconds, bytes, when) alone for a figure or a moment, and `{% present x %}`...`{% endpresent %}` for a value shown in markup. |
 | `hand-drawn-prose-list` | A list of sentences drawn by hand, where the prose list part draws it. | Write `{% prose_list %}``<li>`...`</li>``{% endprose_list %}`, with numbered=True for items read in order. |
+| `hand-drawn-query` | A query added to an address by hand, where the with_query tag adds and encodes it. | Write `{% with_query url name=value as named_url %}` and link named_url, or `{% with_query url name=value %}` where the address stands. |
 | `hand-drawn-record-link` | A link to a record's page drawn by hand, where the entity tag names the record by the page its model declares. | Write `{% entity row\|record label=row.name %}`, or row\|record:"section" for a part of its page. |
 | `hand-drawn-row-actions` | A row's actions drawn by hand, where the row actions part draws them. | Write `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell. |
 | `hand-drawn-row-group` | A group of rows headed by hand, where the row group tag heads it. | Write `{% row_group label count %}`. |

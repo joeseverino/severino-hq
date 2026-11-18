@@ -106,7 +106,7 @@ domain; the SDK owns integration mechanics:
 | A link to a page or an HQ command | `hq_sdk.workflows` |
 | Read resources, strict filters, search projection | `hq_sdk.resources` |
 | Connections | `hq_sdk.connections` |
-| Capability-gated Django views | `hq_sdk.web` |
+| Capability-gated Django views, a query added to an address | `hq_sdk.web` |
 | Audit attribution and summary events | `hq_sdk.audit` |
 | Work that reaches a network or a provider | `hq_sdk.outbound` |
 | Kept reads and derivations | `hq_sdk.reads` |
@@ -949,7 +949,9 @@ names the ones a list keeps by default, every key of the item where it names
 none. And it retires `ResourceSpec`'s `list_handler`, `list_query_type`,
 `item_type` and `list_fields`: a list read is one `listing=ListRead(reader,
 query, item, fields=...)`, so none of them can be declared without the
-others.
+others. It also exports `with_query` from `hq_sdk.web`, the one way an
+address gets a query, and `{% with_query url name=value as named %}` is its
+template form: `hq plugin check` refuses a query added by hand.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
