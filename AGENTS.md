@@ -193,6 +193,14 @@ adding UI; grow a primitive rather than styling a page.
   `tools/lint/ast-grep/rules`, with its scope in its own `files:` and
   `ignores:` (`sgconfig.yml` there names the scopes), and its cases in
   `rule-tests/`.
+- Python says a thing the one way HQ already has for it, never by hand:
+  - a text cut to a length with an ellipsis is `Truncator(text).chars(n)`;
+  - a raised first letter is `capfirst(text)`;
+  - a list in words is `get_text_list(items, "and")`;
+  - a value that must hold something is `RequiredText` or
+    `Annotated[<type>, NonEmpty()]` from `command_fields`, never
+    `min_length=1`;
+  - an ISO instant or day is read by `moments.moment` or `stamp_day`.
 - A docstring says what the thing is and why it exists. How it works lives in
   the one doc or comment that owns the mechanism, so a long docstring is
   trimmed as its file is touched.
