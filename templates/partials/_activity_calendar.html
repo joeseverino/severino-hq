@@ -11,7 +11,7 @@ can be linked to directly and works without JavaScript.
   <div class="calendar-legend">
     {% if calendar.series %}
       <div class="chart-legend" aria-label="Legend">
-        {% for series in calendar.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label|breakable }}</span>{% endfor %}
+        {% for series in calendar.series %}<span><i class="series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label|breakable }}</span>{% endfor %}
         <span><i class="calendar-key-missed" aria-hidden="true"></i>Missed</span>
       </div>
     {% endif %}
@@ -39,7 +39,7 @@ can be linked to directly and works without JavaScript.
                 {% comment %}Without this a screen reader gets a grid of bare numbers.{% endcomment %}
                 <span class="visually-hidden">{{ day.when|when_text:"day" }}: {{ day.detail|default:"nothing logged"|breakable }}</span>
                 <span class="calendar-marks" aria-hidden="true">
-                  {% for slot in day.slots %}<i class="calendar-dot chart-series-{{ slot }}"></i>{% endfor %}
+                  {% for slot in day.slots %}<i class="calendar-dot series-{{ slot }}"></i>{% endfor %}
                   {% if day.state == "missed" %}<i class="calendar-dot is-missed"></i>{% endif %}
                   {% if day.state == "planned" %}<i class="calendar-dot is-planned"></i>{% endif %}
                 </span>

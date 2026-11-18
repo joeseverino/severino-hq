@@ -177,7 +177,6 @@
 .chart-band-3 { --source: var(--route-band-3); }
 .chart-band-4 { --source: var(--route-band-4); }
 .chart-band-5 { --source: var(--route-band-5); }
-.chart-legend [class*="chart-band-"] { background: var(--source); }
 .chart-path-marker { stroke: var(--surface); stroke-width: 2.5; }
 .chart-path-scale { stroke: var(--ink-2); stroke-width: 2; }
 .chart-path:hover .chart-path-segment:not(:hover) { opacity: .55; }
@@ -290,10 +289,8 @@
      paper that distinction lives in the caption instead and every line is
      drawn in the one ink there is. `print-color-adjust` is what keeps the
      grid a gray rather than nothing. */
-  .chart-line, .chart-line-1, .chart-line-2, .chart-line-3, .chart-line-4,
-  .chart-line-5 { stroke: var(--print-ink) !important; }
-  .chart-series-1, .chart-series-2, .chart-series-3,
-  .chart-series-4, .chart-series-5 { fill: var(--print-ink) !important; }
+  .chart-line, .line-chart .chart-dot { stroke: var(--print-ink) !important; }
+  .bar-chart rect, .allocation rect { fill: var(--print-ink) !important; }
   .chart-grid, .chart-mark {
     stroke: var(--print-faint) !important;
     print-color-adjust: exact;

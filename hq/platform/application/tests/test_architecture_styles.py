@@ -537,7 +537,7 @@ class StyleContractTests(SimpleTestCase):
 
         css = self._stylesheet()
         reserved = {"--danger", "--warn", "--ok", "--attn"}
-        for rule in re.findall(r"\.chart-series-\d+\s*\{([^}]*)\}", css):
+        for rule in re.findall(r"\.series-\d+\s*\{([^}]*)\}", css):
             used = set(re.findall(r"var\(\s*(--[a-z0-9-]+)", rule))
             self.assertFalse(
                 used & reserved,

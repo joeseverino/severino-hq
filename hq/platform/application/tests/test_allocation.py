@@ -64,7 +64,7 @@ class AllocationTests(SimpleTestCase):
             for part in said:
                 self.assertIn(part, words.split())
         swatches = [i.attrs["class"] for i in elements(html, "i")]
-        self.assertEqual(swatches, [f"chart-series-{rect['slot']}" for rect in bar.drawn])
+        self.assertEqual(swatches, [f"series-{rect['slot']}" for rect in bar.drawn])
         (owed,) = [span for span in within(html, "data-allocation-legend") if "toned-attention" in span.classes]
         self.assertEqual(owed.words, "-$70.00")
 

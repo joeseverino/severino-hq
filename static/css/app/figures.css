@@ -132,12 +132,20 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
   height: 214px;
 }
 
-/* Series fills: an undefined custom property makes `fill` invalid and SVG falls back to black, so every one here is defined in :root (the :root-variable test checks). */
-.chart-series-1 { fill: var(--series-1); background: var(--series-1); }
-.chart-series-2 { fill: var(--series-2); background: var(--series-2); }
-.chart-series-3 { fill: var(--series-3); background: var(--series-3); }
-.chart-series-4 { fill: var(--series-4); background: var(--series-4); }
-.chart-series-5 { fill: var(--series-5); background: var(--series-5); }
+/* A series' color is one custom property its slot's class sets, so a bar, a line, a dot, a calendar's mark and a swatch all read it the same way. Each is a token defined in :root, since an undefined one makes `fill` invalid and SVG falls back to black. */
+.series-1 { --source: var(--series-1); }
+.series-2 { --source: var(--series-2); }
+.series-3 { --source: var(--series-3); }
+.series-4 { --source: var(--series-4); }
+.series-5 { --source: var(--series-5); }
+.series-6 { --source: var(--series-6); }
+.series-7 { --source: var(--series-7); }
+.series-8 { --source: var(--series-8); }
+.series-9 { --source: var(--series-9); }
+.series-10 { --source: var(--series-10); }
+/* A swatch is an `<i>` carrying a slot (a legend's key, a calendar's dot, a week's mark); a route's band sets the same property. */
+i:is([class*="series-"], [class*="chart-band-"]) { background: var(--source); }
+.bar-chart rect, .allocation rect { fill: var(--source); }
 /* A 2px surface gap between stacked segments, so adjacent fills read as separate marks; also carries the CVD relief for close hues. */
 .bar-chart rect { stroke: var(--surface); stroke-width: 2; paint-order: stroke; transition: opacity .08s ease; }
 /* A line chart borrows the bar chart's box rather than restating it, so two charts stacked share an axis position. */
@@ -155,12 +163,8 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .line-chart .chart-grid,
 .line-chart .chart-mark { vector-effect: non-scaling-stroke; }
 .chart-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-/* Strokes, not fills: `.chart-series-N` sets `fill`, which draws a line's path as a blob. A dot on the line takes its stroke too. */
-.chart-line-1 { stroke: var(--series-1); }
-.chart-line-2 { stroke: var(--series-2); }
-.chart-line-3 { stroke: var(--series-3); }
-.chart-line-4 { stroke: var(--series-4); }
-.chart-line-5 { stroke: var(--series-5); }
+/* A line, its trend and its dots are stroked in their series' color. */
+.line-chart :is(.chart-line, .chart-trend, .chart-dot) { stroke: var(--source); }
 /* Dashed and thinner than its series, so a fitted line reads as an estimate. */
 .chart-trend { fill: none; stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .65; }
 /* A point in a stretched drawing (the line chart, a figure's trend) is a zero-length line: its round cap, under a stroke that does not scale, is a true circle however far x and y are scaled apart, where a <circle> draws as an oval. */
@@ -222,7 +226,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .link-chips a {
   display: inline-flex; align-items: center; gap: var(--space-3);
   padding: var(--space-2) var(--space-6);
-  border: 1px solid var(--line); border-radius: 999px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
   background: var(--surface); color: var(--ink-2); font-size: var(--text-sm); font-weight: 500;
 }
 .link-chips a:is(:hover, :focus-visible) { border-color: var(--line-strong); color: var(--ink); text-decoration: none; }

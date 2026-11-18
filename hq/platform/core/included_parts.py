@@ -22,9 +22,9 @@ CHART = _part(
     "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from "
     "`hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`.",
     *("bar-chart", "chart-axis", "chart-band-*", "chart-category", "chart-cats", "chart-dot", "chart-frame"),
-    *("chart-frame-dense", "chart-grid", "chart-hit", "chart-labels", "chart-legend", "chart-line", "chart-line-*"),
+    *("chart-frame-dense", "chart-grid", "chart-hit", "chart-labels", "chart-legend", "chart-line"),
     *("chart-mark", "chart-mark-label", "chart-path", "chart-path-frame", "chart-path-marker", "chart-path-scale"),
-    *("chart-path-segment", "chart-scroll", "chart-series-*", "chart-tick", "chart-trend", "line-chart"),
+    *("chart-path-segment", "chart-scroll", "chart-tick", "chart-trend", "line-chart", "series-*"),
     pieces=("partials/_chart_legend.html", "partials/_chart_path.html"),
     public=True,
 )
@@ -41,7 +41,7 @@ MONTH_GRID = _part(
     *("is-*", "is-all-day", "is-compact", "is-end", "is-gap", "is-outside", "is-past", "is-selected", "is-start"),
     *("is-today", "is-weekend", "month-date", "month-day", "month-day-head", "month-grid", "month-item"),
     *("month-item-dot", "month-mark", "month-more", "month-of", "month-span", "month-week", "month-weekday"),
-    "series-*",
+    draws=(CHART,),
     example='{% section "Example month" %}{% include "partials/_month_grid.html" %}{% endsection %}',
 )
 WEEK_PLAN = _part(
@@ -164,7 +164,7 @@ PARTS = (
         "calendar_sources",
         "The calendar's sources, each a toggle with its color swatch.",
         *("calendar-source", "calendar-source-failure", "calendar-source-note", "calendar-sources", "calendar-swatch"),
-        draws=(MONTH_GRID,),
+        draws=(CHART, MONTH_GRID),
     ),
     _part(
         "certificate_mark",

@@ -136,18 +136,6 @@
 :is(h2, h3) > .count { font-size: .8em; }
 
 /* Activity calendar: one month of plan against execution. */
-/* The calendar. A source's color is one custom property, so a dot, a line, a
-   bar and a swatch all read it the same way. */
-.series-1 { --source: var(--series-1); }
-.series-2 { --source: var(--series-2); }
-.series-3 { --source: var(--series-3); }
-.series-4 { --source: var(--series-4); }
-.series-5 { --source: var(--series-5); }
-.series-6 { --source: var(--series-6); }
-.series-7 { --source: var(--series-7); }
-.series-8 { --source: var(--series-8); }
-.series-9 { --source: var(--series-9); }
-.series-10 { --source: var(--series-10); }
 /* A section holding a month is the box the month asks how much room it has. */
 .section:has(> .section-body > .month-grid) { container: month / inline-size; }
 /* A month as a split's main takes the room: it grows a thousand times faster
@@ -232,7 +220,7 @@
 .month-more { display: block; color: var(--muted); font-size: var(--text-3xs); font-weight: 600; text-decoration: none; }
 .month-more:hover { color: var(--accent); }
 /* A source's color alone (partials/_calendar_sources.html#swatch). */
-.calendar-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--source); }
+.calendar-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
 .calendar-sources { display: grid; gap: var(--space-1); }
 /* A source is a toggle ({% button %} with `post` and `pressed`): the whole line is
    the button, its box drawn before the name and filled in its color when
