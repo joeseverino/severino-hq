@@ -525,6 +525,24 @@ class TableTagTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             _render(source)
 
+    def test_a_status_heading_with_a_rank_leaves_by_it_and_one_without_stays(self):
+        """A ranked status is a secondary check, which leaves with the
+        table's ranked columns whatever its cells say; an unranked one is the
+        row's state, which leaves last."""
+
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>'
+            '{% table_heading "Name" %}{% table_heading "Note" drop=1 %}'
+            '{% table_heading "Check" "status" drop=2 %}{% table_heading "State" "status" %}</tr></thead>'
+            '<tbody><tr><td>a</td><td>b</td><td>{% status "Passed" %}</td><td>{% status "Up" %}</td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        cells = elements(_render(source), "td")
+        note, check, state = (cell.attrs.get("data-drop") for cell in cells[1:4])
+        self.assertTrue(check)
+        self.assertLessEqual(int(check), int(note))
+        self.assertGreater(int(state), int(check))
+
     def test_a_heading_refuses_what_cannot_be(self):
         for source in (
             '{% table_heading "Name" "color" %}',

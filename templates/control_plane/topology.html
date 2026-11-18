@@ -22,7 +22,7 @@
 {% section "Links shown" count=topology_edges|length id="topology-relations" %}
   {% table_region "Links shown" pane=True %}
     <table class="data-table">
-      <thead><tr>{% table_heading "From" "identifier" gutter=True local_sort=True %}{% table_heading "Link" drop=3 local_sort=True %}{% table_heading "To" "identifier" drop=2 local_sort=True %}{% table_heading "State" "status" drop=1 local_sort=True %}</tr></thead>
+      <thead><tr>{% table_heading "From" "identifier" gutter=True local_sort=True %}{% table_heading "Link" drop=3 local_sort=True %}{% table_heading "To" "identifier" drop=2 local_sort=True %}{% table_heading "State" "status" local_sort=True %}</tr></thead>
       <tbody>
         {% for item in topology_edges %}
           <tr data-topology-edge="{{ item.edge.source }} {{ item.edge.target }}">

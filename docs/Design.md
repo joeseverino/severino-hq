@@ -176,8 +176,8 @@ table. No width is computed in Python. A column whose values keep their line
 as the browser shares it. Each column's share is its region's width over one
 more than the count of columns it shows (`--share`, tables.css, over the count
 the region writes, `data-columns`: its headings, or in a table with none its
-widest row; a column with nothing in any row, or one ranked to leave at the
-region's width, is not counted), the one more
+widest row; a column with nothing in any row, one ranked to leave at the
+region's width, or a `wide-only` one in a narrow box, is not counted), the one more
 kept for what a column asks past its share, and no column asks more than its
 share to hold a value whole, so the columns together never ask more than the
 region. A value longer than a line of words (`data-long` on its cell and
@@ -243,8 +243,8 @@ the section or card around a table is one already, often by the same name.
 `test_a_section_and_the_table_in_it_are_one_landmark`. A pane (`pane=True`) is
 as tall as its rows up to a fixed reading height, as the topology ledger is,
 and scrolls past it. A table is never swiped through: in a narrow box its
-ranked columns have left. A column of words every row must show, such as a
-change's two sides, is a `key-col`, which takes no rank and never leaves,
+ranked columns have left. A column of words every row must show, such as
+what a change sets (its After; its Before is spare and leaves first), is a `key-col`, which takes no rank and never leaves,
 nor does the closing figure of a table that marks none: a table whose kept
 columns cannot stand at a phone's width declares too many keys.
 
@@ -285,14 +285,19 @@ empty box. *Gates:* the survey's `rows unruled` and `empty panels`.
 region (the `table-region` container query in tables.css) every column a row
 can spare has left for the row's open line, and what stands is the naming
 column, each `key-col` (or the closing figure), a row's state (its pills, or
-any column under a heading of kind `status`), a field it fills in and its
-controls, each under its heading. Below every rank's width (20rem) the state
-goes to the open line last; a key never does. A name's least width is its
+any column under a heading of kind `status` that declares no rank), a field it
+fills in and its controls, each under its heading. A heading of kind `status`
+that declares a rank is one of a row's secondary checks: it leaves at that
+rank, whatever its cells hold, and no later than the table's last ranked
+column, so a row's own state is declared with no rank and its checks with one.
+Below every rank's width (20rem) the state goes to the open line last; a key
+never does, and a key's pill wraps between its words. A name's least width is its
 longest word, so another column gives way before a name breaks inside one; a
 hash or key with no break in it may break anywhere (cuts.css).
 
 A table cell cannot take a line of its own, so a narrow table whose rows hold
-labeled controls is a grid of its columns' tracks instead, each row a subgrid
+labeled controls (below 48rem where a row holds four, which ask a line of
+their own sooner) is a grid of its columns' tracks instead, each row a subgrid
 of them: the headings, the cells under them, the open line and a group's
 heading keep their place and their roles (table, row, column header, cell, in
 WebKit and Chromium), and the heading still pins. A row's labeled controls

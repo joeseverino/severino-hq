@@ -547,7 +547,8 @@ ROWS_UNRULED = (
 # with a column a narrow box lets go, and what a row is (its state, a cell
 # its pills say) leaves only once no other column that can leave still
 # stands: a row without them no longer says what it is or does what it is
-# for while a column it could spare stands in their place.
+# for while a column it could spare stands in their place. A column whose
+# heading declares a status with a rank leaves by its rank.
 STATE_LEFT = (
     "() => {"
     + DESCRIBE
@@ -555,9 +556,9 @@ STATE_LEFT = (
   const found = [];
   for (const cell of document.querySelectorAll('main table.data-table > tbody > tr:not(.is-expanded) > [data-drop]:not([data-blank])')) {
     if (!cell.closest('table').checkVisibility() || cell.checkVisibility()) continue;
-    // A pill beside a value is a note on it; a cell its pills alone say is the row's state.
+    // A pill beside a value is a note on it; a cell its pills alone say is the row's state, unless its heading declares a status with a rank, which it leaves by.
     const pills = [...cell.querySelectorAll('.pill')];
-    const stated = pills.length && pills.map((pill) => pill.textContent).join('').replace(/\\s+/g, '') === cell.textContent.replace(/\\s+/g, '');
+    const stated = pills.length && cell.dataset.kind !== 'status' && pills.map((pill) => pill.textContent).join('').replace(/\\s+/g, '') === cell.textContent.replace(/\\s+/g, '');
     const spared = [...cell.parentElement.children].some((other) => other.matches('[data-drop]') && other.checkVisibility());
     const held = cell.querySelector('select, textarea, input:not([type="hidden"])') || (stated && spared ? pills[0] : null);
     if (held) found.push(`${describe(cell)} "${(cell.dataset.label || '').slice(0, 30)}" leaves with its column, holding ${describe(held)}`);

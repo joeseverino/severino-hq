@@ -455,6 +455,11 @@ class Cells(HTMLParser):
         counted = heads[-1] if heads else max((row.cells for row in records), key=len, default=[])
         if (columns := min(COUNTED, sum(index not in empty for index in range(len(counted))))) > 1:
             self.marks.setdefault(self.table_at, []).append(f' data-columns="{columns}"')
+        # Of those, the ones a narrow box does not draw (`wide-only`), which
+        # its share is not counted over.
+        wide = {at for at, cell in enumerate(heads[-1] if heads else []) if "wide-only" in _classes(cell.attrs)}
+        if columns > 1 and (narrow := min(columns - 1, len(wide - empty))):
+            self.marks.setdefault(self.table_at, []).append(f' data-wide-columns="{narrow}"')
         drops, gutter = _columns(heads[-1] if heads else [])
         # The columns no heading's rank takes away: what a row is (a cell said
         # by its pills alone; a pill beside a value is a note on it), what it
@@ -468,18 +473,19 @@ class Cells(HTMLParser):
         # (`STATES_LEAVE`), where the name, the keys and the controls take
         # the row.
         heading = heads[-1] if heads else []
-        states = {place for row in records for place, cell in _placed(row) if place != named and cell.states}
-        states |= {
-            at
-            for at, cell in enumerate(heading)
-            if cell.attrs.get("data-kind") == "status" and at not in drops and at != named
-        }
+        # A heading of kind `status` decides: with no rank its column is a
+        # state, and with one it leaves by it, whatever its cells hold, though
+        # never before another ranked column (`declared`).
+        statuses = {at for at, cell in enumerate(heading) if cell.attrs.get("data-kind") == "status" and at != named}
+        declared = statuses & set(drops)
+        states = {place for row in records for place, cell in _placed(row) if place != named and cell.states} - declared
+        states |= statuses - declared
         keys = set(_keys([(kinds.get(at, ""), _classes(cell.attrs)) for at, cell in enumerate(heading)]))
         does = {place for row in records for place, cell in _placed(row) if cell.fields}
         does |= {place for row in records for place, _ in _row_controls(row, kinds, named)}
         pressed = {place for row in records for place, cell in _placed(row) if cell.presses}
         kept = states | keys | does
-        ranked = {at: rank for at, rank in drops.items() if at not in kept | empty}
+        ranked = {at: rank for at, rank in drops.items() if at not in kept | empty | declared}
         # Each rank is a width of the region (tables.css), counted from the
         # widest: a table's first rank leaves at the widest, and its others
         # each at the next width down, the ranks past the last width leaving
@@ -490,7 +496,10 @@ class Cells(HTMLParser):
         if heads:
             levels |= _narrow_levels(heading, kinds, kept | pressed | empty | {named} | set(drops), after=len(order))
             levels |= dict.fromkeys(states - keys - does - pressed - empty - {named}, STATES_LEAVE)
-        wide = {at for at, cell in enumerate(heads[-1] if heads else []) if "wide-only" in _classes(cell.attrs)}
+        # A ranked status leaves with the last column that leaves before every
+        # state does, so a row never shows a spare column without its status.
+        last = max((level for level in levels.values() if level <= RANKS), default=1)
+        levels |= dict.fromkeys(declared - kept - empty, last)
         self.opens = False
         self.cuts += [cell.drop for row in self.rows if row.section == "thead" for cell in row.cells if cell.drop]
         if not (self.sorts and _sorts(records)):
@@ -578,6 +587,10 @@ class Cells(HTMLParser):
         marks = [] if "data-kind" in cell.attrs else [f' data-kind="{kind}"']
         if body and _long(cell):
             marks.append(" data-long")
+        elif body and kind == "status" and len(" ".join(cell.text).split()) > 1:
+            # A state of several words, which the narrowest box wraps between
+            # them (tables.css); one word stands whole.
+            marks.append(" data-words")
         words = kind in _CUT_KINDS or (kind == "control" and not cell.controls)
         if body and words and not cell.says_nothing:
             if _long(cell):

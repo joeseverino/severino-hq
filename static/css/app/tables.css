@@ -39,7 +39,7 @@
   --tick-box: 16px;
   /* A column's share of its region while every column stands: the region's width over one more than the table's count of columns, read from its headings, less a cell's padding. The one more is kept for what a column asks past its share (a state's line). What a value holds whole, or the line a long one keeps, is never more than that share, so the table's columns together never ask more than their region. */
   --columns: 1;
-  --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) + 1) - 2 * var(--cell-pad));
+  --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-wide, 0) + 1) - 2 * var(--cell-pad));
   inline-size: 100%; border-collapse: collapse;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm);
 }
@@ -184,6 +184,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   /* What a control cell says beside its controls wraps as words do, on a line of its own: a note, or the sentence linked to the setup a change needs (`_write_gap.html`), which is a link and no control's label. */
   & > :is(.muted, p, [data-write-gap]) { display: block; margin: 0; white-space: normal; }
   &:has(> :is(.btn, .icon-link, form, [data-ask])) { padding-block: calc(var(--row-pad) - var(--control-rise)); }
+  /* An ask's cell keeps the line its note stands on under its controls (below). */
+  &:has(> [data-ask]) { padding-block-end: calc(var(--row-pad) + 1lh); }
 }
 .data-table > * > tr > .select-column { inline-size: 1px; text-align: center; padding-inline: var(--space-4); }
 /* The tick-boxes' column is their box and its padding, in every engine, whose own margins around a checkbox differ. */
@@ -282,10 +284,13 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* Below every rank's width a row's state goes to its open line too (`STATES_LEAVE`, table_cells), the last to leave. */
 @container table-region (width < 20rem) {
   .data-table > * > tr > [data-drop="5"] { display: none; }
-  /* The narrowest box wraps a held value or a time between its words, so a key stands whole. */
+  /* The narrowest box wraps a held value or a time between its words, so a key stands whole: a pill of several words (`data-words`, table_cells) is as wide as its words up to its column's share, as a short value is, and past it wraps between them inside its own paint. */
   .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]), .data-table td time { white-space: normal; }
+  .data-table > tbody > tr:not(.row-detail) > [data-kind="status"][data-words] .pill { white-space: normal; inline-size: max-content; max-inline-size: var(--share); }
   .data-table:has(> thead > tr:last-child > [data-drop="5"]) { --gone-5: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="5"] ~ [data-drop="5"]) { --gone-5: 2; }
+  .data-table:has(> thead > tr:last-child > [data-drop="5"] ~ [data-drop="5"] ~ [data-drop="5"]) { --gone-5: 3; }
+  .data-table:has(> thead > tr:last-child > [data-drop="5"] ~ [data-drop="5"] ~ [data-drop="5"] ~ [data-drop="5"]) { --gone-5: 4; }
   :is(.row-columns > [data-drop="5"], .row-columns:has(> [data-drop="5"]), .data-table > tbody > tr:has(> [data-drop="5"]:not([data-blank])) .row-expand) { display: grid; }
   .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > .row-columns > [data-drop="5"]) { display: table-row; }
   .data-table > tbody > tr.is-expanded:has(+ tr.row-detail > td > .row-columns > [data-drop="5"]) > * { border-bottom: 0; }
@@ -295,6 +300,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table > * > tr > [data-drop="4"] { display: none; }
   .data-table:has(> thead > tr:last-child > [data-drop="4"]) { --gone-4: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="4"] ~ [data-drop="4"]) { --gone-4: 2; }
+  .data-table:has(> thead > tr:last-child > [data-drop="4"] ~ [data-drop="4"] ~ [data-drop="4"]) { --gone-4: 3; }
+  .data-table:has(> thead > tr:last-child > [data-drop="4"] ~ [data-drop="4"] ~ [data-drop="4"] ~ [data-drop="4"]) { --gone-4: 4; }
   :is(.row-columns > [data-drop="4"], .row-columns:has(> [data-drop="4"]), .data-table > tbody > tr:has(> [data-drop="4"]:not([data-blank])) .row-expand) { display: grid; }
   .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > .row-columns > [data-drop="4"]) { display: table-row; }
   .data-table > tbody > tr.is-expanded:has(+ tr.row-detail > td > .row-columns > [data-drop="4"]) > * { border-bottom: 0; }
@@ -304,6 +311,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table > * > tr > [data-drop="3"] { display: none; }
   .data-table:has(> thead > tr:last-child > [data-drop="3"]) { --gone-3: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="3"] ~ [data-drop="3"]) { --gone-3: 2; }
+  .data-table:has(> thead > tr:last-child > [data-drop="3"] ~ [data-drop="3"] ~ [data-drop="3"]) { --gone-3: 3; }
+  .data-table:has(> thead > tr:last-child > [data-drop="3"] ~ [data-drop="3"] ~ [data-drop="3"] ~ [data-drop="3"]) { --gone-3: 4; }
   :is(.row-columns > [data-drop="3"], .row-columns:has(> [data-drop="3"]), .data-table > tbody > tr:has(> [data-drop="3"]:not([data-blank])) .row-expand) { display: grid; }
   .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > .row-columns > [data-drop="3"]) { display: table-row; }
   .data-table > tbody > tr.is-expanded:has(+ tr.row-detail > td > .row-columns > [data-drop="3"]) > * { border-bottom: 0; }
@@ -313,6 +322,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table > * > tr > [data-drop="2"] { display: none; }
   .data-table:has(> thead > tr:last-child > [data-drop="2"]) { --gone-2: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="2"] ~ [data-drop="2"]) { --gone-2: 2; }
+  .data-table:has(> thead > tr:last-child > [data-drop="2"] ~ [data-drop="2"] ~ [data-drop="2"]) { --gone-2: 3; }
+  .data-table:has(> thead > tr:last-child > [data-drop="2"] ~ [data-drop="2"] ~ [data-drop="2"] ~ [data-drop="2"]) { --gone-2: 4; }
   :is(.row-columns > [data-drop="2"], .row-columns:has(> [data-drop="2"]), .data-table > tbody > tr:has(> [data-drop="2"]:not([data-blank])) .row-expand) { display: grid; }
   .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > .row-columns > [data-drop="2"]) { display: table-row; }
   .data-table > tbody > tr.is-expanded:has(+ tr.row-detail > td > .row-columns > [data-drop="2"]) > * { border-bottom: 0; }
@@ -322,6 +333,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table > * > tr > [data-drop="1"] { display: none; }
   .data-table:has(> thead > tr:last-child > [data-drop="1"]) { --gone-1: 1; }
   .data-table:has(> thead > tr:last-child > [data-drop="1"] ~ [data-drop="1"]) { --gone-1: 2; }
+  .data-table:has(> thead > tr:last-child > [data-drop="1"] ~ [data-drop="1"] ~ [data-drop="1"]) { --gone-1: 3; }
+  .data-table:has(> thead > tr:last-child > [data-drop="1"] ~ [data-drop="1"] ~ [data-drop="1"] ~ [data-drop="1"]) { --gone-1: 4; }
   :is(.row-columns > [data-drop="1"], .row-columns:has(> [data-drop="1"]), .data-table > tbody > tr:has(> [data-drop="1"]:not([data-blank])) .row-expand) { display: grid; }
   .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > .row-columns > [data-drop="1"]) { display: table-row; }
   .data-table > tbody > tr.is-expanded:has(+ tr.row-detail > td > .row-columns > [data-drop="1"]) > * { border-bottom: 0; }
@@ -345,6 +358,16 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-3); }
   .data-table [data-kind] .narrow-more, .data-table :is(.wide-only, [data-wide-only]) { display: none; }
   .data-table .narrow-only { display: inline; }
+  /* The columns a narrow box does not draw (`data-wide-columns`, table_cells) are taken off the count its share is reckoned over. */
+  .data-table[data-wide-columns="1"] { --gone-wide: 1; }
+  .data-table[data-wide-columns="2"] { --gone-wide: 2; }
+  .data-table[data-wide-columns="3"] { --gone-wide: 3; }
+  .data-table[data-wide-columns="4"] { --gone-wide: 4; }
+  .data-table[data-wide-columns="5"] { --gone-wide: 5; }
+  .data-table[data-wide-columns="6"] { --gone-wide: 6; }
+  .data-table[data-wide-columns="7"] { --gone-wide: 7; }
+  .data-table[data-wide-columns="8"] { --gone-wide: 8; }
+  .data-table[data-wide-columns="9"] { --gone-wide: 9; }
   .data-table > tbody > tr:has(> [data-kind] .narrow-more) .row-expand { display: grid; }
   .data-table > tbody > tr.is-expanded [data-kind] .narrow-more { display: block; contain: inline-size; }
   .data-table > tbody > tr.is-expanded [data-kind] .narrow-more > br:first-child { display: none; }
@@ -355,7 +378,9 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* A table cell cannot take a line of its own, so a narrow table whose rows hold labeled controls (any but an `icon-link`), or the narrowest one whose rows hold any, is a grid of its columns' tracks instead, each row a subgrid of them, every cell under its heading (a column that has left takes no track). A row's controls take its last line, from where its name starts. The table and its rows name their controls again, which weighs these rules above a column's own width and display. */
 .table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] :is(a, button, [role="button"])) { --controls: icons; }
 .table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] :is(a, button, [role="button"]):not(.icon-link)) { --controls: labeled; }
-@container table-region ((width < 36rem) and style(--controls: labeled)) or ((width < 20rem) and style(--controls: icons)) {
+/* A row of four labeled controls asks a line of their own sooner, as a table of more columns lets them leave sooner (above). */
+.table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] > .btn:not(.icon-link) ~ .btn ~ .btn ~ .btn) { --controls: crowded; }
+@container table-region ((width < 36rem) and style(--controls: labeled)) or ((width < 48rem) and style(--controls: crowded)) or ((width < 20rem) and style(--controls: icons)) {
   .data-table:has(> tbody > tr > [data-kind="control"] :is(a, button, [role="button"]):not([hidden])) {
     display: grid; grid-template-columns: var(--lead,) [name] minmax(auto, 1fr) repeat(var(--columns), auto);
     &[data-selectable-table] { --lead: auto; }
