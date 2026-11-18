@@ -39,6 +39,7 @@ lazy from .infrastructure import enabled_resources
 lazy from .path_model import Route
 lazy from .paths import path_to, routed_names
 lazy from .services import find_service
+lazy from .topology_estate import machine_nodes
 
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 # A service's wiring fault (``services._faults``), one fact per fault on its node.
@@ -68,10 +69,20 @@ def _subject(hostname: str) -> str:
     return f"service:{hostname}"
 
 
+def _about(estate: FindingEstate, hostname: str, machine: str) -> dict[str, str]:
+    """What a claim about ``hostname`` is about: its service, or where HQ
+    lists no service of that name (a route it only read), the machine the
+    name reaches, with the name as the part of it the claim is about."""
+
+    if _subject(hostname) in {node.id for node in estate.nodes()}:
+        return {"subject": _subject(hostname)}
+    return {"subject": machine_nodes()(machine) or _subject(hostname), "part": hostname}
+
+
 # ----- A public name that a machine answers but nothing on it serves ---------
 
 
-def _answered_by_nothing(_estate: FindingEstate) -> tuple[Finding, ...]:
+def _answered_by_nothing(estate: FindingEstate) -> tuple[Finding, ...]:
     # Only a machine whose containers HQ reads can be said to serve nothing:
     # elsewhere (shared hosting, a bare server) what answers is unknown. A
     # machine where a container answers on a web port serves names HQ cannot
@@ -100,7 +111,7 @@ def _answered_by_nothing(_estate: FindingEstate) -> tuple[Finding, ...]:
             found.append(
                 Finding(
                     rule="public-name-served-by-nothing",
-                    subject=_subject(name),
+                    **_about(estate, name, last.name),
                     title=f"{name} points at {last.name}, which serves nothing for it",
                     severity=Tone.ATTENTION,
                     explanation=(
@@ -154,7 +165,7 @@ def _said(state: str) -> str:
     return {"exited": "stopped", "dead": "stopped", "created": "not started"}.get(state, state)
 
 
-def _routed_to_stopped(_estate: FindingEstate) -> tuple[Finding, ...]:
+def _routed_to_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
     containers = _containers_by_place()
     found = []
     for name in routed_names():
@@ -164,7 +175,7 @@ def _routed_to_stopped(_estate: FindingEstate) -> tuple[Finding, ...]:
                 found.append(
                     Finding(
                         rule="route-to-stopped-container",
-                        subject=_subject(name),
+                        **_about(estate, name, machine),
                         title=f"{name} leads to {container} on {machine}, which is {_said(state)}",
                         severity=Tone.SERIOUS,
                         explanation=(
@@ -222,12 +233,12 @@ def _gates_guarding_nothing(_estate: FindingEstate) -> tuple[Finding, ...]:
 # ----- The internal and public answers disagree about where a name lives -----
 
 
-def _split_horizon(_estate: FindingEstate) -> tuple[Finding, ...]:
+def _split_horizon(estate: FindingEstate) -> tuple[Finding, ...]:
     found = []
     for name in routed_names():
         routes = path_to(name).routes
         if apart := _machines_apart(routes):
-            found.append(_split_horizon_finding(name, routes, *apart))
+            found.append(_split_horizon_finding(estate, name, routes, *apart))
     return distinct(found)
 
 
@@ -253,10 +264,12 @@ def _dns_kinds(*, public: bool) -> tuple[str, ...]:
     )
 
 
-def _split_horizon_finding(name: str, routes: tuple[Route, ...], public: set[str], internal: set[str]) -> Finding:
+def _split_horizon_finding(
+    estate: FindingEstate, name: str, routes: tuple[Route, ...], public: set[str], internal: set[str]
+) -> Finding:
     return Finding(
         rule="split-horizon-disagrees",
-        subject=_subject(name),
+        **_about(estate, name, min(public)),
         title=(
             f"{name} goes to {', '.join(sorted(public))} from the internet and {', '.join(sorted(internal))} from home"
         ),

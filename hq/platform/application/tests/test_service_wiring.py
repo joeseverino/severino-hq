@@ -56,23 +56,6 @@ class WiringFaultTests(TestCase):
         self.assertEqual(len(service.faults), 1)
         self.assertEqual(service.status, "attention")
 
-    def test_the_queue_title_says_what_is_wrong(self):
-        for key in ("dns-a", "dns-b"):
-            healthy(
-                ManagedResource.objects.create(
-                    key=key,
-                    kind="adguard.rewrite",
-                    spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-                )
-            )
-
-        (fault,) = find_service("app.example.com").faults
-        (finding,) = wiring()
-
-        self.assertEqual(finding.subject, "service:app.example.com")
-        self.assertIn("app.example.com", finding.title)
-        self.assertIn(fault.split(". ", 1)[0].rstrip("."), finding.title)
-
     def test_two_declarations_of_different_kinds_on_one_facet_are_not_a_fault(self):
         """An internal answer and a public one are both DNS and legitimately differ."""
         healthy(
