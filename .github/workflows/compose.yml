@@ -159,7 +159,7 @@ jobs:
 
       - name: Install the pinned age
         if: failure()
-        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
@@ -272,7 +272,7 @@ jobs:
       # and the published composition is signed and attested with it at the end.
       # The release mise.lock records, which the host verifies with too.
       - name: Install the pinned cosign
-        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
@@ -441,7 +441,7 @@ jobs:
         # Every value that names an extension passes between steps as a file:
         # a step's env block is printed in its public log.
         env:
-          CORDON_LOCK: ./cordon/admission/lock.mjs
+          CORDON_LOCK: ./cordon/admission/lock.ts
         # The arguments are words by construction (the collect step admits only
         # plain file names), so they are split here on purpose and never globbed.
         run: |
@@ -558,7 +558,7 @@ jobs:
       - name: Install the pinned Trivy
         if: >-
           steps.fingerprint.outputs.build == 'true'
-        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
@@ -674,7 +674,7 @@ jobs:
 
       - name: Install the pinned age
         if: failure()
-        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:

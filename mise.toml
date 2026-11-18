@@ -31,7 +31,7 @@
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
 # the tools below.
 
-min_version = "2026.11.6"
+min_version = "2026.11.9"
 
 [settings]
 # The runners, which build the images, the machines gates run on by hand, and
@@ -71,7 +71,7 @@ UV_LOCKED = "1"
 GOTOOLCHAIN = "local"
 
 [tools]
-node = "26.13.0"
+node = "26.13.1"
 # The controller's Go is the release go.mod's toolchain line names, its one
 # pin, which Renovate moves; the images install it and uv from mise.lock.
 go = '{{ read_file(path="controller/go.mod") | regex_replace(pattern="(?ms).*^toolchain go([0-9.]+)$.*", rep="$1") }}'
@@ -81,17 +81,17 @@ shellcheck = "0.11.0"
 # Runs the Go tests (test:controller) and renders go test's JSON events, which
 # it also keeps in a file for a reader that decides from them.
 "aqua:gotestyourself/gotestsum" = "1.13.0"
-jactionlint = { version = "2.5.0", workflow = "release.yaml" }
+jactionlint = "2.6.0"
 # The workflows' security audit (lint:workflows), offline.
 zizmor = "1.32.0"
 # The prose linter: HQ's wording rules, in tools/lint/vale/.vale.ini (lint:prose).
-vale = "3.26.0"
+vale = "3.27.0"
 # Structural rules over the source, in tools/lint/ast-grep/ (lint:ast-grep), and the
 # counts Ruff has no rule for (audit:ast).
-ast-grep = "0.51.1"
+ast-grep = "0.51.3"
 yq = "4.54.3"
 jq = "1.8.2"
-uv = "0.13.7"
+uv = "0.13.9"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
 # Lazy, as age is: only lint:scorecard runs it.
 scorecard = { version = "5.6.0", lazy = true }

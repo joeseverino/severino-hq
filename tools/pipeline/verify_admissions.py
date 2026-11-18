@@ -86,7 +86,7 @@ def verify_one(extension: dict[str, str], directory: Path, policy_sha: str, cord
     with entry.open("wb") as out:
         run(
             [
-                "node", str(cordon / "admission" / "verify.mjs"),
+                "node", str(cordon / "admission" / "verify.ts"),
                 "--statement", str(statement),
                 "--bundle", str(bundle),
                 "--artifact", str(wheel),

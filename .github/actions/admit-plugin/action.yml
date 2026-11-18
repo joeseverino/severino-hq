@@ -229,8 +229,8 @@ runs:
         wheel=$(find dist -maxdepth 1 -name '*.whl' -print -quit)
         version=$(python -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["project"]["version"])' \
           "$PACKAGE_DIR/pyproject.toml")
-        node cordon/admission/evidence.mjs --policy "$POLICY_PATH" > evidence.json
-        node cordon/admission/create.mjs \
+        node cordon/admission/evidence.ts --policy "$POLICY_PATH" > evidence.json
+        node cordon/admission/create.ts \
           --artifact "$wheel" \
           --repository "$GITHUB_REPOSITORY" \
           --commit "$GITHUB_SHA" \

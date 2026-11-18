@@ -172,6 +172,11 @@ def _vale(text: str = "", files: Iterable[Path | str] = (), flags: Iterable[str]
     if vale.returncode not in (0, 1):
         sys.stderr.write(vale.stdout + vale.stderr)
         return vale.returncode, {}
+    # A warning is Vale reading less than it was asked to, such as a language
+    # whose grammar is not installed (setup:lint-tools), and still exiting 0.
+    if vale.stderr.strip():
+        sys.stderr.write(vale.stderr)
+        return 2, {}
     return 0, json.loads(vale.stdout or "{}")
 
 

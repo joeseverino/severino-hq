@@ -1,6 +1,7 @@
 #!/bin/sh
 #MISE description="Vale holds the wording to tools/lint/vale's swaps: no em dash, and the one name a page gives each thing, in place of HQ's own words or a retired label"
 #MISE hide=true
+#MISE depends=["setup:lint-tools"]
 #MISE tags=["fast"]
 #MISE sources=["**/*.py", "**/*.html", "**/*.md", "**/*.js", "**/*.css", "**/*.go", "**/*.sh", "tools/lint/vale/**", "pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env"]
 #MISE outputs=[]

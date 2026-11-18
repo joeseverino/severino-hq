@@ -5,9 +5,11 @@ import contextlib
 import io
 import json
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from django.conf import settings
 from django.test import SimpleTestCase, tag
@@ -226,6 +228,26 @@ class ValeRuleTests(SimpleTestCase):
             vale({"views.py": source}),
             [("views.py", 2, "Parts"), ("views.py", 5, "Parts"), ("views.py", 9, "Parts"), ("views.py", 10, "Parts")],
         )
+
+
+@tag("source")
+class ValeWarningTests(SimpleTestCase):
+    def test_a_language_vale_has_no_grammar_for_fails_the_run(self):
+        """Without its grammar Vale reads a language by comment delimiters,
+        matches no view, and still exits 0, so lint:prose refuses the run."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shutil.copytree(VALE / "styles", root / "styles", ignore=shutil.ignore_patterns("grammars"))
+            (root / ".vale.ini").write_text((VALE / ".vale.ini").read_text())
+            (root / "example.go").write_text('package example\n\nconst Label = "A label"\n')
+            with (
+                mock.patch.object(plain_words, "VALE_CONFIG", root / ".vale.ini"),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                status, _alerts = plain_words._vale(files=[root / "example.go"])
+
+        self.assertNotEqual(status, 0)
 
 
 @tag("source", "tree")
