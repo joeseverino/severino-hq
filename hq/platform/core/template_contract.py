@@ -124,6 +124,7 @@ CLASSES = (
     "two-col",
     "visually-hidden",
     "whole",
+    "wide-only",
 )
 
 _VARIABLE = re.compile(r"\{\{.*?\}\}", re.DOTALL)

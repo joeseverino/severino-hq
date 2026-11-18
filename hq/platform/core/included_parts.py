@@ -150,7 +150,7 @@ PARTS = (
     _part(
         "cadence_matrix",
         "Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`.",
-        *("cadence-cell", "cadence-detail", "cadence-period", "cadence-total", "wide-only"),
+        *("cadence-cell", "cadence-detail", "cadence-period", "cadence-total"),
         draws=(CADENCE,),
         public=True,
     ),

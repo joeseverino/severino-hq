@@ -108,6 +108,16 @@ class RowControlsTests(SimpleTestCase):
                 )
                 self.assertEqual(len([each for each in all_elements(html) if each.tag == "select"]), 1)
 
+    def test_a_column_headed_wide_only_stands_only_in_a_wide_box_cell_by_cell(self):
+        """A column of fields no open line can copy leaves a narrow box whole:
+        its heading says so once, and each of its cells carries it."""
+
+        rows = '<tr><td>Example</td><td>On</td><td><select name="example"><option>One</option></select></td></tr>'
+        head = '{% table_heading "Name" gutter=True %}{% table_heading "Default" %}'
+        html = _table(rows, head=head + '{% table_heading "Agent" "control" css="wide-only" %}')
+        cells = [each for each in all_elements(html) if each.tag == "td"]
+        self.assertEqual(["data-wide-only" in each.attrs for each in cells], [False, False, True])
+
     def test_key_columns_leave_after_every_other_and_together(self):
         """Words every row must show (a change's two sides) stay while any
         other column can leave, then move to the row's open line together,

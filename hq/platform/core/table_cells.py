@@ -127,6 +127,7 @@ class _Cell:
     def states(self) -> bool:
         pills = [pill for pill, said in zip(self.tops, self.said, strict=True) if pill or said]
         return bool(pills) and all(pills) and not self.loose
+
     # Its first element at its top, and where a class goes on that element:
     # a value said by one list is its own short value's box.
     top_tag: str = ""
@@ -461,12 +462,7 @@ class Cells(HTMLParser):
         # twice. Key-cols leave after every other column and together, at
         # the widest rank any of them would take, since one side of a change
         # without the other says nothing.
-        states = {
-            place
-            for row in records
-            for place, cell in _placed(row)
-            if place != named and cell.states
-        }
+        states = {place for row in records for place, cell in _placed(row) if place != named and cell.states}
         keys = {at for at, cell in enumerate(heads[-1] if heads else []) if "key-col" in _classes(cell.attrs)}
         does = {place for row in records for place, cell in _placed(row) if cell.fields}
         does |= {place for row in records for place, _ in _row_controls(row, kinds, named)}
@@ -494,6 +490,7 @@ class Cells(HTMLParser):
                 keys - states - does - pressed - empty - {named},
                 after=len(order),
             )
+        wide = {at for at, cell in enumerate(heads[-1] if heads else []) if "wide-only" in _classes(cell.attrs)}
         self.opens = False
         self.cuts += [cell.drop for row in self.rows if row.section == "thead" for cell in row.cells if cell.drop]
         if not (self.sorts and _sorts(records)):
@@ -505,7 +502,7 @@ class Cells(HTMLParser):
             # A value is clamped only where its row's toggle opens it whole.
             toggle_cell = None if gutter is None else _at_place(row.cells, gutter)
             self.toggled = toggle_cell is not None and not toggle_cell.folds
-            self._mark_cells(row, kinds, named, empty, levels)
+            self._mark_cells(row, kinds, named, empty, levels, wide)
             if row.section == "thead":
                 self._mark_long_heads(row, longs)
             self._name(row, kinds, named)
@@ -550,9 +547,11 @@ class Cells(HTMLParser):
         named: int,
         empty: set[int],
         levels: dict[int, int],
+        wide: set[int],
     ) -> None:
         """What each cell says of itself: blank, its whole column blank, the
-        width its column leaves at, and in the body its kind and its clamp."""
+        width its column leaves at, that it stands only in a wide box as its
+        heading does (`wide-only`), and in the body its kind and its clamp."""
 
         body = row.section == "tbody"
         for at, cell in _placed(row):
@@ -560,6 +559,7 @@ class Cells(HTMLParser):
             if "colspan" not in cell.attrs:
                 marks += [" data-blank-column"] if at in empty else []
                 marks += [f' data-drop="{levels[at]}"'] if at in levels else []
+                marks += [" data-wide-only"] if body and at in wide else []
                 if row.section != "thead":
                     marks += self._body_marks(cell, _kind_at(at, kinds, named), body=body)
             self.marks.setdefault(cell.start, []).extend(marks)

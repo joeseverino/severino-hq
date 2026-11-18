@@ -118,9 +118,7 @@ class DecisionTests(SimpleTestCase):
         check = read_link("verify", "Check again", "/example/check/")
         shown = decision(self.item(url="/example/plan/", action="Upgrade plan", check=check))
 
-        self.assertEqual(
-            [action["label"] for action in shown["actions"] if action["recommended"]], ["Upgrade plan"]
-        )
+        self.assertEqual([action["label"] for action in shown["actions"] if action["recommended"]], ["Upgrade plan"])
 
     def test_a_reason_is_a_sentence_and_never_a_numbered_step(self):
         item = self.item(no_help_reason="Only the registrar can renew it.")
