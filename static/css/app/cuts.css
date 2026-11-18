@@ -105,6 +105,9 @@
   /* A list inside a clamp uses its inline line boxes. A flex item's padded
      rows can cross the clamp's last line and leave half a glyph visible. */
   .cell-clamp .line-list { display: inline; }
+  /* So does a change (`{% change %}`, figures.css): its flex box and the value before it keep lines of their own, which the clamp's lines do not count. What it changes to stays one box of one line, set apart from the words before it. Opening its row keeps these boxes, so it moves no column. */
+  .cell-clamp:not(.row-detail *) :is(.change, .change > :not(.change-to)) { display: inline; }
+  .cell-clamp:not(.row-detail *) .change-to { display: inline-flex; vertical-align: top; max-inline-size: 100%; }
   .cell-clamp .tag { padding-block: 0; }
 }
 /* A hash or a key, which has no break in it, may break anywhere, so it asks
