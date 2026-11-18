@@ -2,9 +2,14 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from datetime import date, time
+from decimal import Decimal
+from functools import cache
 from typing import Annotated, Any, Literal, NamedTuple, TypedDict, final
+from uuid import UUID
 
-from pydantic import ConfigDict, with_config
+from jsonschema import Draft202012Validator, validators
+from pydantic import ConfigDict, ValidationError as PydanticValidationError, with_config
 
 from hq.platform.core.audit import audit_connection, audit_operation, record_event, tallied
 from hq.platform.core.models import AuditLog
@@ -36,6 +41,7 @@ from .integration_specs import (
     CapabilitySpec,
     capability_schema,
     command_adapter,
+    command_schema,
     kept_by,
     takes_consent,
     takes_sent_fields,
@@ -417,7 +423,13 @@ def _retry_key(spec: CapabilitySpec, payload: dict[str, Any], sent: str | None) 
 
     if not spec.effect.changes or not isinstance(payload, dict):
         return "", payload
-    keys = {_valid_key(given) for given in (sent, payload.get(IDEMPOTENCY_FIELD)) if given is not None}
+    # A payload's key is judged whenever the field is there: a null is a key
+    # of the wrong shape, as the document declares it, never a key left out.
+    given = (
+        *(() if sent is None else (sent,)),
+        *((payload[IDEMPOTENCY_FIELD],) if IDEMPOTENCY_FIELD in payload else ()),
+    )
+    keys = {_valid_key(key) for key in given}
     if len(keys) > 1:
         raise InvalidIdempotencyKey("The request sent two different idempotency keys.")
     key = keys.pop() if keys else ""
@@ -497,11 +509,65 @@ def validate_command(spec: CapabilitySpec, payload: dict[str, Any], target: str 
     so a rule that reads two fields reads them as the record will hold them.
     """
 
+    sent = payload
     kept = kept_by(spec) if target is not None else None
     if kept is not None:
         (current,) = _target_keyword(spec, target).values()
         payload = {**kept.read(current), **payload}
+    mistyped = _mistyped(spec.command_type, sent)
+    if mistyped:
+        raise PydanticValidationError.from_exception_data(spec.name, mistyped)
     return command_adapter(spec.command_type).validate_python(payload)
+
+
+# What Pydantic calls a value of the wrong JSON type, by the type the schema
+# gives; the first a union lists names the refusal.
+_TYPE_ERRORS = {
+    "array": "list_type",
+    "boolean": "bool_type",
+    "integer": "int_type",
+    "null": "none_required",
+    "number": "float_type",
+    "object": "dict_type",
+    "string": "string_type",
+}
+# A value a door hands HQ already parsed: the text the schema says, as Python holds it.
+_JSON_TYPES = Draft202012Validator.TYPE_CHECKER
+_SENT_TYPES = _JSON_TYPES.redefine_many(
+    {
+        "number": lambda checker, value: _JSON_TYPES.is_type(value, "number") or isinstance(value, Decimal),
+        "string": lambda checker, value: isinstance(value, str | date | time | UUID),
+    }
+)
+_Sent = validators.extend(Draft202012Validator, type_checker=_SENT_TYPES)
+
+
+@cache
+def _published(command_type: type) -> Any:
+    return _Sent(command_schema(command_type))
+
+
+def _mistyped(command_type: type, payload: Any) -> list[Any]:
+    """Each value ``payload`` sends in a JSON type its published schema does not give it.
+
+    Pydantic's lax mode, which reads a form's text, takes ``0`` for false and
+    ``"3"`` for 3; a door's payload is held to the document's types first, so
+    what the document refuses is refused. The rest Pydantic judges.
+    """
+
+    found = []
+    for error in _published(command_type).iter_errors(payload):
+        if error.validator == "type":
+            wanted = error.validator_value
+        elif error.validator in {"anyOf", "oneOf"} and all(
+            branch.validator == "type" and not branch.relative_path for branch in error.context or ()
+        ):
+            wanted = error.context[0].validator_value
+        else:
+            continue
+        first = wanted[0] if isinstance(wanted, list) else wanted
+        found.append({"type": _TYPE_ERRORS[first], "loc": tuple(error.absolute_path), "input": error.instance})
+    return found
 
 
 # What a declaration write the consent does not admit is refused with.

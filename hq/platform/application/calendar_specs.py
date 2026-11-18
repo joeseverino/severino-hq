@@ -7,7 +7,7 @@ declarations without a central list naming the calendar.
 from datetime import date
 from typing import Annotated, TypedDict
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 
 from hq.domains.calendars.models import Entry
 
@@ -31,6 +31,7 @@ from .contracts import Effect
 from .deletion import DeleteCommand, delete_calendar_entry
 from .describe import Describe, listed
 from .integration_specs import CapabilitySpec, ListRead, ResourceSpec
+from .moments import stamp_day
 from .record_fields import Notes
 from .records import EDIT, KEPT
 from .resources import BoundedQuery, limit_words
@@ -44,8 +45,21 @@ type AgendaLimit = Annotated[
 ]
 
 
+def _iso_day(value: object) -> object:
+    # Pydantic reads a text of digits as a Unix time; a query's day is the
+    # ISO 8601 date the document's `format: date` says, and nothing else.
+    if not isinstance(value, str):
+        return value
+    day = stamp_day(value)
+    if day is None:
+        raise ValueError("must be an ISO 8601 date")
+    return day
+
+
 class AgendaQuery(BoundedQuery):
-    start: date | None = Field(default=None, description="The first day the span covers; absent, today.")
+    start: Annotated[date, BeforeValidator(_iso_day)] | None = Field(
+        default=None, description="The first day the span covers; absent, today."
+    )
     days: int = Field(
         default=14, ge=1, le=calendar_entries.AGENDA_DAYS, description="How many days the span covers, from start."
     )

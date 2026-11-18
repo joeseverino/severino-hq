@@ -2,7 +2,9 @@
 # read by its path: Schemathesis's own discovery climbs past a worktree's root.
 
 [generation]
-# Cases per operation and per mode.
+# Fuzzed cases per operation, valid and invalid drawn alike; the examples and
+# coverage phases add the document's examples and each boundary and refusal
+# case its schema implies.
 max-examples = 10
 # The bearer is the configured auth alone; ignored_auth holds what HQ answers
 # without it, so no generated case spends its one mutation there.

@@ -6,6 +6,7 @@ valid request is accepted, an invalid one refused with a declared refusal,
 and a request without a good token refused.
 """
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -15,10 +16,11 @@ import schemathesis
 from django.core.wsgi import get_wsgi_application
 from django.db import transaction
 from django.test import override_settings
-from hypothesis import HealthCheck, given, settings, strategies as st
-from hypothesis.errors import Unsatisfiable
+from hypothesis import HealthCheck, settings, strategies as st
 from schemathesis.config import SchemathesisConfig
 from schemathesis.generation import GenerationMode
+from schemathesis.generation.hypothesis.builder import HypothesisTestConfig, HypothesisTestMode, create_test
+from schemathesis.generation.meta import TestPhase
 from schemathesis.hook_specs import flatmap_case, map_case
 from werkzeug.test import Client
 
@@ -26,6 +28,7 @@ from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.application.capabilities import CapabilitySpec
+from hq.platform.application.domains import load, records_of
 from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD, IDEMPOTENCY_HEADER, STALE_WRITE_KEYWORD
 from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import compile_integration_graph
@@ -37,7 +40,11 @@ from hq.platform.core.example_estate.testing import throwaway_media
 
 from .in_process import DOCUMENT, LOOPBACK, UNCOMPRESSED, InProcessAPITestCase
 
-MODES = (GenerationMode.POSITIVE, GenerationMode.NEGATIVE)
+# Schemathesis's own phases, as its runner and pytest plugin build them: the
+# document's examples, the coverage cases its checks of headers, methods and
+# media types judge, and the fuzzed cases of both modes.
+PHASES = (HypothesisTestMode.EXAMPLES, HypothesisTestMode.COVERAGE, HypothesisTestMode.FUZZING)
+FUZZING = HypothesisTestMode.FUZZING.value
 # The agent acts for a person, the estate's owner, so a capability that keeps
 # something of a person's is reachable as well as one a machine may hold.
 AGENT = "example-properties"
@@ -52,6 +59,23 @@ def _needs(operation: dict) -> tuple[str, ...]:
     return tuple(scope for requirement in operation.get("security", ()) for scope in requirement.get(BEARER, ()))
 
 
+def listed(case):
+    """The operation the document lists for ``case``'s concrete path, if any:
+    the path itself, else the template with the fewest parameters that matches
+    it, as a router prefers ``/resources/calendar/{identifier}/`` to
+    ``/resources/{name}/{identifier}/``."""
+
+    schema, method = case.operation.schema, case.method.lower()
+    matching = [
+        path
+        for path, item in schema.raw_schema["paths"].items()
+        if method in item and re.fullmatch(re.sub(r"\\\{\w+\\\}", "[^/]+", re.escape(path)), case.formatted_path)
+    ]
+    if not matching:
+        return None
+    return schema[min(matching, key=lambda path: path.count("{"))][case.method.upper()]
+
+
 def required(case) -> tuple[str, ...]:
     """The capabilities the document's security requirement says ``case``'s call needs.
 
@@ -60,8 +84,8 @@ def required(case) -> tuple[str, ...]:
     it lists one, and needs what that one requires.
     """
 
-    listed = case.operation.schema.raw_schema["paths"].get(case.formatted_path, {}).get(case.method.lower(), {})
-    return _needs(case.operation.definition.raw) or _needs(listed)
+    named = listed(case)
+    return _needs(case.operation.definition.raw) or (_needs(named.definition.raw) if named is not None else ())
 
 
 def bearer(scope) -> str:
@@ -135,7 +159,22 @@ def one_key(context, case):
     if isinstance(spec, dict) and "connection_ref" in spec and provider is not None:
         reported = ProviderConnection.objects.filter(provider__in=provider.connection_providers)
         spec["connection_ref"] = reported.values_list("connection_ref", flat=True).first() or ""
+    # So is a record an import lays over: a drawn slug names none, so a record
+    # sent without what creating one needs is refused for want of a stored one.
+    if case.operation.path.endswith("/hq.import/") and isinstance(payload, dict):
+        for kind in ("projects", "assets"):
+            sent = [item for item in payload.get(kind) or () if isinstance(item, dict)]
+            stored = load(records_of(kind).model).objects.values_list("slug", flat=True)[: len(sent)]
+            for item, slug in zip(sent, stored, strict=False):
+                item["slug"] = slug
     return case
+
+
+def names_another(case) -> bool:
+    """Whether ``case`` calls a templated route at a path the document lists an operation of its own for."""
+
+    named = listed(case)
+    return named is not None and named.path != case.operation.path
 
 
 def by_name(context, case):
@@ -146,23 +185,29 @@ def by_name(context, case):
     ``flatmap`` ("Use `flatmap_<part>` when the strategy for one field depends
     on the value of another")."""
 
-    method = case.method.upper()
-    listed = case.operation.schema.raw_schema["paths"].get(case.formatted_path, {})
-    if (
-        case.meta is None
-        or not case.meta.generation.mode.is_positive
-        or case.formatted_path == case.operation.path
-        or method.lower() not in listed
-    ):
+    if case.meta is None or not case.meta.generation.mode.is_positive or not names_another(case):
         return st.just(case)
-    named = case.operation.schema[case.formatted_path][method]
 
     def sent(drawn):
         case.body, case.query = drawn.body, drawn.query
         case.headers = {**(case.headers or {}), **(drawn.headers or {})}
         return case
 
-    return named.as_strategy(generation_mode=GenerationMode.POSITIVE).map(sent)
+    return listed(case).as_strategy(generation_mode=GenerationMode.POSITIVE).map(sent)
+
+
+def drawn_by_name(case) -> bool:
+    """Whether a valid case of a templated path is one ``by_name`` drew: the
+    examples and coverage phases apply no ``flatmap``, so their valid call
+    naming a listed operation sends the template's body, which that
+    operation's own run judges instead."""
+
+    return not (
+        case.meta is not None
+        and case.meta.phase.name != TestPhase.FUZZING
+        and case.meta.generation.mode.is_positive
+        and names_another(case)
+    )
 
 
 @override_settings(OIDC_ISSUER=ISSUER, OIDC_RP_SIGN_ALGO="RS256", SEVERINO_API_RESOURCE=RESOURCE)
@@ -204,8 +249,9 @@ class APIPropertyTests(InProcessAPITestCase):
         schema.hooks.register_hook_with_name(by_name, flatmap_case.__name__)
         return schema
 
-    def exercise(self, operation, mode, *, examples=None, after=None):
-        examples = examples or operation.schema.config.generation_for(operation=operation).max_examples
+    def exercise(self, operation, *, examples=None, after=None):
+        config = operation.schema.config
+        examples = examples or config.generation_for(operation=operation, phase=FUZZING).max_examples
         kwargs = {"headers": UNCOMPRESSED, "environ_overrides": LOOPBACK}
 
         @settings(
@@ -215,8 +261,9 @@ class APIPropertyTests(InProcessAPITestCase):
             deadline=None,
             suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
         )
-        @given(case=operation.as_strategy(generation_mode=mode))
         def run(case):
+            if not drawn_by_name(case):
+                return
             with transaction.atomic():
                 response = case.call(**kwargs)
                 case.validate_response(response, transport_kwargs=kwargs)
@@ -224,14 +271,8 @@ class APIPropertyTests(InProcessAPITestCase):
                     after(case, response)
                 transaction.set_rollback(True)
 
-        try:
-            run()
-        except Unsatisfiable:
-            # An operation with nothing left to break once its bearer is the
-            # configured one has no invalid request, as Schemathesis's own
-            # runner finds before it schedules a mode.
-            if not mode.is_negative:
-                raise
+        modes = [mode for mode in PHASES if operation.is_testable_in(mode)]
+        create_test(operation=operation, test_func=run, config=HypothesisTestConfig(project=config, modes=modes))()
 
     def test_every_live_operation_keeps_its_contract(self):
         schema = self.load()
@@ -250,9 +291,8 @@ class APIPropertyTests(InProcessAPITestCase):
         covered = {schema.raw_schema["paths"][DOCUMENT]["get"]["operationId"]}
         for result in schema.get_all_operations():
             operation = result.ok()
-            for mode in MODES:
-                with self.subTest(operation=operation.label, mode=mode.value):
-                    self.exercise(operation, mode)
+            with self.subTest(operation=operation.label):
+                self.exercise(operation)
             covered.add(operation.definition.raw["operationId"])
         self.assertEqual(covered, expected)
 
@@ -297,12 +337,8 @@ class APIPropertyTests(InProcessAPITestCase):
                 self.assertEqual(second.headers["idempotency-replayed"], ["true"])
                 handler.assert_called_once()
 
-            for mode in MODES:
-                with self.subTest(mode=mode.value):
-                    handler.reset_mock()
+            def reset(case, response):
+                retried(case, response)
+                handler.reset_mock()
 
-                    def reset(case, response, retried=retried):
-                        retried(case, response)
-                        handler.reset_mock()
-
-                    self.exercise(operation, mode, examples=3, after=reset)
+            self.exercise(operation, examples=6, after=reset)

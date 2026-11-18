@@ -74,9 +74,9 @@ class DefaultTests(PolicyTestCase):
 
     def test_an_agents_deleting_flag_waits_like_a_delete_however_it_is_spelled(self):
         """An orphan prune deletes every record the manifest leaves out, so an
-        agent's is held though the capability only writes. Judged on the
-        command, because validation reads 1 and "true" as True and a policy
-        that read the payload would let either run a prune nobody approved."""
+        agent's is held though the capability only writes. Another spelling
+        of true (1, "true") is refused as the wrong type, so none runs a
+        prune nobody approved."""
 
         from hq.domains.docs_index.models import DocumentationRecord
 
@@ -99,7 +99,10 @@ class DefaultTests(PolicyTestCase):
                         name, keyed({**plain, **confirmed, flag: spelling}), principal=everything
                     )
 
-                    self.assertEqual(result.get("status"), "awaiting_approval", result)
+                    if spelling is True:
+                        self.assertEqual(result.get("status"), "awaiting_approval", result)
+                    else:
+                        self.assertEqual(result["error"]["code"], "invalid_input", result)
                     self.assertTrue(DocumentationRecord.objects.filter(doc_id="example-kept").exists())
             self.assertTrue(execute_capability(name, keyed(plain), principal=everything)["ok"])
 

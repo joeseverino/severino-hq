@@ -152,7 +152,11 @@ class _Builder:
         # leads somewhere writes out its own response, the links beside the
         # same schema: a Reference Object takes no other field (OpenAPI 3.2.0,
         # section 4.23).
-        ran = {"description": "Success.", "content": _json_content({"$ref": self.components.add(name, schema)})}
+        ran = {
+            "description": "Success.",
+            "headers": self.answered(),
+            "content": _json_content({"$ref": self.components.add(name, schema)}),
+        }
         success = {**ran, "links": links} if links else self.component("responses", self.responses, name, ran)
         responses: dict[str, Any] = {"200": success}
         if held is not None:
@@ -170,6 +174,7 @@ class _Builder:
         schema = {**envelope, "properties": {**envelope["properties"], "data": data}}
         response = {
             "description": "Accepted: held for approval in HQ. Nothing has happened yet.",
+            "headers": self.answered(),
             "content": _json_content(schema),
         }
         if links := self.links(answering=kind):
@@ -195,44 +200,57 @@ class _Builder:
         if waits:
             error["required"] = [*detail["required"], "retry_after"]
         self.components.add(schema, {**envelope, "properties": {**envelope["properties"], "error": error}})
-        response: dict[str, Any] = {
-            "description": f"{HTTPStatus(status).phrase}.",
-            "content": _json_content({"$ref": SCHEMAS + schema}),
-        }
+        headers = self.answered()
         if status == HTTPStatus.UNAUTHORIZED:
-            response["headers"] = {
-                "WWW-Authenticate": {
-                    "description": "How to authenticate.",
-                    "schema": {"type": "string", "const": views.REALM},
-                }
+            headers["WWW-Authenticate"] = {
+                "description": "How to authenticate.",
+                "required": True,
+                "schema": {"type": "string", "const": views.REALM},
             }
         if "insufficient_scope" in codes:
             # One component every 403 that can answer the code shares.
-            response["headers"] = {
-                "WWW-Authenticate": self.component(
-                    "headers",
-                    self.headers,
-                    _pascal("insufficient_scope") + _pascal("WWW-Authenticate"),
-                    {
-                        "description": (
-                            'On `insufficient_scope`: `Bearer` with `error="insufficient_scope"` and `scope`, the '
-                            "permission `error.details.scope` names (RFC 6750 section 3.1)."
-                        ),
-                        "schema": {"type": "string"},
-                    },
-                )
-            }
+            headers["WWW-Authenticate"] = self.component(
+                "headers",
+                self.headers,
+                _pascal("insufficient_scope") + _pascal("WWW-Authenticate"),
+                {
+                    "description": (
+                        'On `insufficient_scope`: `Bearer` with `error="insufficient_scope"` and `scope`, the '
+                        "permission `error.details.scope` names (RFC 6750 section 3.1)."
+                    ),
+                    "schema": {"type": "string"},
+                },
+            )
         if later:
-            response["headers"] = {
-                "Retry-After": {
-                    "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
-                    "required": waits,
-                    "schema": {"type": "integer", "minimum": 1},
-                }
+            headers["Retry-After"] = {
+                "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
+                "required": waits,
+                "schema": {"type": "integer", "minimum": 1},
             }
+        response: dict[str, Any] = {
+            "description": f"{HTTPStatus(status).phrase}.",
+            "headers": headers,
+            "content": _json_content({"$ref": SCHEMAS + schema}),
+        }
         if self.responses.setdefault(name, response) != response:
             raise OpenAPIError(f"Two responses claim the component name {name!r}.")
         return name
+
+    def answered(self) -> dict[str, Any]:
+        """The headers every answer carries: an answer for one bearer is stored by no cache."""
+
+        return {
+            "Cache-Control": self.component(
+                "headers",
+                self.headers,
+                "CacheControl",
+                {
+                    "description": "Operational data read with a bearer credential, correct only for the caller.",
+                    "required": True,
+                    "schema": {"type": "string", "const": views.ANSWER_CACHE_CONTROL},
+                },
+            )
+        }
 
     @staticmethod
     def component(section: str, held: dict[str, Any], name: str, value: dict[str, Any]) -> dict[str, Any]:

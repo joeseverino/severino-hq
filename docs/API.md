@@ -630,6 +630,8 @@ paths, expected types and declared choices, never a value the request carried.
 A field a command does not have is refused at any depth, as `extra_forbidden`
 at its path (`rules[0].scope is not a known field`), and its `input_schema` is
 closed at the same levels; only a part its type declares open takes any key.
+A value in a JSON type its `input_schema` does not give it is refused the same
+way, never read as another (`0` for `false`, `"3"` for `3`).
 `details` holds the structured list the sentence was built from, under the same
 rule: `type`, `loc` and `msg` for a schema error, field names and error codes
 for a domain one, and no submitted value in either. A field that names a

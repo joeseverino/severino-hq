@@ -18,6 +18,7 @@ from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, HttpResponse
 from django.urls import URLPattern, reverse
 from django.views.decorators.csrf import csrf_exempt
+from jsonschema import Draft202012Validator
 from pydantic import (
     BaseModel,
     Field,
@@ -188,6 +189,11 @@ class CapabilityRequestCatalog(TypedDict):
     capabilities: Annotated[list[CapabilityEntry], Describe("Each capability asked for that you can run from here.")]
 
 
+# Operational data reached with a bearer credential: correct nowhere but
+# the client that asked for it.
+ANSWER_CACHE_CONTROL = "private, no-store"
+
+
 def _json(payload: Mapping[str, Any], *, status: int = 200) -> HttpResponse:
     # A response body, which no fingerprint compares, and which fails on a
     # value JSON has no form for rather than writing its str.
@@ -197,9 +203,7 @@ def _json(payload: Mapping[str, Any], *, status: int = 200) -> HttpResponse:
         content_type="application/json",
         status=status,
     )
-    # Operational data reached with a bearer credential: correct nowhere but
-    # the client that asked for it.
-    response["Cache-Control"] = "private, no-store"
+    response["Cache-Control"] = ANSWER_CACHE_CONTROL
     return response
 
 
@@ -496,7 +500,7 @@ def capabilities(request: APIRequest) -> HttpResponse:
 
     # `?name=` narrows to a capability or a dotted prefix of whole segments,
     # and `?resource=` to the capabilities acting on that resource.
-    described = describe_capabilities(principal=request.principal, **_narrowing(request, capability_query()))
+    described = describe_capabilities(principal=request.principal, **_judged(request, capability_query()))
     specs: list[CapabilityDescription] = described["capabilities"]
     catalog: CapabilityRequestCatalog = {
         "schema_version": described["schema_version"],
@@ -603,6 +607,24 @@ def _narrowing(request: APIRequest, query_fields: QueryFields) -> dict[str, Any]
             continue
         (raw,) = sent
         values[field] = int(raw) if _counts(schema) and _COUNT.fullmatch(raw) else raw
+    return values
+
+
+class _UndeclaredValue(QueryRefusal):
+    """A declared parameter sent with a value its schema does not take."""
+
+
+def _judged(request: APIRequest, query_fields: QueryFields) -> dict[str, Any]:
+    """The declared query parameters, each held to the schema the document gives it.
+
+    The capability catalog has no query model of its own to judge them, so an
+    empty or malformed value is refused here rather than read as one left out.
+    """
+
+    values = _narrowing(request, query_fields)
+    for field, value in values.items():
+        if not Draft202012Validator(query_fields[field]).is_valid(value):
+            raise _UndeclaredValue(f"Query field {field!r} holds a value it does not take.")
     return values
 
 
