@@ -734,7 +734,7 @@ class DemoSiteTests(unittest.TestCase):
             self.assertTrue(homelab.first.locator('a[href="/infrastructure/containers/"]').count())
             weather = page.locator('[data-glance] .fact[data-fragment-part="weather"]')
             self.assertTrue(weather.is_visible(), "the forecast is on the dashboard")
-            self.assertIn("°", weather.locator(".fact-value").inner_text())
+            self.assertIn("°", weather.locator(":scope > .fact-value").inner_text())
             self.assertTrue(weather.locator(".fact-panel .facts-band > .fact").count())
             for width in (402, 1360):
                 page.set_viewport_size({"width": width, "height": 900})
