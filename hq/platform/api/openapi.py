@@ -9,7 +9,6 @@ and resource its registry's entry, and the tag tree the domain registry's.
 
 import json
 import re
-from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from http import HTTPStatus
 from pathlib import Path
@@ -441,19 +440,19 @@ class _Builder:
                         "properties": {**requests[name]["properties"], "target": shared},
                     }
         # A command several capabilities take in one shape is the component
-        # named for its type; one taken in a shape of its own (an update's
-        # shows no defaults) stays in its body.
-        shapes: dict[str, Counter[str]] = {}
+        # named for the type of the first of them, so commands of different
+        # types written alike (two taking no field but the retry key, which
+        # travels in its header) share it too; one taken in a shape of its own
+        # (an update's shows no defaults) stays in its body.
+        shapes: dict[str, list[str]] = {}
         for name, request in requests.items():
-            said = json.dumps(request["properties"]["payload"], sort_keys=True)
-            shapes.setdefault(registry[name].command_type.__name__, Counter())[said] += 1
+            shapes.setdefault(json.dumps(request["properties"]["payload"], sort_keys=True), []).append(name)
         for spec in self.capabilities:
             name = spec["name"]
             request = requests[name]
-            command = registry[name].command_type.__name__
             payload = request["properties"]["payload"]
-            if shapes[command][json.dumps(payload, sort_keys=True)] > 1:
-                shared = {"$ref": self.components.add(command, payload)}
+            if len(takers := shapes[json.dumps(payload, sort_keys=True)]) > 1:
+                shared = {"$ref": self.components.add(registry[takers[0]].command_type.__name__, payload)}
                 request = {**request, "properties": {**request["properties"], "payload": shared}}
             # Capabilities taking one body share its schema, each under its own name.
             first = self.requests.setdefault(json.dumps(request, sort_keys=True), f"{_pascal(name)}Request")
