@@ -5,7 +5,6 @@ containers HQ read on each, and where HQ's own image serves. A finding
 raises it (``tailnet_findings``); this module only derives it.
 """
 
-import json
 import re
 from dataclasses import dataclass
 
@@ -46,14 +45,6 @@ class LoopbackGrant:
     ports: tuple[LoopbackPort, ...]
     # Each policy test that accepts one of those ports, with it moved to deny.
     tests: tuple[dict, ...]
-
-    @classmethod
-    def of(cls, fact: str) -> LoopbackGrant:
-        """One read back from the fact the topology carries it in."""
-
-        said = json.loads(fact)
-        ports = tuple(LoopbackPort(**port) for port in said["ports"])
-        return cls(said["grant"], said["machine"], ports, tuple(said["tests"]))
 
     @property
     def fragment(self) -> dict:

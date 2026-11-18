@@ -9,7 +9,7 @@ sweep cannot answer says so rather than guessing.
 
 import json
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -29,7 +29,6 @@ lazy from .facts import inventory_records
 lazy from .hq_self import scoped_served_port, site_label
 lazy from .infrastructure import enabled_resources
 lazy from .locate import host_of, points_at_host, split_endpoint
-lazy from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, loopback_grants
 
 # The settings row naming the tailnet's resolvers, by address.
 RESOLVES_THROUGH = "Resolves through"
@@ -805,7 +804,6 @@ def posture_facts() -> tuple[tuple[str, str], ...]:
         if not group.get("members") and group.get("name") in named
     )
     entries.extend(("tag-granted-to-nobody", tag) for tag in unworn_tags(named))
-    entries.extend((GRANT_REACHES_ONLY_LOOPBACK, json.dumps(asdict(item))) for item in loopback_grants())
     return tuple(entries)
 
 

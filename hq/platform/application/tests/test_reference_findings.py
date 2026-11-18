@@ -9,8 +9,7 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .. import reference_findings as rules
-from ..inventory_testing import store
-from .test_tailnet_posture import raised, tailnet_connection
+from .test_tailnet_posture import raised
 
 ZONE, RECORD, TARGET = "cloudflare.zone", "cloudflare.dns_record", "tls.delivery_target"
 
@@ -89,29 +88,6 @@ class NamesNoConnectionTests(TestCase):
         target("on-nothing", "example-edge-2")
 
         self.assertEqual(raised(rules.RULE), [])
-
-
-class RuleTests(TestCase):
-    def test_checking_the_links_asks_the_database_nothing_more(self):
-        """The declarations and readings are in hand when the estate is built."""
-
-        from ..infrastructure import enabled_resources
-        from ..projection import projection_scope
-        from ..topology import relation_graph
-        from .test_tailnet_posture import EVERYTHING
-
-        tailnet_connection("example-dns", "cloudflare_dns")
-        store(ZONE, {"zone": "example.com", "connection_ref": "example-dns"})
-        record("lost", "typo.example", connection_ref="example-other")
-        with projection_scope():
-            graph = relation_graph(principal=EVERYTHING)
-            nodes = {node.id: node for node in graph.topology.nodes}
-            with self.assertNumQueries(0):
-                rules.add(nodes, enabled_resources())
-        self.assertEqual(
-            {key for key, _value in nodes["resource:lost"].facts},
-            {rules.NO_CONNECTION, rules.NO_PARENT},
-        )
 
 
 @tag("source")

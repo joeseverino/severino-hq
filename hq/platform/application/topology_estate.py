@@ -44,7 +44,6 @@ lazy from . import (
     filesystem_findings,
     reading_facts,
     reboot_findings,
-    reference_findings,
     render_status_findings,
     tailnet,
     tailnet_device_findings,
@@ -135,7 +134,7 @@ def add_estate(
     _hosted(nodes, edges, resources, estate)
     _reading_edges(nodes, edges, estate)
     _connects_edges(nodes, edges, estate)
-    _derived_from_readings(nodes, resources, estate)
+    _derived_from_readings(nodes, estate)
     _observed(nodes, edges, estate)
     return dict(estate.subjects)
 
@@ -520,7 +519,7 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     return by_ref, by_provider
 
 
-def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
+def _derived_from_readings(nodes, estate: _Estate) -> None:
     """The node each machine reading, refused report, tailnet device and
     certificate is about, where none stands yet."""
 
@@ -536,7 +535,6 @@ def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
         ),
     )
     tailnet_device_findings.add(nodes, estate.machine)
-    reference_findings.add(nodes, resources)
     certificate_expiry.held(nodes, estate.machine)
 
 

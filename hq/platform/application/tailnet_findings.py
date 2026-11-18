@@ -3,7 +3,8 @@
 import json
 from dataclasses import dataclass
 
-from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
+from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
+from hq.domains.control_plane.providers import PROVIDERS
 
 from . import trusted_networks
 from .action_links import command_url
@@ -14,11 +15,10 @@ from .finding_model import (
     FindingRemedy,
     FindingRule,
     Said,
-    connections_carrying,
     per_connection,
 )
 from .finding_steps import Do, Run
-from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, LoopbackGrant, LoopbackPort
+from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, LoopbackGrant, LoopbackPort, loopback_grants
 from .tone import Tone
 from .ui import counted, counted_forms, ended
 
@@ -178,11 +178,15 @@ def _grant_reaches_only_loopback(estate: FindingEstate) -> tuple[Finding, ...]:
     that accepts it keeps it so. What the card claims is only what HQ read.
     """
 
-    found = []
-    for node, values in connections_carrying(estate, GRANT_REACHES_ONLY_LOOPBACK):
-        grants = tuple(LoopbackGrant.of(value) for value in values)
-        found.append(_loopback_finding(node, grants))
-    return tuple(found)
+    grants = loopback_grants()
+    if not grants:
+        return ()
+    providers = PROVIDERS[TAILNET_KIND].connection_providers
+    return tuple(
+        _loopback_finding(node, grants)
+        for node in estate.nodes()
+        if node.kind == "connection" and node.provider in providers
+    )
 
 
 def _loopback_finding(node, grants: tuple[LoopbackGrant, ...]) -> Finding:
@@ -298,6 +302,7 @@ RULES: tuple[FindingRule, ...] = (
         "A grant opens a port bound only to loopback",
         Tone.NEUTRAL,
         _grant_reaches_only_loopback,
+        gathered=True,
         operator_action=(
             "In Tailscale's admin console, remove the port from the grant and deny it in the test that accepts it."
         ),
