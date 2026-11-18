@@ -868,9 +868,11 @@ PAST_THE_GUTTER = (
 COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
   .filter((th) => getComputedStyle(th).display !== 'none').map((th) => th.textContent.replace(/[^A-Za-z ]/g, '').trim())"""
 
-# Three tables whose every row the server made openable. In the first a
-# narrow box drops a column: one row has something in it, one has a dash
-# there. One row's only clipped text is for screen readers, beside a
+# Three tables whose every row the server made openable, each keeping its
+# value's column on the row as a key (a narrow box sends any other column to
+# the open line), so a row holds back only what the probe plants. In the
+# first a narrow box drops a column: one row has something in it, one has a
+# dash there. One row's only clipped text is for screen readers, beside a
 # decoration hidden from them, and one row's value is longer than a line of
 # its column (`data-long`). In the second a row folds part of a list, and a
 # row's value is that long too. In the third a run of parts (`line_list`)
@@ -878,7 +880,7 @@ COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
 # them.
 ROW_TOGGLE_TABLES = """
 {% table_region "Dropping" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
+{% table_heading "Name" gutter=True %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
 <tr data-probe="dropped"><td>Dropped</td><td>Short</td>
 <td><span style="display: inline-block; inline-size: 30rem">Something too wide for a phone to keep</span></td></tr>
 <tr data-probe="dropped-blank"><td>Blank</td><td>Short</td><td>–</td></tr>
@@ -889,14 +891,14 @@ ROW_TOGGLE_TABLES = """
 <td>a value far too long to show whole on one line of its column</td><td>–</td></tr>
 </tbody></table>{% endtable_region %}
 {% table_region "Folding" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>
+{% table_heading "Name" gutter=True %}{% table_heading "Value" css="key-col" %}</tr></thead><tbody>
 <tr data-probe="folded"><td>Folded</td>
 <td><span class="tag">One</span><span class="muted row-less">+1</span><span class="row-more"><span class="tag">Two</span></span></td></tr>
 <tr data-probe="cut-in-a-kept-gutter"><td>Name</td>
 <td>a value far too long to show whole on one line of its column</td></tr>
 </tbody></table>{% endtable_region %}
 {% table_region "Lining" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" gutter=True %}{% table_heading "Parts" %}</tr></thead><tbody>
+{% table_heading "Name" gutter=True %}{% table_heading "Parts" css="key-col" %}</tr></thead><tbody>
 <tr data-probe="line-fits"><td>Fits</td>
 <td>{% line_list fits as part %}<span class="tag">{{ part }}</span>{% endline_list %}</td></tr>
 <tr data-probe="line-cut"><td>Cut</td>
@@ -908,8 +910,8 @@ ROW_TOGGLE_VALUES = {
     "many": ("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"),
 }
 
-# A table of cut values, each the word its row is probed by then more: one
-# with no title, one carrying its whole text as a title, one longer than a
+# A table of cut values, their column kept on the row as a key, each the
+# word its row is probed by then more: one with no title, one carrying its whole text as a title, one longer than a
 # line of its column in a row that opens, two past the line a clamp ends with an ellipsis (a block and a
 # link set in its line, as a cell's name is), one cut where no ellipsis can
 # land, a box of words around a box of its own, and a name's chip in the muted
@@ -927,7 +929,7 @@ _CHIP = "chip-" + "-".join(["example-unit-name-long-enough-to-be-cut"] * 4) + ".
 _NOTE = '<td><span style="display: inline-block; inline-size: 30rem">A note wider than a phone</span></td>'
 CUT_TABLE = (
     '{% load value_tags %}{% table_region "Cuts" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Name" %}{% table_heading "Value" %}{% table_heading "Note" %}</tr></thead><tbody>'
+    '{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" %}</tr></thead><tbody>'
     + "".join(
         f"<tr><td>{name.title()}</td><td>{_CUT.format(title.format(name), name)}</td>{_NOTE}</tr>"
         for name, title in (("untitled", ""), ("titled", ' title="{} value far too long to fit"'))
@@ -943,7 +945,7 @@ CUT_TABLE = (
     + f'<tr><td>Chip<br><span class="muted"><code>{{{{ chip|breakable }}}}</code></span></td><td>Short</td>{_NOTE}</tr>'
     + "</tbody></table>{% endtable_region %}"
     + '{% table_region "Opening" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" %}</tr></thead><tbody>'
+    '{% table_heading "Name" gutter=True %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" %}</tr></thead><tbody>'
     + f"<tr><td>Opens</td><td>opens value far too long to show whole on one line of its column</td>{_NOTE}</tr>"
     "</tbody></table>{% endtable_region %}"
 )
