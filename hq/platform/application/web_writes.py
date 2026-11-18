@@ -34,7 +34,8 @@ lazy from django.utils.html import format_html
 lazy from hq.platform.core.templatetags.action_tags import offer_markup
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
-from .capabilities import Ran, run_capability
+from . import capabilities
+from .capabilities import Ran, as_documented, run_capability
 from .forms import file_as_sent
 from .idempotency import (
     KEY,
@@ -64,11 +65,13 @@ def run_posted(
     target: str | int | None = None,
     expected_updated_at: str | None = None,
 ) -> Ran:
-    """Run ``name`` as the signed-in person, under the key their form posted."""
+    """Run ``name`` as the signed-in person, under the key their form posted,
+    with what the form sent as text read in the command's types (``as_documented``)."""
 
+    spec = capabilities.capability_spec(name)
     return run_capability(
         name,
-        payload,
+        payload if spec is None else as_documented(spec.command_type, payload),
         principal=web_principal(request.user),
         target=target,
         expected_updated_at=expected_updated_at,

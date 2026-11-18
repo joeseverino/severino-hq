@@ -5,12 +5,12 @@ from dataclasses import dataclass, replace
 from datetime import date, time
 from decimal import Decimal
 from functools import cache
-from typing import Annotated, Any, Literal, NamedTuple, TypedDict, final
+from typing import Annotated, Any, Literal, NamedTuple, TypeAliasType, TypedDict, final, get_type_hints
 from uuid import UUID
 
 from jsonschema import Draft202012Validator, validators
 from jsonschema.exceptions import ValidationError as JSONSchemaError
-from pydantic import ConfigDict, ValidationError as PydanticValidationError, with_config
+from pydantic import ConfigDict, TypeAdapter, ValidationError as PydanticValidationError, with_config
 
 from hq.platform.core.audit import audit_connection, audit_operation, record_event, tallied
 from hq.platform.core.models import AuditLog
@@ -571,6 +571,43 @@ def _mistyped(command_type: type, payload: Any) -> list[Any]:
         first = wanted[0] if isinstance(wanted, list) else wanted
         found.append({"type": _TYPE_ERRORS[first], "loc": tuple(held.absolute_path), "input": held.instance})
     return found
+
+
+def as_documented(command_type: type, payload: dict[str, Any]) -> dict[str, Any]:
+    """``payload`` with each field the document's types refuse read as the command's own type reads it.
+
+    A form posts text: a weekday's checkbox sends ``"0"`` where the document
+    says an integer. The web door reads its form through this before the call,
+    so what it sends, holds for approval and records is the JSON an agent
+    would send. A field its type does not read stays as sent, for the call's
+    refusal to name.
+    """
+
+    wrong = {error["loc"][0] for error in _mistyped(command_type, payload) if error["loc"]}
+    return {
+        name: _read_as_typed(command_type, name, value) if name in wrong else value for name, value in payload.items()
+    }
+
+
+def _read_as_typed(command_type: type, name: str, value: Any) -> Any:
+    adapter = _field_adapter(command_type, name)
+    if adapter is None:
+        return value
+    try:
+        return adapter.dump_python(adapter.validate_python(value), mode="json")
+    except PydanticValidationError:
+        return value
+
+
+@cache
+def _field_adapter(command_type: type, name: str) -> TypeAdapter[Any] | None:
+    hint = get_type_hints(command_type, include_extras=True).get(name)
+    if hint is None:
+        return None
+    # Closed as the command's own validator is (``command_adapter``), so a
+    # field it would refuse is never read into one it takes.
+    alias: Any = TypeAliasType(f"{command_type.__name__}_{name}", hint)
+    return TypeAdapter(alias, config=ConfigDict(extra="forbid"))
 
 
 def _wrong_type(error: JSONSchemaError) -> tuple[Any, JSONSchemaError] | None:
