@@ -347,7 +347,6 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table[data-wide-columns="9"] { --gone-wide: 9; }
   .data-table > tbody > tr:has(> [data-kind] .narrow-more) .row-expand { display: grid; }
   .data-table > tbody > tr.is-expanded [data-kind] .narrow-more { display: block; contain: inline-size; }
-  .data-table > tbody > tr.is-expanded [data-kind] .narrow-more > br:first-child { display: none; }
   /* A value its clamp holds here (`cell-clamp`, cuts.css) opens its row, which releases it in place. */
   .data-table > tbody > tr:has(.cell-clamp) .row-expand { display: grid; }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
@@ -427,8 +426,6 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 }
 .row-columns dt { color: var(--muted); font-size: var(--text-xs); }
 .row-columns dd { min-width: 0; margin: 0; }
-/* A part that opened its own line on the row starts the entry's. */
-.row-columns dd > :is(.row-more, .narrow-more) > br:first-child { display: none; }
 /* Beside its label a value on a narrow line has too little room to hold a word, so there each label stands above its value. */
 @container row-columns (width < 18rem) {
   .row-columns dd, .row-columns dt { grid-column: 1 / -1; }
