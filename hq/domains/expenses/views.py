@@ -112,12 +112,13 @@ class ExpenseDetailView(RecordPageMixin, TemplateView):
         context["links"] = {kind: entity_link(kind, key, label=name) if key else None for kind, key, name in named}
         doc_id = record["related_documentation"]
         context["document"] = document_link(doc_id, record["document_title"]) if doc_id else None
+        # The records of other kinds that name this one, read by it, and the
+        # saved names of its references, which its record leaves to their owner.
+        found = Expense.objects.prefetch_related("receipts").get(pk=record["id"])
         context["account"], context["about"] = resolve_many(
-            [(record["paid_from"], record["paid_from_name"]), (record["about"], record["about_name"])],
+            [(record["paid_from"], found.paid_from_name), (record["about"], found.about_name)],
             principal=principal,
         )
-        # The records of other kinds that name this one, read by it.
-        found = Expense.objects.prefetch_related("receipts").get(pk=record["id"])
         receipts = related.receipts(found.receipts.all())
         context["receipted"] = bool(receipts.items)
         context["related"] = related.related(receipts, *referenced_by_row(found, principal=principal))

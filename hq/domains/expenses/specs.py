@@ -64,8 +64,6 @@ class ExpenseRecord(ExpenseRow):
     document_title: Annotated[
         str, Describe("The related doc's title; empty for none, or for one too sensitive to share.")
     ]
-    paid_from_name: Annotated[str, Describe("The paying account's name as it was saved; empty when not recorded.")]
-    about_name: Annotated[str, Describe("The name of what it was for, as it was saved; empty for none.")]
 
 
 def resources() -> tuple[ResourceSpec, ...]:
@@ -75,7 +73,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Expenses",
             "Expense records with stable relationship identifiers.",
             Capability.READ,
-            listing=ListRead(expenses.list_expenses, ExpenseQuery, ExpenseRow),
+            listing=ListRead(expenses.list_expenses, ExpenseQuery, ExpenseRecord),
             detail_handler=expenses.get_expense,
             identifier="id",
             identifier_type=RecordId,

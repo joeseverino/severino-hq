@@ -556,14 +556,15 @@ class RecordPageMixin(PageMixin):
         except RecordNotFound as exc:
             raise Http404(str(exc)) from exc
         # Asked for by another of its names, or a record whose page is
-        # another kind's, such as a machine's declaration: the page lives at
-        # the record's own path, never at an address it does not name here.
-        page = urlsplit(str(self.record["url"])).path
-        if unquote(page) == request.path:
+        # another kind's, such as a machine's declaration or an event read
+        # on its calendar: the page lives at the record's own address, never
+        # at one off this site.
+        url = str(self.record["url"])
+        if unquote(urlsplit(url).path) == request.path:
             return None
-        if not url_has_allowed_host_and_scheme(page, allowed_hosts={request.get_host()}):
-            raise ImproperlyConfigured(f"{self.resource!r} answered a page HQ does not serve: {page!r}.")
-        return redirect(page)
+        if not url_has_allowed_host_and_scheme(url, allowed_hosts={request.get_host()}):
+            raise ImproperlyConfigured(f"{self.resource!r} answered a page HQ does not serve: {url!r}.")
+        return redirect(url)
 
     @cached_property
     def stored(self) -> Any:

@@ -938,45 +938,6 @@
               "asset_name",
               "content_title",
               "document_title",
-              "paid_from_name",
-              "about_name",
-              "*"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
-      "ExpenseRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "id",
-              "label",
-              "date",
-              "vendor",
-              "item",
-              "category",
-              "total_cost",
-              "business_use_percentage",
-              "estimated_deductible_amount",
-              "payment_method",
-              "business_purpose",
-              "notes",
-              "related_project",
-              "related_asset",
-              "related_content",
-              "related_documentation",
-              "paid_from",
-              "about",
-              "updated_at",
               "*"
             ],
             "type": "string"
@@ -13228,10 +13189,6 @@
           "about": {
             "$ref": "#/components/schemas/ExpenseRow/properties/about"
           },
-          "about_name": {
-            "description": "The name of what it was for, as it was saved; empty for none.",
-            "type": "string"
-          },
           "asset_name": {
             "description": "The related asset's name; empty for none.",
             "type": "string"
@@ -13277,10 +13234,6 @@
           },
           "paid_from": {
             "$ref": "#/components/schemas/ExpenseRow/properties/paid_from"
-          },
-          "paid_from_name": {
-            "description": "The paying account's name as it was saved; empty when not recorded.",
-            "type": "string"
           },
           "payment_method": {
             "$ref": "#/components/schemas/ExpenseRow/properties/payment_method"
@@ -13345,9 +13298,37 @@
           "project_name",
           "asset_name",
           "content_title",
-          "document_title",
-          "paid_from_name",
-          "about_name"
+          "document_title"
+        ],
+        "type": "object"
+      },
+      "ExpenseRecordPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ExpenseRecordPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -13357,9 +13338,6 @@
         "properties": {
           "about": {
             "$ref": "#/components/schemas/ExpenseRowPartial/properties/about"
-          },
-          "about_name": {
-            "$ref": "#/components/schemas/ExpenseRecord/properties/about_name"
           },
           "asset_name": {
             "$ref": "#/components/schemas/ExpenseRecord/properties/asset_name"
@@ -13402,9 +13380,6 @@
           },
           "paid_from": {
             "$ref": "#/components/schemas/ExpenseRowPartial/properties/paid_from"
-          },
-          "paid_from_name": {
-            "$ref": "#/components/schemas/ExpenseRecord/properties/paid_from_name"
           },
           "payment_method": {
             "$ref": "#/components/schemas/ExpenseRowPartial/properties/payment_method"
@@ -13543,36 +13518,6 @@
           "paid_from",
           "about",
           "updated_at"
-        ],
-        "type": "object"
-      },
-      "ExpenseRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "$ref": "#/components/schemas/ExpenseRowPartial"
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
-        "required": [
-          "ok",
-          "data"
         ],
         "type": "object"
       },
@@ -37198,7 +37143,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ExpenseRowPageFields"
+            "$ref": "#/components/parameters/ExpenseRecordFields"
           }
         ],
         "responses": {
@@ -37206,7 +37151,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExpenseRowPageSuccess"
+                  "$ref": "#/components/schemas/ExpenseRecordPageSuccess"
                 }
               }
             },

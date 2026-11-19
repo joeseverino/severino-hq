@@ -153,17 +153,10 @@ class ExpenseCommand:
 _LINKED = ("related_project", "related_asset", "related_content", "related_documentation")
 
 
-def serialize_expense(expense: Expense, *, principal: Principal | None = None) -> ExpenseRow:
-    """``expense`` as ``principal`` may read it; None is an AI-facing surface's reader."""
-
-    document = shared_doc(expense.related_documentation, principal)
-    return row(expense, ExpenseRow, related_documentation=document.doc_id if document else None)
-
-
 def list_expenses(
     *, year: int | None = None, category: str | None = None, limit: int = 50, principal: Principal | None = None
 ) -> dict[str, Any]:
-    """List expense records with stable relationships, each doc as ``principal`` may read it."""
+    """List expense records whole, each doc as ``principal`` may read it."""
     rows = Expense.objects.select_related(*_LINKED)
     if year is not None:
         rows = rows.filter(date__year=year)
@@ -172,12 +165,16 @@ def list_expenses(
     return listing(rows, partial(serialize_expense, principal=principal), order=("-date", "-id"), limit=limit)
 
 
-def expense_record(expense: Expense, *, principal: Principal | None = None) -> ExpenseRecord:
-    """``expense`` whole, with the names its related records are said by."""
+def serialize_expense(expense: Expense, *, principal: Principal | None = None) -> ExpenseRecord:
+    """``expense`` whole, with the names its related records are said by, as
+    ``principal`` may read it; None is an AI-facing surface's reader."""
 
     document = shared_doc(expense.related_documentation, principal)
+    # The saved names of what ``paid_from`` and ``about`` refer to stay out: a
+    # reference's owner says who may read its name.
+    fields: ExpenseRow = row(expense, ExpenseRow, related_documentation=document.doc_id if document else None)
     return {
-        **serialize_expense(expense, principal=principal),
+        **fields,
         "url": entity_link(Kind.EXPENSE, str(expense.pk)).url,
         "category_label": expense.get_category_display(),
         "payment_method_label": expense.get_payment_method_display() if expense.payment_method else "",
@@ -185,8 +182,6 @@ def expense_record(expense: Expense, *, principal: Principal | None = None) -> E
         "asset_name": expense.related_asset.item_name if expense.related_asset else "",
         "content_title": expense.related_content.title if expense.related_content else "",
         "document_title": document.title if document else "",
-        "paid_from_name": expense.paid_from_name,
-        "about_name": expense.about_name,
     }
 
 
@@ -196,12 +191,12 @@ def get_expense(identifier: int, *, principal: Principal | None = None) -> Expen
     expense = Expense.objects.select_related(*_LINKED).filter(pk=identifier).first()
     if expense is None:
         raise RecordNotFound("No expense has that id.")
-    return expense_record(expense, principal=principal)
+    return serialize_expense(expense, principal=principal)
 
 
 save_expense = linked_saver(
     "expenses",
-    expense_record,
+    serialize_expense,
     refusals=Held("That expense was not found.", "That expense changed after it was read."),
     links={
         "related_project": Link("slug", "A related project was not found."),
