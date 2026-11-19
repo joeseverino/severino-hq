@@ -24,7 +24,7 @@ from hq.platform.core.example_estate import example_owner
 from hq.platform.core.example_estate.names import OWNER_USERNAME
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.models import AuditLog
-from hq.platform.core.tests import test_browser_fixtures
+from hq.platform.core.tests import crowding
 from hq.platform.core.tests.browser import estate
 
 
@@ -40,9 +40,9 @@ class RegistryTests(SimpleTestCase):
         self.assertIsNot(seeds.get("showcase"), seeds.SEEDS["empty"])
 
     def test_a_stress_estate_is_known_by_name_once_its_builder_is_loaded(self):
-        # Read first: the module registers its estates as it loads, which a lazy import waits for.
-        builder = test_browser_fixtures.build_estate
-        self.assertIs(seeds.get("sparse").plant, builder)
+        # Read first: the module registers its estate as it loads, which a lazy import waits for.
+        builder = crowding.build
+        self.assertIs(seeds.get("crowded").plant, builder)
 
     def test_the_server_side_of_the_registry_loads_no_test_module(self):
         probe = (

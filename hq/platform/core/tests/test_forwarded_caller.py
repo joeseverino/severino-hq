@@ -138,21 +138,17 @@ class ClientAddressTests(SimpleTestCase):
 
 
 class ProxiedFixtureTests(SimpleTestCase):
-    """A fixture written as the middleware's result is what the middleware makes of its proxy's request."""
+    """A request written as the middleware's result is what the middleware makes of its proxy's request."""
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=["172.18.0.0/16"])
-    def test_each_proxied_fixture_is_its_proxys_request_resolved(self):
+    def test_the_example_estates_request_is_its_proxys_request_resolved(self):
         from hq.platform.core.example_estate import REQUEST
 
-        from .test_browser_fixtures import _THROUGH_THE_PROXY
+        sent = {key: value for key, value in REQUEST.items() if key != SOCKET_PEER}
+        handed = arrived(**(sent | {"REMOTE_ADDR": REQUEST[SOCKET_PEER]}))
 
-        for name, fixture in {"browser connection page": _THROUGH_THE_PROXY, "example estate": REQUEST}.items():
-            with self.subTest(fixture=name):
-                sent = {key: value for key, value in fixture.items() if key not in {"secure", SOCKET_PEER}}
-                handed = arrived(**(sent | {"REMOTE_ADDR": fixture[SOCKET_PEER]}))
-
-                self.assertEqual(handed["REMOTE_ADDR"], fixture["REMOTE_ADDR"])
-                self.assertEqual(handed[SOCKET_PEER], fixture[SOCKET_PEER])
+        self.assertEqual(handed["REMOTE_ADDR"], REQUEST["REMOTE_ADDR"])
+        self.assertEqual(handed[SOCKET_PEER], REQUEST[SOCKET_PEER])
 
 
 @override_settings(SEVERINO_TRUSTED_PROXIES=["127.0.0.0/8"])

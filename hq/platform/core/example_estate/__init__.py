@@ -1,9 +1,9 @@
 """The example estate: a small, well-run homelab, the one HQ is shown with.
 
-Used by the showcase and standard data sets and the rendered-page and export
-tests; HQ itself never reads it. Each thing left to point out is a named
-constant beside the records it seeds, so the browser gate reads the page it
-changes.
+Used by the showcase and standard data sets, the rendered-page and export
+tests and, with crowding laid on top, the browser gate's crowded set; HQ
+itself never reads it. Each thing left to point out is a named constant beside
+the records it seeds, so the browser gate reads the page it changes.
 """
 
 from django.contrib.auth import get_user_model

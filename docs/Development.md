@@ -1059,9 +1059,11 @@ settles, never on a longer timer.
 
 #### The two estates
 
-The stress estate (`build_estate()` in
-`hq/platform/core/tests/test_browser_fixtures.py`) breaks things on purpose:
-long names, many rows, every state at once, on the pages it was built for.
+The crowded estate is the example estate with crowding laid on top
+(`crowd()` in `hq/platform/core/tests/crowding.py`): long names, many rows,
+held requests and long histories, added in the test tree so the demo never
+loads them. Its pages are `PAGES` in
+`hq/platform/core/tests/test_browser_fixtures.py`.
 
 Every list page is also filled from its own model
 (`hq/platform/core/tests/test_browser_derived_fixtures.py`). Each view drawn
@@ -1089,7 +1091,7 @@ moved. A finding names its check and the first width it was found at.
 `WIDE_TABLES` is read from the stylesheet: the narrowest window where a
 table's region, on the page and in a card, has passed the breakpoint its wide
 rules need. So the columns that keep their line are measured with the least
-room; the stress estate is held there too.
+room; the crowded estate is held there too.
 
 The example estate's values have the shapes and lengths real providers give
 (both tailnet addresses and a MagicDNS name per device, long image tags, a

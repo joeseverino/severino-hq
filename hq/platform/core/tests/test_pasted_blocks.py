@@ -13,13 +13,13 @@ from hq.platform.application.markup_testing import copied, within
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.tests.browser.estate import ask_as_production, owner_client
 
-# The module that registers the dense set, loaded now: HQ imports lazily, so
+# The module that registers the crowded set, loaded now: HQ imports lazily, so
 # an import nothing reads would never run it.
-import_module("hq.platform.core.tests.test_browser_dense_fixtures")
+import_module("hq.platform.core.tests.crowding")
 
 # The example estate, so an override it comes to raise is held too, and
-# the dense set, whose frontend fails every check a compose file can meet.
-SETS = ("showcase", "dense")
+# the crowded set, whose frontend fails every check a compose file can meet.
+SETS = ("showcase", "crowded")
 
 
 class ComposeChangeTests(TestCase):

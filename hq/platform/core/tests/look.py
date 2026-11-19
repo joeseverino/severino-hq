@@ -48,7 +48,7 @@ from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.audit import AUDIT
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
-from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
+from hq.platform.core.tests.browser.stress import stress_pages
 from hq.platform.core.tests.browser.survey import (
     BUSY,
     CLOSE_OPENED,
@@ -94,8 +94,8 @@ from hq.platform.core.tests.look_report import (
 )
 from hq.platform.core.tests.look_tables import COLUMNS, TABLES, columns_line
 from hq.platform.core.tests.task import PREFIX, TEMPLATE, Usage, estate_name, estate_path, is_estate, usage
-from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
+from hq.platform.core.tests.test_browser_fixtures import PAGES
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.agents import example_viewer
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
@@ -968,7 +968,7 @@ def _families(asked: tuple[str, ...]) -> list[str]:
 def _named() -> list[str]:
     """Every page dev:look knows by name but a catalog entry."""
 
-    return [*ALL_PAGES, *derived_pages(), *REFERENCE_PAGES]
+    return [*PAGES, *derived_pages(), *REFERENCE_PAGES]
 
 
 def catalog_pages(asked) -> dict[str, str]:
@@ -1735,8 +1735,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     def judged_as(self, name) -> Judged:
         """How the gate that reads ``name`` judges it, as drawn here, with
         script unless ``--no-script``: a catalog entry, a page without script,
-        a list filled with its longest values, a dense page, or a page once its
-        script has run."""
+        a list filled with its longest values, a crowded estate's page once its
+        script has run, or an estate page once its script has run."""
 
         if name in self.entries:
             return SCRIPTED_ENTRY if self.runs_script else ENTRY
@@ -1744,7 +1744,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             return UNSCRIPTED
         if name in self.lists:
             return LIST
-        return DENSE if name in DENSE_PAGES else SCRIPTED
+        return DENSE if name in PAGES else SCRIPTED
 
     def widths_of(self, name):
         """The widths ``--widths`` names, or else each its gate judges

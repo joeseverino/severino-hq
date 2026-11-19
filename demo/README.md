@@ -21,12 +21,12 @@ as HQ; no page is made for the demo alone.
 | Standard | `standard` | The same homelab with Advanced HQ Posture off. |
 | Empty | `empty` | A fresh install: one signed-in user and nothing else. What someone sees the first time. |
 
-## Two estates, two purposes
+## The example estate and its crowding
 
 | Estate | Where | What it is for |
 | --- | --- | --- |
 | The example estate | `hq/platform/core/example_estate/` | The one homelab HQ is shown with: this demo, a dev database (`manage.py seed showcase`, every set named in `hq/platform/core/seeds.py`), the rendered-page and export tests, and the layout gate's realistic pass, which reads every page the navigation reaches. The checks and the demo read the same data. |
-| The stress estate | `build_estate()` in `hq/platform/core/tests/test_browser_fixtures.py` | Long names, many rows, every state at once: it breaks things on purpose so the layout gate tests layouts at their worst. The demo never uses it. |
+| The crowded estate | `crowd()` in `hq/platform/core/tests/crowding.py`, laid on top of the example estate | Long names, many rows, held requests and long histories, added to the example estate so the layout gate tests layouts at their worst. It lives in the test tree, so the demo never loads it. |
 
 The example estate lives in `hq/`, not here, because `seed` and the suite
 run inside the image, which `demo/` is not copied into. `seed` refuses a
