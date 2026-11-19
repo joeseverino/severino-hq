@@ -10,10 +10,10 @@ from django.test import SimpleTestCase, TestCase
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
+from ..integration_specs import ListRead
 from ..integrations import integration_graph
 from ..resources import (
     EmptyQuery,
-    ListRead,
     ResourceSpec,
     describe_resources,
     get_resource,

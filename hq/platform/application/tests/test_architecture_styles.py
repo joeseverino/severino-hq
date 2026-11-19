@@ -608,7 +608,7 @@ class TemplateClassStyleTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**", "hq/**/*.py")
+@reads("**/templates/**", "hq/**/*.py", "!**/tests/**/*.py")
 class HandRolledClassTests(SimpleTestCase):
     """A class is one part's own, declared on its ``Part``: a template writes
     only the public classes, as an extension does, and a part's partial writes

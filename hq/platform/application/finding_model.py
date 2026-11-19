@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, NotRequired, TypedDict
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink, read_link
-from .core_capabilities import CONTROLLER_REFRESH
+from .cadence import CONTROLLER_REFRESH
 from .display_words import as_members, in_words
 from .finding_steps import Do, Press, Run, Step
 from .moments import moment

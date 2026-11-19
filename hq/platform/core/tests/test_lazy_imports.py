@@ -225,7 +225,7 @@ def submodules_of(package: Path) -> set[str]:
 
 
 @tag("source", "tree")
-@reads("**/*.py", lists=("*",))
+@reads("**/__init__.py", lists=("*", "**/*.py"))
 class SubmoduleShadowTests(SimpleTestCase):
     def test_no_package_binds_a_name_its_submodule_has(self):
         found = [

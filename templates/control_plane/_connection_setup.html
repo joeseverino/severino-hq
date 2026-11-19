@@ -29,7 +29,7 @@ connected is in one place.
               {% endif %}
               {% if setup.mint %}
                 <p>Or have the script issue one with exactly these:</p>
-                {% include "partials/_command.html" with command=setup.mint only %}
+                {% command text=setup.mint %}
               {% endif %}
             {% endstep %}
             {% step %}
@@ -53,7 +53,7 @@ connected is in one place.
             {% step %}
               <strong>Then</strong>
               <p>HQ's host reads the vault every hour; the connection then appears above. To read the vault now:</p>
-              {% include "partials/_command.html" with command="sudo systemctl start severino-hq-secrets.service" only %}
+              {% command text="sudo systemctl start severino-hq-secrets.service" %}
             {% endstep %}
           {% endsteps %}
         {% endsection %}

@@ -290,7 +290,7 @@ class ProcedurePageTests(TestCase):
 
 
 @tag("source", "tree")
-@reads("**/*.py", "**/templates/**")
+@reads("**/*.py", "!**/tests/**/*.py", "**/templates/**")
 class NoProcedureNamedTests(SimpleTestCase):
     """The host draws a procedure from the adopted catalog alone: no template
     and no module outside the example estate and the tests names one."""

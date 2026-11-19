@@ -4,7 +4,7 @@ from typing import Annotated, TypedDict
 
 from pydantic import Field
 
-from hq.platform.application import read_models, receipts
+from hq.platform.application import receipts
 from hq.platform.application.answer_fields import UpdatedAt
 from hq.platform.application.describe import Describe, listed
 from hq.platform.application.integration_specs import ListRead, ResourceSpec
@@ -50,7 +50,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Receipts",
             "Receipt metadata without file contents, storage paths, or URLs.",
             Capability.READ,
-            listing=ListRead(read_models.list_receipts, ReceiptQuery, ReceiptRow),
+            listing=ListRead(receipts.list_receipts, ReceiptQuery, ReceiptRow),
             search=SearchDefinition(
                 "receipts",
                 Receipt,

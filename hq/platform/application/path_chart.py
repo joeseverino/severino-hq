@@ -3,6 +3,7 @@
 from typing import ClassVar
 
 from .display_words import display
+from .drawings import LegendKey
 
 
 @display
@@ -63,3 +64,9 @@ class PathChart:
     @property
     def empty(self) -> bool:
         return not self.segments
+
+    @property
+    def legend_keys(self) -> tuple[LegendKey, ...]:
+        """Each ordered band as its legend's key."""
+
+        return tuple(LegendKey(mark=f"swatch-key chart-band-{slot}", label=label) for slot, label in self.legend)

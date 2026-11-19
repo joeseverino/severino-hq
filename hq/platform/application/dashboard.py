@@ -11,6 +11,7 @@ from typing import Any, TypedDict
 
 from django.utils import timezone
 
+from hq.domains.contacts import inbox
 from hq.platform.application.url_query import with_query
 
 from . import sections
@@ -32,7 +33,6 @@ from .json_schemas import as_written
 from .plugins import source_overview
 from .projection import projection_scope
 from .read_models import ActivityEvent, recent_activity
-from .record_findings import contacts_state
 from .security import Capability, Principal
 from .workflows import WrittenAction
 lazy from .action_items import item_key, item_revision, waiting_count
@@ -329,7 +329,7 @@ _SNAPSHOT_READS: tuple[str, ...] = tuple(
 
 @derivation("dashboard.snapshot", reads=_SNAPSHOT_READS, vary=_snapshot_variant)
 def _operating_snapshot(principal) -> _Snapshot:
-    unread_contacts_count, contacts_status = contacts_state()
+    unread_contacts_count, contacts_status = inbox.unread()
     projects = sections.projects_reading()
     content = sections.content_reading()
     expenses = sections.expenses_reading()

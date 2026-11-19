@@ -288,20 +288,6 @@ _FILL_ROWS = """async (png) => {
 
 # Each count of a strip: whether its number and its words share one line and
 # the count takes no second, whether it is a link, and the top of its line.
-_COUNTS_STRIP = """(strip, [cell, valued, labeled]) => ({counts: [...strip.children].filter(fact => fact.matches(cell)).map(fact => {
-  const value = fact.querySelector(valued).getBoundingClientRect();
-  const label = fact.querySelector(labeled).getBoundingClientRect();
-  const box = fact.getBoundingClientRect();
-  const line = Math.max(value.height, label.height);
-  return {
-    text: fact.textContent.trim(),
-    phrase: label.top < value.bottom && value.top < label.bottom && box.height < line * 1.5,
-    linked: Boolean(fact.querySelector(`${valued} a[href]`)),
-    top: Math.round(box.top),
-  };
-})})"""
-
-
 class ComponentLayoutTests(LayoutBrowserTests):
     """Rules with a setup of their own: one page, probe or control each."""
 
@@ -1444,23 +1430,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                     self.assertGreater(len(rows), 1)
                     self.assertEqual({len(row) for row in rows}, {1})
                     self.assertEqual({round(row[0]["left"]) for row in rows}, {round(rows[0][0]["left"])})
-
-    def test_the_dashboards_counts_are_one_line_that_wraps_between_counts(self):
-        """Each count reads as one phrase, its number then its words on one
-        line, a link where it has an address; the strip is one line where the
-        counts fit and wraps between counts, never inside one, on a phone."""
-
-        for width in (PHONE_SCREEN[0], 820, WIDE, 1900):
-            with self.subTest(width=width):
-                self.open("dashboard", width)
-                strip = self.page.locator(SELECTORS["dashboard_counts"]).evaluate(
-                    _COUNTS_STRIP, [SELECTORS["band_fact_cell"], SELECTORS["fact_value"], SELECTORS["fact_label"]]
-                )
-                self.assertGreater(len(strip["counts"]), 2)
-                self.assertEqual([count for count in strip["counts"] if not count["phrase"]], [])
-                self.assertEqual([count for count in strip["counts"] if not count["linked"]], [])
-                if width >= WIDE:
-                    self.assertEqual(len({count["top"] for count in strip["counts"]}), 1, strip)
 
     @with_script
     def test_a_row_toggle_is_owed_only_to_what_a_reader_cannot_see(self):

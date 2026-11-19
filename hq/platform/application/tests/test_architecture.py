@@ -24,7 +24,7 @@ from .source import source_files, template_files
 from .test_view_writes import routed_modules, shown
 
 
-@reads("**/*.py", "**/templates/**")
+@reads("**/*.py", "!**/tests/**/test_*.py", "**/templates/**")
 class DeliveryAdapterArchitectureTests(SimpleTestCase):
     """Which module may import which is pyproject.toml's import contracts, held by lint:imports."""
 
@@ -156,7 +156,7 @@ class FileSizeTests(SimpleTestCase):
         self.assertEqual(over, {}, "split these by responsibility, a test module by the behavior it holds")
 
 
-@reads("**/*.py", "**/templates/**", "static/js/**", "tools/lint/ast-grep/rules/**")
+@reads("**/*.py", "!**/tests/**/*.py", "**/templates/**", "static/js/**", "tools/lint/ast-grep/rules/**")
 class RequestNeverWaitsTests(SimpleTestCase):
     """A request answers from what HQ holds. It never reaches a network,
     starts a process or sleeps: the interpreter refuses it (``core.outbound``),
@@ -255,7 +255,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/*.py")
+@reads(lists=("hq/**/test*.py", "hq_sdk/**/test*.py"))
 class TestPlacementTests(SimpleTestCase):
     """Every test lives in its package's tests/ directory (CLAUDE.md), so
     coverage, discovery and the fast gate's selection see the same tree."""
@@ -283,7 +283,8 @@ class TestPlacementTests(SimpleTestCase):
         )
 
 
-@tag("source")
+# deptry reads the host code less its tests, a program the watch of @reads cannot hold.
+@tag("source", "tree")
 class RuntimeDependencyTests(SimpleTestCase):
     """lint:deptry holds every dependency to host code's imports, less the
     per-rule ignores in pyproject.toml. deptry says nothing of an ignore that

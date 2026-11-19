@@ -1,44 +1,20 @@
 """Canonical, non-mutating HQ projections shared by delivery adapters."""
 
 from datetime import datetime
-from typing import Any, Literal, TypedDict, cast
+from typing import Literal, TypedDict, cast
 
 from django.db.models import FETCH_RAISE, Count
 from django.utils import timezone
 
-from hq.domains.expenses.models import Expense
-from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
 
 from . import history, records
-from .expenses import serialize_expense
-from .projection import NextPage, listing, page_size
-from .receipts import serialize_receipt
+from .projection import NextPage, page_size
 from .resource_records import DocumentationRow
 from .routes import reverse
 from .sensitivity import safe_records
 lazy from .resources import list_resource
 lazy from .security import Principal
-
-
-def list_expenses(*, year: int | None = None, category: str | None = None, limit: int = 50) -> dict[str, Any]:
-    """List expense records with stable, sensitivity-safe relationships."""
-    rows = Expense.objects.select_related(
-        "related_project", "related_asset", "related_content", "related_documentation"
-    )
-    if year is not None:
-        rows = rows.filter(date__year=year)
-    if category:
-        rows = rows.filter(category=category)
-    return listing(rows, serialize_expense, order=("-date", "-id"), limit=limit)
-
-
-def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str, Any]:
-    """List receipt metadata without file contents, storage paths, or URLs."""
-    rows = Receipt.objects.select_related("related_asset")
-    if unmatched_only:
-        rows = rows.filter(related_expense__isnull=True, related_asset__isnull=True)
-    return listing(rows, serialize_receipt, order=("-uploaded_at",), limit=limit)
 
 
 class DocumentationStatus(TypedDict):

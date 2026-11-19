@@ -430,7 +430,7 @@ TEMPLATES = [
                 "hq.platform.core.templatetags.write_tags",
                 "hq.platform.core.templatetags.status_tags",
                 "hq.platform.core.templatetags.part_tags",
-                "hq.platform.core.templatetags.patch_tags",
+                "hq.platform.core.templatetags.command_tags",
                 "hq.platform.core.templatetags.change_tags",
                 "hq.platform.core.templatetags.notice_tags",
                 "hq.platform.core.templatetags.filter_tags",

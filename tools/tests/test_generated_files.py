@@ -10,6 +10,7 @@ import subprocess
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
 from tests.mise_tasks import ROOT, mise_tasks, writes
 
 
@@ -19,6 +20,15 @@ def tracked(*pathspec: str) -> set[str]:
 
 
 @tag("source", "tree")
+@reads(
+    "mise*.toml",
+    "mise.lock",
+    "mise-tasks/**",
+    "controller/go.mod",
+    "tools/pipeline/toolchain.env",
+    "**/.gitattributes",
+    lists=("**",),
+)
 class GeneratedAttributeTests(SimpleTestCase):
     def test_the_attribute_marks_exactly_what_the_tasks_declare(self) -> None:
         declared = {path: tracked(f":(glob){path}") for task in mise_tasks().values() for path in writes(task)}

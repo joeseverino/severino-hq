@@ -391,7 +391,7 @@ Otherwise it runs the check against current data.
 
 ### What each surface exposes
 
-Every derived read is a `ResourceSpec` in `hq/platform/application/resources.py`.
+Every derived read is a `ResourceSpec`, the host's own in `core_resources.py`.
 One registration serves the API (`/api/v2/resources/<name>/`), MCP
 (`list_resource`, `get_resource`), the CLI (`manage.py hq_call` over those
 tools) and the SDK (`hq_sdk.resources.list_resource` / `get_resource`). Each

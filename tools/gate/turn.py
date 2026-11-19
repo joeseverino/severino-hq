@@ -30,7 +30,7 @@ lazy from django.core.management.commands.test import Command as TestCommand
 lazy from django.test.runner import get_max_test_processes
 lazy from django.test.utils import get_runner
 
-from tools.gate.room import GATE, LOCK, capacity, lock_file, slot
+from tools.gate.room import GATE, LANDED, LOCK, available, capacity, free, free_now, lock_file, recorded, slot
 lazy from hq.platform.core.test_runner import drives_a_browser, tests_in
 
 # GATE sorts before LOCK: mise takes a task's locks in sorted order, so a task
@@ -54,6 +54,8 @@ ALL = "all"
 # Set for every process a share runs, so a run inside it goes ahead.
 SHARE = "HQ_TURN_SHARE"
 MEASURER = Path(__file__).resolve().parents[2] / "tools" / "lib" / "measured"
+# Where the measurer records the peak its tree held, for the next run of the same command (peak_file).
+PEAK = "HQ_MEASURED_PEAK"
 # mise's own poll of a busy lock, and how often a waiter says it still waits.
 FIRST_POLL, MAX_POLL, REPORT_EVERY = 0.1, 1.0, 30.0
 # Once a run outlives its bound it is asked to stop, and killed this long after.
@@ -118,8 +120,8 @@ def land(command: list[str]) -> int:
 
     record = lock_file(GATE).with_suffix(".json")
     held = held_locks() | {GATE}
-    with opened(GATE) as gate:
-        threading.Thread(target=hold, args=(gate, record), daemon=True).start()
+    with opened(GATE) as gate, opened(LANDED) as landed:
+        threading.Thread(target=hold, args=(gate, landed, record), daemon=True).start()
         try:
             return subprocess.run(command, env=os.environ | {HELD: ",".join(sorted(held))}, check=False).returncode
         except KeyboardInterrupt:
@@ -129,10 +131,12 @@ def land(command: list[str]) -> int:
             record.unlink(missing_ok=True)
 
 
-def hold(gate: int, record: Path) -> None:
-    """Take the gate, then say who holds it the way mise's holders do, for the line its waiters print."""
+def hold(gate: int, landed: int, record: Path) -> None:
+    """Take the gate, then LANDED, which says a landing holds it, then say who holds it the way mise's holders
+    do, for the line its waiters print."""
 
     fcntl.flock(gate, fcntl.LOCK_EX)
+    fcntl.flock(landed, fcntl.LOCK_EX)
     held_by = {"pid": os.getpid(), "task": "landing", "root": str(Path.cwd()), "started_at": int(time.time())}
     record.write_text(json.dumps(held_by))
 
@@ -171,9 +175,7 @@ def task_name() -> str:
 def holder(name: str) -> str:
     """Who holds the lock ``name``, as its holder recorded it (mise's ``HolderRecord``), or nothing."""
 
-    try:
-        record = json.loads(lock_file(name).with_suffix(".json").read_text())
-    except OSError, ValueError:
+    if not (record := recorded(name)):
         return ""
     root = str(record.get("root") or "")
     home = str(Path.home())
@@ -211,11 +213,13 @@ class Waiting:
         self.limit = seconds(limit) if limit else None
         self.waited = False
 
-    def until(self, taken: Callable[[], bool], what: Callable[[], str]) -> None:
-        """Poll ``taken()`` until it is true, saying ``what()`` while it is not."""
+    def until(self, taken: Callable[[], bool], what: Callable[[], str], fits: Callable[[], bool] = bool) -> None:
+        """Poll ``taken()`` until it is true, saying ``what()`` while it is not, and raise Fits once ``fits()``."""
 
         poll = FIRST_POLL
         while not taken():
+            if fits():
+                raise Fits
             spent = time.monotonic() - self.began
             if self.limit is not None and spent >= self.limit:
                 raise TimeoutError(f"timed out after {human(self.limit)} waiting for {what()}")
@@ -242,16 +246,71 @@ def flocked(fd: int, mode: int) -> bool:
     return True
 
 
+class Fits(Exception):
+    """The peak a share's command last recorded fits the memory the OS has available now."""
+
+
+def peak_file(command: list[str]) -> Path:
+    """Where the measurer records the peak of a share's ``command`` run by this task: by the task and the
+    words after the command's first, its path in one checkout, so every worktree reads the same record."""
+
+    return lock_file("\0".join(["peak", task_name(), *command[1:]])).with_suffix(".peak")
+
+
+def fitting(tokens: int, peak: Path) -> Callable[[], bool]:
+    """Whether a share of ``tokens`` runs on no tokens now: one of fewer than every token whose command's
+    recorded peak fits the memory the OS has available. A run that needs every token may hold memory outside
+    its tree (a Docker VM), so it never does."""
+
+    def fits() -> bool:
+        try:
+            need = int(peak.read_text())
+        except OSError, ValueError:
+            return False
+        return need <= available()
+
+    return fits if tokens < CAPACITY else bool
+
+
+def backfills(tokens: int, fits: Callable[[], bool]) -> bool:
+    """Whether a share of ``tokens`` passes the gate a landing holds now, as EASY backfill (Slurm's backfill
+    scheduler) starts a smaller job on idle resources ahead of the reserved one: a share of fewer than every
+    token, on tokens free now or on none when it fits. Tokens it still takes behind the door, where a landing's
+    own share collects every token it waits for, so none passes it. A landing takes LANDED only once it holds
+    the gate, and the kernel lets it go as the landing ends, so a whole run waiting at the gate is never passed."""
+
+    landing = tokens < CAPACITY and not free_now(LANDED, fcntl.LOCK_EX)
+    return landing and (free(CAPACITY, gate_held=True) >= tokens or fits())
+
+
 @contextlib.contextmanager
-def share_held(tokens: int, waiting: Waiting) -> Iterator[None]:
-    """Hold a share of ``tokens`` for the block: past the gate, ``tokens`` slots behind the door, then LOCK
-    shared. Each lock file is open in a block of its own, and the share's until it ends; a slot it opened and
-    did not take holds no lock."""
+def share_held(tokens: int, waiting: Waiting, fits: Callable[[], bool]) -> Iterator[None]:
+    """Hold a share for the block: ``tokens`` of the machine's, or none once ``fits()`` while it waits for them
+    (Fits), then LOCK shared, which a whole run's exclusive hold keeps it from."""
+
+    with contextlib.ExitStack() as held:
+        try:
+            held.enter_context(tokens_taken(tokens, waiting, fits))
+        except Fits:
+            give_back()
+            tokens = 0
+        heavy = held.enter_context(opened(LOCK))
+        held.callback(give_back)
+        waiting.until(lambda: flocked(heavy, fcntl.LOCK_SH), lambda: on(LOCK))
+        record(LOCK)
+        waiting.done(tokens)
+        yield
+
+
+@contextlib.contextmanager
+def tokens_taken(tokens: int, waiting: Waiting, fits: Callable[[], bool]) -> Iterator[None]:
+    """Hold ``tokens`` for the block: past the gate, then that many slots behind the door. Each lock file is
+    open in a block of its own; a slot it opened and did not take holds no lock, and Fits lets go of all."""
 
     if GATE not in held_locks():
         # A turnstile: passed, it is let go at once, so only a run that holds it stops the shares behind it.
         with opened(GATE) as gate:
-            waiting.until(lambda: flocked(gate, fcntl.LOCK_SH), lambda: on(GATE))
+            waiting.until(lambda: flocked(gate, fcntl.LOCK_SH) or backfills(tokens, fits), lambda: on(GATE))
     mine: list[int] = []
     with opened_all([slot(n) for n in range(CAPACITY)]) as slots:
         with opened(DOOR) as door:
@@ -269,39 +328,13 @@ def share_held(tokens: int, waiting: Waiting) -> Iterator[None]:
                     sorted({o for o in others if o})
                 )
 
+            waiting.until(lambda: flocked(door, fcntl.LOCK_EX), lambda: on(DOOR), fits)
             try:
-                waiting.until(lambda: flocked(door, fcntl.LOCK_EX), lambda: on(DOOR))
                 record(DOOR)
-                waiting.until(enough, holders)
+                waiting.until(enough, holders, fits)
             finally:
                 lock_file(DOOR).with_suffix(".json").unlink(missing_ok=True)
-        with opened(LOCK) as heavy:
-            try:
-                waiting.until(lambda: flocked(heavy, fcntl.LOCK_SH), lambda: on(LOCK))
-                record(LOCK)
-                waiting.done(tokens)
-                yield
-            finally:
-                give_back()
-
-
-def recorded(name: str) -> str:
-    """The record of who holds ``name``, or nothing."""
-
-    try:
-        return lock_file(name).with_suffix(".json").read_text()
-    except OSError:
-        return ""
-
-
-def ours(text: str) -> bool:
-    """Whether a holder's record names this process; a record cut short as it was written names none."""
-
-    try:
-        found = json.loads(text)
-    except ValueError:
-        return False
-    return isinstance(found, dict) and found.get("pid") == os.getpid()
+        yield
 
 
 def give_back() -> None:
@@ -309,16 +342,16 @@ def give_back() -> None:
 
     others = []
     for n in range(CAPACITY):
-        text = recorded(slot(n))
-        if ours(text):
+        held_by = recorded(slot(n))
+        if held_by.get("pid") == os.getpid():
             lock_file(slot(n)).with_suffix(".json").unlink(missing_ok=True)
-        elif text:
-            others.append(text)
+        elif held_by:
+            others.append(held_by)
     # LOCK's record names one share that holds it; this one's goes to another still holding it, if any.
-    if ours(recorded(LOCK)):
+    if recorded(LOCK).get("pid") == os.getpid():
         heavy = lock_file(LOCK).with_suffix(".json")
         if others:
-            heavy.write_text(others[0])
+            heavy.write_text(json.dumps(others[0]))
         else:
             heavy.unlink(missing_ok=True)
 
@@ -332,15 +365,17 @@ def share(tokens: int, bound: str, command: list[str]) -> int:
     under it that takes the lock in its header goes ahead inside the share rather than waiting forever on the
     share its own run holds, so a run that may start one takes every token."""
 
+    peak = peak_file(command)
     if not os.environ.get("HQ_MEASURED"):
         command = [str(MEASURER), *command]
     if inside():
         return subprocess.run(command, check=False).returncode
     tokens = min(tokens, CAPACITY)
     held = ",".join(sorted(held_locks() | {GATE, LOCK}))
+    env = os.environ | {SHARE: str(tokens), HELD: held, PEAK: str(peak)}
     try:
-        with share_held(tokens, Waiting()):
-            return run_bounded(command, seconds(bound), bound, os.environ | {SHARE: str(tokens), HELD: held})
+        with share_held(tokens, Waiting(), fitting(tokens, peak)):
+            return run_bounded(command, seconds(bound), bound, env)
     except TimeoutError as error:
         print(f"[{task_name()}] ERROR {error}", file=sys.stderr, flush=True)
         return 1

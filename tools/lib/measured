@@ -279,6 +279,8 @@ exec perl -e '
             "$_ " . size($peak{$_}) . $one
         } grep { $peak{$_} } ("gate", "test run", "workers", "children");
         $memory = sprintf ", peak memory %s: %s", size($peak{""}), join ", ", @roles;
+        # The next run of the same share weighs itself by it (tools/gate/turn.py, fitting).
+        if ($ENV{HQ_MEASURED_PEAK} && open my $kept, ">", $ENV{HQ_MEASURED_PEAK}) { print $kept $peak{""} }
     }
     # uptime(1) ends on the 1, 5 and 15 minute averages, which Linux separates by commas.
     my $load = `uptime` // "";

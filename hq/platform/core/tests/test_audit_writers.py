@@ -82,7 +82,7 @@ def _members(action: ast.expr) -> list[str | None]:
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py")
+@reads("hq/**/*.py", "!**/tests/**/*.py")
 class HandWrittenChangeTests(SimpleTestCase):
     def test_no_change_to_a_row_is_written_by_hand(self):
         files = [path for path in source_files(ROOT / "hq", "*.py") if "tests" not in path.relative_to(ROOT).parts]
@@ -153,7 +153,7 @@ def hand_endings(source: str) -> list[str]:
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "hq_sdk/**/*.py")
+@reads("hq/**/*.py", "hq_sdk/**/*.py", "!**/tests/**/*.py")
 class WorkEndedTests(SimpleTestCase):
     def test_a_record_s_end_is_written_only_by_work_ended(self):
         found = [
@@ -237,7 +237,7 @@ def handler_calls(source: str) -> list[str]:
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "hq_sdk/**/*.py")
+@reads("hq/**/*.py", "hq_sdk/**/*.py", "!**/tests/**/*.py")
 class CapabilityActTests(SimpleTestCase):
     def test_a_capability_s_handler_runs_only_where_its_act_is_counted(self):
         files = [

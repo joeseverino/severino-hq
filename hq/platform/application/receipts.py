@@ -21,6 +21,7 @@ lazy from hq.domains.receipts.specs import ReceiptRow
 
 from .command_fields import Day, Describe, Names, RequiredText, Upload, stored_in
 from .integration_specs import Kept, keeps
+from .projection import listing
 from .record_errors import RecordNotFound
 from .record_fields import Notes, RecordId
 from .record_saves import Held, as_sent, found, held, row, written
@@ -105,6 +106,14 @@ _REPLACED = Kept(_stored, always_sent=frozenset({"file"}))
 
 def serialize_receipt(receipt: Receipt) -> ReceiptRow:
     return row(receipt, ReceiptRow)
+
+
+def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str, Any]:
+    """List receipt metadata without file contents, storage paths, or URLs."""
+    rows = Receipt.objects.select_related("related_asset")
+    if unmatched_only:
+        rows = rows.filter(related_expense__isnull=True, related_asset__isnull=True)
+    return listing(rows, serialize_receipt, order=("-uploaded_at",), limit=limit)
 
 
 def _relations(command: ReceiptMetadataCommand):

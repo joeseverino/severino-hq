@@ -32,6 +32,8 @@ trap cleanup EXIT
 # mise it starts would inherit and so never wait, and inside its measured run,
 # which every run would take as its own.
 unset MISE_TASK_LOCKS MISE_TASK_LOCK_TIMEOUT HQ_MEASURED HQ_TURN_SHARE
+# Empty keeps each run on this machine, whose turn the suite holds.
+export HQ_GATE_REMOTE=""
 # The uv this checkout pins, first on PATH from a directory of the suite's
 # own: the fixture's config names none, so a shim there finds no version, a
 # machine may have no uv of its own, and mise drops its own install
@@ -263,8 +265,10 @@ one_line "${work}/out" "a heavy task that ran another"
 # A run of tests in the turn: its CPU holds the half second each child spent,
 # and its peak names the test run, two workers of 32 MB or more each and two
 # children apart from them.
-REPO="${repo}" mise -C "${main}" run spend >"${work}/out" 2>&1 || { cat "${work}/out" >&2; fail "a measured run of tests failed"; }
+REPO="${repo}" HQ_MEASURED_PEAK="${work}/peak" mise -C "${main}" run spend >"${work}/out" 2>&1 ||
+    { cat "${work}/out" >&2; fail "a measured run of tests failed"; }
 one_line "${work}/out" "a run of tests"
+[ "$(cat "${work}/peak")" -ge $((64 << 20)) ] || fail "the peak it records, for its next run to weigh itself by, is not its own"
 line="$(measured "${work}/out")"
 cpu="$(printf '%s\n' "${line}" | sed -nE 's/.* wall, ([0-9.]+)s CPU,.*/\1/p')"
 awk -v cpu="${cpu:-0}" 'BEGIN { exit !(cpu >= 1.0) }' || fail "the CPU its children spent is not in the line: ${line}"
@@ -340,9 +344,9 @@ case "${said}" in
     *"[weighed] ERROR timed out after 1s"*) ;;
     *) fail "a heavy run was not stopped at the bound its task set: ${said}" ;;
 esac
-# A share waits for a run that holds the whole turn and names it, as a share
-# of every token does; so do this checkout's runs of tests, narrowed to one
-# process by a label or of every test of a tree.
+# A share waits for a run that holds the whole turn and names it; so do this
+# checkout's runs of tests, narrowed to one process by a label or of every
+# test of a tree.
 hold
 rm -f "${RAN}" "${STARTS}"
 status=0
@@ -350,11 +354,6 @@ said="$(turn_share=1 MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed 2
 [ "${status}" -ne 0 ] || fail "a share ran beside a run that holds the whole turn"
 names_holder "${said}" "a share that gave up waiting"
 [ ! -e "${RAN}" ] || fail "a share's body ran while a run held the whole turn"
-rm -f "${STARTS}"
-status=0
-said="$(MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed 2>&1)" || status=$?
-[ "${status}" -ne 0 ] || fail "a share of every token ran beside the holder"
-names_holder "${said}" "a share of every token that gave up waiting"
 for task in "test tools.dev.tests.test_serve" \
     "lint:source tools.tests.test_task_files.TaskFileFilterTests" "test hq.platform.core.tests" lint:source; do
     status=0
@@ -427,16 +426,43 @@ exec 8<&-
 wait "${waiter}" || fail "the whole run waiting for the shares failed"
 [ "$(cat "${RAN}")" = ran ] || fail "the whole run that waited for the shares did not run once"
 
-# A share's run is stopped at its task's bound.
-fifo never
-rm -f "${STARTS}"
-status=0
-said="$(turn_share=1 BOUND=1s LINGER="${work}/never" mise -C "${main}" run --timeout 30s weighed 2>&1)" || status=$?
-[ "${status}" -ne 0 ] || fail "a share that outlived its task's bound was not stopped"
-case "${said}" in
-    *"[weighed] ERROR timed out after 1s"*) ;;
-    *) fail "a share was not stopped at the bound its task set: ${said}" ;;
-esac
+# A landing's gate keeps out a share of every token and backfills one of fewer.
+fifo ready
+fifo release
+# shellcheck disable=SC2016  # the landing's command expands them
+(cd "${main}" && exec uv run python -m tools.gate.turn --landing sh -c 'echo $$ >"$READY"; read -r _ <"$RELEASE"') &
+holder=$!
+read -r command <"${READY}"
+said="$(STARTS="${work}/starts-whole" MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed 2>&1)" &&
+    fail "a share of every token started beside a landing"
+case "${said}" in *"lock gate, held by landing in "*) ;; *) fail "a share behind a landing does not name it: ${said}" ;; esac
+turn_share=1 STARTS="${work}/starts-backfill" MISE_TASK_LOCK_TIMEOUT=5s mise -C "${second}" run weighed \
+    >"${work}/out" 2>&1 || fail "a share of one token did not start beside a landing: $(cat "${work}/out")"
+release
+
+# A share whose command's recorded peak fits the memory the OS has available
+# runs on no tokens beside a share of every token; one whose peak does not waits.
+peak() {
+    (cd "${main}" && MISE_TASK_NAME=weighed uv run python -c \
+        'import sys; from tools.gate.turn import peak_file; peak_file(["weighed"]).write_text(sys.argv[1])' "$1")
+}
+fifo linger
+rm -f "${RAN}"
+LINGER="${work}/linger" STARTS="${work}/starts-every" mise -C "${main}" run weighed >"${work}/share" 2>&1 &
+sharer=$!
+until [ -s "${RAN}" ]; do
+    kill -0 "${sharer}" 2>/dev/null || fail "a share failed: $(cat "${work}/share")"
+    sleep 0.1
+done
+peak 1
+turn_share=1 STARTS="${work}/starts-fits" MISE_TASK_LOCK_TIMEOUT=5s mise -C "${second}" run weighed >"${work}/out" 2>&1 ||
+    fail "a share whose peak fits did not run beside a share of every token: $(cat "${work}/out")"
+peak 999999999999999999
+turn_share=1 STARTS="${work}/starts-big" MISE_TASK_LOCK_TIMEOUT=1s mise -C "${second}" run weighed >/dev/null 2>&1 &&
+    fail "a share whose peak does not fit ran beside a share of every token"
+echo go >"${work}/linger"
+wait "${sharer}" || fail "the share of every token failed: $(cat "${work}/share")"
+sharer=""
 
 # This checkout's narrow run of source tests takes its share and ends with one line.
 MISE_TASK_LOCK_TIMEOUT=5s mise -C "${repo}" run -q lint:source tools.tests.test_task_files.TaskFileFilterTests \

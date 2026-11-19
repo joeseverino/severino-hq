@@ -25,10 +25,6 @@ from tools.gate import chain
 
 # Never part of the Django suite: other languages and vendored trees.
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
-# Run whatever changed. The startup budgets count what settings and
-# django.setup import, so an import added anywhere they reach is one the
-# test's own imports never select.
-ALWAYS = ("architecture", "new_domain", "test_startup")
 # The module every test that reads the tasks goes through; a change to a task
 # definition, or to a file a task runs, reaches those tests as a change to it would.
 TASK_READER = "tests.mise_tasks"
@@ -641,11 +637,10 @@ def importing(start: set[str], reverse: dict[str, set[str]], files: list[Path]) 
 
 
 def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tuple[list[str], int]:
-    """The test modules to run: those ``chosen`` picks, and the architecture tests."""
+    """The test modules to run: those ``chosen`` picks."""
 
     tests = {module_name(p): p for p in files if is_test(p)}
-    picked = chosen(tests, reached, touched) | {t for t in tests if any(a in t for a in ALWAYS)}
-    return sorted(picked), len(tests)
+    return sorted(chosen(tests, reached, touched)), len(tests)
 
 
 def whole_suite(files: list[Path]) -> list[str]:

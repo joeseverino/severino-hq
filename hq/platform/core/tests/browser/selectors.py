@@ -96,8 +96,6 @@ SELECTORS = {
     "highlights": ".section-flow > .section:has(> .section-body > .facts-band.is-lead)",
     "patterns": ".section-flow:has(> #dashboard-calendar) > .section",
     "glance": ".page-head .facts-band > .fact",
-    # The dashboard's strip of counts across HQ, by the name it gives a reader.
-    "dashboard_counts": "main dl[aria-label='Across HQ']",
     # A control a reader fills in or picks from, whose edge is what shows it.
     "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
     # A link that goes somewhere.
@@ -225,9 +223,7 @@ SELECTORS = {
     # One fact of a band, and the label that names its value.
     "band_fact": ".facts-band > .fact",
     "band_label": ".fact-label",
-    "band_fact_cell": ".fact",
     "fact_value": ".fact-value",
-    "fact_label": ".fact-label",
     # A tab of a tabbed chart, the radio inside it, and the panels they choose.
     "chart_tab": ".chart-tablist > .chart-tab",
     "chart_tab_input": ".chart-tab-input",

@@ -153,7 +153,7 @@ class SourcedRecordTests(TestCase):
 
 
 @tag("source", "tree")
-@reads("**/*.py", "**/templates/**")
+@reads("hq/**/*.py", "templates/**/*.html", "!**/tests/**")
 class OfferedLinksTests(SimpleTestCase):
     def test_no_file_links_a_declarations_edit_or_removal_by_its_route(self):
         files = [*ROOT.joinpath("hq").rglob("*.py"), *ROOT.joinpath("templates").rglob("*.html")]

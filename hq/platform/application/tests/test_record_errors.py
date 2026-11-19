@@ -121,7 +121,7 @@ def _subclasses(cls: type) -> set[type]:
 
 
 @tag("source", "tree")
-@reads("**/*.py")
+@reads("hq/**/*.py", "!**/tests/**/*.py")
 class RefusalTextTests(SimpleTestCase):
     """A capability answers with a refusal's text, so every refusal is built from a sentence HQ wrote."""
 

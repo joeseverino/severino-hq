@@ -391,7 +391,7 @@ class ReachabilityTests(TestCase):
 
 
 @tag("source", "tree")
-@reads("**/*.py")
+@reads("hq/**/*.py", "!**/tests/**/*.py")
 class ListenerSourceTests(SimpleTestCase):
     """Which listener is handed the bridge, read from the launcher source."""
 

@@ -89,11 +89,6 @@ class FactsTagTests(SimpleTestCase):
         self.assertTrue(all(detail in small.ancestors for small in elements(html, "small")))
         self.assertNotIn("·", detail.words)
 
-    def test_an_inline_line_is_its_own_look(self):
-        (line,) = elements(_render('{% facts layout="inline" %}{% fact "Rules" value=0 %}{% endfacts %}'), "dl")
-
-        self.assertIn("facts-inline", line.classes)
-
     def test_a_fact_without_its_label_is_refused(self):
         with self.assertRaises(TemplateSyntaxError):
             Template("{% facts %}{% fact value=1 %}{% endfacts %}")

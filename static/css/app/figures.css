@@ -119,10 +119,16 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 }
 .design-gallery > [role="region"] > .specimen-name { margin-block-start: var(--stack-gap); }
 /* Block margins only: in a head's aside the legend sits at the row's end, by the aside's own inline margin, where the drawing under it ends. */
-.chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-6); margin-block: 0; color: var(--muted); font-size: var(--text-xs); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); margin-block: 0; color: var(--muted); font-size: var(--text-xs); }
 /* A legend after the drawing it keys stands apart from it; one that opens what holds it (a figure's head, the row over a calendar's days) takes its place from that. */
 .chart-legend:not(:first-child) { margin-block: var(--space-6) var(--space-1); }
-.chart-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
+.chart-legend > * { display: inline-flex; align-items: baseline; gap: var(--space-2); color: inherit; }
+.chart-legend i { align-self: center; }
+.chart-legend a:is(:hover, :focus-visible) { color: var(--accent); }
+/* A part of a whole's figure leads its key in ink; stacked for a narrow column, the keys one under another, so the figures line up. */
+.chart-legend b { color: var(--ink); font-weight: 650; font-feature-settings: "tnum"; }
+.chart-legend.stacked { flex-direction: column; }
+.chart-legend.stacked b { min-inline-size: 5.5em; }
 /* A mark: a dot for a state or a kind, a key (`swatch-key`, square) for a series
    or a category, one size wherever it stands, colored by its slot or what its
    part sets. A part that draws one writes the class; one drawn as generated
@@ -362,20 +368,6 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .fact:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }
 .fact:is(.tone-good, .tone-attention, .tone-serious) .fact-value { color: var(--tone-ink); }
 
-/* A line of facts (`{% facts layout="inline" %}`): a card's summary, each fact one phrase, its value bold then its words ("3 rules"), a fixed gap apart, wrapping fact by fact. Under the card's head it takes a rule above. A fact with an address is a link whole: its value's link reaches over the fact, every line of which is a target tall. */
-.facts-inline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-10); margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--target-min); }
-.facts-inline:not(:first-child) { padding-block-start: var(--space-6); border-block-start: 1px solid var(--line-2); }
-.facts-inline > .fact { position: relative; display: flex; align-items: baseline; gap: 0 .3em; min-width: 0; }
-.facts-inline dt { display: contents; }
-.facts-inline .band-icon { order: 0; align-self: center; width: auto; height: auto; background: none; font-size: var(--text-md); }
-.facts-inline .fact-value { order: 1; margin: 0; color: var(--ink); font-weight: 650; font-variant-numeric: tabular-nums; }
-.facts-inline .fact-value a { color: inherit; text-decoration: none; }
-/* Its words read on from the value ("3 rules"), so a label in a line is written in lower case where it is given. */
-.facts-inline .fact-label { order: 2; min-width: 0; }
-.facts-inline .fact-detail { order: 3; margin: 0; }
-/* A linked fact is one target, a tile that tints under the pointer and the focus as a linked fact's in a band does, with no underline. The tint reaches past its words as a shadow, so nothing moves. */
-.facts-inline .fact:has(.fact-value a:is(:hover, :focus-visible)) { border-radius: var(--radius-sm); background: var(--surface-2); box-shadow: 0 0 0 var(--space-3) var(--surface-2); }
-.facts-inline .fact:has(.fact-value a:is(:hover, :focus-visible)) :is(.fact-value, .fact-label) { color: var(--ink); }
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .page-title-row > h1 { margin: 0; max-width: 100%; }
 .page-title-meta { margin: 0; color: var(--muted); font-size: var(--text-sm); }

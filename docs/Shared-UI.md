@@ -131,7 +131,7 @@ fails when this file falls behind. The rules around it are in
 | `fact` | `data_*` | | | Each a `data-` attribute. |
 | `facts` | `items` |  |  | Figures (`Kpi`) to draw as its facts, which makes it one tag with no end. |
 | `facts` | `label` |  |  | What the whole is, for a reader, when nothing on the page heads it. |
-| `facts` | `layout` | `"list"` | `list`, `band`, `inline` | A list, each label beside its value; a band, the few facts that sum up a page, each a cell; a line (`inline`), a card's summary, each fact its value then its words. |
+| `facts` | `layout` | `"list"` | `list`, `band` | A list, each label beside its value; a band, the few facts that sum up a page, each a cell. |
 | `facts` | `size` | `"regular"` | `small`, `regular`, `large`, `lead` | How large a band sets its values: small figures read across, status facts, the headline figures a page is read for, or headline figures led by the first. |
 | `facts` | `data_*` | | | Each a `data-` attribute. |
 | `filter_bar` | `action` |  |  | The page it asks, when that is another. |
@@ -250,7 +250,7 @@ fails when this file falls behind. The rules around it are in
 
 Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `cell-data`, `cell-part`, `cell-whole`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `two-col`, `visually-hidden`, `whole`, `wide-only`.
+Classes: `actions-col`, `address-list`, `allocation`, `cell-data`, `cell-part`, `cell-whole`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `two-col`, `visually-hidden`, `whole`, `wide-only`.
 
 Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
 

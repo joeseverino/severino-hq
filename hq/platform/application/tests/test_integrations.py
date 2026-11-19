@@ -11,6 +11,7 @@ from hq.domains.projects.specs import ProjectQuery
 from ..capabilities import CapabilitySpec, describe_capabilities
 from ..command_center import command_center
 from ..connections import ConnectionAbility, ConnectionSpec, describe_connections
+from ..integration_specs import ListRead
 from ..integration_testing import override_integration_graph
 from ..integrations import (
     IntegrationGraphError,
@@ -19,7 +20,7 @@ from ..integrations import (
     integration_graph,
 )
 from ..plugins import clear_plugin_composition_cache
-from ..resources import EmptyQuery, ListRead, ResourceSpec, describe_resources
+from ..resources import EmptyQuery, ResourceSpec, describe_resources
 from ..search_contracts import SearchDefinition
 from ..security import Capability, Principal
 

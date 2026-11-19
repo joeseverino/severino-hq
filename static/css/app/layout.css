@@ -79,15 +79,6 @@
 .card:has(> .identity + .facts-band:last-child) { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8) var(--space-20); }
 .card > .identity:has(+ .facts-band:last-child) { flex: 1 1 16rem; margin: 0; }
 .card > .identity + .facts-band:last-child { flex: 1 1 calc(48rem + 3 * var(--space-20)); margin: 0; }
-/* A card holding nothing but a line of facts (`{% facts layout="inline" %}`)
-   is a strip of counts: a narrower inset than a card of content, its words a
-   size under its values. A section's body under its head is the section's,
-   so its line keeps the body's inset and size. */
-.card:not(.section-body):has(> .facts-inline:only-child) {
-  padding: var(--surface-inset, var(--space-5) var(--space-8));
-  & > .facts-inline { font-size: var(--text-xs); }
-  & .fact-value { font-size: var(--text-md); }
-}
 /* Inside a layout container the gap is the separation, so a section's own
    stacking margin is dead space, and a member is as narrow as its track.
    Declared after the section rules above so it wins on source order at
@@ -386,9 +377,9 @@
 /* A list of places to go: the whole row is its title's link, stretched over
    it, so the row is one target and its markup stays a link around a name. */
 .whole-rows li { position: relative; }
-/* A link or a label stretched over the whole of its row, fact or card, so
+/* A link or a label stretched over the whole of its row or card, so
    the box is the target. */
-.whole-rows .row-main > a::after, .facts-inline .fact-value a::after, .choice-card > label::after { content: ""; position: absolute; inset: 0; }
+.whole-rows .row-main > a::after, .choice-card > label::after { content: ""; position: absolute; inset: 0; }
 /* A title is ink however it links: its own address, or a thing it names. */
 .list-rows :is(a strong, strong > a) { color: var(--ink); font-weight: 600; }
 .list-rows :is(a:hover strong, strong > a:hover) { color: var(--accent); }

@@ -8,8 +8,7 @@ from hq.domains.control_plane.observations.portainer import ENVIRONMENT_KIND
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.providers import PROVIDERS
 
-from .cadence import sweep_interval
-from .core_capabilities import CONTROLLER_REFRESH
+from .cadence import CONTROLLER_REFRESH, sweep_interval
 from .credential_findings import UNREPORTED
 from .derivations import since
 from .entity_links import kind_label, node_name
