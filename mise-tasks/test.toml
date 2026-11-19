@@ -45,10 +45,14 @@ tags = ["fast", "heavy"]
 # whole of hq and hq_sdk, which Django loads to answer, its own modules, and the
 # two data files the settings and the bridge open. The committed document is
 # what the served one is held to (lint:drift-api-document), so it selects the
-# suite too.
+# suite too. No served answer runs a test module, so an edit there selects none
+# but the token helper the suite signs its requests with.
 sources = [
   "hq/**/*.py",
   "hq_sdk/**/*.py",
+  "!hq/**/tests/**",
+  "!hq_sdk/**/tests/**",
+  "hq/platform/api/tests/tokens.py",
   "hq/domains/control_plane/bridge_base.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "hq/platform/api/hq-api.openapi.json",
