@@ -12,8 +12,10 @@ import re
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
+from html.parser import HTMLParser
+from typing import override
 
-from django.template.base import tag_re
+from django.template.base import Lexer, TokenType, tag_re
 
 # A template comment, which no page receives, and a template tag or value.
 _COMMENT_TAG = re.compile(r"\{%-?\s*(end)?comment\b.*?%\}", re.DOTALL)
@@ -77,6 +79,65 @@ class Source:
                 found.append(pieces)
         return found
 
+    def at(self, line: int) -> int:
+        """Where the line ``line`` starts."""
+
+        return sum(len(each) + 1 for each in self.text.split("\n")[: line - 1])
+
+    @cached_property
+    def marked(self) -> tuple[str, list[str]]:
+        """The source with each template tag dropped, its lines kept, and each
+        value marked by its place among the values, with the values."""
+
+        values: list[str] = []
+
+        def mark(match: re.Match[str]) -> str:
+            if match.group().startswith("{%"):
+                return "\n" * match.group().count("\n")
+            values.append(match.group()[2:-2].strip())
+            return f"\0{len(values) - 1}\0"
+
+        return _DJANGO.sub(mark, self.text), values
+
+    def walked(self, visit: Callable[[list[tuple[str, dict]], str], Iterator[int]]) -> Iterator[int]:
+        """Each place ``visit`` finds in a run of text, given the elements
+        open around it, both sides of each condition read."""
+
+        walk = _Walk(visit)
+        walk.feed(self.marked[0])
+        walk.close()
+        return (self.at(line) for line in walk.seen)
+
+
+_VOID = frozenset(
+    ("area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr")
+)
+
+
+class _Walk(HTMLParser):
+    def __init__(self, visit: Callable[[list[tuple[str, dict]], str], Iterator[int]]) -> None:
+        super().__init__(convert_charrefs=True)
+        self.open: list[tuple[str, dict]] = []
+        self.visit = visit
+        self.seen: list[int] = []
+
+    @override
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag not in _VOID:
+            self.open.append((tag, dict(attrs)))
+
+    @override
+    def handle_endtag(self, tag: str) -> None:
+        for at in range(len(self.open) - 1, -1, -1):
+            if self.open[at][0] == tag:
+                del self.open[at:]
+                return
+
+    @override
+    def handle_data(self, data: str) -> None:
+        line = self.getpos()[0]
+        self.seen += [line + data.count("\n", 0, offset) for offset in self.visit(self.open, data)]
+
 
 type Find = Callable[[Source], Iterator[int]]
 
@@ -126,6 +187,92 @@ def _outside_a_region(source: Source) -> Iterator[int]:
             before = [opened for at, opened in regions if at < start]
             if not before or before[-1]:
                 yield start
+
+
+_DOTS, _ARROWS = "·•", "→←↗↑↓›‹»«"
+
+
+def _typed_marks(source: Source) -> Iterator[int]:
+    """Each dot, and each arrow a reader hears, typed as text."""
+
+    def visit(around: list[tuple[str, dict]], data: str) -> Iterator[int]:
+        tags = {tag for tag, _ in around}
+        if tags & {"title", "script", "style"}:
+            return iter(())
+        # A name given to a control replaces its text; a landmark's does not.
+        unheard = "kbd" in tags or any(
+            named.get("aria-hidden") == "true" or (tag in {"a", "button"} and named.get("aria-label"))
+            for tag, named in around
+        )
+        return (at for at, mark in enumerate(data) if mark in _DOTS or (mark in _ARROWS and not unheard))
+
+    return source.walked(visit)
+
+
+# What prints a figure: a filter that writes one, a count's or a total's name.
+_FIGURE_FILTERS = frozenset(("money", "counted", "length", "floatformat", "bytes"))
+_COUNT_NAME = re.compile(r"(?:^|[._])(?:count|total)$")
+
+
+def _figures_in_chips(source: Source) -> Iterator[int]:
+    """Each figure printed inside a chip, which is a word."""
+
+    values = source.marked[1]
+
+    def figure(value: str, percent: str) -> bool:
+        name, *filters = (part.strip().partition(":")[0] for part in value.split("|"))
+        return bool(percent) or bool(_FIGURE_FILTERS.intersection(filters)) or bool(_COUNT_NAME.search(name))
+
+    def visit(around: list[tuple[str, dict]], data: str) -> Iterator[int]:
+        chip = any(
+            word in {"chip", "pill", "tag"} or word.endswith("-chip")
+            for _, named in around
+            for word in (named.get("class") or "").split()
+        )
+        printed = re.finditer(r"\0(\d+)\0(%?)", data) if chip else iter(())
+        return (match.start() for match in printed if figure(values[int(match.group(1))], match.group(2)))
+
+    return source.walked(visit)
+
+
+# What a row holds back until it opens, and a tag that decides by a count.
+_HELD_BACK = re.compile(r"""class=["'][^"']*\b(?:row-more|row-less)\b""")
+_BY_A_COUNT = re.compile(r"""forloop\.counter|\|length\b|\|slice:["']-?\d*:?\d|\|add:["']-\d|[<>]=?\s*\d""")
+
+
+def _counted_folds(source: Source) -> Iterator[int]:
+    """Each part a row holds back inside a tag that decides by a count."""
+
+    opened: list[bool] = []
+    for token in Lexer(source.text).tokenize():
+        if token.token_type is TokenType.BLOCK:
+            name, counted = token.contents.partition(" ")[0], bool(_BY_A_COUNT.search(token.contents))
+            if name in ("if", "for", "with"):
+                opened.append(counted)
+            elif name in ("elif", "else", "empty") and opened:
+                opened[-1] = opened[-1] or counted
+            elif name in ("endif", "endfor", "endwith") and opened:
+                opened.pop()
+        elif token.token_type is TokenType.TEXT and any(opened):
+            for match in _HELD_BACK.finditer(token.contents):
+                yield source.at(token.lineno + token.contents.count("\n", 0, match.start()))
+
+
+_ALONE_AFTER_HEADING = re.compile(
+    r"</h[1-6]>\s*(?:\{%[^%]*%\}\s*)?<span class=\"count\"[^>]*>\s*\{\{([^}]*)\}\}\s*</span>"
+)
+_COUNT_IN_PARENTHESES = re.compile(r"\(\{\{[^}]*\|length\s*\}\}\)")
+
+
+def _cut_counts(source: Source) -> Iterator[int]:
+    """Each bare count standing apart from the words it counts."""
+
+    text = re.sub(r"<option\b.*?</option>", lambda match: _blank(match.group()), source.text, flags=re.DOTALL)
+    for match in _ALONE_AFTER_HEADING.finditer(text):
+        name, *filters = (part.strip().partition(":")[0] for part in match.group(1).split("|"))
+        if "counted" not in filters and ("length" in filters or re.search(r"(?:^|[._])count$", name)):
+            yield match.start()
+    yield from (match.start() for match in _COUNT_IN_PARENTHESES.finditer(text))
 
 
 # The value tags that write a figure together with its own words, each joined
@@ -456,6 +603,68 @@ SHAPES = (
         refuses=('<span class="muted">A</span>',),
         keeps=('<span class="muted-ink">A</span>',),
         drawn_by={"partials/_list.html": "the list part says a quiet run in the muted voice"},
+    ),
+    Shape(
+        name="typed-mark",
+        said="A dot or an arrow typed as text, which a reader hears and a line may strand.",
+        instead="{% dot %} between two parts, a .dot-list for a run of parts, {% arrow %} after a link",
+        find=_typed_marks,
+        refuses=("<p>{{ a }} &middot; {{ b }}</p>", '<a href="{{ url }}">All &rarr;</a>'),
+        keeps=(
+            '<span aria-hidden="true">→</span><a aria-label="Next" href="{{ url }}">&rsaquo;</a><kbd>↑</kbd>',
+            '<span data-tip="{{ a }} · {{ b }}">{{ a }}</span><title>{{ a }} · HQ</title>',
+        ),
+    ),
+    Shape(
+        name="figure-in-chip",
+        said="A figure inside a chip, which is a word.",
+        instead="the figure in a band of facts, a numeric column or a sentence",
+        find=_figures_in_chips,
+        refuses=('<span class="{% if a %}pill{% endif %}">{{ alerts|length }}</span>', '<b class="tag">{{ n }}%</b>'),
+        keeps=('<span class="pill">{{ state|breakable }}</span>', '<span class="pill-row">{{ n|length }}</span>'),
+    ),
+    Shape(
+        name="counted-fold",
+        said="A list folded at a count, which hides parts its line has room for.",
+        instead="{% line_list %}, which shows as many parts as the line holds",
+        find=_counted_folds,
+        refuses=(
+            '{% for x in xs %}{% if forloop.counter > 3 %}<span class="row-more">{{ x }}</span>{% endif %}{% endfor %}',
+        ),
+        keeps=('{% if x.hidden %}<span class="row-more">{{ x }}</span>{% endif %}',),
+    ),
+    Shape(
+        name="cut-count",
+        said="A count cut off from the words it counts.",
+        instead='<h2>Words <span class="count">N</span></h2>, or {{ n|counted:"thing" }}',
+        find=_cut_counts,
+        refuses=(
+            '<h2>A</h2><span class="count">{{ rows|length }}</span>',
+            "<summary>Other settings ({{ rows|length }})</summary>",
+        ),
+        keeps=(
+            '<h2>A</h2><span class="count">{{ rows|length|counted:"event" }}</span>',
+            "<option>Machines ({{ rows|length }})</option>",
+        ),
+    ),
+    Shape(
+        name="code-block",
+        said="A code block a keyboard cannot reach, though it scrolls in its own box.",
+        instead='<pre tabindex="0">',
+        find=tagged("pre", without=r"[\s}]tabindex=\"0\""),
+        refuses=("<pre>{{ log }}</pre>",),
+        keeps=('<pre tabindex="0">{{ log }}</pre>',),
+    ),
+    Shape(
+        name="control-in-summary",
+        said="A control inside a summary, which is the control that opens its disclosure.",
+        instead="the link or button in the disclosure's body",
+        find=within(
+            "summary",
+            r"<(?:a|button|input|select|textarea)\b|\btabindex=|\{%\s*(?:entity|button|cell_line|page_action)\b",
+        ),
+        refuses=('<summary>More <a href="{{ url }}">all</a></summary>',),
+        keeps=("<summary>More</summary>",),
     ),
 )
 

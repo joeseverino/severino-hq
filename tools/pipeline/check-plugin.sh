@@ -116,11 +116,10 @@ MYPYPATH="$hq_root" "$python" -m mypy --show-traceback --cache-dir "$work/mypy"
 # every routed view's source, the plugin's included. A package keeps no copy
 # of any of them.
 "$python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered \
-    hq.platform.application.tests.test_architecture_pages.InterfaceTextTests hq.platform.core.tests.test_counts.CountPlacementTests \
-    hq.platform.core.tests.test_template_chips.TemplateChipTests hq.platform.core.tests.test_table_contract.TableContractTests \
+    hq.platform.core.tests.test_table_contract.TableContractTests \
     hq.platform.application.tests.test_reading_age.OneWordingTests \
     hq.platform.application.tests.test_script_loading hq.platform.application.tests.test_action_words.DeclaredWordsTests \
-    hq.platform.application.tests.test_architecture_pages.PageTitleTests hq.platform.application.tests.test_architecture_primitives.OnePrimitiveTests \
+    hq.platform.application.tests.test_architecture_primitives.OnePrimitiveTests \
     hq.platform.application.tests.test_architecture_primitives.FragmentPrimitiveTests \
     hq.platform.application.tests.test_shared_markup.SharedMarkupTemplateTests \
     hq.platform.core.tests.test_template_values.TemplateValueTests \

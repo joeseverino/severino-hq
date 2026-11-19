@@ -1,7 +1,6 @@
-"""Where a template draws a mark between or beside words, read from its
-source: each mark typed as text a reader would hear, and each held mark
-(`{% dot %}`, `{% arrow %}`) a line could start with, followed down every
-way through the template its conditions allow."""
+"""Each held mark (`{% dot %}`, `{% arrow %}`) a line could start with,
+read from a template's source and followed down every way through the
+template its conditions allow."""
 
 import functools
 import operator
@@ -9,11 +8,10 @@ import re
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
-from html.parser import HTMLParser
 from typing import Any
 
 from django.template import engines
-from django.template.base import Lexer, Node, Origin, Template, TextNode, TokenType, Variable, VariableNode
+from django.template.base import Node, Origin, Template, TextNode, Variable, VariableNode
 from django.template.defaulttags import (
     AutoEscapeControlNode,
     CommentNode,
@@ -29,9 +27,6 @@ from django.template.library import SimpleNode
 from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
 
 from hq.platform.core.templatetags import value_tags
-
-DOTS = "·•"
-ARROWS = "→←↗↑↓›‹»«"
 
 # What the text after the last part can end in: a part, a space (a line may
 # break there), an edge (a block's start or a line break, where a line
@@ -436,60 +431,3 @@ def loose_dots(sources: dict[str, str]) -> list[str]:
     for name, source in sources.items():
         flow.template(Template(source, origin=Origin(name=name, template_name=name), engine=engine))
     return [f"{template}:{line}" for template, line in sorted(flow.found)]
-
-
-class _Marks(HTMLParser):
-    """Reads a template's markup, both sides of each condition, and collects
-    each mark a reader would hear or a line could strand."""
-
-    def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.open: list[tuple[str, bool]] = []
-        self.found: list[tuple[int, str]] = []
-
-    def handle_starttag(self, tag, attrs):
-        if tag in {"area", "br", "col", "hr", "img", "input", "link", "meta", "source", "wbr"}:
-            return
-        named = dict(attrs)
-        # A name given to a control replaces its text; a landmark's does not.
-        renamed = tag in {"a", "button"} and bool(named.get("aria-label"))
-        self.open.append((tag, named.get("aria-hidden") == "true" or renamed))
-
-    def handle_endtag(self, tag):
-        for at in range(len(self.open) - 1, -1, -1):
-            if self.open[at][0] == tag:
-                del self.open[at:]
-                return
-
-    def handle_data(self, data):
-        tags = {tag for tag, _ in self.open}
-        if tags & {"title", "script", "style"}:
-            return
-        line = self.getpos()[0]
-        unheard = any(silent for _, silent in self.open) or "kbd" in tags
-        for offset, character in enumerate(data):
-            if character in DOTS or (character in ARROWS and not unheard):
-                self.found.append((line + data.count("\n", 0, offset), character))
-
-
-def typed_marks(source: str) -> list[tuple[int, str]]:
-    """The line and the mark of each dot or arrow ``source`` lays out as
-    text for a reader to hear, rather than drawing it through ``{% dot %}``,
-    ``.dot-list`` or ``{% arrow %}``."""
-
-    marked = []
-    commented = False
-    for token in Lexer(source).tokenize():
-        if token.token_type == TokenType.BLOCK:
-            word = token.contents.split()[0] if token.contents.split() else ""
-            commented = word == "comment" or (commented and word != "endcomment")
-            # The tag's place, its lines kept, so the reader counts the source's.
-            marked.append("\n" * token.contents.count("\n"))
-        elif token.token_type == TokenType.TEXT:
-            marked.append(re.sub(r"[^\n]", " ", token.contents) if commented else token.contents)
-        elif token.token_type == TokenType.VAR:
-            marked.append("x")
-    reader = _Marks()
-    reader.feed("".join(marked))
-    reader.close()
-    return reader.found

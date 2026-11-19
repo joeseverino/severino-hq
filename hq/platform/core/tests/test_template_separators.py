@@ -1,40 +1,18 @@
-"""A mark drawn between or beside words (a middle dot, an arrow) never opens
-a line or stands on one alone, and a reader never hears it.
-
-A dot between two parts of a line is `{% dot %}`, a run of whole parts a
-`.dot-list`, the arrow that ends a link onward `{% arrow %}`; each holds its
-mark to the word before it and hides it from a reader. Any other mark is the
-text of an element a reader never hears (`aria-hidden`), a control named
-otherwise (`aria-label`) or a key (`<kbd>`). Every template Django loads
-is read, an extension's too, so the plugin check holds them as the host's.
-A stylesheet's generated marks are `lint:css`'s.
+"""A held mark (`{% dot %}`, `{% arrow %}`) never opens a line: it is
+written straight after the part before it. A mark typed as text is the
+typed-mark shape's (hq/platform/core/hand_drawn.py). Every template Django
+loads is read, an extension's too.
 """
 
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
-from hq.platform.core.tests.separators import loose_dots, typed_marks
+from hq.platform.core.tests.separators import loose_dots
 
 
 class SeparatorRuleTests(SimpleTestCase):
-    """What the checks read as a mark out of place."""
-
-    def test_a_dot_typed_between_two_parts_is_found(self):
-        self.assertEqual(typed_marks("<p>{{ a }} · {{ b }}</p>"), [(1, "·")])
-        self.assertEqual(typed_marks("<p>\n{{ a }}{% if b %} &middot; {{ b }}{% endif %}</p>"), [(2, "·")])
-
-    def test_an_arrow_a_reader_hears_is_found(self):
-        self.assertEqual(typed_marks('<a href="{{ url }}">All &rarr;</a>'), [(1, "→")])
-
-    def test_an_arrow_a_reader_never_hears_passes(self):
-        source = '<span aria-hidden="true">→</span><a aria-label="Next month" href="{{ url }}">&rsaquo;</a><kbd>↑</kbd>'
-        self.assertEqual(typed_marks(source), [])
-
-    def test_a_mark_no_line_lays_out_passes(self):
-        self.assertEqual(typed_marks('<span data-tip="{{ a }} · {{ b }}">{{ a }}</span>'), [])
-        self.assertEqual(typed_marks("<title>{{ a }} · HQ</title>{# a · b #}"), [])
-        self.assertEqual(typed_marks("{% comment %}\na · b → c\n{% endcomment %}"), [])
+    """What the check reads as a held mark a line may start with."""
 
     def loose(self, source):
         return loose_dots({"example/page.html": source})
@@ -78,19 +56,6 @@ class SeparatorRuleTests(SimpleTestCase):
 @tag("source", "tree")
 @reads("**/templates/**")
 class TemplateSeparatorTests(SimpleTestCase):
-    def test_no_template_types_a_mark_a_reader_hears(self):
-        found = [
-            f"{name}:{line}: {mark}"
-            for name, path in template_files()
-            for line, mark in typed_marks(path.read_text(encoding="utf-8"))
-        ]
-        self.assertEqual(
-            found,
-            [],
-            "a dot between two parts of a line is {% dot %}, a run of parts a .dot-list, a link's onward arrow"
-            " {% arrow %}, and any other mark the text of an aria-hidden element",
-        )
-
     def test_every_held_mark_follows_its_part(self):
         found = loose_dots({name: path.read_text(encoding="utf-8") for name, path in template_files()})
         self.assertEqual(

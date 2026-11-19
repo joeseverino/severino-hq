@@ -271,7 +271,7 @@ heading the toggle.
 paths, ports) in `<code>` and leaves counts, words and phrases as text.
 
 Numbers are never chips: a figure stands in a band of facts, a numeric column or a
-sentence (`hq/platform/core/tests/test_template_chips.py`). One that carries a
+sentence (the figure-in-chip shape, `hq/platform/core/hand_drawn.py`). One that carries a
 state says it in ink, as `.figure` with its tone class
 (`<span class="figure tone-attention">`).
 
