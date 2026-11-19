@@ -36,7 +36,8 @@ from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.tone import Tone
 from hq.platform.application.url_query import with_query
 from hq.platform.application.visit_refresh import worth_asking
-from hq.platform.application.web_writes import execute_posted, refused
+from hq.platform.application.web_writes import execute_posted
+from hq.platform.core.web_refusals import refused
 lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
 
 from .forms import DashboardLinksForm, DashboardSettingsForm

@@ -34,7 +34,8 @@ from hq.platform.application.resource_operations import OperationAsked
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.service_context import Cell, ServiceSection
 from hq.platform.application.ui import MISSING
-from hq.platform.application.web_writes import refused, run_posted
+from hq.platform.application.web_writes import run_posted
+from hq.platform.core.web_refusals import refused
 
 
 def _json_value(value):

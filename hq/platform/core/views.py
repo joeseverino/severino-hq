@@ -39,7 +39,8 @@ from hq.platform.application.search import global_search
 from hq.platform.application.security import Capability, agent_grantable, safe_next, web_principal
 from hq.platform.application.ui import PageNavigation, PageSection, counted
 from hq.platform.application.url_query import with_query
-from hq.platform.application.web_writes import execute_posted, refusal_response, refused, run_posted
+from hq.platform.application.web_writes import execute_posted, run_posted
+from hq.platform.core.web_refusals import refusal_response, refused
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
 lazy from hq.platform.application.connection_catalog import connection_catalog
 lazy from hq.platform.application.hq_context import hq_context

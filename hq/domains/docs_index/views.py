@@ -24,10 +24,11 @@ from hq.platform.application.tables import (
     TableListMixin,
     TableSort,
 )
-from hq.platform.application.web_writes import execute_posted, refused
+from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.status_tags import status_pill
 from hq.platform.core.templatetags.value_tags import breakable
+from hq.platform.core.web_refusals import refused
 
 from .forms import ManifestImportForm
 from .models import DocumentationRecord

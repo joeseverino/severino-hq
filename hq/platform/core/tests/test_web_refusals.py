@@ -1,4 +1,4 @@
-"""A web view turns a refused answer into what a person sees one way: ``web_writes.refused``."""
+"""A web view turns a refused answer into what a person sees one way: ``web_refusals.refused``."""
 
 from django import forms
 from django.contrib.auth.models import AnonymousUser
@@ -7,8 +7,9 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.backends.signed_cookies import SessionStore
 from django.test import RequestFactory, SimpleTestCase
 
-from ..refusal_status import refuse
-from ..web_writes import refusal_response, refused
+from hq.platform.application.refusal_status import refuse
+
+from ..web_refusals import refusal_response, refused
 
 SENTENCE = "Example: name is required."
 

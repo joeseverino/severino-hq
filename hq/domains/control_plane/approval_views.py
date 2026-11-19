@@ -7,7 +7,8 @@ from django.views import View
 from hq.platform.application.approvals import DECISIONS, REJECT
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next
-from hq.platform.application.web_writes import execute_posted, refused
+from hq.platform.application.web_writes import execute_posted
+from hq.platform.core.web_refusals import refused
 
 
 class ApprovalDecisionView(View):

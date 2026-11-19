@@ -8,7 +8,8 @@ from django.views.generic import TemplateView
 from hq.platform.application.moments import moment
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
-from hq.platform.application.web_writes import execute_posted, refused
+from hq.platform.application.web_writes import execute_posted
+from hq.platform.core.web_refusals import refused
 lazy from hq.domains.control_plane.forms import LOOKUP_FORMS
 lazy from hq.platform.application import security
 lazy from hq.platform.application.lookup import LOOK_UP_ADDRESS
