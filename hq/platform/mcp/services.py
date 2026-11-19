@@ -22,7 +22,7 @@ from hq.platform.application.input_errors import unknown_field_errors
 from hq.platform.application.integration_specs import FIELD_MASK, PAGE_FIELD
 from hq.platform.application.projection import MAX_PAGE_SIZE
 from hq.platform.application.read_models import DocumentationStatus, RecentActivity, SystemHealth
-from hq.platform.application.record_fields import RecordId
+from hq.platform.application.record_fields import MOST_INTEGER, RecordId
 from hq.platform.application.registry import RegistryAudit, audit_registry as audit_application_registry
 from hq.platform.application.reports import (
     ExportFormat,
@@ -52,9 +52,11 @@ from hq.platform.mcp.shapes import Budget, tool
 # The kind whose first page this tool answers smaller than the kind's own default.
 QUEUE = "action_items"
 
-# A page's size, beside the filters; the kind's own query holds it to its bounds.
+# A page's size, beside the filters; the kind's own query holds it to its
+# bounds, which differ by kind, so here it is held only to what an integer
+# column holds.
 type PageSize = Annotated[
-    int | None,
+    Annotated[int, Field(le=MOST_INTEGER)] | None,
     Field(
         description=(
             f"How many records a page holds: at most {MAX_PAGE_SIZE}, or the lower cap `describe_resources` "

@@ -24,7 +24,7 @@ from .input_errors import pydantic_refusal
 from .integration_specs import PAGE_FIELD, ResourceSpec, typed_keys
 from .integration_validation import required_capability_names
 from .integrations import held_graph
-from .json_schemas import json_schema, narrowed
+from .json_schemas import narrowed, sent_schema
 from .projection import MAX_PAGE_SIZE, CursorRefusal, NextPage, PageScope, page_size, paging
 from .record_errors import HostRefusal, RecordNotFound
 from .refusal_status import next_call
@@ -295,7 +295,7 @@ def _listing(spec: ResourceSpec, *, whole: bool) -> ListOperation | None:
     query = spec.listing.query
     listing: ListOperation = {"filters": list(list_filters(query)), "fields": list(spec.listing.fields)}
     if whole:
-        schema = json_schema(query)
+        schema = sent_schema(query)
         properties = schema.get("properties", {})
         listing["query_schema"] = narrowed(schema, properties.keys() - PAGING)
         if PAGING & properties.keys():

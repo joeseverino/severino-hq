@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, create_model
 
-from hq.platform.application.json_schemas import json_schema
+from hq.platform.application.json_schemas import sent_schema
 
 from . import services
 from .contract import Resource, ResourceContract, filters, identifiers, served_resources
@@ -109,14 +109,11 @@ def tool_contract() -> dict[str, Any]:
     entries: dict[str, Any] = {}
     for handler in HANDLERS:
         name = handler.__name__
-        schema = json_schema(argument_model(handler, resources))
+        schema = sent_schema(argument_model(handler, resources))
         # The docstring is the description a model reads, so it is Markdown:
         # a one-paragraph summary first, the rest in paragraphs after a blank
         # line, and names in single backticks.
         description = handler.__doc__ or ""
-        if not description.strip():
-            # A client chooses a tool by its description; one with none is never chosen right.
-            raise ValueError(f"MCP tool {name!r} must have a description.")
         if handler is services.list_resource:
             description += "\nFilters: " + filters(resources.listable)
         if handler is services.get_resource:

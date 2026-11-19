@@ -32,7 +32,7 @@ from hq.platform.application.integration_specs import (
     takes_stale_write_token,
     typed_keys,
 )
-from hq.platform.application.json_schemas import LOCAL, json_schema
+from hq.platform.application.json_schemas import LOCAL, sent_schema
 from hq.platform.application.refusal_status import LATER_CODES
 from hq.platform.application.resource_operations import RunAsked
 from hq.platform.application.resources import describe_resources, mask_paths, masked_kind, resource_registry
@@ -605,7 +605,7 @@ class _Builder:
                         spec["name"]
                         for spec in self.resources
                         if spec["operations"]["get"]
-                        and json_schema(self.resource_specs[spec["name"]].identifier_type) == _TEXT
+                        and sent_schema(self.resource_specs[spec["name"]].identifier_type) == _TEXT
                     ],
                     "read of one record",
                 ),
@@ -619,7 +619,7 @@ class _Builder:
                 continue
             name = spec["name"]
             field = detail["identifier"]
-            identifier = json_schema(self.resource_specs[name].identifier_type)
+            identifier = sent_schema(self.resource_specs[name].identifier_type)
             listed = spec["operations"]["list"] is not None
             # A resource with a list holds the records its summary describes,
             # and this reads one of them; one without is read one at a time,

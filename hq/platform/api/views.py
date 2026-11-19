@@ -61,7 +61,7 @@ from hq.platform.application.integration_specs import (
     CapabilitySpec,
     answer_type,
 )
-from hq.platform.application.json_schemas import json_schema, merged_definitions
+from hq.platform.application.json_schemas import merged_definitions, sent_schema
 from hq.platform.application.lists import split_list
 from hq.platform.application.pages import page_refusal
 from hq.platform.application.projection import QueryRefusal
@@ -657,7 +657,7 @@ def _projection(
     tool name, so both doors say it alike.
     """
 
-    fields = json_schema(query)["properties"]
+    fields = sent_schema(query)["properties"]
 
     def view(request: APIRequest) -> HttpResponse:
         # A repeat, or a focus that names nothing, is answered as

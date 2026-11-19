@@ -48,6 +48,7 @@ from .contracts import Closed, Effect
 from .integration_specs import CapabilitySpec
 from .projection import read_once
 from .record_errors import PolicyError, RecordNotFound
+from .record_fields import RecordId
 from .security import Capability, Principal
 lazy from . import agent_registry
 lazy from .approval_review import SUMMARY
@@ -757,12 +758,15 @@ class Adopted(TypedDict):
 # A playbook as a change of a scan names it: its id, or its sidecar where two declare one id.
 PlaybookKey = Annotated[RequiredText, Strict(), Field(max_length=200, title="Playbook")]
 
+# The scan result a change of a scan is adopted or rejected from.
+type ScanResult = Annotated[RecordId, Strict(), Field(title="Scan result"), Describe("The scan result's ID.")]
+
 
 @dataclass(frozen=True, slots=True)
 class AdoptProposal:
     """The scan result to adopt, and the one playbook to adopt from it."""
 
-    proposal: Annotated[StrictInt, Field(ge=1, title="Scan result"), Describe("The scan result's ID.")]
+    proposal: ScanResult
     playbook: Annotated[
         PlaybookKey | None,
         Describe("The playbook whose change to adopt, by its id; left out, every change that waits is adopted."),
@@ -844,7 +848,7 @@ class Rejected(TypedDict):
 class RejectProposal:
     """The scan result to reject, and the one playbook to reject from it."""
 
-    proposal: Annotated[StrictInt, Field(ge=1, title="Scan result"), Describe("The scan result's ID.")]
+    proposal: ScanResult
     playbook: Annotated[
         PlaybookKey | None,
         Describe(

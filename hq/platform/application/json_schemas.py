@@ -9,7 +9,7 @@ given at a use into the alias's definition.
 import copy
 import functools
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from datetime import datetime
 from types import get_original_bases
 from typing import Annotated, Any, TypedDict, is_typeddict, override
@@ -156,6 +156,45 @@ class PublishedSchema(GenerateJsonSchema):
         if "patternProperties" in value:
             value.setdefault("additionalProperties", False)
         return value
+
+
+class SentSchema(PublishedSchema):
+    """The same, for what a caller sends, which never builds with an integer
+    that names no ceiling: one past the database's integer would reach it
+    unrefused. A record's id is ``record_fields.RecordId``."""
+
+    @override
+    def generate(self, schema: core_schema.CoreSchema, mode: JsonSchemaMode = "validation") -> JsonSchemaValue:
+        # Read once written whole, since an annotation may write its bound
+        # after the integer it wraps.
+        value = super().generate(schema, mode)
+        if unbounded := next(_unbounded(value), None):
+            raise TypeError(
+                f"The integer at {unbounded} a caller sends declares no ceiling: give it one, "
+                "Annotated[int, Field(le=...)], or RecordId for an id."
+            )
+        return value
+
+
+# What holds an integer to a ceiling, beside its type or the reference to it.
+_BOUNDS = frozenset({"maximum", "exclusiveMaximum", "enum", "const"})
+
+
+def _unbounded(node: Any, where: str = "#") -> Iterator[str]:
+    """Where under ``node`` an integer names no ceiling."""
+
+    if isinstance(node, list):
+        for index, item in enumerate(node):
+            yield from _unbounded(item, f"{where}/{index}")
+        return
+    if not isinstance(node, dict) or _BOUNDS & node.keys():
+        return
+    kinds = node.get("type")
+    if kinds == "integer" or (isinstance(kinds, list) and "integer" in kinds):
+        yield where
+    for key, item in node.items():
+        if key not in {"examples", "example", "default"}:
+            yield from _unbounded(item, f"{where}/{key}")
 
 
 class AnswerSchema(PublishedSchema):
@@ -341,6 +380,12 @@ def json_schema(
 
     adapter = kind if isinstance(kind, TypeAdapter) else TypeAdapter(kind)
     return adapter.json_schema(mode=mode, ref_template=ref_template, schema_generator=generator)
+
+
+def sent_schema(kind: Any) -> dict[str, Any]:
+    """The schema of ``kind``, something a caller sends: a command, a query, a tool's arguments, an identifier."""
+
+    return json_schema(kind, generator=SentSchema)
 
 
 def json_schemas(

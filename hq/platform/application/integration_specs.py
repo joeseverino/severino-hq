@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from .contracts import Effect
 from .display_words import display
-from .json_schemas import fields, json_schema
+from .json_schemas import fields, sent_schema
 from .search_contracts import SearchDefinition
 from .security import Capability, Principal, Requires
 from .ui import ended
@@ -75,7 +75,7 @@ def command_schema(command_type: type) -> dict[str, Any]:
     """Build an immutable command type's closed JSON Schema once; each field's
     ``command_fields`` markers write themselves in."""
 
-    return json_schema(command_adapter(command_type))
+    return sent_schema(command_adapter(command_type))
 
 
 # The machine API's contract version (``/api/v2/``), which a retry key's
