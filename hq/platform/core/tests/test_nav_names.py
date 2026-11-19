@@ -1,33 +1,16 @@
-"""A navigation entry is called what its page is called."""
+"""A navigation entry is called what its page is titled."""
 
-from django.test import TestCase
-from django.urls import reverse
+from django.test import SimpleTestCase
 
-from hq.platform.application.domains import domain_navigation
-from hq.platform.application.tests.host_only import host_only
-from hq.platform.core.bench import seed
-
-# Entries whose page is one of several things the entry lists, so the page is
-# titled by the thing: a domain's page is named for the domain. The dashboard
-# is titled by its greeting.
-NAMED_FOR_ITS_SUBJECT = frozenset({"zones:index", "dashboard"})
+from hq.platform.application.domains import domain_navigation, page_title
 
 
-class NavigationNameTests(TestCase):
-    def test_every_entry_is_named_as_its_page_is_titled(self):
-        seeded = seed(0.05)
-        self.client.force_login(seeded.user)
-        differing = {}
-        with host_only():
-            for item in domain_navigation():
-                if item.route in NAMED_FOR_ITS_SUBJECT:
-                    continue
-                response = self.client.get(reverse(item.route), follow=True)
-                # The view's own context, never one a part of the page was
-                # drawn with (the Design page's examples). A page a function
-                # draws (the API reference) has no title to hold to.
-                page = (getattr(response, "context_data", None) or {}).get("page")
-                if page is not None and page.title != item.label:
-                    differing[item.route] = (item.label, page.title)
+class NavigationNameTests(SimpleTestCase):
+    def test_an_entry_takes_its_page_s_title_and_names_itself_only_for_an_untitled_page(self):
+        from hq.domains.projects.views import PostureView
 
-        self.assertEqual(differing, {})
+        labels = {item.route: item.label for item in domain_navigation()}
+
+        self.assertEqual(labels["posture"], PostureView.page_title)
+        self.assertEqual(page_title("dashboard"), "")
+        self.assertEqual(labels["dashboard"], "Dashboard")

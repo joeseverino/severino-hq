@@ -8,7 +8,7 @@ nothing here names an extension (``test_domains`` holds it).
 
 import itertools
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cache, partial
 from typing import Any, NamedTuple
 
@@ -30,7 +30,7 @@ from .plugins import (
     source_cards,
 )
 from .record_declaration import Records
-from .routes import reverse
+from .routes import reverse, routed
 lazy from . import attention
 lazy from .security import Capability, Principal, could_hold
 
@@ -879,8 +879,18 @@ def domain_navigation() -> tuple[NavigationItem, ...]:
         if item.route in seen:
             continue
         seen.add(item.route)
-        items.append(item)
+        items.append(replace(item, label=page_title(item.route) or item.label))
     return tuple(items)
+
+
+@cache
+def page_title(route: str) -> str:
+    """What the page at ``route`` is titled, when its view says so before it
+    draws: an entry is called what its page is, and names itself only for a
+    page titled by what it shows (a zone, the greeting)."""
+
+    views = (getattr(view.pattern.callback, "view_class", None) for view in routed() if view.name == route)
+    return getattr(next(views, None), "page_title", "")
 
 
 def domain_attention_items() -> tuple[dict[str, Any], ...]:

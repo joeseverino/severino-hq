@@ -9,4 +9,4 @@ inherited into the symbol, so a control can restroke it.
 
 `aria-hidden` on all of them: every caller puts the word next to the mark, so a
 screen reader announcing both would read each button twice.
-{% endcomment %}{% load static %}<svg class="icon" aria-hidden="true"><use href="{% static 'img/icons.svg' %}#{{ name }}"></use></svg>
+{% endcomment %}{% load static icon_tags %}<svg class="icon" aria-hidden="true"><use href="{% static 'img/icons.svg' %}#{{ name|symbol }}"></use></svg>
