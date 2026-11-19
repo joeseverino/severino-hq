@@ -28,11 +28,10 @@ from hq.platform.application.service_context import (
     page_parts,
     sections_for,
     service_badges,
-    service_summary,
 )
 from hq.platform.application.service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET
 from hq.platform.application.service_list import listed_service, listed_services
-from hq.platform.application.services import alias_target
+from hq.platform.application.services import alias_summary, alias_target, fault_rows
 from hq.platform.application.ui import PageNavigation, PageSection
 from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted
@@ -197,7 +196,7 @@ class ServiceDetailView(RecordPageMixin, TemplateView):
                 *((PageSection("parts", "Not set up"),) if self.missing_facets else ()),
                 *(PageSection(section.id, section.label) for section in self.sections),
                 *((PageSection("relationships", "Relationships"),) if self.relationships.groups else ()),
-                *((PageSection("resources", "Other names"),) if self.service.alias_claims else ()),
+                *((PageSection("resources", "Other names"),) if self.record["alias_records"] else ()),
             )
         )
 
@@ -238,8 +237,7 @@ class ServiceDetailView(RecordPageMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["service"] = self.service
         context["page_visit"] = page_visit("service", self.record["hostname"])
-        context["summary"] = service_summary(self.service)
-        context["page_badges"] = service_badges(self.service, own=self.own is not None)
+        context["page_badges"] = service_badges(self.record["exposure"]["reach"], own=self.own is not None)
         context.update(page_parts(self.service, self.request))
         context["missing_facets"] = self.missing_facets
         # The trace of this name in the topology, beside the path it draws.
@@ -248,11 +246,10 @@ class ServiceDetailView(RecordPageMixin, TemplateView):
         context["sections"] = self.sections
         context["relationships"] = self.relationships
         context["read_only"] = self.own is not None
-        # Who reaches it, and, when that is anyone on the internet unasked,
-        # the gate HQ can put in front.
-        exposure = self.service.exposure
-        context["exposure"] = exposure
-        context["gate_fixes"] = gate_links(self.service) if exposure.level == OPEN else ()
+        # When anyone on the internet reaches it unasked, the gate HQ can put in front.
+        context["gate_fixes"] = gate_links(self.service) if self.record["exposure"]["level"] == OPEN else ()
+        context["fault_rows"] = fault_rows(self.record["hostname"], faults) if (faults := self.record["faults"]) else ()
+        context["alias_summary"] = alias_summary(self.record["aliases"])
         context["hq_label"] = HQ_LABEL
         context["runtime_facet"] = RUNTIME_FACET
         context["hq_machine"] = entity_link("machine", self.own.machine) if self.own and self.own.machine else None

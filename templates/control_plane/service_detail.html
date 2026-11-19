@@ -2,18 +2,17 @@
 {% block page %}
 <div id="overview">
 {% comment %}
-The summary first: what it is, where it runs, and whether it is healthy. Each
-value comes from application.service_context.service_summary, walked from the
-readings. The path is the next section, drawn once.
+The summary first: what it is, where it runs, and whether it is healthy, as
+the record says it. The path is the next section, drawn once.
 {% endcomment %}
 {% card element="div" %}{% facts layout="band" %}
-  {% for item in summary %}
+  {% for item in record.summary %}
     {% fact item.label icon=item.icon tone=item.tone detail=item.detail %}
       {% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value|breakable }}{% endif %}
     {% endfact %}
   {% endfor %}
-  {% if service.aliases %}
-    {% fact "Also at" value=service.aliases|length|counted:"other name,other names" detail=service.aliases icon="globe" %}
+  {% if record.aliases %}
+    {% fact "Also at" value=record.aliases|length|counted:"other name,other names" detail=record.aliases icon="globe" %}
   {% endif %}
 {% endfacts %}{% endcard %}
 {% comment %}
@@ -21,7 +20,7 @@ What is wrong with this name, as the queue says it. Its setup's finding
 carries the faults, so they are drawn as that finding when the queue has
 none open about it.
 {% endcomment %}
-{% problems_about as problems %}{% if problems or not service.faults %}{% include "partials/_problems.html" %}{% else %}{% include "partials/_problems.html" with problems=service.fault_rows %}{% endif %}
+{% problems_about as problems %}{% if problems or not record.faults %}{% include "partials/_problems.html" %}{% else %}{% include "partials/_problems.html" with problems=fault_rows %}{% endif %}
 </div>
 
 {% section "Path" id="path" %}
@@ -42,15 +41,15 @@ none open about it.
   {% include "control_plane/_service_parts.html" %}
 {% empty %}
   {% if declared_parts %}{% with parts=declared_parts %}{% include "control_plane/_service_parts.html" %}{% endwith %}{% endif %}
-  {% muted element="p" %}{% for gap in service.path.gaps %}{{ gap|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}
+  {% muted element="p" %}{% for gap in record.path.unread %}{{ gap|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}
   {% for hop in service.path.observed %}
     <p>{{ hop.phrase|breakable:":" }} {% entity hop.link %}{% if hop.source %}{% muted %}{% dot %}{{ hop.source.phrase|breakable }}{% if hop.source.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=hop.source.observed_at only %}{% endif %}{% endmuted %}{% endif %}</p>
   {% endfor %}
 {% endfor %}
-{% aside %}{% muted %}{% if routes|length == 1 %}via {{ routes.0.via_phrase|breakable:"·" }}{% endif %}{% status exposure.label tone=exposure.tone pill=False data_exposure=exposure.level %}{% if exposure.worst.path_gates %}{% dot %}login only at {% for path in exposure.worst.path_gates %}<code>{{ path|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% endmuted %}{% if topology_url %} {% button "View on map" topology_url look="ghost compact" %}{% endif %}
+{% aside %}{% muted %}{% if routes|length == 1 %}via {{ routes.0.via_phrase|breakable:"·" }}{% endif %}{% status record.exposure.label tone=record.exposure.tone pill=False data_exposure=record.exposure.level %}{% if record.exposure.path_gates %}{% dot %}login only at {% for path in record.exposure.path_gates %}<code>{{ path|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% endmuted %}{% if topology_url %} {% button "View on map" topology_url look="ghost compact" %}{% endif %}
 {% endsection %}
 
-{% if missing_facets or service.origin.parked or service.origin and not service.origin.external and not service.origin.known %}
+{% if missing_facets or record.origin.parked or record.origin and not record.origin.external and not record.origin.known %}
 {% section "Not set up" id="parts" %}
 {% comment %}
 The headline is the value, not the word "Declared". Each line comes from the
@@ -107,7 +106,7 @@ close every one.
     {% elif facet.readings %}
       {% comment %}Observed through a reading joined to the name. Not a declaration. Its lines follow.{% endcomment %}
       {% fact facet.label %}{{ facet.reading_lines.0.label|breakable }}{% detail %}{% partial reading_lines %}{% endfact %}
-    {% elif service.origin.external and facet.routes %}
+    {% elif record.origin.external and facet.routes %}
       {% comment %}
       Not a gap. A name resolving straight to something outside is already
       routed, and nothing on this network should answer for it: saying "nothing
@@ -124,7 +123,7 @@ close every one.
       {% endcomment %}
       {% fact facet.label %}{% status "Not needed" tone="neutral" pill=False %}{% detail %}
         {% for kind, label in facet.declarable %}<small>No {{ label|breakable }} needed.</small>{% endfor %}
-        {% if facet.id == runtime_facet and not service.provider_answers %}<small>Served by <strong>{{ service.origin.headline|breakable }}</strong> from <code>{{ service.origin.address|breakable }}</code></small>{% endif %}
+        {% if facet.id == runtime_facet and not record.provider_answers %}<small>Served by <strong>{{ record.origin.headline|breakable }}</strong> from <code>{{ record.origin.address|breakable }}</code></small>{% endif %}
         {% partial reading_lines %}
       {% endfact %}
     {% elif facet.observed %}
@@ -158,7 +157,7 @@ close every one.
     {% elif facet.not_visible and not facet.reading_lines %}
       {% fact facet.label %}{% status "Not visible" tone="neutral" pill=False %}{% detail %}
         <small>{% status facet.not_visible tone="neutral" pill=False %}</small>
-        {% if not read_only %}{% for kind, label in facet.declarable %}{% url 'control_plane:create' as create_url %}<small><a class="subtle-link" href="{% with_query create_url kind=kind hostname=service.hostname %}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}{% endif %}
+        {% if not read_only %}{% for kind, label in facet.declarable %}{% url 'control_plane:create' as create_url %}<small><a class="subtle-link" href="{% with_query create_url kind=kind hostname=record.hostname %}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}{% endif %}
       {% endfact %}
     {% elif read_only %}
       {% fact facet.label %}{% status "Not set up" tone="neutral" pill=False %}{% detail %}{% partial reading_lines %}{% endfact %}
@@ -175,8 +174,8 @@ close every one.
       that does work.
       {% endcomment %}
       {% fact facet.label %}{% status "Not set up" tone="neutral" pill=False %}{% detail %}
-        <small>{% status "HQ has none for" service.hostname|add:"." tone="neutral" pill=False %}</small>
-        {% for kind, label in facet.declarable %}{% url 'control_plane:create' as create_url %}<small><a class="subtle-link" href="{% with_query create_url kind=kind hostname=service.hostname %}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}
+        <small>{% status "HQ has none for" record.hostname|add:"." tone="neutral" pill=False %}</small>
+        {% for kind, label in facet.declarable %}{% url 'control_plane:create' as create_url %}<small><a class="subtle-link" href="{% with_query create_url kind=kind hostname=record.hostname %}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}
         {% for label, reason in facet.unavailable %}<small>{{ label|breakable }} {{ reason|breakable }}</small>{% endfor %}
         {% partial reading_lines %}
       {% endfact %}
@@ -189,12 +188,12 @@ What serves the name is in Relationships. Two things are said here because no
 card can say them: the name points at a documentation address where nothing
 answers, or at an address no known machine holds.
 {% endcomment %}
-{% if service.origin.parked and not service.provider_answers %}
-  {% muted element="p" %}Parked. The name resolves to <code>{{ service.origin.address|breakable:"," }}</code> where nothing answers.{% endmuted %}
-{% elif service.origin and not service.origin.external and not service.origin.known %}
+{% if record.origin.parked and not record.provider_answers %}
+  {% muted element="p" %}Parked. The name resolves to <code>{{ record.origin.address|breakable:"," }}</code> where nothing answers.{% endmuted %}
+{% elif record.origin and not record.origin.external and not record.origin.known %}
   {% muted element="p" %}
-    {% if service.origin.routed %}The proxy forwards to{% else %}The name resolves to{% endif %}
-    <code>{{ service.origin.address|breakable:"," }}</code> which <strong>matches no known machine</strong>.
+    {% if record.origin.routed %}The proxy forwards to{% else %}The name resolves to{% endif %}
+    <code>{{ record.origin.address|breakable:"," }}</code> which <strong>matches no known machine</strong>.
     If it belongs to one, add it to that machine's addresses.
   {% endmuted %}
 {% endif %}
@@ -212,11 +211,11 @@ it relates comes last, as on the machine page.
 {% layout %}
 {% include "partials/_page_sections.html" with spans_row=True %}
 {% include "partials/_page_sections.html" with spans_row=False %}
-{% referenced_by "service" service.hostname %}
+{% referenced_by "service" record.hostname %}
 {% include "partials/_relationships.html" %}
 {% endlayout %}
 
-{% if service.alias_claims %}
+{% if record.alias_records %}
 {% section "Other names" id="resources" fold=True %}
 {% comment %}
 The declarations behind the other names, folded away.
@@ -233,18 +232,18 @@ it is not what anyone opens this page to read.
       <table class="data-table">
         <thead><tr>{% table_heading "Record" "identifier" local_sort=True %}{% table_heading "Type" drop=2 local_sort=True %}{% table_heading "For" "identifier" drop=1 local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}</tr></thead>
         <tbody>
-          {% for alias, claim in service.alias_claims %}
+          {% for each in record.alias_records %}
             <tr>
-              <td><strong>{% entity claim.link %}</strong></td>
-              <td>{{ claim.kind|kind_label|breakable }}</td>
-              <td>{{ alias|breakable }}</td>
-              <td>{% status claim.health.label tone=claim.health.state %}</td>
+              <td><strong>{% entity each.link %}</strong></td>
+              <td>{{ each.kind|kind_label|breakable }}</td>
+              <td>{{ each.alias|breakable }}</td>
+              <td>{% status each.health.label tone=each.health.state %}</td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
     {% endtable_region %}
-{% aside %}{% muted %}{{ service.alias_summary|breakable }}{% endmuted %}
+{% aside %}{% muted %}{{ alias_summary|breakable }}{% endmuted %}
 {% endsection %}
 {% endif %}
 {% endblock %}

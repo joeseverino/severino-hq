@@ -503,7 +503,7 @@ class ServicePageTests(TestCase):
         response = self.client.get(reverse("control_plane:service", args=["app.example.com"]))
         page = response.content.decode()
 
-        labels = [item.label for item in response.context["summary"]]
+        labels = [item["label"] for item in response.context["record"]["summary"]]
         # Health first; the path is drawn once, in its own section, and says where it runs.
         self.assertEqual(labels[:2], ["Health", "Certificate"])
         self.assertNotIn("Path", labels)
@@ -598,12 +598,12 @@ class ObservedNameTests(TestCase):
     def test_the_page_says_no_record_and_access_first(self):
         response = self.client.get(reverse("control_plane:service", args=["admin.example.com"]))
         page = response.content.decode()
-        summary = {item.label: item for item in response.context["summary"]}
+        summary = {item["label"]: item for item in response.context["record"]["summary"]}
         path = self.walk("admin.example.com")
 
-        self.assertEqual(summary["Health"].tone, Tone.NEUTRAL)
-        self.assertIn(path.observed_line, " ".join(summary["Health"].detail))
-        self.assertIn("Admin", summary["What it is"].value)
+        self.assertEqual(summary["Health"]["tone"], Tone.NEUTRAL)
+        self.assertIn(path.observed_line, " ".join(summary["Health"]["detail"]))
+        self.assertIn("Admin", summary["What it is"]["value"])
         section = page[page.index('id="path"') : page.index('id="parts"')]
         missing, unread = path.gaps
         self.assertLess(section.index(missing), section.index(capfirst(unread)))
@@ -657,20 +657,20 @@ class HqHealthTests(TestCase):
 
     def summary(self):
         response = self.client.get(reverse("control_plane:service", args=["hq.example.com"]))
-        return {item.label: item for item in response.context["summary"]}
+        return {item["label"]: item for item in response.context["record"]["summary"]}
 
     def test_hq_answering_this_request_is_up(self):
         health = self.summary()["Health"]
 
-        self.assertEqual(health.tone, "good")
+        self.assertEqual(health["tone"], "good")
 
     def test_a_finding_about_hq_needs_attention(self):
         with mock.patch("hq.platform.application.service_health.hq_findings", return_value=("one",)):
             health = self.summary()["Health"]
 
-        self.assertEqual(health.tone, "attention")
+        self.assertEqual(health["tone"], "attention")
         # The word drawn in that tone is the problem, never the calm word ("Up").
-        self.assertEqual(health.value, "1 open problem")
+        self.assertEqual(health["value"], "1 open problem")
 
     def test_only_findings_about_hq_count(self):
         from ..finding_model import Finding

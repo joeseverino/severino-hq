@@ -13,11 +13,15 @@ from .entity_links import EntityLink
 from .json_schemas import Written
 from .path_model import HopSource
 from .standards import INTENDED, Standing
+from .tone import Tone
 from .ui import ended
 
 # What a container row and a machine's list of its containers say alike.
 type ComposeProject = Annotated[str, Describe("The compose project it belongs to; empty for one started on its own.")]
 
+
+# The state a line of a list or a summary may carry, as its pill is toned.
+type OptionalTone = Annotated[str, Describe(f"How it stands: {listed(Tone)}, or empty for no state.")]
 
 # A name and the page it opens, as ``EntityLink`` says it.
 WrittenLink = Annotated[dict[str, Any], Written(EntityLink)]

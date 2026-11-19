@@ -5,7 +5,7 @@ from typing import Annotated, TypedDict
 from .answer_fields import ObservedAt, PageUrl
 from .describe import Describe, listed
 from .managed_records import HealthPart
-from .record_parts import WrittenLink
+from .record_parts import OptionalTone, WrittenLink
 from .tone import Tone
 from .ui import ended
 
@@ -58,7 +58,7 @@ class InsightRowPart(TypedDict):
     title: Annotated[str, Describe("What the row names.")]
     detail: Annotated[str, Describe("The one fact that sets it apart; empty for none.")]
     url: Annotated[str, Describe("Its page; empty for none.")]
-    status: Annotated[str, Describe(f"How it stands: {listed(Tone)}, or empty for no state.")]
+    status: OptionalTone
     badge: Annotated[str, Describe("That state in words; empty for none.")]
 
 

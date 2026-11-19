@@ -19,7 +19,15 @@ from .record_errors import RecordNotFound
 from .resources import EmptyQuery
 from .security import Capability
 from .service_facets import zone_holding
-from .service_records import FacetPart, ServiceItem, ServiceRecord, ServiceRow
+from .service_records import (
+    AliasRecordPart,
+    ExposurePart,
+    FacetPart,
+    ServiceItem,
+    ServiceRecord,
+    ServiceRow,
+    SummaryPart,
+)
 from .services import (
     CONTAINER_KIND,
     HQ_MARK,
@@ -37,6 +45,7 @@ lazy from .derived_reads import get_path, serialize_path
 lazy from .facts import readings
 lazy from .hq_self import hq_service
 lazy from .record_saves import row
+lazy from .service_context import service_summary
 
 
 def listed_services(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
@@ -115,7 +124,22 @@ def get_service(hostname: str) -> ServiceRecord:
             if not is_hostname(wanted):
                 raise RecordNotFound("That is not a hostname.")
             (found,), listing = prospects((wanted,)), PROSPECT
-        return {**serialize_service(found), "url": found.url, "listing": listing, "path": serialize_path(found.path)}
+        exposure = found.exposure
+        return {
+            **serialize_service(found),
+            "url": found.url,
+            "listing": listing,
+            "path": serialize_path(found.path),
+            "summary": [row(item, SummaryPart) for item in service_summary(found)],
+            "exposure": row(
+                exposure,
+                ExposurePart,
+                path_gates=exposure.worst.path_gates if exposure.worst else (),
+            ),
+            "aliases": list(found.aliases),
+            "alias_records": [row(claim, AliasRecordPart, alias=alias) for alias, claim in found.alias_claims],
+            "provider_answers": found.provider_answers,
+        }
 
 
 @dataclass(frozen=True, slots=True)

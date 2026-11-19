@@ -795,7 +795,7 @@
               "registration.auto_renew",
               "connection_ref",
               "observed_only",
-              "adopt_token",
+              "adoption",
               "reachable",
               "observed_at",
               "records",
@@ -2143,6 +2143,11 @@
               "origin.address",
               "origin.host",
               "origin.container",
+              "origin.routed",
+              "origin.parked",
+              "origin.external",
+              "origin.known",
+              "origin.headline",
               "project",
               "faults",
               "mark",
@@ -2177,6 +2182,11 @@
               "origin.address",
               "origin.host",
               "origin.container",
+              "origin.routed",
+              "origin.parked",
+              "origin.external",
+              "origin.known",
+              "origin.headline",
               "project",
               "faults",
               "mark",
@@ -2286,6 +2296,50 @@
               "path.routes.hops.layers.boundary",
               "path.routes.hops.layers.mechanism",
               "path.routes.hops.layers.rules",
+              "summary",
+              "summary.label",
+              "summary.value",
+              "summary.link",
+              "summary.link.label",
+              "summary.link.url",
+              "summary.link.external",
+              "summary.link.kind",
+              "summary.link.kind_label",
+              "summary.link.title",
+              "summary.link.detail",
+              "summary.link.identity",
+              "summary.detail",
+              "summary.tone",
+              "summary.icon",
+              "exposure",
+              "exposure.level",
+              "exposure.label",
+              "exposure.tone",
+              "exposure.reach",
+              "exposure.reach.id",
+              "exposure.reach.label",
+              "exposure.reach.detail",
+              "exposure.reach.tailnet_only",
+              "exposure.path_gates",
+              "aliases",
+              "alias_records",
+              "alias_records.alias",
+              "alias_records.link",
+              "alias_records.link.label",
+              "alias_records.link.url",
+              "alias_records.link.external",
+              "alias_records.link.kind",
+              "alias_records.link.kind_label",
+              "alias_records.link.title",
+              "alias_records.link.detail",
+              "alias_records.link.identity",
+              "alias_records.kind",
+              "alias_records.health",
+              "alias_records.health.state",
+              "alias_records.health.label",
+              "alias_records.health.reason",
+              "alias_records.health.message",
+              "provider_answers",
               "*"
             ],
             "type": "string"
@@ -5039,6 +5093,50 @@
         "minimum": 1,
         "type": "integer"
       },
+      "AliasRecordPart": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "description": "The other name the record is for.",
+            "type": "string"
+          },
+          "health": {
+            "$ref": "#/components/schemas/HealthPart"
+          },
+          "kind": {
+            "description": "The record's type, such as `cloudflare.dns_record`.",
+            "type": "string"
+          },
+          "link": {
+            "$ref": "#/components/schemas/EntityLink"
+          }
+        },
+        "required": [
+          "alias",
+          "link",
+          "kind",
+          "health"
+        ],
+        "type": "object"
+      },
+      "AliasRecordPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "$ref": "#/components/schemas/AliasRecordPart/properties/alias"
+          },
+          "health": {
+            "$ref": "#/components/schemas/HealthPartPartial"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AliasRecordPart/properties/kind"
+          },
+          "link": {
+            "$ref": "#/components/schemas/EntityLinkPartial"
+          }
+        },
+        "type": "object"
+      },
       "Allocation": {
         "additionalProperties": false,
         "description": "Who an address was allocated to, as the registry that allocated it says; empty when it could not be read.",
@@ -6151,6 +6249,52 @@
       "AttemptCount": {
         "description": "How many times a controller has tried it.",
         "type": "integer"
+      },
+      "AudiencePart": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "description": "What said so, in a sentence.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Who may open a connection, by id, such as `tailnet` or `internet`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "That audience in words; empty when unknown.",
+            "type": "string"
+          },
+          "tailnet_only": {
+            "description": "Whether only devices on the tailnet may connect.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "detail",
+          "tailnet_only"
+        ],
+        "type": "object"
+      },
+      "AudiencePartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/AudiencePart/properties/detail"
+          },
+          "id": {
+            "$ref": "#/components/schemas/AudiencePart/properties/id"
+          },
+          "label": {
+            "$ref": "#/components/schemas/AudiencePart/properties/label"
+          },
+          "tailnet_only": {
+            "$ref": "#/components/schemas/AudiencePart/properties/tailnet_only"
+          }
+        },
+        "type": "object"
       },
       "AutomationRunCancelRequest": {
         "additionalProperties": false,
@@ -12248,8 +12392,8 @@
         "additionalProperties": false,
         "description": "One domain with its records, its connection and what HQ makes of it.",
         "properties": {
-          "adopt_token": {
-            "description": "The token `infrastructure.zone.adopt` takes to manage the domain as it was read; empty when HQ manages it or cannot.",
+          "adoption": {
+            "description": "The handle `infrastructure.zone.adopt` takes to manage the domain as it was read; empty when HQ manages it or cannot.",
             "type": "string"
           },
           "connection_ref": {
@@ -12316,7 +12460,7 @@
           "registration",
           "connection_ref",
           "observed_only",
-          "adopt_token",
+          "adoption",
           "reachable",
           "observed_at",
           "records",
@@ -12328,8 +12472,8 @@
         "additionalProperties": false,
         "description": "One domain with its records, its connection and what HQ makes of it.",
         "properties": {
-          "adopt_token": {
-            "$ref": "#/components/schemas/DomainRecord/properties/adopt_token"
+          "adoption": {
+            "$ref": "#/components/schemas/DomainRecord/properties/adoption"
           },
           "connection_ref": {
             "$ref": "#/components/schemas/DomainRecord/properties/connection_ref"
@@ -13967,6 +14111,66 @@
           },
           "renewal_at": {
             "$ref": "#/components/schemas/ExpiryPart/properties/renewal_at"
+          }
+        },
+        "type": "object"
+      },
+      "ExposurePart": {
+        "additionalProperties": false,
+        "description": "Who can reach the name, by the worst of its routes.",
+        "properties": {
+          "label": {
+            "description": "That level, in words.",
+            "type": "string"
+          },
+          "level": {
+            "description": "How open its worst route is: `open`, `unknown`, `gated`, `private` or `unrouted`.",
+            "type": "string"
+          },
+          "path_gates": {
+            "description": "The paths a gate stands in front of on an open route that no gate covers whole.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reach": {
+            "$ref": "#/components/schemas/AudiencePart",
+            "description": "Who its worst route lets in."
+          },
+          "tone": {
+            "description": "How that level is colored: `serious`, `attention`, `neutral` or `good`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "label",
+          "tone",
+          "reach",
+          "path_gates"
+        ],
+        "type": "object"
+      },
+      "ExposurePartPartial": {
+        "additionalProperties": false,
+        "description": "Who can reach the name, by the worst of its routes.",
+        "properties": {
+          "label": {
+            "$ref": "#/components/schemas/ExposurePart/properties/label"
+          },
+          "level": {
+            "$ref": "#/components/schemas/ExposurePart/properties/level"
+          },
+          "path_gates": {
+            "$ref": "#/components/schemas/ExposurePart/properties/path_gates"
+          },
+          "reach": {
+            "$ref": "#/components/schemas/AudiencePartPartial",
+            "description": "Who its worst route lets in."
+          },
+          "tone": {
+            "$ref": "#/components/schemas/ExposurePart/properties/tone"
           }
         },
         "type": "object"
@@ -16399,8 +16603,7 @@
             "type": "string"
           },
           "status": {
-            "description": "How it stands: `serious`, `attention`, `neutral` or `good`, or empty for no state.",
-            "type": "string"
+            "$ref": "#/components/schemas/OptionalTone"
           },
           "title": {
             "description": "What the row names.",
@@ -16430,7 +16633,7 @@
             "$ref": "#/components/schemas/InsightRowPart/properties/detail"
           },
           "status": {
-            "$ref": "#/components/schemas/InsightRowPart/properties/status"
+            "$ref": "#/components/schemas/OptionalTone"
           },
           "title": {
             "$ref": "#/components/schemas/InsightRowPart/properties/title"
@@ -20058,6 +20261,10 @@
         },
         "type": "object"
       },
+      "OptionalTone": {
+        "description": "How it stands: `serious`, `attention`, `neutral` or `good`, or empty for no state.",
+        "type": "string"
+      },
       "Origin": {
         "additionalProperties": false,
         "description": "Where a request for the name is finally served, and what serves it there.",
@@ -20071,16 +20278,46 @@
             "description": "The container serving it there; empty when none is known.",
             "type": "string"
           },
+          "external": {
+            "description": "Whether this is served somewhere HQ does not reach: a Pages site, a mail\nhost, someone else's server. An unknown host inside the network is\n``qualifier``'s to say.",
+            "readOnly": true,
+            "type": "boolean"
+          },
+          "headline": {
+            "description": "What to call whatever serves this, in one phrase.\n\nHere rather than in a template, because there are two templates and one\nfact. Phrased in each, they drift, and the board and the page disagree\nabout the same origin.",
+            "readOnly": true,
+            "type": "string"
+          },
           "host": {
             "default": "",
             "description": "The machine at that address; empty when it matches none.",
             "type": "string"
+          },
+          "known": {
+            "description": "Whether the address belongs to a machine HQ knows.\n\nAn ingress forwarding to an address no host claims may work, yet it is\nsomewhere HQ cannot describe, reconcile or reach, which a page says in\nwords rather than as a bare IP.",
+            "readOnly": true,
+            "type": "boolean"
+          },
+          "parked": {
+            "description": "Whether the name points at a documentation address, where nothing answers.",
+            "readOnly": true,
+            "type": "boolean"
+          },
+          "routed": {
+            "default": true,
+            "description": "Whether a proxy forwards to it, over a record that names it.",
+            "type": "boolean"
           }
         },
         "required": [
           "address",
           "host",
-          "container"
+          "container",
+          "routed",
+          "parked",
+          "external",
+          "known",
+          "headline"
         ],
         "type": "object"
       },
@@ -20094,8 +20331,23 @@
           "container": {
             "$ref": "#/components/schemas/Origin/properties/container"
           },
+          "external": {
+            "$ref": "#/components/schemas/Origin/properties/external"
+          },
+          "headline": {
+            "$ref": "#/components/schemas/Origin/properties/headline"
+          },
           "host": {
             "$ref": "#/components/schemas/Origin/properties/host"
+          },
+          "known": {
+            "$ref": "#/components/schemas/Origin/properties/known"
+          },
+          "parked": {
+            "$ref": "#/components/schemas/Origin/properties/parked"
+          },
+          "routed": {
+            "$ref": "#/components/schemas/Origin/properties/routed"
           }
         },
         "type": "object"
@@ -26654,6 +26906,23 @@
         "additionalProperties": false,
         "description": "One service name whole and the path a request for it takes.",
         "properties": {
+          "alias_records": {
+            "description": "HQ's records behind those other names.",
+            "items": {
+              "$ref": "#/components/schemas/AliasRecordPart"
+            },
+            "type": "array"
+          },
+          "aliases": {
+            "description": "The other names that lead to it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "exposure": {
+            "$ref": "#/components/schemas/ExposurePart"
+          },
           "facets": {
             "$ref": "#/components/schemas/ServiceItem/properties/facets"
           },
@@ -26679,11 +26948,22 @@
           "project": {
             "$ref": "#/components/schemas/ServiceRow/properties/project"
           },
+          "provider_answers": {
+            "description": "The DNS service that answers for the name itself, where a proxied record puts it in front.",
+            "type": "string"
+          },
           "status": {
             "$ref": "#/components/schemas/ServiceRow/properties/status"
           },
           "status_label": {
             "$ref": "#/components/schemas/ServiceRow/properties/status_label"
+          },
+          "summary": {
+            "description": "What it is, where it runs, and whether it is healthy.",
+            "items": {
+              "$ref": "#/components/schemas/SummaryPart"
+            },
+            "type": "array"
           },
           "url": {
             "$ref": "#/components/schemas/PageUrl"
@@ -26700,7 +26980,12 @@
           "facets",
           "url",
           "listing",
-          "path"
+          "path",
+          "summary",
+          "exposure",
+          "aliases",
+          "alias_records",
+          "provider_answers"
         ],
         "type": "object"
       },
@@ -26708,6 +26993,19 @@
         "additionalProperties": false,
         "description": "One service name whole and the path a request for it takes.",
         "properties": {
+          "alias_records": {
+            "description": "HQ's records behind those other names.",
+            "items": {
+              "$ref": "#/components/schemas/AliasRecordPartPartial"
+            },
+            "type": "array"
+          },
+          "aliases": {
+            "$ref": "#/components/schemas/ServiceRecord/properties/aliases"
+          },
+          "exposure": {
+            "$ref": "#/components/schemas/ExposurePartPartial"
+          },
           "facets": {
             "$ref": "#/components/schemas/ServiceItemPartial/properties/facets"
           },
@@ -26732,11 +27030,21 @@
           "project": {
             "$ref": "#/components/schemas/ServiceRowPartial/properties/project"
           },
+          "provider_answers": {
+            "$ref": "#/components/schemas/ServiceRecord/properties/provider_answers"
+          },
           "status": {
             "$ref": "#/components/schemas/ServiceRowPartial/properties/status"
           },
           "status_label": {
             "$ref": "#/components/schemas/ServiceRowPartial/properties/status_label"
+          },
+          "summary": {
+            "description": "What it is, where it runs, and whether it is healthy.",
+            "items": {
+              "$ref": "#/components/schemas/SummaryPartPartial"
+            },
+            "type": "array"
           },
           "url": {
             "$ref": "#/components/schemas/PageUrl"
@@ -27394,6 +27702,89 @@
           "ok",
           "data"
         ],
+        "type": "object"
+      },
+      "SummaryPart": {
+        "additionalProperties": false,
+        "description": "One fact of the service's summary: what it is, where it runs, whether it is healthy.",
+        "properties": {
+          "detail": {
+            "description": "What backs it, each a line.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "icon": {
+            "description": "The kind of fact it is, as a symbol's name, such as `activity`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "What the fact is, such as `Health` or `Certificate`.",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityLink",
+                "title": "Entity link"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The page of what `value` names; null for none."
+          },
+          "tone": {
+            "$ref": "#/components/schemas/OptionalTone"
+          },
+          "value": {
+            "description": "The fact, in a few words.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "link",
+          "detail",
+          "tone",
+          "icon"
+        ],
+        "type": "object"
+      },
+      "SummaryPartPartial": {
+        "additionalProperties": false,
+        "description": "One fact of the service's summary: what it is, where it runs, whether it is healthy.",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/SummaryPart/properties/detail"
+          },
+          "icon": {
+            "$ref": "#/components/schemas/SummaryPart/properties/icon"
+          },
+          "label": {
+            "$ref": "#/components/schemas/SummaryPart/properties/label"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityLinkPartial",
+                "title": "Entity link"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The page of what `value` names; null for none."
+          },
+          "tone": {
+            "$ref": "#/components/schemas/OptionalTone"
+          },
+          "value": {
+            "$ref": "#/components/schemas/SummaryPart/properties/value"
+          }
+        },
         "type": "object"
       },
       "SweptKind": {

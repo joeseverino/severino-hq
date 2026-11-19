@@ -7,7 +7,7 @@ name a project publishes at, a document describes, an audit entry changed:
 every side already carries it, and storing the tie again would make two answers.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -740,13 +740,14 @@ def missing_facets(service: Any) -> list[Any]:
     ]
 
 
-def service_badges(service: Any, *, own: bool) -> tuple[Any, ...]:
-    """Beside the hostname: who can reach it, and whether HQ may change it."""
+def service_badges(reach: Mapping[str, Any], *, own: bool) -> tuple[Any, ...]:
+    """Beside the hostname: who can reach it (its record's ``exposure.reach``),
+    and whether HQ may change it."""
 
-    reach = service.exposure.reach
     found = []
-    if reach.label:
-        found.append(PageBadge(reach.label, Tone.GOOD if reach.tailnet_only else Tone.NEUTRAL, reach.detail))
+    if reach["label"]:
+        tone = Tone.GOOD if reach["tailnet_only"] else Tone.NEUTRAL
+        found.append(PageBadge(reach["label"], tone, reach["detail"]))
     if own:
         found.append(PageBadge("Read-only", title="HQ's own name: changed by deploying HQ"))
     return tuple(found)

@@ -6,7 +6,7 @@ declarations by the hostname each already names and stores nothing, so there is
 no Service model to disagree with them (docs/Architecture.md#providers).
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import Any
@@ -97,19 +97,6 @@ class Service:
         private network, from the same routes the path walks."""
 
         return exposure_of_name(self.hostname)
-
-    @property
-    def alias_summary(self) -> str:
-        """What to call the folded-away records, in the reader's terms.
-
-        "Records behind the other names" is a description of the data structure
-        rather than of anything an operator has. There is almost always exactly
-        one alias, and its name is the useful word.
-        """
-
-        if len(self.aliases) == 1:
-            return f"Records for {self.aliases[0]}"
-        return f"Records for {len(self.aliases)} other names"
 
     @property
     def url(self) -> str:
@@ -205,15 +192,28 @@ class Service:
     def status_label(self) -> str:
         return self.health.label
 
-    @property
-    def fault_rows(self) -> tuple[dict[str, Any], ...]:
-        """Its faults as the queue's row, in the words of the finding they raise."""
 
-        return dashboard.finding_rows(
-            "hq.infrastructure",
-            "Infrastructure",
-            (contradiction_findings.wiring_incomplete(self.hostname, self.faults),),
-        )
+def alias_summary(aliases: Sequence[str]) -> str:
+    """What to call the records behind a service's other names, in the reader's terms.
+
+    "Records behind the other names" is a description of the data structure
+    rather than of anything an operator has. There is almost always exactly
+    one alias, and its name is the useful word.
+    """
+
+    if len(aliases) == 1:
+        return f"Records for {aliases[0]}"
+    return f"Records for {len(aliases)} other names"
+
+
+def fault_rows(hostname: str, faults: Sequence[str]) -> tuple[dict[str, Any], ...]:
+    """A service's faults as the queue's row, in the words of the finding they raise."""
+
+    return dashboard.finding_rows(
+        "hq.infrastructure",
+        "Infrastructure",
+        (contradiction_findings.wiring_incomplete(hostname, tuple(faults)),),
+    )
 
 
 def _certificates_in_use() -> dict[str, dict[str, Any]]:

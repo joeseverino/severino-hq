@@ -431,11 +431,11 @@ class ServiceFaultRowTests(SimpleTestCase):
     """A service's faults on its own page are the finding they raise on the queue."""
 
     def test_its_faults_are_one_row_in_the_findings_words(self):
-        from ..services import Service
+        from ..services import fault_rows
 
         faults = ("No certificate covers it.", "The proxy points at a host HQ does not know.")
 
-        rows = Service(hostname="www.example.com", facets=(), faults=faults).fault_rows
+        rows = fault_rows("www.example.com", faults)
 
         # As the queue's finding of them is titled (``contradiction_findings``).
         self.assertEqual(
