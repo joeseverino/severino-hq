@@ -181,7 +181,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .switch .scope-chip > [aria-hidden] { color: var(--accent); }
 .switch p { margin: var(--space-3) 0 0; }
 /* A row's controls (`{% row_actions %}`, or a cell of a column of kind `control`) stand side by side on one line, so their column is as wide as they are and the words beside them wrap first. They end at the row's end, in every row whatever its set, on the row's first line where the table has headings (below where it has none). A control stands taller than a line of words by twice `--control-rise`, which its cell takes out of its padding, so a row holding one is as tall as a row of words. */
-.data-table > tbody > tr > [data-kind="control"] {
+.data-table > tbody > tr > [data-kind="control"]:not(.select-column) {
   --control-rise: max(0px, (var(--control-compact) - 1lh) / 2); white-space: nowrap; text-align: end;
   & > :is(.btn, form) { vertical-align: top; }
   & > * + * { margin-inline-start: var(--space-4); }
@@ -194,7 +194,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   &:has(> [data-ask]) { padding-block-end: calc(var(--row-pad) + 1lh); }
 }
 .data-table:not(:has(> thead)) > tbody > tr > [data-kind="control"] { vertical-align: middle; } /* A table with no headings is a list of rows that each say one thing (the queue's items): no column's first line to keep level with, so a row's controls stand at the middle of the words they act on. */
-/* The tick-boxes' column is their box and the room beside it, its width the table's `--row-lead`, in every engine, whose own margins around a checkbox differ. */
+/* The tick-boxes' column is their box and the room beside it, no row control, so each box stands centered under the heading's; its width the table's `--row-lead`, in every engine, whose own margins around a checkbox differ. */
 .data-table:has(> * > tr > .select-column) { --row-lead: calc(var(--tick-box) + 2 * var(--space-4)); }
 .data-table > * > tr > .select-column { inline-size: var(--row-lead); text-align: center; padding-inline: 0; }
 .data-table > * > tr > .select-column > input { margin-inline: 0; }
