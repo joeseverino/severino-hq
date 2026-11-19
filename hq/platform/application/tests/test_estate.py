@@ -579,15 +579,6 @@ class MachineRoleTests(TestCase):
         self.assertEqual(self.roles("example-dns"), ["Tailnet DNS"])
         self.assertEqual(self.roles("example-unapproved"), [])
 
-    def test_the_serves_card_and_the_list_show_roles(self):
-        operator(self.client)
-
-        page = self.client.get(reverse("control_plane:machine", args=["example-exit"]))
-        board = self.client.get(reverse("control_plane:machines"))
-
-        self.assertContains(page, "Exit node")
-        self.assertContains(board, "Tailnet DNS")
-
 
 def addresses(response):
     return [

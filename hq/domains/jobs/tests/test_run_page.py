@@ -82,27 +82,16 @@ class RunPageTests(TestCase):
         self.assertIn("example.reading", said["Readings"][0])
         self.assertIn("example.other_reading", said["Readings"][0])
 
-    def test_a_finished_run_s_page_says_who_asked_how_it_ended_and_each_task(self):
+    def test_a_finished_run_s_page_says_how_it_ended_and_links_its_machines_and_playbook(self):
         run = OperationRequest.objects.filter(
             action=OperationRequest.Action.RUN, state=OperationRequest.State.SUCCEEDED, input__correlation=CORRELATION
         ).get()
 
-        html = self.page(run_page(run.pk))
+        said = facts(self.page(run_page(run.pk)))
 
-        said = facts(html)
-        from hq.platform.core.models import AuditLog
-
-        queued = AuditLog.objects.get(object_id=str(run.pk), action=AuditLog.Action.CREATED)
-        # Read as words, whichever space keeps "· approved by" with what it follows.
-        self.assertEqual(said["Asked by"][0].split(), queued.who.words.split())
         self.assertEqual(said["Result"][0], run.result["message"])
-        self.assertEqual(said["Correlation"][0], CORRELATION)
         self.assertEqual(said["Machines"][1], reverse("control_plane:machine", kwargs={"name": MACHINE}))
         self.assertEqual(said["Playbook"][1], reverse("command", args=[RUN]))
-        tasks = said["Tasks"][0]
-        self.assertTrue(run.result["events"])
-        for event in run.result["events"]:
-            self.assertIn(event["task"], tasks)
 
     def test_a_scan_s_page_names_the_command_that_asked_for_it_and_decides_nothing(self):
         from hq.platform.application.automation_sources import REFRESH

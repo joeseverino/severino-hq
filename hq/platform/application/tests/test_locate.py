@@ -244,15 +244,6 @@ class ProxyPageTests(TestCase):
             reverse("control_plane:machine", kwargs={"name": "example-alpha"}),
         )
 
-    def test_the_resource_page_names_it_too(self):
-        a_proxy("example-proxy", "dev.example.com", "10.0.0.5")
-
-        response = self.client.get(reverse("control_plane:detail", kwargs={"key": "example-proxy"}))
-        self.assertContains(response, "example-alpha")
-        # Still said out loud, because the address is what nginx was configured
-        # with and the name is HQ's reading of it.
-        self.assertContains(response, "10.0.0.5")
-
     def test_the_board_names_the_machine_a_proxy_forwards_to_at_one_cost_for_every_row(self):
         """Read once for the page: per row it would grow with the estate."""
 

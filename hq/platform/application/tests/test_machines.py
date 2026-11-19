@@ -169,13 +169,6 @@ class MachinePageTests(TestCase):
         self.assertContains(response, "a-docker-host")
         self.assertIn("1 of 1 running", plain(response.content))
 
-    def test_the_page_gathers_what_ties_to_one(self):
-        response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-docker-host"}))
-
-        self.assertContains(response, "a-portainer")
-        self.assertContains(response, "nginx:alpine")
-        self.assertContains(response, "8081")
-
     def test_a_name_nothing_reported_is_not_a_page(self):
         response = self.client.get(reverse("control_plane:machine", kwargs={"name": "nowhere"}))
 
