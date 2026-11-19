@@ -36,6 +36,7 @@ from hq.platform.application.security import host_capabilities
 from hq.platform.application.stored_columns import ROW_RULES
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
+from hq.platform.core.tests.browser.shards import runs_here
 
 from .in_process import DOCUMENT, LOOPBACK, UNCOMPRESSED, InProcessAPITestCase
 
@@ -52,6 +53,8 @@ PERSON = "5b1e8c2a-7d3f-4a6e-9b0c-1f2e3d4c5b6a"
 BEARER = "bearer"
 # What generates and what judges: the configuration Schemathesis reads.
 SETTINGS = Path(__file__).with_name("schemathesis.toml")
+# How many shares the live operations are exercised in, side by side, each by a worker of its own.
+SHARES = 4
 
 
 def _needs(operation: dict) -> tuple[str, ...]:
@@ -203,7 +206,7 @@ def drawn_by_name(case) -> bool:
 
 
 @override_settings(OIDC_ISSUER=ISSUER, OIDC_RP_SIGN_ALGO="RS256", SEVERINO_API_RESOURCE=RESOURCE)
-class APIPropertyTests(InProcessAPITestCase):
+class APIProperties(InProcessAPITestCase):
     """Each generated operation reaches middleware and the authenticated adapter.
 
     The showcase estate gives reads and targets records to find. Each example
@@ -266,28 +269,8 @@ class APIPropertyTests(InProcessAPITestCase):
         modes = [mode for mode in PHASES if operation.is_testable_in(mode)]
         create_test(operation=operation, test_func=run, config=HypothesisTestConfig(project=config, modes=modes))()
 
-    def test_every_live_operation_keeps_its_contract(self):
-        schema = self.load()
-        expected = {
-            value["operationId"]
-            for path in schema.raw_schema["paths"].values()
-            for method, value in path.items()
-            if method in {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
-        }
-        # Schemathesis excludes the schema-serving operation itself.
-        live = Client(schema.app).get(
-            DOCUMENT, headers={"Authorization": f"Bearer {bearer(())}", **UNCOMPRESSED}, environ_overrides=LOOPBACK
-        )
-        self.assertEqual(live.status_code, 200)
-        self.assertEqual(live.json, schema.raw_schema)
-        covered = {schema.raw_schema["paths"][DOCUMENT]["get"]["operationId"]}
-        for result in schema.get_all_operations():
-            operation = result.ok()
-            with self.subTest(operation=operation.label):
-                self.exercise(operation)
-            covered.add(operation.definition.raw["operationId"])
-        self.assertEqual(covered, expected)
 
+class APIPropertyTests(APIProperties):
     def test_generated_authorized_write_and_retry(self):
         """A retried change answers as it first did and runs once: durable idempotency, which no schema states."""
 
@@ -334,3 +317,42 @@ class APIPropertyTests(InProcessAPITestCase):
                 handler.reset_mock()
 
             self.exercise(operation, examples=6, after=reset)
+
+
+class _LiveOperations(APIProperties):
+    """A share of the operations the document declares, each held to its contract. The shares together
+    hold every one, each in a test class of its own, which the runner's workers take side by side."""
+
+    share = (1, 1)
+
+    def test_every_live_operation_keeps_its_contract(self):
+        schema = self.load()
+        expected = {
+            value["operationId"]
+            for path in schema.raw_schema["paths"].values()
+            for method, value in path.items()
+            if method in {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
+        }
+        # Schemathesis excludes the schema-serving operation itself.
+        live = Client(schema.app).get(
+            DOCUMENT, headers={"Authorization": f"Bearer {bearer(())}", **UNCOMPRESSED}, environ_overrides=LOOPBACK
+        )
+        self.assertEqual(live.status_code, 200)
+        self.assertEqual(live.json, schema.raw_schema)
+        covered = {schema.raw_schema["paths"][DOCUMENT]["get"]["operationId"]}
+        for result in schema.get_all_operations():
+            operation = result.ok()
+            if runs_here(operation.label, self.share):
+                with self.subTest(operation=operation.label):
+                    self.exercise(operation)
+            covered.add(operation.definition.raw["operationId"])
+        self.assertEqual(covered, expected)
+
+
+# Each share a class of its own, by the name the runner reports it under. The base, whose share is every
+# operation, leaves the module, so the loader never runs it beside them.
+for _share in range(1, SHARES + 1):
+    globals()[f"LiveOperationShare{_share}Tests"] = type(
+        f"LiveOperationShare{_share}Tests", (_LiveOperations,), {"share": (_share, SHARES)}
+    )
+del _LiveOperations, _share
