@@ -13,7 +13,8 @@ from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.tone import Tone
-from hq.platform.application.web_writes import execute_posted, refused
+from hq.platform.application.web_writes import execute_posted
+from hq.platform.core.web_refusals import refused
 
 ACTION_ITEM_FILTERS = ("q", "status", "source", "about")
 # The urgencies the filter narrows to, in the words every pill says.

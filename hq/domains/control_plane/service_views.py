@@ -36,7 +36,8 @@ from hq.platform.application.service_list import listed_service, listed_services
 from hq.platform.application.services import alias_target
 from hq.platform.application.ui import PageNavigation, PageSection
 from hq.platform.application.visit_refresh import page_visit
-from hq.platform.application.web_writes import execute_posted, refused
+from hq.platform.application.web_writes import execute_posted
+from hq.platform.core.web_refusals import refused
 lazy from hq.platform.application.page_relations import for_service
 lazy from hq.platform.application.pins import FAVORITES, MOVE, PIN, SERVICE, ordered
 

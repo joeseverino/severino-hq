@@ -228,7 +228,7 @@ class StyleContractTests(SimpleTestCase):
         """
 
         cell_classes = _table_part_classes()
-        offences = []
+        offenses = []
         # Comments first: one sitting above a rule is otherwise read as part of
         # that rule's selector.
         sheets = "\n".join(path.read_text(encoding="utf-8") for path in sheet_paths() if path.name != "tables.css")
@@ -237,13 +237,13 @@ class StyleContractTests(SimpleTestCase):
             declared = re.search(r"(?<![\w-])display\s*:\s*([a-z-]+)", block)
             if not declared or declared.group(1) not in _BOXES:
                 continue
-            offences.extend(
+            offenses.extend(
                 f"{part.strip()} sets display: {declared.group(1)}"
                 for part in selector.split(",")
                 if part.strip() and _styles_a_table_part(part.strip(), declared.group(1), cell_classes)
             )
 
-        self.assertEqual(sorted(set(offences)), [])
+        self.assertEqual(sorted(set(offenses)), [])
 
     def test_a_rows_block_detail_opens_beneath_the_row(self):
         """`row-more` shows a part in its own cell once the row is open, which
@@ -251,7 +251,7 @@ class StyleContractTests(SimpleTestCase):
         shown there stacks the whole detail into one column beside empty ones,
         so it is `row-below`, the line beneath the row at the table's width."""
 
-        offences = [
+        offenses = [
             f"{name}: <{tag}>"
             for name, template in template_files()
             for tag in re.findall(
@@ -259,7 +259,7 @@ class StyleContractTests(SimpleTestCase):
                 template.read_text(encoding="utf-8"),
             )
         ]
-        self.assertEqual(offences, [])
+        self.assertEqual(offenses, [])
 
     # Viewport breakpoints left, each for something the viewport genuinely
     # decides: the header and nav, a modal that takes the whole screen, table

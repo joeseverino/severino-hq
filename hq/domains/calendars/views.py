@@ -26,8 +26,9 @@ from hq.platform.application.moments import stamp_day, when_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.references import ReferencePickerMixin, reference_of
 from hq.platform.application.security import Capability, safe_next, web_principal
-from hq.platform.application.web_writes import execute_posted, refusal_response
+from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.writes import CapabilityDeleteMixin, CapabilityFormMixin, CommandFormPage
+from hq.platform.core.web_refusals import refusal_response
 
 from .forms import EntryForm
 from .models import Entry

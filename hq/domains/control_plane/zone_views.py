@@ -33,7 +33,7 @@ from hq.platform.application.resource_capabilities import (
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.ui import counted
-from hq.platform.application.web_writes import execute_posted, refused
+from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.zones import (
     ADOPT_ZONE,
     RECORD_KIND,
@@ -42,6 +42,7 @@ from hq.platform.application.zones import (
     zone_catalog,
 )
 from hq.platform.core.templatetags.value_tags import entity
+from hq.platform.core.web_refusals import refused
 
 
 def _records_lede(zone) -> str:

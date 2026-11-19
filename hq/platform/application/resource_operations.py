@@ -41,7 +41,7 @@ from .infrastructure import (
     save_managed_resource,
 )
 from .record_errors import PolicyError, RecordNotFound, Sentence
-from .record_saves import Created
+from .record_saves import Created, row
 from .resource_records import (
     AskedAt,
     AttemptCount,
@@ -169,22 +169,15 @@ class ObservedAccepted(ResourceSaved):
 
 def serialize_operation(operation: OperationRequest) -> OperationItem:
     who = asked_by(OperationRequest, (operation,)).get(str(operation.pk), NOBODY)
-    return {
-        "id": str(operation.id),
-        "resource": operation.resource.key,
-        "action": operation.action,
-        "state": operation.state,
-        "reason": operation.reason,
-        "requested_actor": who.actor,
-        "requested_interface": who.interface,
-        "created_at": operation.created_at.isoformat(),
-        "completed_at": (operation.completed_at.isoformat() if operation.completed_at else None),
-        "claimed_by": operation.claimed_by,
-        "lease_expires_at": (operation.lease_expires_at.isoformat() if operation.lease_expires_at else None),
-        "attempt_count": operation.attempt_count,
-        "result": operation.result,
-        "correlation": str((operation.input or {}).get("correlation", "")),
-    }
+    return row(
+        operation,
+        OperationItem,
+        id=str(operation.id),
+        resource=operation.resource.key,
+        requested_actor=who.actor,
+        requested_interface=who.interface,
+        correlation=str((operation.input or {}).get("correlation", "")),
+    )
 
 
 # How many past operations are read to find the ones that changed something,

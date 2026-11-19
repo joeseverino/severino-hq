@@ -21,10 +21,9 @@ lazy from hq.domains.receipts.specs import ReceiptRow
 
 from .command_fields import Day, Describe, Names, RequiredText, Upload, stored_in
 from .integration_specs import Kept, keeps
-from .projection import iso
 from .record_errors import RecordNotFound
 from .record_fields import Notes, RecordId
-from .record_saves import Held, as_sent, found, held, written
+from .record_saves import Held, as_sent, found, held, row, written
 from .security import Principal
 lazy from .record_answers import ReceiptSaved, ReceiptUploaded
 lazy from .ui import ended
@@ -105,20 +104,7 @@ _REPLACED = Kept(_stored, always_sent=frozenset({"file"}))
 
 
 def serialize_receipt(receipt: Receipt) -> ReceiptRow:
-    return {
-        "id": receipt.id,
-        "original_filename": receipt.original_filename,
-        "content_type": receipt.content_type,
-        "size_bytes": receipt.size_bytes,
-        "vendor": receipt.vendor,
-        "date": iso(receipt.date),
-        "amount": str(receipt.amount),
-        "notes": receipt.notes,
-        "related_expense": receipt.related_expense_id,
-        "related_asset": receipt.related_asset.slug if receipt.related_asset else None,
-        "uploaded_at": receipt.uploaded_at.isoformat(),
-        "updated_at": receipt.updated_at.isoformat(),
-    }
+    return row(receipt, ReceiptRow)
 
 
 def _relations(command: ReceiptMetadataCommand):

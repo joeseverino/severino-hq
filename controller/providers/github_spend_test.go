@@ -1,8 +1,13 @@
 package providers
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -113,26 +118,44 @@ func TestOnlyTheRepositoryThatChangedIsRead(t *testing.T) {
 	t.Logf("one repository changed: the sweep spent %d counted requests", spent)
 }
 
-// HQ's clock says when a repository is read in full whatever the change
-// query says, and a repository HQ holds no fingerprint for is read.
-func TestADueRepositoryIsReadInFull(t *testing.T) {
-	h := newGitHubHarness(t, githubRepositoryRoutes(), runtime.Environment{})
-	first, _ := repositorySweep(t, h)
-	held := heldAfter(t, first)
-	for _, c := range []struct {
-		name string
-		held runtime.GitHubRepositoryHeld
-	}{
-		{"due on HQ's clock", runtime.GitHubRepositoryHeld{Repository: held[0].Repository, Fingerprint: held[0].Fingerprint, Due: true}},
-		{"no fingerprint held", runtime.GitHubRepositoryHeld{Repository: held[0].Repository}},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			report, _ := repositorySweep(t, h, c.held)
-			if len(carried(report)) != 0 || len(report.Records) != 1 {
-				t.Fatalf("read in full: %+v", report)
+// manyRepositories is an installation covering count repositories, each
+// answering as example/app does, named in the order the installation lists them.
+func manyRepositories(count int) ([]string, map[string]string) {
+	routes := githubRepositoryRoutes()
+	names, listed := []string{}, []string{}
+	for i := range count {
+		name := "example/many-" + strconv.Itoa(i)
+		names = append(names, name)
+		listed = append(listed, `{"full_name":"`+name+`"}`)
+		for key, body := range githubRepositoryRoutes() {
+			if rest, ok := strings.CutPrefix(key, githubFakeAPI+" /repos/example/app"); ok {
+				routes[githubFakeAPI+" /repos/"+name+rest] = body
 			}
-		})
+		}
 	}
+	routes[githubFakeAPI+" "+githubRepositoriesPage+"1"] = `{"total_count":` + strconv.Itoa(count) + `,"repositories":[` + strings.Join(listed, ",") + `]}`
+	return names, routes
+}
+
+// A round where every repository fell due on HQ's clock at once, as the
+// first after a quiet night is, reads the plan's first ones and carries the
+// rest, still due, within its ceiling and with nothing refused.
+func TestARoundWhereEveryRepositoryIsDueFitsItsCeiling(t *testing.T) {
+	names, routes := manyRepositories(11)
+	h := newGitHubHarness(t, routes, runtime.Environment{})
+	var compact bytes.Buffer
+	_ = json.Compact(&compact, []byte(githubFakeNode))
+	digest := sha256.Sum256(compact.Bytes())
+	held := []runtime.GitHubRepositoryHeld{}
+	for _, name := range slices.Backward(names) {
+		held = append(held, runtime.GitHubRepositoryHeld{Repository: name, Fingerprint: hex.EncodeToString(digest[:16]), Due: true})
+	}
+	report, spent := repositorySweep(t, h, held...)
+	stood := carried(report)
+	if !report.OK || len(report.RefusedParts) != 0 || spent >= githubSweepCeiling || len(stood) == len(names) || slices.Contains(stood, held[0].Repository) {
+		t.Fatalf("spent %d, carried %v, refused %+v", spent, stood, report.RefusedParts)
+	}
+	t.Logf("%d of 11 due repositories read, %d counted requests", len(names)-len(stood), spent)
 }
 
 // limitReason is the words a read refused for the allowance says: until when,
@@ -168,18 +191,7 @@ func TestTheFuseStopsReadsUnderTheFloorAndSaysUntilWhen(t *testing.T) {
 }
 
 func TestTheFuseStopsASweepAtItsCeiling(t *testing.T) {
-	routes := githubRepositoryRoutes()
-	names := []string{}
-	for i := range 8 {
-		name := "example/many-" + strconv.Itoa(i)
-		names = append(names, `{"full_name":"`+name+`"}`)
-		for key, body := range githubRepositoryRoutes() {
-			if rest, ok := strings.CutPrefix(key, githubFakeAPI+" /repos/example/app"); ok {
-				routes[githubFakeAPI+" /repos/"+name+rest] = body
-			}
-		}
-	}
-	routes[githubFakeAPI+" "+githubRepositoriesPage+"1"] = `{"total_count":8,"repositories":[` + strings.Join(names, ",") + `]}`
+	_, routes := manyRepositories(8)
 	h := newGitHubHarness(t, routes, runtime.Environment{})
 	report, spent := repositorySweep(t, h)
 	// A read already asked when the fuse trips still answers.

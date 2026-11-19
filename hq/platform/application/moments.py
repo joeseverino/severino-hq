@@ -5,7 +5,7 @@ chart tip and an extension all say a time the same way. ``hq_sdk.ui`` hands the
 words to extensions, and ``core.templatetags.value_tags`` owns the filters that
 put them in a page, ``when`` and its plain-text twin ``when_text``.
 
-A stamp that is unparseable, empty or missing reads as ``None``: a reading is a
+A stamp that is unparsable, empty or missing reads as ``None``: a reading is a
 fact about the world, and a caller for whom that is an error raises its own.
 The edges where callers differ (a naive stamp, Go's zero time) are parameters,
 so a caller states which answer it needs.
@@ -336,6 +336,7 @@ WHEN_FORMS = {
     "day": when_day,  # the day a moment fell on
     "exact": when_exact,  # "Oct 3, 2026, 9:29:15 AM CDT"
     "weekday": weekday,  # "Monday"
+    "dateline": lambda value: f"{weekday(value)}, {when_day(value)}",  # "Wednesday, Nov 18", a page's day
     "initials": weekday_initials,  # "Mo", where a column is narrow
     "month": month,  # "October 2026", the month a calendar shows
     "numeral": numeral,  # "3", the day of the month in a calendar's cell

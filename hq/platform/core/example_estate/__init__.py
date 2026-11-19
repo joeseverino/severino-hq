@@ -12,8 +12,9 @@ beside the records it seeds, so the browser gate reads the page it changes.
 """
 
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
-from hq.platform.application import cadence, pins, roles
+from hq.platform.application import cadence, first_seen, freshness, pins, problems, roles
 from hq.platform.application.linked_accounts import GITHUB, record_claimed_accounts
 from hq.platform.core.network import SOCKET_PEER
 
@@ -95,3 +96,6 @@ def _seed(owner):
     agents.lately(owner)
     # Last, so no later step's claim takes the run left waiting.
     automation.runs(owner)
+    # A running HQ looked at its queue a cadence ago, so each item open now says since when.
+    first_seen.note_open((), now=timezone.now() - freshness.cadence(freshness.FIRST_SEEN).every)
+    problems.note_open_problems()

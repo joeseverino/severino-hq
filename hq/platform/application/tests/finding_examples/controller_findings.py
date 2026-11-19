@@ -12,6 +12,16 @@ REWRITE, CONTAINER, MACHINE = "adguard.rewrite", "portainer.container", "machine
 DEGRADED = [{"type": "Degraded", "status": True, "reason": "Failed", "message": "The provider refused it."}]
 RECONCILE, UPDATE = "infrastructure.resource.reconcile", "infrastructure.resource.update"
 REFRESH = "infrastructure.controller.refresh"
+# HQ deploys: a declaration of what HQ watches, whose production is its own report.
+DELIVERY = "github.delivery"
+DELIVERED = {
+    "repository": "example/host",
+    "workflow": ".github/workflows/compose.yml",
+    "branch": "main",
+    "production": "Every extension's latest admission, confirmed on GitHub",
+}
+UNCONFIRMED = "example.alpha: aaaaaaa is live, not yet confirmed on GitHub"
+REPORTS_ITSELF = [{"type": "Degraded", "status": True, "reason": "Reported", "message": f"{UNCONFIRMED}."}]
 
 
 def held(key: str, kind: str = REWRITE, *, seen: Ago | None = NOW, spec=None, status=None, **row):
@@ -149,6 +159,12 @@ EXAMPLES = (
             machine(
                 box("web", ago(hours=3)), box("db"), raises=offering("web was missing from HQ's last read", UPDATE)
             ),
+            # Nor one that only says what HQ watches, so nothing is pressed.
+            estate(
+                held("delivery", DELIVERY, seen=ago(hours=6), spec=DELIVERED),
+                lambda: kind_read(DELIVERY, AT),
+                raises=(Raised(title="HQ deploys was missing from HQ's last read"),),
+            ),
         ),
         quiet=(
             HEALTHY,
@@ -178,13 +194,20 @@ EXAMPLES = (
     ),
     Examples(
         "reporting-a-fault",
-        fires=(estate(held("broken", generation=2, conditions=DEGRADED), raises=offering("The provider refused it")),),
+        fires=(
+            estate(held("broken", generation=2, conditions=DEGRADED), raises=offering("The provider refused it")),
+            # What it reports of itself, applied or not, which no config of HQ's differs from.
+            estate(
+                held("delivery", DELIVERY, spec=DELIVERED, conditions=REPORTS_ITSELF),
+                raises=(Raised(title=UNCONFIRMED, evidence=(("What", "HQ deploys"), ("Status", "Has a problem"))),),
+            ),
+        ),
         quiet=(HEALTHY,),
     ),
     Examples(
         "reconciled-but-still-wrong",
         fires=(estate(held("broken", conditions=DEGRADED), raises=("The provider refused it",)),),
-        quiet=(HEALTHY,),
+        quiet=(HEALTHY, estate(held("delivery", DELIVERY, spec=DELIVERED, conditions=REPORTS_ITSELF))),
     ),
     Examples(
         "weakly-verified",

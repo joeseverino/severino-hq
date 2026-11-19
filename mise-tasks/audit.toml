@@ -45,14 +45,3 @@ hide = true
 dir = "controller"
 usage = 'arg "[linters]" help="Linters to count, comma-separated, as --enable-only takes them (nilerr,gocritic); the configured set without"'
 run = '''golangci-lint run --issues-exit-code=0 --output.text.path=/dev/null ${usage_linters:+--enable-only="${usage_linters}"} ./...'''
-
-# tools/audit_tests.py reads the recording fast:map leaves, combined, and keeps
-# every row in var/audit/tests; CI's Map job runs it after the recording and
-# keeps that report as the artifact test-audit.
-["audit:tests"]
-extends = "audit"
-allow_write = ["var/audit/tests"]
-description = "Each test whose covered lines a test of its module (its class, in a large module) also covers, the groups of tests of one app or package that run the same lines, ranked by the lines each runs past its setup, and the tests that run no line no other test runs, read from the per-test coverage fast:map records, without the tests tagged source or tree or of unmeasured code; candidates to read before a test is deleted, never proof one is redundant"
-hide = true
-usage = 'flag "--data <file>" default="var/coverage/map/data" help="The recording, combined, as fast:map leaves it"'
-run = 'uv run python -m tools.audit_tests "${usage_data}"'

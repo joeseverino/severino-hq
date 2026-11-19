@@ -125,7 +125,7 @@ class UnobservableFieldTests(TestCase):
     def test_drift_in_an_observable_field_is_still_refused(self):
         """Only unobservable fields are exempt, not the whole record."""
         self.sweep({**A_PROXY, "forward_port": 9999})
-        self.assertIsNone(self.resource.last_observed_at)
+        self.assertEqual(self.resource.conditions[0]["reason"], "Drifted")
 
     def test_every_unobservable_field_names_a_real_field_of_its_spec(self):
         for kind, provider in PROVIDERS.items():
@@ -303,6 +303,7 @@ class NothingIsJudgedAgainstAReadingThatDoesNotExistTests(TestCase):
         def __init__(self, spec, status):
             self.spec = spec
             self.status = status
+            self.conditions = []
             self.last_observed_at = timezone.now()
 
     def _unconfirmed(self, kind, status):

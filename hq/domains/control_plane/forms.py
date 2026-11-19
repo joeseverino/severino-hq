@@ -144,8 +144,8 @@ class MailSendersForm(MailPolicyForm):
             breakable(SPF_LOOKUP_LIMIT),
         )
         # The qualifier on the record's `all` term decides everyone unlisted.
-        alls = [term.qualifier for term in policy.terms if term.mechanism == "all"]
-        self.fields["default"].initial = alls[-1] if alls else "-"
+        defaults = [term.qualifier for term in policy.terms if term.mechanism == "all"]
+        self.fields["default"].initial = defaults[-1] if defaults else "-"
 
     def published(self) -> str:
         senders = parse_spf(" ".join([compose_spf(()), *self.cleaned_data["rule"]])).terms

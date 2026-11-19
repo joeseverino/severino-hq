@@ -22,7 +22,7 @@ from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
 from hq.domains.projects.models import PROJECT_CATEGORY_CHOICES, Project
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
-lazy from hq.domains.projects.specs import ProjectRecord
+lazy from hq.domains.projects.specs import ProjectRecord, ProjectRow
 lazy from hq.platform.application.routes import reverse
 
 from .command_fields import Describe
@@ -33,7 +33,7 @@ from .projection import addressable, iso, listing, projection_scope, read_once
 from .record_errors import RecordConflict, RecordNotFound
 from .record_fields import Notes, PublishedUrl, Slug, one_of
 from .record_links import linked
-from .record_saves import Held, held, linked_saver, saved_type
+from .record_saves import Held, held, linked_saver, row, saved_type
 from .refusal_status import RefusalEnvelope, refusal_of, refuse
 from .security import Principal
 from .standards import Standing
@@ -156,19 +156,7 @@ class ProjectCommand:
 
 
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
-    fields = {
-        "slug": project.slug,
-        "name": project.name,
-        "category": project.category,
-        "status": project.status,
-        "description": project.description,
-        "technologies": project.tech_list,
-        "repository_url": project.repository_url,
-        "public_url": project.public_url,
-        "last_push_at": iso(project.last_push_at),
-        "dependency_updates": project.dependency_updates,
-        "updated_at": iso(project.updated_at),
-    }
+    fields = row(project, ProjectRow, technologies=project.tech_list)
     if repository_key(project.repository_url):
         fields["updates"] = _updates(project)
     return linked(fields, project, relationships=relationships, assets=project.assets)

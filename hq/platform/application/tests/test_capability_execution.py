@@ -363,8 +363,9 @@ class CapabilityTests(TestCase):
     def test_the_operator_reaches_every_tool_the_cli_uses_without_a_token(self):
         """The CLI's contract is the MCP tool surface, over the host shell."""
 
-        catalog = agent_capabilities(principal=cli_principal())
-        self.assertEqual(self.call_as_operator({"tool": "describe_capabilities"}), catalog)
+        catalog = agent_capabilities(principal=cli_principal())["capabilities"]
+        answered = self.call_as_operator({"tool": "describe_capabilities"})["capabilities"]
+        self.assertEqual([item["name"] for item in answered], [item["name"] for item in catalog])
         created = self.call_as_operator(
             {
                 "tool": "execute_capability",

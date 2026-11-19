@@ -302,10 +302,9 @@ their own sooner) is a grid of its columns' tracks instead, each row a subgrid
 of them: the headings, the cells under them, the open line and a group's
 heading keep their place and their roles (table, row, column header, cell, in
 WebKit and Chromium), and the heading still pins. A row's labeled controls
-take its last line: at the end of the line of notes its name ends with
-(`dot_list`: its date, its source) where the name stands alone in its row,
-else on a line of their own from where its name starts, wrapping only between
-whole controls. A row of icon controls (a star, the order arrows) keeps them
+take its last line, on a line of their own from where its name starts, in
+every row alike, the row's pad under them, wrapping only between whole
+controls. A row of icon controls (a star, the order arrows) keeps them
 at its end on its first line. *Gates:* the survey's `tables` (each cell a row
 shows stands under its column's heading, and no row draws a column's label),
 `rows unruled` (a row's bottom edge is ruled, whichever cell draws it),
@@ -318,7 +317,8 @@ state or a field never leaves early).
 one size. A label keeps one line, uncut. A field a reader fills in (a select) is the row's value, so a
 column holding one never leaves, and in a cell it fills its cell and gives
 way with its column. The reader's way to set a row aside (`row_actions
-put_away=`, the queue's Dismiss) is the last of its buttons, drawn quiet.
+put_away=`, the queue's Dismiss) is the last of its buttons, drawn quiet; alone
+on a row's line its words start at the name's edge.
 *Gates:* the survey's `row actions beside squeezed words`, and
 `test_row_controls.py`.
 
@@ -604,9 +604,8 @@ is the button that opens the panel in place, as a menu does, and each
 facts refreshed in place as its own (`core/_dashboard_glance.html`). Under
 24rem a band reads as a list, each fact a row of its own; small figures keep
 their grid, and headline figures (`large`, `lead`) and a band beside a page's
-title their counted rows, two to a row. Headline figures stand on a wider
-floor, so three take a row only once the band is about 360px wide, and each
-value is sized to its cell, never under the band's value size.
+title their counted rows, two to a row (a phone's head: label beside value, a one-line note). Headline figures stand on a
+wider floor, so three take a row only once the band is about 360px wide, each value sized to its cell, never under the band's.
 
 Every label and its value is a fact: `{% fact "Label" value=n url=...
 detail=... %}` inside `{% facts %}`, or the block form `{% fact "Label"
@@ -1287,6 +1286,7 @@ column needs nothing else.
 | `when:"exact"` | "Oct 3, 2026, 9:29:15 AM CDT" | the exact moment |
 | `when:"clock"` | "Oct 3, 9:29:15 AM" | a list of events, where several fall in one minute |
 | `when:"weekday"`, `"month"`, `"numeral"` | "Monday", "October 2026", "3" | a calendar |
+| `when:"dateline"` | "Wednesday, Nov 18" | the day a page opens on, over its title |
 | `when:"length"` | "5 minutes", either way from now | a wait |
 | `when:"ahead"` | "in 3 days" | a wait |
 | `{{ at\|when_text:"ago" }}` | the words of any form, as plain text | an attribute, or a table cell's line, which sorts on the first `<time>` it holds |
@@ -1706,8 +1706,8 @@ it asks for (`cadence.WorkerStanding.takes_reads`): one whose heartbeat
 says it reports to this HQ, and is not silent. Where none will, the page draws
 no ask and no note, so it never promises a refresh that cannot come.
 `page.html` draws the ask (`partials/_visit_refresh.html`), and its note says
-what it waits for at the end of the head's first line. The note keeps its own
-room there. An unseen strut of each sentence HQ writes for it word for word
+what it waits for at the end of the head's first line, in room of its own; a
+line whose longest word or date leaves it none hides it. An unseen strut of each sentence HQ writes for it word for word
 sizes its slot (`asks.REFRESHING`, `REFRESHED`, `NEWER_READING` and
 `SHOW_NEWER`, which the script writes from the page). So those sentences are
 always whole, and the trail beside it never moves whatever the note says. Only

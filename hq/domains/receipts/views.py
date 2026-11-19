@@ -31,9 +31,10 @@ from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD, file_taken, serialize_receipt
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
 from hq.platform.application.url_query import with_query
-from hq.platform.application.web_writes import execute_posted, refused
+from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.writes import CapabilityFormMixin, CommandFormPage, RecordDeleteMixin
 from hq.platform.core.templatetags.value_tags import breakable
+from hq.platform.core.web_refusals import refused
 
 from .models import Receipt
 from .validation import (

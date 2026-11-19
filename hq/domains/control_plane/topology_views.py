@@ -352,7 +352,7 @@ class TopologyView(PageMixin, TemplateView):
 
         A node carries the instant as ISO 8601 text because the projection is
         serialized to JSON as often as it is rendered, and `timesince` needs
-        the object back. Unparseable text ages to nothing rather than raising:
+        the object back. Unparsable text ages to nothing rather than raising:
         the reading is a fact about the world, not an invariant of ours.
         """
 

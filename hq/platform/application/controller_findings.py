@@ -249,7 +249,8 @@ def _skipped_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
 
     A record missing from a sweep is gone: HQ can create it again from its
     config, or stop holding it. A container is either one that runs now and
-    then, or one that is gone, and HQ cannot create a container.
+    then, or one that is gone, and HQ cannot create a container; nor a record
+    whose declaration only says what HQ watches.
     """
 
     remove = FindingRemedy(capability="infrastructure.resource.remove", target=node.label)
@@ -262,6 +263,9 @@ def _skipped_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
             ),
             remove,
         )
+    provider = PROVIDERS.get(node.kind_key)
+    if provider is not None and provider.declaration_only:
+        return (remove,)
     recreate = tuple(replace(remedy, intent="Create it again") for remedy in reconcile_remedy(node))
     return (*recreate, remove)
 
@@ -430,10 +434,19 @@ def _fault_title(node: TopologyNode, otherwise: str) -> str:
 
 def _fault_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
     return (
-        ("What", f"{kind_label(node.kind_key)} {node_name(node)}" if node.kind_key else node.label),
+        ("What", _what(node, node_name(node))),
         ("Status", node.status_label or node.status),
         *drift_evidence(node),
     )
+
+
+def _what(node: TopologyNode, name: str) -> str:
+    """A record named its kind, then its name, unless the name already says
+    the kind."""
+
+    if not node.kind_key or kind_label(node.kind_key).casefold() in name.casefold():
+        return name
+    return f"{kind_label(node.kind_key)} {name}"
 
 
 def _fault_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
@@ -454,7 +467,8 @@ def _fault_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
 
 def _reports_itself(node: TopologyNode) -> bool:
     """Whether what is wrong is the thing's own report (``ProviderSpec.reported_fields``):
-    applying, keeping or restoring changes nothing about it."""
+    no config of HQ's differs from it, and applying, keeping or restoring
+    changes nothing about it."""
 
     provider = PROVIDERS.get(node.kind_key)
     return bool(provider and provider.reported_fields)
@@ -469,7 +483,8 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
 
     `reconciled-but-still-wrong` covers the case where a reconcile has already
     been tried against this exact declaration. This is the rest: a fault the
-    resource is reporting while a change is still outstanding.
+    resource is reporting while a change is still outstanding, or one that is
+    its own report, which no config of HQ's differs from.
     """
 
     return tuple(
@@ -489,7 +504,7 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
         and node.status in {Tone.ATTENTION, Tone.SERIOUS}
         # The other rule owns the converged case and says something sharper
         # about it, so this one takes what is left rather than doubling it.
-        and node.declared_revision != node.observed_revision
+        and (node.declared_revision != node.observed_revision or _reports_itself(node))
     )
 
 
@@ -515,11 +530,8 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
                 "will not help. Keep the live version, or change what HQ expects."
             ),
             evidence=_fault_evidence(node),
-            no_help_reason=_cannot_fix_report(node),
             # Applying again is the one thing already known not to work. Where
             # the live record was changed, the choice is which side to keep.
-            # Where the resource reports its own problem there is no side to
-            # keep: what it says is the instruction.
             remedies=(
                 (
                     _keep_live(node),
@@ -535,6 +547,7 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
         and node.status in {Tone.ATTENTION, Tone.SERIOUS}
         and node.declared_revision == node.observed_revision
         and node.declared_revision > 0
+        and not _reports_itself(node)
     )
 
 
@@ -583,7 +596,7 @@ def _unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="resource-unchecked",
             subject=node.id,
-            title=f"{kind_label(node.kind_key)} {node.label} could not be checked",
+            title=f"{_what(node, node.label)} could not be checked",
             severity=Tone.ATTENTION,
             explanation=f"It was last read {ago(node.observed_at)}." if node.observed_at else "It has never been read.",
             remedies=reconcile_remedy(node),

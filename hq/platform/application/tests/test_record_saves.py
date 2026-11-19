@@ -5,6 +5,7 @@ from datetime import date
 from django.test import TestCase
 
 from hq.domains.content.models import ContentItem
+from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 
 from ..assets import AssetCommand, save_asset
@@ -80,6 +81,21 @@ class LinkTests(TestCase):
             current_id=saved["id"],
         )["expense"]
         self.assertEqual((cleared["related_project"], cleared["related_content"]), (None, None))
+
+    def test_a_linked_doc_is_named_only_when_it_may_be_shared(self):
+        for sensitivity, named in (("internal", "example-doc-internal"), ("restricted", None)):
+            with self.subTest(sensitivity):
+                DocumentationRecord.objects.create(
+                    doc_id=f"example-doc-{sensitivity}", title="Example", sensitivity=sensitivity
+                )
+                command = ExpenseCommand(
+                    date=date(2026, 7, 25),
+                    vendor="Example",
+                    item="Thing",
+                    related_documentation=f"example-doc-{sensitivity}",
+                )
+                saved = save_expense(command, principal=cli_principal())["expense"]
+                self.assertEqual(saved["related_documentation"], named)
 
     def test_a_set_of_links_is_replaced_whole(self):
         Project.objects.create(name="One", slug="example-one")

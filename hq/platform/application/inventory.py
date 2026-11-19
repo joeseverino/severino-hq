@@ -233,12 +233,15 @@ def _summary(row: ProviderInventory) -> dict[str, Any]:
 
 
 def confirm_observed(payload: dict[str, Any]) -> int:
-    """Mark declarations the sweep just found still matching as observed.
+    """Mark every declaration the sweep just listed as seen, and confirm the
+    ones still matching as observed.
 
     Nothing queues a reconcile for a resource that has not drifted, so without
     this an unchanged declaration would never be recorded as observed. Only
     where the spec still matches the live record: calling a drifted one
-    observed would hide the difference this whole model exists to surface.
+    observed would hide the difference this whole model exists to surface. A
+    drifted one was still listed, so it takes the read's moment, and is never
+    missing from it.
     """
 
     seen = timezone.now()
@@ -251,16 +254,16 @@ def confirm_observed(payload: dict[str, Any]) -> int:
         if not live:
             continue
         for resource in ManagedResource.objects.filter(kind=kind, enabled=True):
-            found = live.get(record_identity(kind, resource.spec))
+            found, record = live.get(record_identity(kind, resource.spec), (None, None))
             if found is None:
-                continue
-            drift = _differences(kind, resource.spec, found)
-            if drift:
-                _record_drift(resource, drift)
                 continue
             # One whose observation changed is saved, so the change is audited
             # and indexed; the rest take the moment in one statement for the
             # whole sweep, with no save, no event and nothing to index.
+            if drift := _differences(kind, resource.spec, found):
+                _record_drift(resource, drift, record)
+                unchanged.append(resource.pk)
+                continue
             if not _observe(resource, found, seen):
                 unchanged.append(resource.pk)
             confirmed += 1
@@ -273,14 +276,14 @@ def confirm_observed(payload: dict[str, Any]) -> int:
 MATCHES = "Matches HQ's config."
 
 
-def _live_specs(kind: str, records: list[Any]) -> dict[tuple[str, ...], dict[str, Any]]:
-    """Each live record as the spec a declaration of it would hold, by identity."""
+def _live_specs(kind: str, records: list[Any]) -> dict[tuple[str, ...], tuple[dict[str, Any], Any]]:
+    """Each live record, and the spec a declaration of it would hold, by identity."""
 
     live = {}
     for record in records:
         spec = record_spec(kind, record)
         if spec is not None:
-            live[record_identity(kind, spec)] = spec
+            live[record_identity(kind, spec)] = (spec, record)
     return live
 
 
@@ -456,13 +459,15 @@ def _canonical_document(text: str) -> str:
     return canonical(parsed)
 
 
-def _record_drift(resource: ManagedResource, drift: tuple[tuple[str, str, str], ...]) -> None:
+def _record_drift(resource: ManagedResource, drift: tuple[tuple[str, str, str], ...], record: Any) -> None:
     """Say what the sweep found instead, rather than leaving the last good word.
 
-    Not marked observed, so the timestamp keeps meaning "last seen as
-    declared". The disagreement is named field by field because which side is
-    wrong is not HQ's to decide: often the declaration is out of date, and an
-    operator sees that only if HQ says which value it is arguing about.
+    Not marked observed. The disagreement is named field by field because
+    which side is wrong is not HQ's to decide: often the declaration is out of
+    date, and an operator sees that only if HQ says which value it is arguing
+    about. A difference only in what the thing reports of itself is its
+    status, so the record as read becomes it, and its state and its condition
+    say the same read.
     """
 
     # ``Drifted`` asserted true, not ``Ready`` asserted false. A condition here
@@ -471,11 +476,17 @@ def _record_drift(resource: ManagedResource, drift: tuple[tuple[str, str, str], 
     # nothing looks at.
     # Stamped, so the drift keeps the moment it was first seen however many
     # sweeps find it again: that is what lets a finding say what happened then.
-    conditions = stamped(resource.conditions, [_difference_condition(resource.kind, drift)])
-    if conditions == resource.conditions:
+    condition = _difference_condition(resource.kind, drift)
+    conditions = stamped(resource.conditions, [condition])
+    status = dict(record) if condition["reason"] == REPORTED else resource.status
+    if (conditions, status) == (resource.conditions, resource.status):
         return
-    resource.conditions = conditions
-    resource.save(update_fields=["conditions"])
+    resource.conditions, resource.status = conditions, status
+    resource.save(update_fields=["conditions", "status"])
+
+
+# The reason a difference in the thing's own report raises.
+REPORTED = "Reported"
 
 
 def _difference_condition(kind: str, drift: tuple[tuple[str, str, str], ...]) -> dict[str, Any]:
@@ -493,7 +504,7 @@ def _difference_condition(kind: str, drift: tuple[tuple[str, str, str], ...]) ->
         return {
             "type": DEGRADED,
             "status": True,
-            "reason": "Reported",
+            "reason": REPORTED,
             "message": " ".join(ended(said) for said in reported),
         }
     fields = provider.spec_type.model_fields

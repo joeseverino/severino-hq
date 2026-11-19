@@ -41,7 +41,6 @@ output-options:
     - repos/get-all-environments
     - repos/get-branch-rules
     - repos/get-commit
-    - repos/get-content
     - repos/get-latest-release
     - repos/list-collaborators
     - repos/list-deploy-keys

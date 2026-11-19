@@ -363,7 +363,7 @@ def pick(
     if not sources:
         return Pick((), plugins, f"Extensions composed: {', '.join(plugins)}, from the host's own tree")
     moved: dict[str, str] = {}
-    froms = []
+    origins = []
     at = []
     stood = []
     apart: dict[Path, list[_Package]] = {}
@@ -371,12 +371,12 @@ def pick(
         mine = [package for package in packages.values() if package.top == top]
         if host is not None and (coordinated := _coordinated(host, top, mine, api)):
             moved |= coordinated.moved
-            froms.append(coordinated.said)
+            origins.append(coordinated.said)
             at.extend([coordinated.at] if coordinated.at else [])
             stood.extend([coordinated.stood] if coordinated.stood else [])
         elif behind := [package for package in mine if package.required != api or not as_they_stand]:
             apart[top] = behind
-    if not apart and not froms:
+    if not apart and not origins:
         return Pick(
             sources,
             plugins,
@@ -401,9 +401,9 @@ def pick(
         unpacked = snapshot(top, commit, relative)
         for package, path in zip(mine, relative, strict=True):
             moved[package.source] = str(unpacked / path / Path(package.source).name)
-        froms.append(f"{top.name} at {commit[:12]}, its newest commit at API {api}{made}{stands}")
+        origins.append(f"{top.name} at {commit[:12]}, its newest commit at API {api}{made}{stands}")
         at.append((str(top), commit))
-    said = f"Extensions composed for HQ at {where}, which supports plugin API {api}, from {'; '.join(froms)}"
+    said = f"Extensions composed for HQ at {where}, which supports plugin API {api}, from {'; '.join(origins)}"
     chosen = tuple(moved.get(source, source) for source in sources)
     return Pick(
         chosen,

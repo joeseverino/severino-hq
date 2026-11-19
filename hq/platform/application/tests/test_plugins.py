@@ -193,16 +193,16 @@ class PluginContractTests(TestCase):
         kind_of = {word.lower(): kind for word, kind in forbidden.items()}
 
         root = Path(os.environ.get("HQ_CHECKOUT_COPY") or Path(__file__).resolve().parents[4])
-        offences: list[str] = []
+        offenses: list[str] = []
         for path, body in _host_texts(root):
             found = needle.search(body)
             if found:
                 word = found.group(0).lower()
                 relative = path.relative_to(root)
-                offences.append(f"{relative}: {kind_of[word]} {word!r}")
+                offenses.append(f"{relative}: {kind_of[word]} {word!r}")
 
         self.assertEqual(
-            sorted(offences),
+            sorted(offenses),
             [],
             "the host names an installed extension, which is a dependency it is "
             "not supposed to have; use the synthetic example.* namespace",

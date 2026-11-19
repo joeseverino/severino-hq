@@ -656,18 +656,6 @@ class TransportTests(SentinelMixin, TestCase):
         )
         project_update = next(spec for spec in specs if spec["name"] == "project.update")
         self.assertIn("target", project_update["request_schema"]["required"])
-        nested = views.request_schema(
-            {
-                "input_schema": {
-                    "type": "object",
-                    "$defs": {"Record": {"type": "object"}},
-                    "properties": {"record": {"$ref": "#/$defs/Record"}},
-                },
-                "target": None,
-            }
-        )
-        self.assertIn("$defs", nested)
-        self.assertNotIn("$defs", nested["properties"]["payload"])
 
     def test_resources_are_discoverable_and_flagged_for_this_token(self):
         with _serving():

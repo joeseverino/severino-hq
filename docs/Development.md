@@ -426,45 +426,6 @@ A run runs its selection however wide it is. `--whole` runs the whole suite
 with every quick gate instead, whatever changed: the landing asks for it, and
 its pass records the tree.
 
-CI's Map job records which tests ran each line of each Python file, on every
-push to main and on a pull request's head: coverage runs the whole suite with
-its C tracer, a context per test module switched before the module's
-fixtures and one per test switched before the test
-(`hq/platform/core/coverage_contexts.py`), since `sys.monitoring`, coverage's
-default core, records a line once per process (`mise run fast:map`). The
-contexts make the run much slower, so no gate records; nothing waits on the
-job, and its failure never fails CI. It keeps the map, coverage's own
-`contexts_by_lineno` read back by test module, as the artifact `fast-map` of
-the commit it checked out. From the same recording, `mise run audit:tests`
-names each test whose lines a test of its module (its class, in a large
-module) also covers, and the tests of its app or package that run the same
-lines, ranked by the lines each runs past its setup, and leaves out the
-tests tagged `source` or `tree` and those of `tools/`, whose lines coverage
-does not measure. The job keeps that report as the artifact `test-audit`:
-candidates to read before deleting a test, since two tests running the same
-lines may assert different outcomes. fast fetches through gh the map of the nearest
-commit on HEAD's first-parent history, as far back as `MAP_REACH` in
-`tools/gate/chain.py`, into `$(git rev-parse --git-common-dir)/severino/fast-line-maps/`
-(`tools/gate/testmap.py`), and says where its map came from, or that none
-was in reach. It then also selects from the change since the map's own
-commit, whose lines the map numbers, and runs whichever selection has fewer
-modules:
-
-- a Python file the map holds, changed only inside function bodies (a
-  function's docstring aside), selects the test modules that ran each body
-  the change touches, as `git diff -U0` against that commit numbers its
-  lines, and no importer, route or app: such a change does nothing at
-  import, and a test that ran none of those bodies runs what it ran before
-  until it reaches another changed file, which selects it;
-- a changed test module reaches no route;
-- every other path (a module-level line, a template, a migration, a file
-  the map does not hold) selects by the rules above, and so does a test
-  module the recording did not run.
-
-The task and naming rules apply to every changed file either way, which
-keeps the tests that run a file in a subprocess, which coverage does not
-attribute.
-
 Before the tests it runs each quick gate the change affects, as mise's
 `--affected` reads it from the base: a quick gate is a task tagged
 `fast`, and it is affected when a changed or deleted file matches its
@@ -920,7 +881,7 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    names (fast's base, `--at`), which are resolved here: a branch there is
    not this one. The push skips the repository's pre-push hook, which guards
    a push to its forge, since these refs publish nothing. fast's default base is resolved here too, from this
-   checkout's chain of passed trees, which is also synced there with its maps,
+   checkout's chain of passed trees, which is also synced there,
    so it selects what it would select here. A run that may compose (the
    composed suite, fast, perf, and a look that runs perf) sends the extension
    checkout `HQ_LOCAL_PYTHONPATH` names the same way, to the clone of the same

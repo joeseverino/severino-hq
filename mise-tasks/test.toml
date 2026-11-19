@@ -38,17 +38,23 @@ run = "uv run python manage.py makemigrations --check --dry-run"
 ["test:api-properties"]
 description = "Generated API cases through the real WSGI middleware"
 hide = true
-# Its modules in one process, outside the heavy turn and its shares, which fast
-# still runs in the turn it holds for its tests (tools/gate/fast.py, HEAVY).
+# Its test classes side by side, the live operations in shares of their own
+# (tests/fuzz/api_properties.py, SHARES), outside the heavy turn and its
+# shares, which fast still runs in the turn it holds for its tests
+# (tools/gate/fast.py, HEAVY).
 tags = ["fast", "heavy"]
 # What its run reads, as a log of the files its processes open finds it: the
 # whole of hq and hq_sdk, which Django loads to answer, its own modules, and the
 # two data files the settings and the bridge open. The committed document is
 # what the served one is held to (lint:drift-api-document), so it selects the
-# suite too.
+# suite too. No served answer runs a test module, so an edit there selects none
+# but the token helper the suite signs its requests with.
 sources = [
   "hq/**/*.py",
   "hq_sdk/**/*.py",
+  "!hq/**/tests/**",
+  "!hq_sdk/**/tests/**",
+  "hq/platform/api/tests/tokens.py",
   "hq/domains/control_plane/bridge_base.json",
   "deploy/systemd/severino-hq-secrets.timer",
   "hq/platform/api/hq-api.openapi.json",
@@ -64,7 +70,7 @@ sources = [
 ]
 outputs = []
 extends = "django"
-run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties tests.fuzz.api_links --noinput --parallel 1"
+run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties tests.fuzz.api_links --noinput --parallel auto"
 
 # Go does not vary with Python, so `mise run test` runs it once, outside the
 # interpreter loop. gotestsum renders go test's JSON events as text, and writes

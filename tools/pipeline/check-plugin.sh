@@ -52,18 +52,23 @@ fi
 # (attention-why-restates-rating) or, raised by a threshold, not what clears it
 # (threshold-says-what-clears-it), and a query added to an address by hand
 # (query-added-by-with-query), hold the package's source as they
-# hold the host's: each rule's scope reaches src/, read from the package root. The ast-grep is the
+# hold the host's: each rule's scope reaches src/, read from the package root.
+# The host's spelling check reads the package's project whole. Each tool is the
 # host's pin, which mise installs where it is missing (an extension's CI sets
-# up only uv), or the one on the PATH where mise has no pin. It runs here,
-# since the scope is read from where it runs.
-pinned() { mise -C "$hq_root" which ast-grep 2>/dev/null; }
-ast_grep=$(pinned) || { mise -C "$hq_root" install --quiet ast-grep 2>/dev/null && ast_grep=$(pinned); } \
-    || ast_grep=$(command -v ast-grep) || {
-    echo "ast-grep is not installed: \`mise -C $hq_root install ast-grep\` installs the host's pin, or says why it cannot." >&2
-    exit 1
+# up only uv), or the one on the PATH where mise has no pin. They run here,
+# since a scope is read from where it runs.
+pinned() { mise -C "$hq_root" which "$1" 2>/dev/null; }
+host_tool() {
+    pinned "$1" || { mise -C "$hq_root" install --quiet "$1" 2>/dev/null && pinned "$1"; } || command -v "$1" || {
+        echo "$1 is not installed: \`mise -C $hq_root install $1\` installs the host's pin, or says why it cannot." >&2
+        exit 1
+    }
 }
+ast_grep=$(host_tool ast-grep)
+typos=$(host_tool typos)
 "$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^(cell-read-by-its-text|absent-text-read-from-the-text|page-read-by-what-it-says|attention-item-says-why|attention-why-restates-rating|threshold-says-what-clears-it|query-added-by-with-query|hand-drawn-.+)$' \
     --error=unused-suppression --report-style medium src
+"$typos" --config "$hq_root/_typos.toml" .
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/hq-plugin-check.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT HUP INT TERM
@@ -109,8 +114,8 @@ MYPYPATH="$hq_root" "$python" -m mypy --show-traceback --cache-dir "$work/mypy"
 "$python" "$hq_root/manage.py" makemigrations --check --dry-run "$django_app"
 # The template checks read every template Django loads, so they hold the
 # plugin's wording and markup as they hold the host's; the view checks read
-# every routed view's source, the plugin's included; the spelling check reads
-# the package's project whole. A package keeps no copy of any of them.
+# every routed view's source, the plugin's included. A package keeps no copy
+# of any of them.
 "$python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered \
     hq.platform.application.tests.test_architecture_pages.InterfaceTextTests hq.platform.core.tests.test_counts.CountPlacementTests \
     hq.platform.core.tests.test_template_chips.TemplateChipTests hq.platform.core.tests.test_table_contract.TableContractTests \
@@ -125,8 +130,7 @@ MYPYPATH="$hq_root" "$python" -m mypy --show-traceback --cache-dir "$work/mypy"
     hq.platform.application.tests.test_architecture_styles.StyleContractTests.test_a_rows_block_detail_opens_beneath_the_row \
     hq.platform.application.tests.test_view_writes.ViewWriteTests.test_no_view_writes_outside_the_runner \
     hq.platform.application.tests.test_architecture.DeliveryAdapterArchitectureTests.test_paginated_list_views_use_the_shared_table_engine \
-    hq.platform.application.tests.test_architecture_pages.PageTrailTests \
-    hq.platform.application.tests.test_spelling.ExtensionSpellingTests
+    hq.platform.application.tests.test_architecture_pages.PageTrailTests
 
 # Production installs admitted wheels with --no-deps. Recreate that exact
 # dependency boundary in an isolated environment so an undeclared host pin

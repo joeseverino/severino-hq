@@ -46,7 +46,7 @@ from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 from threading import local
-from typing import Any
+from typing import Any, cast
 
 from hq.platform.application.tests import program_reads
 
@@ -437,9 +437,18 @@ LISTINGS: tuple[tuple[Any, str, Names], ...] = (
 EAGER = {(os, "listdir"), (glob, "glob")}
 
 
-def _listing(owner: Any, name: str, names: Names) -> Callable[..., Any]:
-    original = getattr(owner, name)
+def listing[F: Callable[..., Any]](function: F) -> F:
+    """A function that answers the paths it finds, held as a listing of those alone, as rglob is: what it
+    lists to find them is its own (a walk that prunes what it never answers)."""
 
+    return _watched(function, lambda args, kwargs, item: [item], eager=True)
+
+
+def _listing(owner: Any, name: str, names: Names) -> Callable[..., Any]:
+    return _watched(getattr(owner, name), names, eager=(owner, name) in EAGER)
+
+
+def _watched[F: Callable[..., Any]](original: F, names: Names, *, eager: bool) -> F:
     @functools.wraps(original)
     def watched(*args: Any, **kwargs: Any) -> Any:
         watch = _active()
@@ -447,14 +456,14 @@ def _listing(owner: Any, name: str, names: Names) -> Callable[..., Any]:
             return original(*args, **kwargs)
         with _unwatched():
             found = original(*args, **kwargs)
-        if (owner, name) in EAGER:
+        if eager:
             for item in found:
                 for each in names(args, kwargs, item):
                     watch.listed(each)
             return found
         return _Listing(found, watch, lambda item: names(args, kwargs, item))
 
-    return watched
+    return cast(F, watched)
 
 
 def _opener(original: Callable[..., Any]) -> Callable[..., Any]:

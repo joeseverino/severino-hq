@@ -201,7 +201,7 @@
    rather than a glitch. */
 .job-bar::-webkit-progress-value { border-radius: inherit; background: currentcolor; transition: inline-size .4s ease; }
 .job-bar::-moz-progress-bar { border-radius: inherit; background: currentcolor; }
-/* Work that cannot say how far along it is has no value: a travelling band
+/* Work that cannot say how far along it is has no value: a traveling band
    rather than a bar sitting at a number nobody computed. The band is the
    track's own background, so no engine's indeterminate drawing shows. */
 .job-bar:indeterminate {

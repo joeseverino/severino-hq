@@ -6,9 +6,7 @@
 import copy
 from typing import Any
 
-from hq.platform.application.json_schemas import LOCAL, json_schemas
-
-from .fragments import OpenAPIError
+from hq.platform.application.json_schemas import LOCAL, json_schemas, merged_definitions
 
 SCHEMAS = "#/components/schemas/"
 
@@ -74,10 +72,7 @@ class Components:
         return refs
 
     def add(self, name: str, schema: dict[str, Any]) -> str:
-        if self.schemas.setdefault(name, schema) != schema:
-            raise OpenAPIError(
-                f"Two schemas claim the component name {name!r}: each meaning is a type alias of its own name."
-            )
+        merged_definitions(self.schemas, {name: schema})
         return SCHEMAS + name
 
     def hoist(self, schema: dict[str, Any]) -> dict[str, Any]:
@@ -86,7 +81,7 @@ class Components:
         Inside an OpenAPI document ``#/$defs/X`` resolves against the document,
         not the schema. A definition is named for the type it is, so one alias
         used by many schemas is one component, and two that mean different
-        things under one name fail in ``add``.
+        things under one name fail in ``merged_definitions``.
         """
 
         for key, definition in schema.get("$defs", {}).items():

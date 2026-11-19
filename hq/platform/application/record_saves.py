@@ -10,14 +10,17 @@ own; any other write that changes a record the caller read holds it with ``held`
 from annotationlib import Format, call_annotate_function
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, fields
+from datetime import date
+from decimal import Decimal
 from functools import cache
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict, get_type_hints
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
 from django.db.models import Model
 
 from .answer_fields import CallMessage
+from .command_fields import Names, names_of
 from .describe import Describe
 from .domains import load, records_of
 from .integration_specs import TARGET_KINDS, Kept, keeps
@@ -126,6 +129,50 @@ def as_sent(record: Model, command: type, keys: Mapping[str, str]) -> dict[str, 
             linked = getattr(record, name)
             values[name] = None if linked is None else getattr(linked, keys[name])
     return values
+
+
+def row(record: Model, shape: Any, **given: Any) -> Any:
+    """``record`` read as ``shape``, the TypedDict its resource declares: each
+    field's value, an amount as its decimal string, a day or time in ISO 8601,
+    and a linked record by the key its ``Names`` gives, or null for a doc too
+    sensitive to share. A field the record does not hold as the shape says it
+    is ``given``; a field the shape does not require is left out unless given."""
+
+    values: dict[str, Any] = {}
+    for name, names in _row_fields(shape):
+        if name in given:
+            values[name] = given[name]
+        elif name not in shape.__required_keys__:
+            continue
+        elif names is None:
+            values[name] = _plain(getattr(record, name))
+        else:
+            values[name] = _linked(record, name, names)
+    return values
+
+
+def _linked(record: Model, name: str, names: Names) -> Any:
+    field = record._meta.get_field(name)
+    key = names.key or records_of(names.resource).lookup
+    if key == field.target_field.name:
+        return getattr(record, field.attname)
+    linked = getattr(record, name)
+    # Only a doc says whether it may be shared.
+    shared = linked is not None and getattr(linked, "is_safe_for_ai_export", True)
+    return getattr(linked, key) if shared else None
+
+
+@cache
+def _row_fields(shape: type) -> tuple[tuple[str, Names | None], ...]:
+    return tuple((name, names_of(hint)) for name, hint in get_type_hints(shape, include_extras=True).items())
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
 
 
 def written(command: Any, sent: frozenset[str] | None) -> dict[str, Any]:

@@ -306,9 +306,9 @@ class NoProcedureNamedTests(SimpleTestCase):
             if not {"tests", "example_estate"} & set(path.relative_to(ROOT).parts)
         ]
         self.assertTrue(modules)
-        offences = [
+        offenses = [
             f"{path.relative_to(ROOT)}: {found.group(0)}"
             for path in (*modules, *(path for _name, path in template_files()))
             if (found := needle.search(path.read_text()))
         ]
-        self.assertEqual(offences, [], "a procedure is named in the host; draw it from the adopted catalog")
+        self.assertEqual(offenses, [], "a procedure is named in the host; draw it from the adopted catalog")

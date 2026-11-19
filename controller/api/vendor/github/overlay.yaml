@@ -37,6 +37,3 @@ actions:
   - target: $.components.schemas.workflow.properties.state
     update:
       x-enum-varnames: [WorkflowStateActive, WorkflowStateDeleted, WorkflowStateDisabledFork, WorkflowStateDisabledInactivity, WorkflowStateDisabledManually]
-  - target: $.components.schemas['content-directory'].items.properties.type
-    update:
-      x-enum-varnames: [ContentDirectoryTypeDir, ContentDirectoryTypeFile, ContentDirectoryTypeSubmodule, ContentDirectoryTypeSymlink]

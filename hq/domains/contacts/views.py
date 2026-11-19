@@ -28,7 +28,8 @@ from hq.platform.application.pages import PageAction, page_context, runs_here
 from hq.platform.application.security import safe_next
 from hq.platform.application.ui import counted
 from hq.platform.application.url_query import with_query
-from hq.platform.application.web_writes import execute_posted, refused
+from hq.platform.application.web_writes import execute_posted
+from hq.platform.core.web_refusals import refused
 
 from . import inbox
 from .forms import STATUS_CHOICES, ContactReviewForm, submission_state

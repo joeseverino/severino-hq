@@ -23,7 +23,7 @@ from hq.platform.application.security import Capability
 from hq.platform.core.models import AuditLog
 from hq.platform.core.test_runner import no_default_role
 
-from .. import openapi
+from .. import openapi, views
 from ..components import Components
 from ..tags import Tags
 from ..testing import ContractClient
@@ -148,14 +148,29 @@ class DocumentTests(SimpleTestCase):
         self.assertEqual(hoisted["properties"]["r"]["$ref"], "#/components/schemas/Record")
         self.assertIn("Record", components.schemas)
 
-    def test_two_definitions_meaning_different_things_under_one_name_fail_the_build(self):
+    def test_one_name_is_one_definition_wherever_definitions_are_gathered(self):
+        """The document's components and a command's request body, an extension's included."""
+
+        envelope = views.ENVELOPE_SCHEMA["$defs"]
+        name = next(iter(envelope))
+        command = {"properties": {"at": {"$ref": f"#/$defs/{name}"}}, "$defs": {name: envelope[name]}}
+        body = views.request_schema({"name": "example.thing.touch", "input_schema": command, "target": None})
+        self.assertEqual(
+            (body["$defs"], body["properties"]["payload"]["properties"]["at"]), (envelope, command["properties"]["at"])
+        )
         components = Components()
-        components.hoist({"$defs": {"Record": {"type": "object"}}})
+        components.hoist({"$defs": envelope})
+        for gather in (
+            lambda clash: components.hoist({"$defs": clash}),
+            lambda clash: views.request_schema(
+                {"name": "example.thing.touch", "input_schema": {"$defs": clash}, "target": None}
+            ),
+        ):
+            gather(envelope)
+            with self.subTest(gather), self.assertRaisesRegex(RuntimeError, name):
+                gather({name: {"type": "integer"}})
 
-        with self.assertRaisesRegex(openapi.OpenAPIError, "Record"):
-            components.hoist({"$defs": {"Record": {"type": "string"}}})
-
-    def test_a_parameterised_route_without_an_expansion_fails_the_build(self):
+    def test_a_parameterized_route_without_an_expansion_fails_the_build(self):
         with patch.dict(openapi.EXPANSIONS, clear=True), self.assertRaises(openapi.OpenAPIError):
             openapi.document()
 

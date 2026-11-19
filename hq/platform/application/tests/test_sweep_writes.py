@@ -121,15 +121,14 @@ class ChangedSweepTests(TestCase):
 
     def test_a_drift_already_described_is_not_written_again(self):
         changed = [{**self.records[0], "answer": "192.0.2.99"}, self.records[1]]
-        seen = self.first.last_observed_at
         _sweep(changed)
         self.first.refresh_from_db()
         self.assertEqual(self.first.conditions[0]["reason"], "Drifted")
-        self.assertEqual(self.first.last_observed_at, seen)
 
         _result, _verbs, moved = _measured(changed)
 
-        self.assertEqual(moved, {INVENTORY: 1, DECLARATIONS: 1})
+        # Both records were listed, so both take the read's moment.
+        self.assertEqual(moved, {INVENTORY: 1, DECLARATIONS: 2})
 
     def test_an_observation_that_changed_is_saved_audited_and_indexed(self):
         ManagedResource.objects.filter(pk=self.first.pk).update(spec={**self.records[0], "answer": "192.0.2.99"})

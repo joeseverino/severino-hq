@@ -182,6 +182,12 @@ def for_agents(kind: type) -> frozenset[str]:
     return frozenset(name for name, hint in hints.items() if _marker(hint, ForAgents) is not None)
 
 
+def names_of(hint: Any) -> Names | None:
+    """The ``Names`` a field's type carries, when it names other records."""
+
+    return _marker(hint, Names)
+
+
 def _marker[T](hint: Any, marker: type[T]) -> T | None:
     """The ``marker`` a field's type carries, in its own ``Annotated`` or an
     alias it names, the nearest the field first."""

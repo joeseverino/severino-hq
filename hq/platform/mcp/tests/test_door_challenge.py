@@ -24,7 +24,7 @@ def _challenge(headers):
     return scheme, {name: value.replace('\\"', '"') for name, value in re.findall(r'(\w+)="((?:[^"\\]|\\.)*)"', rest)}
 
 
-class ChallengeTests(test_mcp.MCPBoundaryTests):
+class ChallengeTests(test_mcp.BoundaryRequests):
     def test_an_unauthenticated_request_is_told_where_to_sign_in(self):
         for token in (None, "wrong"):
             with self.subTest(token=token):
@@ -71,7 +71,7 @@ class ChallengeTests(test_mcp.MCPBoundaryTests):
 @override_settings(
     OIDC_ISSUER=ISSUER, SEVERINO_API_RESOURCE=API_RESOURCE, SEVERINO_API_LEEWAY_SECONDS=30, OIDC_RP_SIGN_ALGO="RS256"
 )
-class RealAdmissionTests(test_mcp.MCPBoundaryTests):
+class RealAdmissionTests(test_mcp.BoundaryRequests):
     """Through HQ's own admission, as the ASGI module wires it."""
 
     def _through_hq(self, token, **request):
@@ -101,7 +101,7 @@ class RealAdmissionTests(test_mcp.MCPBoundaryTests):
                 self.assertEqual(self._through_hq(token)[0], 401)
 
 
-class GateTests(test_mcp.MCPBoundaryTests):
+class GateTests(test_mcp.BoundaryRequests):
     """HQ's own Host and Origin gate, kept because the SDK's would not refuse all it refuses."""
 
     def test_hosts_are_matched_by_name_whatever_their_port_or_case(self):
@@ -145,7 +145,7 @@ class GateTests(test_mcp.MCPBoundaryTests):
         self.assertEqual(self._request(host="a-docker-host:abc")[0], 400)
 
 
-class ProxiedPeerTests(test_mcp.MCPBoundaryTests):
+class ProxiedPeerTests(test_mcp.BoundaryRequests):
     """Behind the TLS proxy, the caller is the address the proxy forwarded, and only from the proxy."""
 
     def _proxied(self, *, peer, forwarded):

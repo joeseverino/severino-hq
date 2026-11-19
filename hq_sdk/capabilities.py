@@ -23,7 +23,8 @@ from hq.platform.application.security import (
     mcp_principal,
     web_principal,
 )
-from hq.platform.application.web_writes import execute_posted, refusal_response, refused
+from hq.platform.application.web_writes import execute_posted
+from hq.platform.core.web_refusals import refusal_response, refused
 
 __all__ = [
     "KEPT",

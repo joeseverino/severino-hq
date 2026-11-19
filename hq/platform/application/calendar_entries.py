@@ -9,7 +9,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from itertools import count
-from typing import Annotated, Any, Literal, TypedDict, cast
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 from django.db.models import Q
@@ -29,7 +29,7 @@ from .moments import when_day
 from .projection import window
 from .record_errors import RecordNotFound
 from .record_fields import Notes
-from .record_saves import Held, as_sent, found, held, written
+from .record_saves import Held, as_sent, found, held, row, written
 from .security import Principal, person
 from .ui import counted, ended
 from .url_query import with_query
@@ -256,25 +256,16 @@ class EntryCommand:
 
 
 def serialize_entry(entry: Entry) -> EntryRecord:
-    return {
-        "uid": str(entry.uid),
-        "title": entry.title,
-        "starts_on": entry.starts_on.isoformat(),
-        "ends_on": entry.ends_on.isoformat() if entry.ends_on else None,
-        "starts_at": entry.starts_at.isoformat(timespec="minutes") if entry.starts_at else None,
-        "ends_at": entry.ends_at.isoformat(timespec="minutes") if entry.ends_at else None,
-        "location": entry.location,
-        "notes": entry.notes,
-        # Every write passes EntryCommand, whose type holds repeat to these.
-        "repeat": cast(Repeat, entry.repeat),
-        "repeat_label": repeat_label(entry),
-        "interval": entry.interval,
-        "weekdays": list(entry.weekday_numbers),
-        "repeat_until": entry.repeat_until.isoformat() if entry.repeat_until else None,
-        "about": entry.about,
-        "url": entry.get_absolute_url(),
-        "updated_at": entry.updated_at.isoformat(),
-    }
+    return row(
+        entry,
+        EntryRecord,
+        uid=str(entry.uid),
+        starts_at=entry.starts_at.isoformat(timespec="minutes") if entry.starts_at else None,
+        ends_at=entry.ends_at.isoformat(timespec="minutes") if entry.ends_at else None,
+        repeat_label=repeat_label(entry),
+        weekdays=list(entry.weekday_numbers),
+        url=entry.get_absolute_url(),
+    )
 
 
 def _stored(uid: str) -> dict[str, Any]:

@@ -1,13 +1,12 @@
 """What fast selects from a change: the test modules it reaches through
-imports, the routes and paths modules name and the map of the tests that ran
-each file (docs/Development.md, What `fast` runs)."""
+imports and the routes and paths modules name (docs/Development.md, What
+`fast` runs)."""
 
 from __future__ import annotations
 
 import ast
 import functools
 import json
-import os
 import re
 import subprocess
 import sys
@@ -20,10 +19,9 @@ import grimp
 
 from hq.platform.application.tests.reads import Reads
 from hq.platform.application.tests.tree import TreeTests, tree_tests
-from hq.platform.core.tests.task import RefError, changed_paths, names
+from hq.platform.core.tests.task import RefError, names
 from tests.mise_tasks import ROOT as TASKS_ROOT, body, mise_tasks, run_files, runs
-from tools.gate import chain, testmap
-from tools.gate.chain import SENT, maps
+from tools.gate import chain
 
 # Never part of the Django suite: other languages and vendored trees.
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
@@ -219,32 +217,21 @@ def string_attributes(node: ast.ClassDef) -> dict[str, str]:
     }
 
 
-def affected(
-    changed: list[str],
-    deleted: list[str],
-    files: list[Path],
-    apart: frozenset[str] = frozenset(),
-    mapped: frozenset[str] = frozenset(),
-) -> tuple[set[str], set[str]]:
+def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple[set[str], set[str]]:
     """(modules the change reaches, the apps whose models it reaches).
 
     It reaches the modules that import what it touched, those that name a file it touched, and those that
     name a route whose view it reaches, by its name or its path: a test that drives a view through the
-    client imports its models, never its views. A path in ``apart`` reaches no route: the map names the
-    tests that ran it, or it is a test module (``by_map``). A path in ``mapped`` reaches no importer
-    either, since the map names every test that ran the lines it changed; it still reaches the modules
-    that name it, which run it in a process of their own, where coverage does not follow.
+    client imports its models, never its views.
     """
 
     reverse = with_gone(importers(files), deleted, files)
     paths = [*changed, *deleted]
-    reached = importing(seeds([path for path in paths if path not in mapped]), reverse, files) | reading(paths, files)
-    own = [path for path in paths if path not in apart]
-    started = seeds(own)
+    started = seeds(paths)
     imported = importing(started, reverse, files)
-    read = reading(own, files)
+    read = reading(paths, files)
     index = named(chain.ROOT, tuple(files))
-    shown = [path for path in rendering(own) if not path.endswith(".py")]
+    shown = [path for path in rendering(paths) if not path.endswith(".py")]
     # A module that names a page a change reaches reaches the routes of the views in it that name the page.
     readers = {
         module_name(Path(path)): path for parts in (Path(p).parts for p in shown) for path in Naming(index).file(parts)
@@ -262,7 +249,7 @@ def affected(
     by_name = {path for route in hit for path in Naming(index)((route.name,))}
     by_path = {path for parts, paths in requested(index, every).items() if parts in hit for path in paths}
     touched = {label for prefix, label in django_apps(files).items() if f"{prefix.replace('/', '.')}.models" in near}
-    return reached | {module_name(Path(path)) for path in by_name | by_path}, touched
+    return near | {module_name(Path(path)) for path in by_name | by_path}, touched
 
 
 def requested(index: dict[tuple[tuple[str, ...], bool], set[str]], every: tuple[Route, ...]) -> dict[Route, set[str]]:
@@ -661,85 +648,6 @@ def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tupl
     return sorted(picked), len(tests)
 
 
-def by_map(labels: list[str], files: list[Path]) -> list[str]:
-    """The selection read from the nearest map of the tests that ran each
-    line (``chain.nearest_map``), when it is narrower than ``labels``, and
-    ``labels`` otherwise; both are sound, so the run takes the one with fewer
-    modules.
-
-    The change is read from the map's own commit, whose lines the map numbers.
-    A Python file the map holds whose change stays inside function bodies
-    (``ran_bodies``) selects the test modules that ran those bodies there, and
-    no importer, route or app; a test module reaches no route either. Every
-    other path selects as without a map. A test module the recording did not
-    run (new since, or skipped there) selects by every rule."""
-
-    if not os.environ.get(SENT):
-        # A run sent to the second machine reads the maps the machine that sent it fetched.
-        print(f"[fast] {chain.fetch_map()}")
-    found = chain.nearest_map()
-    if not found:
-        print(
-            f"[fast] no map of the tests that ran each line within {chain.MAP_REACH} commits back, so none narrows it"
-        )
-        return labels
-    commit, back = found
-    the_map = testmap.load(testmap.kept(maps(chain.ROOT), commit))
-    picked = from_map(the_map, commit, files)
-    narrower = len(picked) < len(labels)
-    print(
-        f"[fast] the map of the tests that ran each line, of {commit[:9]}, {back} back:"
-        f" {len(picked)} test modules from it, {'taken' if narrower else 'not narrower'}"
-    )
-    return sorted(picked) if narrower else labels
-
-
-def from_map(the_map: testmap.TestMap, commit: str, files: list[Path]) -> set[str]:
-    """The test modules the change since ``commit``, ``the_map``'s, selects with it (``by_map``)."""
-
-    changed, deleted = changed_paths(commit, chain.ROOT)
-    bodies = {path: lines for path in changed if (lines := ran_bodies(path, commit, the_map)) is not None}
-    mapped = frozenset(bodies)
-    tests = {module_name(p) for p in files if is_test(p)}
-    apart = mapped | {path for path in [*changed, *deleted] if is_test(Path(path))}
-    picked = set(test_labels(files, *affected(changed, deleted, files, apart, mapped))[0])
-    picked |= {module for path, lines in bodies.items() for module in the_map.tests_of(path, lines)} & tests
-    if apart:
-        picked |= set(test_labels(files, *affected(changed, deleted, files))[0]) - the_map.ran
-    print(
-        f"[fast] {len(mapped)} of the {len(changed) + len(deleted)} files changed since {commit[:9]}"
-        " change only function bodies the map holds"
-    )
-    return picked
-
-
-def ran_bodies(path: str, commit: str, the_map: testmap.TestMap) -> set[int] | None:
-    """The lines, as ``commit`` numbers them, of each function body the change to ``path`` since ``commit``
-    touches, when ``path`` is a Python file the map holds and every line the change touches is inside a
-    function body there (``testmap.touched_bodies``); None otherwise."""
-
-    if not path.endswith(".py") or path not in the_map.lines:
-        return None
-    before = subprocess.run(
-        ["git", "cat-file", "blob", f"{commit}:{path}"], cwd=chain.ROOT, capture_output=True, check=False
-    )
-    if before.returncode:
-        return None
-    diff = subprocess.run(
-        ["git", "diff", "-U0", "--no-ext-diff", "--no-color", commit, "--", path],
-        cwd=chain.ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    old, new = testmap.touched(diff)
-    # Each added line lies in a function body of the new file too: an addition that dedents out of a body
-    # leaves the old line it is added before inside one.
-    if testmap.touched_bodies((chain.ROOT / path).read_text(encoding="utf-8"), new) is None:
-        return None
-    return testmap.touched_bodies(before.stdout.decode(), old)
-
-
 def whole_suite(files: list[Path]) -> list[str]:
     """Every test module, which a wide change runs."""
 
@@ -848,11 +756,8 @@ def source_first(labels: list[str], files: list[Path]) -> tuple[list[str], list[
 def selection(
     changed: list[str], deleted: list[str], files: list[Path]
 ) -> tuple[list[str], int, tuple[set[str], set[str]]]:
-    """(the test modules to run, how many there are, what the change reaches and the apps it touches),
-    from the base and from the nearest map, whichever selects fewer."""
+    """(the test modules to run, how many there are, what the change reaches and the apps it touches)."""
 
     reached, touched = affected(changed, deleted, files)
     labels, total = test_labels(files, reached, touched)
-    if changed or deleted:
-        labels = by_map(labels, files)
     return labels, total, (reached, touched)

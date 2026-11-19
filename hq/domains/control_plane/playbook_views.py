@@ -36,7 +36,8 @@ from hq.platform.application.automation_sources import (
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
-from hq.platform.application.web_writes import execute_posted, refused
+from hq.platform.application.web_writes import execute_posted
+from hq.platform.core.web_refusals import refused
 lazy from hq.domains.jobs.models import JobState
 lazy from hq.platform.application.asks import FAILED, Ask, AskMixin, Standing, WatchView
 lazy from hq.platform.application.cadence import automation_standing

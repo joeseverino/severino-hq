@@ -1,19 +1,10 @@
-"""A browser's write: the retry key its form posts, sent with the capability it runs.
+"""A browser's write: the capability a form runs, sent under the retry key the form posts.
 
 Every write form carries ``{% write_token %}``, which draws the CSRF field and
-a fresh key, and a view runs its capabilities through ``execute_posted`` or
-``run_posted``, which send that key. So a form sent twice (a double press, a
-resend after an answer that never arrived, a fragment posting again) acts
-once, as a token's write does. ``fragment.js``'s ``hqFetch`` draws the form a
-new key once a post is answered, so a form that stays on the page asks afresh.
-
-A form view sends its form's values as the payload ``form_payload`` makes
-of them, and answers a resend from ``posted_answer`` before its form is
-validated again.
-
-What a write that ran says reaches the person through ``said``, on the next
-page. A refused answer reaches them through ``refused``, said on the form or
-the next page, or as the whole response through ``refusal_response``.
+a fresh key, and ``run_posted`` and ``execute_posted`` send that key, so a form
+sent twice (a double press, a resend after an answer that never arrived) acts
+once, as a token's write does. A refused answer is
+``hq.platform.core.web_refusals``' to say.
 """
 
 import json
@@ -27,23 +18,14 @@ from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import UploadedFile
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Model
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest
 lazy from django.forms import BaseForm
-lazy from django.utils.html import format_html
-
-lazy from hq.platform.core.templatetags.action_tags import offer_markup
-lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from . import capabilities
 from .capabilities import Ran, as_documented, run_capability
 from .forms import file_as_sent
-from .idempotency import (
-    KEY,
-    answered,
-)
-from .refusal_status import Refusal, refusal_of
-from .security import Principal, agent_subject, web_principal
-lazy from .automation_runs import held_words
+from .idempotency import KEY, answered
+from .security import agent_subject, web_principal
 lazy from .records import records_for
 
 # The hidden field the key travels in: a name no command declares, like the
@@ -87,13 +69,7 @@ def execute_posted(
     target: str | int | None = None,
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    """``run_posted``'s answer alone, its ``message`` said on the next page.
-
-    A capability says what it did once, as its answer's ``message``, which
-    every door carries: an agent reads it in the answer, the audit log keeps it,
-    and here the person reads it among the page's messages. A refusal is
-    ``refused``'s to say.
-    """
+    """``run_posted``'s answer alone, its ``message`` said on the next page (``said``)."""
 
     answer = run_posted(request, name, payload, target=target, expected_updated_at=expected_updated_at).answer
     said(request, answer)
@@ -105,69 +81,6 @@ def said(request: HttpRequest, answer: dict[str, Any]) -> None:
 
     if answer.get("ok") and (message := str(answer.get("message") or "")):
         messages.success(request, message)
-
-
-def refused(request: HttpRequest, answer: dict[str, Any], *, form: BaseForm | None = None) -> Refusal | None:
-    """The refusal ``answer`` carries, said where the person will read it, or None when it ran.
-
-    On a form drawn again, each detail that names one of its fields goes beside
-    that field, and the refusal's own sentence above the form unless the
-    details placed all of it. Anywhere else the sentence goes on the next
-    page's messages. Its ``status`` is the one the view answers with.
-    """
-
-    if answer.get("ok"):
-        return None
-    refusal = refusal_of(answer)
-    # Only a signed-in reader is offered a cancel of the run in the way.
-    user = request.user
-    said = _said(refusal, web_principal(user) if user.is_authenticated else None)
-    if form is None:
-        messages.error(request, said)
-    elif not _placed(form, refusal.details):
-        form.add_error(None, said)
-    return refusal
-
-
-def _said(refusal: Refusal, principal: Principal | None) -> str:
-    """The refusal's sentence as a page says it: a run refused for another in
-    its way names that run, links to it and offers to cancel it where the
-    reader may, where the machine API's sentence points at ``details.holding``."""
-
-    held = held_words(refusal.details, principal)
-    if held is None:
-        return refusal.message
-    said = format_html('{} <a href="{}">{}</a>', breakable(held.sentence), held.href, breakable(held.link))
-    if held.cancel is None:
-        return said
-    return format_html("{} {}", said, offer_markup(held.cancel, look=f"{held.cancel.look} compact"))
-
-
-def refusal_response(answer: dict[str, Any]) -> HttpResponse:
-    """A refused answer as the whole response, for a post no page is drawn for: its sentence, at its status."""
-
-    refusal = refusal_of(answer)
-    return HttpResponse(refusal.message, status=refusal.status, content_type="text/plain; charset=utf-8")
-
-
-def _placed(form: BaseForm, details: Any) -> bool:
-    """Put each field's problem from an ``invalid_input`` refusal's details beside it; whether all were.
-
-    The details are the Pydantic list ``input_errors`` describes: a location
-    whose first part is the field, and a message that names no value sent.
-    """
-
-    if not isinstance(details, list) or not details:
-        return False
-    placed = True
-    for item in details:
-        location = item.get("loc") if isinstance(item, dict) else None
-        field = str(location[0]) if location else ""
-        if field in form.fields and item.get("msg"):
-            form.add_error(field, item["msg"])
-        else:
-            placed = False
-    return placed
 
 
 def _call_key(request: HttpRequest) -> str | None:

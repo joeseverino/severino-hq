@@ -41,7 +41,8 @@ def due(repository: str, read_at: datetime | None, now: datetime, every: timedel
 
 def plan(now: datetime | None = None) -> dict[str, Any]:
     """Each repository HQ holds a record of, with its fingerprint and whether
-    its full read is due.
+    its full read is due, read longest ago first, the order the controller
+    reads due ones in.
 
     A held record the reading's schema refuses was stored under an older
     contract, so it is due at once: carried, it would stand as current.
@@ -61,6 +62,8 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
                 "repository": name,
                 "fingerprint": str(record.get("fingerprint", "") or ""),
                 "due": due(name, read_at, now) or bool(reading.clean([record])[1]),
+                "read_at": read_at or datetime.min.replace(tzinfo=now.tzinfo),
             }
         )
+    held.sort(key=lambda entry: entry.pop("read_at"))
     return {"held": held}

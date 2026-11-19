@@ -17,7 +17,6 @@ from typing import override
 from django.test.runner import RemoteTestResult, RemoteTestRunner
 
 from hq.platform.core import stalls
-from hq.platform.core.coverage_contexts import TestContexts
 from hq.platform.core.isolation_testing import CompositionIsolation, fresh
 from hq.platform.core.stalls import StallMarks
 
@@ -219,7 +218,7 @@ class CompositionRemoteRunner(RemoteTestRunner):
     resultclass = CompositionRemoteResult
 
 
-class ClassTimedSuite(TestContexts):
+class ClassTimedSuite(unittest.TestSuite):
     """A suite that sets each class up on a fresh process (``isolation_testing.fresh``),
     tells its result how long each class took, from its ``setUpClass`` to the
     end of its ``tearDownClass``, and keeps the stall watch on while it runs.

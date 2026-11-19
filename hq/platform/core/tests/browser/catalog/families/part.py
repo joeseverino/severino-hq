@@ -2200,11 +2200,13 @@ ENTRIES = {
         {"page": Page(title="Example glance"), "page_aside": _Drawn(_GLANCE), "hours": _HOURS},
         heads_the_page=True,
     ),
-    # The same band on its own line, as a narrower head draws it.
+    # The same band on its own line, as a narrower head draws it, under the dashboard's day and its note.
     "part/facts-band-glance-under-the-title": Entry(
         '{% include "partials/_page_head.html" %}{% section "Example section 2" %}<p>An example line.</p>{% endsection %}',
         {
             "page": Page(title="Example glance", lede="An example lede long enough to take the head's line."),
+            "page_dateline": date(2026, 11, 18),
+            "page_visit": PageVisit("page", "dashboard"),
             "page_facts": "An example fact · another example fact",
             "page_aside": _Drawn(_GLANCE_EMPTY),
         },

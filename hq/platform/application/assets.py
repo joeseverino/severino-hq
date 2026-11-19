@@ -7,14 +7,15 @@ from functools import partial
 from typing import Annotated, Any
 
 from hq.domains.assets.models import ASSET_CATEGORY_CHOICES, PAYMENT_METHOD_CHOICES, Asset
+lazy from hq.domains.assets.specs import AssetRow
 
 from .business_use import BusinessUseShare
 from .command_fields import Describe, Names, Refers
 from .entity_links import EntityLink, entity_link
-from .projection import addressable, iso, listing
+from .projection import addressable, listing
 from .record_fields import Notes, Slug, TotalCost, one_of
 from .record_links import linked
-from .record_saves import Held, Link, linked_saver, saved_type
+from .record_saves import Held, Link, linked_saver, row, saved_type
 from .security import Principal
 from .upserts import upsert_by_slug
 lazy from . import zones
@@ -76,24 +77,7 @@ class AssetCommand:
 
 
 def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, Any]:
-    fields = {
-        "slug": asset.slug,
-        "item_name": asset.item_name,
-        "vendor": asset.vendor,
-        "category": asset.category,
-        "status": asset.status,
-        "purchase_date": iso(asset.purchase_date),
-        "total_cost": str(asset.total_cost),
-        "business_use_percentage": asset.business_use_percentage,
-        "estimated_deductible_amount": str(asset.estimated_deductible_amount),
-        "payment_method": asset.payment_method,
-        "serial_number": asset.serial_number,
-        "warranty_date": iso(asset.warranty_date),
-        "notes": asset.notes,
-        "infrastructure": asset.infrastructure,
-        "updated_at": iso(asset.updated_at),
-    }
-    return linked(fields, asset, relationships=relationships, projects=asset.related_projects)
+    return linked(row(asset, AssetRow), asset, relationships=relationships, projects=asset.related_projects)
 
 
 def list_assets(*, status: str | None = None, query: str | None = None, limit: int = 50) -> dict[str, Any]:

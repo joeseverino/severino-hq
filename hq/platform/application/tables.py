@@ -167,7 +167,7 @@ class TableToggle:
 class TableTotal:
     """A column to sum, and where the sum belongs.
 
-    ``column`` is the field being totalled and doubles as the key a template
+    ``column`` is the field being totaled and doubles as the key a template
     looks the value up by, so a totals row lands under the column it totals
     rather than being positioned by hand.
     """

@@ -1,9 +1,9 @@
 """How old a reading may be before it is out of date, per kind.
 
 One answer for every surface, and nothing else decides it. A reading is *due*
-once one cadence of its kind has passed, so a surface may ask for it again,
-and *stale* once the tolerance has passed with no newer reading, so a surface
-says it is out of date.
+once one cadence of its kind has passed, or when none was ever taken, so a
+surface may ask for it, and *stale* once the tolerance has passed with no
+newer reading, so a surface says it is out of date.
 """
 
 from collections.abc import Callable, Mapping
@@ -175,7 +175,8 @@ class Freshness:
 
     @property
     def due(self) -> bool:
-        return self.state in (DUE, STALE)
+        # Asking is how the first reading arrives, so none yet is due.
+        return self.state in (DUE, STALE, NEVER)
 
     @property
     def stale(self) -> bool:

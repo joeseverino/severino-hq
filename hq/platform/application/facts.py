@@ -573,6 +573,20 @@ def stored_snapshots() -> Mapping[str, tuple[Any, ...]]:
     return _stored()
 
 
+def kinds_read() -> dict[str, datetime]:
+    """When each kind was last read with an answer, from its stored snapshots.
+
+    A read that failed, or stopped at a provider's limit, stores no moment and
+    keeps the records it could not replace, so it moves nothing here.
+    """
+
+    return {
+        kind: max(read)
+        for kind, rows in sorted(_stored().items())
+        if (read := [row.observed_at for row in rows if row.observed_at is not None])
+    }
+
+
 def every_snapshot() -> Iterator[Any]:
     """Every stored snapshot, connected or not, from the same read."""
 

@@ -30,8 +30,8 @@ import (
 // pipeline's report of a deploy waits on.
 
 const (
-	// githubSweepCeiling is a few times what a sweep spends when every covered
-	// repository changed at once; a sweep that reaches it is a bug.
+	// githubSweepCeiling is the most a round spends; repositories read only
+	// because they are due stop at half of it, so a round that reaches it is a bug.
 	githubSweepCeiling = 150
 	// githubFloor is what the controller leaves an installation's other users:
 	// the deploy pipeline needs a few requests a deploy, the dependency update
