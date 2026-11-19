@@ -98,14 +98,3 @@ class CapabilityAnswerTests(TestCase):
                     schema = whole[entry["name"]]
                     own = {name: definitions.get(name) for name in schema.get("$defs", {})}
                     self.assertEqual({**entry["input_schema"], **({"$defs": own} if own else {})}, schema)
-
-    def test_two_commands_defining_one_name_differently_are_refused(self):
-        from ..capability_answer import ClashingDefinition, shared_definitions
-
-        entries = [
-            {"name": f"example.{index}", "input_schema": {"$defs": {"Slug": {"type": kind}}}}
-            for index, kind in enumerate(("string", "integer"))
-        ]
-
-        with self.assertRaisesRegex(ClashingDefinition, "Slug"):
-            shared_definitions(entries)

@@ -380,6 +380,19 @@ def json_schemas(
     return copy.deepcopy(built)
 
 
+class ClashingDefinition(RuntimeError):
+    """Two declarations define one name differently, so one document cannot carry both under it."""
+
+
+def merged_definitions(into: dict[str, Any], definitions: Mapping[str, Any]) -> dict[str, Any]:
+    """``into`` with each of ``definitions`` added: a name holds one meaning, kept once."""
+
+    for name, definition in definitions.items():
+        if into.setdefault(name, definition) != definition:
+            raise ClashingDefinition(f"Two declarations define {name!r} differently: one name is one type.")
+    return into
+
+
 # Enough for every document a process builds: each holds about 170 sets of types.
 _BUILT = 1024
 

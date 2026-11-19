@@ -18,6 +18,7 @@ from hq.platform.application.capabilities import (
     describe_capabilities,
 )
 from hq.platform.application.describe import Describe
+from hq.platform.application.json_schemas import merged_definitions
 from hq.platform.application.security import Principal
 
 # The shape describe_capabilities answers an agent in, apart from the API's: it moves when this shape does.
@@ -55,26 +56,14 @@ CapabilityDetail = TypedDict(
 CapabilityDetail.__doc__ = "The capabilities a name or a resource narrows to, in full."
 
 
-class ClashingDefinition(ValueError):
-    """Two commands define one name differently, so an answer cannot carry both under it."""
-
-
 def shared_definitions(entries: list[CapabilityDescription]) -> tuple[list[CapabilityDescription], dict[str, Any]]:
-    """``entries`` with each ``input_schema``'s ``$defs`` moved to one map, and that map.
-
-    A definition is named for the type it is, as the API document's
-    components are, so one name holds one meaning across every command.
-    """
+    """``entries`` with each ``input_schema``'s ``$defs`` moved to one map, and that map."""
 
     definitions: dict[str, Any] = {}
     moved: list[CapabilityDescription] = []
     for entry in entries:
         schema = dict(entry["input_schema"])
-        for name, definition in schema.pop("$defs", {}).items():
-            if definitions.setdefault(name, definition) != definition:
-                raise ClashingDefinition(
-                    f"Two commands define {name!r} differently: each meaning is a type alias of its own name."
-                )
+        merged_definitions(definitions, schema.pop("$defs", {}))
         moved.append({**entry, "input_schema": schema})
     return moved, definitions
 

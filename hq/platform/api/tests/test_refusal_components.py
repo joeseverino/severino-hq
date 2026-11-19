@@ -8,6 +8,7 @@ from unittest import mock
 
 from django.test import SimpleTestCase
 
+from hq.platform.application.json_schemas import ClashingDefinition
 from hq.platform.application.refusal_status import REFUSAL_STATUS
 
 from .. import openapi, refusal_names, views
@@ -96,7 +97,7 @@ class RefusalComponentTests(SimpleTestCase):
                     self.assertFalse([code for code in codes if _pascal(code) in kind], codes)
 
     def test_a_name_two_code_sets_reach_fails_the_build(self):
-        with mock.patch.object(openapi, "refusal_name", return_value="Same"), self.assertRaises(openapi.OpenAPIError):
+        with mock.patch.object(openapi, "refusal_name", return_value="Same"), self.assertRaises(ClashingDefinition):
             openapi.document()
 
     def test_only_a_refusal_that_says_later_declares_a_wait(self):

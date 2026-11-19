@@ -61,7 +61,7 @@ from hq.platform.application.integration_specs import (
     CapabilitySpec,
     answer_type,
 )
-from hq.platform.application.json_schemas import json_schema
+from hq.platform.application.json_schemas import json_schema, merged_definitions
 from hq.platform.application.lists import split_list
 from hq.platform.application.pages import page_refusal
 from hq.platform.application.projection import QueryRefusal
@@ -315,7 +315,7 @@ def request_schema(spec: Mapping[str, Any]) -> dict[str, Any]:
     else:
         del properties["target"]
     schema: dict[str, Any] = {**ENVELOPE_SCHEMA, "properties": properties, "required": required}
-    if definitions := {**ENVELOPE_SCHEMA.get("$defs", {}), **spec["input_schema"].get("$defs", {})}:
+    if definitions := merged_definitions(dict(ENVELOPE_SCHEMA.get("$defs", {})), spec["input_schema"].get("$defs", {})):
         schema["$defs"] = definitions
     return schema
 
