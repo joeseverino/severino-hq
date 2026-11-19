@@ -385,6 +385,8 @@ PARTS = (
         *("conn-carriage", "conn-carriage-*", "conn-headline", "conn-link", "conn-link-*", "conn-link-line"),
         *("conn-peer", "conn-peer-name", "conn-peering", "conn-peering-frame", "conn-row-note"),
         "conn-sub",
+        # Its carriage's lookup opens on the line, what it holds taking the next.
+        elements=("details",),
         rules="""
         **A connection is its two ends and the link between them.** It draws You, the link and HQ side by
         side, the link in its network's color and the verdict's. It stacks the three in one column when

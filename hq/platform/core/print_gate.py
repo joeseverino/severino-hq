@@ -9,16 +9,12 @@ prints as it always has (docs/Plugins.md, What a template prints).
 
 import functools
 import inspect
-import os
-from pathlib import Path
 
-from django.apps import apps
-from django.conf import settings
 from django.template import base, defaulttags, library
 from django.templatetags import i18n
 
-from hq.platform.application.plugins import installed_plugin_apps
 from hq.platform.application.printable import refusal, refused
+from hq.platform.core.template_engine import ours
 
 # Every node that prints a value: through ``render_value_in_context``, or a
 # ``simple_tag`` through ``conditional_escape``.
@@ -32,26 +28,6 @@ PRINTING = (
 )
 # The code of each printing node's render, by which a refusal finds its node.
 _RENDERS = frozenset(node.render.__code__ for node in PRINTING)
-
-
-def _ours() -> tuple[str, ...]:
-    """The template directories of HQ and its installed extension apps.
-
-    Read only for a refused print, and so at each one: the installed set and
-    the apps it names are whatever is composed then.
-    """
-
-    # A manifest may name an app by its module or by its AppConfig.
-    extensions = {apps.get_containing_app_config(app).name for app in installed_plugin_apps()}
-    directories = [
-        *(directory for backend in settings.TEMPLATES for directory in backend.get("DIRS", ())),
-        *(
-            Path(config.path) / "templates"
-            for config in apps.get_app_configs()
-            if config.name.startswith("hq.") or config.name in extensions
-        ),
-    ]
-    return tuple(f"{Path(directory)}{os.sep}" for directory in directories)
 
 
 def _printing() -> base.Node | None:
@@ -76,7 +52,7 @@ def _gated(write):
             # The template that holds the print, not the root of its extends chain.
             node = _printing()
             origin = getattr(node, "origin", None)
-            if origin is not None and origin.name.startswith(_ours()):
+            if origin is not None and origin.name.startswith(ours()):
                 value = refused(reason, f"{origin.template_name or origin.name}:{node.token.lineno}")
         return write(value, *args)
 

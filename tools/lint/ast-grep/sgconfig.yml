@@ -13,8 +13,8 @@
 # is marked with an HTML comment alone on its line inside a Django comment,
 # which no page receives, and the shape on the line after:
 #   {% comment %}
-#   <!-- ast-grep-ignore: hand-drawn-fold --> why
-#   {% endcomment %}<details>
+#   <!-- ast-grep-ignore: hand-drawn-form --> why
+#   {% endcomment %}<form method="post">
 # ast-grep keys a suppression to the line after it unless the node before it
 # ends on its own line, so it is never written on the shape's line. A shape
 # that is text starts where the comment ends, so its why goes on the line

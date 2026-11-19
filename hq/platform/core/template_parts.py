@@ -166,6 +166,9 @@ class Part:
     # its own any template, an extension's too, may write beside it.
     classes: tuple[str, ...] = ()
     public_classes: tuple[str, ...] = ()
+    # The elements a shared part draws (template_engine.DRAWN) that its
+    # templates write themselves, which no other template may.
+    elements: tuple[str, ...] = ()
     # The parts whose look the partial draws too, writing their classes.
     draws: tuple[Part, ...] = ()
     # The templates the partial includes that draw a piece of it alone, which

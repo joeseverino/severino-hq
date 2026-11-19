@@ -918,7 +918,7 @@ check` refuses each where it is drawn, with the host's `hand-drawn-*` ast-grep
 rules (`tools/lint/ast-grep/rules`), which hold the host's own templates
 too. `ast-grep scan --update-all` moves the ones whose rule carries a fix. A shape a page still draws is marked on the line above it, inside a
 Django comment no page receives, with why:
-`{% comment %}`, then `<!-- ast-grep-ignore: hand-drawn-fold --> why` alone
+`{% comment %}`, then `<!-- ast-grep-ignore: hand-drawn-form --> why` alone
 on its line, then `{% endcomment %}` on the shape's own line before it. A
 mark no shape needs any more fails the check, so the marks only fall.
 `PLUGIN_API_VERSION` 11 retires `{% section_head %}`, whose head

@@ -16,6 +16,7 @@ lazy from django.apps import apps
 lazy from django.template.base import Lexer, TokenType
 
 lazy from hq.platform.core import template_contract
+lazy from hq.platform.core.template_engine import hand_drawn
 
 # Sentence checks ------------------------------------------------------------
 
@@ -476,7 +477,8 @@ def template_violations(source_root: str | Path) -> list[str]:
         except UnicodeDecodeError:  # noqa: S112 - an image or font kept beside the templates is no template
             continue
         reader = _Template(name, templates, own_templates, own_libraries)
-        found.extend((path.relative_to(root).as_posix(), line, message) for line, message in reader.check(text))
+        problems = [*reader.check(text), *hand_drawn(text, name)]
+        found.extend((path.relative_to(root).as_posix(), line, message) for line, message in problems)
     return [f"{path}:{line}: {message}" for path, line, message in sorted(found)]
 
 

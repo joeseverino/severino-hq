@@ -29,6 +29,7 @@ lazy from hq.platform.core.included_parts import PARTS
 lazy from hq.platform.core.interface_text import TEMPLATE_COMMENT
 lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.table_cells import ROLE_CLASSES
+lazy from hq.platform.core.template_engine import DRAWN
 lazy from hq.platform.core.template_parts import Part
 lazy from hq.platform.core.templatetags.value_tags import PresentNode
 
@@ -732,6 +733,10 @@ def markdown(templates: dict[str, Any]) -> str:
         "| Rule | Drawn by hand | Write instead |",
         "| --- | --- | --- |",
         *(f"| `{rule['id']}` | {_cell(rule['message'])} | {_cell(rule['note'])} |" for rule in hand_drawn_rules()),
+        *(
+            f"| `<{element}>` | Refused as its template loads. | {_cell(instead)} |"
+            for element, instead in sorted(DRAWN.items())
+        ),
         "",
         "## Each part's rules",
     ]

@@ -76,6 +76,7 @@ CHECK_RUNG = Part(
         *("ladder-more", "ladder-page", "ladder-rung", "ladder-statement"),
     ),
     partial="partials/_check_rung.html",
+    elements=("details",),
     # The statement and its detail are the list's dot run, as spans.
     draws=(LIST,),
     about=(
