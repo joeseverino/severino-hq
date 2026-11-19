@@ -26,12 +26,8 @@ from hq.platform.application.markup_testing import elements, select
 from hq.platform.application.tests.facts import scan
 from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
-from hq.platform.core.hand_drawn import WORDED_FIGURES
+from hq.platform.core.hand_drawn import HOLDING, WORDED_FIGURES
 from hq.platform.core.templatetags.value_tags import breakable, entity, readable, when
-
-# Filters whose output holds every name in it: `breakable` itself, and the
-# filters that build on it (`button_words`) or print a `<time>` (`last_read`).
-HOLDING = {"breakable", "code_spans", "button_words", "or_empty", "readout", "when", "last_read", "readable"}
 
 # Filters whose output can never hold a hyphen or a seam, so it has nothing
 # to hold.
@@ -417,32 +413,6 @@ def misplaced(source: str, path: str = "", plain_blocks=frozenset(), included=No
     return [Site(path, token.lineno, token.contents) for token in read(source, plain_blocks, included).misplaced]
 
 
-# A value drawn in a box (a held name, an entity, a cell's line; a moment
-# `when` prints is words in a `<time>`), then what
-# renders nothing or closes around it (a closing tag, a block tag, a list's
-# space between items), then a mark. A box as wide as its line leaves the mark
-# no room after it, so the mark starts the next line alone: the hold takes it
-# instead (`|breakable:"."`, `{% entity link mark="," %}`).
-_BOXED = (
-    r"\{\{[^{}]*\|(?:" + "|".join(sorted(HOLDING - {"when"})) + r")(?::(?:\"[^\"]*\"|\w+))?\s*\}\}"
-    r"|\{%\s*(?:entity|cell_line)\b[^%]*%\}"
-)
-_SILENT = (
-    r"(?:</[a-z]+>|\{%\s*(?:endif|endfor|endwith)\s*%\}|\{%\s*if\b[^%]*%\}"
-    r"|\{%\s*if not forloop\.last\s*%\}[^{]*\{%\s*endif\s*%\})*"
-)
-_STRANDED = re.compile(rf"(?:{_BOXED}){_SILENT}[.,;:!?)\]]")
-# Text only a screen reader hears has no line for a mark to start.
-_UNSEEN = re.compile(r'<span class="visually-hidden">.*?</span>', re.DOTALL)
-
-
-def stranded(source: str, path: str = "") -> list[str]:
-    """Each mark ``source`` writes after a boxed value rather than through its hold."""
-
-    seen = _UNSEEN.sub(lambda match: "\n" * match[0].count("\n"), source)
-    return [f"{path}:{seen.count(chr(10), 0, match.start()) + 1}: {match[0]}" for match in _STRANDED.finditer(seen)]
-
-
 def plain_blocks(sources) -> set[str]:
     """The blocks any of ``sources`` opens where text belongs (`{% block title %}` in a `<title>`)."""
 
@@ -630,38 +600,6 @@ class UnheldTests(SimpleTestCase):
         self.assertEqual(self.values('<a data-x="a>b" title="{{ host }}">x</a>'), [])
 
 
-class StrandedMarkTests(SimpleTestCase):
-    """What the check reads as a mark written outside the box it follows."""
-
-    found = staticmethod(stranded)
-
-    def test_a_mark_after_a_held_value_is_found(self):
-        self.assertEqual(len(self.found("<p>Runs on {{ host|breakable }}.</p>")), 1)
-
-    def test_a_mark_after_a_closing_tag_or_a_branch_is_found(self):
-        for source in (
-            "<p>At <code>{{ host|breakable }}</code>, which</p>",
-            "<p>{% entity link %}{% if x %}, {{ y }}{% endif %}</p>",
-            "<p>{% for h in hosts %}{{ h|breakable }}{% if not forloop.last %} {% endif %}{% endfor %}.</p>",
-        ):
-            with self.subTest(source=source):
-                self.assertEqual(len(self.found(source)), 1)
-
-    def test_a_mark_the_hold_takes_passes(self):
-        source = (
-            '<p>{{ host|breakable:"." }} {% entity link mark=forloop %}'
-            '{% with mark=x|then:"," %}{{ y|breakable:mark }}{% endwith %} {{ z|breakable }} or</p>'
-        )
-
-        self.assertEqual(self.found(source), [])
-
-    def test_a_mark_only_a_screen_reader_hears_passes(self):
-        self.assertEqual(self.found('<a><span class="visually-hidden">{{ x|breakable }}: {{ y }}</span></a>'), [])
-
-    def test_a_mark_in_the_other_branch_passes(self):
-        self.assertEqual(self.found('{% if x %}<code>{{ x|breakable:"." }}</code>{% else %}.{% endif %}'), [])
-
-
 class _ExampleForm(forms.Form):
     name = forms.CharField()
     key = forms.CharField(widget=forms.HiddenInput)
@@ -756,17 +694,6 @@ class TemplateValueTests(SimpleTestCase):
         ]
 
         self.assertEqual([str(site) for site in found], [])
-
-    def test_every_mark_after_a_boxed_value_is_written_by_its_hold(self):
-        found = [site for path, source in self.sources.items() for site in stranded(source, path)]
-
-        self.assertEqual(
-            found,
-            [],
-            'A box as wide as its line leaves a mark after it no room: give the mark to the hold (`|breakable:"."`,'
-            ' `|breakable:forloop` for a list\'s commas, `{% entity link mark="," %}`). A run of code chips takes'
-            " no commas: their gaps separate them.",
-        )
 
 
 # What a `format_html` builder may print as text: a call that holds its names
