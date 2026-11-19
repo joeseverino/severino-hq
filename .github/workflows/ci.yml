@@ -198,50 +198,6 @@ jobs:
         # Every gate named test:* (mise-tasks/test.toml, mise-tasks/test/).
         run: mise run test
 
-  # The map of the tests that ran each line of the commit checked out, which
-  # fast selects from (tools/gate/testmap.py, docs/Development.md). A pull
-  # request's map is of its head, the commit a branch builds on, never the
-  # merge commit. A map only narrows fast's selection, so Ready needs no part
-  # of this job, and its failure never fails the run.
-  map:
-    name: Map
-    runs-on: ubuntu-26.04
-    timeout-minutes: 30
-    continue-on-error: true
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: ./.github/actions/toolchain
-        with:
-          # The live bridge tests build the controller.
-          go: true
-          # A test label can reach the lint tools.
-          npm: true
-      - name: Record the map
-        run: mise run fast:map
-      # fast finds a map by the commit its run checked out (tools/gate/chain.py, fetch_map), and
-      # reads one only a few commits back, so a short retention keeps every map it can use.
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: fast-map
-          path: var/coverage/map/map.json
-          retention-days: 7
-          if-no-files-found: error
-      # The same recording holds each test's lines, read for the tests whose
-      # lines others cover; after the map's upload, so it never costs fast its map.
-      - name: Audit the tests
-        run: mise run audit:tests
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: test-audit
-          path: var/audit/tests/report.json
-          retention-days: 7
-          if-no-files-found: error
-
   # Real-browser layout invariants over synthetic example.* pages
   # (hq/platform/core/tests/browser/). Every request the page makes is answered in
   # process; the browser reaches nothing. Each browser:* gate is a leg, an

@@ -426,16 +426,20 @@ A run runs its selection however wide it is. `--whole` runs the whole suite
 with every quick gate instead, whatever changed: the landing asks for it, and
 its pass records the tree.
 
-CI's Map job records which tests ran each line of each Python file, on every
-push to main and on a pull request's head: coverage runs the whole suite with
-its C tracer, a context per test module switched before the module's
-fixtures and one per test switched before the test
-(`hq/platform/core/coverage_contexts.py`), since `sys.monitoring`, coverage's
-default core, records a line once per process (`mise run fast:map`). The
-contexts make the run much slower, so no gate records; nothing waits on the
-job, and its failure never fails CI. It keeps the map, coverage's own
-`contexts_by_lineno` read back by test module, as the artifact `fast-map` of
-the commit it checked out. From the same recording, `mise run audit:tests`
+CI's Map workflow (`.github/workflows/map.yml`) records which tests ran each
+line of each Python file, on every push of any branch, so a pull request's
+head has its map: coverage runs the whole suite with its C tracer, a context
+per test module switched before the module's fixtures and one per test
+switched before the test (`hq/platform/core/coverage_contexts.py`), since
+`sys.monitoring`, coverage's default core, supports no dynamic context
+(`mise run fast:map`). The contexts make the run much slower, so no gate
+records, and six runners each record a share of the test modules
+(`fast:map --share i/n`, chosen as a browser gate's shares are) before one
+combines them (`fast:map --write`). It is a workflow of its own, so CI's run
+ends with its checks, and nothing waits on it. It keeps the map, coverage's
+own `contexts_by_lineno` read back by test module, as the artifact
+`fast-map` of the commit pushed. From the same recording, on main,
+`mise run audit:tests`
 names each test whose lines a test of its module (its class, in a large
 module) also covers, and the tests of its app or package that run the same
 lines, ranked by the lines each runs past its setup, and leaves out the

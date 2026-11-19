@@ -199,7 +199,7 @@ class AuditArtifactTests(SimpleTestCase):
     def test_ci_keeps_the_report_the_audit_writes(self):
         uploads = {
             step["with"]["name"]: step["with"]["path"]
-            for step in steps(jobs(workflow("ci.yml"))["map"])
+            for step in steps(jobs(workflow("map.yml"))["map"])
             if step.get("uses", "").startswith("actions/upload-artifact@")
         }
         self.assertEqual(uploads.get("test-audit"), audit_tests.WRITTEN.as_posix())

@@ -142,7 +142,7 @@ class MapArtifactTests(SimpleTestCase):
 
         uploads = {
             step["with"]["name"]: step["with"]["path"]
-            for step in steps(jobs(workflow("ci.yml"))["map"])
+            for step in steps(jobs(workflow("map.yml"))["map"])
             if step.get("uses", "").startswith("actions/upload-artifact@")
         }
         self.assertEqual(uploads.get(chain.MAP_ARTIFACT), testmap.WRITTEN.as_posix())
