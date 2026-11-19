@@ -294,12 +294,14 @@ def share_held(tokens: int, waiting: Waiting, fits: Callable[[], bool]) -> Itera
         except Fits:
             give_back()
             tokens = 0
-        heavy = held.enter_context(opened(LOCK))
-        held.callback(give_back)
-        waiting.until(lambda: flocked(heavy, fcntl.LOCK_SH), lambda: on(LOCK))
-        record(LOCK)
-        waiting.done(tokens)
-        yield
+        with opened(LOCK) as heavy:
+            try:
+                waiting.until(lambda: flocked(heavy, fcntl.LOCK_SH), lambda: on(LOCK))
+                record(LOCK)
+                waiting.done(tokens)
+                yield
+            finally:
+                give_back()
 
 
 @contextlib.contextmanager

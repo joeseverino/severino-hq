@@ -125,6 +125,8 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .chart-legend > * { display: inline-flex; align-items: baseline; gap: var(--space-2); color: inherit; }
 .chart-legend i { align-self: center; }
 .chart-legend a:is(:hover, :focus-visible) { color: var(--accent); }
+/* A legend whose keys link sets its lines a target tall (`--target-min`), so each key is hit through a target's height; the lines are its rows' spacing, so it adds no gap between them. */
+.chart-legend:has(> a[href]) { row-gap: 0; line-height: var(--target-min); }
 /* A part of a whole's figure leads its key in ink; stacked for a narrow column, the keys one under another, so the figures line up. */
 .chart-legend b { color: var(--ink); font-weight: 650; font-feature-settings: "tnum"; }
 .chart-legend.stacked { flex-direction: column; }
