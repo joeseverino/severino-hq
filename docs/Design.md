@@ -1706,8 +1706,8 @@ it asks for (`cadence.WorkerStanding.takes_reads`): one whose heartbeat
 says it reports to this HQ, and is not silent. Where none will, the page draws
 no ask and no note, so it never promises a refresh that cannot come.
 `page.html` draws the ask (`partials/_visit_refresh.html`), and its note says
-what it waits for at the end of the head's first line. The note keeps its own
-room there. An unseen strut of each sentence HQ writes for it word for word
+what it waits for at the end of the head's first line, in room of its own; a
+line whose longest word or date leaves it none hides it. An unseen strut of each sentence HQ writes for it word for word
 sizes its slot (`asks.REFRESHING`, `REFRESHED`, `NEWER_READING` and
 `SHOW_NEWER`, which the script writes from the page). So those sentences are
 always whole, and the trail beside it never moves whatever the note says. Only

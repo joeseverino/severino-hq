@@ -49,10 +49,10 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 /* The head's first line: the trail, then at its end the note of a page about
    one thing (partials/_visit_refresh.html) in the room it keeps (cuts.css).
    A trail longer than the line wraps between its steps inside it, leaving the
-   note its room, so neither runs past the page's edge; one whose longest word
-   would not fit beside the note puts the note on a line of its own instead of
-   breaking that word. */
-.page-trail-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-6); }
+   note its room. Its gap gives way first; a note a word or date leaves no room
+   wraps to a line of no height (cuts.css), so neither runs past the edge. */
+.page-trail-row { display: flex; flex-wrap: wrap; align-items: baseline; }
+.page-trail-row:has(> .visit-slot)::after { content: ""; flex: 1000 0 0; inline-size: var(--space-6); max-inline-size: var(--space-6); }
 .page-trail-row > :not(.visit-slot) { flex: 1 1 0; }
 .page-head-copy > .page-trail-row { flex: 1 1 100%; order: 0; margin-bottom: calc(-1 * var(--space-2)); }
 /* The title yields width before the controls do: a long name wraps in its

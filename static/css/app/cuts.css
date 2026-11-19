@@ -31,13 +31,13 @@
    dot's room before it, so the slot is drawn at its width before anything is
    said, and the trail beside it never moves whatever the note says. The note
    asks the slot for no size (`contain: size`), takes the height the line's
-   other part gives it, and says one line at its end, centered in that height,
-   so those sentences are whole and only a failure's is cut. Its end keeps a
-   ring's room inside the cut for the link it may offer. */
+   other part gives it, and says one line at its end, clipped to that height,
+   so those sentences are whole, only a failure's is cut, and on a line of its
+   own (page.css) it says nothing. Its end keeps a ring's room for a link. */
 .page-trail-row > .visit-slot {
   display: grid;
   flex: none;
-  margin-inline-start: auto;
+  order: 1;
   align-self: stretch;
   max-inline-size: 100%;
   font-size: var(--text-xs);
@@ -54,7 +54,7 @@
     padding-inline-end: var(--space-2);
     text-align: end;
     white-space: nowrap;
-    overflow-x: clip;
+    overflow: clip;
     text-overflow: ellipsis;
   }
 }
