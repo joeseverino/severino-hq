@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Annotated, Literal, TypedDict
 
 from django.test import SimpleTestCase
+from pydantic import Field
 
 from hq.platform.application import integration_specs
 from hq.platform.application.capabilities import capability_registry
@@ -30,7 +31,7 @@ class ExampleCounted(TypedDict):
 
 @dataclass(frozen=True, slots=True)
 class ExampleCommand:
-    value: int = 0
+    value: Annotated[int, Field(le=100), Describe("How many to count.")] = 0
 
 
 def _typed(command: ExampleCommand, *, principal) -> ExampleCounted:

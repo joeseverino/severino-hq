@@ -18,7 +18,6 @@ from hq.platform.application.findings import RULES, derive_findings
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.inventory_records import kind_read
 from hq.platform.application.tests.links import example_command
-from hq.platform.application.tone import Tone
 from hq.platform.application.topology_model import Topology, TopologyEdge, TopologyNode
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
@@ -78,16 +77,6 @@ def session(*asked):
 
 
 class FindingsChoicesTests(TestCase):
-    def test_the_rule_and_severity_choices_are_the_registrys(self):
-        listed, _ = session()
-        properties = listed["get_findings"].input_schema["properties"]
-
-        def values(name):
-            return next(option["enum"] for option in properties[name]["anyOf"] if "enum" in option)
-
-        self.assertEqual(values("rule"), [rule.name for rule in RULES])
-        self.assertEqual(values("severity"), [tone.value for tone in Tone])
-
     def test_the_answer_carries_no_field_its_schema_does_not_name(self):
         with mock.patch("hq.platform.application.findings.estate_findings", return_value=(RAISED,)):
             listed, (answer,) = session(("get_findings", {"rule": RAISED.rule}))

@@ -59,8 +59,8 @@ class Tags:
         # domain whose nav item is its page (a resource's web page, a
         # capability's starting page, a route's `page`), else, for a
         # capability, the domain of the resource it acts on. What none places
-        # carries no tag, which test_sections refuses; only the API's own
-        # routes, which serve every domain, stand in its section.
+        # carries no tag; only the API's own routes, which serve every
+        # domain, stand in its section.
         self.pages = _first_declarer(domains, lambda domain: [item.route for item in domain.navigation])
         self.resource_owner = _first_declarer(domains, _declared_resources)
         for name, resource in resources.items():

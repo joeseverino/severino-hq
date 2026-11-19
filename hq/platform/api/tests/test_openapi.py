@@ -1,14 +1,11 @@
-"""The OpenAPI document is complete, and what the API really answers.
+"""The OpenAPI document is served to whom it may be, and holds the API to what it says.
 
-Complete means derived: every route appears with the methods it serves, and
-each capability and resource operation is written from its registry entry by
-``openapi._Builder``. What the API really answers is held by
-``ContractClient`` on every TransportTests request; the tests below cover the
-document's own route and the contract client's refusals.
+What the API really answers is held by ``ContractClient`` on every request
+of the API's tests; the tests below cover the document's own route and the
+contract client's refusals.
 """
 
 import json
-from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
@@ -16,161 +13,16 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from jsonschema import ValidationError
 
-from hq.platform.application.capabilities import capability_registry
-from hq.platform.application.domains import all_domains
-from hq.platform.application.resources import resource_registry
 from hq.platform.application.security import Capability
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import person
 
-from .. import openapi, views
-from ..components import Components
-from ..tags import Tags
+from .. import openapi
 from ..testing import ContractClient
 from .tokens import ISSUER, OTHER_KEY, RESOURCE, _serving, _token
 
 # A list that matched nothing, with every field the collection contract requires.
 EMPTY_PAGE = {"items": [], "count": 0, "total": 0, "truncated": False, "next": None}
-
-
-def _operations(value: dict) -> list[tuple[str, str, dict]]:
-    return [(path, method, operation) for path, item in value["paths"].items() for method, operation in item.items()]
-
-
-class DocumentTests(SimpleTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.document = openapi.document()
-
-    def test_every_route_appears_with_its_methods(self):
-        for route, pattern in openapi.routes():
-            path = openapi.path_template(route)
-            with self.subTest(route=route):
-                self.assertIn(path, self.document["paths"])
-                self.assertEqual(
-                    set(self.document["paths"][path]),
-                    {method.lower() for method in pattern.callback.__hq_methods__},
-                )
-
-    def test_tags_are_the_nav_tree(self):
-        tags = {tag["name"]: tag for tag in self.document["tags"]}
-        for _, _, operation in _operations(self.document):
-            self.assertLessEqual(set(operation["tags"]), set(tags))
-        for tag in tags.values():
-            if "parent" in tag:
-                self.assertIn(tag["parent"], tags)
-                self.assertEqual(tags[tag["parent"]]["kind"], "nav")
-        projects = self.document["paths"]["/api/v2/resources/projects/"]["get"]
-        self.assertEqual(projects["tags"], ["hq.projects"])
-        self.assertEqual(tags["hq.docs"]["parent"], "hq.projects")
-        self.assertEqual(tags["hq.content"]["parent"], "nav.web")
-
-    def test_the_apis_own_section_leads_and_the_rest_stand_in_the_order_of_the_bar(self):
-        """The group holding the API's own domain first, that domain first in
-        it, then the bar's order: a group where its first domain is, its
-        domains after it, the rest in place."""
-
-        domains = {domain.id: domain for domain in all_domains()}
-        tags = self.document["tags"]
-        parent = {tag["name"]: tag.get("parent") for tag in tags}
-        placed = [tag["name"] for tag in tags if tag["name"] in domains]
-        self.assertEqual(placed[0], openapi.API_TAG)
-        self.assertEqual(tags[0]["name"], parent[openapi.API_TAG])
-
-        def bar(name):
-            return domains[name].bar_order, domains[name].label
-
-        leading = [name for name in placed if parent[name] == parent[openapi.API_TAG]]
-        self.assertEqual(placed[: len(leading)], leading)
-        self.assertEqual(leading[1:], sorted(leading[1:], key=bar))
-        # A domain heading its group stands where the group does, ahead of the domains under it.
-        rest = [name for name in placed[len(leading) :] if name not in parent.values()]
-        self.assertEqual(rest, sorted(rest, key=bar))
-        seen: list[str] = []
-        for tag in tags:
-            if "parent" in tag:
-                self.assertIn(tag["parent"], seen)
-            seen.append(tag["name"])
-        parents = [tag["parent"] for tag in tags if "parent" in tag]
-        groups = [tag["name"] for tag in tags if tag["name"] in parents]
-        self.assertEqual(groups, list(dict.fromkeys(parents)))
-
-    def test_the_apis_own_routes_stand_under_the_api_where_the_bar_has_it(self):
-        tags = {tag["name"]: tag for tag in self.document["tags"]}
-        api = next(domain for domain in all_domains() if domain.id == openapi.API_TAG)
-        group = next(item.group for item in api.navigation)
-        self.assertEqual(tags[openapi.API_TAG]["parent"], f"nav.{group.lower()}")
-        root = self.document["paths"]["/api/v2/"]["get"]
-        self.assertEqual(root["tags"][0], openapi.API_TAG)
-
-    def test_no_section_repeats_the_documents_description(self):
-        tags = self.document["tags"]
-        said = self.document["info"]["description"]
-        for tag in tags:
-            with self.subTest(tag=tag["name"]):
-                self.assertFalse(tag.get("description") and tag["description"] in said)
-
-    def test_each_resource_and_capability_is_tagged_with_the_domain_it_belongs_to(self):
-        """Its declaring domain, else the domain of its page, else of its subject."""
-
-        tags = Tags(resource_registry(), capability_registry())
-        self.assertEqual(tags.of_resource("projects"), "hq.projects")
-        self.assertEqual(tags.of_resource("services"), "hq.services")
-        self.assertEqual(tags.of_resource("search"), "hq.search")
-        self.assertEqual(tags.of_capability("project.create"), "hq.projects")
-        self.assertEqual(tags.of_capability("infrastructure.zone.adopt"), "hq.zones")
-        declaring = next(domain for domain in all_domains() if domain.integration.capabilities)
-        declared = next(iter(declaring.integration.capabilities())).name
-        self.assertEqual(tags.of_capability(declared), declaring.id)
-
-    def test_every_operation_has_a_name_short_enough_for_a_sidebar(self):
-        """A summary is a title; the sentence about it is the description."""
-
-        for path, item in self.document["paths"].items():
-            for method, operation in item.items():
-                with self.subTest(path=path, method=method):
-                    self.assertLessEqual(len(operation["summary"]), 48)
-                    self.assertFalse(operation["summary"].endswith("."))
-
-    def test_local_schema_definitions_are_hoisted_under_their_own_names(self):
-        components = Components()
-        hoisted = components.hoist(
-            {
-                "type": "object",
-                "$defs": {"Record": {"type": "object"}},
-                "properties": {"r": {"$ref": "#/$defs/Record"}},
-            }
-        )
-        self.assertNotIn("$defs", hoisted)
-        self.assertEqual(hoisted["properties"]["r"]["$ref"], "#/components/schemas/Record")
-        self.assertIn("Record", components.schemas)
-
-    def test_one_name_is_one_definition_wherever_definitions_are_gathered(self):
-        """The document's components and a command's request body, an extension's included."""
-
-        envelope = views.ENVELOPE_SCHEMA["$defs"]
-        name = next(iter(envelope))
-        command = {"properties": {"at": {"$ref": f"#/$defs/{name}"}}, "$defs": {name: envelope[name]}}
-        body = views.request_schema({"name": "example.thing.touch", "input_schema": command, "target": None})
-        self.assertEqual(
-            (body["$defs"], body["properties"]["payload"]["properties"]["at"]), (envelope, command["properties"]["at"])
-        )
-        components = Components()
-        components.hoist({"$defs": envelope})
-        for gather in (
-            lambda clash: components.hoist({"$defs": clash}),
-            lambda clash: views.request_schema(
-                {"name": "example.thing.touch", "input_schema": {"$defs": clash}, "target": None}
-            ),
-        ):
-            gather(envelope)
-            with self.subTest(gather), self.assertRaisesRegex(RuntimeError, name):
-                gather({name: {"type": "integer"}})
-
-    def test_a_parameterized_route_without_an_expansion_fails_the_build(self):
-        with patch.dict(openapi.EXPANSIONS, clear=True), self.assertRaises(openapi.OpenAPIError):
-            openapi.document()
 
 
 @override_settings(

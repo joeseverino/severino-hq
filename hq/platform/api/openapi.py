@@ -42,7 +42,7 @@ lazy from hq.platform.application.routes import routed
 
 from . import urls, views
 from .components import SCHEMAS, Components
-from .fragments import OpenAPIError, camel as _camel, pascal as _pascal
+from .fragments import OpenAPIError, camel as _camel, pascal as _pascal, said_once
 from .refusal_names import LATER_STATUSES, codes_by_status, refusal_name
 from .tags import API_TAG, Tags
 
@@ -782,45 +782,47 @@ def document() -> dict[str, Any]:
     builder = _Builder()
     for route, pattern in routes():
         builder.route(route, pattern)
-    return {
-        "openapi": OPENAPI_VERSION,
-        "$self": reverse("hq_api:openapi"),
-        "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
-        "info": {
-            "title": "Severino HQ machine API",
-            "version": str(VERSION),
-            "description": views.first_line(views.__doc__)
-            + " Derived from HQ's routes and its capability, resource and domain registries.\n\n"
-            + effect_glossary(EFFECT_EXTENSION),
-        },
-        "tags": builder.tags.render(),
-        "paths": dict(sorted(builder.paths.items())),
-        "components": {
-            "securitySchemes": {
-                BEARER: {
-                    "type": "http",
-                    "scheme": "bearer",
-                    "bearerFormat": "JWT",
-                    "description": (
-                        "An access token from HQ's identity provider, addressed to this API. The names an "
-                        "operation's security lists are the HQ capabilities its token must carry, every one."
-                    ),
-                }
+    return said_once(
+        {
+            "openapi": OPENAPI_VERSION,
+            "$self": reverse("hq_api:openapi"),
+            "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+            "info": {
+                "title": "Severino HQ machine API",
+                "version": str(VERSION),
+                "description": views.first_line(views.__doc__)
+                + " Derived from HQ's routes and its capability, resource and domain registries.\n\n"
+                + effect_glossary(EFFECT_EXTENSION),
             },
-            "parameters": dict(
-                sorted(
-                    {
-                        IDEMPOTENCY_KEY: builder.retry_key(required=True),
-                        **builder.parameters,
-                        "Fields": _mask({"type": "string", "pattern": FIELD_PATH_PATTERN}),
-                    }.items()
-                )
-            ),
-            "responses": dict(sorted(builder.responses.items())),
-            "headers": dict(sorted(builder.headers.items())),
-            "schemas": dict(sorted(builder.components.written().items())),
-        },
-    }
+            "tags": builder.tags.render(),
+            "paths": dict(sorted(builder.paths.items())),
+            "components": {
+                "securitySchemes": {
+                    BEARER: {
+                        "type": "http",
+                        "scheme": "bearer",
+                        "bearerFormat": "JWT",
+                        "description": (
+                            "An access token from HQ's identity provider, addressed to this API. The names an "
+                            "operation's security lists are the HQ capabilities its token must carry, every one."
+                        ),
+                    }
+                },
+                "parameters": dict(
+                    sorted(
+                        {
+                            IDEMPOTENCY_KEY: builder.retry_key(required=True),
+                            **builder.parameters,
+                            "Fields": _mask({"type": "string", "pattern": FIELD_PATH_PATTERN}),
+                        }.items()
+                    )
+                ),
+                "responses": dict(sorted(builder.responses.items())),
+                "headers": dict(sorted(builder.headers.items())),
+                "schemas": dict(sorted(builder.components.written().items())),
+            },
+        }
+    )
 
 
 def render(value: dict[str, Any]) -> str:

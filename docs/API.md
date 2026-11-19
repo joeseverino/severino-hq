@@ -773,10 +773,10 @@ another is the same: the base is a component of its own, and each field the
 extension inherits is a `$ref` to the base's property
 (`#/components/schemas/MachineRow/properties/name`), so a field is described
 where it is declared. It is never `allOf` its base, since a closed base refuses
-every key its extension adds. A document holding two
-identical described fragments fails `test_described_once.py`, run in
-the host's suite and in the composed suite before a deploy, so an extension's
-declarations are held too. Serving the document never runs it.
+every key its extension adds. A document holding two identical described
+fragments, a property or parameter that says nothing of what it is, or an
+object naming none of its fields does not build (`fragments.said_once`), the
+composed one included, so an extension's declarations are held too.
 
 Each answer names the requests it leads to as OpenAPI links, derived in one
 place (`_Builder.links`) from what the registries say of it: a page links to
