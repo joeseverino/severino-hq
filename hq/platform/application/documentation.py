@@ -29,7 +29,7 @@ from .projection import listing
 from .record_errors import PolicyError, RecordNotFound
 from .record_fields import Notes, PublishedAt, RecordId, one_of
 from .record_saves import Held, Link, linked_saver, row
-from .references import Mention, Mentions
+from .references import Kind, Mention, Mentions
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Capability, Principal
 from .sensitivity import readable_records, reads_whole
@@ -323,6 +323,7 @@ class DocumentationLinks(TypedDict):
 class DocumentationItem(DocumentationRow):
     """One documentation pointer with the records it is linked to."""
 
+    url: Annotated[str, Describe("The doc's page in HQ.")]
     relationships: DocumentationLinks
 
 
@@ -339,6 +340,7 @@ def serialize_documentation(
     withheld = {} if shown else dict.fromkeys(_WITHHELD, "")
     fields = row(record, DocumentationRow, system=record.system_service, **withheld)
     if relationships:
+        fields["url"] = entity_link(Kind.DOCUMENT, record.doc_id).url
         fields["relationships"] = {
             "projects": list(record.related_projects.order_by("slug").values_list("slug", flat=True)),
             "assets": list(record.related_assets.order_by("slug").values_list("slug", flat=True)),

@@ -89,6 +89,7 @@ class ReceiptRow(TypedDict):
 class ReceiptRecord(ReceiptRow):
     """One receipt with what it is called, whether HQ holds its file, and the names of what it proves."""
 
+    url: Annotated[str, Describe("The receipt's page in HQ.")]
     label: Annotated[str, Describe("What the receipt is called wherever it is named: who it is from, else its file.")]
     file: Annotated[
         Literal["stored", "missing", "none"],

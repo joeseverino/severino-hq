@@ -12,7 +12,7 @@ from copy import copy
 from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 from weakref import WeakKeyDictionary
 
 from django.core.exceptions import ImproperlyConfigured
@@ -20,6 +20,7 @@ from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import NoReverseMatch, Resolver404, get_resolver, get_script_prefix, get_urlconf, resolve
 from django.utils.functional import Promise
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from .asks import Ask
 from .fragments import FragmentMixin
@@ -540,15 +541,28 @@ class RecordPageMixin(PageMixin):
         return str(resource_registry()[self.resource].identifier)
 
     def get(self, request: Any, *args: Any, **kwargs: Any) -> Any:
+        if (elsewhere := self.read(request, kwargs)) is not None:
+            return elsewhere
+        return super().get(request, *args, **kwargs)
+
+    def read(self, request: Any, kwargs: dict[str, Any]) -> Any:
+        """Read ``record``, the one the route names, or answer with where its
+        page is when that is not here. A page that posts reads it first too."""
+
         asked = kwargs[self.url_kwarg or self.identifier]
         try:
             self.record = get_resource(self.resource, asked, principal=web_principal(request.user), strict=False)
         except RecordNotFound as exc:
             raise Http404(str(exc)) from exc
-        if str(self.record[self.identifier]).casefold() != str(asked).strip().casefold():
-            # Asked for by another of its names; the page lives at one.
-            return redirect(self.record["url"])
-        return super().get(request, *args, **kwargs)
+        # Asked for by another of its names, or a record whose page is
+        # another kind's, such as a machine's declaration: the page lives at
+        # the record's own path, never at an address it does not name here.
+        page = urlsplit(str(self.record["url"])).path
+        if unquote(page) == request.path:
+            return None
+        if not url_has_allowed_host_and_scheme(page, allowed_hosts={request.get_host()}):
+            raise ImproperlyConfigured(f"{self.resource!r} answered a page HQ does not serve: {page!r}.")
+        return redirect(page)
 
     @cached_property
     def stored(self) -> Any:

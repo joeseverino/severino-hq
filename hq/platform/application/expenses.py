@@ -15,11 +15,13 @@ from .assets import PaymentMethod
 from .business_use import BusinessUseShare
 from .card_items import Kpi
 from .command_fields import Day, Describe, Names, Refers
+from .entity_links import entity_link
 from .money import money
 from .projection import listing
 from .record_errors import RecordNotFound
 from .record_fields import Notes, TotalCost, one_of
 from .record_saves import Held, Link, linked_saver, row
+from .references import Kind
 from .security import Principal
 from .sensitivity import shared_doc
 from .url_query import with_query
@@ -176,6 +178,7 @@ def expense_record(expense: Expense, *, principal: Principal | None = None) -> E
     document = shared_doc(expense.related_documentation, principal)
     return {
         **serialize_expense(expense, principal=principal),
+        "url": entity_link(Kind.EXPENSE, str(expense.pk)).url,
         "category_label": expense.get_category_display(),
         "payment_method_label": expense.get_payment_method_display() if expense.payment_method else "",
         "project_name": expense.related_project.name if expense.related_project else "",

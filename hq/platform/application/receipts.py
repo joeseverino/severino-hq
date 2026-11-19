@@ -26,11 +26,13 @@ from hq.platform.core.models import AuditLog
 lazy from hq.domains.receipts.specs import ReceiptRecord, ReceiptRow
 
 from .command_fields import Day, Describe, Names, RequiredText, Upload, stored_in
+from .entity_links import entity_link
 from .integration_specs import Kept, keeps
 from .projection import listing
 from .record_errors import RecordNotFound
 from .record_fields import Notes, RecordId
 from .record_saves import Held, as_sent, found, held, row, written
+from .references import Kind
 from .security import Principal
 lazy from .record_answers import ReceiptSaved, ReceiptUploaded
 lazy from .ui import ended
@@ -150,6 +152,7 @@ def get_receipt(identifier: int) -> ReceiptRecord:
     expense, asset = receipt.related_expense, receipt.related_asset
     return {
         **serialize_receipt(receipt),
+        "url": entity_link(Kind.RECEIPT, str(receipt.pk)).url,
         "label": receipt.label,
         "file": "stored" if stored_file(receipt) else "missing" if receipt.file else "none",
         "file_type_label": receipt.file_type,

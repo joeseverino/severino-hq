@@ -55,6 +55,7 @@ class ExpenseRow(TypedDict):
 class ExpenseRecord(ExpenseRow):
     """One expense with the words and names its related records are said by."""
 
+    url: Annotated[str, Describe("The expense's page in HQ.")]
     category_label: Annotated[str, Describe("Its category, in words.")]
     payment_method_label: Annotated[str, Describe("How it was paid for, in words; empty when not recorded.")]
     project_name: Annotated[str, Describe("The related project's name; empty for none.")]

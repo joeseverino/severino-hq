@@ -722,6 +722,7 @@
               "published_at",
               "notes",
               "updated_at",
+              "url",
               "relationships",
               "relationships.projects",
               "relationships.assets",
@@ -929,6 +930,7 @@
               "paid_from",
               "about",
               "updated_at",
+              "url",
               "category_label",
               "payment_method_label",
               "project_name",
@@ -1894,6 +1896,7 @@
               "related_asset",
               "uploaded_at",
               "updated_at",
+              "url",
               "label",
               "file",
               "file_type_label",
@@ -11516,6 +11519,10 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/DocumentationRow/properties/updated_at"
+          },
+          "url": {
+            "description": "The doc's page in HQ.",
+            "type": "string"
           }
         },
         "required": [
@@ -11533,6 +11540,7 @@
           "published_at",
           "notes",
           "updated_at",
+          "url",
           "relationships"
         ],
         "type": "object"
@@ -11585,6 +11593,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/DocumentationRowPartial/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/DocumentationItem/properties/url"
           }
         },
         "type": "object"
@@ -13275,6 +13286,10 @@
           "updated_at": {
             "$ref": "#/components/schemas/ExpenseRow/properties/updated_at"
           },
+          "url": {
+            "description": "The expense's page in HQ.",
+            "type": "string"
+          },
           "vendor": {
             "$ref": "#/components/schemas/ExpenseRow/properties/vendor"
           }
@@ -13299,6 +13314,7 @@
           "paid_from",
           "about",
           "updated_at",
+          "url",
           "category_label",
           "payment_method_label",
           "project_name",
@@ -13391,6 +13407,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/ExpenseRowPartial/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/url"
           },
           "vendor": {
             "$ref": "#/components/schemas/ExpenseRowPartial/properties/vendor"
@@ -23335,6 +23354,10 @@
           "uploaded_at": {
             "$ref": "#/components/schemas/ReceiptRow/properties/uploaded_at"
           },
+          "url": {
+            "description": "The receipt's page in HQ.",
+            "type": "string"
+          },
           "vendor": {
             "$ref": "#/components/schemas/ReceiptRow/properties/vendor"
           }
@@ -23352,6 +23375,7 @@
           "related_asset",
           "uploaded_at",
           "updated_at",
+          "url",
           "label",
           "file",
           "file_type_label",
@@ -23415,6 +23439,9 @@
           },
           "uploaded_at": {
             "$ref": "#/components/schemas/ReceiptRowPartial/properties/uploaded_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/url"
           },
           "vendor": {
             "$ref": "#/components/schemas/ReceiptRowPartial/properties/vendor"
