@@ -7,6 +7,7 @@ from unittest import mock
 
 from django.test import TestCase
 from django.urls import reverse
+from django.views.generic.base import TemplateResponseMixin
 
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
@@ -50,7 +51,8 @@ class RecordPageTests(TestCase):
             self.assertEqual(every_item("machines", principal=principal), whole)
 
     def test_each_record_page_draws_the_record_its_api_read_answers(self):
-        pages = self.routes(RecordPageMixin)
+        # A route that only sends a record to its page elsewhere draws nothing.
+        pages = [route for route in self.routes(RecordPageMixin) if issubclass(route.view, TemplateResponseMixin)]
         principal = web_principal(self.owner)
         self.client.force_login(self.owner)
         for route in pages:
@@ -60,7 +62,8 @@ class RecordPageTests(TestCase):
                 listed = list_resource(view.resource, principal=principal, fields=[identifier])["items"]
                 drawn = 0
                 for item in listed:
-                    response = self.client.get(reverse(route.name, kwargs={identifier: item[identifier]}))
+                    asked = {view.url_kwarg or identifier: item[identifier]}
+                    response = self.client.get(reverse(route.name, kwargs=asked))
                     # A record whose page lives elsewhere, such as a machine's declaration, is sent there.
                     if response.status_code != 200:
                         self.assertEqual(response.status_code, 302)

@@ -299,14 +299,6 @@ class InfrastructureDetailView(RecordPageMixin, TemplateView):
 
         return stored(self.record["key"])
 
-    @override
-    def get(self, request, *args, **kwargs):
-        response = super().get(request, *args, **kwargs)
-        if response.status_code == 200 and self.record["url"] != request.path:
-            # A kind with a page of its own, such as a machine, lives there.
-            return redirect(self.record["url"])
-        return response
-
     @cached_property
     def capabilities(self):
         return capabilities_of(self.row)

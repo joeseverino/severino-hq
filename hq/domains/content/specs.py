@@ -35,6 +35,7 @@ class ContentRow(TypedDict):
     """One writeup, video or page, published or not."""
 
     slug: RecordSlug
+    url: Annotated[str, Describe("The writeup's or page's page in HQ.")]
     title: content.ContentTitle
     content_type: content.ContentType
     status: content.ContentStatus

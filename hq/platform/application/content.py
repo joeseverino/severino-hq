@@ -15,6 +15,7 @@ from .entity_links import EntityLink, entity_link, web_url
 from .projection import addressable, listing
 from .record_fields import Notes, PublishedAt, PublishedUrl, RecordId, one_of
 from .record_saves import Held, Link, linked_saver, row
+from .references import Kind
 from .sensitivity import safe_doc_ids
 lazy from .published_sites import projects_by_hostname
 
@@ -71,7 +72,7 @@ class ContentCommand:
 
 
 def serialize_content(item: ContentItem, *, relationships: bool = True) -> dict[str, Any]:
-    fields = row(item, ContentRow, tags=item.tag_list)
+    fields = row(item, ContentRow, url=entity_link(Kind.WRITEUP, item.slug).url, tags=item.tag_list)
     if relationships:
         fields["relationships"] = {
             "projects": list(item.related_projects.order_by("slug").values_list("slug", flat=True)),

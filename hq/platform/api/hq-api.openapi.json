@@ -171,6 +171,7 @@
           "items": {
             "enum": [
               "slug",
+              "url",
               "item_name",
               "vendor",
               "category",
@@ -209,6 +210,7 @@
           "items": {
             "enum": [
               "slug",
+              "url",
               "item_name",
               "vendor",
               "category",
@@ -575,6 +577,7 @@
           "items": {
             "enum": [
               "slug",
+              "url",
               "title",
               "content_type",
               "status",
@@ -609,6 +612,7 @@
           "items": {
             "enum": [
               "slug",
+              "url",
               "title",
               "content_type",
               "status",
@@ -1688,6 +1692,7 @@
           "items": {
             "enum": [
               "slug",
+              "url",
               "name",
               "category",
               "status",
@@ -1733,6 +1738,7 @@
           "items": {
             "enum": [
               "slug",
+              "url",
               "name",
               "category",
               "status",
@@ -5636,6 +5642,9 @@
           "updated_at": {
             "$ref": "#/components/schemas/AssetRow/properties/updated_at"
           },
+          "url": {
+            "$ref": "#/components/schemas/AssetRow/properties/url"
+          },
           "vendor": {
             "$ref": "#/components/schemas/AssetRow/properties/vendor"
           },
@@ -5645,6 +5654,7 @@
         },
         "required": [
           "slug",
+          "url",
           "item_name",
           "vendor",
           "category",
@@ -5708,6 +5718,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/AssetRowPartial/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/AssetRowPartial/properties/url"
           },
           "vendor": {
             "$ref": "#/components/schemas/AssetRowPartial/properties/vendor"
@@ -5778,6 +5791,10 @@
           "updated_at": {
             "$ref": "#/components/schemas/UpdatedAt"
           },
+          "url": {
+            "description": "The asset's page in HQ.",
+            "type": "string"
+          },
           "vendor": {
             "$ref": "#/components/schemas/AssetVendor"
           },
@@ -5787,6 +5804,7 @@
         },
         "required": [
           "slug",
+          "url",
           "item_name",
           "vendor",
           "category",
@@ -5876,6 +5894,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/UpdatedAt"
+          },
+          "url": {
+            "$ref": "#/components/schemas/AssetRow/properties/url"
           },
           "vendor": {
             "$ref": "#/components/schemas/AssetVendor"
@@ -9737,10 +9758,14 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/ContentRow/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ContentRow/properties/url"
           }
         },
         "required": [
           "slug",
+          "url",
           "title",
           "content_type",
           "status",
@@ -9794,6 +9819,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/ContentRowPartial/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ContentRowPartial/properties/url"
           }
         },
         "type": "object"
@@ -9855,10 +9883,15 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/UpdatedAt"
+          },
+          "url": {
+            "description": "The writeup's or page's page in HQ.",
+            "type": "string"
           }
         },
         "required": [
           "slug",
+          "url",
           "title",
           "content_type",
           "status",
@@ -9938,6 +9971,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/UpdatedAt"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ContentRow/properties/url"
           }
         },
         "type": "object"
@@ -21789,10 +21825,14 @@
           },
           "updates": {
             "$ref": "#/components/schemas/ProjectRow/properties/updates"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ProjectRow/properties/url"
           }
         },
         "required": [
           "slug",
+          "url",
           "name",
           "category",
           "status",
@@ -21861,6 +21901,9 @@
           },
           "updates": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/updates"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ProjectRowPartial/properties/url"
           }
         },
         "type": "object"
@@ -21969,10 +22012,15 @@
           },
           "updates": {
             "$ref": "#/components/schemas/Updates"
+          },
+          "url": {
+            "description": "The project's page in HQ.",
+            "type": "string"
           }
         },
         "required": [
           "slug",
+          "url",
           "name",
           "category",
           "status",
@@ -22067,6 +22115,9 @@
           },
           "updates": {
             "$ref": "#/components/schemas/UpdatesPartial"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ProjectRow/properties/url"
           }
         },
         "type": "object"

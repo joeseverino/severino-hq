@@ -99,6 +99,8 @@ class ExpenseDetailView(RecordPageMixin, TemplateView):
     url_kwarg = "pk"
     page_trail = EXPENSES_TRAIL
     template_name = "expenses/expense_detail.html"
+    model = Expense
+    stored_related = ("receipts",)
 
     @override
     def get_context_data(self, **kwargs):
@@ -114,7 +116,7 @@ class ExpenseDetailView(RecordPageMixin, TemplateView):
         context["document"] = document_link(doc_id, record["document_title"]) if doc_id else None
         # The records of other kinds that name this one, read by it, and the
         # saved names of its references, which its record leaves to their owner.
-        found = Expense.objects.prefetch_related("receipts").get(pk=record["id"])
+        found = self.stored
         context["account"], context["about"] = resolve_many(
             [(record["paid_from"], found.paid_from_name), (record["about"], found.about_name)],
             principal=principal,

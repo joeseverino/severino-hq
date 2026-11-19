@@ -122,6 +122,7 @@ class ProjectRow(TypedDict):
     """One project; `updates` only where its repository is on GitHub."""
 
     slug: RecordSlug
+    url: Annotated[str, Describe("The project's page in HQ.")]
     name: projects.ProjectName
     category: projects.ProjectCategory
     status: projects.ProjectStatus

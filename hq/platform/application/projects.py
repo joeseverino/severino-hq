@@ -48,6 +48,7 @@ lazy from .github_posture import STANDARD, posture_of
 lazy from .moments import moment
 lazy from .plugins import installed_plugins
 lazy from .record_answers import DependencyUpdatesSet
+lazy from .references import Kind
 
 # A project's fields as its command writes them and its row reads them back, each said once.
 type ProjectName = Annotated[str, Describe("What the project is called.")]
@@ -156,7 +157,7 @@ class ProjectCommand:
 
 
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
-    fields = row(project, ProjectRow, technologies=project.tech_list)
+    fields = row(project, ProjectRow, url=entity_link(Kind.PROJECT, project.slug).url, technologies=project.tech_list)
     if repository_key(project.repository_url):
         fields["updates"] = _updates(project)
     return linked(fields, project, relationships=relationships, assets=project.assets)

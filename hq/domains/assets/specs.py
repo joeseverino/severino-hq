@@ -36,6 +36,7 @@ class AssetRow(TypedDict):
     """One asset: what it is, what it cost and what it is to the business."""
 
     slug: RecordSlug
+    url: Annotated[str, Describe("The asset's page in HQ.")]
     item_name: assets.AssetName
     vendor: assets.AssetVendor
     category: assets.AssetCategory

@@ -1,5 +1,4 @@
 import json
-from functools import cached_property
 from typing import override
 
 from django.contrib import messages
@@ -130,18 +129,12 @@ class DocsDetailView(RecordPageMixin, TemplateView):
     context_object_name = "record"
     page_trail = DOCS_TRAIL
     template_name = "docs_index/docs_detail.html"
-
-    @cached_property
-    def found(self) -> DocumentationRecord:
-        """The doc as stored, which the records of other kinds it is linked to are asked by."""
-
-        return DocumentationRecord.objects.prefetch_related(
-            "related_projects", "related_assets", "related_expenses", "content_items"
-        ).get(doc_id=self.record["doc_id"])
+    model = DocumentationRecord
+    stored_related = ("related_projects", "related_assets", "related_expenses", "content_items")
 
     @override
     def get_context_data(self, **kwargs):
-        found = self.found
+        found = self.stored
         return super().get_context_data(**kwargs) | {
             "safe_for_ai_export": self.record["sensitivity"] in SAFE_SENSITIVITIES,
             "related": related.related(

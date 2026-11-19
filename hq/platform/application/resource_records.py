@@ -14,7 +14,6 @@ from .answer_fields import (
     DateTime,
     ObservedAt,
     Since,
-    UpdatedAt,
 )
 from .credential_sight import STATE_LABELS
 from .describe import Describe, listed
