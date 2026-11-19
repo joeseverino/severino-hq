@@ -6,7 +6,7 @@ references, so it carries no secret. `#said` is what the step says, wherever
 a list draws it.
 {% endcomment %}
 {% partialdef said %}
-{% if step.kind == "run" %}<strong>{{ step.label|breakable }}</strong>{% command text=step.command %}{% else %}<p>{{ step.text|breakable }}</p>{% endif %}
+{% if step.kind == "run" %}<strong>{{ step.label|breakable }}</strong>{% command text=step.command %}{% else %}<span>{{ step.text|breakable }}</span>{% endif %}
 {% for note in step.notes %}{% muted %}{{ note|breakable }}{% endmuted %}{% endfor %}
 {% endpartialdef %}
 {% step %}{% partial said %}{% endstep %}

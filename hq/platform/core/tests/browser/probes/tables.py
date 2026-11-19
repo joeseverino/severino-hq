@@ -780,6 +780,38 @@ FOLDED_ROWS_SHOWN = (
 }"""
 )
 
+# What a row's open line holds starts where the row's words do, never left of
+# them under its toggle: a row set in (in a group, under its family) keeps its
+# open line in its own column.
+OPEN_LINES_OUTDENTED = (
+    "() => {"
+    + DESCRIBE
+    + """
+  const found = new Set();
+  for (const line of document.querySelectorAll('main table.data-table > tbody > tr.row-detail')) {
+    const row = line.previousElementSibling;
+    const words = row?.querySelector(':scope > td:has(> [data-row-toggle])');
+    if (!words || !line.checkVisibility()) continue;
+    const column = words.getBoundingClientRect().left + parseFloat(getComputedStyle(words).paddingInlineStart);
+    for (const part of line.querySelectorAll(':scope > td > *')) {
+      const left = part.getBoundingClientRect().left;
+      if (part.checkVisibility() && left < column - 1) {
+        found.add(`${describe(part)} starts ${Math.round(column - left)}px left of its row's words: ${row.innerText.trim().replace(/\\s+/g, ' ').slice(0, 40)}`);
+      }
+    }
+  }
+  return [...found];
+}"""
+)
+
+# A row whose words hold a block for its open line, set in as far as `inset`.
+_OPEN_LINE_TABLE = (
+    '{{% table_region "Open lines" %}}<table class="data-table"><thead><tr>'
+    '{{% table_heading "Item" %}}{{% table_heading "State" "status" %}}</tr></thead><tbody>'
+    '<tr><td class="row-gutter"{inset}>Example item<p class="row-below">Example note under the item.</p></td>'
+    '<td><span class="pill">Up</span></td></tr></tbody></table>{{% endtable_region %}}'
+)
+
 # Nothing reaches past the content's side gutter: drawn there, it touches the
 # edge of the screen. `text` also holds every line of text to the box that
 # holds it.
@@ -1146,6 +1178,20 @@ CHECKS = {
     ),
     "folded rows stay folded": Check(
         FOLDED_ROWS_SHOWN, table=True, scripted=True, reader_sees="a folded row drawn while its group is closed"
+    ),
+    "open lines outdented": Check(
+        OPEN_LINES_OUTDENTED,
+        table=True,
+        reader_sees="what an opened row holds starting left of the row's own words",
+        plants=(
+            Plant(
+                _OPEN_LINE_TABLE.format(inset=' style="padding-inline-start: 60px"'),
+                scripted=True,
+                setup=_OPEN_EVERY_ROW,
+                finds=("left of its row's words",),
+            ),
+        ),
+        clear=(Example(_OPEN_LINE_TABLE.format(inset=""), scripted=True, setup=_OPEN_EVERY_ROW),),
     ),
     # Every box and every line of text, not only a card's or code's.
     "gutter": Check((PAST_THE_GUTTER, ["*", True]), reader_sees="content past the page's gutter"),

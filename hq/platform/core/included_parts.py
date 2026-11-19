@@ -230,6 +230,7 @@ WORK_QUEUE = _part(
     healthy estate.
     """,
     example=records.WORK_QUEUE,
+    states=records.WORK_QUEUE_STATES,
 )
 
 TOPOLOGY_MAP = _part(

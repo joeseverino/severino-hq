@@ -157,14 +157,24 @@
 .step-list.is-numbered > li::before { content: counter(step) "."; min-inline-size: 1.5em; color: var(--muted); font-weight: 650; font-variant-numeric: tabular-nums; }
 /* One step stands alone, with no number. */
 .step-list.is-numbered > li:only-child::before { content: none; }
-/* A step's command sits beside its label, the commands lined up where the
-   labels are short; one too long for the room goes under its label, and a
-   note under both. Such steps sit close, as a command's chip has its own room. */
-.step-list.is-numbered:has(.command) > li { padding-bottom: var(--space-2); }
-.step-list.is-numbered > li > div:has(> .command) { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-6); }
-.step-list.is-numbered > li > div:has(> .command) > strong { flex: 0 1 auto; min-inline-size: min(40%, 11rem); max-inline-size: 100%; }
-.step-list.is-numbered > li > div:has(> .command) > .command { flex: 0 1 auto; margin-top: 0; }
-.step-list.is-numbered > li > div:has(> .command) > :not(strong, .command) { flex-basis: 100%; }
+/* Steps that pair a label with its command (partials/_operator_step.html) are
+   one grid the steps share: the labels one column, as wide as the longest up
+   to two fifths of the row, the commands the next, each note and any step in
+   words across both. They sit close, as a command's chip has its own room. In
+   a narrow box each command goes under its label. */
+.step-list.is-numbered:has(> li > div > strong + .command) {
+  display: grid; grid-template-columns: [number] auto [label] fit-content(40%) [command] minmax(0, 1fr) [end];
+  gap: var(--space-2) var(--space-3); container: steps / inline-size;
+  & > li { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: baseline; row-gap: var(--space-1); padding-bottom: 0; }
+  & > li > div { display: contents; }
+  & > li > div > * { grid-column: label / end; min-inline-size: 0; }
+  & > li > div > strong:has(+ .command) { grid-column: label; }
+  & > li > div > strong + .command { grid-column: command; margin: 0 0 0 var(--space-3); }
+  @container steps (width < 28rem) {
+    & > li > div > :is(strong:has(+ .command), strong + .command) { grid-column: label / end; margin-inline-start: 0; }
+  }
+}
+.step-list.is-numbered:has(> li > div > strong + .command):has(> li:only-child) { grid-template-columns: [label] fit-content(40%) [command] minmax(0, 1fr) [end]; }
 .step-list .command { margin-top: var(--space-2); }
 .step-list li.is-done { color: var(--muted); }
 .step-list li.is-done .band-icon { background: var(--surface-2); color: var(--muted); }

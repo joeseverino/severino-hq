@@ -394,8 +394,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .data-table > tbody > tr.row-detail { display: none; }
 /* An open row's line is drawn only where it holds something at this width: a block moved there whole, an entry shown at every width, or a column that has left (above), so a row opened narrow and widened draws no empty line. */
 .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > :not(.row-columns), > td > .row-columns > :not([data-drop]:not([data-holds]))) { display: table-row; }
-/* It starts at the row's edge under the toggle, so what it holds has the row's whole width. */
-.data-table .row-detail > td { --cell: open; padding-block: 0 var(--row-pad); padding-inline-start: var(--row-edge); }
+/* It starts where its row's words do, past the toggle, so nothing it holds sits left of them. */
+.data-table .row-detail > td { --cell: open; padding-block: 0 var(--row-pad); padding-inline-start: var(--row-inset, var(--cell-pad)); }
 /* What it holds asks its columns for no width, so opening a row moves no column. */
 .row-detail > td > * { contain: inline-size; margin-block: 0 var(--row-pad); }
 .row-detail > td > :last-child { margin-block-end: 0; }

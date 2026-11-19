@@ -14,6 +14,7 @@ lazy from hq.platform.application.dashboard import finding_rows
 lazy from hq.platform.application.drawings import AllocationBar, Share
 lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.finding_model import Finding
+lazy from hq.platform.application.finding_steps import Do, Run
 lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.pages import PageAction
@@ -733,3 +734,50 @@ ROW_FOLD = Example(context={"label": "Show all of example-host-01"})
 WORK_QUEUE = Example(
     context=lambda: {"items": _problems("Example certificate expires soon", "Example backup is late"), "grouped": True}
 )
+
+
+def _opened_problems():
+    """Rows that open onto what was read and what to do: commands whose
+    labels differ in length, and one step alone between the facts and the
+    reason it cannot be done from here."""
+
+    facts = (("Waiting since", "Jan 3, 1:42 AM"), ("Packages", "example-kernel, example-libc"))
+    return list(
+        finding_rows(
+            "example",
+            "Example",
+            (
+                Finding(
+                    rule="example",
+                    subject="example-host-01",
+                    severity=Tone.ATTENTION,
+                    title="example-host-01 waits on a restart",
+                    explanation="An installed update takes effect only once the machine restarts.",
+                    evidence=facts,
+                    steps=(
+                        Run("See what waits on the restart", 'ssh example-host-01 "cat /run/reboot-required.pkgs"'),
+                        Run("See when", 'ssh example-host-01 "shutdown --show"', notes=("shutdown -c cancels it.",)),
+                    ),
+                ),
+                Finding(
+                    rule="example",
+                    subject="example.com",
+                    severity=Tone.SERIOUS,
+                    title="Example certificate expired",
+                    explanation="It serves no name, so nothing breaks when it expires.",
+                    evidence=(("Certificate", "example.com"), ("Held in", "example-proxy")),
+                    steps=(Do("Renew the certificate where it is held, then press Check again."),),
+                    no_help_reason="HQ cannot renew this certificate.",
+                ),
+            ),
+        )
+    )
+
+
+WORK_QUEUE_STATES = {
+    # Rows opened as the queue page draws them: what each opens onto starts
+    # where its title does, commands in one column, a lone step close.
+    "opened": Example(
+        '{% include "partials/_work_queue.html" %}', lambda: {"items": _opened_problems(), "grouped": True}
+    ),
+}
