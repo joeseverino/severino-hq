@@ -466,10 +466,10 @@ neither (an element, `:root`, a token). A file that reaches no entry is
 named in the look's output, never skipped unsaid. A Python-only change
 selects no look, and the whole catalog stays CI's Browser job.
 
-A test module that a `test:*` task runs by its label in a dependency group's
-environment (`uv run --group fuzz`), which the tests' environment lacks, is
-never a label. When the selection above would reach it, its task runs as a
-gate beside the tests instead, read from the task's own `run`.
+The generated API cases (`test:api-properties`) stay CI's Test job and
+`mise run check`'s: every change Django loads reaches every operation, and
+Schemathesis sends each operation's boundary and refusal cases whatever the
+example budget.
 
 fast runs in two stages, each one `mise run`. The quick gates run first, side
 by side, before the tests are selected, and the tests start only once every

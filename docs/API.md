@@ -803,10 +803,9 @@ with read authority and the writes of the records that live in HQ's database,
 each scenario rolled back. Besides conformance it fails a next page that
 repeats a record of the page before it, a read an answer named that finds
 nothing, and a write that took an `expected_updated_at` other than the one
-read. `mise run test:api-properties` runs both modules.
-
-These tooling tests run explicitly in the contributor gates. Production test
-discovery does not require development dependencies.
+read. `mise run test:api-properties` runs both modules, as CI's Test job and
+`mise run check` do; `fast` leaves them to those. Production test discovery
+does not require development dependencies.
 
 ### MCP tools
 

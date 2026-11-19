@@ -44,37 +44,10 @@ run = "uv run python manage.py makemigrations --check --dry-run"
 ["test:api-properties"]
 description = "Generated API cases through the real WSGI middleware"
 hide = true
-# Its test classes side by side, the live operations in shares of their own
-# (tests/fuzz/api_properties.py, SHARES), outside the heavy turn and its
-# shares, which fast still runs in the turn it holds for its tests
-# (tools/gate/fast.py, HEAVY).
-tags = ["fast", "heavy"]
-# What its run reads, as a log of the files its processes open finds it: the
-# whole of hq and hq_sdk, which Django loads to answer, its own modules, and the
-# two data files the settings and the bridge open. The committed document is
-# what the served one is held to (lint:drift-api-document), so it selects the
-# suite too. No served answer runs a test module, so an edit there selects none
-# but the token helper the suite signs its requests with.
-sources = [
-  "hq/**/*.py",
-  "hq_sdk/**/*.py",
-  "!hq/**/tests/**",
-  "!hq_sdk/**/tests/**",
-  "hq/platform/api/tests/tokens.py",
-  "hq/domains/control_plane/bridge_base.json",
-  "deploy/systemd/severino-hq-secrets.timer",
-  "hq/platform/api/hq-api.openapi.json",
-  "manage.py",
-  "tests/__init__.py",
-  "tests/fuzz/**",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-]
-outputs = []
+# Untagged, so fast leaves it to CI's Test job and `mise run check`, as it
+# leaves the browser suite: Schemathesis's coverage phase sends every boundary
+# and refusal case of every operation whatever the example budget, and any
+# change Django loads reaches every operation.
 extends = "django"
 run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties tests.fuzz.api_links --noinput --parallel auto"
 

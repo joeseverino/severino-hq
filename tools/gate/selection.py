@@ -20,7 +20,7 @@ import grimp
 from hq.platform.application.tests.reads import Reads
 from hq.platform.application.tests.tree import TreeTests, tree_tests
 from hq.platform.core.tests.task import RefError, names
-from tests.mise_tasks import ROOT as TASKS_ROOT, body, mise_tasks, run_files, runs
+from tests.mise_tasks import run_files
 from tools.gate import chain
 
 # Never part of the Django suite: other languages and vendored trees.
@@ -28,11 +28,6 @@ SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
 # The module every test that reads the tasks goes through; a change to a task
 # definition, or to a file a task runs, reaches those tests as a change to it would.
 TASK_READER = "tests.mise_tasks"
-# A test task that runs its labels in a dependency group's environment, which
-# the default one fast tests in lacks: a module it names is selected as that
-# task, never as a label.
-GROUP_TASK = "test:"
-GROUP_RUN = re.compile(r"\buv run\b[^\n]*--group\b[^\n]*\bmanage\.py test\b((?:\s+[\w.]+)+)")
 # How many importers away from a changed module a test is still selected
 # through any import, one a function or a lazy import makes as it runs among
 # them: one that imports it, or imports a module that does. Further out such a
@@ -668,32 +663,6 @@ def chosen(modules: dict[str, Path], reached: set[str], touched: set[str]) -> se
     return picked
 
 
-@functools.cache
-def group_tests() -> dict[str, str]:
-    """Each test module a test task runs in a dependency group's environment, by its label: module -> task."""
-
-    found: dict[str, str] = {}
-    for name, task in mise_tasks().items():
-        run_labels = GROUP_RUN.search(body(task)) if name.startswith(GROUP_TASK) else None
-        if not run_labels:
-            continue
-        labels = run_labels[1].split()
-        for path in runs(task):
-            module = module_name(path.relative_to(TASKS_ROOT))
-            if any(label == module or label.startswith(module + ".") for label in labels):
-                found[module] = name
-    return found
-
-
-def group_tasks(files: list[Path], reached: set[str], touched: set[str]) -> tuple[str, ...]:
-    """The test tasks whose group-run modules the change reaches as it would reach a test module."""
-
-    present = {module_name(p): p for p in files}
-    modules = {m: present[m] for m in group_tests() if m in present}
-    picked = chosen(modules, reached, touched)
-    return tuple(sorted({group_tests()[m] for m in picked}))
-
-
 def with_tree(
     labels: list[str],
     paths: list[str],
@@ -748,11 +717,7 @@ def source_first(labels: list[str], files: list[Path]) -> tuple[list[str], list[
     return first, [label for label in labels if label not in first]
 
 
-def selection(
-    changed: list[str], deleted: list[str], files: list[Path]
-) -> tuple[list[str], int, tuple[set[str], set[str]]]:
-    """(the test modules to run, how many there are, what the change reaches and the apps it touches)."""
+def selection(changed: list[str], deleted: list[str], files: list[Path]) -> tuple[list[str], int]:
+    """(the test modules to run, how many there are)."""
 
-    reached, touched = affected(changed, deleted, files)
-    labels, total = test_labels(files, reached, touched)
-    return labels, total, (reached, touched)
+    return test_labels(files, *affected(changed, deleted, files))

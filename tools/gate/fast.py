@@ -24,8 +24,6 @@ from tests.mise_tasks import HEAVY_LOCK, locks, mise_tasks
 from tools.gate import chain, turn as gate_turn
 from tools.gate.chain import SENT, fast_base, record_pass
 from tools.gate.selection import (
-    group_tasks,
-    group_tests,
     listed_change,
     python_files,
     selection,
@@ -402,7 +400,7 @@ def main(asked: Usage) -> int:
             return judge(gate, steps, base, whole=False, fixed=fixed)
     walking = walk_for_tree() if changed or deleted else None
     files = python_files()
-    labels, total, (reached, touched) = selection(changed, deleted, files)
+    labels, total = selection(changed, deleted, files)
     counts = f"{len(changed)} changed, {len(deleted)} deleted, {len(labels)}/{total} test modules"
     print(f"[fast] base {base[:9]}, {why}: {counts}")
     every_test = len(labels) == total > 0
@@ -416,15 +414,13 @@ def main(asked: Usage) -> int:
         print("\n".join(labels))
         return 0
 
-    whole = (*quick_gates(), *group_tests().values())
-    tasks = whole if every_test else (*selected, *group_tasks(files, reached, touched))
-    whole_run = every_test and set(tasks) == set(whole)
+    tasks = quick_gates() if every_test else selected
     rest = tuple(task for task in tasks if task not in early)
     steps = [*first, *gates_and_tests(rest, labels, files, parallel, handing, base)]
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
-    return judge(gate, steps, base, whole=whole_run, fixed=fixed)
+    return judge(gate, steps, base, whole=every_test, fixed=fixed)
 
 
 if __name__ == "__main__":
