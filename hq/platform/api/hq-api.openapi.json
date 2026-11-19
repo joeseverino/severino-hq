@@ -794,6 +794,8 @@
               "registration.source",
               "registration.auto_renew",
               "connection_ref",
+              "observed_only",
+              "adopt_token",
               "reachable",
               "observed_at",
               "records",
@@ -804,6 +806,17 @@
               "records.ttl",
               "records.declaration",
               "records.observed_only",
+              "records.manageable",
+              "records.secondary",
+              "records.service",
+              "records.health",
+              "records.health.state",
+              "records.health.label",
+              "records.health.reason",
+              "records.health.message",
+              "records.edits",
+              "records.removes",
+              "records.summary",
               "insights",
               "insights.label",
               "insights.value",
@@ -811,6 +824,25 @@
               "insights.url",
               "insights.concern",
               "insights.notice",
+              "insights.rows",
+              "insights.rows.title",
+              "insights.rows.detail",
+              "insights.rows.url",
+              "insights.rows.status",
+              "insights.rows.badge",
+              "insights.links",
+              "insights.links.label",
+              "insights.links.links",
+              "insights.links.links.label",
+              "insights.links.links.url",
+              "insights.links.links.external",
+              "insights.links.links.kind",
+              "insights.links.links.kind_label",
+              "insights.links.links.title",
+              "insights.links.links.detail",
+              "insights.links.links.identity",
+              "insights.note",
+              "insights.note_title",
               "*"
             ],
             "type": "string"
@@ -11109,6 +11141,26 @@
             "description": "The key of HQ's record of it; empty for none.",
             "type": "string"
           },
+          "edits": {
+            "description": "Whether HQ's record of it offers an edit.",
+            "type": "boolean"
+          },
+          "health": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HealthPart",
+                "title": "Health part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The health of HQ's record of it; null for none."
+          },
+          "manageable": {
+            "description": "Whether HQ can declare a record of its type; false for one HQ only lists.",
+            "type": "boolean"
+          },
           "name": {
             "description": "The name in the zone the record is for.",
             "type": "string"
@@ -11123,6 +11175,22 @@
           },
           "record_type": {
             "description": "The record's type, such as `A`, `CNAME` or `TXT`.",
+            "type": "string"
+          },
+          "removes": {
+            "description": "Whether HQ's record of it offers its removal.",
+            "type": "boolean"
+          },
+          "secondary": {
+            "description": "Whether it states policy or proves ownership, such as a TXT or CAA record, over routing.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "The hostname of the service it declares; empty for a type that declares none.",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Its value in a line, where another record shares its name and type; empty where none does.",
             "type": "string"
           },
           "ttl": {
@@ -11141,7 +11209,14 @@
           "proxied",
           "ttl",
           "declaration",
-          "observed_only"
+          "observed_only",
+          "manageable",
+          "secondary",
+          "service",
+          "health",
+          "edits",
+          "removes",
+          "summary"
         ],
         "type": "object"
       },
@@ -11150,6 +11225,24 @@
         "properties": {
           "declaration": {
             "$ref": "#/components/schemas/DnsRecordPart/properties/declaration"
+          },
+          "edits": {
+            "$ref": "#/components/schemas/DnsRecordPart/properties/edits"
+          },
+          "health": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HealthPartPartial",
+                "title": "Health part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The health of HQ's record of it; null for none."
+          },
+          "manageable": {
+            "$ref": "#/components/schemas/DnsRecordPart/properties/manageable"
           },
           "name": {
             "$ref": "#/components/schemas/DnsRecordPart/properties/name"
@@ -11162,6 +11255,18 @@
           },
           "record_type": {
             "$ref": "#/components/schemas/DnsRecordPart/properties/record_type"
+          },
+          "removes": {
+            "$ref": "#/components/schemas/DnsRecordPart/properties/removes"
+          },
+          "secondary": {
+            "$ref": "#/components/schemas/DnsRecordPart/properties/secondary"
+          },
+          "service": {
+            "$ref": "#/components/schemas/DnsRecordPart/properties/service"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/DnsRecordPart/properties/summary"
           },
           "ttl": {
             "$ref": "#/components/schemas/DnsRecordPart/properties/ttl"
@@ -12143,6 +12248,10 @@
         "additionalProperties": false,
         "description": "One domain with its records, its connection and what HQ makes of it.",
         "properties": {
+          "adopt_token": {
+            "description": "The token `infrastructure.zone.adopt` takes to manage the domain as it was read; empty when HQ manages it or cannot.",
+            "type": "string"
+          },
           "connection_ref": {
             "description": "The connection that reads the domain's DNS records; empty for none.",
             "type": "string"
@@ -12173,6 +12282,10 @@
               }
             ]
           },
+          "observed_only": {
+            "description": "Whether HQ keeps no record of it and reads it through a connection that cannot change it.",
+            "type": "boolean"
+          },
           "reachable": {
             "description": "Whether that connection answered its last read.",
             "type": "boolean"
@@ -12202,6 +12315,8 @@
           "services",
           "registration",
           "connection_ref",
+          "observed_only",
+          "adopt_token",
           "reachable",
           "observed_at",
           "records",
@@ -12213,6 +12328,9 @@
         "additionalProperties": false,
         "description": "One domain with its records, its connection and what HQ makes of it.",
         "properties": {
+          "adopt_token": {
+            "$ref": "#/components/schemas/DomainRecord/properties/adopt_token"
+          },
           "connection_ref": {
             "$ref": "#/components/schemas/DomainRecord/properties/connection_ref"
           },
@@ -12241,6 +12359,9 @@
                 "type": "null"
               }
             ]
+          },
+          "observed_only": {
+            "$ref": "#/components/schemas/DomainRecord/properties/observed_only"
           },
           "reachable": {
             "$ref": "#/components/schemas/DomainRecord/properties/reachable"
@@ -16173,9 +16294,31 @@
             "description": "What the insight is about, in a few words.",
             "type": "string"
           },
+          "links": {
+            "description": "What it names, each group under what it is to the domain.",
+            "items": {
+              "$ref": "#/components/schemas/LinkGroupPart"
+            },
+            "type": "array"
+          },
+          "note": {
+            "description": "A reason kept beside it, in a line; empty for none.",
+            "type": "string"
+          },
+          "note_title": {
+            "description": "The note's full reason, where `note` says it in fewer words; empty for none.",
+            "type": "string"
+          },
           "notice": {
             "description": "Whether it is a notice worth knowing, short of a concern.",
             "type": "boolean"
+          },
+          "rows": {
+            "description": "The whole list a counted `value` stands for; empty for none.",
+            "items": {
+              "$ref": "#/components/schemas/InsightRowPart"
+            },
+            "type": "array"
           },
           "url": {
             "description": "Where to look into it; empty for none.",
@@ -16192,7 +16335,11 @@
           "detail",
           "url",
           "concern",
-          "notice"
+          "notice",
+          "rows",
+          "links",
+          "note",
+          "note_title"
         ],
         "type": "object"
       },
@@ -16208,14 +16355,88 @@
           "label": {
             "$ref": "#/components/schemas/InsightPart/properties/label"
           },
+          "links": {
+            "description": "What it names, each group under what it is to the domain.",
+            "items": {
+              "$ref": "#/components/schemas/LinkGroupPartPartial"
+            },
+            "type": "array"
+          },
+          "note": {
+            "$ref": "#/components/schemas/InsightPart/properties/note"
+          },
+          "note_title": {
+            "$ref": "#/components/schemas/InsightPart/properties/note_title"
+          },
           "notice": {
             "$ref": "#/components/schemas/InsightPart/properties/notice"
+          },
+          "rows": {
+            "description": "The whole list a counted `value` stands for; empty for none.",
+            "items": {
+              "$ref": "#/components/schemas/InsightRowPartPartial"
+            },
+            "type": "array"
           },
           "url": {
             "$ref": "#/components/schemas/InsightPart/properties/url"
           },
           "value": {
             "$ref": "#/components/schemas/InsightPart/properties/value"
+          }
+        },
+        "type": "object"
+      },
+      "InsightRowPart": {
+        "additionalProperties": false,
+        "properties": {
+          "badge": {
+            "description": "That state in words; empty for none.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "The one fact that sets it apart; empty for none.",
+            "type": "string"
+          },
+          "status": {
+            "description": "How it stands: `serious`, `attention`, `neutral` or `good`, or empty for no state.",
+            "type": "string"
+          },
+          "title": {
+            "description": "What the row names.",
+            "type": "string"
+          },
+          "url": {
+            "description": "Its page; empty for none.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "detail",
+          "url",
+          "status",
+          "badge"
+        ],
+        "type": "object"
+      },
+      "InsightRowPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "badge": {
+            "$ref": "#/components/schemas/InsightRowPart/properties/badge"
+          },
+          "detail": {
+            "$ref": "#/components/schemas/InsightRowPart/properties/detail"
+          },
+          "status": {
+            "$ref": "#/components/schemas/InsightRowPart/properties/status"
+          },
+          "title": {
+            "$ref": "#/components/schemas/InsightRowPart/properties/title"
+          },
+          "url": {
+            "$ref": "#/components/schemas/InsightRowPart/properties/url"
           }
         },
         "type": "object"
@@ -16467,6 +16688,43 @@
           "label",
           "summary"
         ],
+        "type": "object"
+      },
+      "LinkGroupPart": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "description": "What the things it names are to the domain, such as `Served by`.",
+            "type": "string"
+          },
+          "links": {
+            "description": "The things it names.",
+            "items": {
+              "$ref": "#/components/schemas/EntityLink"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "links"
+        ],
+        "type": "object"
+      },
+      "LinkGroupPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "$ref": "#/components/schemas/LinkGroupPart/properties/label"
+          },
+          "links": {
+            "description": "The things it names.",
+            "items": {
+              "$ref": "#/components/schemas/EntityLinkPartial"
+            },
+            "type": "array"
+          }
+        },
         "type": "object"
       },
       "LinkedAssets": {

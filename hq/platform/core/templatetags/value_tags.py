@@ -1,5 +1,5 @@
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import date, datetime
 from numbers import Number
 from typing import Annotated, Any
@@ -18,6 +18,7 @@ lazy from django.conf import settings
 from hq.platform.application.describe import Describe
 from hq.platform.application.doors import interface_label as _interface_label
 from hq.platform.application.entity_links import (
+    EntityLink,
     connection_anchor as anchor,
     declared_link as declared,
     entity_link,
@@ -392,19 +393,23 @@ def is_this_page(context, url):
 
 def entity(
     context,
-    link: Annotated[Any, Describe("The thing's link, as the link builder answered for it.")],
+    link: Annotated[
+        Any, Describe("The thing's link, as the link builder answered for it or a record's read writes it.")
+    ],
     code: Annotated[bool, Describe("Its name drawn as code.")] = False,
     label: Annotated[Any, Describe("The words it is named by, in place of its own.")] = "",
     mark: Annotated[Any, Describe("The punctuation after the name, held to it, or a list's `forloop`.")] = "",
 ):
     """One entity name, as the link builder answered for it.
 
-    ``link`` is an ``application.entity_links.EntityLink``. Every mention of an
+    ``link`` is an ``application.entity_links.EntityLink``, or a record's mapping of one. Every mention of an
     entity on a page renders here, marked ``data-entity``. An external link
     opens in a new tab without a way back to this page. A link to the page it
     is on renders as plain text. ``mark`` is the punctuation after the name
     (or a list's ``forloop``), held to it as ``breakable`` holds it.
     """
+    if isinstance(link, Mapping):
+        link = EntityLink(**link)
     if link is None:
         return empty_value() + conditional_escape(mark_text(mark))
     # A count of nothing is still a name to show.

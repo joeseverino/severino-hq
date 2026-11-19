@@ -11,7 +11,7 @@ from hq.platform.application.infrastructure import ResourceState
 from hq.platform.application.markup_testing import elements, select, text, texts, with_class
 from hq.platform.application.relationships import Relationships
 from hq.platform.application.topology_model import RelationGroup, Relationship
-from hq.platform.application.zones import Zone, ZoneRecord
+from hq.platform.application.zones import ZoneRecord, told_apart
 
 
 def group(phrase: str, *ends: EntityLink) -> RelationGroup:
@@ -23,15 +23,17 @@ CERTIFICATE = EntityLink("example.com", "/records/example-cert/", kind="resource
 CONNECTION = EntityLink("example-dns", "/connections/#example-dns", kind="connection")
 
 
-def zone(**fields) -> SimpleNamespace:
-    card = SimpleNamespace(rows=(SimpleNamespace(url=SERVICE.url),), links=())
-    return SimpleNamespace(cards=(card,), **fields)
+def domain(*insights) -> dict:
+    return {"insights": list(insights)}
+
+
+CARD = {"notice": False, "rows": [{"url": SERVICE.url}], "links": []}
 
 
 class RelationsSaidOnceTests(SimpleTestCase):
     def shown(self):
         return _page_relationships(
-            zone(),
+            domain(CARD),
             Relationships(
                 "zone:example.com",
                 groups=(
@@ -60,9 +62,8 @@ class RelationsSaidOnceTests(SimpleTestCase):
         self.assertEqual(relationships.readouts, ())
 
     def test_a_relation_no_card_names_stays(self):
-        bare = SimpleNamespace(cards=())
         relationships, _ = _page_relationships(
-            bare, Relationships("zone:example.com", groups=(group("Contains", SERVICE),))
+            domain(), Relationships("zone:example.com", groups=(group("Contains", SERVICE),))
         )
 
         self.assertEqual(len(relationships.groups), 1)
@@ -70,9 +71,10 @@ class RelationsSaidOnceTests(SimpleTestCase):
 
 class RecordsLedeTests(SimpleTestCase):
     def test_one_record_is_one_record(self):
-        one = SimpleNamespace(managed=True, adoptable=(), managed_count=1, records=(object(),), policy=())
-        many = SimpleNamespace(managed=True, adoptable=(), managed_count=17, records=(), policy=())
-        unmanaged = SimpleNamespace(managed=False, adoptable=(), managed_count=0, records=(1, 2), policy=())
+        managed = {"declaration": "example-record", "manageable": True, "observed_only": False}
+        one = {"declaration": "example-zone", "records": [managed]}
+        many = {"declaration": "example-zone", "records": [managed] * 17}
+        unmanaged = {"declaration": "", "records": [{**managed, "declaration": ""}] * 2}
 
         self.assertEqual(_records_lede(one), "1 record, all managed by HQ")
         self.assertEqual(_records_lede(many), "17 records, all managed by HQ")
@@ -87,9 +89,9 @@ class RecordTableTests(SimpleTestCase):
             "value": "192.0.2.10",
             "proxied": False,
             "ttl": 1,
-            "service_url": "",
+            "service": "",
             "manageable": True,
-            "managed": True,
+            "declaration": "example-record",
             "health": {"state": ResourceState.HEALTHY, "label": "Healthy"},
         }
         return SimpleNamespace(**{**base, **fields})
@@ -100,7 +102,8 @@ class RecordTableTests(SimpleTestCase):
             {
                 "routing": [(row, ()) for row in rows],
                 "policy": [(row, ()) for row in policy],
-                "zone": SimpleNamespace(managed=True, ttl_set=any(row.ttl != 1 for row in (*rows, *policy))),
+                "managed": True,
+                "ttl_set": any(row.ttl != 1 for row in (*rows, *policy)),
                 "public_dns_enabled": True,
                 "request": SimpleNamespace(get_full_path=lambda: "/domains/example.com/"),
                 **context,
@@ -127,13 +130,6 @@ class RecordTableTests(SimpleTestCase):
 
         self.assertNotIn("TTL", texts(html, "th"))
 
-    def test_a_zone_says_whether_any_record_set_its_own_ttl(self):
-        automatic = ZoneRecord("app.example.com", "A", "192.0.2.10")
-        slow = ZoneRecord("slow.example.com", "A", "192.0.2.11", ttl=300)
-
-        self.assertFalse(Zone("example.com", records=(automatic,)).ttl_set)
-        self.assertTrue(Zone("example.com", records=(automatic, slow)).ttl_set)
-
     def test_an_empty_half_says_where_the_records_are(self):
         self.assertIn("No records.", self.table())
         self.assertIn("No routing records.", self.table(policy=(self.record(record_type="CAA"),)))
@@ -154,9 +150,7 @@ class RecordTableTests(SimpleTestCase):
             ZoneRecord("example.com", "MX", "mx2.example.net", priority=20),
             ZoneRecord("mail.example.com", "MX", "mx1.example.net", priority=10),
         )
-        found = Zone("example.com", records=records)
-        rows = found.routing + found.policy
-        html = self.table(*rows)
+        html = self.table(*told_apart(records))
 
         said = {row.words for row in with_class(html, "narrow-only")}
         self.assertEqual(said, {"10 mx1.example.net", "20 mx2.example.net"})

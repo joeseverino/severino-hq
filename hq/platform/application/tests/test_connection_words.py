@@ -1,7 +1,5 @@
 """What the Connections page and its neighbors call a connection, its state and what can be done to it."""
 
-from types import SimpleNamespace
-
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -85,5 +83,5 @@ class WordTests(SimpleTestCase):
     def test_a_domain_is_starred_in_the_word_the_services_list_uses(self):
         for pinned in (True, False):
             with self.subTest(pinned=pinned):
-                action = _pin_action(SimpleNamespace(zone="example.com", pinned=pinned))
+                action = _pin_action("example.com", pinned)
                 self.assertIn("favorite", action.label.lower())

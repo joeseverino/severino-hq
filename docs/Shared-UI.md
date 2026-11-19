@@ -111,7 +111,7 @@ and those that hold across parts in [Design](Design.md).
 | `cell_line` | `text` |  |  | Its words, which make it one tag with no end. |
 | `cell_line` | `url` |  |  | The page its words link to. |
 | `data_table` | `table`, first and unnamed | required |  | A `DataTable`: its columns and its rows. |
-| `entity` | `link`, first and unnamed | required |  | The thing's link, as the link builder answered for it. |
+| `entity` | `link`, first and unnamed | required |  | The thing's link, as the link builder answered for it or a record's read writes it. |
 | `entity` | `code` | `False` |  | Its name drawn as code. |
 | `entity` | `label` |  |  | The words it is named by, in place of its own. |
 | `entity` | `mark` |  |  | The punctuation after the name, held to it, or a list's `forloop`. |

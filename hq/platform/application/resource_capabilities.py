@@ -190,6 +190,22 @@ def resource_capabilities(
     )
 
 
+def declaration_actions(key: str) -> tuple[PageAction, ...]:
+    """Edit and removal of the declaration ``key``, as the page of what it
+    declares (a machine, a domain) offers them; none when HQ keeps none."""
+
+    resource = ManagedResource.objects.filter(key=key).first() if key else None
+    if resource is None:
+        return ()
+    capabilities = resource_capabilities(resource)
+    offered = capabilities.offered
+    shown = (
+        offered.edit(key),
+        PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant) if offered.removes else None,
+    )
+    return tuple(filter(None, shown))
+
+
 def _allowed(verb, policy, resource, provider, removal_pending, gap: WriteGap | None) -> Allowed:
     if removal_pending:
         return Allowed(enabled=False, reason="A removal is in progress.", automatic=policy.automatic)

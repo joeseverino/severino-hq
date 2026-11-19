@@ -27,15 +27,15 @@ four domains behind a click and then need a second one to go anywhere.
   {% endnotice %}
 {% endif %}
 
-{% if not zone.managed %}
+{% if not domain.declaration %}
   {% notice tone="warning" %}
     <p>HQ shows its records but will not change them.</p>
-    {% if zone.adopt %}
-      <p>{% include "partials/_page_action.html" with action=zone.adopt only %}</p>
-    {% elif zone.observed_only %}
+    {% if adopt %}
+      <p>{% include "partials/_page_action.html" with action=adopt only %}</p>
+    {% elif domain.observed_only %}
       {% muted element="p" %}HQ can read this domain, but the credential it reads with cannot change it.{% endmuted %}
     {% endif %}
-  {% title %}{{ zone.zone|breakable }} is not managed{% endnotice %}
+  {% title %}{{ domain.name|breakable }} is not managed{% endnotice %}
 {% endif %}
 
 {% comment %}
@@ -49,24 +49,23 @@ what the value already names. The dialog is an enhancement over a real link,
 never a replacement: the href reaches a page that answers the same question,
 so the fact still works if the dialog does not open.
 {% endcomment %}
-{% card element="div" %}{% facts layout="band" label=zone.zone %}
-  {% for insight in zone.cards %}
-    {% fact insight.label tone=insight.concern|yesno:"attention," %}{% if insight.url %}<a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="{{ insight.modal_id }}"{% endif %}>{{ insight.value|breakable }}</a>{% else %}{{ insight.value|breakable }}{% endif %}{% detail %}
+{% card element="div" %}{% facts layout="band" label=domain.name %}
+  {% for insight in domain.insights %}{% if not insight.notice %}
+    {% fact insight.label tone=insight.concern|yesno:"attention," %}{% if insight.url %}<a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="zone-{{ insight.label|slugify }}"{% endif %}>{{ insight.value|breakable }}</a>{% else %}{{ insight.value|breakable }}{% endif %}{% detail %}
       {% if insight.concern %}<small>{% status "Needs attention" tone="attention" %}</small>{% endif %}
       {% if insight.detail %}<small>{{ insight.detail|breakable }}</small>{% endif %}
-      {% for label, links in insight.links %}<small>{{ label|breakable }} {% for link in links %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</small>{% endfor %}
-      {% if insight.lines %}{% include "partials/_record_list.html" with rows=insight.lines label=insight.label only %}{% endif %}
+      {% for group in insight.links %}<small>{{ group.label|breakable }} {% for link in group.links %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</small>{% endfor %}
       {% if insight.note %}<small{% if insight.note_title %} title="{{ insight.note_title }}"{% endif %}>{{ insight.note|breakable }}</small>{% endif %}
     {% endfact %}
-  {% endfor %}
+  {% endif %}{% endfor %}
 {% endfacts %}{% endcard %}
-{% for insight in zone.cards %}{% if insight.rows %}
-  {% include "partials/_modal.html" with id=insight.modal_id title=insight.label lede=insight.detail body_template="partials/_record_list.html" rows=insight.rows %}
+{% for insight in domain.insights %}{% if insight.rows and not insight.notice %}
+  {% include "partials/_modal.html" with id="zone-"|add:insight.label|slugify title=insight.label lede=insight.detail body_template="partials/_record_list.html" rows=insight.rows %}
 {% endif %}{% endfor %}
 
-{% for notice in zone.notices %}
+{% for notice in domain.insights %}{% if notice.notice %}
   {% notice tone="warning" %}<p>{{ notice.detail|breakable }}</p>{% title %}{{ notice.label|breakable:":" }} {{ notice.value|breakable }}{% endnotice %}
-{% endfor %}
+{% endif %}{% endfor %}
 
 {% comment %}
 Verification strings and issuance rules are folded away last. A domain apex
@@ -75,7 +74,7 @@ and sorted with the rest they would come first: the least interesting rows in
 the zone at the top of the page.
 {% endcomment %}
 {% section "Records" lede=records_lede %}
-  {% include "control_plane/_zone_records.html" with routing=record_rows.routing policy=record_rows.policy zone=zone public_dns_enabled=public_dns_enabled %}
+  {% include "control_plane/_zone_records.html" with routing=record_rows.routing policy=record_rows.policy managed=domain.declaration ttl_set=ttl_set public_dns_enabled=public_dns_enabled %}
 {% aside %}
   {% comment %}How old the records' reading is, beside the one way to add one.{% endcomment %}
   {% for snapshot in inventory %}{% if snapshot.kind == record_kind %}{% muted %}{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|breakable }}</span>{% endif %}{% endmuted %}{% endif %}{% endfor %}
@@ -83,8 +82,8 @@ the zone at the top of the page.
   No "adopt" button: the sweep adopts records in a managed domain
   (``zones.adopt_discovered_records``).
   {% endcomment %}
-  {% if zone.managed and public_dns_enabled %}
-    {% with_query create_url kind=record_kind zone=zone.zone as add_url %}{% button "Add record" add_url look="primary" %}
+  {% if domain.declaration and public_dns_enabled %}
+    {% with_query create_url kind=record_kind zone=domain.name as add_url %}{% button "Add record" add_url look="primary" %}
   {% endif %}
 {% endsection %}
 
@@ -94,7 +93,7 @@ What it is read with is how HQ knows: the relationships card's last line.
 {% endcomment %}
 {% layout %}
 {% include "partials/_relationships.html" %}
-{% referenced_by "zone" zone.zone %}
+{% referenced_by "zone" domain.name %}
 {% endlayout %}
 {% if read_with and not relationships %}{% include "partials/_relationships.html#rest" %}{% endif %}
 {% comment %}Reads what is due from the public registries once the page is up.{% endcomment %}

@@ -561,7 +561,7 @@ class DomainCardTests(TestCase):
     def cards(self, zone):
         from ..zones import find_zone
 
-        return {card.label: card for card in find_zone(zone).cards}
+        return {card.label: card for card in find_zone(zone).insights if not card.notice}
 
     def test_a_parked_domain_says_so_with_who_handles_it(self):
         card = self.cards("example.net")["Services"]

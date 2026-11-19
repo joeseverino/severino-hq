@@ -159,12 +159,10 @@ class ZoneRecord:
         return entity_link("resource", self.resource_key).url
 
     @property
-    def service_url(self) -> str:
-        """Where this name is answered for, when it names something at all."""
+    def service(self) -> str:
+        """The service this name declares, when it names one at all."""
 
-        if not self.declares_service:
-            return ""
-        return entity_link("service", normalized_hostname(self.name)).url
+        return normalized_hostname(self.name) if self.declares_service else ""
 
 
 def told_apart(records: Iterable[ZoneRecord]) -> tuple[ZoneRecord, ...]:
@@ -203,8 +201,6 @@ class ZoneInsight:
     # it. ``url`` stays required alongside this and must reach a page that does
     # the same job, so the card still works when the dialog does not open.
     rows: tuple[ListRow, ...] = ()
-    # A short list on the card itself, one record per line.
-    lines: tuple[ListRow, ...] = ()
     # A muted line under the detail: a reason kept available, not an alarm.
     note: str = ""
     # The note's full reason, where the note says it in fewer words.
@@ -218,12 +214,6 @@ class ZoneInsight:
     links: tuple[tuple[str, tuple[Any, ...]], ...] = ()
     # Shown as a notice above the records rather than as a card.
     notice: bool = False
-
-    @property
-    def modal_id(self) -> str:
-        """A dialog id derived from the label, so no caller invents one."""
-
-        return "zone-" + "".join(char if char.isalnum() else "-" for char in self.label.lower()).strip("-")
 
 
 # Each entry is a ``module:attribute`` taking a Zone and returning a
@@ -287,10 +277,6 @@ class Zone:
         return PageAction.command(ADOPT_ZONE, self.zone, field="token", value=self.adopt_token, primary=True)
 
     @property
-    def managed_count(self) -> int:
-        return sum(1 for record in self.records if record.managed)
-
-    @property
     def adoptable(self) -> tuple[ZoneRecord, ...]:
         """Records HQ could declare and has not.
 
@@ -316,36 +302,6 @@ class Zone:
         """
 
         return tuple(record for record in self.records if not record.ephemeral)
-
-    @property
-    def ttl_set(self) -> bool:
-        """Whether a listed record has a TTL of its own.
-
-        1 leaves it to the DNS service (Cloudflare's "Auto"), which the table
-        leaves blank, so a zone where every record does has no TTL column.
-        """
-
-        return any(record.ttl != 1 for record in self.listed)
-
-    @property
-    def routing(self) -> tuple[ZoneRecord, ...]:
-        """Where traffic goes. The question a domain is usually opened to answer."""
-
-        return told_apart(record for record in self.listed if not record.secondary)
-
-    @property
-    def policy(self) -> tuple[ZoneRecord, ...]:
-        """Verification strings and issuance rules, folded away by default."""
-
-        return told_apart(record for record in self.listed if record.secondary)
-
-    @property
-    def cards(self) -> tuple[ZoneInsight, ...]:
-        return tuple(item for item in self.insights if not item.notice)
-
-    @property
-    def notices(self) -> tuple[ZoneInsight, ...]:
-        return tuple(item for item in self.insights if item.notice)
 
     @cached_property
     def insights(self) -> tuple[ZoneInsight, ...]:
@@ -544,26 +500,11 @@ def zone_names() -> tuple[str, ...]:
     return zone_reads()[0]
 
 
-@dataclass(frozen=True, slots=True)
-class DomainContext:
-    """One domain's page: the domain, and every domain for the switcher."""
-
-    zone: Zone
-    zones: tuple[Zone, ...]
-
-
-def domain_context(zone: str, *, pinned: frozenset[str] = frozenset()) -> DomainContext | None:
-    """The domain named ``zone`` out of one catalog build, or None."""
-
-    zones = zone_catalog(pinned=pinned)
-    wanted = normalized_hostname(zone)
-    found = next((item for item in zones if item.zone == wanted), None)
-    return DomainContext(found, zones) if found is not None else None
-
-
 def find_zone(zone: str) -> Zone | None:
-    context = domain_context(zone)
-    return context.zone if context is not None else None
+    """The domain named ``zone`` out of the catalog, or None."""
+
+    wanted = normalized_hostname(zone)
+    return next((item for item in zone_catalog() if item.zone == wanted), None)
 
 
 @transaction.atomic

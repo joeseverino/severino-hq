@@ -19,8 +19,7 @@ from hq.platform.application.pages import PageAction, PageDialog, PageMixin, Rec
 from hq.platform.application.resource_capabilities import (
     CREATE_CAPABILITY,
     MACHINE_DETAILS,
-    REMOVAL_CAPABILITY,
-    Offered,
+    declaration_actions,
     offered_changes,
     resource_capabilities,
 )
@@ -214,16 +213,7 @@ class MachineDetailView(RecordPageMixin, TemplateView):
         record = self.record
         if record["declaration"]:
             # The machine's declaration is edited from its own page.
-            key = record["declaration"]
-            resource = ManagedResource.objects.filter(key=key).first()
-            capabilities = resource_capabilities(resource) if resource is not None else None
-            offered = capabilities.offered if capabilities is not None else Offered()
-            actions = [
-                offered.edit(key),
-                PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant)
-                if capabilities is not None and offered.removes
-                else None,
-            ]
+            actions: list[PageAction | None] = [*declaration_actions(record["declaration"])]
         else:
             # Seeded with the name and addresses HQ knows, and back here after
             # saving. A machine the tailnet device declaration already names
