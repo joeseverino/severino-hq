@@ -89,7 +89,7 @@ func newWorker(t *testing.T) *worker {
 		Permissions: map[string]string{"contents": "read"}, Path: filepath.Join(root, "grant", "github_token")}
 	write(w.grant.Path, "example-token-one")
 
-	machine := &Machine{Lib: filepath.Join(root, "lib")}
+	machine := &Machine{Lib: filepath.Join(root, "lib"), Runs: filepath.Join(root, "runs")}
 	machine.Owner = func(_ *os.Root, name string) error {
 		w.mu.Lock()
 		defer w.mu.Unlock()

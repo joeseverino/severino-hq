@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -180,18 +182,32 @@ func TestPortainerRefusalsClassify(t *testing.T) {
 	}
 }
 
-// The sweep skips the controller's own run by the nonce it was handed, so a
-// container cannot hide by wearing the label with another value.
-func TestPortainerSweepSkipsOnlyThisRun(t *testing.T) {
+// The sweep leaves out the containers of hq-host's runs in flight, a deploy's
+// as well as its own, by the nonces root registered, so a container cannot
+// hide by wearing the label with a value of its choosing.
+func TestPortainerSweepSkipsOnlyHostRuns(t *testing.T) {
+	const pass, rehearsal, ended = "AAAAAAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBBBBBB", "CCCCCCCCCCCCCCCCCCCCCCCCCC"
+	root := t.TempDir()
+	runs := filepath.Join(root, "runs")
+	for _, file := range []string{filepath.Join(runs, pass), filepath.Join(runs, rehearsal), filepath.Join(root, "beside")} {
+		if err := os.MkdirAll(filepath.Dir(file), 0o711); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	_, server := newPortainerAPI(t, map[string]string{
 		"/api/endpoints": oneLocalEndpoint,
 		"/api/stacks":    `[]`,
 		containersPath: `[
-			{"Id":"aaaaaaaaaaaaaaaa","Names":["/hq-controller"],"Labels":{"severino-hq.run":"nonce-1"},"State":"running"},
-			{"Id":"bbbbbbbbbbbbbbbb","Names":["/impostor"],"Labels":{"severino-hq.run":"nonce-2"},"State":"running"},
+			{"Id":"aaaaaaaaaaaaaaaa","Names":["/hq-controller"],"Labels":{"severino-hq.run":"` + pass + `"},"State":"running"},
+			{"Id":"bbbbbbbbbbbbbbbb","Names":["/severino-hq-rehearsal"],"Labels":{"severino-hq.run":"` + rehearsal + `"},"State":"running"},
+			{"Id":"dddddddddddddddd","Names":["/stranger"],"Labels":{"severino-hq.run":"` + ended + `"},"State":"running"},
+			{"Id":"eeeeeeeeeeeeeeee","Names":["/climber"],"Labels":{"severino-hq.run":"../beside"},"State":"running"},
 			{"Id":"cccccccccccccccc","Names":["/web"],"State":"running"}]`,
 	})
-	r := portainerRegistry(t, server.URL, runtime.Environment{Run: "nonce-1"})
+	r := portainerRegistry(t, server.URL, runtime.Environment{Runs: runs})
 	records, err := r.portainerContainerRecords(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -200,7 +216,7 @@ func TestPortainerSweepSkipsOnlyThisRun(t *testing.T) {
 	for _, record := range records {
 		names = append(names, record.Name)
 	}
-	if !reflect.DeepEqual(names, []string{"impostor", "web"}) {
+	if !reflect.DeepEqual(names, []string{"stranger", "climber", "web"}) {
 		t.Fatalf("swept %v", names)
 	}
 }

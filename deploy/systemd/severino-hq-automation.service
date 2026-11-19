@@ -17,5 +17,6 @@ ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-host automation
 # this outlasts it so that removal runs (tested).
 TimeoutStartSec=95min
 
-# The run directory on the renderer's tmpfs, and the doorbell.
-ReadWritePaths=/run/severino-hq-secrets /run/severino-hq
+# The run directory on the renderer's tmpfs, the doorbell, and the registry its
+# container is known by (controller/host/runs.go).
+ReadWritePaths=/run/severino-hq-secrets /run/severino-hq /run/severino-hq-runs

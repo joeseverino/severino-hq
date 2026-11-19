@@ -31,7 +31,7 @@ const (
 // launchVariables is every variable the launcher may set: a path, a name, an
 // image or a nonce.
 var launchVariables = []string{
-	"HQ_CONTROLLER_RUN", "SEVERINO_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
+	"HQ_CONTROLLER_RUNS", "SEVERINO_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
 	"HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_SEAL_DIR", "HQ_CONTROLLER_IMAGE", "SEVERINO_HQ_SOURCE_REPOSITORY",
 	"HQ_CONTROLLER_CA_FILE", "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK",
 	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS", "SEVERINO_HOST_RESTARTING_UNITS", "SEVERINO_HOST_FILESYSTEMS", "SEVERINO_HOST_REBOOT",
@@ -724,7 +724,7 @@ func TestAGlanceIsGivenNothingElseOfTheControllers(t *testing.T) {
 		names = append(names, name)
 	}
 	slices.Sort(names)
-	want := []string{"HQ_CONTROLLER_CA_FILE", "HQ_CONTROLLER_CONNECTIONS", "HQ_CONTROLLER_RUN", "HQ_CONTROLLER_SSH_DIR", "SEVERINO_BRIDGE_SOCKET"}
+	want := []string{"HQ_CONTROLLER_CA_FILE", "HQ_CONTROLLER_CONNECTIONS", "HQ_CONTROLLER_RUNS", "HQ_CONTROLLER_SSH_DIR", "SEVERINO_BRIDGE_SOCKET"}
 	if !slices.Equal(names, want) {
 		t.Errorf("the glance is told %v, want %v", names, want)
 	}
@@ -737,7 +737,7 @@ func TestAGlanceIsGivenNothingElseOfTheControllers(t *testing.T) {
 		}
 	}
 	slices.Sort(targets)
-	if want := []string{filepath.Dir(BridgeSocket), controllerConnections, controllerSSH, controllerCA}; !slices.Equal(targets, slices.Sorted(slices.Values(want))) {
+	if want := []string{filepath.Dir(BridgeSocket), controllerConnections, controllerSSH, controllerCA, RunsDir}; !slices.Equal(targets, slices.Sorted(slices.Values(want))) {
 		t.Errorf("the glance mounts %v", targets)
 	}
 	if string(l.mounted[controllerCA]) != "ROOT\n" {

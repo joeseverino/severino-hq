@@ -38,8 +38,9 @@ type Environment struct {
 	// SealKeyDir holds the private keys HQ's web seals to (NewOpener),
 	// mounted read-only.
 	SealKeyDir string `env:"HQ_SEAL_DIR"`
-	// Run is this run's nonce, which labels its own container.
-	Run string `env:"HQ_CONTROLLER_RUN"`
+	// Runs is the registry of hq-host's runs in flight (host.RunsDir),
+	// mounted read-only.
+	Runs string `env:"HQ_CONTROLLER_RUNS"`
 	// Image is the image this run was started from, and SourceRepository the
 	// repository that delivers it.
 	Image            string `env:"HQ_CONTROLLER_IMAGE"`

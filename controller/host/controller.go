@@ -2,7 +2,6 @@ package host
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
@@ -126,7 +125,8 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 	if err != nil {
 		return err
 	}
-	nonce := rand.Text()
+	own := c.beginRun()
+	defer own.end()
 	role := "controller"
 	if pass == Glance {
 		role = "glance"
@@ -134,11 +134,11 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 	args := []string{
 		"run", "--rm", "--network", "host", "--user", fmt.Sprintf("%d:%d", hostcore.WebUID, hostcore.WebGID), "--cap-drop", "ALL",
 		"--no-healthcheck",
-		// A nonce the pass is handed too, so it can tell which container it
-		// finds is itself: a fixed label any container could set.
 		"--label", "severino-hq.role=" + role,
-		"--label", "severino-hq.run=" + nonce,
-		"--env", "HQ_CONTROLLER_RUN=" + nonce,
+		own.label(),
+		// What the pass leaves out of what it finds (RunsDir).
+		"--mount", readOnly(c.Runs, RunsDir),
+		"--env", "HQ_CONTROLLER_RUNS=" + RunsDir,
 		"--security-opt", "no-new-privileges:true",
 		"--tmpfs", "/tmp:size=64m,noexec,nosuid,nodev",
 		"--entrypoint", "/usr/local/bin/hq-controller",

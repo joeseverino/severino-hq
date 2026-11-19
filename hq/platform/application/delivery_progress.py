@@ -26,13 +26,6 @@ RUNNING = "running"
 WAITING = "waiting"
 ENDED = "ended"
 _ON_ITS_WAY = (STARTING, RUNNING)
-# The controller's closing words for each stage that is not an end, fixed in
-# controller/providers/github_delivery.go.
-_SENTENCES = (
-    ("No deploy has started", STARTING),
-    ("is running", RUNNING),
-    ("is waiting for approval", WAITING),
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,12 +42,9 @@ class DeliveryProgress:
 
 
 def _stage(item: Mapping[str, Any]) -> str:
-    # A reading without ``stage_state`` carries only the controller's sentence.
+    # The stage as the controller decides it (github_delivery.go, state).
     stated = str(item.get("stage_state", "") or "")
-    if stated:
-        return stated if stated in (STARTING, RUNNING, WAITING) else ENDED
-    said = str(item.get("stage", "") or "").strip().rstrip(".")
-    return next((state for words, state in _SENTENCES if said.endswith(words)), ENDED)
+    return stated if stated in (STARTING, RUNNING, WAITING) else ENDED
 
 
 def delivery_progress(resource) -> DeliveryProgress | None:

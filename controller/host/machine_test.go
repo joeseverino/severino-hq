@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,6 +54,7 @@ const sudoListing = "Matching Defaults entries for %[1]s on example:\n    env_re
 // program is what each command an install or a deploy runs does here: it is
 // recorded, and answers as the host would.
 func (f *fakeHost) program(ctx context.Context, name string, args ...string) *exec.Cmd {
+	args = f.ours(name, args)
 	call := strings.Join(append([]string{name}, args...), " ")
 	f.mu.Lock()
 	f.log = append(f.log, call)
@@ -141,9 +143,15 @@ func newFakeHost(t *testing.T) *fakeHost {
 		Seal:       filepath.Join(root, "seal"),
 		SealPublic: filepath.Join(root, "state", "seal", "public.key"),
 		Runtime:    filepath.Join(root, "run"),
+		Runs:       filepath.Join(root, "run", "severino-hq-runs"),
 		Out:        &f.out,
 	}
 	f.machine.Command = f.program
+	t.Cleanup(func() {
+		if left, _ := os.ReadDir(f.machine.Runs); len(left) != 0 {
+			t.Errorf("runs outlived the work they registered for: %v", left)
+		}
+	})
 	f.machine.Own = func(string) error { return nil }
 	f.machine.Owner = func(*os.Root, string) error { return nil }
 	f.machine.Verifier = func(context.Context) error { return nil }
@@ -206,6 +214,25 @@ func (f *fakeHost) installed(names ...string) map[string]bool {
 		found[name] = err == nil
 	}
 	return found
+}
+
+// ours is a docker run or create's arguments without the run label, which
+// must name a run registered as the container is made: every container a run
+// of hq-host makes is HQ's own to a pass that finds it (RunsDir).
+func (f *fakeHost) ours(name string, args []string) []string {
+	if name != "docker" || len(args) == 0 || (args[0] != "run" && args[0] != "create") {
+		return args
+	}
+	for i, arg := range args {
+		if nonce, ok := strings.CutPrefix(arg, "--label="+RunLabel+"="); ok {
+			if _, err := os.Stat(filepath.Join(f.machine.Runs, nonce)); err != nil {
+				f.t.Errorf("a container is labeled with no registered run: %v", args)
+			}
+			return slices.Delete(slices.Clone(args), i, i+1)
+		}
+	}
+	f.t.Errorf("a container is not labeled as a run of HQ's: %v", args)
+	return args
 }
 
 func (f *fakeHost) calls() []string {

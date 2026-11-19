@@ -54,24 +54,34 @@ func (m *Machine) Sync(ctx context.Context, image string) error {
 	return swap(stage, m.Lib)
 }
 
-// extract copies TreeItems out of image into dir without pulling it again.
-func (m *Machine) extract(ctx context.Context, image, dir string) error {
-	out, err := m.Command(ctx, "docker", "create", "--pull", "never", image, "true").Output()
+// open makes a container of image that never starts, without pulling it
+// again, for read to copy files out of, and removes it after.
+func (m *Machine) open(ctx context.Context, image string, read func(container string) error) error {
+	own := m.beginRun()
+	defer own.end()
+	out, err := m.Command(ctx, "docker", "create", "--pull", "never", own.label(), image, "true").Output()
 	if err != nil {
 		return fmt.Errorf("could not open the image %s", image)
 	}
 	container := strings.TrimSpace(string(out))
 	defer func() { _ = m.run(context.WithoutCancel(ctx), "docker", "rm", "--force", container) }()
-	for _, item := range TreeItems {
-		target := filepath.Join(dir, item)
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
+	return read(container)
+}
+
+// extract copies TreeItems out of image into dir without pulling it again.
+func (m *Machine) extract(ctx context.Context, image, dir string) error {
+	return m.open(ctx, image, func(container string) error {
+		for _, item := range TreeItems {
+			target := filepath.Join(dir, item)
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			if err := m.run(ctx, "docker", "cp", container+":/app/"+item, target); err != nil {
+				return fmt.Errorf("the image ships no /app/%s", item)
+			}
 		}
-		if err := m.run(ctx, "docker", "cp", container+":/app/"+item, target); err != nil {
-			return fmt.Errorf("the image ships no /app/%s", item)
-		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // seal makes everything under dir root's, directories and data 0755/0644,

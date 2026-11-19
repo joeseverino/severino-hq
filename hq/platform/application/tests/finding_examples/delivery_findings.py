@@ -12,8 +12,9 @@ from . import Example, Examples
 RUN = "https://github.example.com/example/host/actions/runs/9"
 
 
-def delivered(stage: str, behind_for: timedelta = timedelta(minutes=1), **extension) -> None:
-    """A delivery whose approved commit production does not run yet, at ``stage`` as the controller words it."""
+def delivered(stage: str, state: str, behind_for: timedelta = timedelta(minutes=1), **extension) -> None:
+    """A delivery whose approved commit production does not run yet, at ``stage`` as the controller words
+    it and ``state`` as it decides it."""
 
     ManagedResource.objects.create(
         key="delivery",
@@ -29,6 +30,7 @@ def delivered(stage: str, behind_for: timedelta = timedelta(minutes=1), **extens
                     "running": "a" * 40,
                     "admitted": "b" * 40,
                     "stage": stage,
+                    "stage_state": state,
                     "run_url": RUN,
                     **extension,
                 }
@@ -46,20 +48,20 @@ def delivered(stage: str, behind_for: timedelta = timedelta(minutes=1), **extens
     )
 
 
-def delivery(stage: str, **said) -> Example:
-    return Example(readings={KIND: ()}, given=lambda: delivered(stage, **said))
+def delivery(stage: str, state: str, **said) -> Example:
+    return Example(readings={KIND: ()}, given=lambda: delivered(stage, state, **said))
 
 
 def raising(example: Example, *titles: str) -> Example:
     return replace(example, raises=titles)
 
 
-RUNNING = delivery("Compose run 9 is running")
-WAITING = delivery("Deploy run 9 is waiting for approval")
+RUNNING = delivery("Compose run 9 is running", "running")
+WAITING = delivery("Deploy run 9 is waiting for approval", "waiting")
 # A run that failed, and one on its way for longer than a deploy takes, are problems rather than news.
 ENDED = (
-    delivery("Compose run 9 failed"),
-    delivery("Compose run 9 is running", behind_for=STALLED_AFTER + timedelta(minutes=1)),
+    delivery("Compose run 9 failed", "failed"),
+    delivery("Compose run 9 is running", "running", behind_for=STALLED_AFTER + timedelta(minutes=1)),
 )
 
 EXAMPLES = (
@@ -68,9 +70,7 @@ EXAMPLES = (
         "deploy-running",
         fires=(
             raising(RUNNING, "A deploy is running"),
-            raising(delivery("No deploy has started"), "A deploy is about to start"),
-            # The stage the reading states is read before its sentence.
-            raising(delivery("Compose run 9 failed", stage_state="running"), "A deploy is running"),
+            raising(delivery("No deploy has started", "not_started"), "A deploy is about to start"),
         ),
         quiet=(WAITING, *ENDED),
     ),

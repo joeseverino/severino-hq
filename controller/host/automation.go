@@ -157,8 +157,10 @@ func (a *Automation) Run(ctx context.Context) error {
 	if err := confined.confine(ctx, a.Machine); err != nil {
 		return err
 	}
+	own := a.beginRun()
+	defer own.end()
 	name := "severino-hq-automation-" + rand.Text()
-	return a.work(ctx, name, AutomationArgs(name, image, run, a.Journal, a.ID, *a.Project), run, token)
+	return a.work(ctx, name, slices.Insert(AutomationArgs(name, image, run, a.Journal, a.ID, *a.Project), 1, own.label()), run, token)
 }
 
 // work runs the container until it ends or the bound passes, keeping its

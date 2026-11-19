@@ -439,16 +439,12 @@ func (d *Deployer) restoreTree(backup string) error {
 
 // copyOut copies one file out of image without pulling it again.
 func (d *Deployer) copyOut(ctx context.Context, image, from, to string) error {
-	out, err := d.Command(ctx, "docker", "create", "--pull", "never", image, "true").Output()
-	if err != nil {
-		return fmt.Errorf("could not read %s from the image: %w", from, err)
-	}
-	container := strings.TrimSpace(string(out))
-	defer func() { _ = d.run(context.WithoutCancel(ctx), "docker", "rm", "--force", container) }()
-	if err := d.run(ctx, "docker", "cp", container+":"+from, to); err != nil {
-		return notShipped{from, err}
-	}
-	return os.Chmod(to, 0o700)
+	return d.open(ctx, image, func(container string) error {
+		if err := d.run(ctx, "docker", "cp", container+":"+from, to); err != nil {
+			return notShipped{from, err}
+		}
+		return os.Chmod(to, 0o700)
+	})
 }
 
 // notShipped is a file an image that opened does not hold.

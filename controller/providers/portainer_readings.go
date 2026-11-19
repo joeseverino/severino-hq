@@ -246,7 +246,7 @@ func (r *Registry) portainerEach(what string, build portainerBuild) Reader {
 	}
 }
 
-// siteContainers is an environment's containers, never this controller's own run.
+// siteContainers is an environment's containers, never one of HQ's own runs.
 func (r *Registry) siteContainers(ctx context.Context, at portainerSite) ([]dockerContainer, error) {
 	listed, err := r.portainerContainers(ctx, at.ConnectionRef, at.EnvironmentID)
 	if err != nil {
@@ -254,7 +254,7 @@ func (r *Registry) siteContainers(ctx context.Context, at portainerSite) ([]dock
 	}
 	found := []dockerContainer{}
 	for _, container := range listed {
-		if !r.isThisRun(container.Labels) {
+		if !r.hostRun(container.Labels) {
 			found = append(found, container)
 		}
 	}

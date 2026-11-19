@@ -276,6 +276,7 @@ func machine(stdout io.Writer) *host.Machine {
 		Seal:       host.SealDir,
 		SealPublic: host.SealPublicKey,
 		Runtime:    runtimeDir(),
+		Runs:       host.RunsDir,
 		Sudoers:    "/etc/sudoers.d",
 		Command:    hostcore.Command,
 		Own:        func(path string) error { return os.Lchown(path, 0, 0) },
