@@ -14,7 +14,7 @@ from hq.platform.application.command_fields import Describe
 from hq.platform.application.json_schemas import json_schemas
 
 from .. import openapi
-from ..components import Components
+from ..components import PARTIAL, Components
 from .test_described_once import described_once
 
 _URI = "urn:example:document"
@@ -119,32 +119,12 @@ class ExampleHealthyRecord(ExampleRow):
     pet: Annotated[ExampleCat | ExampleDog, Field(discriminator="kind")]
 
 
-class ExampleUnmasked(TypedDict):
-    label: str
-
-
 class FieldMaskTests(SimpleTestCase):
-    def test_a_masked_component_promises_no_field_whichever_schema_writes_it_first(self):
-        for first in ("record", "row"):
-            with self.subTest(first=first):
-                components = Components()
-                if first == "record":
-                    components.typed({"ExampleRecord": ExampleRecord})
-                    components.mask("ExampleRow")
-                else:
-                    components.typed({"ExampleRow": ExampleRow})
-                    components.mask("ExampleRow")
-                    components.typed({"ExampleRecord": ExampleRecord})
-
-                schemas = components.sparse()
-                self.assertNotIn("required", schemas["ExampleRow"])
-                _validator(schemas, "ExampleRow").validate({"slug": "example"})
-
     def test_every_part_a_mask_reaches_promises_no_field_and_a_whole_answer_still_validates(self):
         components = Components()
         components.mask("ExampleHealthyRecord")
-        components.typed({"ExampleHealthyRecord": ExampleHealthyRecord, "ExampleUnmasked": ExampleUnmasked})
-        validator = _validator(components.sparse(), "ExampleHealthyRecord")
+        components.typed({"ExampleHealthyRecord": ExampleHealthyRecord})
+        validator = _validator(components.written(), "ExampleHealthyRecord" + PARTIAL)
         health = {"state": "healthy", "label": "Working"}
 
         validator.validate(
@@ -169,12 +149,3 @@ class FieldMaskTests(SimpleTestCase):
                 validator.validate(answer)
         with self.assertRaises(ValidationError):
             validator.validate({"health": {"state": 1}})
-
-    def test_a_part_no_mask_reaches_keeps_its_fields_required(self):
-        components = Components()
-        components.mask("ExampleRow")
-        components.typed({"ExampleRow": ExampleRow, "ExampleUnmasked": ExampleUnmasked})
-        schemas = components.sparse()
-
-        self.assertEqual(schemas["ExampleUnmasked"]["required"], ["label"])
-        self.assertIn("required", components.schemas["ExampleRow"], "the components as written are left whole")

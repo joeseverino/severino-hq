@@ -43,7 +43,6 @@ lazy from hq.platform.application.pins import FAVORITES, MOVE, PIN, SERVICE, ord
 
 from .forms import ServiceStartForm
 from .models import ManagedResource
-from .names import normalized_hostname
 from .provider_adapters.portainer import CONTAINER_KIND
 from .providers import service_facets
 from .views import verb_action
@@ -311,10 +310,7 @@ class ServicePinView(View):
         return {"kind": SERVICE, "key": name}
 
     def post(self, request, hostname: str):
-        name = normalized_hostname(hostname)
-        if not name:
-            raise Http404("No such service.")
-        refused(request, execute_posted(request, self.capability, self.payload(name)))
+        refused(request, execute_posted(request, self.capability, self.payload(hostname)))
         return redirect(safe_next(request, fallback=reverse("control_plane:services")))
 
 

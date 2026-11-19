@@ -436,10 +436,12 @@ Every adapter reads `fields` beside the query, so no resource query may declare
 a field called `fields`. The registry refuses one at startup.
 
 A masked answer validates against the OpenAPI document. A document cannot say
-an answer's shape follows a query parameter. So each record and row schema, and
-every part a mask can reach inside one at any depth, lists no `required` key.
-Each field it names keeps its type and stays closed to keys it does not name. A
-part shared with another answer reads the same there. The test client validates
+an answer's shape follows a query parameter. So a read of a record or a row
+answers `<Name>Partial`, a copy of the type's schema, and of every part a mask
+can reach inside it at any depth, that lists no `required` key and tells no
+branch apart by a discriminator. Each field it names keeps its type and stays
+closed to keys it does not name. An answer no mask cuts, a command's included,
+refers to `<Name>` itself, every field required. The test client validates
 every answer it receives, masked ones included.
 
 A list read is one page. `truncated` says more follow it, and `next` is

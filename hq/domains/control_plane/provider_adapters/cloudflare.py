@@ -7,9 +7,10 @@ from typing import Annotated, Any, Literal, get_args, override
 from pydantic import Field, GetJsonSchemaHandler, model_validator
 from pydantic_core import CoreSchema
 
-from hq.platform.application.command_fields import RequiredText
+from hq.platform.application.command_fields import Choices, RequiredText
 from hq.platform.application.describe import Describe
 from hq.platform.application.routes import reverse
+from hq.platform.application.tone import Tone, TonedChoices
 
 from ..connection_shapes import API_TOKEN
 from ..consoles import cloudflare_dashboard
@@ -604,12 +605,24 @@ ZONE = ProviderSpec(
 )
 
 CONTACT_INBOX_KIND = "cloudflare.contact_inbox"
-# The statuses the contact form's table holds a message in.
-ContactStatus = Literal["unread", "read", "replied", "archived", "spam"]
 # How many changes may wait for the controller at once. A change leaves the
 # declaration once the reading shows it applied, so this is a backlog the
 # controller has not caught up with, never a history.
 CONTACT_CHANGES_LIMIT = 200
+
+
+class SubmissionStatus(TonedChoices):
+    """The statuses the contact form's table holds a message in, each in the
+    tone its pill takes: a message nobody has read waits on someone."""
+
+    UNREAD = "unread", Tone.ATTENTION, "Unread"
+    READ = "read", Tone.NEUTRAL, "Read"
+    REPLIED = "replied", Tone.GOOD, "Replied"
+    ARCHIVED = "archived", Tone.NEUTRAL, "Archived"
+    SPAM = "spam", Tone.NEUTRAL, "Spam"
+
+
+ContactStatus = Annotated[str, Choices(SubmissionStatus.choices)]
 
 
 class ContactReview(ProviderModel):

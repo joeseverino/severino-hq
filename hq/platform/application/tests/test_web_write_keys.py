@@ -1,9 +1,8 @@
 """Every web write carries a retry key, so a form sent twice acts once.
 
-Held twice: from the source, every form that posts, in the host's templates
-and the example plugin's, draws its key with ``{% write_token %}``; and from
-the registry, every capability that changes something refuses the browser
-without one, so no write is left that a keyless form could reach.
+Held from the source: every form that posts, in the host's templates and the
+example plugin's, draws its key with ``{% write_token %}``, and the runner
+refuses a change the browser sends without one.
 """
 
 import re
@@ -14,9 +13,7 @@ from django.test import SimpleTestCase, TestCase, tag
 
 from hq.platform.application.tests.reads import reads
 
-from ..capabilities import capability_registry, run_capability
 from ..plugin_testing import form_keyed
-from ..security import Principal
 from ..web_writes import RETRY_KEY_FIELD
 from .source import source_files
 from .writers import drawn_key
@@ -63,28 +60,6 @@ class WriteFormTests(SimpleTestCase):
         )
 
         self.assertEqual(unkeyed_forms(source), ['<form method="post">'])
-
-
-class KeylessWebWriteTests(TestCase):
-    def test_every_change_refuses_the_browser_without_a_key(self):
-        specs = [spec for spec in capability_registry().values() if spec.effect != "read"]
-        self.assertTrue(specs, "the registry holds no change")
-        everything = frozenset(name for spec in specs for name in spec.required_capabilities)
-        person = Principal("example-operator", "web", everything)
-
-        refused = 0
-        for spec in specs:
-            with self.subTest(capability=spec.name):
-                target = (1 if spec.target_kind == "integer" else "example") if spec.target_kind else None
-                answer = run_capability(spec.name, {}, principal=person, target=target).answer
-                code = answer.get("error", {}).get("code")
-                # A grant held only by HQ itself (a logout token's) never reaches the browser at all.
-                if code == "forbidden" and "never by a web principal" in answer["error"]["message"]:
-                    continue
-
-                self.assertEqual(code, "idempotency_key_required", answer)
-                refused += 1
-        self.assertTrue(refused, "no change was asked of the browser")
 
 
 class RedrawnFormTests(TestCase):

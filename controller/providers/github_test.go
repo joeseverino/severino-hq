@@ -891,6 +891,10 @@ func TestGitHubDelivery(t *testing.T) {
 		{"a composition waiting for approval", admitted, `{"workflow_runs":[{"id":62,"name":"Deploy","status":"waiting","created_at":"2030-01-05T00:01:00Z"}]}`,
 			map[string]string{admitted: `{"check_runs":[]}`}, nil,
 			"Delivering", "Deploy run 62 is waiting for approval", []string{"POST /repos/example/ext/check-runs"}, "in_progress"},
+		// A deploy that passed before production is read running it is still on its way, never failed.
+		{"a deploy that finished before production is read is still deploying", admitted, `{"workflow_runs":[{"id":63,"name":"Deploy","status":"completed","conclusion":"success","created_at":"2030-01-05T00:01:00Z"}]}`,
+			map[string]string{admitted: `{"check_runs":[{"id":9,"status":"in_progress","conclusion":null}]}`}, nil,
+			"Delivering", "Deploy run 63 finished", []string{"PATCH /repos/example/ext/check-runs/9"}, "in_progress"},
 		{"a failed composition is degraded and never retried", admitted, `{"workflow_runs":[{"id":63,"name":"Compose","status":"completed","conclusion":"failure","created_at":"2030-01-05T00:01:00Z"}]}`,
 			map[string]string{admitted: `{"check_runs":[]}`}, nil,
 			"NotDelivered", "Compose run 63 failed", []string{"POST /repos/example/ext/check-runs"}, "completed"},
@@ -1021,7 +1025,7 @@ func TestGitHubDeliveryLatestAdmissionIsTheNewestListed(t *testing.T) {
 
 // A result says in its own line whether anything is waiting on the owner.
 func TestGitHubDeliveryResultNeverReadsAsDoneWhileNotDeployed(t *testing.T) {
-	routes := deliveryRoutes(admitted, `{"workflow_runs":[{"id":63,"name":"Deploy","status":"completed","conclusion":"success","created_at":"2030-01-05T00:01:00Z","html_url":"https://github.com/example/host/actions/runs/63"}]}`)
+	routes := deliveryRoutes(admitted, `{"workflow_runs":[{"id":63,"name":"Deploy","status":"completed","conclusion":"failure","created_at":"2030-01-05T00:01:00Z","html_url":"https://github.com/example/host/actions/runs/63"}]}`)
 	key, value := checkRunsRoute(admitted, `{"check_runs":[]}`)
 	routes[key] = value
 	h := deliveryHarness(t, routes)
@@ -1029,11 +1033,11 @@ func TestGitHubDeliveryResultNeverReadsAsDoneWhileNotDeployed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "ext: 2222222 is approved, production still runs 1111111. Deploy run 63 finished without deploying it. Re-run it on GitHub."
+	want := "ext: 2222222 is approved, production still runs 1111111. Deploy run 63 failed. Re-run it on GitHub."
 	if result.Message != "Not deployed." || result.Conditions[0].Message != want {
 		t.Fatalf("%q %q", result.Message, result.Conditions[0].Message)
 	}
-	if status := result.Status.(GitHubDeliveryRecord); status.Extensions[0].RunURL != "https://github.com/example/host/actions/runs/63" {
+	if status := result.Status.(GitHubDeliveryRecord); status.Extensions[0].RunURL != "https://github.com/example/host/actions/runs/63" || status.Extensions[0].StageState != stageFailed {
 		t.Fatalf("the run to re-run is named: %+v", status.Extensions[0])
 	}
 }

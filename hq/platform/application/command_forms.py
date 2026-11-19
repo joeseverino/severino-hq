@@ -14,7 +14,7 @@ from .command_fields import among_now, for_agents, is_upload, named_records, ref
 from .command_targets import CommandTargetOption
 from .contracts import Effect
 from .describe import meanings
-from .forms import LinesField, UploadField
+from .forms import LinesField, ReadAt, UploadField
 from .integration_specs import IDEMPOTENCY_FIELD, capability_schema, command_schema
 from .json_schemas import fields as whole_fields, labeled_choices
 from .labels import field_label
@@ -425,9 +425,8 @@ def command_form_class(
                 **options,
             )
         fields = {"__target": fields.pop("__target"), **fields}
-        # Filled from the record a chosen target loads, never typed: a save
-        # made against a record that changed since is refused.
-        fields["__expected_updated_at"] = forms.CharField(required=False, widget=forms.HiddenInput())
+        # Filled from the record a chosen target loads.
+        fields["__expected_updated_at"] = ReadAt()
     fields["next"] = forms.CharField(required=False, widget=forms.HiddenInput())
     if spec.effect.rank >= Effect.INFRASTRUCTURE_CHANGE.rank:
         fields["__confirm_effect"] = forms.BooleanField(

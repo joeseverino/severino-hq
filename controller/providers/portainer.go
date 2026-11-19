@@ -7,12 +7,15 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	deployed "github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/host/unit"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -22,7 +25,6 @@ import (
 // Answers decode into the wire types in portainer_types.go.
 
 const (
-	portainerRunLabel  = "severino-hq.run"
 	portainerNeeds     = "environment access"
 	composeProject     = "com.docker.compose.project"
 	composeWorkingDir  = "com.docker.compose.project.working_dir"
@@ -154,10 +156,16 @@ func (r *Registry) portainerPublished(ctx context.Context) ([]PublishedContainer
 	return out, nil
 }
 
-// isThisRun matches the per-run nonce the launcher sets as a label and as
-// HQ_CONTROLLER_RUN; a fixed label would let any container hide from the sweep.
-func (r *Registry) isThisRun(labels map[string]string) bool {
-	return r.Env.Run != "" && labels[portainerRunLabel] == r.Env.Run
+// hostRun is whether a container is one of hq-host's runs in flight, this
+// pass included: its label names a nonce registered in Env.Runs. What makes
+// that safe is deployed.RunLabel's to say.
+func (r *Registry) hostRun(labels map[string]string) bool {
+	nonce := labels[deployed.RunLabel]
+	if r.Env.Runs == "" || !deployed.RunNonce.MatchString(nonce) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(r.Env.Runs, nonce))
+	return err == nil
 }
 
 // portainerToken is a Portainer connection's address and API token.
@@ -502,7 +510,7 @@ func (r *Registry) portainerContainerRecords(ctx context.Context) ([]PortainerCo
 				return nil, err
 			}
 			for _, container := range containers {
-				if !r.isThisRun(container.Labels) {
+				if !r.hostRun(container.Labels) {
 					records = append(records, containerRecord(container, host, ref, createdHere, environment.Address))
 				}
 			}

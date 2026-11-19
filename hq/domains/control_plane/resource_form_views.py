@@ -175,6 +175,7 @@ class ResourceFormView(View):
                 "identity": identity,
                 "spec": spec,
                 "material": material,
+                "options_wrong": bool(spec.errors or (identity is not None and identity.errors)),
                 **_form_page(request, kind, resource),
             },
         )
@@ -195,6 +196,7 @@ class ResourceFormView(View):
                 "enabled": identity.cleaned_data["enabled"] if identity else True,
             },
             target=resource.key if resource else None,
+            expected_updated_at=identity.cleaned_data["expected_updated_at"] or None if identity else None,
         )
         if refused(request, result, form=spec):
             return None
@@ -225,12 +227,12 @@ def _identity(kind: str, resource, data=None) -> ResourceIdentityForm | None:
 
     if not resource:
         return None
+    initial = {"enabled": resource.enabled, "expected_updated_at": resource.updated_at.isoformat()}
     if kind == MACHINE_KIND:
         return MachineIdentityForm(
-            data,
-            initial={"enabled": resource.enabled, "show_on_dashboard": dashboard_machine_selected(resource.key)},
+            data, initial={**initial, "show_on_dashboard": dashboard_machine_selected(resource.key)}
         )
-    return ResourceIdentityForm(data, initial={"enabled": resource.enabled})
+    return ResourceIdentityForm(data, initial=initial)
 
 
 def _form_page(request, kind: str, resource) -> dict:

@@ -229,6 +229,20 @@ class MailPageTests(TestCase):
         self.assertIn("p=reject", content)
         self.assertIn("fo=1", content)
 
+    def test_a_policy_saved_over_a_change_made_since_the_page_was_drawn_is_refused(self):
+        drawn = self.client.get(self.url).context["failures_form"]["expected_updated_at"].value()
+        record = ManagedResource.objects.get(key="dmarc")
+        record.spec = {**record.spec, "ttl": 300}
+        record.save()
+
+        response = self.client.post(
+            self.url, form_keyed({"section": "dmarc", "p": "reject", "pct": "100", "expected_updated_at": drawn})
+        )
+
+        self.assertGreaterEqual(response.status_code, 400)
+        record.refresh_from_db()
+        self.assertEqual((record.spec["ttl"], "p=none" in record.spec["content"]), (300, True))
+
     def test_senders_are_composed_rather_than_typed(self):
         self.client.post(
             self.url,

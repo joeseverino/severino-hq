@@ -266,6 +266,11 @@ class ContractClientTests(SimpleTestCase):
         with self.assertRaises(ValidationError):
             self._answer("/api/v2/", 200, {"ok": True, "data": {"service": "severino-hq"}})
 
+    def test_a_whole_answer_missing_a_field_its_record_promises_fails(self):
+        saved = {"created": True, "message": "Saved.", "asset": {}}
+        with self.assertRaisesRegex(ValidationError, "'slug' is a required property"):
+            self._answer("/api/v2/capabilities/asset.create/", 200, {"ok": True, "data": saved}, method="POST")
+
     def test_resource_collections_accept_projection_metadata(self):
         self._answer(
             "/api/v2/resources/projects/",

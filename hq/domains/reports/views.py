@@ -22,6 +22,7 @@ from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import years_of
 from hq.platform.application.reports import exported
 from hq.platform.application.security import web_principal
+from hq.platform.application.tables import Cell, DataTable, TableColumn
 from hq.platform.application.ui import counted
 from hq.platform.application.url_query import with_query
 
@@ -53,6 +54,13 @@ def by_category(rows, choices, list_url: str, query: Mapping[str, Any] | None = 
         }
         for row in rows
     ]
+
+
+EXPENSE_CATEGORIES = (
+    TableColumn("Category", cell=lambda row: Cell(row["label"], row["url"])),
+    TableColumn("Total", kind="numeric", css="key-col", cell=lambda row: Cell(money(row["total"]))),
+    TableColumn("Deductible (est.)", kind="numeric", cell=lambda row: Cell(money(row["deductible"]))),
+)
 
 
 class ReportsView(PageMixin, TemplateView):
@@ -101,16 +109,17 @@ class ReportsView(PageMixin, TemplateView):
                 {*years_of(Expense, "date"), *years_of(Asset, "purchase_date"), timezone.localdate().year},
                 reverse=True,
             ),
-            expenses_by_category=by_category(
-                expenses.values("category")
-                .annotate(
-                    total=Sum("total_cost"),
-                    deductible=Sum("estimated_deductible_amount"),
-                )
-                .order_by("-total"),
-                EXPENSE_CATEGORY_CHOICES,
-                reverse("expenses:list"),
-                {"year": year},
+            expenses_by_category=DataTable.of(
+                "Expenses by category",
+                EXPENSE_CATEGORIES,
+                by_category(
+                    expenses.values("category")
+                    .annotate(total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount"))
+                    .order_by("-total"),
+                    EXPENSE_CATEGORY_CHOICES,
+                    reverse("expenses:list"),
+                    {"year": year},
+                ),
             ),
             largest_expenses=[
                 ListRow(

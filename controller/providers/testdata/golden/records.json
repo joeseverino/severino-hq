@@ -290,6 +290,7 @@
           "running": "example",
           "admitted": "example",
           "stage": "example",
+          "stage_state": "example",
           "run_url": "example"
         }
       ]

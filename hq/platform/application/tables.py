@@ -3,20 +3,26 @@
 import shlex
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
-from typing import Any, override
+from typing import TYPE_CHECKING, Any, override
 
 from django.core.exceptions import FieldDoesNotExist
 from django.core.paginator import EmptyPage, Page, Paginator
 from django.db import models
-from django.db.models import Model, Q, QuerySet, Sum
+from django.db.models import Model, Q, QuerySet
 
 from hq.platform.core.table_cells import leaving_order
 lazy from hq.platform.application.search import apply_search
 
+from .display_words import display
 from .page_reads import Remedy
 from .projection import guarded
 from .ui import ended
 lazy from . import security
+
+if TYPE_CHECKING:
+    from .entity_links import EntityLink
+    from .pages import PageAction
+    from .work_runs import RunEvidence
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +117,28 @@ def ranked(columns: tuple[TableColumn, ...]) -> tuple[TableColumn, ...]:
     return tuple(replace(column, drop=rank.get(index, 0)) for index, column in enumerate(columns))
 
 
+@display
+class Cell:
+    """One value in a table, and where it goes if anywhere."""
+
+    text: str
+    url: str = ""
+    # Leaves HQ. Rendered so the operator knows before clicking, and so the
+    # linked page cannot reach back through window.opener.
+    external: bool = False
+    muted: bool = False
+    # An entity mention, rendered through the link builder's answer.
+    link: EntityLink | None = None
+    # A state: ``text`` is its word and this its tone, drawn as a status.
+    tone: str = ""
+
+    @classmethod
+    def of(cls, link: EntityLink, *, muted: bool = False) -> Cell:
+        """A cell naming one entity, from ``entity_link``."""
+
+        return cls(link.label, link.url, external=link.external, muted=muted, link=link)
+
+
 @dataclass(frozen=True, slots=True)
 class TableColumn:
     """One column: its heading, and the field it sorts by if it sorts.
@@ -139,6 +167,8 @@ class TableColumn:
     # The order a narrow table lets the column go in, 1 first; 0 keeps it.
     # Never on the column that names the row or on a key column.
     drop: int = 0
+    # Its one plain value in a row, for a table drawn whole (``DataTable.of``).
+    cell: Callable[[Any], Cell] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "kind", column_kind(self.kind, self.css, otherwise=""))
@@ -158,22 +188,34 @@ class TableColumn:
 
 
 @dataclass(frozen=True, slots=True)
-class TableToggle:
-    name: str
+class DataTable:
+    """A table drawn whole by ``{% data_table %}``, its columns ranked to
+    leave a narrow box as a list's do, and each row its cells, what its open
+    line shows beneath it and what may be done to its record."""
+
     label: str
+    columns: tuple[TableColumn, ...]
+    rows: tuple[tuple[tuple[Cell, ...], RunEvidence | None, tuple[PageAction, ...]], ...]
+    compact: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "columns", ranked(self.columns))
+
+    @classmethod
+    def of(cls, label: str, columns: tuple[TableColumn, ...], records: Iterable[Any]) -> DataTable:
+        """The table of ``records``, each cell the one its column declares."""
+
+        return cls(label, columns, tuple((tuple(c.cell(r) for c in columns if c.cell), None, ()) for r in records))
+
+    @property
+    def has_actions(self) -> bool:
+        return any(actions for _cells, _below, actions in self.rows)
 
 
 @dataclass(frozen=True, slots=True)
-class TableTotal:
-    """A column to sum, and where the sum belongs.
-
-    ``column`` is the field being totaled and doubles as the key a template
-    looks the value up by, so a totals row lands under the column it totals
-    rather than being positioned by hand.
-    """
-
-    column: str
-    label: str = "Total"
+class TableToggle:
+    name: str
+    label: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,7 +270,6 @@ class TableListMixin:
     table_selectable = False
     table_sorts: tuple[TableSort, ...] = ()
     table_toggles: tuple[TableToggle, ...] = ()
-    table_totals: tuple[TableTotal, ...] = ()
     table_default_sort = ""
     table_search_placeholder = "Search…"
     # What an empty list means, in one line ("No assets yet."); left blank, it
@@ -266,7 +307,7 @@ class TableListMixin:
         A projected list hands each filter, the search and the sort to its
         projection as its parameters, so a ``TableFilter``'s ``lookup`` and a
         ``TableSort``'s ``ordering`` go unread, its columns declare their kinds
-        with no model to read them from, and it sums no ``table_totals``. A
+        with no model to read them from. A
         host list still names the model its rows are derived from, which the
         derived-estate gate reads.
         """
@@ -409,33 +450,9 @@ class TableListMixin:
             "clear": Remedy("Clear filters", "?"),
         }
 
-    def table_totals_for(self, queryset: QuerySet[Any]) -> dict[str, Any]:
-        """Sum the declared columns over the whole filtered set.
-
-        Over the queryset, deliberately, and never over the page. A total that
-        silently describes the twenty rows currently visible is worse than no
-        total: it is a number that changes with the page and looks like a
-        fact about the filter.
-        """
-        if not self.table_totals or queryset is None:
-            return {}
-        sums = queryset.aggregate(
-            **{f"total_{index}": Sum(spec.column) for index, spec in enumerate(self.table_totals)}
-        )
-        return {
-            spec.column: {
-                "label": spec.label,
-                "value": sums.get(f"total_{index}"),
-            }
-            for index, spec in enumerate(self.table_totals)
-        }
-
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         context["table"] = self.table_context()
-        # `object_list` is the filtered, ordered queryset before the paginator
-        # slices it, which is exactly the set a total should describe.
-        context["table_totals"] = self.table_totals_for(self.object_list)
         return context
 
 

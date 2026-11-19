@@ -101,7 +101,10 @@ type GitHubDeliveryExtension struct {
 	Running  string `json:"running"`
 	Admitted string `json:"admitted"`
 	Stage    string `json:"stage"`
-	RunURL   string `json:"run_url"`
+	// StageState is the stage as HQ reads it (delivery_progress.py), for an
+	// extension behind production.
+	StageState string `json:"stage_state,omitempty"`
+	RunURL     string `json:"run_url"`
 }
 
 // extensionDelivery is how far one extension's latest admission is from production.
@@ -119,34 +122,50 @@ func (e extensionDelivery) behind() bool { return e.admitted != "" && e.admitted
 
 func short(sha string, n int) string { return sha[:min(n, len(sha))] }
 
-func (e extensionDelivery) stage() string {
+// Where a delivery behind production stands, as HQ reads it
+// (delivery_progress.py).
+const (
+	stageStarting = "not_started"
+	stageWaiting  = "waiting"
+	stageRunning  = "running"
+	stageFailed   = "failed"
+)
+
+// stage is where the delivery stands, and in words; the check run and the
+// condition follow it. A run that ended in success while production still
+// reads behind is between steps: Compose has not yet started its deploy, or
+// production has not been read since it. So only a run that ended otherwise
+// has failed, and a next step that never comes stalls in HQ
+// (delivery_progress.STALLED_AFTER).
+func (e extensionDelivery) stage() (state, words string) {
 	run := e.run
 	if run == nil {
-		return "No deploy has started"
+		return stageStarting, "No deploy has started"
 	}
 	which := orDefault(run.Name, "Compose") + " run " + strconv.Itoa(run.ID)
 	switch {
 	case run.Status == "waiting":
-		return which + " is waiting for approval"
+		return stageWaiting, which + " is waiting for approval"
 	case githubPipelineRunning[run.Status]:
-		return which + " is running"
+		return stageRunning, which + " is running"
 	}
 	switch run.Conclusion {
 	case "success":
-		return which + " finished without deploying it"
+		return stageRunning, which + " finished"
 	case "failure":
-		return which + " failed"
+		return stageFailed, which + " failed"
 	case "":
-		return which + " ended"
+		return stageFailed, which + " ended"
 	default:
-		return which + " ended (" + strings.ReplaceAll(run.Conclusion, "_", " ") + ")"
+		return stageFailed, which + " ended (" + strings.ReplaceAll(run.Conclusion, "_", " ") + ")"
 	}
 }
 
 // says is one plugin's distance from production, as whole sentences.
 func (e extensionDelivery) says() string {
 	if e.behind() {
-		return e.plugin + ": " + short(e.admitted, 7) + " is approved, production still runs " + short(e.running, 7) + ". " + e.stage() + "."
+		_, words := e.stage()
+		return e.plugin + ": " + short(e.admitted, 7) + " is approved, production still runs " + short(e.running, 7) + ". " + words + "."
 	}
 	return e.plugin + ": " + short(e.running, 7) + " is live, not yet confirmed on GitHub."
 }
@@ -308,16 +327,16 @@ func production(extensions []extensionDelivery) string {
 func deliveryRecord(spec GitHubDeliverySpec, extensions []extensionDelivery) GitHubDeliveryRecord {
 	record := GitHubDeliveryRecord{Repository: spec.Repository, Workflow: spec.Workflow, Branch: spec.Branch, Production: production(extensions), Extensions: []GitHubDeliveryExtension{}}
 	for _, extension := range extensions {
-		stage := "live"
+		stage, state := "live", ""
 		if extension.behind() {
-			stage = extension.stage()
+			state, stage = extension.stage()
 		}
 		runURL := ""
 		if extension.run != nil {
 			runURL = extension.run.HTMLURL
 		}
 		record.Extensions = append(record.Extensions, GitHubDeliveryExtension{
-			Plugin: extension.plugin, Running: extension.running, Admitted: extension.admitted, Stage: stage, RunURL: runURL,
+			Plugin: extension.plugin, Running: extension.running, Admitted: extension.admitted, Stage: stage, StageState: state, RunURL: runURL,
 		})
 	}
 	return record
@@ -357,20 +376,22 @@ func checkReport(extension extensionDelivery, spec GitHubDeliverySpec, image str
 		return githubCheckReport{Status: "queued", DetailsURL: githubWeb + "/" + spec.Repository + "/actions/workflows/" + path.Base(spec.Workflow),
 			Title: "Waiting for its deploy", Summary: "Its approval starts the deploy. If that approval failed, re-run it."}
 	}
-	report := githubCheckReport{DetailsURL: run.HTMLURL, ExternalID: strconv.Itoa(run.ID), Summary: extension.stage()}
+	state, words := extension.stage()
+	report := githubCheckReport{DetailsURL: run.HTMLURL, ExternalID: strconv.Itoa(run.ID), Summary: words}
 	if report.DetailsURL == "" {
 		report.DetailsURL = githubWeb + "/" + spec.Repository + "/actions/workflows/" + path.Base(spec.Workflow)
 	}
-	switch {
-	case run.Status == "waiting":
+	switch state {
+	case stageWaiting:
 		report.Status, report.Title = "in_progress", "Waiting for deploy approval"
-	case run.Status == "queued":
-		report.Status, report.Title = "queued", "Deploy queued"
-	case githubPipelineRunning[run.Status]:
+	case stageRunning:
 		report.Status, report.Title = "in_progress", "Deploying"
+		if run.Status == "queued" {
+			report.Status, report.Title = "queued", "Deploy queued"
+		}
 	default:
 		report.Status, report.Conclusion, report.Title = "completed", "failure", "Not deployed"
-		report.Summary = extension.stage() + ". Re-run it from the run page."
+		report.Summary = words + ". Re-run it from the run page."
 	}
 	return report
 }
@@ -479,7 +500,7 @@ func (r *Registry) githubDeliveryReconcile(ctx context.Context, spec GitHubDeliv
 	status := deliveryRecord(spec, extensions)
 	failed := []string{}
 	for _, extension := range extensions {
-		if extension.behind() && extension.run != nil && extension.run.Status == "completed" {
+		if state, _ := extension.stage(); extension.behind() && state == stageFailed {
 			failed = append(failed, extension.says())
 		}
 	}

@@ -1,4 +1,4 @@
-"""For an extension's list page: its columns, filters, sorts, toggles and totals."""
+"""For an extension's list page: its columns, filters, sorts, and toggles."""
 
 from hq.platform.application.page_reads import Remedy
 from hq.platform.application.tables import (
@@ -9,7 +9,6 @@ from hq.platform.application.tables import (
     TableQuery,
     TableSort,
     TableToggle,
-    TableTotal,
 )
 
 __all__ = [
@@ -21,5 +20,4 @@ __all__ = [
     "TableQuery",
     "TableSort",
     "TableToggle",
-    "TableTotal",
 ]

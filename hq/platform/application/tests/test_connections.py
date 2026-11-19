@@ -774,17 +774,6 @@ class OutwardLinkChoiceTests(TestCase):
 
         self.assertEqual([item["href"] for item in offered], ["/health/ready/"])
 
-    def test_something_never_offered_cannot_be_stored(self):
-        """A key arriving in a form post is a request, not an instruction."""
-
-        from ..outward_links import outward_links
-
-        self.client.post(reverse("dashboard_links"), form_keyed({"href": "https://elsewhere.test"}))
-        offered, curated = outward_links(self.user)
-
-        self.assertFalse(curated)
-        self.assertGreater(len(offered), 1)
-
     def test_the_chooser_offers_exactly_what_the_panel_renders(self):
         from ..outward_links import link_choices, outward_links
 

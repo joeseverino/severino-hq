@@ -20,4 +20,5 @@ LogsDirectoryMode=0700
 StateDirectory=severino-hq/renovate
 StateDirectoryMode=0700
 
-ReadWritePaths=/run/severino-hq-renovate
+# The spool, and the registry its containers are known by (controller/host/runs.go).
+ReadWritePaths=/run/severino-hq-renovate /run/severino-hq-runs

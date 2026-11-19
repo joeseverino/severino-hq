@@ -58,7 +58,7 @@ func newRenovation(t *testing.T) *renovation {
 	}
 	v := &renovation{docker: "exit 0", network: renovateNetworkJSON, loaded: filepath.Join(root, "loaded.nft")}
 	v.r = &Renovator{
-		Machine:    &Machine{Lib: lib, LogDir: filepath.Join(root, "log")},
+		Machine:    &Machine{Lib: lib, LogDir: filepath.Join(root, "log"), Runs: filepath.Join(root, "runs")},
 		Spool:      filepath.Join(root, "spool"),
 		Outcome:    filepath.Join(root, "state", "renovate", "dependency-run.json"),
 		OwnerBound: time.Hour,

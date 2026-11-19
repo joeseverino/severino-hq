@@ -45,6 +45,7 @@ fails when this file falls behind. The rules around it are in
 | `{% button_row %}` | nothing | A row of buttons that stands on its own: a form's closing row, a card's decisions, a page's way on. | `{% button_row %}{% button "Save" submit=True look="primary" %}{% endbutton_row %}` |
 | `{% card %}` | nothing | The frame a page's content is grouped in; a titled part of a page is a `{% section %}`. | `{% card label="Hosts" %}<p>Body</p>{% endcard %}` |
 | `{% cell_line %}` | `detail` | A fact in a table cell as a line of its own, and the words said quietly on the line under it: given `text=` it encloses nothing, its words a link to `url=`; a line of markup is its block, its second line after `{% detail %}`. A second line that is a status, code or a link is a `{% stack_list %}` item. | `{% cell_line %}{% entity "machine"\|entity_of:"example-host-01" %}{% detail %}Docker host{% endcell_line %}` |
+| `{% data_table %}` | nothing | A table drawn whole from its declaration: its columns' headings and a row of cells for each record. | `{% data_table table %}` |
 | `{% dot %}` | nothing | The middle dot between two parts of one line, written straight after the first. | `{{ count }}{% dot %}{{ age }}` |
 | `{% dot_list %}` | nothing | A run of whole parts on one line, each an `<li>`, a dot between each that no line opens on: a fact's links, a row's context line, a band's details. | `{% dot_list %}<li><a href="/example/">example-host</a></li><li>2 days ago</li>{% enddot_list %}` |
 | `{% empty_value %}` | nothing | The mark for a value that is not there, where there is no value to test; `\|or_empty` tests one. | `{% empty_value %}` |
@@ -107,6 +108,7 @@ fails when this file falls behind. The rules around it are in
 | `cell_line` | `lines` | `2` | `1`, `2` | The lines its first line may take: one keeps its row as tall as the rest. |
 | `cell_line` | `text` |  |  | Its words, which make it one tag with no end. |
 | `cell_line` | `url` |  |  | The page its words link to. |
+| `data_table` | `table`, first and unnamed | required |  | A `DataTable`: its columns and its rows. |
 | `dot_list` | `muted` | `False` | `False`, `True` | Said quietly. |
 | `dot_list` | `data_*` | | | Each a `data-` attribute. |
 | `entity` | `link`, first and unnamed | required |  | The thing's link, as the link builder answered for it. |

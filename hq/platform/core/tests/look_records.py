@@ -48,6 +48,7 @@ class EstatePages:
         self._linked: list[str] = []
         self._crawl = self._crawling()
         self._at: dict[str, tuple[Drawn, list[str]] | None] = {}
+        self._parts: dict[tuple[object, ...], Any] = {}
         self._entries: dict[str, Drawn] = {}
         self._followed: list[str] = []
         self._follow = self._following()
@@ -76,7 +77,11 @@ class EstatePages:
                 templates = _templates(response)
 
                 def ask(_client: Any, url: str, **headers: str) -> Any:
-                    part = self._ask(url, **headers)
+                    # A part is the same request from every page that fetches it (the header's), so it is asked once.
+                    key = (url, *sorted(headers.items()))
+                    if key not in self._parts:
+                        self._parts[key] = self._ask(url, **headers)
+                    part = self._parts[key]
                     templates.update(_templates(part))
                     return part
 

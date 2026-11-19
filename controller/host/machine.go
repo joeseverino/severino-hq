@@ -28,6 +28,8 @@ type Machine struct {
 	Seal, SealPublic string
 	// Runtime is /run, where the deploy stages what it must not leave behind.
 	Runtime string
+	// Runs registers each run that starts containers (RunsDir on a host).
+	Runs string
 	// Sudoers is where the runner's sudo rule is installed.
 	Sudoers string
 	// Verifier installs the signature verifier a deploy uses.

@@ -1,0 +1,16 @@
+{% comment %}A table drawn whole from its declaration (`tables.DataTable`): a toned cell is a state, a row's run evidence opens under its last cell, and its actions end it.{% endcomment %}
+{% table_region table.label %}
+  <table class="data-table{% if table.compact %} compact-table{% endif %}">
+    <thead><tr>{% for column in table.columns %}{% table_heading column.label column.kind css=column.css drop=column.drop local_sort=True %}{% endfor %}{% if table.has_actions %}{% table_heading "Actions" css="actions-col" hidden=True %}{% endif %}</tr></thead>
+    <tbody>
+      {% for cells, below, actions in table.rows %}
+        <tr>
+          {% for cell in cells %}
+            <td>{% if cell.tone and cell.link %}{% entity cell.link %} {% status cell.text tone=cell.tone %}{% elif cell.tone %}{% status cell.text tone=cell.tone href=cell.url %}{% elif cell.link %}{% entity cell.link %}{% elif cell.url %}{% if cell.external %}{% entity cell.url|outside label=cell.text %}{% else %}<a href="{{ cell.url }}">{{ cell.text|breakable }}</a>{% endif %}{% elif cell.muted %}{% muted %}{{ cell.text|breakable }}{% endmuted %}{% else %}{{ cell.text|breakable }}{% endif %}{% if forloop.last %}{% run_evidence below %}{% endif %}</td>
+          {% endfor %}
+          {% if table.has_actions %}{% row_actions actions %}{% endif %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endtable_region %}

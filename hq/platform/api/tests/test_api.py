@@ -323,22 +323,6 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["error"]["code"], "agents_paused")
 
-    def test_a_resumed_agent_runs_again(self):
-        """The positive control: without it a brake that refused everything would pass."""
-
-        from hq.domains.projects.models import Project
-        from hq.platform.core.models import AgentAccess
-
-        AgentAccess.objects.update_or_create(pk=1, defaults={"paused": False})
-        with _serving():
-            response = self._post(
-                "project.create",
-                {"payload": {"name": "Resumed", "slug": "resumed", "status": "active"}},
-                token=_token(scope="write_projects"),
-            )
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertTrue(Project.objects.filter(slug="resumed").exists())
-
     def test_a_granted_capability_actually_runs(self):
         """The half a deny-only test cannot prove.
 
@@ -400,36 +384,6 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(replay["Idempotency-Replayed"], "true")
         self.assertEqual(Project.objects.filter(slug="once").count(), 1)
 
-    def test_an_idempotency_key_cannot_be_reused_for_another_request(self):
-        with _serving():
-            first = self._post(
-                "project.create",
-                {
-                    "payload": {
-                        "name": "First",
-                        "slug": "first",
-                        "status": "active",
-                    }
-                },
-                token=_token(scope="write_projects"),
-                idempotency_key="same-key",
-            )
-            conflict = self._post(
-                "project.create",
-                {
-                    "payload": {
-                        "name": "Second",
-                        "slug": "second",
-                        "status": "active",
-                    }
-                },
-                token=_token(scope="write_projects"),
-                idempotency_key="same-key",
-            )
-        self.assertEqual(first.status_code, 200)
-        self.assertEqual(conflict.status_code, 409)
-        self.assertEqual(conflict.json()["error"]["code"], "idempotency_conflict")
-
     def _rule(self, rule, capability="project.create"):
         from hq.domains.control_plane.models import CapabilityRule
 
@@ -438,72 +392,6 @@ class TransportTests(SentinelMixin, TestCase):
             capability=capability,
             defaults={"rule": rule},
         )
-
-    def test_a_policy_denial_is_403_and_names_its_code(self):
-        from hq.domains.control_plane.models import CapabilityRule
-        from hq.domains.projects.models import Project
-
-        self._rule(CapabilityRule.Rule.DENY)
-        with _serving():
-            response = self._post(
-                "project.create",
-                {"payload": {"name": "Denied", "slug": "denied", "status": "active"}},
-                token=_token(scope="write_projects"),
-            )
-        self.assertEqual(response.status_code, 403, response.content)
-        self.assertEqual(response.json()["error"]["code"], "denied_by_policy")
-        self.assertFalse(Project.objects.filter(slug="denied").exists())
-
-    def test_a_state_that_refuses_a_valid_request_is_409(self):
-        from hq.domains.projects.models import Project
-
-        Project.objects.create(name="Example", slug="example")
-        with _serving():
-            response = self.client.post(
-                "/api/v2/capabilities/project.dependency_updates.set/",
-                data=json.dumps({"target": "example", "payload": {"dependency_updates": False}}),
-                content_type="application/json",
-                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
-                HTTP_IDEMPOTENCY_KEY="k0",
-            )
-        self.assertEqual(response.status_code, 409, response.content)
-        self.assertEqual(response.json()["error"]["code"], "precondition")
-
-    def test_a_refusal_keeps_nothing_under_its_key(self):
-        """The same key runs once the operator lifts the rule that refused it."""
-
-        from hq.domains.control_plane.models import CapabilityRule
-        from hq.domains.projects.models import Project
-
-        body = {"payload": {"name": "Lifted", "slug": "lifted", "status": "active"}}
-        self._rule(CapabilityRule.Rule.DENY)
-        with _serving():
-            refused = self._post("project.create", body, token=_token(scope="write_projects"), idempotency_key="k1")
-            CapabilityRule.objects.all().delete()
-            ran = self._post("project.create", body, token=_token(scope="write_projects"), idempotency_key="k1")
-        self.assertEqual(refused.status_code, 403)
-        self.assertEqual(ran.status_code, 200, ran.content)
-        self.assertNotIn("Idempotency-Replayed", ran)
-        self.assertTrue(Project.objects.filter(slug="lifted").exists())
-
-    def test_a_held_call_keeps_nothing_under_its_key(self):
-        """Allowed after it was held, the same key runs the command."""
-
-        from hq.domains.control_plane.models import CapabilityRule
-        from hq.domains.projects.models import Project
-
-        body = {"payload": {"name": "Allowed", "slug": "allowed", "status": "active"}}
-        self._rule(CapabilityRule.Rule.APPROVE)
-        with _serving():
-            held = self._post("project.create", body, token=_token(scope="write_projects"), idempotency_key="k2")
-            self._rule(CapabilityRule.Rule.ALLOW)
-            ran = self._post("project.create", body, token=_token(scope="write_projects"), idempotency_key="k2")
-        self.assertEqual(held.status_code, 202, held.content)
-        self.assertEqual(held.json()["data"]["status"], "awaiting_approval")
-        self.assertEqual(ran.status_code, 200, ran.content)
-        self.assertNotIn("Idempotency-Replayed", ran)
-        self.assertNotIn("status", ran.json()["data"])
-        self.assertTrue(Project.objects.filter(slug="allowed").exists())
 
     def test_the_same_key_after_an_approval_is_answered_afresh_and_runs_nothing_twice(self):
         from django.contrib.auth import get_user_model

@@ -5,8 +5,6 @@ hq.platform.api.tests.test_resource_filters).
 describe_resources lists every kind by its filters and gives one kind's whole
 schema when asked by name."""
 
-from typing import get_args
-
 from asgiref.sync import async_to_sync
 from django.test import TestCase
 from mcp import Client
@@ -15,7 +13,7 @@ from hq.domains.analytics.models import RumDaily
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.provider_adapters.cloudflare import ContactStatus
+from hq.domains.control_plane.provider_adapters.cloudflare import SubmissionStatus
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.docs_index.models import DocStatus
 from hq.domains.expenses.models import EXPENSE_CATEGORY_CHOICES
@@ -44,7 +42,7 @@ def declared_choices():
         ("content", "status", ContentItem.Status.values),
         ("assets", "status", Asset.Status.values),
         ("documentation", "status", DocStatus.values),
-        ("contact.submissions", "status", get_args(ContactStatus)),
+        ("contact.submissions", "status", SubmissionStatus.values),
         ("expenses", "category", [value for value, _ in EXPENSE_CATEGORY_CHOICES]),
         ("analytics", "dimension", RumDaily.Dimension.values),
         ("action_items", "status", ATTENTION_ORDER),

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -163,11 +164,13 @@ func (r *Renovator) runOwner(ctx context.Context, work, envName, image string, l
 		fmt.Fprintf(log, "%s %s: %v\n", r.Now().UTC().Format(time.RFC3339), run.Owner, err)
 		return result
 	}
+	own := r.beginRun()
+	defer own.end()
 	name := "severino-hq-renovate-" + rand.Text()
 	runCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	fmt.Fprintf(log, "%s %s: %d repositories\n", r.Now().UTC().Format(time.RFC3339), run.Owner, len(run.Repositories))
-	command := r.Command(runCtx, "docker", RenovateArgs(name, image, env, r.configPath(), run.Owner)...)
+	command := r.Command(runCtx, "docker", slices.Insert(RenovateArgs(name, image, env, r.configPath(), run.Owner), 1, own.label())...)
 	command.Stdout, command.Stderr = log, log
 	err := command.Run()
 	if command.ProcessState != nil {

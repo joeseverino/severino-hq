@@ -195,9 +195,9 @@ class FirstSeenTests(TestCase):
 class DeployInProgressTests(TestCase):
     """A deploy that is running is told, not raised as a problem."""
 
-    def delivery(self, stage: str, **said) -> None:
+    def delivery(self, stage: str, state: str, **said) -> None:
         kind_read(DELIVERY, timezone.now())
-        delivered(stage, **said)
+        delivered(stage, state, **said)
 
     def items(self):
         with host_only(), projection_scope():
@@ -208,7 +208,7 @@ class DeployInProgressTests(TestCase):
         return found
 
     def test_a_deploy_behind_for_too_long_is_a_serious_problem(self):
-        self.delivery("Compose run 9 is running", behind_for=STALLED_AFTER + timedelta(minutes=1))
+        self.delivery("Compose run 9 is running", "running", behind_for=STALLED_AFTER + timedelta(minutes=1))
 
         found = self.items()
 
@@ -216,7 +216,7 @@ class DeployInProgressTests(TestCase):
         self.assertFalse(any(item.notice for item in found))
 
     def test_a_failed_deploy_is_a_serious_problem(self):
-        self.delivery("Compose run 9 failed")
+        self.delivery("Compose run 9 failed", "failed")
 
         found = self.items()
 
@@ -224,7 +224,7 @@ class DeployInProgressTests(TestCase):
         self.assertFalse(any(item.notice for item in found))
 
     def test_a_deploy_on_its_way_is_not_a_serious_problem_anywhere(self):
-        self.delivery("Compose run 9 is running")
+        self.delivery("Compose run 9 is running", "running")
 
         self.assertTrue(self.item().notice)
         self.assertNotIn("serious", {item.severity for item in self.items()})
@@ -233,7 +233,7 @@ class DeployInProgressTests(TestCase):
         self.assertEqual(record_status(resource).tone, "attention")
 
     def test_a_run_waiting_for_approval_is_something_to_do(self):
-        self.delivery("Deploy run 9 is waiting for approval")
+        self.delivery("Deploy run 9 is waiting for approval", "waiting")
 
         item = self.item()
 

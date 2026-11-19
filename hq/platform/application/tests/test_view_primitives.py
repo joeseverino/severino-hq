@@ -173,64 +173,6 @@ class ListRowTests(SimpleTestCase):
         self.assertIn(("/example/group/open/", "Open"), [(a.attrs.get("href"), a.words) for a in elements(drawn, "a")])
 
 
-class TableTotalsTests(TestCase):
-    """Totals describe the filtered set, not the page you happen to be on."""
-
-    def setUp(self):
-        from decimal import Decimal
-
-        from hq.domains.assets.models import Asset
-
-        for index in range(5):
-            Asset.objects.create(
-                item_name=f"Item {index}",
-                slug=f"item-{index}",
-                total_cost=Decimal("100.00"),
-                category="tools" if index < 2 else "office",
-            )
-
-    def _view(self, **attrs):
-        from hq.domains.assets.models import Asset
-        from hq.platform.application.tables import TableListMixin, TableTotal
-
-        class View(TableListMixin):
-            table_totals = (TableTotal("total_cost", "Total cost"),)
-
-        view = View()
-        for key, value in attrs.items():
-            setattr(view, key, value)
-        return view, Asset.objects.all()
-
-    def test_it_sums_the_whole_queryset(self):
-        from decimal import Decimal
-
-        view, queryset = self._view()
-        totals = view.table_totals_for(queryset)
-        self.assertEqual(totals["total_cost"]["value"], Decimal("500.00"))
-        self.assertEqual(totals["total_cost"]["label"], "Total cost")
-
-    def test_it_follows_the_filter(self):
-        from decimal import Decimal
-
-        view, queryset = self._view()
-        totals = view.table_totals_for(queryset.filter(category="tools"))
-        self.assertEqual(totals["total_cost"]["value"], Decimal("200.00"))
-
-    def test_a_view_declaring_no_totals_gets_none(self):
-        from hq.platform.application.tables import TableListMixin
-
-        class Bare(TableListMixin):
-            pass
-
-        from hq.domains.assets.models import Asset
-
-        self.assertEqual(Bare().table_totals_for(Asset.objects.all()), {})
-
-    def test_a_missing_queryset_is_not_an_error(self):
-        view, _ = self._view()
-        self.assertEqual(view.table_totals_for(None), {})
-
-
 class ProjectedListTests(TestCase):
     """A list a projection fills: what its address asks reaches the projection
     as its parameters, and a page is cut in the database and read back whole."""

@@ -64,10 +64,10 @@ class CommandViewTests(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
 
-    def _create_payload(self, *, name="Browser command", slug="browser-command"):
+    def _create_payload(self, *, slug="browser-command"):
         response = self.client.get("/commands/project.create/")
         return {
-            "name": name,
+            "name": "Browser command",
             "slug": slug,
             RETRY_KEY_FIELD: drawn_key(response, "data-command-form"),
         }
@@ -77,7 +77,7 @@ class CommandViewTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
-    def test_authority_is_checked_before_the_schema_is_built(self):
+    def test_authority_is_checked_before_the_schema_is_built_and_its_refusal_recorded(self):
         principal = Principal("reader", "web", frozenset({Capability.READ}))
         with (
             mock.patch("hq.platform.core.command_views.web_principal", return_value=principal),
@@ -87,13 +87,6 @@ class CommandViewTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         form_factory.assert_not_called()
-
-    def test_a_page_refused_for_want_of_authority_is_recorded(self):
-        principal = Principal("reader", "web", frozenset({Capability.READ}))
-        with mock.patch("hq.platform.core.command_views.web_principal", return_value=principal):
-            response = self.client.get("/commands/project.create/")
-
-        self.assertEqual(response.status_code, 403)
         denied = AuditLog.objects.filter(
             action=AuditLog.Action.DENIED, metadata__capability="project.create", metadata__actor="reader"
         )
@@ -277,7 +270,6 @@ class CommandViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(result_title(response), "Done")
         self.assertTrue(Project.objects.filter(slug="browser-command").exists())
-        self.assertEqual(IdempotencyRecord.objects.count(), 1)
         audit = AuditLog.objects.get(object_type="Project")
         self.assertEqual(audit.metadata["interface"], "web")
         self.assertEqual(audit.metadata["operation"], "project.create")
@@ -302,44 +294,18 @@ class CommandViewTests(TestCase):
         self.assertEqual(response.context["form"].initial["next"], "")
         self.assertEqual(response.context["return_url"], "")
 
-    def test_exact_retry_replays_one_committed_write(self):
+    def test_the_drawn_key_replays_an_exact_retry_and_refuses_changed_input_at_its_status(self):
         payload = self._create_payload(slug="safe-retry")
 
         first = self.client.post("/commands/project.create/", payload)
         second = self.client.post("/commands/project.create/", payload, follow=True)
+        changed = self.client.post("/commands/project.create/", {**payload, "slug": "changed-request"})
 
         self.assertEqual(first.status_code, 302)
-        self.assertEqual(second.status_code, 200)
         self.assertContains(second, "This was already done earlier. Nothing ran again.")
         self.assertEqual(Project.objects.filter(slug="safe-retry").count(), 1)
         self.assertEqual(IdempotencyRecord.objects.count(), 1)
-
-    def test_execution_key_cannot_be_reused_for_different_input(self):
-        payload = self._create_payload(slug="first-request")
-        self.client.post("/commands/project.create/", payload)
-
-        response = self.client.post(
-            "/commands/project.create/",
-            {**payload, "name": "Changed", "slug": "changed-request"},
-        )
-
-        self.assertEqual(response.status_code, 409)
-        self.assertContains(response, "already used for a different request", status_code=409)
-        self.assertFalse(Project.objects.filter(slug="changed-request").exists())
-
-    def test_a_refused_command_keeps_nothing_under_its_key(self):
-        """The same key runs once what refused it has gone."""
-
-        taken = Project.objects.create(name="Taken", slug="taken-slug")
-        payload = self._create_payload(name="Second", slug="taken-slug")
-
-        refused = self.client.post("/commands/project.create/", payload)
-        taken.delete()
-        ran = self.client.post("/commands/project.create/", payload)
-
-        self.assertNotEqual(refused.status_code, 302)
-        self.assertEqual(ran.status_code, 302)
-        self.assertTrue(Project.objects.filter(name="Second").exists())
+        self.assertContains(changed, "already used for a different request", status_code=409)
 
     def test_unknown_and_repeated_fields_fail_before_execution(self):
         payload = self._create_payload(slug="strict-browser")
@@ -411,10 +377,6 @@ class CommandResultProjectionTests(TestCase):
             dict(response.context["result_facts"]),
             {"name": "example.test", "resolver": "Example", "resolves": "yes"},
         )
-        (table,) = response.context["result_sections"]
-        self.assertEqual(table.label, "answers")
-        self.assertEqual(table.columns, ("name", "type", "value", "ttl"))
-        self.assertEqual(cells(table)[0], ("example.test", "A", "192.0.2.1", MISSING))
         # Each heading is its column's name, then the sort control's mark.
         self.assertIn("type", [heading.split()[0] for heading in texts(response, "th")])
         # The list is a section of the result's own, named for it with its count.

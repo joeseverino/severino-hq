@@ -15,7 +15,7 @@ from django import forms
 from django.utils.html import format_html
 
 from hq.platform.application.asks import APPLIES_SHORTLY
-from hq.platform.application.forms import ChoiceCards, SuffixedInput
+from hq.platform.application.forms import ChoiceCards, ReadAt, SuffixedInput
 from hq.platform.application.lookup import LOOK_UP_ADDRESS, LOOK_UP_NAME
 from hq.platform.application.mail_policy import (
     DMARC_TAGS,
@@ -33,7 +33,7 @@ from hq.platform.application.ui import counted
 from hq.platform.core.templatetags.action_tags import POST_FORM_ID
 from hq.platform.core.templatetags.value_tags import breakable
 
-from .names import normalized_hostname
+from .names import is_hostname, normalized_hostname
 
 # A value typed to be looked up, never prose or a remembered entry.
 _TYPED = {"spellcheck": "false", "autocomplete": "off"}
@@ -84,10 +84,9 @@ class ServiceStartForm(forms.Form):
     )
 
     def clean_hostname(self) -> str:
-        hostname = normalized_hostname(self.cleaned_data["hostname"])
-        if not hostname or " " in hostname or "." not in hostname:
+        if not is_hostname(hostname := self.cleaned_data["hostname"]):
             raise forms.ValidationError("Enter a hostname, like app.example.com.")
-        return hostname
+        return normalized_hostname(hostname)
 
 
 class MailPolicyForm(forms.Form):
@@ -103,6 +102,7 @@ class MailPolicyForm(forms.Form):
     verb: ClassVar[str]
 
     section = forms.CharField(widget=forms.HiddenInput)
+    expected_updated_at = ReadAt()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, auto_id=f"{self.SECTION}-%s", **kwargs)

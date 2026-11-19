@@ -32,9 +32,8 @@ from hq.platform.application.web_writes import execute_posted
 from hq.platform.core.web_refusals import refused
 
 from . import inbox
-from .forms import STATUS_CHOICES, ContactReviewForm, submission_state
+from .forms import ContactReviewForm, SubmissionStatus, submission_state
 
-STATUS_LABELS = dict(STATUS_CHOICES)
 GONE = "That message was not found."
 
 
@@ -90,7 +89,7 @@ def _offered(submission: dict, marks: list[str]) -> tuple[PageAction, ...]:
 
 def contact_list(request):
     selected_status = request.GET.get("status", "").strip()
-    if selected_status not in STATUS_LABELS:
+    if selected_status not in SubmissionStatus.values:
         selected_status = ""
     q = request.GET.get("q", "").strip()
     current = inbox.current()
@@ -101,7 +100,7 @@ def contact_list(request):
         {"value": value, "label": label, "count": count, "current": (value or "") == selected_status}
         for value, label, count in (
             (None, "All", sum(current.counts.values())),
-            *((value, label, current.counts.get(value, 0)) for value, label in STATUS_CHOICES),
+            *((value, label, current.counts.get(value, 0)) for value, label in SubmissionStatus.choices),
         )
     ]
 
@@ -198,21 +197,8 @@ def _safe_next(request) -> str:
 
 @require_POST
 def contact_set_status(request, pk: int):
-    status = request.POST.get("status", "")
-    if status not in STATUS_LABELS:
-        messages.error(request, "Choose a status from the list.")
-        return redirect(_safe_next(request))
-
-    submission = find_submission(pk)
-    if not submission:
-        messages.error(request, GONE)
-        return redirect("contacts:list")
-    review = {
-        "status": status,
-        "assigned_to": submission.get("assigned_to") or "",
-        "admin_notes": submission.get("admin_notes") or "",
-    }
-    _review(request, pk, review)
+    # The review keeps what it is not sent, so the status is all this sends.
+    _review(request, pk, {"status": request.POST.get("status", "")})
     return redirect(_safe_next(request))
 
 

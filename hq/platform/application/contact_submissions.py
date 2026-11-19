@@ -8,23 +8,26 @@ for D1.
 """
 
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal, NotRequired, TypedDict, get_args
+from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from pydantic import Field
 
 from hq.domains.contacts import inbox
-from hq.domains.contacts.forms import STATUS_CHOICES
 from hq.domains.control_plane.desired_state import desired_fingerprint
 from hq.domains.control_plane.models import ManagedResource
-from hq.domains.control_plane.provider_adapters.cloudflare import CONTACT_CHANGES_LIMIT, ContactStatus
+from hq.domains.control_plane.provider_adapters.cloudflare import (
+    CONTACT_CHANGES_LIMIT,
+    ContactStatus,
+    SubmissionStatus,
+)
 from hq.domains.control_plane.providers import validate_spec
 
 from .adoption import WriteGap, require_writable, write_gap
 from .answer_fields import CallMessage
 from .cadence import ask
-from .command_fields import Choices, Describe, confirm
+from .command_fields import Describe, confirm
 from .deletion import DeleteCommand
 from .integration_specs import Kept, keeps
 from .projection import window
@@ -35,7 +38,6 @@ from .ui import ended
 lazy from .asks import APPLIES_SHORTLY
 lazy from .capabilities import Consented, consent
 
-CONTACT_STATUSES = frozenset(get_args(ContactStatus))
 ASSIGNEE_LENGTH = 120
 # The inbox page reads its whole list at once, so a page may hold more than an API page.
 MOST_SHOWN = 500
@@ -44,7 +46,7 @@ DELETE = "contact.submission.delete"
 
 
 # A submission's review fields as its command writes them and its row reads them back, each said once.
-type ReviewStatus = Annotated[ContactStatus, Choices(STATUS_CHOICES), Describe("Where its review stands.")]
+type ReviewStatus = Annotated[ContactStatus, Describe("Where its review stands.")]
 type Assignee = Annotated[
     str, Field(max_length=ASSIGNEE_LENGTH), Describe("Who is handling it.", api="Empty when unassigned.")
 ]
@@ -62,7 +64,7 @@ def _status(value: str) -> str:
     """A list's status filter, or "" for every status."""
 
     value = value.strip()
-    if value and value not in CONTACT_STATUSES:
+    if value and value not in SubmissionStatus.values:
         raise ValidationError({"status": ValidationError("Unknown contact status.", code="invalid_choice")})
     return value
 
@@ -219,7 +221,7 @@ def execute_contact_review(
         said=f"Asked for contact submission #{current_id} to be reviewed.",
     )
     marked = status != _review_of(before)["status"]
-    done = f"marked {ended(dict(STATUS_CHOICES)[status].lower())}" if marked else "saved."
+    done = f"marked {ended(SubmissionStatus(status).label.lower())}" if marked else "saved."
     return {
         "ok": True,
         "id": current_id,

@@ -55,9 +55,11 @@ type Rehearsal struct {
 }
 
 const (
-	// The rehearsal's container and volumes have fixed names, so one a
+	// The rehearsal's containers and volumes have fixed names, so one a
 	// killed rehearsal left is removed by the next.
 	rehearsalName   = "severino-hq-rehearsal"
+	rehearsalCopy   = rehearsalName + "-copy"
+	rehearsalPlan   = rehearsalName + "-plan"
 	rehearsalData   = rehearsalName + "-data"
 	rehearsalBridge = rehearsalName + "-bridge"
 	// rehearsalReady bounds the wait for the web process to answer ready:
@@ -144,12 +146,16 @@ type rehearsing struct {
 	*Deployer
 	image, data, scratch string
 	log                  io.Writer
+	// own is the run every container of the rehearsal is labeled with.
+	own ownRun
 }
 
 func (r *rehearsing) run(ctx context.Context) (said verdict) {
 	said = verdict{sandbox: "-", ready: "no", socket: "-", integrity: "-", jobs: "-", memory: "-", plan: "-", live: "-"}
 	ctx, cancel := context.WithTimeout(ctx, rehearsalBound)
 	defer cancel()
+	r.own = r.beginRun()
+	defer r.own.end()
 	r.clear()
 	defer r.clear()
 	before := r.liveMarks(ctx)
@@ -274,11 +280,11 @@ func (r *rehearsing) copyDatabase(ctx context.Context) bool {
 		{"docker", "volume", "create", rehearsalData},
 		{"docker", "volume", "create", rehearsalBridge},
 		{"docker", "run", "--rm", "--pull", "never", "--user", "0:0", "--network", "none", "--entrypoint", "sh",
-			"--mount", "type=volume,source=" + rehearsalData + ",target=/data", r.image,
+			"--mount", "type=volume,source=" + rehearsalData + ",target=/data", "--name", rehearsalCopy, r.own.label(), r.image,
 			"-c", "mkdir -p /data/tmp && chown -R " + user + " /data"},
 		{"docker", "run", "--rm", "--pull", "never", "--user", user, "--network", "none", "--entrypoint", "python",
 			"--mount", "type=volume,source=" + r.data + ",target=/src",
-			"--mount", "type=volume,source=" + rehearsalData + ",target=/data", r.image, "-c", backupScript},
+			"--mount", "type=volume,source=" + rehearsalData + ",target=/data", "--name", rehearsalCopy, r.own.label(), r.image, "-c", backupScript},
 		{"chown", user, filepath.Join(r.scratch, "bell")},
 	} {
 		if _, err := r.exec(ctx, step[0], step[1:]...); err != nil {
@@ -306,7 +312,7 @@ func (r *rehearsing) startWeb(ctx context.Context) bool {
 		"--mount", "type=volume,source="+rehearsalBridge+",target="+filepath.Dir(BridgeSocket),
 		"--mount", "type=bind,source="+filepath.Join(r.scratch, "bell")+",target="+hostcore.RunDir,
 		"--mount", readOnly(filepath.Join(r.Rehearsal.SecretDir, "web", hostcore.AppEnvName), appEnv),
-		r.image); err != nil {
+		r.own.label(), r.image); err != nil {
 		return false
 	}
 	ready := false
@@ -364,6 +370,7 @@ func (r *rehearsing) plan(ctx context.Context) string {
 		"--env", "HQ_ACME_DIR="+controllerACME,
 		"--env", "HQ_CONTROLLER_IMAGE="+r.image,
 		"--env", "SEVERINO_BRIDGE_SOCKET="+BridgeSocket,
+		"--name", rehearsalPlan, r.own.label(),
 		// No --apply: a plan reads providers and writes to none.
 		r.image)
 	_, err := r.exec(ctx, "docker", args...)
@@ -390,7 +397,7 @@ func (r *rehearsing) liveMarks(ctx context.Context) string {
 // clear removes everything the rehearsal makes, whether or not it is there.
 func (r *rehearsing) clear() {
 	ctx := context.Background()
-	_, _ = r.exec(ctx, "docker", "rm", "--force", rehearsalName)
+	_, _ = r.exec(ctx, "docker", "rm", "--force", rehearsalName, rehearsalCopy, rehearsalPlan)
 	_, _ = r.exec(ctx, "docker", "volume", "rm", "--force", rehearsalData, rehearsalBridge)
 	if err := os.RemoveAll(r.scratch); err != nil {
 		fmt.Fprintln(r.log, err)
