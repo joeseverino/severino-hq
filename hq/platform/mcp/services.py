@@ -87,7 +87,7 @@ describe_capabilities.__doc__ = f"{describe_capabilities.__doc__}\n{effect_gloss
     "Run a capability",
     requires=RUNS_A_CAPABILITY,
     budget=Budget(
-        460,
+        480,
         frozendict(
             {
                 "name": "project.create",
@@ -222,7 +222,7 @@ def list_resource(
 
 # One record of its kind, with the fields describe_resources names for it.
 @tool(
-    "Read one record", requires=READS_A_RECORD, budget=Budget(700, frozendict({"name": "projects", "identifier": "hq"}))
+    "Read one record", requires=READS_A_RECORD, budget=Budget(720, frozendict({"name": "projects", "identifier": "hq"}))
 )
 def get_resource(
     name: str, identifier: str | RecordId, fields: Annotated[list[str] | None, Field(description=FIELD_MASK)] = None

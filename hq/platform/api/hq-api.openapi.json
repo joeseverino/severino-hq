@@ -5792,8 +5792,7 @@
             "$ref": "#/components/schemas/UpdatedAt"
           },
           "url": {
-            "description": "The asset's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           },
           "vendor": {
             "$ref": "#/components/schemas/AssetVendor"
@@ -5896,7 +5895,7 @@
             "$ref": "#/components/schemas/UpdatedAt"
           },
           "url": {
-            "$ref": "#/components/schemas/AssetRow/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           },
           "vendor": {
             "$ref": "#/components/schemas/AssetVendor"
@@ -9041,8 +9040,7 @@
             "description": "When the table last changed it, an ISO 8601 date-time; null when the table says nothing."
           },
           "url": {
-            "description": "The message's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           },
           "user_agent": {
             "description": "The visitor's browser's whole user agent string.",
@@ -9155,7 +9153,7 @@
             "$ref": "#/components/schemas/ContactSubmissionRow/properties/updated_at"
           },
           "url": {
-            "$ref": "#/components/schemas/ContactSubmissionRow/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           },
           "user_agent": {
             "$ref": "#/components/schemas/ContactSubmissionRow/properties/user_agent"
@@ -9885,8 +9883,7 @@
             "$ref": "#/components/schemas/UpdatedAt"
           },
           "url": {
-            "description": "The writeup's or page's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -9973,7 +9970,7 @@
             "$ref": "#/components/schemas/UpdatedAt"
           },
           "url": {
-            "$ref": "#/components/schemas/ContentRow/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -11543,8 +11540,7 @@
             "$ref": "#/components/schemas/DocumentationRow/properties/updated_at"
           },
           "url": {
-            "description": "The doc's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -11617,7 +11613,7 @@
             "$ref": "#/components/schemas/DocumentationRowPartial/properties/updated_at"
           },
           "url": {
-            "$ref": "#/components/schemas/DocumentationItem/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -12319,8 +12315,7 @@
             "type": "array"
           },
           "url": {
-            "description": "The domain's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -12394,7 +12389,7 @@
             "type": "array"
           },
           "url": {
-            "$ref": "#/components/schemas/DomainRow/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -13301,8 +13296,7 @@
             "$ref": "#/components/schemas/ExpenseRow/properties/updated_at"
           },
           "url": {
-            "description": "The expense's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           },
           "vendor": {
             "$ref": "#/components/schemas/ExpenseRow/properties/vendor"
@@ -13445,7 +13439,7 @@
             "$ref": "#/components/schemas/ExpenseRowPartial/properties/updated_at"
           },
           "url": {
-            "$ref": "#/components/schemas/ExpenseRecord/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           },
           "vendor": {
             "$ref": "#/components/schemas/ExpenseRowPartial/properties/vendor"
@@ -17155,8 +17149,7 @@
             "type": "string"
           },
           "url": {
-            "description": "The machine's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -17204,7 +17197,7 @@
             "$ref": "#/components/schemas/MachineRow/properties/tone"
           },
           "url": {
-            "$ref": "#/components/schemas/MachineRow/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -18548,8 +18541,7 @@
             "type": "string"
           },
           "url": {
-            "description": "Its page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -18612,7 +18604,7 @@
             "$ref": "#/components/schemas/Match/properties/summary"
           },
           "url": {
-            "$ref": "#/components/schemas/Match/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -19942,6 +19934,10 @@
           "next"
         ],
         "type": "object"
+      },
+      "PageUrl": {
+        "description": "Its page in HQ.",
+        "type": "string"
       },
       "PaidFrom": {
         "description": "The account that paid. A `type:key` reference; empty when not recorded.",
@@ -21748,8 +21744,7 @@
             "type": "string"
           },
           "url": {
-            "description": "The project's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -21769,7 +21764,7 @@
             "$ref": "#/components/schemas/ProjectPart/properties/slug"
           },
           "url": {
-            "$ref": "#/components/schemas/ProjectPart/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -22014,8 +22009,7 @@
             "$ref": "#/components/schemas/Updates"
           },
           "url": {
-            "description": "The project's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -22117,7 +22111,7 @@
             "$ref": "#/components/schemas/UpdatesPartial"
           },
           "url": {
-            "$ref": "#/components/schemas/ProjectRow/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -23376,8 +23370,7 @@
             "$ref": "#/components/schemas/ReceiptRow/properties/uploaded_at"
           },
           "url": {
-            "description": "The receipt's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           },
           "vendor": {
             "$ref": "#/components/schemas/ReceiptRow/properties/vendor"
@@ -23462,7 +23455,7 @@
             "$ref": "#/components/schemas/ReceiptRowPartial/properties/uploaded_at"
           },
           "url": {
-            "$ref": "#/components/schemas/ReceiptRecord/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           },
           "vendor": {
             "$ref": "#/components/schemas/ReceiptRowPartial/properties/vendor"
@@ -25508,8 +25501,7 @@
             "type": "string"
           },
           "url": {
-            "description": "The run's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -25619,7 +25611,7 @@
             "$ref": "#/components/schemas/RunRow/properties/tone"
           },
           "url": {
-            "$ref": "#/components/schemas/RunRow/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -26436,8 +26428,7 @@
             "$ref": "#/components/schemas/ServiceRow/properties/status_label"
           },
           "url": {
-            "description": "The service's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -26490,7 +26481,7 @@
             "$ref": "#/components/schemas/ServiceRowPartial/properties/status_label"
           },
           "url": {
-            "$ref": "#/components/schemas/ServiceRecord/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"

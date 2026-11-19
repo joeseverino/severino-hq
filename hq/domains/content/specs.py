@@ -10,6 +10,7 @@ from hq.platform.application.answer_fields import (
     LinkedAssets,
     LinkedDocs,
     LinkedProjects,
+    PageUrl,
     RecordedExpenses,
     RecordSlug,
     UpdatedAt,
@@ -35,7 +36,7 @@ class ContentRow(TypedDict):
     """One writeup, video or page, published or not."""
 
     slug: RecordSlug
-    url: Annotated[str, Describe("The writeup's or page's page in HQ.")]
+    url: PageUrl
     title: content.ContentTitle
     content_type: content.ContentType
     status: content.ContentStatus

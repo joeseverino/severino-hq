@@ -13,6 +13,7 @@ from pydantic import Field, create_model
 
 from hq.domains.jobs.models import JobState
 
+from .answer_fields import PageUrl
 from .automation_manifest import DottedName
 from .automation_runs import CORRELATION_LONGEST, CORRELATION_PATTERN
 from .command_fields import RequiredText
@@ -52,7 +53,7 @@ class RunRow(TypedDict):
     operation_id: Annotated[
         str, Describe("The run's id: the `operation.id` its command answered, which a read of one names.")
     ]
-    url: Annotated[str, Describe("The run's page in HQ.")]
+    url: PageUrl
     title: Annotated[str, Describe("What it is, in words.")]
     playbook: Annotated[
         str, Describe("The id of the playbook it runs, which the `playbook` filter takes; empty for a scan.")

@@ -21,7 +21,7 @@ from hq.domains.projects.models import Project
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
-from .answer_fields import CallMessage, LinkedAssets, LinkedProjects, RecordedExpenses, UpdatedAt
+from .answer_fields import CallMessage, LinkedAssets, LinkedProjects, PageUrl, RecordedExpenses, UpdatedAt
 from .command_fields import Day, Describe, Names, NonEmpty
 from .entity_links import EntityLink, entity_link
 from .labels import plural
@@ -323,7 +323,7 @@ class DocumentationLinks(TypedDict):
 class DocumentationItem(DocumentationRow):
     """One documentation pointer with the records it is linked to."""
 
-    url: Annotated[str, Describe("The doc's page in HQ.")]
+    url: PageUrl
     relationships: DocumentationLinks
 
 

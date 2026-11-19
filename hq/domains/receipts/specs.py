@@ -5,7 +5,7 @@ from typing import Annotated, Literal, TypedDict
 from pydantic import Field
 
 from hq.platform.application import receipts
-from hq.platform.application.answer_fields import UpdatedAt
+from hq.platform.application.answer_fields import PageUrl, UpdatedAt
 from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe, listed
 from hq.platform.application.domains import records_of
@@ -89,7 +89,7 @@ class ReceiptRow(TypedDict):
 class ReceiptRecord(ReceiptRow):
     """One receipt with what it is called, whether HQ holds its file, and the names of what it proves."""
 
-    url: Annotated[str, Describe("The receipt's page in HQ.")]
+    url: PageUrl
     label: Annotated[str, Describe("What the receipt is called wherever it is named: who it is from, else its file.")]
     file: Annotated[
         Literal["stored", "missing", "none"],

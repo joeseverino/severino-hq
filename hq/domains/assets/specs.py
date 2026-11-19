@@ -10,6 +10,7 @@ from hq.platform.application.answer_fields import (
     LinkedContent,
     LinkedDocs,
     LinkedExpenses,
+    PageUrl,
     RecordSlug,
     TotalCostAmount,
     UpdatedAt,
@@ -36,7 +37,7 @@ class AssetRow(TypedDict):
     """One asset: what it is, what it cost and what it is to the business."""
 
     slug: RecordSlug
-    url: Annotated[str, Describe("The asset's page in HQ.")]
+    url: PageUrl
     item_name: assets.AssetName
     vendor: assets.AssetVendor
     category: assets.AssetCategory

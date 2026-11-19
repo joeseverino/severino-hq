@@ -11,6 +11,7 @@ from typing import Annotated, Any
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 
 from .adoption import ADOPT, AdoptCommand, adopt
+from .answer_fields import PageUrl
 from .contracts import Effect
 from .describe import Describe
 from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
@@ -68,7 +69,7 @@ def _listed(favorites: tuple[str, ...]) -> tuple[Service, ...]:
 class ServiceRecord(ServiceItem):
     """One service name whole and the path a request for it takes."""
 
-    url: Annotated[str, Describe("The service's page in HQ.")]
+    url: PageUrl
     listing: Annotated[
         str,
         Describe(

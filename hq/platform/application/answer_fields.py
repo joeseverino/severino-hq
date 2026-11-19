@@ -68,6 +68,8 @@ type WebRoute = Annotated[
 type RecordSlug = Annotated[
     str, Describe("Its address in HQ, unique among records of its type: what its page and its links name it by.")
 ]
+# A record's own page, as ``entity_link`` builds it.
+type PageUrl = Annotated[str, Describe("Its page in HQ.")]
 # What an asset and an expense say of their cost alike.
 type TotalCostAmount = Annotated[
     str, Describe("What it cost in all, a decimal string with two places.", examples=("12.50",))

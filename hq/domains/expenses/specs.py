@@ -5,7 +5,7 @@ from typing import Annotated, TypedDict
 from pydantic import Field, create_model
 
 from hq.platform.application import expenses
-from hq.platform.application.answer_fields import DeductibleAmount, TotalCostAmount, UpdatedAt
+from hq.platform.application.answer_fields import DeductibleAmount, PageUrl, TotalCostAmount, UpdatedAt
 from hq.platform.application.assets import PaymentMethod
 from hq.platform.application.business_use import BusinessUseShare
 from hq.platform.application.describe import Describe
@@ -55,7 +55,7 @@ class ExpenseRow(TypedDict):
 class ExpenseRecord(ExpenseRow):
     """One expense with the words and names its related records are said by."""
 
-    url: Annotated[str, Describe("The expense's page in HQ.")]
+    url: PageUrl
     category_label: Annotated[str, Describe("Its category, in words.")]
     payment_method_label: Annotated[str, Describe("How it was paid for, in words; empty when not recorded.")]
     project_name: Annotated[str, Describe("The related project's name; empty for none.")]

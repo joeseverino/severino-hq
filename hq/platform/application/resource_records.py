@@ -13,6 +13,7 @@ from .answer_fields import (
     AsRead,
     DateTime,
     ObservedAt,
+    PageUrl,
     Since,
 )
 from .credential_sight import STATE_LABELS
@@ -255,7 +256,7 @@ class RolePart(TypedDict):
 
 class MachineRow(TypedDict):
     name: Annotated[str, Describe("The machine's name, which a read of one names it by.")]
-    url: Annotated[str, Describe("The machine's page in HQ.")]
+    url: PageUrl
     state: Annotated[
         str,
         Describe(
@@ -417,7 +418,7 @@ class ContainerRow(TypedDict):
 class ProjectPart(TypedDict):
     name: Annotated[str, Describe("The project's name.")]
     slug: Annotated[str, Describe("The project's slug, which its page is addressed by.")]
-    url: Annotated[str, Describe("The project's page in HQ.")]
+    url: PageUrl
 
 
 class PullRequestPart(TypedDict):
@@ -595,7 +596,7 @@ class Registration(TypedDict):
 class DomainRow(TypedDict):
     name: Annotated[str, Describe("The domain's name, which a read of one names it by.")]
     node: Annotated[str, Describe("The domain's id on the map: `zone:` and its name.")]
-    url: Annotated[str, Describe("The domain's page in HQ.")]
+    url: PageUrl
     declaration: Annotated[str, Describe("The key of HQ's record of the domain's DNS zone; empty when HQ keeps none.")]
     services: Annotated[list[ZoneMemberPart], Describe("The services under the domain, HQ's own among them.")]
     registration: Registration | None
@@ -722,7 +723,7 @@ class Match(TypedDict):
     name: Annotated[str, Describe("Its id where it is listed, such as a machine's name, a hostname or a record's key.")]
     label: Annotated[str, Describe("What it is called, as a result shows it.")]
     summary: Annotated[str, Describe("A line on it, with the text that matched.")]
-    url: Annotated[str, Describe("Its page in HQ.")]
+    url: PageUrl
     group: Annotated[str, Describe("The heading a list of results files it under.")]
 
 

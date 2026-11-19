@@ -6,6 +6,7 @@ from pydantic import Field, create_model
 
 from hq.domains.control_plane.provider_adapters.cloudflare import SubmissionStatus
 from hq.platform.application import contact_submissions
+from hq.platform.application.answer_fields import PageUrl
 from hq.platform.application.contact_submissions import (
     ContactReviewCommand,
     execute_contact_delete,
@@ -38,7 +39,7 @@ class ContactSubmissionRow(TypedDict):
     """
 
     id: Annotated[int, Describe("The message's id in the form's table, which the review and delete commands take.")]
-    url: Annotated[str, Describe("The message's page in HQ.")]
+    url: PageUrl
     connection_ref: NotRequired[Annotated[str, Describe("The Cloudflare connection it was read through, by name.")]]
     account_id: NotRequired[Annotated[str, Describe("The id of the Cloudflare account that holds the table.")]]
     database_id: NotRequired[Annotated[str, Describe("The id of the D1 database that holds the table.")]]

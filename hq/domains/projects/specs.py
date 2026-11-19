@@ -5,7 +5,14 @@ from typing import Annotated, NotRequired, TypedDict
 from pydantic import Field, create_model
 
 from hq.platform.application import dependency_updates, projects, registry_import
-from hq.platform.application.answer_fields import LinkedContent, LinkedDocs, LinkedExpenses, RecordSlug, UpdatedAt
+from hq.platform.application.answer_fields import (
+    LinkedContent,
+    LinkedDocs,
+    LinkedExpenses,
+    PageUrl,
+    RecordSlug,
+    UpdatedAt,
+)
 from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe
 from hq.platform.application.domains import records_of
@@ -122,7 +129,7 @@ class ProjectRow(TypedDict):
     """One project; `updates` only where its repository is on GitHub."""
 
     slug: RecordSlug
-    url: Annotated[str, Describe("The project's page in HQ.")]
+    url: PageUrl
     name: projects.ProjectName
     category: projects.ProjectCategory
     status: projects.ProjectStatus
