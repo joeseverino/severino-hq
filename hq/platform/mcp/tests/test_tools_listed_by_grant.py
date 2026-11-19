@@ -12,6 +12,7 @@ from mcp import Client
 from mcp.shared.exceptions import MCPError
 
 from hq.platform.application.security import DEVICE_INTERFACE, Capability, Principal, operator_capabilities
+from hq.platform.core.testing import MCP_READER
 
 from .. import prompts, resources
 from ..identity import set_principal
@@ -21,7 +22,7 @@ from ..server import mcp
 def _callers():
     return (
         Principal("example-none", "mcp", frozenset()),
-        Principal("example-reader", "mcp", frozenset({Capability.READ})),
+        MCP_READER,
         Principal("example-auditor", "mcp", frozenset({Capability.READ, Capability.READ_AUDIT_LOG})),
         Principal("example-writer", "mcp", frozenset({Capability.READ, "write_projects"})),
         Principal("example-device", DEVICE_INTERFACE, operator_capabilities()),

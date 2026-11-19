@@ -13,9 +13,10 @@ from hq.platform.application.finding_model import Finding
 from hq.platform.application.finding_steps import Do
 from hq.platform.application.integration_specs import typed_keys
 from hq.platform.application.plugin_testing import installed, sibling
-from hq.platform.application.security import Capability, Principal, operator_capabilities
+from hq.platform.application.security import Principal, operator_capabilities
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
+from hq.platform.core.testing import MCP_READER
 
 from ..dashboard_answer import ACTION_ITEMS_PAGE, AgentSnapshot
 from ..identity import set_principal
@@ -138,7 +139,7 @@ class DashboardAnswerTests(TestCase):
         self.assertEqual(walked, queue)
 
     def test_a_caller_who_may_not_read_the_audit_log_is_not_pointed_at_it(self):
-        reader = Principal("example-reader", "mcp", frozenset({Capability.READ}))
+        reader = MCP_READER
 
         answer = self._answered(principal=reader).structured_content
 

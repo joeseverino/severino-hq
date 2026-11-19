@@ -11,7 +11,6 @@ import json
 import re
 
 from asgiref.sync import async_to_sync
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from mcp import types
 
@@ -19,7 +18,7 @@ from hq.domains.control_plane.models import CapabilityRule
 from hq.platform.application import roles, tokens
 from hq.platform.application.linked_accounts import bind_sign_in, sign_in_subject
 from hq.platform.application.security import subject_of
-from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 from hq.platform.mcp.identity import set_principal
 from hq.platform.mcp.server import mcp
 
@@ -43,8 +42,7 @@ def _challenge(header):
 )
 class ScopeRefusalTests(TestCase):
     def setUp(self):
-        with no_default_role():
-            self.person = get_user_model().objects.create_user("example-person")
+        self.person = person(username="example-person")
         bind_sign_in(self.person, sign_in_subject(ISSUER, PERSON))
         roles.assign(self.person, roles.Role.OPERATOR)
 

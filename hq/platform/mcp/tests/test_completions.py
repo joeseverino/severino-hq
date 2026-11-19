@@ -7,12 +7,12 @@ from mcp import Client, types
 from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.resources import EmptyQuery
 from hq.platform.application.security import Capability, Principal
+from hq.platform.core.testing import MCP_READER
 
 from ..identity import set_principal
 from .registry import KIND, ExampleRecord, served, with_kind
 
 HOLDER = Principal("example-holder", "mcp", frozenset({Capability.READ, "example_read"}))
-READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 # More records than one completion offers.
 NAMES = [f"example-{number:03}" for number in range(150)]
 
@@ -59,7 +59,7 @@ class CompletionTests(TestCase):
         self.assertTrue(completion.has_more)
 
     def test_a_reader_without_the_kinds_read_gate_is_offered_nothing_of_it(self):
-        _, completion = _completed(READER, "")
+        _, completion = _completed(MCP_READER, "")
 
         self.assertEqual(completion.values, [])
 

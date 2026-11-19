@@ -6,12 +6,12 @@ from functools import cache
 from pathlib import Path
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.templatetags.static import static
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import select
+from hq.platform.core.testing import operator
 
 from ..openapi import document
 
@@ -39,7 +39,7 @@ class ReferencePageTests(TestCase):
         self.url = reverse("api_reference:reference")
 
     def _sign_in(self):
-        self.client.force_login(get_user_model().objects.create_user("operator"))
+        operator(self.client)
 
     def test_the_operator_gets_the_page_pointing_at_the_document(self):
         self._sign_in()

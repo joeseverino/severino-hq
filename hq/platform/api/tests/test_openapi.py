@@ -21,7 +21,7 @@ from hq.platform.application.domains import all_domains
 from hq.platform.application.resources import resource_registry
 from hq.platform.application.security import Capability
 from hq.platform.core.models import AuditLog
-from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 
 from .. import openapi, views
 from ..components import Components
@@ -203,8 +203,7 @@ class ServedDocumentTests(TestCase):
         self.assertEqual(response.json(), openapi.document())
 
     def test_a_signed_in_person_with_no_role_is_refused_it_as_a_page_is(self):
-        with no_default_role():
-            self.client.force_login(get_user_model().objects.create_user("example-nobody"))
+        person(self.client, "example-nobody")
 
         response = self.client.get(reverse("hq_api:openapi"))
 

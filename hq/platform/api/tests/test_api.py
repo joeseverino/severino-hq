@@ -18,6 +18,7 @@ from hq.platform.application.tests.sentinel import (
     plant_credentials,
 )
 from hq.platform.application.topology import TOPOLOGY_SCHEMA_VERSION
+from hq.platform.core.testing import declare
 
 from .. import views
 from ..testing import ContractClient
@@ -614,13 +615,9 @@ class TransportTests(SentinelMixin, TestCase):
     def test_topology_exposes_safe_nodes_edges_and_canonical_actions(self):
         from django.utils import timezone
 
-        from hq.domains.control_plane.models import ManagedResource, ProviderConnection
+        from hq.domains.control_plane.models import ProviderConnection
 
-        ManagedResource.objects.create(
-            key="api-zone",
-            kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": "api-cloudflare"},
-        )
+        declare("api-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "api-cloudflare"})
         ProviderConnection.objects.create(
             connection_ref="api-cloudflare",
             controller_id="api-controller",

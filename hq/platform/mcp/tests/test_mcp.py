@@ -21,6 +21,7 @@ from hq.platform.application.tests.sentinel import (
     SentinelMixin,
     plant_credentials,
 )
+from hq.platform.core.testing import declare
 
 from .. import services
 from ..security import MCPBoundary, TailnetGate
@@ -254,13 +255,8 @@ class ServiceTests(SentinelMixin, TestCase):
             return {}
 
     def test_derived_topology_traces_from_a_focus(self):
-        from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(
-            key="mcp-zone",
-            kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": "mcp-cloudflare"},
-        )
+        declare("mcp-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "mcp-cloudflare"})
         with host_only():
             topology = services.get_topology(focus="resource:mcp-zone", direction="inbound", depth=2)
 
@@ -269,11 +265,8 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertEqual(topology["trace"]["direction"], "inbound")
 
     def test_an_agent_can_ask_the_topology_one_standing_question(self):
-        from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(
-            key="mcp-lonely", kind="adguard.rewrite", spec={"domain": "app.example.test", "answer": "192.0.2.10"}
-        )
+        declare("mcp-lonely", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"})
         with host_only():
             whole = services.get_topology()
             narrowed = services.get_topology(lens="unobserved-resources")

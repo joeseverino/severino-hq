@@ -12,7 +12,8 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 from mcp import Client
 
-from hq.platform.application.security import AuthorizationError, Capability, Principal
+from hq.platform.application.security import AuthorizationError, Principal
+from hq.platform.core.testing import MCP_READER
 
 from .. import prompts, resources
 from ..identity import set_principal
@@ -20,7 +21,6 @@ from ..server import mcp
 from ..shapes import declared
 
 WRITER = Principal("example-writer", "mcp", frozenset({"write_projects"}))
-READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 
 
 def plain(call):
@@ -51,14 +51,14 @@ class ReadsRefusedAtTheDoorTests(TestCase):
                 self.assertEqual(answer.structured_content["error"]["code"], "forbidden", answer.structured_content)
 
     def test_the_audit_trail_is_refused_a_caller_holding_only_read(self):
-        answer = self._called("recent_activity", {}, READER)
+        answer = self._called("recent_activity", {}, MCP_READER)
 
         self.assertTrue(answer.is_error, answer.structured_content)
         self.assertEqual(answer.structured_content["error"]["code"], "forbidden")
 
     def test_a_tool_that_reads_under_read_answers_a_reader(self):
         for name in ("get_topology", "system_health", "audit_registry", "documentation_status"):
-            answer = self._called(name, plain(declared(mcp.tools[name].handler).budget.call), READER)
+            answer = self._called(name, plain(declared(mcp.tools[name].handler).budget.call), MCP_READER)
             with self.subTest(tool=name):
                 self.assertFalse(answer.is_error, answer.structured_content)
 

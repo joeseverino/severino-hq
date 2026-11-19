@@ -11,7 +11,6 @@ from django.test import TestCase
 from django.utils import timezone
 from mcp import Client
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.finding_model import Finding
 from hq.platform.application.finding_steps import Press
@@ -23,6 +22,7 @@ from hq.platform.application.tone import Tone
 from hq.platform.application.topology_model import Topology, TopologyEdge, TopologyNode
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
+from hq.platform.core.testing import declare
 
 from ..finding_actions import FIRST_FINDINGS
 from ..identity import set_principal
@@ -145,10 +145,10 @@ class FindingActionsTests(TestCase):
         now = timezone.now()
         for key, when in (("example-skipped", now - timedelta(hours=9)), ("example-swept", now)):
             spec = {"domain": f"{key}.example.test", "answer": "192.0.2.10"}
-            ManagedResource.objects.create(
-                key=key,
-                kind=REWRITE,
-                spec=spec,
+            declare(
+                key,
+                REWRITE,
+                spec,
                 last_observed_at=when,
                 generation=1,
                 observed_generation=1,

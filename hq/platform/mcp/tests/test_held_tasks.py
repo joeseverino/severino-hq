@@ -13,7 +13,6 @@ from datetime import timedelta
 from typing import Any, Literal
 
 from asgiref.sync import async_to_sync
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from mcp import Client, types
@@ -21,13 +20,14 @@ from mcp.client.extension import ClientExtension, ResultClaim
 from mcp.shared.exceptions import MCPError
 from pydantic import Field, TypeAdapter
 
-from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource, OperationRequest
+from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, OperationRequest
 from hq.platform.application.approval_review import asked
 from hq.platform.application.approvals import ApproveCommand, RejectCommand, approve, reject
 from hq.platform.application.controller import ControllerReport, claim_next_operation, report_operation
 from hq.platform.application.hq_self import site_host
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import Principal, mcp_principal, web_principal
+from hq.platform.core.testing import declare, operator
 
 from ..identity import set_principal
 from ..server import mcp
@@ -118,9 +118,9 @@ class HeldTaskTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        ManagedResource.objects.create(key=POLICY_KEY, kind="tailscale.policy", spec={"document": "{}"})
+        declare(POLICY_KEY, "tailscale.policy", {"document": "{}"})
         self.agent = Principal("example-agent", "mcp", mcp_principal().capabilities)
-        user = get_user_model().objects.create_user(username="operator", password="test-only-password")
+        user = operator()
         self.person = web_principal(user)
 
     def _session(self, steps, *, principal=None, tasks=True):

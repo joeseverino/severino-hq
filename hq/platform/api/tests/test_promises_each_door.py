@@ -9,7 +9,6 @@ from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from itertools import combinations_with_replacement
 
-from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase, TransactionTestCase, override_settings
 
@@ -21,6 +20,7 @@ from hq.platform.application.controller import ControllerReport, claim_next_oper
 from hq.platform.application.security import web_principal
 from hq.platform.application.tests.procedures import APP, DB, RESTART, RESTART_RUN, Supply, manifest, run_payload
 from hq.platform.application.tests.test_page_projections import page_lists, populate, served_lists
+from hq.platform.core.testing import operator
 
 from .doors import MCP, OPERATOR, SDK, Api, Caller, at_the_door, each_door
 
@@ -76,7 +76,7 @@ class CancelAndWithdrawTests(TestCase):
     def setUp(self):
         at_the_door(self)
         self.supply = Supply(self, manifest())
-        self.person = web_principal(get_user_model().objects.create_user(username="example-owner"))
+        self.person = web_principal(operator())
 
     def held(self, door):
         asked = door.capability(RESTART_RUN, run_payload() | {"idempotency_key": "example-ask"})
@@ -120,7 +120,7 @@ class ConnectionStandingTests(TestCase):
         populate()
 
     def test_a_connections_reads_and_changes_are_the_pages(self):
-        self.client.force_login(get_user_model().objects.create_user("operator", password="pw", is_staff=True))
+        operator(self.client)
         drawn = page_lists(self.client, "example-tailnet")
         self.assertTrue(drawn[0])
 
@@ -210,7 +210,7 @@ class AutomationLoopTests(TestCase):
     def setUp(self):
         at_the_door(self)
         self.supply = Supply(self, manifest(), manifest(id=LOGS, effect="read", retry="safe"))
-        self.person = web_principal(get_user_model().objects.create_user(username="example-owner"))
+        self.person = web_principal(operator())
 
     def found(self, door, effect):
         """What a caller learns before it asks: the resources HQ has, a playbook

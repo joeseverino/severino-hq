@@ -6,13 +6,11 @@ from mcp import Client
 from mcp.shared.exceptions import MCPError
 
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
-from hq.platform.application.security import Capability, Principal
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import MCP_READER
 
 from ..identity import set_principal
 from .registry import KIND, example_kind, registry_patched, served, with_kind
-
-READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 
 
 def _denials():
@@ -27,7 +25,7 @@ def _on_mcp(steps):
         async with Client(server.server) as client:
             return await steps(client)
 
-    with set_principal(READER), served(with_kind(example_kind())) as server:
+    with set_principal(MCP_READER), served(with_kind(example_kind())) as server:
         return async_to_sync(run)(server)
 
 
@@ -54,7 +52,7 @@ class RecordedRefusalTests(TestCase):
         self.assertTrue(answered.is_error)
         self.assertEqual(answered.structured_content["error"]["code"], "forbidden")
         self.assertEqual(
-            _denials(), [{"interface": "mcp", "actor": READER.actor, "reason": "forbidden", "authenticated": True}]
+            _denials(), [{"interface": "mcp", "actor": MCP_READER.actor, "reason": "forbidden", "authenticated": True}]
         )
 
     def test_a_read_refused_on_mcp_is_recorded_as_the_api_records_it(self):
@@ -65,5 +63,5 @@ class RecordedRefusalTests(TestCase):
 
         self.assertEqual(_on_mcp(steps), {"code": "forbidden"})
         self.assertEqual(
-            _denials(), [{"interface": "mcp", "actor": READER.actor, "reason": "forbidden", "authenticated": True}]
+            _denials(), [{"interface": "mcp", "actor": MCP_READER.actor, "reason": "forbidden", "authenticated": True}]
         )

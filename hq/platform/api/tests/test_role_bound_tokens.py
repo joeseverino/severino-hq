@@ -5,7 +5,6 @@ person's role; a machine's own token holds its grant; a token naming a person
 with no role is refused.
 """
 
-from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
@@ -16,7 +15,7 @@ from hq.platform.application.agent_registry import observe
 from hq.platform.application.linked_accounts import bind_sign_in, sign_in_subject
 from hq.platform.application.security import DEVICE_INTERFACE, AuthorizationError, Capability
 from hq.platform.core.models import AgentIdentity, AuditLog, OwnDevice
-from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 
 from .tokens import ISSUER, RESOURCE, _serving, _token
 
@@ -35,8 +34,7 @@ ASKED = "read write_projects manage_infrastructure"
 )
 class RoleBoundTokenTests(TestCase):
     def setUp(self):
-        with no_default_role():
-            self.person = get_user_model().objects.create_user("example-person")
+        self.person = person(username="example-person")
         bind_sign_in(self.person, sign_in_subject(ISSUER, PERSON))
 
     def _hold(self, role):

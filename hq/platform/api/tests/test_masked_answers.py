@@ -2,7 +2,7 @@
 
 from django.test import TestCase, override_settings
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ..testing import ContractClient
 from .tokens import ISSUER, RESOURCE, _serving, _token
@@ -16,9 +16,7 @@ class MaskedAnswerTests(TestCase):
     def test_an_answer_cut_inside_a_nested_part_holds_to_the_document(self):
         """The contract client validates each answer against the published document."""
 
-        ManagedResource.objects.create(
-            key="example-rewrite", kind="adguard.rewrite", spec={"domain": "app.example.test", "answer": "192.0.2.10"}
-        )
+        declare("example-rewrite", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"})
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving():
             listed = self.client.get("/api/v2/resources/infrastructure/?fields=key,health.state", **headers)

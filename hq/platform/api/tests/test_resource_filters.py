@@ -6,6 +6,7 @@ from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.projection import MAX_PAGE_SIZE
+from hq.platform.core.testing import declare
 from hq.platform.mcp.tests.test_list_filters import OUTSIDE, calls
 
 from ..testing import ContractClient
@@ -81,10 +82,9 @@ class TheApiAgreesTests(TestCase):
                     self.assertEqual(response.status_code, 400)
 
     def test_kind_and_kinds_sent_together_each_narrow_the_list(self):
-        from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(key="example-machine", kind="machine", spec={"name": "example"})
-        ManagedResource.objects.create(key="example-network", kind="network", spec={})
+        declare("example-machine", "machine", {"name": "example"})
+        declare("example-network", "network")
         with _serving():
             token = f"Bearer {_token(scope='read')}"
             for kind, kept in (("machine", ["example-machine"]), ("caddy.route", [])):

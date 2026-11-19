@@ -8,11 +8,11 @@ actor, its grant is capped and paused as every agent's is, and what it keeps
 (settings, pins, set-asides) is its person's, though it never stands as them.
 """
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from hq.platform.application.linked_accounts import bind_sign_in, sign_in_subject
 from hq.platform.application.security import DEVICE_INTERFACE, is_interactive, person_of
+from hq.platform.core.testing import operator
 
 from .tokens import ISSUER, RESOURCE, _serving, _token
 
@@ -30,7 +30,7 @@ AGENT_CLIENT = "example-agent"
 class DelegatedTokenTests(TestCase):
     def setUp(self):
         # The person has signed in to HQ, so a `sub` naming them names somebody.
-        self.person = get_user_model().objects.create_user(username="operator", password="test-only-password")
+        self.person = operator()
         bind_sign_in(self.person, sign_in_subject(ISSUER, PERSON))
 
     def _admitted(self, scope, interface):
@@ -92,7 +92,7 @@ class DelegatedTokenTests(TestCase):
         self.assertEqual(person_of(principal), self.person)
 
     def test_a_registration_made_by_another_person_grants_nothing(self):
-        other = get_user_model().objects.create_user(username="someone-else", password="test-only-password")
+        other = operator(username="someone-else")
         bind_sign_in(other, sign_in_subject(ISSUER, "7a9e0c1d-2b3f-4c5d-8e6f-1a2b3c4d5e6f"))
         self._registered(other)
 
