@@ -34,7 +34,6 @@ lazy from .entity_links import entity_link
 lazy from .facts import Subject, snapshots_of
 lazy from .infrastructure import declared_machines, enabled_resources
 lazy from .machine_roles import role_context, roles_of
-lazy from .moments import moment, when_day
 lazy from .projection import read_once
 lazy from .reach import network_of
 lazy from .resource_records import MachineRecord, MachineRow
@@ -207,15 +206,6 @@ class Machine:
         if self.reached_by:
             return MachineState.ONLINE if self.reachable else MachineState.NOT_ANSWERING
         return MachineState.UNMONITORED
-
-    @property
-    def state_since(self) -> str:
-        """The day the tailnet last saw a machine that is away or offline, or ""."""
-
-        if self.presence is None or self.presence.online:
-            return ""
-        seen = moment(str(self.presence.last_seen or ""))
-        return when_day(seen) if seen is not None else ""
 
 
 def _own(address: str) -> bool:

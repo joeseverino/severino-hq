@@ -35,7 +35,7 @@ lazy from .record_errors import RecordNotFound
 lazy from .refusal_status import Refusal, refusal_of
 lazy from .request_context import current as current_request
 lazy from .request_identity import signed_in
-lazy from .resources import get_resource, resource_registry
+lazy from .resources import every_item, get_resource, resource_registry
 lazy from .routes import reverse, routed
 lazy from .security import AuthorizationError, Capability, web_principal
 
@@ -481,6 +481,38 @@ class PageMixin(FragmentMixin):
         return context
 
 
+def _names_its_read(cls: type) -> None:
+    if not (getattr(cls, "resource", "") and getattr(cls, "context_object_name", "")):
+        raise ImproperlyConfigured(f"{cls.__name__} names the resource it reads and its context_object_name.")
+
+
+class RecordListMixin(PageMixin):
+    """The list page of a resource kind, its rows the items that kind's API
+    and MCP list read answer (``resources.every_item``), so a row says what an
+    agent's list says. The template reads them as ``context_object_name``."""
+
+    # The ``ResourceSpec`` whose list read draws the page, by its name.
+    resource = ""
+    context_object_name = ""
+    # The fields of each item the page draws, as a field mask; none, its list's own.
+    fields: tuple[str, ...] = ()
+    records: list[dict[str, Any]]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        _names_its_read(cls)
+
+    def get(self, request: Any, *args: Any, **kwargs: Any) -> Any:
+        principal = web_principal(request.user)
+        self.records = every_item(self.resource, principal=principal, fields=list(self.fields) or None)
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        context[self.context_object_name] = self.records
+        return context
+
+
 class RecordPageMixin(PageMixin):
     """The page of one record of a resource kind, drawn from the record that
     kind's API and MCP read answer (``resources.get_resource``), so what the
@@ -499,8 +531,7 @@ class RecordPageMixin(PageMixin):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        if not (cls.resource and cls.context_object_name):
-            raise ImproperlyConfigured(f"{cls.__name__} names the resource it reads and its context_object_name.")
+        _names_its_read(cls)
 
     @property
     def identifier(self) -> str:

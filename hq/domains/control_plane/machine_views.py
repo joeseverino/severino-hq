@@ -15,7 +15,7 @@ from hq.platform.application.machine_context import (
     serves_links,
 )
 from hq.platform.application.machines import Machine, machine
-from hq.platform.application.pages import PageAction, PageDialog, PageMixin, RecordPageMixin
+from hq.platform.application.pages import PageAction, PageDialog, PageMixin, RecordListMixin, RecordPageMixin
 from hq.platform.application.resource_capabilities import (
     CREATE_CAPABILITY,
     MACHINE_DETAILS,
@@ -44,7 +44,7 @@ from .names import normalized_hostname
 from .provider_adapters.declarations import MACHINE_KIND
 
 
-class MachineListView(PageMixin, TemplateView):
+class MachineListView(RecordListMixin, TemplateView):
     """Every machine anything reported, and what is on each.
 
     Nothing here is declared. A machine exists because a credential reaches it,
@@ -55,15 +55,32 @@ class MachineListView(PageMixin, TemplateView):
     template_name = "control_plane/machine_list.html"
     page_title = "Machines"
     page_reads = ("tailscale.device", "portainer.environment")
+    resource = "machines"
+    context_object_name = "machines"
+    fields = (
+        "name",
+        "url",
+        "role",
+        "roles",
+        "state",
+        "tone",
+        "reached_by",
+        "unanswered",
+        "containers.name",
+        "running",
+        "containers_visible",
+        "hostnames",
+        "runs_hq",
+        "presence.online",
+        "presence.last_seen",
+    )
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        machines = machines_once()
-        context["machines"] = machines
         context["hq_label"] = HQ_LABEL
         # How many are in each state, in the order the states first appear.
-        states = [item.state for item in machines]
+        states = [item["state"] for item in self.records]
         context["state_counts"] = [(states.count(state), state) for state in dict.fromkeys(states)]
         return context
 

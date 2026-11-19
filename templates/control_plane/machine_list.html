@@ -23,7 +23,7 @@ anyway, and would go on meaning nothing after it stopped being.
       {% for machine in machines %}
         <tr>
           <td>
-            {% cell_line %}<strong>{% entity machine.link %}</strong>{% for role in machine.roles %} {% status role.label chip=True title=role.detail %}{% endfor %}{% detail %}{% if machine.role %}{{ machine.role|breakable }}{% endif %}{% endcell_line %}
+            {% cell_line %}<strong>{% entity "machine"|entity_of:machine.name %}</strong>{% for role in machine.roles %} {% status role.label chip=True title=role.detail %}{% endfor %}{% detail %}{% if machine.role %}{{ machine.role|breakable }}{% endif %}{% endcell_line %}
           </td>
           <td>
             {% present machine.reached_by %}{% list %}{% for ref in machine.reached_by %}<li>{% entity "connection"|entity_of:ref code=True %}{% if ref in machine.unanswered %} {% muted %}not answering{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endpresent %}
@@ -39,14 +39,14 @@ anyway, and would go on meaning nothing after it stopped being.
             {% comment %}Two names and a count: a machine serving ten would make its row ten lines tall. Its page lists them all.{% endcomment %}
             {% list %}{% if machine.runs_hq %}<li>{{ hq_label|breakable }}</li>{% endif %}
             {% for hostname in machine.hostnames|slice:":2" %}<li>{% entity "service"|entity_of:hostname %}</li>{% endfor %}
-            {% if machine.hostnames|length > 2 %}<li><a href="{{ machine.link.url }}#names">{% muted %}+{{ machine.hostnames|length|add:"-2"|measured:"more" }}{% endmuted %}</a></li>{% endif %}{% endlist %}
+            {% if machine.hostnames|length > 2 %}<li><a href="{{ machine.url }}#names">{% muted %}+{{ machine.hostnames|length|add:"-2"|measured:"more" }}{% endmuted %}</a></li>{% endif %}{% endlist %}
           </td>
           <td>
             {% comment %}
             One state. Presence decides when the tailnet reports the machine;
             the connection that sees it is in "Read through".
             {% endcomment %}
-            {% list %}<li>{% status machine.state %}</li>{% if machine.state_since %}<li>{% muted css="cell-part" %}since {{ machine.state_since|breakable }}{% endmuted %}</li>{% endif %}{% endlist %}
+            {% list %}<li>{% status machine.state tone=machine.tone %}</li>{% if machine.presence and not machine.presence.online and machine.presence.last_seen %}<li>{% muted css="cell-part" %}since {{ machine.presence.last_seen|when:"day" }}{% endmuted %}</li>{% endif %}{% endlist %}
           </td>
         </tr>
       {% endfor %}

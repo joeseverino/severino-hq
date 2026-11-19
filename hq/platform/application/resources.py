@@ -386,6 +386,24 @@ def list_resource(
     return {**page, "items": items}
 
 
+def every_item(name: str, *, principal: Principal, fields: Fields | None = None) -> list[dict[str, Any]]:
+    """Every item of a resource's list, read page after page through
+    ``list_resource`` at its largest page: what a web page drawing the whole
+    list shows."""
+
+    spec = _resource(name)
+    query: dict[str, Any] = (
+        {"limit": MAX_PAGE_SIZE} if spec.listing and "limit" in spec.listing.query.model_fields else {}
+    )
+    items: list[dict[str, Any]] = []
+    while True:
+        page = list_resource(name, query, principal=principal, strict=False, fields=fields)
+        items.extend(page["items"])
+        if page["next"] is None:
+            return items
+        query = {**query, **page["next"]}
+
+
 class PagePosition(TypedDict):
     """Where a page of a list stopped."""
 
