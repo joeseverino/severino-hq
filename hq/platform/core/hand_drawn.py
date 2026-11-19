@@ -709,6 +709,22 @@ SHAPES = (
         keeps=("{% block title %}Machines{% endblock %}",),
         drawn_by={"base.html": "the layout, which appends the site name to each page's title"},
     ),
+    Shape(
+        name="dollar-amount",
+        said='A dollar sign before a value, which writes a negative amount as "$-5.00".',
+        instead="{{ amount|money }}",
+        find=matched(r"\$\{\{"),
+        refuses=("<td>${{ total|floatformat:2 }}</td>",),
+        keeps=("<td>{{ total|money }}</td>",),
+    ),
+    Shape(
+        name="command-url",
+        said="A command's address built by hand, which encodes its target as the form does not read it.",
+        instead="the link command_url builds (action_links)",
+        find=matched(r"""\{%\s*url\s+["']command["']"""),
+        refuses=("""<a href="{% url 'command' name %}?target={{ key }}">Run</a>""",),
+        keeps=('<a href="{{ action.url }}">Run</a>',),
+    ),
 )
 
 

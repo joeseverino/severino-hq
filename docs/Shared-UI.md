@@ -293,6 +293,8 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `nested-form` | A form opened inside a form, whose opening tag the parser drops, so the inner form's end closes the outer one. | one form, or the second after the first closes |
 | `open-comment` | A comment left open on its line, which Django prints on the page. | {# #} closed on its line, or `{% comment %}` for a longer note |
 | `page-title` | A page title that is empty, or names the site, which the layout appends after it. | `{% block title %}` naming the page alone |
+| `dollar-amount` | A dollar sign before a value, which writes a negative amount as "$-5.00". | {{ amount\|money }} |
+| `command-url` | A command's address built by hand, which encodes its target as the form does not read it. | the link command_url builds (action_links) |
 
 ## Each part's rules
 
