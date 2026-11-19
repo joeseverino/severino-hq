@@ -185,12 +185,14 @@ def as_here(line: bytes, task: str, where: str, home: str) -> bytes:
 
 
 class Sent(NamedTuple):
-    """A tree sent there: its commit, the arguments that ask for the task again, the run's id there (what it
-    staged and what it keeps for back), and the extension checkout there and commit a composed run
-    composes, with its packages' paths in it, or none, and the files fast's fixes rewrote here first."""
+    """A tree sent there: its commit and this checkout's HEAD, which HEAD there names too, the arguments that
+    ask for the task again, the run's id there (what it staged and what it keeps for back), and the
+    extension checkout there and commit a composed run composes, with its packages' paths in it, or none,
+    and the files fast's fixes rewrote here first."""
 
     tree: str
     commit: str
+    head: str
     argv: list[str]
     id: str
     extension: tuple[str, str] | None
@@ -270,7 +272,7 @@ def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
     # fast's chain: the trees passed here, so it selects as it would here.
     if chain.passes().is_dir():
         done(["rsync", "-a", "-e", shlex.join(SSH), str(chain.passes()), f"{remote}/.git/severino/"])
-    return Sent(tree, commit, argv, run, extension, packages, fixed)
+    return Sent(tree, commit, git("rev-parse", "HEAD", root=ROOT)[0], argv, run, extension, packages, fixed)
 
 
 def run_there(task: str, host: str, checkout: str, values: dict[str, str], took: Callable[[str], None]) -> int:
@@ -282,10 +284,10 @@ def run_there(task: str, host: str, checkout: str, values: dict[str, str], took:
     }
     handed = [f"{name}={value}" for name, value in carried.items()]
     composed = [*(sent.extension or ("-", "")), sent.packages]
-    asked = [sent.id, sender(), checkout, sent.tree, sent.commit, *composed, "env", *handed, "mise", "run", task]
+    asked = [sent.id, sender(), checkout, sent.tree, sent.commit, sent.head, *composed, "env", *handed]
     # Its input closing is what stops the run there.
     stream = subprocess.Popen(
-        host_half(host, "run", *asked, *sent.argv),
+        host_half(host, "run", *asked, "mise", "run", task, *sent.argv),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

@@ -183,6 +183,14 @@ class CoordinatedBranchTests(SimpleTestCase):
         self.assertEqual(picked.sources, (str(chosen / "packages/alpha/src"),))
         self.assertNotIn("pass/x", picked.said)
 
+    def test_the_tree_a_gate_was_sent_composes_the_set_it_was_sent_with_as_it_stands(self):
+        # The second machine's copy: detached, beside the extension tree the sender picked, at another API.
+        self.git(self.host, "switch", "-q", "--detach", "pass/x")
+        self.environ["HQ_GATE_SENT"] = self.git(self.host, "rev-parse", "HEAD^{tree}")
+        picked = self.picked()
+        self.assertEqual(picked.sources, (str(self.extensions / "packages/alpha/src"),))
+        self.assertEqual(picked.plugins, ("example_alpha.plugin:plugin",))
+
     def test_a_tree_landing_on_the_default_branch_or_detached_keeps_the_named_set(self):
         for switch in (("-c", "from-main", "main"), ("--detach", "pass/x")):
             with self.subTest(switch=switch):

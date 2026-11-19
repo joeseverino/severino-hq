@@ -929,17 +929,20 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    a push to its forge, since these refs publish nothing. fast's default base is resolved here too, from this
    checkout's chain of passed trees, which is also synced there,
    so it selects what it would select here. A run that may compose (the
-   composed suite, fast, perf, and a look that runs perf) sends the extension
-   checkout `HQ_LOCAL_PYTHONPATH` names the same way, to the clone of the same
-   name beside HQ's there, with `HQ_LOCAL_PLUGINS`, and the set is picked
-   there from what was sent; one that cannot send it runs here.
+   composed suite, fast, perf, and a look that runs perf) picks the set here,
+   as a run here would, and sends the extension tree it picked the same way,
+   to the clone of the same name as the checkout `HQ_LOCAL_PYTHONPATH` names,
+   beside HQ's there, with `HQ_LOCAL_PLUGINS`. The tree sent composes it there
+   as it stands, never picking again; one that cannot send it runs here.
 2. There, the run takes the first free worktree of this checkout's under
    `~/.cache/hq-gates` (the checkout is keyed by its machine and path), held
    with `flock` until the run ends, so two runs at once never share one and
    each tree a checkout sends finds the environment and caches the last one
    warmed. The worktree is reset to the commit sent, everything an earlier
    run left that git tracks or does not ignore removed, and the pushed refs
-   are deleted. A new one holds the files `.worktreeinclude` names as that
+   are deleted. Its HEAD is then this checkout's HEAD, with the rest of the
+   tree as uncommitted work, so a step that reads HEAD (a look's
+   `catalog:<sheet>`) reads the change it would read here. A new one holds the files `.worktreeinclude` names as that
    checkout has them. A file under `var/` that an argument names (a `--eval`
    probe) is staged before the run and laid in. A worktree untouched for a
    day is removed as the next run starts.

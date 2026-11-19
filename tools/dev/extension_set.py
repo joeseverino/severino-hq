@@ -22,6 +22,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from tools.gate.tree import working_tree
 from tools.pipeline.plugin_identity import PLUGINS, identity, manifest_file, plugin_api_version, required_api, spoken
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -332,6 +333,13 @@ def _coordinated(host: Path, top: Path, mine: list[_Package], api: int) -> _Coor
     )
 
 
+def _named(environ: Mapping[str, str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The plugins and sources ``environ`` names the set by."""
+
+    plugins = tuple(each for each in environ.get("HQ_LOCAL_PLUGINS", "").split(",") if each)
+    return plugins, tuple(each for each in environ.get("HQ_LOCAL_PYTHONPATH", "").split(":") if each)
+
+
 def pick(
     speaks: Callable[[], int],
     where: str,
@@ -354,8 +362,7 @@ def pick(
     SNAPSHOTS. Where it has none, no extension is composed, since the host refuses a package of another
     API."""
 
-    plugins = tuple(each for each in environ.get("HQ_LOCAL_PLUGINS", "").split(",") if each)
-    sources = tuple(each for each in environ.get("HQ_LOCAL_PYTHONPATH", "").split(":") if each)
+    plugins, sources = _named(environ)
     if not plugins:
         return Pick((), (), ALONE)
     api = speaks()
@@ -416,8 +423,14 @@ def pick(
 
 def for_tree(tree: Path, environ: Mapping[str, str] = os.environ) -> Pick:
     """The set a step composes for the host checked out at ``tree``: an extension's branch named as the
-    one the tree lands on where its repository carries one, as CI composes it."""
+    one the tree lands on where its repository carries one, as CI composes it. On the second machine, the
+    tree a gate was sent (HQ_GATE_SENT) composes the set as it stands: the sending machine picked it for
+    that tree and sent what it picked (tools/gate/remote.py), and the copy there lands on no branch."""
 
+    plugins, sources = _named(environ)
+    sent = environ.get("HQ_GATE_SENT")
+    if plugins and sources and sent and working_tree(tree) == sent:
+        return Pick(sources, plugins, f"Extensions composed from: {', '.join(sources)}, as picked where sent from")
     return pick(
         lambda: int(plugin_api_version(tree)), str(tree), before=moved_past(tree, "HEAD"), host=tree, environ=environ
     )

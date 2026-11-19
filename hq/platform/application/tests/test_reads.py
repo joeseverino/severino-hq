@@ -5,6 +5,7 @@ import io
 import os
 from pathlib import Path
 
+from django.template.utils import get_app_template_dirs
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests import program_reads
@@ -48,6 +49,11 @@ class ReadsTests(SimpleTestCase):
     def test_a_directory_opened_is_no_read_of_a_file(self):
         with watching(EVERYTHING_LISTED):
             os.close(os.open(FILE.parent, os.O_RDONLY))
+
+    def test_what_django_finds_once_for_the_process_is_no_read_of_the_step_that_first_asks(self):
+        get_app_template_dirs.cache_clear()
+        with watching(Reads(())):
+            get_app_template_dirs("templates")
 
     def test_a_program_started_outside_subprocess_is_named(self):
         for name, start in {

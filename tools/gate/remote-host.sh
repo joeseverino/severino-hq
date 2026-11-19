@@ -3,10 +3,12 @@
 # tools/gate/remote.py (docs/Development.md, Gates on a second machine).
 #   stage <id>
 #     keeps the archive on its input (files no commit holds) for run <id>.
-#   run <id> <key> <checkout> <tree> <commit> <extension checkout> <commit> <packages> <command...>
+#   run <id> <key> <checkout> <tree> <commit> <head> <extension checkout> <commit> <packages> <command...>
 #     takes the first free worktree of the sending checkout's (<key>-1,
 #     <key>-2, ...), holding it until the run ends, so a run never shares one;
-#     resets it to the commit pushed as refs/gate/<id>, with what run <id>
+#     resets it to the commit pushed as refs/gate/<id>, its HEAD then the
+#     sender's <head> with the rest as uncommitted work, so HEAD names the
+#     same commit there as on the sending machine, with what run <id>
 #     staged laid over it and the extension commit's beside it when one is named
 #     (- names none); prints the worktree and $HOME on its first line; runs the
 #     command there, the extension set composed from the extension commit's
@@ -33,11 +35,12 @@ export MISE_TRUSTED_CONFIG_PATHS
 umask 022
 
 # A detached worktree of <commit> at <worktree>, holding the gitignored files
-# .worktreeinclude names as the checkout has them, as Claude Code makes one.
+# .worktreeinclude names as the checkout has them, as Claude Code makes one,
+# its HEAD <head> where given, with what <commit> holds past it left unstaged.
 # One made before holds exactly <commit> again, whatever an earlier run wrote
 # there: the tree a run judges is the tree sent. Ignored files stay (the
 # environment, caches, the .worktreeinclude copies, var/).
-worktree() { # <checkout> <id> <commit> <worktree>
+worktree() { # <checkout> <id> <commit> <worktree> [<head>]
     if [ -d "$4" ]; then
         git -C "$4" reset --quiet --hard "$3"
         git -C "$4" clean -d --force --quiet
@@ -48,6 +51,7 @@ worktree() { # <checkout> <id> <commit> <worktree>
             [ ! -e "$1/$kept" ] || cp -R "$1/$kept" "$4/$kept"
         done
     fi
+    [ "${5:-$3}" = "$3" ] || git -C "$4" reset --quiet --mixed "$5"
     touch "$4"
     # The worktree holds the commit now; a ref left behind would keep every tree ever sent.
     for ref in "$2" "$2-base" "$2-at"; do
@@ -61,8 +65,8 @@ case "$step" in
         cat >"$gates/staged/$1.tar"
         ;;
     run)
-        id=$1 key=$2 checkout=$3 sent=$4 commit=$5 extension_checkout=$6 extension_commit=$7 packages=$8
-        shift 8
+        id=$1 key=$2 checkout=$3 sent=$4 commit=$5 head=$6 extension_checkout=$7 extension_commit=$8 packages=$9
+        shift 9
         mkdir -p "$gates/back" "$gates/staged" "$checkout/.git/severino"
         find "$gates" -path "$gates/*" -prune -type d ! -name staged ! -name back -mtime +0 -exec rm -rf {} +
         find "$gates/staged" "$gates/back" -type f -mtime +0 -exec rm -f {} +
@@ -75,7 +79,7 @@ case "$step" in
             if flock -n 9; then break; fi
             n=$((n + 1))
         done
-        worktree "$checkout" "$id" "$commit" "$slot"
+        worktree "$checkout" "$id" "$commit" "$slot" "$head"
         if [ "$extension_checkout" != - ]; then
             worktree "$extension_checkout" "$id" "$extension_commit" "$slot.ext"
         fi
