@@ -2,7 +2,7 @@
 
 from hq.platform.core.included_parts import TOPOLOGY_MAP
 from hq.platform.core.templatetags.table_tags import TABLE_REGION
-from hq.platform.core.tests.browser.probes import Check
+from hq.platform.core.tests.browser.probes import Check, Plant
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, PAINTED_PART
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.widths import TARGET_MIN
@@ -470,16 +470,156 @@ CUT_RINGS = (
 )
 
 
+def _link(name, place, size="font-size: 8px; line-height: 8px", more=""):
+    """A link drawn as an ``x``, placed in the window at ``place`` (top, left)."""
+
+    top, left = place
+    return f'<a href="#" class="{name}"{more} style="position: fixed; top: {top}; left: {left}; {size}">x</a>'
+
+
+def _cover(top, width, height):
+    """A box drawn over what lies under it, as an open menu's panel is."""
+
+    return (
+        f'<div style="position: fixed; top: {top}; left: 0; width: {width}; height: {height}; '
+        'z-index: 10; background: white"></div>'
+    )
+
+
+# A popover's foot laid in the 3px a heading's ``::after`` hangs above it:
+# 1px above the heading's box.
+_LAY_THE_POPOVER = """() => {
+  const popover = document.querySelector('main [popover]');
+  popover.showPopover();
+  const foot = () => popover.querySelector('.example-cover').getBoundingClientRect().bottom
+    - document.querySelector('main .example-beneath').getBoundingClientRect().top;
+  popover.style.setProperty('top', `${200 - foot() - 1}px`);
+}"""
+_POPOVER_FOOT = """() => {
+  const foot = document.querySelector('main .example-cover').getBoundingClientRect().bottom
+    - document.querySelector('main .example-beneath').getBoundingClientRect().top;
+  return foot === -1 ? [] : [`the popover's foot is ${foot}px from the heading, not -1px`];
+}"""
+
+# The panel an item holds, shown over the button beside it.
+_SHOW_THE_HELD_PANEL = """() => {
+  const item = document.querySelector('main .example-held');
+  const at = item.nextElementSibling.getBoundingClientRect();
+  const panel = item.querySelector('[popover]');
+  panel.style.cssText = `margin: 0; inset: auto; left: ${at.left}px; top: ${at.top}px`;
+  panel.showPopover();
+}"""
+_HELD_OVER_ITS_NEIGHBOR = """() => {
+  const item = document.querySelector('main .example-held');
+  const panel = item.querySelector('[popover]').getBoundingClientRect();
+  const at = item.nextElementSibling.getBoundingClientRect();
+  const over = panel.left < at.right && panel.right > at.left && panel.top < at.bottom && panel.bottom > at.top;
+  return over ? [] : ['the held panel is not shown over its neighbor'];
+}"""
+
+_GRID_ITEM = (
+    '<div style="display: grid; grid-template-columns: 200px 200px; inline-size: 400px">'
+    '<div class="{}" style="grid-area: 1 / 1 / 2 / 3; align-self: start; margin: 0; white-space: nowrap">{}</div>'
+    '<button style="grid-area: 1 / 2 / 2 / 3; align-self: start; margin: 0">Approve</button></div>'
+)
+
+
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
     "sideways": Check(
         (SIDEWAYS, SELECTORS["sideways"]), reader_sees="content past the page's edge or clipped out of its box"
     ),
-    "overlaps": Check((OVERLAPS, SELECTORS["floating"]), reader_sees="one box drawn over another"),
+    "overlaps": Check(
+        (OVERLAPS, SELECTORS["floating"]),
+        reader_sees="one box drawn over another",
+        # A grid item laid across the track of the item beside it (a phone
+        # row's name cell under its buttons) is judged by what it draws: a
+        # popover it holds is drawn in the top layer, so shown over the
+        # neighbor it is no overlap, while the item's own words run under the
+        # neighbor are.
+        plants=(
+            Plant(
+                _GRID_ITEM.format("example-held", 'A name<div popover="manual">Why it needs you</div>')
+                + _GRID_ITEM.format("example-spilled", "A name long enough to run on under the button"),
+                setup=_SHOW_THE_HELD_PANEL,
+                premise=(_HELD_OVER_ITS_NEIGHBOR, None),
+                finds=("div.example-spilled overlaps button",),
+            ),
+        ),
+    ),
     "into a neighbor": Check(INTO_A_NEIGHBOR, reader_sees="what a box holds drawn over the box beside it"),
     "small targets": Check(
         (SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN, SELECTORS["floating"]]),
         reader_sees="a control too small to hit",
+        # Each pair of small targets side by side, so neither is spaced clear
+        # of the other.
+        plants=(
+            # A target drawn under an open menu is out of a pointer's reach;
+            # the same target in view still fails.
+            Plant(
+                "".join(
+                    _link(name, (top, left))
+                    for name, top in (("example-hidden", "300px"), ("example-shown", "500px"))
+                    for left in ("40px", "50px")
+                )
+                + _cover("260px", "200px", "100px"),
+                finds=("a.example-shown",),
+            ),
+            # A target the size of one, covered by a menu, is that size again
+            # once the menu is dismissed, so a small target that names it as
+            # doing the same job passes; one naming a small stand-in fails.
+            Plant(
+                '<section><a href="#" id="example-stand-in" class="example-stand-in" style="display: block; '
+                'width: 30px; height: 30px; position: fixed; top: 300px; left: 40px">x</a>'
+                '<a href="#" id="example-small-stand-in" class="example-stand-in" style="display: block; '
+                'width: 10px; height: 10px; position: fixed; top: 300px; left: 300px">x</a>'
+                + "".join(
+                    _link(
+                        f"example-named-{size}",
+                        ("400px", f"{left + step}px"),
+                        "display: block; width: 8px; height: 8px",
+                        f' data-target-equivalent="{named}"',
+                    )
+                    for named, size, left in (
+                        ("example-stand-in", "sized", 40),
+                        ("example-small-stand-in", "small", 300),
+                    )
+                    for step in (0, 10)
+                )
+                + "</section>"
+                + _cover("285px", "400px", "60px"),
+                finds=("a.example-named-small",),
+            ),
+            # A popover's target reaching over the area a page target hangs
+            # beside its box leaves that area the page target's: the two lie
+            # in different layers. The popover's own small targets still fail.
+            Plant(
+                '<a href="#" class="subtle-link example-beneath" style="position: fixed; top: 300px; left: 40px; '
+                'font-size: 12px; line-height: 18px">Example heading</a>'
+                '<div popover="manual" style="inset: auto; margin: 0; padding: 0; position: fixed; top: 200px; '
+                'left: 40px"><div style="position: absolute; top: 8px; left: 0">'
+                + "".join(
+                    f'<a href="#" class="example-within" style="position: absolute; left: {left}; font-size: 8px; '
+                    'line-height: 8px">x</a>'
+                    for left in ("0", "10px")
+                )
+                + '</div><button type="button" class="example-cover" style="display: block; box-sizing: border-box; '
+                'width: 200px; height: 30px; margin: 40px 0 0">Example cover</button></div>',
+                setup=_LAY_THE_POPOVER,
+                premise=(_POPOVER_FOOT, None),
+                finds=("a.example-within",),
+            ),
+            # A modal dialog makes the rest of the document inert, so no
+            # pointer reaches a target behind it; its own still fail.
+            Plant(
+                "".join(_link("example-beneath", ("8px", left)) for left in ("40px", "50px"))
+                + "<dialog>"
+                + "".join(_link("example-within", ("8px", left)) for left in ("40px", "50px"))
+                + "</dialog>",
+                setup="() => document.querySelector('main dialog').showModal()",
+                finds=("a.example-within",),
+            ),
+        ),
     ),
     "cut rings": Check((CUT_RINGS, SELECTORS["target"]), reader_sees="a focus ring cut off by what holds its control"),
     "frames short of their box": Check(
@@ -491,6 +631,15 @@ CHECKS = {
         (MAP, [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]]),
         reader_sees="a map scrolling inside the page, or a lane with nothing in it",
         part=TOPOLOGY_MAP,
+        # The stylesheet hides a lane with no node in it, so the plant is a
+        # lane shown empty, as a sheet that lost that rule draws it.
+        plants=(
+            Plant(
+                '<div class="topology-map"><div class="topology-lane" style="display: block">Example lane</div>'
+                '<div class="topology-lane"><div class="topology-node">Example node</div></div></div>',
+                finds=("an empty lane: Example lane",),
+            ),
+        ),
     ),
     "chrome insets": Check(CHROME_INSETS, reader_sees="a sticky part drawn under the header or the page's nav"),
 }

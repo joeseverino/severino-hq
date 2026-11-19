@@ -15,7 +15,7 @@ a control inside a control. Its options are its Part's (ladder_tags).
     <summary>
       <span class="ladder-mark" aria-hidden="true">{% if not state %}{% include "partials/_icon.html" with name=icon only %}{% elif state == "met" %}&check;{% elif state == "unmet" %}&times;{% else %}?{% endif %}</span>
       {% if kind %}<span class="ladder-kind">{{ kind|breakable }}</span>{% endif %}
-      <span class="ladder-check"><span class="ladder-statement">{{ content|safe }}{% if detail %}<span class="ladder-detail">{{ detail|safe }}</span>{% endif %}</span>{% if evidence %} <code class="ladder-evidence">{{ evidence|breakable }}</code>{% endif %}</span>
+      <span class="ladder-check"><span class="ladder-statement dot-list"><span>{{ content|safe }}</span>{% if detail %}<span class="ladder-detail">{{ detail|safe }}</span>{% endif %}</span>{% if evidence %} <code class="ladder-evidence">{{ evidence|breakable }}</code>{% endif %}</span>
       {% if more %}<span class="ladder-more">{{ more|safe }}</span>{% endif %}
     </summary>
     {% if page or body %}<div class="ladder-body">{% if page %}<div class="ladder-page">{{ page|safe }}</div>{% endif %}{{ body|safe }}</div>{% endif %}

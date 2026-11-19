@@ -8,10 +8,11 @@ from collections.abc import Callable, Mapping
 from functools import partial
 from typing import Any, override
 
+from django.utils.text import slugify
 lazy from playwright.sync_api import Error as BrowserError
 
 from hq.platform.core.tests.browser import probes
-from hq.platform.core.tests.browser.probes import Check
+from hq.platform.core.tests.browser.probes import Check, Example
 from hq.platform.core.tests.browser.reading import _probe
 
 
@@ -78,6 +79,18 @@ def table_probes():
     sweep of every width (`BrowserGate.table_defects_at_every_width`) reads."""
 
     return {name: _read(check)() for name, check in CHECKS.items() if check.table}
+
+
+def examples() -> dict[str, tuple[str, Example, Any]]:
+    """Every check's examples (`Check.plants`, `Check.clear`) by the page each
+    is drawn on, each with its check and its probe as ``(source, arg)``."""
+
+    return {
+        f"{kind}/{slugify(name)}/{at}": (name, example, _read(check)())
+        for name, check in CHECKS.items()
+        for kind, drawn in (("plant", check.plants), ("clear", check.clear))
+        for at, example in enumerate(drawn, 1)
+    }
 
 
 def survey_checks(path, width, scripted=True):

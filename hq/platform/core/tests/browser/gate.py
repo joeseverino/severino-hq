@@ -249,6 +249,9 @@ def answered(response):
 # to writing none but the custom properties a table's layout hands its sheet,
 # which the gate leaves where HQ writes them.
 _STYLE_ATTRIBUTE = re.compile(r'(<[a-zA-Z][^>]*?)\sstyle="([^"]*)"')
+# A <style> such a page writes is lifted the same way, its rules unlayered, as
+# a sheet laid over the page (`add_css`) has them.
+_STYLE_ELEMENT = re.compile(r"<style>(.*?)</style>", re.DOTALL)
 _HEAD = re.compile(r"<head\b[^>]*>", re.IGNORECASE)
 _DOCTYPE = re.compile(r"<!doctype html>", re.IGNORECASE)
 LIFTED = "/gate-lifted-styles/"
@@ -270,16 +273,21 @@ def lifted(body):
     linked ahead of every other so its layer is the first one named."""
 
     declared = []
+    sheets = []
 
     def named(match):
         declared.append(unescape(match[2]))
         return f'{match[1]} data-gate-style="{len(declared)}"'
 
-    body = _STYLE_ATTRIBUTE.sub(named, body)
-    if not declared:
+    def taken(match):
+        sheets.append(match[1])
+        return ""
+
+    body = _STYLE_ATTRIBUTE.sub(named, _STYLE_ELEMENT.sub(taken, body))
+    if not declared and not sheets:
         return body
     rules = "\n".join(f'[data-gate-style="{at}"] {{ {style} }}' for at, style in enumerate(declared, 1))
-    path = served_sheet(f"@layer gate-lifted {{\n{rules}\n}}\n{rules}\n")
+    path = served_sheet(f"@layer gate-lifted {{\n{rules}\n}}\n{rules}\n" + "\n".join(sheets))
     opening = _HEAD.search(body) or _DOCTYPE.search(body)
     at = opening.end() if opening else 0
     return f'{body[:at]}<link rel="stylesheet" href="{path}">{body[at:]}'

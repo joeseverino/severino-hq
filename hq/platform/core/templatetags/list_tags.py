@@ -69,38 +69,34 @@ def list_items(content: str) -> str:
     return content
 
 
-slotted(
-    Part(
-        name="list",
-        example=(
-            '{% list %}<li>{% status "High" tone="serious" %}</li><li>An example advisory</li>{% endlist %}'
-            '{% list kind="dots" %}<li><a href="/example/">example-host</a></li><li>2 days ago</li>{% endlist %}'
-            '{% list kind="prose" %}<li>An example sentence.</li><li>Another example sentence.</li>{% endlist %}'
-            '{% list kind="chips" %}<li><a href="/example/">Example page</a></li>'
-            '<li><a href="/example/2/">Another example page</a></li>{% endlist %}'
-            '{% list kind="codes" %}<li><code>example:read</code></li><li><code>example:write</code></li>{% endlist %}'
-            '{% list kind="labeled" %}<li><span>Example network</span> <code>192.0.2.10</code></li>'
-            "<li><span>Example tailnet</span> <code>192.0.2.20</code></li>{% endlist %}"
-        ),
-        classes=("stack-list", "dot-list", "prose-list", "link-chips", "code-list", "address-list"),
-        draws=(MUTED,),
-        partial=LIST_PARTIAL,
-        about="A list, each `<li>` an item, read as its kind says.",
-        options={
-            "kind": Option(
-                default="down",
-                choices=tuple(KINDS),
-                about="; ".join(f"`{name}`, {kind.about}" for name, kind in KINDS.items()) + ".",
-            ),
-            "below": Option(about="The open row's label, for a `down` list the open row shows under it."),
-            "muted": Option(default=False, choices=(False, True), about="A `dots` run said quietly."),
-            "numbered": Option(
-                default=False, choices=(False, True), about="`prose` items read in order, each numbered."
-            ),
-        },
-        data=True,
-        public=True,
-        shape=list_frame,
+LIST = Part(
+    name="list",
+    example=(
+        '{% list %}<li>{% status "High" tone="serious" %}</li><li>An example advisory</li>{% endlist %}'
+        '{% list kind="dots" %}<li><a href="/example/">example-host</a></li><li>2 days ago</li>{% endlist %}'
+        '{% list kind="prose" %}<li>An example sentence.</li><li>Another example sentence.</li>{% endlist %}'
+        '{% list kind="chips" %}<li><a href="/example/">Example page</a></li>'
+        '<li><a href="/example/2/">Another example page</a></li>{% endlist %}'
+        '{% list kind="codes" %}<li><code>example:read</code></li><li><code>example:write</code></li>{% endlist %}'
+        '{% list kind="labeled" %}<li><span>Example network</span> <code>192.0.2.10</code></li>'
+        "<li><span>Example tailnet</span> <code>192.0.2.20</code></li>{% endlist %}"
     ),
-    library=register,
+    classes=("stack-list", "dot-list", "prose-list", "link-chips", "code-list", "address-list"),
+    draws=(MUTED,),
+    partial=LIST_PARTIAL,
+    about="A list, each `<li>` an item, read as its kind says.",
+    options={
+        "kind": Option(
+            default="down",
+            choices=tuple(KINDS),
+            about="; ".join(f"`{name}`, {kind.about}" for name, kind in KINDS.items()) + ".",
+        ),
+        "below": Option(about="The open row's label, for a `down` list the open row shows under it."),
+        "muted": Option(default=False, choices=(False, True), about="A `dots` run said quietly."),
+        "numbered": Option(default=False, choices=(False, True), about="`prose` items read in order, each numbered."),
+    },
+    data=True,
+    public=True,
+    shape=list_frame,
 )
+slotted(LIST, library=register)

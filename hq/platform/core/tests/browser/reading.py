@@ -9,7 +9,8 @@ from hq.platform.core.tests.browser.serving import NONCE
 
 # A probe page: a table drawn through the table tags, as a template draws one,
 # with the stylesheet and the table script.
-_PROBE_PAGE = """{% load table_tags stylesheet_tags %}<!doctype html><html><head><meta charset="utf-8">
+_PROBE_PAGE = """{% load table_tags stylesheet_tags %}<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><title>Example</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {% stylesheets %}
 <script defer src="{{ static }}js/tables.js" nonce="{{ nonce }}"></script>

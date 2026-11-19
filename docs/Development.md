@@ -1042,7 +1042,11 @@ nothing.
 A check is declared once, beside its probe: an entry of its probe module's
 `CHECKS` (`hq/platform/core/tests/browser/probes/__init__.py` says what an
 entry holds), which the survey collects from every module there, so a new check lands as
-its `CHECKS` entry, never an edit to `survey.py`.
+its `CHECKS` entry, never an edit to `survey.py`. The entry carries its own
+examples, markup it must find (`plants`, each with the findings it expects)
+and markup it must pass (`clear`), and one test walks them all in each engine
+(`hq/platform/core/tests/browser/plants.py`), so a check needs no test of its
+own.
 
 A check selects markup only through `SELECTORS`, and
 `hq/platform/core/tests/test_browser_selectors.py` fails on a selector no

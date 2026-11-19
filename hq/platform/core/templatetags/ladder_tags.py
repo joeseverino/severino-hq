@@ -8,6 +8,7 @@ from django import template
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.standards import Standing
 from hq.platform.core.template_parts import Option, Part, slotted
+from hq.platform.core.templatetags.list_tags import LIST
 from hq.platform.core.templatetags.status_tags import tone_class
 
 register = template.Library()
@@ -57,6 +58,8 @@ CHECK_RUNG = Part(
         *("ladder-more", "ladder-page", "ladder-rung", "ladder-statement"),
     ),
     partial="partials/_check_rung.html",
+    # The statement and its detail are the list's dot run, as spans.
+    draws=(LIST,),
     about=(
         "One rung of a `{% check_ladder %}`: its tick, its statement with any `detail` part, and its `more` "
         "part saying what opening it shows; it opens to its `body` part, after the `page` part's link to "

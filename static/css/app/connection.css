@@ -197,9 +197,11 @@ textarea.code {
 /* A check's statement, then what it was read from: on the same line while
    both fit, under the statement when they do not. */
 .ladder-check { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-6); min-width: 0; }
+/* The statement and its detail are a dot run (page.css); each part wraps
+   inside the run's line rather than standing past it. */
 .ladder-statement { font-weight: 550; font-size: var(--text-sm); min-width: 0; overflow-wrap: break-word; }
-.ladder-detail { margin-left: var(--space-4); color: var(--muted); font-size: var(--text-xs); font-weight: 400; }
-.ladder-detail::before { content: "· " / ""; }
+.ladder-statement > * { min-width: 0; }
+.ladder-detail { color: var(--muted); font-size: var(--text-xs); font-weight: 400; }
 /* A check's reading is a value HQ read, in the chip every value has; one that
    wraps keeps the chip on each line. */
 .ladder-evidence {
@@ -300,6 +302,11 @@ details[open] > summary .ladder-more::after { transform: rotate(90deg); }
   .check-ladder.is-route > .ladder-rung > details > summary { grid-template-columns: minmax(0, 1fr); justify-items: center; row-gap: 0; text-align: center; }
   .check-ladder.is-route > .ladder-rung > details > summary > * { grid-column: 1; grid-row: auto; }
   .check-ladder.is-route .ladder-check { justify-content: center; }
+  /* A column this narrow gives what a stop is and its detail a line each,
+     centered, so neither opens on the run's dot, which only a line set at
+     the run's start can clip. */
+  .check-ladder.is-route .ladder-statement { flex-direction: column; align-items: center; }
+  .check-ladder.is-route .ladder-statement > *::before { content: none; }
   .check-ladder.is-route > .ladder-rung::before { inset: var(--tick-y) calc(-50% - var(--space-6)) auto 50%; width: auto; height: 2px; }
 }
 
