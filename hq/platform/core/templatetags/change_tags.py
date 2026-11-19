@@ -1,11 +1,12 @@
 """The change table: what a change moves, each value before and after it."""
 
-from typing import Any, NamedTuple
+from typing import Annotated, Any, NamedTuple
 
 from django import template
 from django.utils.safestring import SafeString
 from django.utils.text import slugify
 
+from hq.platform.application.describe import Describe
 from hq.platform.application.payload_words import ChangeRow
 from hq.platform.application.tone import Tone
 from hq.platform.core.part_examples import tags
@@ -41,14 +42,29 @@ def _words(kind: str, preview: ChangePreview | None) -> str:
     return said.made if preview is not None and preview.made else said.held
 
 
-@register.simple_tag
-def change_status(kind: str, preview: ChangePreview | None = None) -> SafeString:
-    """A row's kind of change (``ChangeRow.change``) as the status its
-    Status column says in ``preview``, each kind in its own tone."""
+def change_status(
+    kind: Annotated[str, Describe("A row's kind of change (`ChangeRow.change`): added, changed or removed.")],
+    preview: Annotated[Any, Describe("The `ChangePreview` the row is of, which says whether it was made.")] = None,
+) -> SafeString:
+    """A row's kind of change as the status its Status column says (its Part's about)."""
 
     if kind not in _KINDS:
         return SafeString("")
     return status_pill(_words(kind, preview), tone=_KINDS[kind].tone)
+
+
+slotted(
+    Part(
+        name="change_status",
+        about=(
+            "A row's kind of change as the status its Status column says, each kind in its own tone: what it "
+            "did once made, else what approving it would do."
+        ),
+        function=change_status,
+        example='{% change_status "added" %} {% change_status "changed" %} {% change_status "removed" %}',
+    ),
+    library=register,
+)
 
 
 def _head(group: ChangeGroup, preview: ChangePreview) -> ChangeRow:

@@ -16,6 +16,8 @@ lazy from hq.platform.application.command_center import DiscoveryItem
 lazy from hq.platform.application.freshness import CURRENT, STALE, Freshness
 lazy from hq.platform.application.pages import Page, PageAction, PageVisit
 lazy from hq.platform.application.request_channel import TAILNET_CHANNEL
+lazy from hq.platform.application.service_context import ServiceSection
+lazy from hq.platform.application.tables import Cell
 lazy from hq.platform.application.ui import PageNavigation, PageSection
 lazy from hq.platform.core.templatetags.action_tags import MOST_BESIDE
 
@@ -449,3 +451,46 @@ PAGE_NAVIGATION_STATES = {
         heads_the_page=True,
     ),
 }
+
+
+def _sections():
+    """A detail page's bands: one wide table whose rows are the latest of
+    more, a short one, and a folded one of readouts."""
+
+    runs = ServiceSection(
+        "example-runs",
+        "Example runs",
+        ("Run", "State", "Started", "Took", "Host", "Note"),
+        tuple(
+            (
+                Cell(f"example-run-{at}", f"/example/runs/{at}/"),
+                Cell("Done", tone="good"),
+                Cell("2 hours ago"),
+                Cell("40 s"),
+                Cell("example-host-01"),
+                Cell("An example note."),
+            )
+            for at in range(1, 4)
+        ),
+        more_label="All runs",
+        more_url="/example/runs/",
+    )
+    ports = ServiceSection("example-ports", "Example ports", ("Port", "Open to"), ((Cell("443"), Cell("Everyone")),))
+    readouts = ServiceSection(
+        "example-config",
+        "Example configuration",
+        ("Name",),
+        ((Cell("example.conf"),),),
+        readouts=(("example.conf", "listen 443\nserver_name example.com"),),
+        folded=True,
+    )
+    return {"sections": (runs, ports, readouts)}
+
+
+# A detail page's bands ({% include "partials/_page_sections.html" %}), the
+# wide ones drawn ahead of the short ones.
+PAGE_SECTIONS = Example(
+    '{% include "partials/_page_sections.html" with spans_row=True %}'
+    '{% include "partials/_page_sections.html" with spans_row=False %}',
+    _sections,
+)

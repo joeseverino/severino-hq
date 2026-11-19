@@ -47,6 +47,7 @@ from .moments import moment
 from .routes import reverse
 from .ui import counted
 lazy from .inventory import READING_AUDIT_TYPE
+lazy from .page_parts import html_attributes
 
 # How far either side of a moment counts as near it.
 NEAR = timedelta(hours=6)
@@ -257,6 +258,15 @@ class HistoryLine:
     @property
     def grouped(self) -> bool:
         return bool(self.burst or self.items)
+
+    @property
+    def attributes(self) -> str:
+        """Its row's ``tr`` attributes: a line under its event is folded under
+        it, and an event that changed things holds the fold."""
+
+        if self.under:
+            return html_attributes({"data-folded": self.under})
+        return html_attributes({"id": self.fold, "data-folds": True}) if self.grouped else ""
 
     @property
     def url(self) -> str:

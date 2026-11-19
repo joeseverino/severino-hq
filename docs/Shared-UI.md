@@ -65,6 +65,7 @@ and those that hold across parts in [Design](Design.md).
 | `{% row_actions %}` | nothing | The cell that ends a row with what can be done to its record, each a compact control. | `{% table_region "Example actions" %}<table class="data-table"><tbody><tr><td>{{ row.name }}</td>{% row_actions row.actions %}</tr></tbody></table>{% endtable_region %}` |
 | `{% row_editor %}` | nothing | The way into a row's editor, and the editor itself under the row where the page's address opens it. | `{% row_editor form row.pk label="Edit" action=row.edit_url verb="Save" %}` |
 | `{% row_group %}` | nothing | The heading row of one group of a table's rows, first in its `tbody`: its name and how many rows. | `{% table_region "Example groups" %}<table class="data-table"><tbody>{% row_group "Example group" 3 %}<tr><td>example-host</td></tr></tbody></table>{% endtable_region %}` |
+| `{% row_state %}` | nothing | How a row stands among the others, written in its `tr`: one that asks to be read first. | `{% section "Example messages 2" %}{% table_region "Example messages 2" %}<table class="data-table"><thead><tr>{% table_heading "From" "identifier" %}{% table_heading "Message" %}</tr></thead><tbody>{% for row in rows %}<tr{% row_state emphasized=row.2 %}><td>{{ row.0 }}</td><td><a href="#">{{ row.1 }}</a></td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}` |
 | `{% row_toggle %}` | nothing | The toggle that opens a row to all it holds, last in the cell that names it, in a table with no headings. | `{% table_region "Example toggles" %}<table class="data-table"><tbody><tr><td>{{ row.name }}{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}` |
 | `{% section %}` | `aside`, `empty`, `foot` | A titled part of a page in its frame, its head on the page and its body in the frame. | `{% section "Agents" count=n %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}` |
 | `{% status %}` | nothing | One short state, drawn in its tone and said in sentence case, the one way a page draws a state. | `{% status "Blocked" tone="attention" %}` |
@@ -198,6 +199,7 @@ and those that hold across parts in [Design](Design.md).
 | `row_group` | `count` | `None` |  | How many rows it holds. |
 | `row_group` | `folds` |  |  | The row's id, for a group that starts folded away. |
 | `row_group` | `href` |  |  | The page its rows are dealt with on together, which its name links to. |
+| `row_state` | `emphasized` | `False` |  | A row that asks to be read first, a message not yet read. |
 | `section` | `heading`, first and unnamed |  |  | Plain words; with none, the moment it names is the heading. |
 | `section` | `count` | `None` |  | How many things it holds, beside the heading. |
 | `section` | `css` |  |  | The classes of where it stands. |
@@ -283,6 +285,12 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `hand-drawn-table` | A table drawn outside its region. | Write `{% table_region "Label" %}` around its `<table class="data-table">`. |
 
 ## Each part's rules
+
+### ask_button (host only)
+
+An ask's button is drawn by `partials/_ask.html` alone, around its note. While its work is live it
+is `aria-disabled`, which keeps its focus, and its title says what the work said, where a cell
+shows only its word.
 
 ### button
 
@@ -568,6 +576,24 @@ drawn `hidden` in the bar and stays so. *Gate:* the `hand-drawn-filter-bar` rule
 `test_filter_tags.FilterBarUseTests` reads every `{% filter_bar %}` in the templates. It refuses a
 count written in the summary and a narrowing bar with no count.
 
+### headed (host only)
+
+A part that draws its own title (a dialog's, an insight's) wraps what it holds in `{% headed %}`, so
+a section in it heads itself a level under the one a section where the part stands would take.
+`{% headed top %}` is a body under a title at the top level wherever the part stands (a dialog's),
+so a dialog opened from inside a section still heads its own sections a level under its title.
+
+### history_table (host only)
+
+Every table of audit events is this part, its rows the one row the audit log draws
+(`partials/_history_row.html`, its `tr` written with `HistoryLine.attributes`): the audit log, an event's
+other events and a record's recent changes. Each group (`history.HistoryGroup`) is a `tbody` under
+its heading row where it has a label, and a group that starts folded away (`folds`) marks each of
+its rows as folded under its heading. An event that changed things heads them: its gutter holds the
+fold rather than the row's own toggle. A fold carries at most `history.SHOWN` of what the event
+changed, and a last row counts the others and links to the list of them all. Its headings are
+`history.COLUMNS`, without who did each where `hide_who` is set.
+
 ### layout
 
 A run of sibling sections or cards (the sections that close a thing's page, the connection panel's
@@ -599,6 +625,15 @@ Inside a layout the gap is the separation, so a member's own stacking margin is 
 member is as narrow as its track. No page writes a layout's class or an auto-fit grid of its own:
 the classes are this part's, and `lint:css` refuses `repeat(auto-fit` and `repeat(auto-fill` outside
 the parts that lay out something else inside themselves. A layout with nothing in it draws nothing.
+
+### line_list (host only)
+
+A run of short parts in a cell (a project's technologies, what a connection reads or reaches) is
+`{% line_list values as value %}…{% endline_list %}`, with `kind=` one of the list's kinds where
+the body draws each `li`. No count decides how many show. Its first three size the column and
+wrap with it. The rest ask the column for nothing and show as many as the line they end has room
+for, each whole, and the row opens only when one is cut. A list folded at a fixed number behind
+`row-more` is refused (`test_template_line_lists`).
 
 ### list
 
@@ -648,11 +683,23 @@ Drawn with no body it is the frame a script clones and fills: base.html holds on
 server draws, and no script writes a notice's class. An error page is a page of its own, never
 this part.
 
+### open_line (host only)
+
+The line a row opens to that a script adds is `{% open_line %}value{% endopen_line %}`, the line
+the region draws, so it is the same part: a frame the script clones for a row that comes to hold
+something beneath it once drawn (ask.js), setting the label and width.
+
 ### page_main (host only)
 
 base.html draws every page's content in it, and the component catalog draws each of its entries
 in the same part, so an entry stands where a page's content does. It is the host's frame; an
 extension's page is drawn in it and never writes it.
+
+### partials/_approval_card.html (host only)
+
+Its heading is what was asked, the aside when and how, and what it acts on, with the edge of its
+tone while it waits. A warning no row of the change carries stands above the change. Its buttons
+are the decisions its reader may take (`entry.offer`), and a decision withheld from them says why.
 
 ### partials/_ask.html
 
@@ -836,6 +883,21 @@ width. `size="wide"` makes it a page in a dialog (the connection panel): two pan
 the window showing around it by a gap that grows with the window. It scrolls under a title that
 stays put, and takes the whole screen on a phone.
 
+### partials/_page_action.html (host only)
+
+A page's action is `{% include "partials/_page_action.html" with action=... %}`, and a run of an
+item's actions (`ActionLink`s, or their serialized dicts) is `partials/_action_links.html` with
+`actions=`, which leaves out a way that leads only to the view it is drawn on (`remedies`), so a box
+around them asks it first and is drawn only around a control. `extra` adds looks: a head draws a
+control twice, beside its title and in its menu, and both are the same control. `heard` marks the
+copy beside the title, whose ask is heard there and seen on the head's reading line.
+
+A disabled one, by any method, is never a link or a form: it stays in the tab order
+(`aria-disabled`) so its reason, the title, is read where it stands. One that names the view it is
+drawn on (a switch between views) is that view's state, `aria-current`, never a link to itself,
+unless it opens a dialog: then it is the dialog's one way in. A POST one is the button's `offer`,
+which sends what it carries.
+
 ### partials/_page_head.html (host only)
 
 **One head.** Trail, title, controls, lede, laid out the same at every width. The title and its
@@ -859,6 +921,16 @@ an aside and a line of facts (`page_facts`) stacks its words in a column of thei
 or day, the title, the facts. The aside stands beside the whole column, as the dashboard's
 readings stand beside its greeting and what needs you. The facts about it at a glance are a band
 under the head, as a service, a machine and HQ's own page open.
+
+### partials/_page_sections.html (host only)
+
+A band on a detail page (`ServiceSection`) is drawn by this part, never by a page's own markup, so a
+page grows a band because a resolver produced one: a function and a registry entry, not an edit to
+a template. Its table is `{% data_table %}`; a band of audit events (`history`) is
+`{% history_table %}`; each readout a fold under it. A band whose rows are the latest of more links
+to the rest from its heading (`more_url`), and a folded one's heading is its toggle, its count
+saying what is behind it. A page draws the bands that take a flow's whole row (`spans_row=True`)
+ahead of its short ones (`spans_row=False`), so its flow paints in the order it reads.
 
 ### partials/_problems.html (host only)
 
@@ -1070,6 +1142,12 @@ The queue page is sections by the domain that raised each item, derived from wha
 without being listed anywhere. Filters that match nothing offer a way back; they never imply a
 healthy estate.
 
+### partials/_write_gap.html (host only)
+
+Every page that would offer a change its connection cannot make offers this instead: what the change
+needs, linked to the setup step that gives it, with the whole reason as its title (`data-write-gap`).
+A row draws it through `{% row_actions gap=... %}` and a form through its `gap`.
+
 ### projects/_repository_postures.html (host only)
 
 Repositories against their standard: a row each of its name, a meter with a segment per check, its
@@ -1129,6 +1207,13 @@ A group folded away is `row_group ... folds=<id>`, its rows naming that id.
 ### row_select (host only)
 
 A cell of fixed width, so selecting moves nothing. A row with no key keeps the cell empty.
+
+### row_state
+
+What a table's rows are to each other is an option of its parts, never a class of the page's:
+rows selected together are `{% row_select %}`'s, a change's before and after is
+`{% change_table %}`, and a row that asks to be read first says so in its `tr` with
+`{% row_state emphasized=True %}`: its cells are tinted and its links weigh more.
 
 ### row_toggle
 
@@ -1270,7 +1355,9 @@ of each other. Each step is `{% step icon=... %}`: its icon, then what it says; 
 icon by how a check stands, `done` draws a finished step quiet, and `title` is its tooltip. Steps
 done in order are `{% steps numbered=True %}`: read down wider columns, as many as fit up to
 three, so a short run fills a wide frame; each step's number stands where its icon would be, so
-its steps take no icon.
+its steps take no icon. A step an operator takes on their own machine (a `Run`) or in words (a
+`Do`), each with its notes, is `partials/_operator_step.html` given `step`: HQ offers it and never
+runs it, and it carries no secret.
 
 ### switch (host only)
 
@@ -1402,11 +1489,6 @@ its column's heading, and no row draws a column's label), `rows unruled` (a row'
 ruled, whichever cell draws it), `overlaps` (what two boxes draw never crosses) and `row state
 kept` (a key, a state or a field never leaves early).
 
-What a table's rows are to each other is an option of its parts, never a class of the page's:
-rows selected together are `{% row_select %}`'s, a change's before and after is
-`{% change_table %}`, and a row that asks to be read first says so in its `tr` with
-`{% row_state emphasized=True %}`: its cells are tinted and its links weigh more.
-
 **Opening a row moves no column.** An open row keeps its cells as they were, but for a clamp,
 which it releases in place, and, in a narrow box, its `narrow-more` parts, which it shows in
 place, each on a line of its own that asks its column for no width. What it holds back stands on
@@ -1423,7 +1505,7 @@ part only the open line shows (`row-more`, `line-rest`), shown always, what the 
 shows of it only once its column has left (`data-row-shows`). A copy draws no id twice. A cell
 held back holds no control, which a copy would draw twice: the region refuses one, so a button
 stands in place or moves whole (`row-below`). A row's open line a script adds is
-`{% open_line %}`, the line this region draws, so it is the same part. *Gates:*
+`{% open_line %}`. *Gates:*
 `test_table_once.py`: `test_a_row_writes_each_cell_once`, `test_a_cell_held_back_holds_no_control`,
 and the byte budgets `ROW_BYTES` and `CHROME_BYTES`.
 
@@ -1485,13 +1567,6 @@ later sets as every other does by writing those, and `lint:css` refuses a table 
 that tells a cell's part by anything else. Free text breaks a run with no seam in it (a link, a
 digest) wherever it must, so it never holds its column wider than its box. An identifier in a
 prose column waits for the open row (`row-more`) rather than holding that column at its cap.
-
-A run of short parts in a cell (a project's technologies, what a connection reads or reaches) is
-`{% line_list values as value %}…{% endline_list %}`, with `list="dot-list"` where the body draws
-each `li`. No count decides how many show. Its first three size the column and wrap with it. The
-rest ask the column for nothing and show as many as the line they end has room for, each whole,
-and the row opens only when one is cut. A list folded at a fixed number behind `row-more` is
-refused (`test_template_line_lists`).
 
 A run of links longer than the count its template declares folds behind "+N", and a stacked list
 longer than four shows three and "+N more". A row that holds anything back gets one toggle that

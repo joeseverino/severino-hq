@@ -39,7 +39,7 @@ uptime and how the request came.
     {% fact "Container" %}{% include "partials/_empty_state.html" with message="No container HQ reads is known to be HQ's." inline=True %}{% endfact %}
     {% endif %}
     {% if work.services %}
-    {% fact "Kept running by" %}{% list %}{% for job in work.services %}<li>{% include "partials/_unit.html" with title=job.title unit=job.name only %}{% if job.last_run %} {% muted %}since {{ job.last_run|when:"ago" }}{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endfact %}
+    {% fact "Kept running by" %}{% list %}{% for job in work.services %}<li>{% include "core/hq.html#unit" with title=job.title unit=job.name only %}{% if job.last_run %} {% muted %}since {{ job.last_run|when:"ago" }}{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endfact %}
     {% endif %}
   {% endfacts %}
 {% endsection %}
@@ -90,7 +90,7 @@ row in the flow.
         <tbody>
           {% for job in work.jobs %}
             <tr>
-              <td>{% include "partials/_unit.html" with title=job.title unit=job.name only %}</td>
+              <td>{% include "core/hq.html#unit" with title=job.title unit=job.name only %}</td>
               <td>{% present job.runs %}{% if job.runs_unit %}<code>{{ job.runs|breakable }}</code>{% else %}{{ job.runs|breakable }}{% endif %}{% endpresent %}</td>
               <td>{{ job.last_run|when:"ago" }}</td>
               <td>{% status job.result tone=job.tone %}</td>
@@ -179,3 +179,7 @@ row in the flow.
 {% endlayout %}
 {% endwith %}
 {% endblock %}
+{% comment %}
+A systemd unit as a person reads it: its unit file's title, with its name
+beneath, its escapes decoded; the name alone when it has no title.
+{% endcomment %}{% partialdef unit %}{% if title %}{% list %}<li>{{ title|breakable }}</li><li><code>{{ unit|breakable }}</code></li>{% endlist %}{% else %}<code>{{ unit|breakable }}</code>{% endif %}{% endpartialdef %}

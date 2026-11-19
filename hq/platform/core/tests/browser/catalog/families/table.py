@@ -132,15 +132,6 @@ ENTRIES = {
         "<tr><th>example_note</th><td>An example note long enough to take two lines on a phone.</td>"
         "<td>Another example note.</td></tr></tbody></table>{% endtable_region %}{% endsection %}"
     ),
-    # A row that asks to be read first ({% row_state emphasized=True %}) among
-    # rows that do not, its links weighed and its cells tinted.
-    "table/emphasized": Example(
-        '{% section "Example messages 2" %}{% table_region "Example messages 2" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "From" "identifier" %}{% table_heading "Message" %}</tr></thead><tbody>'
-        "{% for row in rows %}<tr{% row_state emphasized=row.2 %}><td>{{ row.0 }}</td>"
-        '<td><a href="#">{{ row.1 }}</a></td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}',
-        {"rows": (("example-01", "An example message not read yet.", True), ("example-02", "An example read.", False))},
-    ),
     # A table whose rows are selected together: the heading that selects
     # every row, then each row's tick-box ({% row_select %}), and a row with
     # no key whose cell stays empty.
@@ -152,23 +143,6 @@ ENTRIES = {
         "{% for row in rows %}<tr>{% row_select row.0 %}<td>{{ row.1 }}</td>"
         '<td>{% status "Online" tone="good" %}</td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}',
         {"rows": ((1, "example-01"), (2, "example-02"), (None, "example-03"))},
-    ),
-    # A run of parts in a cell ({% line_list %}): four that all show, two,
-    # and nine. With script the parts past the first three show as far as
-    # their line has room and the row opens for the rest; without it, as
-    # here, the rest wrap on lines of their own beneath the first three.
-    "table/line-list": Example(
-        '{% section "Example stacks" %}{% table_region "Example stacks" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" "identifier" %}{% table_heading "Parts" %}</tr></thead><tbody>'
-        "{% for row in rows %}<tr><td>{{ row.0 }}</td><td>{% line_list row.1 as part %}{% status part chip=True %}"
-        "{% endline_list %}</td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}",
-        {
-            "rows": (
-                ("example-01", ("Debian", "systemd", "Caddy", "Tailscale")),
-                ("example-02", ("Django", "SQLite")),
-                ("example-03", tuple(f"example-part-{at:02}" for at in range(1, 10))),
-            )
-        },
     ),
     # Identifiers beside sentences, as a service's path draws its steps: an
     # address with a port, a host name and a list of networks, in tables with

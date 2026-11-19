@@ -13,6 +13,7 @@ from hq.platform.core.part_examples import DRAWN_AT
 from hq.platform.core.template_parts import Example
 lazy from hq.domains.control_plane.models import ApprovalRequest
 lazy from hq.domains.jobs.models import JobState
+lazy from hq.platform.application.adoption import ONLY_READS, WriteGap
 lazy from hq.platform.application.approval_review import SUMMARY, Asked, ChangePreview, compare, grouped
 lazy from hq.platform.application.approvals import DECISIONS, NO_OFFER, Offer, _decision_link
 lazy from hq.platform.application.capability_policy import RULE_LABELS, Column, Group, PolicyCell, Row
@@ -346,10 +347,29 @@ BUTTON = Example(
 )
 
 
-BUTTON_STATES = {
+# A page's actions ({% include "partials/_page_action.html" %}), one of each
+# kind: a way to another page, one that posts, one the reader may not take,
+# saying why, and one that names the page it stands on.
+PAGE_ACTION = Example(
+    '{% section "Example actions" %}{% button_row %}{% for action in actions %}'
+    '{% include "partials/_page_action.html" with action=action only %}{% endfor %}{% endbutton_row %}{% endsection %}',
+    lambda: {
+        "actions": (
+            PageAction("Open example", "/example/"),
+            PageAction._built(label="Restart example", url="/example/restart/", method="post"),
+            PageAction("Upgrade example", "/example/upgrade/", disabled=True, title="An example reason it waits."),
+            PageAction("This page", "/component-catalog/"),
+        )
+    },
+    address="/component-catalog/",
+)
+
+
+PAGE_ACTION_STATES = {
     # A row's buttons whose labels end in a name, one of them hyphenated, as a
-    # queue row draws a plan for each container behind: the hyphenated part is
-    # a box of its own (`breakable`), set on the line of the words before it.
+    # queue row draws a plan for each container behind (`_action_links.html`):
+    # the hyphenated part is a box of its own (`breakable`), set on the line of
+    # the words before it.
     "in-rows": Example(
         '{% table_region "Example plans" %}<table class="data-table"><tbody>{% for action in actions %}<tr><td>'
         '{% include "partials/_action_links.html" with actions=action only %}</td></tr>{% endfor %}</tbody></table>'
@@ -360,6 +380,59 @@ BUTTON_STATES = {
                 (PageAction("Upgrade plan for example-app", "/example/app/"),),
             )
         },
+    ),
+}
+
+
+def _gap():
+    """A row whose connection cannot make its change, its action a gap."""
+
+    return {
+        "gap": WriteGap(
+            "HQ only reads through Example connection example-main. A change through it also needs Example Write.",
+            ONLY_READS,
+            "Needs manages: 1 and Example Write",
+            "/example/connections/",
+        )
+    }
+
+
+# A change its connection cannot make, where a confirmation would offer it:
+# what it needs, linked to its setup.
+WRITE_GAP = Example(
+    '{% section "Example change" %}<p>Example change to example.com.</p>{% button_row %}'
+    '{% include "partials/_write_gap.html" %}{% endbutton_row %}{% endsection %}',
+    _gap,
+)
+
+
+WRITE_GAP_STATES = {
+    # In a row's controls, as a list of messages draws it beside what each says.
+    "in-a-row": Example(
+        '{% section "Example messages" %}{% table_region "Example messages" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "From" "identifier" %}{% table_heading "Subject" %}{% table_heading "Received" "status" %}'
+        '{% table_heading "Actions" css="actions-col" hidden=True %}</tr></thead><tbody><tr><td>example-01</td>'
+        "<td>An example subject a reader asked about the example service</td><td>2 hours ago</td>"
+        "{% row_actions gap=gap %}</tr></tbody></table>{% endtable_region %}{% endsection %}",
+        _gap,
+    ),
+}
+
+
+# A held request: one waiting, its reason among its facts and its
+# decision's two buttons, and one decided, with the note its decider wrote.
+APPROVAL_CARD = Example(context=lambda: _approval(ApprovalRequest.State.PENDING))
+
+
+APPROVAL_CARD_STATES = {
+    "decided": Example(
+        '{% include "partials/_approval_card.html" %}',
+        lambda: _approval(
+            ApprovalRequest.State.REJECTED,
+            decided_actor="example-person",
+            decided_at=DRAWN_AT - timedelta(minutes=3),
+            decision_note="The upgrade waits for the example-host-02 backup to finish; ask again tomorrow.",
+        ),
     ),
 }
 
@@ -380,24 +453,6 @@ RUN_EVIDENCE = Example(
 
 
 CARD_STATES = {
-    # A change's before and after ({% change_table %}), each state its two
-    # callers draw: an approval card's preview and an audit event's changes.
-    # An empty one draws nothing beside what its section already says.
-    # A held request (partials/approval_card.html): one waiting, its reason
-    # among its facts and its decision's two buttons, and one decided, with
-    # the note its decider wrote.
-    "approval-pending": Example(
-        '{% include "partials/approval_card.html" %}', lambda: _approval(ApprovalRequest.State.PENDING)
-    ),
-    "approval-decided": Example(
-        '{% include "partials/approval_card.html" %}',
-        lambda: _approval(
-            ApprovalRequest.State.REJECTED,
-            decided_actor="example-person",
-            decided_at=DRAWN_AT - timedelta(minutes=3),
-            decision_note="The upgrade waits for the example-host-02 backup to finish; ask again tomorrow.",
-        ),
-    ),
     # A card that is the whole of a page outside the frame, as the sign-in
     # draws one: its mark, its own title, its one action and its closing line.
     "alone": Example(

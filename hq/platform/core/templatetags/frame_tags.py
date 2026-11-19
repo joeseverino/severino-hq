@@ -102,11 +102,14 @@ slotted(
         icon by how a check stands, `done` draws a finished step quiet, and `title` is its tooltip. Steps
         done in order are `{% steps numbered=True %}`: read down wider columns, as many as fit up to
         three, so a short run fills a wide frame; each step's number stands where its icon would be, so
-        its steps take no icon.
+        its steps take no icon. A step an operator takes on their own machine (a `Run`) or in words (a
+        `Do`), each with its notes, is `partials/_operator_step.html` given `step`: HQ offers it and never
+        runs it, and it carries no secret.
         """,
         example='{% steps %}{% step icon="check-circle" tone="good" %}Example check holds.{% endstep %}{% endsteps %}',
         classes=("is-numbered", "step-list"),
         partial="partials/_steps.html",
+        pieces=("partials/_operator_step.html",),
         about="A list of short steps or checks, each a `{% step %}`, read down its columns.",
         options={"numbered": Option(about="Steps done in order: one column, each its number in place of its icon.")},
         states=tags.STEPS_STATES,

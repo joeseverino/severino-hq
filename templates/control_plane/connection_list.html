@@ -36,7 +36,7 @@ part's heading shows only when there is more than one.
               {% if sight.sights %}<li>{% muted %}{{ sight.summary|breakable }}{% if sight.read_at %}{% dot %}{% include "partials/_reading_age.html" with at=sight.read_at only %}{% endif %}{% endmuted %}</li>{% endif %}
               {% endwith %}
               {% endlist %}
-              {% if row.more_scope %}<div class="row-below" data-label="Also sees">{% line_list row.more_scope as line list="dot-list" %}<li>{{ line|breakable }}</li>{% endline_list %}</div>{% endif %}
+              {% if row.more_scope %}<div class="row-below" data-label="Also sees">{% line_list row.more_scope as line kind="dots" %}<li>{{ line|breakable }}</li>{% endline_list %}</div>{% endif %}
               {% if row.fix %}{% include "control_plane/_credential_fix.html" with fix=row.fix %}{% endif %}
             </td>
             {% comment %}
@@ -53,11 +53,11 @@ part's heading shows only when there is more than one.
               {% endcomment %}
               {% if row.changes_only %}
                 {% muted %}Changes only:{% endmuted %}
-                {% line_list row.changes as state list="dot-list" %}{% include "control_plane/_connection_ability.html" %}{% endline_list %}
+                {% line_list row.changes as state kind="dots" %}{% include "control_plane/_connection_ability.html" %}{% endline_list %}
               {% else %}
-                {% present row.reads %}{% line_list row.reads as read list="dot-list" %}{% include "control_plane/_connection_read.html" %}{% endline_list %}{% endpresent %}
+                {% present row.reads %}{% line_list row.reads as read kind="dots" %}{% include "control_plane/_connection_read.html" %}{% endline_list %}{% endpresent %}
               {% endif %}
-              {% if row.changes and not row.changes_only %}<div class="row-below" data-label="Changes">{% line_list row.changes as state list="dot-list" %}{% include "control_plane/_connection_ability.html" %}{% endline_list %}</div>{% endif %}
+              {% if row.changes and not row.changes_only %}<div class="row-below" data-label="Changes">{% line_list row.changes as state kind="dots" %}{% include "control_plane/_connection_ability.html" %}{% endline_list %}</div>{% endif %}
             </td>
             {% comment %}
             Inline and wrapping rather than one line per link: stacked links make
@@ -67,8 +67,8 @@ part's heading shows only when there is more than one.
             {% endcomment %}
             <td class="optional-col">
               {% with targets=connection.instance.targets dependencies=connection.instance.dependencies %}
-              {% line_list targets as link list="dot-list" %}<li>{% entity link|declared_link %}</li>{% endline_list %}
-              {% line_list dependencies as link list="dot-list" %}<li>{% entity link|declared_link code=True %}</li>{% endline_list %}
+              {% line_list targets as link kind="dots" %}<li>{% entity link|declared_link %}</li>{% endline_list %}
+              {% line_list dependencies as link kind="dots" %}<li>{% entity link|declared_link code=True %}</li>{% endline_list %}
               {% if not targets and not dependencies %}{% empty_value %}{% endif %}
               {% endwith %}
             </td>
@@ -109,7 +109,7 @@ part's heading shows only when there is more than one.
   {% endnotice %}
 {% endif %}
 
-{% include "partials/_posture.html" with posture=connections.standard guide=connections.standard_guide only %}
+{% include "control_plane/connection_list.html#posture" with posture=connections.standard guide=connections.standard_guide only %}
 
 {% section "Security checks" fold=True %}
   {% section "Request path" %}
@@ -129,3 +129,18 @@ part's heading shows only when there is more than one.
 {% endsection %}
 {% if connections.groups and not connections.setups and not connections.unconfigured and connections.again %}{% include "control_plane/_connection_setup.html" with setups=connections.again count=connections.again|length guide=connections.guide again=True only %}{% endif %}
 {% endblock %}
+{% comment %}
+HQ's standard (application.posture), in a section, given its ``posture``
+(a standards.Measurement) and the ``guide`` that says how to enforce it. Each check
+is its own statement, so nothing above the list restates it: a met check's
+sentence is its tooltip, and how to enforce the standard is in the docs the
+heading links to. An unread check says what would read it.
+{% endcomment %}{% partialdef posture %}{% section posture.enforced|yesno:"Advanced HQ Posture,HQ's standard" id="posture" %}
+  {% steps %}
+    {% for result in posture.results %}
+      {% step icon=result.icon tone=result.tone title=result.met|then:result.check.holds %}
+        <strong>{{ result.check.label|breakable }}</strong> {% muted %}{% if result.reading.evidence %}{% if result.reading.fix %}{{ result.reading.evidence|breakable:":" }} {% if result.reading.fix_url %}<a href="{{ result.reading.fix_url }}">{{ result.reading.fix|breakable:"." }}</a>{% else %}{{ result.reading.fix|breakable:"." }}{% endif %}{% else %}{{ result.reading.evidence|breakable:"." }}{% endif %} {% endif %}Stops {{ result.check.why|breakable:"." }}{% endmuted %}{% endstep %}
+    {% endfor %}
+  {% endsteps %}
+{% aside %}<span class="count prose">{{ posture.count_line|breakable }}{% if guide %}{% dot %}{% entity guide|outside label="Checks guide" %}{% endif %}</span>
+{% endsection %}{% endpartialdef %}

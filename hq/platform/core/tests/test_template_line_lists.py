@@ -3,7 +3,7 @@
 A list in a cell folded at a fixed number of parts (`|slice:":3"` then a
 `+N` behind `row-less`, the rest in `row-more`) hides parts its line has room
 for, and offers to open a row whose parts all fit. How many show is the
-layout's: a run of parts is a `{% line_list %}` (table_tags), which shows as
+layout's: a run of parts is a `{% line_list %}` (list_tags), which shows as
 many as the line holds and opens the row only for what it cuts.
 """
 
@@ -102,13 +102,17 @@ class LineListTagTests(SimpleTestCase):
         self.assertEqual(with_class(markup, "line-rest"), [])
         self.assertEqual(self.drawn("{% line_list names as n %}{{ n }}{% endline_list %}", names=[])[0], "")
 
-    def test_a_list_class_draws_a_list_whose_rest_is_an_item(self):
+    def test_a_list_kind_draws_that_list_whose_rest_is_an_item(self):
         markup, with_class = self.drawn(
-            '{% line_list names as name list="dot-list" %}<li>{{ name }}</li>{% endline_list %}', names="abcd"
+            '{% line_list names as name kind="dots" %}<li>{{ name }}</li>{% endline_list %}', names="abcd"
         )
         (rest,) = with_class(markup, "line-rest")
         self.assertEqual(rest.tag, "li")
         self.assertTrue(markup.startswith('<ul class="dot-list line-list">'))
+
+    def test_a_kind_the_list_has_not_is_refused(self):
+        with self.assertRaises(TemplateSyntaxError):
+            self.drawn('{% line_list names as name kind="dot-list" %}<li>{{ name }}</li>{% endline_list %}', names="a")
 
     def test_a_value_is_escaped_by_the_body_that_draws_it(self):
         markup, _ = self.drawn("{% line_list names as name %}{{ name }}{% endline_list %}", names=["<i>"])
@@ -117,7 +121,7 @@ class LineListTagTests(SimpleTestCase):
     def test_a_wrong_form_is_refused(self):
         for source in (
             "{% line_list names %}{% endline_list %}",
-            '{% line_list names as n css="x" %}{% endline_list %}',
+            '{% line_list names as n list="dot-list" %}{% endline_list %}',
         ):
             with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
                 Template(source)

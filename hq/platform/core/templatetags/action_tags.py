@@ -27,7 +27,7 @@ lazy from hq.platform.application.dashboard import gathered_rows
 lazy from hq.platform.application.page_parts import html_attributes
 lazy from hq.platform.application.pages import PageAction, offered_now
 lazy from hq.platform.application.ui import button_classes
-lazy from hq.platform.core.template_parts import Part, slotted
+lazy from hq.platform.core.template_parts import Example, Part, answers, slotted
 lazy from hq.platform.core.templatetags.value_tags import (
     OUTSIDE_LINK,
     _request,
@@ -50,7 +50,7 @@ def row_value(item):
     return action_items.row_value(item)
 
 
-@register.simple_tag
+@answers(register)
 def triage(item=None, *, sorts=True, family="", url=""):
     """``{% triage item sorts=triage as away %}``: the reader's own way to sort
     a queue row, Dismiss, or Restore once it is dismissed, posting the row's
@@ -102,7 +102,7 @@ def workflow_action(action):
     return PageAction.of(action)
 
 
-@register.simple_tag(takes_context=True)
+@answers(register, takes_context=True)
 def remedies(context, actions):
     """``{% remedies actions as shown %}``: the actions a page draws, each as a
     page action. A remedy is a way somewhere else, so one that leads only to
@@ -320,7 +320,7 @@ def _ranked(actions):
     ]
 
 
-@register.simple_tag(takes_context=True)
+@answers(register, takes_context=True)
 def head_split(context, actions):
     """``{% head_split page.actions as split %}``: ``head_actions`` with as
     many beside the title as the page names (``page_beside``), two where it
@@ -368,28 +368,28 @@ def words(
     return capability_words(capability, variant)
 
 
-@register.simple_tag
+@answers(register)
 def waiting():
     """``{% waiting %}``: what asked-for work says while it waits its turn."""
 
     return asks.WAITING
 
 
-@register.simple_tag
+@answers(register)
 def refreshing():
     """``{% refreshing %}``: what a reading says while it is fetched again."""
 
     return asks.REFRESHING
 
 
-@register.simple_tag
+@answers(register)
 def refreshed():
     """``{% refreshed %}``: what a reading says once it is in."""
 
     return asks.REFRESHED
 
 
-@register.simple_tag
+@answers(register)
 def newer_reading():
     """``{% newer_reading %}``: what a page says of a newer reading it could
     not draw in place, before the link that loads it."""
@@ -397,17 +397,18 @@ def newer_reading():
     return asks.NEWER_READING
 
 
-@register.simple_tag
+@answers(register)
 def show_newer():
     """``{% show_newer %}``: the link that loads a newer reading."""
 
     return asks.SHOW_NEWER
 
 
-@register.simple_tag
-def ask_button(ask, extra=""):
-    """The button of an ``application.asks.Ask``: a posting ``button`` the page's
-    script may answer in place. Busy is ``aria-disabled``, which keeps focus."""
+def ask_button(
+    ask: Annotated[Any, Describe("The `application.asks.Ask` it asks for.")],
+    extra: Annotated[str, Describe("Looks it takes beside the ask's own.")] = "",
+):
+    """The button of an ask (its Part's rules)."""
 
     attributes = {
         "name": ask.name,
@@ -482,7 +483,6 @@ slotted(
         function=button,
         public=True,
         example=tags.BUTTON,
-        states=tags.BUTTON_STATES,
     ),
     library=register,
 )
@@ -493,6 +493,23 @@ slotted(
         function=words,
         public=True,
         example='Press {% words "agent.access.set" %}.',
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="ask_button",
+        about="The button of an ask: a posting `button` the page's script may answer in place.",
+        rules="""
+        An ask's button is drawn by `partials/_ask.html` alone, around its note. While its work is live it
+        is `aria-disabled`, which keeps its focus, and its title says what the work said, where a cell
+        shows only its word.
+        """,
+        function=ask_button,
+        example=Example(
+            "{% ask_button ask %}",
+            lambda: {"ask": Ask("Read example", "/example/read/", title="Read the example again.")},
+        ),
     ),
     library=register,
 )

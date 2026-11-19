@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 {% if approval %}
-{% include "partials/approval_card.html" with entry=approval %}
+{% include "partials/_approval_card.html" with entry=approval %}
 {% else %}
 {% layout %}
 {% section event_heading %}

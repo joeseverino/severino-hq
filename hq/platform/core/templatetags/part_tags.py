@@ -213,12 +213,7 @@ class HeadedNode(template.Node):
 
 @register.tag(name="headed")
 def compile_headed(parser, token) -> HeadedNode:
-    """``{% headed %}body{% endheaded %}``: a body under a heading its part
-    draws itself at the level a section here would take (a dialog's title,
-    an insight's), so a section in the body heads itself a level below it.
-    ``{% headed top %}`` is a body under a title drawn at the top level
-    wherever the part stands (a dialog's), so a dialog opened from inside a
-    section still heads its own sections a level under its title."""
+    """``{% headed %}body{% endheaded %}`` (its Part's rules)."""
 
     bits = token.split_contents()[1:]
     if bits not in ([], ["top"]):
@@ -226,3 +221,21 @@ def compile_headed(parser, token) -> HeadedNode:
     nodelist = parser.parse(("endheaded",))
     parser.delete_first_token()
     return HeadedNode(nodelist, top=bool(bits))
+
+
+# The template contract reads a tag's declaration from what it wraps.
+compile_headed.__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
+    name="headed",
+    about="A body under a heading its part draws itself, so a section in it heads itself a level below.",
+    rules="""
+    A part that draws its own title (a dialog's, an insight's) wraps what it holds in `{% headed %}`, so
+    a section in it heads itself a level under the one a section where the part stands would take.
+    `{% headed top %}` is a body under a title at the top level wherever the part stands (a dialog's),
+    so a dialog opened from inside a section still heads its own sections a level under its title.
+    """,
+    # A title a part draws itself, as a dialog does, and a section under it.
+    example=(
+        '<h2>Example dialog</h2>{% headed top %}{% section "Example detail" %}'
+        "<p>An example line under it.</p>{% endsection %}{% endheaded %}"
+    ),
+)

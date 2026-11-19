@@ -89,7 +89,7 @@ class RowWrittenOnceTests(SimpleTestCase):
             '<tr id="row-{n}"><td><strong><a href="/example/{n}/">example-{n}</a></strong>'
             '<br><code>192.0.2.{n}:8080</code><span class="muted narrow-more"><br>Reached at example-host</span>'
             '<div class="row-below" data-label="Changes"><ul class="dot-list"><li>A record</li></ul></div></td>'
-            '<td>{{% line_list reads as read list="dot-list" %}}<li>{{{{ read }}}} <span class="muted row-more">2</span>'
+            '<td>{{% line_list reads as read kind="dots" %}}<li>{{{{ read }}}} <span class="muted row-more">2</span>'
             "</li>{{% endline_list %}}</td>"
             '<td><a href="/example/host/">example-host</a></td>'
             '<td><span class="toned tone-good">Working</span><span class="muted row-more"><br>Full access</span></td>'

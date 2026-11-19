@@ -37,7 +37,7 @@ from hq.platform.application.money import money as _money
 from hq.platform.application.printable import admitted
 from hq.platform.application.ui import MISSING, counted as _counted, measured as _measured, no_value
 from hq.platform.core.part_examples import tags
-from hq.platform.core.template_parts import Option, Part, SlotsNode, slotted
+from hq.platform.core.template_parts import Option, Part, SlotsNode, answers, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
 from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
@@ -378,7 +378,7 @@ def _is_this_page(context, url: str) -> bool:
     return not parts.netloc and unquote(parts.path) == request.path
 
 
-@register.simple_tag(takes_context=True)
+@answers(register, takes_context=True)
 def is_this_page(context, url):
     """``{% is_this_page url as here %}``: whether ``url`` is the view being
     drawn, its path and its query: a control that would only lead there is
@@ -659,7 +659,7 @@ def named_links(text):
     return _named_links(text)
 
 
-@register.simple_tag(takes_context=True)
+@answers(register, takes_context=True)
 def problems_about(context, url=""):
     """The open problems about the thing at ``url``, by default the page this
     is drawn on, for ``partials/_problems.html``. One read of a stored answer,
@@ -682,7 +682,7 @@ def not_urgent(problems):
     return [item for item in problems or () if item.get("status") != "serious"]
 
 
-@register.simple_tag
+@answers(register)
 def rendered_copy() -> datetime | None:
     """When this saved copy of HQ was saved (``SEVERINO_RENDERED_COPY``), which
     is the moment it was rendered; None for a running HQ."""

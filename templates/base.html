@@ -16,8 +16,7 @@
   <link rel="icon" href="{% static 'img/favicon.ico' %}" sizes="any">
   <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
   <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}">
-  {% include "partials/_color_scheme.html" %}
-  {% include "partials/_first_frame.html" %}
+  {% include "scripts/head.html" %}
   {% block head_extra %}{% endblock %}
 </head>
 <body data-sign-in="{% url 'login' %}" data-ask-refreshing="{% refreshing %}">

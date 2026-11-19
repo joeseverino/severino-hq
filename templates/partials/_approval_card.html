@@ -1,9 +1,4 @@
-{% comment %}
-Expects `entry` from approvals.review(). Its heading is what was asked, the
-aside when and how, and what it acts on. A warning no row of the change
-carries stands above it. Its buttons are the decisions its reader may take
-(`entry.offer`), and a decision withheld from them says why.
-{% endcomment %}
+{% comment %}A held request, from `entry`, an approvals.review() entry (its Part's rules).{% endcomment %}
 {% section entry.asked|stringformat:"s" edge=entry.tone data_approval=entry.held.state more_label=entry.resource_label more_url=entry.resource_url %}
   {% if entry.held.reason or entry.held.decision_note or entry.offer.withheld %}
     {% facts %}

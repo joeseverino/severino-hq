@@ -1,4 +1,0 @@
-{% comment %}
-A systemd unit as a person reads it: its unit file's title, with its name
-beneath, its escapes decoded; the name alone when it has no title.
-{% endcomment %}{% if title %}{% list %}<li>{{ title|breakable }}</li><li><code>{{ unit|breakable }}</code></li>{% endlist %}{% else %}<code>{{ unit|breakable }}</code>{% endif %}

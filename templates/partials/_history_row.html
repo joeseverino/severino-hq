@@ -1,12 +1,11 @@
 {% comment %}
 The cells of one line of history (an application.history.HistoryLine), as
 every table of audit events draws it: the audit log, an event's other events
-and a record's recent changes. Its row's attributes are
-{% history_row_attributes %}'s. An event that changed things heads them: its
-gutter holds the fold rather than the row's own toggle, so opening the fold
-opens what its columns that left hold too (tables.js). A fold carries at most
-history.SHOWN of what the event changed, a run at most as many moments; a
-last row (`rest`), one cell across the row (`across`, every column of its
+and a record's recent changes. Its row's attributes are `HistoryLine.attributes`: a
+row in a group folded away (`folds`), or under its event, is folded under it,
+and an event that changed things holds the fold. Opening the fold opens what
+its columns that left hold too (tables.js). A run holds at most
+history.SHOWN moments; a last row (`rest`), one cell across the row (`across`, every column of its
 table, a tick-box's included), counts the others and links to the
 list of them all: an event's page, a run's shared page. A run with no such
 page has no last row. Every title links where `row.url` says, and only a

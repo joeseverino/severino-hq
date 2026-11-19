@@ -131,7 +131,7 @@ every navigation page.
 
 **No script builds markup.** What a script adds to a page is a `<template>`
 the server drew, in the partial that owns the region (a notice's tone in
-`_notice_frames.html`, an ask's pieces in `_ask.html#frames`, the messages'
+`scripts/fragment.html#notices`, an ask's pieces in `_ask.html#frames`, the messages'
 list in `_messages.html`, the live round trip in `_connection_loading.html#frame`),
 cloned and filled through `textContent`. A
 frame is drawn only where something can fill it: one that fills a part of a

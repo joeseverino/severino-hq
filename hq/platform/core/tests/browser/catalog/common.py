@@ -100,8 +100,7 @@ class _Asked(Context):
 
 
 HEAD = "partials/_page_head.html"
-COLOR_SCHEME = "partials/_color_scheme.html"
-FIRST_FRAME = "partials/_first_frame.html"
+DOCUMENT_HEAD = "scripts/head.html"
 MAIN = "partials/_page_main.html"
 SCRIPTS = "scripts/page.html"
 
@@ -119,6 +118,6 @@ def part_page(name, markup, before="", after="", main=""):
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"{render_to_string(COLOR_SCHEME)}<title>{escape(name)}</title>{render_to_string(FIRST_FRAME, nonce)}</head>"
+        f"<title>{escape(name)}</title>{render_to_string(DOCUMENT_HEAD, nonce)}</head>"
         f"<body>{before}{main}{after}{render_to_string(SCRIPTS, nonce)}</body></html>"
     )

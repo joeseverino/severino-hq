@@ -24,7 +24,7 @@ queue's (data-queue) is counted down as its rows are dismissed.
 {% with area=action_groups.0 %}
 {% if action_groups|length == 1 %}{% firstof area.label as queue_heading %}{% elif action_query or action_status or action_source or action_about %}{% firstof "Matches" as queue_heading %}{% else %}{% firstof "To do" as queue_heading %}{% endif %}
 {% section queue_heading count=action_item_total data_queue=True data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
-  {% include "partials/_queue_groups.html" with groups=action_groups prefix="queue" aside_url=dismiss_all.url titled=action_groups|length|add:"-1" %}
+  {% include "action_items.html#queue_groups" with groups=action_groups prefix="queue" aside_url=dismiss_all.url titled=action_groups|length|add:"-1" %}
 {% aside %}{% if action_groups|length == 1 and area.url %}<a class="subtle-link" href="{{ area.url }}">View all{% arrow %}</a>{% if dismiss_all %}{% dot %}{% endif %}{% endif %}{% if dismiss_all %}{% include "partials/_page_action.html" with action=dismiss_all extra="compact ghost" only %}{% endif %}
 {% endsection %}
 {% endwith %}
@@ -42,14 +42,32 @@ of it unless it reports something else.
 {% endcomment %}
 {% if notice_groups %}
   {% section "Notices" count=notice_total data_queue=True %}
-    {% include "partials/_queue_groups.html" with groups=notice_groups prefix="notice" aside_url=dismiss_notices.url %}
+    {% include "action_items.html#queue_groups" with groups=notice_groups prefix="notice" aside_url=dismiss_notices.url %}
   {% aside %}{% if dismiss_notices %}{% include "partials/_page_action.html" with action=dismiss_notices extra="compact ghost" only %}{% endif %}
   {% endsection %}
 {% endif %}
 
 {% if aside_groups %}
   {% section "Dismissed" count=aside_total fold=True data_set_aside=True %}
-    {% include "partials/_queue_groups.html" with groups=aside_groups prefix="aside" %}
+    {% include "action_items.html#queue_groups" with groups=aside_groups prefix="aside" %}
   {% endsection %}
 {% endif %}
 {% endblock %}
+{% comment %}
+A part of the queue (what needs doing, the notices, what was dismissed) under
+its domains, from `action_items.by_source`: one table, a row group per domain,
+so every row shares one set of columns. A group's heading links where its
+domain's items are decided together, when the domain says. Its entries are
+`_queue_entries.html`. `aside_url`, where the part can be dismissed, lets a
+family be dismissed whole. `titled="0"` when the card around it is already
+titled by its one area, so the area is not said twice.
+{% endcomment %}{% partialdef queue_groups %}{% table_region "Queue" %}
+  <table class="data-table" data-line="flat">
+    {% for group in groups %}
+    <tbody>
+      {% if titled != 0 %}{% row_group group.label group.items|length href=group.url %}{% endif %}
+      {% include "partials/_queue_entries.html" with entries=group.entries grouped=True triage=True %}
+    </tbody>
+    {% endfor %}
+  </table>
+{% endtable_region %}{% endpartialdef %}

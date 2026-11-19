@@ -464,14 +464,39 @@ def _part(compile_function: Any) -> Part | None:
     return target if isinstance(target, Part) else None
 
 
+def undeclared(engine: Any, every: Iterable[Part]) -> list[str]:
+    """Each host tag that is no part and answers no value (``answers``), and
+    each of the host's partials no part draws: a piece of markup drawn by
+    neither is one no rule, option or example holds."""
+
+    tags = (
+        f"{{% {name} %}}"
+        for path, library in zip(engine.builtins, engine.template_builtins, strict=True)
+        if path.startswith("hq.")
+        for name, compile_function in library.tags.items()
+        if not (_part(compile_function) or getattr(compile_function, "answers", False))
+    )
+    files = {name for part in every for name in part.files()}
+    partials = (
+        name
+        for path in sorted((ROOT / "templates" / "partials").glob("*.html"))
+        if (name := f"partials/{path.name}") not in files
+    )
+    return [*tags, *partials]
+
+
 def parts() -> tuple[Part, ...]:
     """Every shared part: each tag's, read from what it wraps, and each a
     template includes by path. A class or a piece is one part's own, so two
-    declaring it is refused here, where every reader of a part's classes reads them."""
+    declaring it is refused here, where every reader of a part's classes reads
+    them, as is a host tag or partial that is no part's (``undeclared``)."""
 
-    tags, _ = _libraries(_engine())
+    engine = _engine()
+    tags, _ = _libraries(engine)
     found = (*(part for compile_function in tags.values() if (part := _part(compile_function))), *PARTS)
     every = tuple({id(part): part for part in found}.values())
+    if missing := undeclared(engine, every):
+        raise ValueError(f"Every host tag and partial is a part's, or a tag `answers` a value: {', '.join(missing)}.")
     owners: dict[str, list[str]] = {}
     for part in every:
         for word in (*part.owned(), *part.pieces):

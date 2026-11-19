@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, Union, get_args, get_origin, get_typ
 
 from django import template
 from django.template.base import token_kwargs
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeData, mark_safe
 
 from hq.platform.application.describe import Describe
 
@@ -348,3 +348,31 @@ def slotted(part: Part, *, library: template.Library) -> None:
     # The template contract reads a tag's declaration from what it wraps.
     compile_.__wrapped__ = part  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
     library.tag(part.name, compile_)
+
+
+def answers(library: template.Library, *, takes_context: bool = False) -> Callable[[Callable], Callable]:
+    """Register the function as a tag that answers a value (a word, a record, a
+    choice), written `as` a name or drawn as text, never markup: a piece of
+    markup is a Part's, and a tag that answers some is refused as it draws.
+    Every host tag is a Part or one of these (``template_contract.parts``)."""
+
+    def register(function: Callable) -> Callable:
+        @wraps(function)
+        def answered(*args, **kwargs):
+            value = function(*args, **kwargs)
+            if isinstance(value, SafeData):
+                raise TypeError(f"The tag {function.__name__} answers a value; markup is drawn by a Part.")
+            return value
+
+        library.simple_tag(answered, takes_context=takes_context, name=function.__name__)
+        library.tags[function.__name__].answers = True  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
+        return function
+
+    return register
+
+
+def included(partial: str, about: str, *classes: str, **declared) -> Part:
+    """A part with no tag, which a template includes as ``partials/_<partial>.html``,
+    writing ``classes``."""
+
+    return Part(name="", partial=f"partials/_{partial}.html", about=about, classes=classes, **declared)

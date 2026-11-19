@@ -2,6 +2,14 @@
 fragment.js with every frame it clones: a notice of each tone, the warning
 that ends in a link, and the messages' list. A page loads the script only
 through this part (ScriptFrameTests), so no page has it without its frames.
-{% endcomment %}{% include "partials/_notice_frames.html" %}
+
+`#notices` is the empty notice of each tone a script draws in, so a line it
+adds is the part the server draws and no script writes its class:
+fragment.js's warning, and the warning that ends in a link, for it to say
+where the part it could not have is offered. demo.js says what the demo
+leaves out in an info notice, drawn only in the saved copy it runs in.
+{% endcomment %}{% partialdef notices inline %}<template data-notice="warning">{% notice tone="warning" %}{% endnotice %}</template>
+<template data-notice-link="warning">{% notice tone="warning" %}<a href=""></a>{% endnotice %}</template>{% if saved_copy %}
+<template data-notice="info">{% notice tone="info" %}{% endnotice %}</template>{% endif %}{% endpartialdef %}
 {% include "partials/_messages.html#frame" %}
 <script src="{% static 'js/fragment.js' %}" {% csp_nonce_attr %} defer></script>

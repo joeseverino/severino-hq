@@ -185,6 +185,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   & > * + * { margin-inline-start: var(--space-4); }
   /* What a control cell says beside its controls wraps as words do, on a line of its own: a note, or the sentence linked to the setup a change needs (`_write_gap.html`), which is a link and no control's label. */
   & > :is(.muted, p, [data-write-gap]) { display: block; margin: 0; white-space: normal; }
+  /* That sentence is long, so its cell keeps the measure a long value keeps. */
+  &:has(> [data-write-gap]) { box-sizing: content-box; min-inline-size: min(var(--row-words), var(--share)); }
   &:has(> :is(.btn, form, [data-ask])) { padding-block: calc(var(--row-pad) - var(--control-rise)); }
   /* An ask's cell keeps the line its note stands on under its controls (below). */
   &:has(> [data-ask]) { padding-block-end: calc(var(--row-pad) + 1lh); }

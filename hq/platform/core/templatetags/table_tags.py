@@ -23,8 +23,7 @@ from django.utils.safestring import SafeString, mark_safe
 from django.utils.text import slugify
 
 from hq.platform.application.describe import Describe
-from hq.platform.application.page_parts import html_attributes
-from hq.platform.application.tables import TableColumn, check_drop, column_kind, ranked
+from hq.platform.application.tables import check_drop, column_kind
 from hq.platform.core.part_examples import tags
 from hq.platform.core.table_cells import (
     Cells,
@@ -33,8 +32,7 @@ from hq.platform.core.table_cells import (
     Position,
     Span,
 )
-from hq.platform.core.template_parts import Part, slotted
-lazy from hq.platform.application import history
+from hq.platform.core.template_parts import Example, Part, slotted
 
 register = template.Library()
 
@@ -130,11 +128,27 @@ _LINE_FRAME = f"<template data-open-line>{_open_line(1, '', [('', '<span data-ro
 
 @register.simple_block_tag
 def open_line(content):
-    """``{% open_line %}value{% endopen_line %}``: an open line holding one
-    unlabeled entry, the frame a script clones for a row that comes to hold
-    something beneath it once drawn (ask.js), setting the label and width."""
+    """An open line holding one unlabeled entry (``OPEN_LINE``'s rules)."""
 
     return mark_safe(_open_line(1, "", [("", content)]))  # noqa: S308 - the body is rendered template output, escaped there
+
+
+# The template contract reads a tag's declaration from what it wraps.
+OPEN_LINE = register.tags["open_line"].__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
+    name="open_line",
+    rules="""
+    The line a row opens to that a script adds is `{% open_line %}value{% endopen_line %}`, the line
+    the region draws, so it is the same part: a frame the script clones for a row that comes to hold
+    something beneath it once drawn (ask.js), setting the label and width.
+    """,
+    about="The line a row opens to, holding one entry, as a frame a script clones for a row.",
+    # The frame an ask clones for the row it stands in, as `_ask.html` draws it.
+    example=(
+        '{% table_region "Example lines" %}<table class="data-table"><tbody><tr><td>example-01</td></tr>'
+        '<template data-example>{% open_line %}<span class="row-below" data-label="Example">An example note.</span>'
+        "{% endopen_line %}</template></tbody></table>{% endtable_region %}"
+    ),
+)
 
 
 def _unnamed(roles: list[tuple[int, str]]) -> list[tuple[int, str]]:
@@ -433,11 +447,6 @@ TABLE_REGION = table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  #
     ruled, whichever cell draws it), `overlaps` (what two boxes draw never crosses) and `row state
     kept` (a key, a state or a field never leaves early).
 
-    What a table's rows are to each other is an option of its parts, never a class of the page's:
-    rows selected together are `{% row_select %}`'s, a change's before and after is
-    `{% change_table %}`, and a row that asks to be read first says so in its `tr` with
-    `{% row_state emphasized=True %}`: its cells are tinted and its links weigh more.
-
     **Opening a row moves no column.** An open row keeps its cells as they were, but for a clamp,
     which it releases in place, and, in a narrow box, its `narrow-more` parts, which it shows in
     place, each on a line of its own that asks its column for no width. What it holds back stands on
@@ -454,7 +463,7 @@ TABLE_REGION = table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  #
     shows of it only once its column has left (`data-row-shows`). A copy draws no id twice. A cell
     held back holds no control, which a copy would draw twice: the region refuses one, so a button
     stands in place or moves whole (`row-below`). A row's open line a script adds is
-    `{% open_line %}`, the line this region draws, so it is the same part. *Gates:*
+    `{% open_line %}`. *Gates:*
     `test_table_once.py`: `test_a_row_writes_each_cell_once`, `test_a_cell_held_back_holds_no_control`,
     and the byte budgets `ROW_BYTES` and `CHROME_BYTES`.
 
@@ -516,13 +525,6 @@ TABLE_REGION = table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  #
     that tells a cell's part by anything else. Free text breaks a run with no seam in it (a link, a
     digest) wherever it must, so it never holds its column wider than its box. An identifier in a
     prose column waits for the open row (`row-more`) rather than holding that column at its cap.
-
-    A run of short parts in a cell (a project's technologies, what a connection reads or reaches) is
-    `{% line_list values as value %}…{% endline_list %}`, with `list="dot-list"` where the body draws
-    each `li`. No count decides how many show. Its first three size the column and wrap with it. The
-    rest ask the column for nothing and show as many as the line they end has room for, each whole,
-    and the row opens only when one is cut. A list folded at a fixed number behind `row-more` is
-    refused (`test_template_line_lists`).
 
     A run of links longer than the count its template declares folds behind "+N", and a stacked list
     longer than four shows three and "+N more". A row that holds anything back gets one toggle that
@@ -640,40 +642,6 @@ def row_group(
     return {"label": label, "count": count, "folds": folds, "href": href, "attention": attention}
 
 
-@register.inclusion_tag("partials/_history_table.html", takes_context=True)
-def history_table(context: Any, label: str, groups: Any, *, hide_who: bool = False) -> dict[str, Any]:
-    """A table of audit events, each drawn by the row the audit log draws
-    (``partials/_history_row.html``): ``groups`` is a sequence of
-    ``history.HistoryGroup``. ``hide_who`` leaves out who did each, for a
-    reader who may not read the audit log."""
-
-    columns = ranked(
-        tuple(
-            TableColumn(heading, css=css)
-            for heading, css in history.COLUMNS
-            if not (hide_who and heading == history.WHO)
-        )
-    )
-    return {
-        "request": context.get("request"),
-        "label": label,
-        "groups": groups,
-        "columns": columns,
-        "hide_who": hide_who,
-    }
-
-
-@register.simple_tag
-def history_row_attributes(row: Any, folds: str = "") -> SafeString:
-    """The ``tr`` attributes of a line of history (``_history_row.html``): a
-    row in a group folded away (``folds``), or under its event, is folded
-    under it; an event that changed things holds the fold."""
-
-    if folds or row.under:
-        return html_attributes({"data-folded": folds or row.under})
-    return html_attributes({"id": row.fold, "data-folds": True}) if row.grouped else SafeString("")
-
-
 def row_actions(
     actions: Annotated[Any, Describe("What can be done to the row's record, each a `PageAction`.")] = (),
     *,
@@ -712,68 +680,42 @@ def row_select(pk: Any) -> dict[str, Any]:
     return {"pk": pk}
 
 
-@register.simple_tag
-def row_state(*, emphasized: bool = False) -> str:
-    """How a row stands among the others, written in its ``tr``:
-    ``emphasized`` for one that asks to be read first, such as a message not
-    yet read, whose row is tinted and whose links weigh more."""
+def row_state(
+    *, emphasized: Annotated[bool, Describe("A row that asks to be read first, a message not yet read.")] = False
+) -> SafeString:
+    """How a row stands among the others, written in its ``tr`` (its Part's rules)."""
 
-    return mark_safe(" data-emphasized") if emphasized else ""
-
-
-# How many of a line list's parts show on its row, wrapping with its column
-# as any value's words do; the whole run shows on the row's open line.
-LINE_LEAD = 3
+    return mark_safe(" data-emphasized") if emphasized else SafeString("")
 
 
-class LineListNode(template.Node):
-    def __init__(self, nodelist: Any, values: Any, name: str, list_class: Any) -> None:
-        self.nodelist = nodelist
-        self.values = values
-        self.name = name
-        self.list_class = list_class
-
-    def _parts(self, context: Any, values: list[Any]) -> str:
-        drawn = []
-        for value in values:
-            with context.push(**{self.name: value}):
-                drawn.append(self.nodelist.render(context))
-        return "".join(drawn)
-
-    def render(self, context: Any) -> str:
-        values = [value for value in self.values.resolve(context) or () if value not in (None, "")]
-        if not values:
-            return ""
-        css = str(self.list_class.resolve(context)) if self.list_class else ""
-        lead, rest = values[:LINE_LEAD], values[LINE_LEAD:]
-        # Parts already rendered and escaped by their own template.
-        parts = mark_safe(self._parts(context, lead))  # noqa: S308 - rendered and escaped already
-        tail = mark_safe(self._parts(context, rest))  # noqa: S308 - rendered and escaped already
-        # The rest shows only on the row's open line (table_cells._HELD).
-        if css:
-            more = format_html('<li class="line-rest"><ul class="{} line-run">{}</ul></li>', css, tail) if rest else ""
-            return format_html('<ul class="{} line-list">{}{}</ul>', css, parts, more)
-        more = format_html('<span class="line-rest"><span class="line-run">{}</span></span>', tail) if rest else ""
-        return format_html('<span class="line-list">{}{}</span>', parts, more)
-
-
-@register.tag("line_list")
-def line_list(parser: Any, token: Any) -> LineListNode:
-    """``{% line_list row.tech_list as name %}{% status name chip=True %}{% endline_list %}``:
-    a run of short parts in a cell, each drawn by the body: the first
-    ``LINE_LEAD`` on the row, wrapping with its column, and the whole run on
-    the row's open line, which the row offers once it holds more.
-    ``list="dot-list"`` draws it as that list, the body drawing each ``li``."""
-
-    bits = token.split_contents()
-    if len(bits) not in (4, 5) or bits[2] != "as":
-        raise template.TemplateSyntaxError('line_list takes values "as" name, then optionally list="<class>"')
-    options = token_kwargs(bits[4:], parser)
-    if len(options) != len(bits[4:]) or set(options) - {"list"}:
-        raise template.TemplateSyntaxError('line_list takes one option, list="<class>"')
-    nodelist = parser.parse(("endline_list",))
-    parser.delete_first_token()
-    return LineListNode(nodelist, parser.compile_filter(bits[1]), bits[3], options.get("list"))
+slotted(
+    Part(
+        name="row_state",
+        rules="""
+        What a table's rows are to each other is an option of its parts, never a class of the page's:
+        rows selected together are `{% row_select %}`'s, a change's before and after is
+        `{% change_table %}`, and a row that asks to be read first says so in its `tr` with
+        `{% row_state emphasized=True %}`: its cells are tinted and its links weigh more.
+        """,
+        about="How a row stands among the others, written in its `tr`: one that asks to be read first.",
+        function=row_state,
+        public=True,
+        # A row not read yet among rows that are, its links weighed and its cells tinted.
+        example=Example(
+            '{% section "Example messages 2" %}{% table_region "Example messages 2" %}<table class="data-table">'
+            '<thead><tr>{% table_heading "From" "identifier" %}{% table_heading "Message" %}</tr></thead><tbody>'
+            "{% for row in rows %}<tr{% row_state emphasized=row.2 %}><td>{{ row.0 }}</td>"
+            '<td><a href="#">{{ row.1 }}</a></td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}',
+            {
+                "rows": (
+                    ("example-01", "An example message not read yet.", True),
+                    ("example-02", "An example read.", False),
+                )
+            },
+        ),
+    ),
+    library=register,
+)
 
 
 slotted(
