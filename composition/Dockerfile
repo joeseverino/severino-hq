@@ -10,7 +10,7 @@
 # The host image, by digest: compose.yml passes it after verifying its
 # signature. The default has no shell or users, so a build without it fails.
 ARG HQ_IMAGE=scratch
-# uv and ast-grep at the releases mise.toml pins, installed by mise from
+# uv, ast-grep and typos at the releases mise.toml pins, installed by mise from
 # mise.lock, which refuses a download whose checksum differs from it (as the
 # host image's tools stage does, with the same mise). mise.toml reads Go's
 # release from go.mod, so mise cannot load it without that file.
@@ -20,17 +20,18 @@ ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
 COPY controller/go.mod controller/
-RUN mise install uv ast-grep \
+RUN mise install uv ast-grep typos \
     && install -D "$(mise which uv)" /opt/bin/uv \
-    && install -D "$(mise which ast-grep)" /opt/bin/ast-grep
+    && install -D "$(mise which ast-grep)" /opt/bin/ast-grep \
+    && install -D "$(mise which typos)" /opt/bin/typos
 
 # The installer uses the same Python ABI as HQ.
 FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS installer-base
 COPY --from=tools /opt/bin/uv /usr/local/bin/uv
-# The extension check's scan of a package's source (tools/pipeline/check-plugin.sh),
-# which Compose runs in this base. The installer stage after it ships only
-# /install, so the runtime never holds it.
-COPY --from=tools /opt/bin/ast-grep /usr/local/bin/ast-grep
+# The extension check's scan and spelling check of a package's source
+# (tools/pipeline/check-plugin.sh), which Compose runs in this base. The
+# installer stage after it ships only /install, so the runtime never holds them.
+COPY --from=tools /opt/bin/ast-grep /opt/bin/typos /usr/local/bin/
 # Every wheel an installer of this base installs carries its bytecode, as the
 # host's own packages do: the image is read-only to the account HQ runs as.
 ENV UV_COMPILE_BYTECODE=1
