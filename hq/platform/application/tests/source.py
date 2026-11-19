@@ -1,8 +1,11 @@
 """This checkout's source files and the templates Django loads."""
 
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 lazy from django.template.autoreload import get_template_directories
+
+from hq.platform.application.tests.reads import listing
 
 # Installed or generated trees inside a checkout. With hidden directories
 # (.git, a virtualenv under any name) they are not this project's source.
@@ -20,6 +23,7 @@ NOT_SOURCE = {
 }
 
 
+@listing
 def source_files(root: Path, pattern: str) -> list[Path]:
     """This checkout's own files matching ``pattern``.
 
@@ -27,11 +31,12 @@ def source_files(root: Path, pattern: str) -> list[Path]:
     image, where there is no git to ask what is tracked.
     """
 
-    return sorted(
-        path
-        for path in root.rglob(pattern)
-        if not any(part.startswith(".") or part in NOT_SOURCE for part in path.relative_to(root).parts[:-1])
-    )
+    found: list[Path] = []
+    for top, directories, files in root.walk():
+        # Pruned as the walk goes, so it never lists a virtualenv or node_modules it would throw away.
+        directories[:] = [name for name in directories if not name.startswith(".") and name not in NOT_SOURCE]
+        found += [top / name for name in files if fnmatchcase(name, pattern)]
+    return sorted(found)
 
 
 def template_files() -> list[tuple[str, Path]]:
