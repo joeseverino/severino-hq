@@ -185,14 +185,9 @@ class LoginRequiredMiddleware(auth_middleware.LoginRequiredMiddleware):
     """Django's sign-in gate: every view needs a session unless it is marked
     ``@login_not_required`` where it is defined.
 
-    Also lets through the routes an extension declared as carrying their own
-    authentication. Skipping the redirect is not skipping auth: the view
-    still authenticates the request, and answers 401 rather than an HTML
-    login page a native client cannot use.
-
-    A signed-in person then opens a page only while their role holds the
-    capability it reads under (``pages.page_refusal``). Here, before the view,
-    because this is the one place every routed view passes through.
+    An extension's routes that carry their own authentication answer 401
+    instead of a redirect. A page's capability (``pages.page_refusal``) is
+    checked here too, the one place every routed view passes through.
     """
 
     @override

@@ -158,13 +158,9 @@ def waiting_for_approval() -> tuple[Finding, ...]:
 def readable_by[Item: Mapping[str, Any]](principal, items: list[Item]) -> list[Item]:
     """The composed queue as ``principal`` may read it.
 
-    The queue is composed once for everybody at the operator's authority, so
-    each door it leaves through to one reader takes out here what that reader
-    may not be told: an item about what only some capabilities may read
-    (``read_capabilities``), and, for a reader that sees only its own held
-    requests (``approvals.reads_every_hold``), every other caller's. A held
-    request is composed with no decision on it, and gains here what
-    ``approvals.offers`` offers this reader.
+    The queue is composed once at the operator's authority, so each door to one
+    reader takes out here what that reader may not be told, and adds the
+    decisions ``approvals.offers`` offers it.
     """
 
     items = [item for item in items if principal.permits(*item.get("read_capabilities", ()))]

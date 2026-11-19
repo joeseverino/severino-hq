@@ -1,12 +1,8 @@
-"""Whether a credential's call runs, waits for approval, or is refused.
+"""Whether a credential's call runs, waits for approval, or is refused (docs/Security.md#what-hq-enforces).
 
-How the identity provider's grant, the default and the rules combine is
-docs/Security.md#what-hq-enforces. For an agent, anything destructive (a
-deletion, a stop) waits for a person by default: a caller that may have read
-untrusted text is the one whose deletes and stops most deserve a second look.
-A call its handler holds for a person every time (a procedure that changes a
-machine) waits whatever the agent's rule, and no rule may allow it. Operators
-are never subject to policy.
+An agent's destructive call waits for a person by default, since a caller that
+may have read untrusted text most deserves a second look. Operators are never
+subject to policy.
 """
 
 from dataclasses import dataclass

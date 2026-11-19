@@ -1,14 +1,9 @@
-"""The ways a use case refuses: the record is not there, it clashes, policy
-or state forbids the change, the uploaded material cannot be used, or a value
-the command's type admits is still not one HQ can act on.
+"""The ways a use case refuses: not there, a clash, forbidden by policy or
+state, unusable material, or a value HQ cannot act on.
 
-Every domain raises these, so an adapter answers each one way, by its ``code``.
-A ``reason`` is written by the host, never taken from a request or a
-dependency, and is the only text of theirs an adapter answers with. It is a
-literal where it is raised, or a ``Sentence`` carried from where one is
-written, and its dynamic parts are values HQ wrote: a constant, or a day, a
-count or a size in HQ's own form. ``RefusalTextTests`` reads every refusal for
-it (``tests/refusal_text.py`` says what a sentence is).
+An adapter answers each one way, by its ``code``. A ``reason`` is written by
+the host, never taken from a request or a dependency, since it is the only text
+an adapter answers with (``RefusalTextTests``).
 """
 
 from typing import ClassVar

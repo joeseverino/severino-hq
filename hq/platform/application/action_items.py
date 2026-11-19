@@ -175,12 +175,8 @@ def set_aside(user, keys, *, aside: bool, current: list[dict[str, Any]]) -> None
 def by_source(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The queue under the domain that raised each item, families folded.
 
-    Derived from what every item already carries, so a domain that starts
-    raising items has its section, and a family its fold, without anybody
-    listing either. The queue's own order is kept: a domain appears where its
-    first (and so its worst) item does. A domain that declares where its items
-    are decided together (``PluginIntegration.attention_url``) gives its group
-    that page as ``url``.
+    Derived from what every item carries, so a new domain gets its section
+    without anybody listing it. The queue's order is kept.
     """
 
     urls = attention_urls() if items else {}

@@ -1,27 +1,9 @@
-"""The one way HQ turns a Python type into the JSON Schema it publishes.
+"""The one way HQ turns a Python type into the JSON Schema it publishes, so every schema says a thing the same way.
 
-Every schema HQ hands a client (the API document, the capability and resource
-catalogs, the MCP tools, the control plane's specs) comes from here, so all of
-them say a thing the same way. A schema carries only the titles a declaration
-gives, and a named alias is declared by its name: the title Pydantic would
-derive from a field's name or a class's is only that name, and every reader
-labels a field from its name through ``labels.field_label`` instead, while an
-alias that names a bare composition (``type TotalCost = Annotated[Decimal,
-...]``, a number or a string) is titled from its name by that same labeler, so
-a viewer offering its branches says what it is rather than the name it is
-filed under. A branch of a choice that names a definition is titled the same
-way beside its ``$ref``, which the viewer reads over the definition's own, so
-its selector says "Asset saved" for ``AssetSaved``. A TypedDict's keys are all of its keys, as
-the strict API reads them; an object open to any key says so by saying
-nothing, JSON Schema's default.
-
-A fragment many declarations share is a named type alias (``type Notes =
-Annotated[str, Describe(...)]``): Pydantic writes it once, as the definition
-named for the alias, and each use as a ``$ref`` to it beside what that use
-adds (its ``default``). A bound (a length, a range) is never a use's own:
-Pydantic writes one given at a use into the alias's definition, so it goes in
-the alias, and a field that needs another bound is an alias of its own.
-``fields`` reads a schema's fields whole again.
+A schema carries only the titles a declaration gives, and readers label a field
+through ``labels.field_label``. A fragment many declarations share is a named
+type alias, defined once; a bound goes in the alias, since Pydantic writes one
+given at a use into the alias's definition.
 """
 
 import copy

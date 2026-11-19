@@ -849,13 +849,9 @@ def gather_attention(
 ) -> tuple[dict[str, Any], ...]:
     """Collect, validate, attribute and order attention items from any sources.
 
-    ``sources`` is ``(id, label, provider, read_capabilities)`` per
-    contributor, the last gating the item that stands in for a source that
-    could not be read (``source_attention``), so the host's own
-    sections and installed extensions are gathered by one implementation that
-    cannot drift on what "urgent" means. Each entry carries its source, so a
-    surface can say where an item came from; the order is the status
-    vocabulary's (``ordered_attention``), so every surface agrees on urgency.
+    One implementation for the host's sections and every extension, so no
+    surface drifts on what "urgent" means. ``sources`` is ``(id, label,
+    provider, read_capabilities)`` per contributor.
     """
 
     gathered: list[dict[str, Any]] = []

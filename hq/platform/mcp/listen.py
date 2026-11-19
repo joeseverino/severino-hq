@@ -1,26 +1,10 @@
 """The listen streams an agent holds open (``subscriptions/listen``), and what reaches them.
 
-HQ publishes one event, the tools ``list_changed``: Claude Code's MCP docs
-name list changes as what it hears on a stream, and HQ's prompts and
-resources change only with a release. The SDK's ``ListenHandler`` serves each
-stream; this module is the bus it is given, the SDK's in-memory one with the
-brakes in front of it, since the SDK delivers to every stream alike and an
-event carries nobody's name:
-
-- A stream records its caller when it opens, in the request's own task, where
-  the caller is bound.
-- An event is delivered only to the streams it is aimed at, and of those only
-  to a caller ``agent_access.refusal`` lets act now, asked on a pooled thread
-  with connections of its own. A paused, blocked or unapproved caller keeps
-  its stream, as a paused agent keeps its connection, and is owed the event
-  until a person lifts the brake (``agent_registry.STANDING_CHANGED``).
-- Changes are told from synchronous code through ``agent_registry``'s
-  signals, received here and handed to the loop each stream is served on.
-
-An open stream holds no thread and no database connection (``MCPBoundary``
-lets the request's own go after its admission), and ends when its token
-expires (``ends_at``). The process serves from one loop
-(``test_one_serving_process``), so this bus reaches every stream.
+The SDK's in-memory bus with HQ's brakes in front of it, since the SDK delivers
+to every stream alike: a stream records its caller as it opens, and an event
+reaches only a caller ``agent_access.refusal`` lets act now; a braked one keeps
+its stream and is owed the event. An open stream holds no thread or connection
+and ends when its token expires.
 """
 
 import asyncio

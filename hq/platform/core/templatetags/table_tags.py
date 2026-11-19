@@ -1,14 +1,7 @@
-"""The tags a data table is declared through.
+"""The tags a data table is declared through: ``table_region``,
+``table_heading``, ``row_toggle``, ``row_select`` and ``row_state``.
 
-``{% table_region %}`` wraps the table in the box it fits and draws what
-follows from its headings: a figure's alignment down its column, the sort
-control only where there are rows to sort, and, where a row can hold anything
-back, each row's toggle in the cell that names it. ``{% table_heading %}`` draws each column heading with its kind, its
-drop rank and its sort control, and ``{% row_toggle %}`` draws the disclosure
-of a row in a table with no headings to say where its gutter is.
-``{% row_select %}`` draws a row's tick-box under the heading that selects
-every row, and ``{% row_state %}`` says how a row stands among the others. Which columns
-show is the browser's to say (``TABLE_REGION``'s rules).
+Which columns show is the browser's to say (``TABLE_REGION``'s rules).
 """
 
 import inspect
@@ -156,23 +149,13 @@ def _unnamed(roles: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 
 def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
-    """The region's tables with each cell marked for what the stylesheet reads.
+    """The region's tables with each cell marked for what the stylesheet reads;
+    None when no table holds a row beneath its head.
 
-    A blank body cell is ``data-blank``, a cell of a column blank in every
-    row ``data-blank-column``; a cell says the width its column leaves at
-    (``data-drop``), a body cell its column's kind, a long one held to a
-    few lines (``cell-clamp``), a short one held whole up to its column's
-    share (``cell-short``), each in a box of the region's own only where no
-    element of the cell can be it (``Cells._box``), and a group's heading
-    row spans every declared column. After each row that
-    holds something back is its open line (``_detail_row``).
-    What a part of a cell is, which decides how it wraps, is its ``data-cell``:
-    ``name`` for what names the row, else the role its class declares
-    (``table_cells.ROLE_CLASSES``), so the stylesheet never reads a cell's content.
-    Without ``sorts`` no row sorts on the page, so no heading keeps its control.
-    A region whose rows hold a cell back draws the frame tables.js copies it
-    onto the row's open line with (``_LINE_FRAME``), once.
-    None when the region holds tables and none of them a row beneath its head.
+    Blank cells and columns, each column's drop width and kind, clamped and
+    short cells, and each part's ``data-cell`` role
+    (``table_cells.ROLE_CLASSES``), so the stylesheet never reads a cell's
+    content. Each row that holds something back is followed by its open line.
     """
 
     cells = Cells(sorts=sorts)

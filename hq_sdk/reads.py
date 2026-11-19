@@ -1,11 +1,8 @@
-"""Read once per request, and derive once per change, for an extension's own pages.
+"""Read once per request, and derive once per change, for an extension's own pages (docs/Plugins.md, Derived reads).
 
-``read_once`` shares one read among the functions assembling a page, and
-``derivation`` keeps a fact of the extension's own across requests until a
-table it reads is written. The rules an answer keeps, the clock among them:
-docs/Plugins.md, Derived reads. ``freshness`` says whether a reading of a kind
-is current by the kind's one ``ReadCadence``, which an extension declares in
-``PluginIntegration.cadences``.
+``read_once`` shares a read within a request, ``derivation`` keeps a fact until
+a table it reads is written, and ``freshness`` judges a reading by its kind's
+``ReadCadence``.
 """
 
 from collections.abc import Callable

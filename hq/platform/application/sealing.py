@@ -1,26 +1,10 @@
 """Tokens only one module makes, which only that module's unsealer reads.
 
-A token stands for a decision its module made (the bridge admitted a
-controller, the runner consented to a run, a person approved a held change, a
-read of the sweep found a spec),
-handed to a writer that must not act without it. It is the sealer/unsealer
-pair of the E language's brands (Morris, "Protection in Programming
-Languages", 1973; Miller, "Robust Composition", 2006):
-
-- A token is an empty box (``Sealed``). What it carries is held by its
-  sealer, in a closure no import reaches, so a token's contents cannot be set
-  or swapped by anything that holds the box.
-- ``seal`` is the only way to make one: the class refuses to be called, and
-  refuses a copy and a pickle. Its module keeps ``seal`` private, or inside
-  the closure of the one path that mints.
-- ``unseal`` is the only way to read one, and refuses anything ``seal`` did
-  not make: a duck-typed stand-in, ``object.__new__`` of the box, a box
-  another sealer made. A writer reads its token only through the owning
-  module's unsealer, so a writer has nothing to read without passing the
-  check.
-
-Out of scope, as for anything in one process: code that reads a closure's
-cells or patches a module.
+A token stands for a decision its module made, handed to a writer that must not
+act without it: the sealer/unsealer pair of the E language's brands (Morris
+1973; Miller 2006). The box (``Sealed``) is empty and cannot be called, copied
+or pickled, and ``unseal`` refuses anything ``seal`` did not make. Out of
+scope: code that reads a closure's cells or patches a module.
 """
 
 from collections.abc import Callable

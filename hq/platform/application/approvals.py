@@ -717,12 +717,10 @@ def _stopped_askers(principal: Principal, rows: tuple[ApprovalRequest, ...]) -> 
 def _refusal(principal: Principal, held: ApprovalRequest, decision: str, *, stopped: bool) -> Refusal | None:
     """Why ``principal`` may not take ``decision`` on ``held``, or None.
 
-    Only a person, and not the caller that asked. The interface is the test
-    rather than a capability, and that is the whole point of the module. The
-    requesting token already held every capability its request needed; a
-    capability to approve would be one more thing that token could be granted,
-    or could be found to have been granted, and the gate would be back where
-    it started.
+    Only a person, and not the caller that asked. The interface is the test,
+    never a capability: a capability to approve would be one more thing the
+    requesting token could be granted, and the gate would be back where it
+    started.
     """
 
     if held.state != ApprovalRequest.State.PENDING:
@@ -806,14 +804,9 @@ def approve(command: ApproveCommand, *, principal: Principal) -> ApprovalApplied
 class Approved(Sealed):
     """A held change a person has just approved, the only thing ``execute_approved`` runs (``sealing``).
 
-    - One place makes one: ``_apply``, once the approver may decide and the
-      change is still what was asked for. Only this module holds its seal, so
-      no other path has a value that makes a run approved.
-    - It carries the whole change (the spec, the validated command, its
-      target, the fields sent) and who acts, so what runs approved is what
-      the person saw, and nothing handed beside it can swap any part.
-    - ``execute_approved`` reads it only through ``approval``, which refuses
-      anything this module did not seal.
+    Only ``_apply`` makes one, once the approver may decide and the change is
+    still what was asked. It carries the whole change and who acts, so what
+    runs is what the person saw.
     """
 
     __slots__ = ()

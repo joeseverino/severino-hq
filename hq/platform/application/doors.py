@@ -77,14 +77,10 @@ def approved_words(approver: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Attribution:
-    """Who did something, as every page and read says it: the actor, the door
-    they came through or the agent they acted through, and who approved it.
+    """Who did something, as every page and read says it: the actor, their door or agent, and who approved it.
 
-    Built from the record that holds the act (``AuditLog.who``,
-    ``OperationRequest.who``, ``ApprovalRequest.who``, ``Job.who``), so one
-    act reads alike on Jobs, its run, its audit entry and its approval. The
-    agent, and who approved it, are said only where that is someone other
-    than the actor.
+    Built from the record that holds the act, so one act reads alike on every
+    page.
     """
 
     actor: str

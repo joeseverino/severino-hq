@@ -349,12 +349,9 @@ def run_subject(manifest: OperationManifest, command: RunCommand) -> ApprovalSub
 def _record(manifest: OperationManifest, *, consented: Consented) -> ManagedResource:
     """The procedure's record, written as its manifest now says.
 
-    Written here, when a run is asked for, rather than when the registry is
-    composed: composing happens in every process and before any database is
-    migrated, with nobody to attribute a write to, while a request has a
-    transaction, an actor and an audit binding. An id nobody runs needs no
-    record, and each ask pins the record to the manifest it was asked of, so
-    the record says what its latest run bound to.
+    Written when a run is asked for, where a transaction, an actor and an audit
+    binding exist, never as the registry is composed in every process before
+    migrations.
     """
 
     key = resource_key(manifest.id)

@@ -1,13 +1,8 @@
-"""HQ's playbook worker, absent: never seen once a playbook source exists,
-or not seen within its timer's interval (``cadence.automation_standing``). An
-HQ where nobody set automation up raises nothing; Refresh and each run still
-refuse there with the reason.
+"""HQ's playbook worker, absent: never seen once a playbook source exists, or not seen within its timer's interval.
 
-A scan or run asked of it then waits for nothing, so Refresh and each
-playbook's run are refused while this stands, and this is what says how to
-set the worker up. HQ cannot read why the host declined to start one (its
-launcher says so in its own log), so the steps are the whole setup, in the
-order docs/Deployment.md gives it, for any operator's host.
+Refresh and each run are refused while this stands, and this is what says how
+to set the worker up, in docs/Deployment.md's order, since HQ cannot read why
+the host declined to start one.
 """
 
 from typing import Any

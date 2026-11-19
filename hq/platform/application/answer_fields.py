@@ -1,11 +1,8 @@
-"""The fields several answers carry with one meaning, each said once.
+"""The fields several answers carry with one meaning, each said once as a named type alias.
 
-Each is a named type alias, so the API document writes its definition once
-under the alias's name and each use as a reference to it (``json_schemas``).
-A field whose meaning differs by type (a ``status``, a ``label``, an ``id``)
-is declared with its type, where it means what it says. Like ``describe``,
-it is a leaf that loads neither HQ nor pydantic at import, so a leaf contract
-(``workflow_contracts``) can use it too.
+The API document then defines each once under the alias's name
+(``json_schemas``). A leaf that loads neither HQ nor pydantic, so a leaf
+contract (``workflow_contracts``) can use it too.
 """
 
 from dataclasses import dataclass

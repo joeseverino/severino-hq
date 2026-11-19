@@ -608,15 +608,7 @@ def _named(joined: Joined, about: str) -> str:
 
 
 def _readers(joined: Joined, by_ref, by_provider, nodes, machine: Callable[[Any], str]) -> tuple[str, ...]:
-    """The nodes that took this reading.
-
-    A reading HQ takes itself comes from its public registry's node. Otherwise
-    the record's ``connection_ref`` where it names one; otherwise the
-    connections of the reading's provider, narrowed to the controller that
-    stored it; otherwise, for a reading no connection takes (the controller's
-    own machine's), the controller that stored it, or the machine it folded
-    into.
-    """
+    """The nodes that took this reading, from the most specific source the record names."""
 
     if joined.spec.read_by == "hq":
         node_id = f"registry:{joined.spec.provider}"

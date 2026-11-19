@@ -1,13 +1,9 @@
 """The development servers' Uvicorn, listening on both loopback stacks when its host is loopback.
 
-A browser asks `localhost` for ::1 as readily as for 127.0.0.1, and Uvicorn's
-command line binds one host (Kludex/uvicorn#1528; #2486, which would have
-taken several, closed unmerged). So this binds 127.0.0.1 and ::1 on one port
-and hands both sockets to Uvicorn's own server and reloader, as `uvicorn.run`
-hands them the one it binds. A host past loopback is bound alone, as given.
-
-The port it bound is put in `UVICORN_PORT` before any worker starts, so the
-scratch server's sign-in link (hq/config/dev_asgi.py) names it.
+A browser asks `localhost` for ::1 as readily as 127.0.0.1, and Uvicorn's
+command line binds one host (Kludex/uvicorn#1528), so this binds both and hands
+the sockets to Uvicorn's server and reloader. The bound port goes in
+`UVICORN_PORT`, which the sign-in link names.
 """
 
 import argparse

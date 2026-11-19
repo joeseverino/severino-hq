@@ -1,27 +1,10 @@
 """What HQ's MCP server costs a served process, and the tool list it answers, in a process of its own.
 
-Run by tools.perf.mcp as ``python -m tools.perf.mcp_probe <out>``, from the tree it measures, so
-the count starts before HQ imports anything. The process is the one an agent's first request
-meets: imports lazy, as hq/config/asgi.py makes them, and the readiness page already served, so
-what any served process holds is boot. The server then loads as that first request loads it
-(asgi.py starts it on demand), and answers ``initialize`` and ``tools/list`` over its own
-streamable HTTP application, as a client's POSTs reach it, then the prompt, resource and resource
-template lists, and the structured answers of a describe_resources call with no arguments and of
-the action queue's largest page through list_resource, then every listed tool's answer, each called
-once (``answer_arguments``); a list the server does not serve counts nothing. The templates are the caller's,
-so every request is asked as the agent holding every grant. Each stage's growth is counted twice:
-what tracemalloc traced, charged to each module as audit:memory charges it, and the resident set,
-less tracemalloc's own, which also holds what pydantic-core and other native code allocate.
-
-A last stage of its own, so it never adds to the first request's numbers, calls a slow tool through
-the agent door (``MCPBoundary``) as many times at once as the agent limits let every agent together,
-each call one agent's, and the same calls one after another: what that costs the process while they
-are in flight, resident (sampled from ``ps``, since the peak cannot fall between the two), traced,
-and the threads and calls at the peak. The tool is the real call path with a handler that opens its
-thread's database connection, as a read does, and holds until every call has arrived.
-
-``MCP_PROBE_DEFER_BUILD=1`` sets pydantic's ``defer_build`` on the SDK's wire models, in this
-process only, to measure what that upstream change would save.
+Run by tools.perf.mcp from the tree it measures, so the count starts before HQ
+imports anything, in the process an agent's first request meets. Each stage's
+growth is counted traced and resident, the latter also holding what native code
+allocates. A last stage of its own calls a slow tool as many times at once as
+the agent limits let in, and one after another.
 """
 
 import asyncio

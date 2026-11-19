@@ -1,22 +1,8 @@
-"""The data sets HQ's tools run on, each by one name: what it writes, and the
-settings it is shown under. The browser gate's stress estates register beside
-their builders in the test tree, which nothing here imports.
+"""The data sets HQ's tools run on, each by one name: what it writes, and the settings it is shown under.
 
-The showcase and standard sets are the example estate and each installed
-extension's demo (``PluginIntegration.demo_seed``), so a composed server or
-look draws an extension's pages with records in them. Every set is written
-through ``plant``, which holds two promises:
-
-- it writes only into a database that holds no record of the host's domains,
-  so it never merges into one in use, production's included (an extension's
-  own tables are not read, since its migrations may write rows of their own);
-- an extension's demo is written only in a development or sandboxed process
-  (``DEBUG`` on, or a test run's or gate's own database), so even a new
-  production database never takes one.
-
-A demo runs outside every door, so an audited row it writes is refused unless
-it says how it was made (``seeded_by_hand``), as each of the example estate's
-events does (``example_estate.doors``).
+Every set is written through ``plant``, which writes only into a database
+holding no host record, and writes an extension's demo only in a development or
+sandboxed process, so production never takes one.
 """
 
 import os
@@ -172,11 +158,8 @@ def seeded_by_hand(path: str, *, at: datetime) -> Iterator[None]:
     """Each audit event the block records, written as the set's owner made it
     by hand: in the browser, one request for ``path``, at ``at``.
 
-    For an extension's demo, whose records are written in one moment but stand
-    for months of use. Writing an event as somebody, at a moment past, is a
-    seed's power alone, so it is refused anywhere but inside a demo the
-    showcase or standard set is writing, which only a development or sandboxed
-    process does.
+    Writing an event as somebody, in the past, is refused anywhere but inside a
+    demo the showcase or standard set is writing.
     """
 
     owner = _DEMO_OWNER.get()

@@ -170,15 +170,10 @@ SOCKET_PEER = "hq.socket_peer"
 
 
 class ForwardedCaller:
-    """The caller's address and scheme, from a proxy's forwarded headers, for every route.
+    """The caller's address and scheme, from a proxy's forwarded headers, for every route (docs/Security.md).
 
-    Uvicorn's ProxyHeadersMiddleware decides: it reads X-Forwarded-For and
-    X-Forwarded-Proto only from a peer in SEVERINO_TRUSTED_PROXIES, and
-    resolves the chain to the first hop from the right that is not one. It
-    replaces the scope's client, so the peer is recorded first, for the pages
-    that show how a request was forwarded. The server runs with
-    --no-proxy-headers, or its own copy would resolve the caller before the
-    peer is recorded.
+    The peer is recorded first, for the pages that show how a request was
+    forwarded, so the server runs with --no-proxy-headers.
     """
 
     def __init__(self, app):

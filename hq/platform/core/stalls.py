@@ -79,20 +79,11 @@ def suspended_greenlets(stream) -> None:
 
 
 def tree_cpu() -> dict[int, float]:
-    """CPU seconds, user and system, of this process and of each process
-    under it, by pid: this process's, less the calling thread's, with its
-    reaped children's, each live descendant's its own.
+    """CPU seconds, user and system, of this process and each process under it, by pid.
 
-    This process's own is read from the clocks the kernel keeps to the
-    nanosecond, the two back to back: ``os.times`` counts in clock ticks, so
-    less a thread clock it grows by a whole tick whenever the calling thread's
-    own reads cross one, and a walk between the two would count as work.
-
-    The standard library reads only this process and its reaped children,
-    so a live descendant is read from the kernel: ``/proc`` on Linux, libproc
-    on macOS. Both through ``os`` and ``ctypes`` calls alone, since this runs
-    on the watch's thread while a test may have patched ``open``, ``Path`` or
-    ``subprocess``.
+    The standard library reads only this process and its reaped children, so a
+    live descendant is read from the kernel, through ``os`` and ``ctypes``
+    alone, since a test may have patched ``open`` or ``subprocess``.
     """
 
     own = process_time() - thread_time()
@@ -181,13 +172,8 @@ class StallWatch:
     """Fail the test or class fixture a test process is in once it has made no
     progress for ``seconds``, saying where it is stuck.
 
-    A daemon thread waits for the deadline each ``mark`` moves, reading the CPU
-    time of the process's tree as it waits: a reading that grew by at least
-    ``IDLE_SHARE`` of a core moves the deadline too, since wall time is what
-    load stretches. At the deadline it reports and interrupts the test thread,
-    whose handler raises ``Stalled``. With no mark within ``grace`` the process
-    exits, a parallel worker first telling Django's parent so the run stops
-    (docs/Development.md).
+    CPU time of the process's tree moves the deadline too, since wall time is
+    what load stretches (docs/Development.md).
     """
 
     def __init__(

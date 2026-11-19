@@ -1,12 +1,5 @@
-"""An agent HQ has seen: it called over the API and MCP from the server, a
-device the operator approved for it, was refused a change to the tailnet the
-operator blocked it from, and asked to answer the photos library's name with
-the server's tailnet address, which waits because the operator asks to see the
-records it changes first, and holds one update stream open. Beside it, the agents of the last week (``lately``):
-one calling from the owner's laptop, a device that waits for the owner's
-approval, and once from the server's own loopback, which no tailnet device
-sent and so was refused, holding every update stream it may; and one a
-viewer signed in, calling from the owner's phone, which the owner blocked.
+"""An agent HQ has seen, with its devices, a refusal, a held change and an open
+stream, and the agents of the last week (``lately``).
 
 Each step runs the way a verified token's call does in production, so the
 Agents page and the approvals queue read what HQ itself records.
@@ -164,14 +157,9 @@ def asks_to_open_the_policy():
 
 
 def lately(owner=None):
-    """The week behind the Agents page, after the months ``history.settle`` dates.
-
-    An assistant the owner signed in through their own sign-in, carrying every
-    permission HQ offers but one, calling over MCP faster than HQ lets it, and
-    once from the server's loopback, which no tailnet device sent; a reader a viewer
-    signed in, granted more than their role, calling from the owner's phone,
-    which the owner blocked there; a build runner calling as itself, which the
-    owner blocked; and the owner's phone, registered as their own device.
+    """The week behind the Agents page, after the months ``history.settle``
+    dates: an over-rate assistant, an over-granted reader, a blocked runner
+    and the owner's phone.
     """
 
     # The server was approved for the agent the day it was first seen (``history.settle``).
@@ -260,12 +248,9 @@ def _assistant_claims(person=PERSON):
 def _listen(principal, streams):
     """``principal`` holding ``streams`` update streams open, each opened as the MCP door opens one.
 
-    HQ counts a stream in its one serving process's memory, so these are held
-    for the life of the process that builds the estate: a page it draws shows
-    them, as the demo, ``dev:look`` and the browser gates draw, and a server
-    the ``seed`` command filled from another process holds none. A database
-    rolled back gives none of them back, so an estate built again in the same
-    process opens only those it lacks.
+    A stream lives in the serving process's memory, so these last as long as
+    the process that builds the estate, and a rebuild opens only those it
+    lacks.
     """
 
     with doors.mcp():

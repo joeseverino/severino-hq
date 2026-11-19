@@ -1,11 +1,8 @@
 """tailscaled's LocalAPI on its Unix socket: which device is at an address, asked per request.
 
-The one live read of the tailnet. ``whois`` answers from the daemon's own
-netmap, so the device is the WireGuard peer that opened the connection, with
-no polled reading between them to go stale. Only an agent's admission asks
-(``agent_devices.place``); a page never does. Where the socket is absent (a
-developer's Mac, a deployment without Tailscale) HQ has no tailnet to place a
-call on, and says so (docs/Security.md#agents).
+The one live read of the tailnet, from the daemon's own netmap, so no polled
+reading can go stale between them. Only an agent's admission asks
+(docs/Security.md#agents).
 """
 
 import http.client

@@ -1,27 +1,9 @@
-"""Call one MCP tool as the operator, from a shell on the host.
+"""Call one MCP tool as the operator, from a shell on the host, or as an agent
+on a development server (docs/Development.md).
 
 The shell already requires the operator's own credentials, so there is no
-shared token; agents use MCP, each under its own identity. The contract is the
-MCP tool surface itself, so the two cannot drift: ``{"tool": "<name>",
-"arguments": {...}}`` on stdin, the tool's JSON result as an MCP caller receives
-it on stdout. A refusal is the doors' ``{"ok": false}`` answer on stdout, its
-message on stderr, and a non-zero exit.
-
-``--agent <client> --grant <permission>`` makes the call as that agent instead,
-on a development server, so an agent's path is walked without an identity
-provider. Its security properties:
-
-- It answers only with DEBUG on and when every host Django serves is a
-  loopback one, as a scratch server's are, and refuses otherwise, so it
-  never acts on a server anyone else reaches.
-- The principal is ``agent_principal``'s of the grant named, the one way a
-  token becomes a principal, so it holds no permission the command line did
-  not name and none an agent's token could not carry. A name HQ does not
-  grant an agent is refused, never dropped.
-- The call is let through as a verified token is (``agent_admission.admitted``)
-  and served by the MCP server's own tool call, in an operation bound to the
-  agent alone, so its rate, brakes, authorization and approval are the ones
-  an agent meets over /mcp/.
+shared token, and the contract is the MCP tool surface itself, so the two
+cannot drift.
 """
 
 import json

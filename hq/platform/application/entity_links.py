@@ -113,12 +113,9 @@ NODE_KINDS: Mapping[str, NodeKind] = {
 def record_name(kind: str, spec: Mapping[str, Any], key: str = "", *, leads: bool = True) -> str:
     """The name a record stands for, from its settings; its key when it has none.
 
-    A key is HQ's filing of a record. What a person knows it by is the name it
-    answers for and where that leads, or the name the thing itself carries. A
-    kind that is called something else says so (``ProviderSpec.name``). A
-    certificate keeps its key: it covers many names and is known by its own.
-    ``leads=False`` leaves out where the name leads, for a sentence that
-    says that itself.
+    A key is HQ's filing; a person knows a record by the name it answers for. A
+    certificate keeps its key, since it covers many names. ``leads=False``
+    leaves out where the name leads.
     """
 
     provider = PROVIDERS.get(kind)

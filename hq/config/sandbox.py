@@ -1,12 +1,8 @@
 """Where a test run or a gate writes, kept out of the working tree and out of every other run.
 
-Each run gets a temporary directory of its own, as Bazel gives each test its
-TEST_TMPDIR: made by the process that starts the run, named to every process it
-starts (parallel workers, the browser's driver, a controller it builds) as their
-TMPDIR, and removed when it ends, so whatever any test makes there goes with it.
-A gate's process that names no database (``SEVERINO_SANDBOX``, which mise.toml's
-django template sets) is run the same way, its database a new file in that
-directory. An explicit setting still wins.
+Each run gets a temporary directory of its own, as Bazel's TEST_TMPDIR, named
+to every process it starts as TMPDIR and removed when it ends. An explicit
+setting still wins.
 """
 
 import contextlib

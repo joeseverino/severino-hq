@@ -1,13 +1,8 @@
 """The permissions HQ asks an operator to grant, one table per provider.
 
-Each member reads the way the provider's own screen names the permission,
-where the operator grants it, and carries the name its API takes (``api``),
-which the minting tasks resolve. Where the two differ, the text HQ shows names
-both. Every reading's ``requires``, a connection's ``writes``, the setup card
-and a gap's text take their names from these tables, and ``test_permissions``
-fails a permission name written anywhere else.
-
-A member is a ``str``, so a reader joins, sorts and compares it as one.
+Each member reads as the provider's own screen names it and carries the name
+its API takes (``api``). Every other text that names a permission takes it from
+here, which ``test_permissions`` holds.
 """
 
 from enum import StrEnum

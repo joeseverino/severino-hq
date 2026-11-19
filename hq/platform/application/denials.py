@@ -1,11 +1,9 @@
 """Refusals, recorded in the audit log.
 
-An authenticated caller's refusal gets its own row. A rejected credential proves
-nothing about its sender, so those are counted per surface, source and reason
-per minute. An agent refused for asking too much is counted the same way per
-agent, in memory between writes, so a flood writes a row a minute rather than
-a row a call. The credential itself is never recorded, and recording never
-blocks the refusal.
+A rejected credential proves nothing about its sender, so those, and an agent
+refused for asking too much, are counted per minute, so a flood writes a row a
+minute. The credential is never recorded, and recording never blocks the
+refusal.
 """
 
 import logging

@@ -339,15 +339,11 @@ def register_audit(
 ) -> None:
     """Register a model so create/update/delete events land in the audit log.
 
-    `redact` names fields whose values never reach the log, though the change
-    is still reported (a token rotated is worth logging). `redact_for` names
-    more for one instance, where it depends on the row (a declaration of a
-    withheld kind). `connection` returns the connection_ref an instance's work
-    goes through; `observation` names fields that only record HQ looking.
-    `subject` returns the key of the record an instance's rows are about, so
-    one query on the row's `subject` reads that record's whole story.
-    `required` fails the save with its row, for a model whose change must not
-    commit unrecorded (a person's access or an agent's standing).
+    `redact` names fields whose values never reach the log, `redact_for` more
+    for one instance. `connection` gives an instance's connection_ref,
+    `observation` the fields that only record HQ looking, `subject` the record
+    a row is about. `required` fails the save with its row, for a change that
+    must not commit unrecorded.
     """
 
     if model in _AUDITED_MODELS:

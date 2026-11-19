@@ -1,12 +1,7 @@
-"""For an extension's source tree: the static checks it must pass.
+"""For an extension's source tree: the static checks it must pass, each read without importing the extension.
 
-Each read without importing the extension: its templates use only the public
-pieces of the host's, derived from the host's own templates and tags as the
-check runs (``template_contract.describe``), and no page sentence closes on a
-value by hand. What its Python
-imports is Ruff's to hold (tools/pipeline/extension-imports.toml), and the
-host's ast-grep rules ``plugin:check`` names hold the rest
-(tools/pipeline/check-plugin.sh).
+Its Python imports are Ruff's to hold (tools/pipeline/extension-imports.toml)
+and the rest the ast-grep rules ``plugin:check`` names.
 """
 
 import argparse

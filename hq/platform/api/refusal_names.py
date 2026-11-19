@@ -75,12 +75,8 @@ def call_kinds() -> tuple[CallKind, ...]:
 def refusal_name(status: int, codes: list[str]) -> str:
     """The component name for refusing at ``status`` with ``codes``, from them alone.
 
-    The set every endpoint answers there is named for the status; one code at
-    a status no endpoint answers, for that code; any other set, for the kind
-    of call that answers exactly it: the words the kinds answering it share,
-    then the status. Two operations answering the same codes so share one
-    response, and no order of routes moves a name. A set no kind answers fails
-    the build here, and a name two sets reach fails it in ``refusal``.
+    So two operations answering the same codes share one response, and no order
+    of routes moves a name. A set no kind answers fails the build here.
     """
 
     phrase = pascal(HTTPStatus(status).phrase)

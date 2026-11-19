@@ -61,14 +61,10 @@ class Identity:
 
     @property
     def corroborated(self) -> bool:
-        """Whether two independent systems agree on who is asking.
+        """Whether two independent systems agree on who is asking: the session's person and the tailnet device's owner.
 
-        The session says who signed in; the tailnet says which account owns the
-        device the request came from. Neither consults the other, so agreement
-        between them is independent corroboration. Different account
-        namespaces require an explicit link; HQ does not infer equivalence
-        from similar-looking names. A token call has no session, so the link
-        is the person's approval of the device for that agent.
+        Different namespaces need an explicit link, never inferred from similar
+        names. A token call's link is the person's approval of the device.
         """
 
         if self.agent:

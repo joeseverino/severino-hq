@@ -223,12 +223,9 @@ def locate(
 ) -> Origin:
     """Match a forwarding address to a machine, and if certain, a container.
 
-    The machine is ``application.locate``'s answer; this adds loopback and the
-    observed container. ``at`` carries the estate-wide readings across a loop of
-    lookups, and ``near`` is the machine the forwarding proxy runs on, where a
-    docker network's container name resolves first. ``loopback_on`` is the
-    machine the address was read on when the caller knows it (a controller
-    reporting its own connection): a loopback address is that machine.
+    ``at`` carries the estate-wide readings across a loop of lookups, ``near``
+    is the forwarding proxy's machine, and ``loopback_on`` the machine a
+    loopback address was read on.
     """
 
     machines = declared_machines() if machines is None else machines

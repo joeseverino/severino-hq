@@ -1,11 +1,7 @@
 """The runs of HQ's playbooks as a readable resource, declared beside Jobs.
 
-An agent or a client that asked for a run reads it here by the operation id
-its answer carried, or lists the runs of a playbook, a machine or its own
-correlation id. Each run says what Jobs shows of it to anyone who may read
-it, and nothing more: its machines, who asked and who agreed to it, the
-worker holding it, each task's host, name, outcome and message, and the
-kinds of reading its playbook stated.
+Each run says what Jobs shows of it to anyone who may read it, and nothing
+more.
 """
 
 import uuid

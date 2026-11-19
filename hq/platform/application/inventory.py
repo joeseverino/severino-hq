@@ -233,15 +233,10 @@ def _summary(row: ProviderInventory) -> dict[str, Any]:
 
 
 def confirm_observed(payload: dict[str, Any]) -> int:
-    """Mark every declaration the sweep just listed as seen, and confirm the
-    ones still matching as observed.
+    """Mark every declaration the sweep just listed as seen, and confirm the ones still matching as observed.
 
-    Nothing queues a reconcile for a resource that has not drifted, so without
-    this an unchanged declaration would never be recorded as observed. Only
-    where the spec still matches the live record: calling a drifted one
-    observed would hide the difference this whole model exists to surface. A
-    drifted one was still listed, so it takes the read's moment, and is never
-    missing from it.
+    Nothing else records an unchanged declaration as observed. A drifted one is
+    never called observed, which would hide the difference.
     """
 
     seen = timezone.now()
@@ -462,12 +457,8 @@ def _canonical_document(text: str) -> str:
 def _record_drift(resource: ManagedResource, drift: tuple[tuple[str, str, str], ...], record: Any) -> None:
     """Say what the sweep found instead, rather than leaving the last good word.
 
-    Not marked observed. The disagreement is named field by field because
-    which side is wrong is not HQ's to decide: often the declaration is out of
-    date, and an operator sees that only if HQ says which value it is arguing
-    about. A difference only in what the thing reports of itself is its
-    status, so the record as read becomes it, and its state and its condition
-    say the same read.
+    Named field by field, since which side is wrong is the operator's to
+    decide.
     """
 
     # ``Drifted`` asserted true, not ``Ready`` asserted false. A condition here

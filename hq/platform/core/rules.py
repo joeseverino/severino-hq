@@ -22,15 +22,9 @@ RULE = "rule"
 class Rule(models.CheckConstraint):  # noqa: PLW1641 - unhashable, as Django's CheckConstraint is, since both compare by value
     """A check constraint whose violation is reported beside ``field``.
 
-    A bound on one number a form control should also carry is field validators
-    with a check constraint behind them (``application.business_use``). Added to
-    a table with rows, its migration fails on a row that breaks it, so
-    ``manage.py constraint_preflight`` counts those first.
-
-    ``pattern`` is, for a rule about the one text column ``field``, what a
-    value matches exactly when the row keeps the rule, so the command that
-    writes the column refuses the rest and its schema says so
-    (``stored_columns.stored_rules``).
+    ``pattern``, for a rule about one text column, is what a value matches when
+    the row keeps the rule, so the command that writes the column refuses the
+    rest (``stored_columns.stored_rules``).
     """
 
     def __init__(self, *, field: str = "", pattern: str = "", **kwargs: Any) -> None:

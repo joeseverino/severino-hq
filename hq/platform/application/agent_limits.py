@@ -1,18 +1,9 @@
-"""How much one agent may ask of HQ: calls at once, its own and everyone's, a call rate, and listen streams open at once.
+"""How much one agent may ask of HQ: calls at once, a call rate, and listen streams open at once.
 
-Both agent doors ask it of a caller they authenticated. It is held in this
-process's memory, which every request sees because HQ serves from one process
-(the image's CMD; ``test_one_serving_process`` holds it), and an agent that is
-not calling holds nothing: a count back at zero and a rate fully recovered are
-both removed. The settings beside ``SEVERINO_AGENT_CALLS_AT_ONCE`` set the
-numbers.
-
-The rate is a token bucket kept the way the generic cell rate algorithm keeps
-one: a single time per agent, when its bucket is full again. The standard
-library has no bucket; pyrate-limiter, already locked as a test tool's
-dependency, keeps a timestamp per call and a background thread to expire them,
-and django-ratelimit needs a cache shared across processes with an atomic
-increment, and a Django request, which the MCP door does not have.
+Held in this process's memory, which every request sees because HQ serves from
+one process (``test_one_serving_process``). The rate is a generic cell rate
+algorithm bucket, one time per agent: pyrate-limiter keeps a timestamp per call
+and a thread, and django-ratelimit needs a shared cache and a Django request.
 """
 
 import math

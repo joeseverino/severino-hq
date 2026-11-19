@@ -1,12 +1,8 @@
 """How every HQ process imports: lazily (PEP 810), so it holds only what its work reached.
 
-Each entrypoint (manage.py, the ASGI and WSGI applications) switches it on
-before it imports anything else. From then on a module-level import binds a
-name and loads its module when that name is first used. Registration is never
-an import's side effect: HQ's lives in each app's ``ready()`` and Django's own
-autodiscovery (apps, URLconfs, template libraries), which import by name and so
-load at once. A library that registers something as it is imported, where no
-reader imports it first, is named in ``EAGER``.
+Registration is never an import's side effect: it lives in each app's
+``ready()`` and Django's autodiscovery. A library that registers as it is
+imported is named in ``EAGER``.
 """
 
 import sys
@@ -88,13 +84,9 @@ def lazily() -> None:
 def eagerly() -> None:
     """Imports run as written from here on, whatever an entrypoint asks, only an explicit ``lazy`` one waiting.
 
-    For a process that judges what HQ reaches by what it loaded: a lazy one
-    loads only what its own run happened to use, so a module-level import
-    stays out of ``sys.modules`` and a deleted dependency never fails to load.
-    Python's own switches (``-X lazy_imports``, ``PYTHON_LAZY_IMPORTS``) only
-    set the mode a process starts in, which ``lazily()``'s
-    ``sys.set_lazy_imports`` replaces, so the switch is here. Some explicit
-    ``lazy`` imports break an import cycle, so those still wait.
+    For a process that judges what HQ reaches by what it loaded, which a lazy
+    import would hide. Explicit ``lazy`` imports still wait, since some break
+    an import cycle.
     """
 
     if sys.get_lazy_imports() == "all":

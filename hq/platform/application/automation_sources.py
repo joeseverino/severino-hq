@@ -1,14 +1,10 @@
-"""Refresh: asking HQ's runner which playbooks the repository it holds
-declares, and storing what it found as a scan result HQ judged.
+"""Refresh: asking HQ's runner which playbooks its repository declares, and
+storing what it found as a scan result HQ judged.
 
-Nothing is fetched here. A Refresh queues one scan of the automation source
-(``automation.source:scan``) and rings the worker's doorbell; the worker reads
-the tip of the repository's default branch with the token only it holds and
-reports a catalog over the bridge (``SourceCatalog``). HQ holds each sidecar
-to ``ProcedureDeclaration``, the model it has one home in, and stores the
-catalog with every way a procedure falls short. A proposal is never adopted
-and never runnable. How the scan reads a repository: docs/Architecture.md,
-"Refreshing the playbooks".
+Nothing is fetched here: the worker reads the repository with the token only it
+holds and reports over the bridge. A proposal is never adopted and never
+runnable. How the scan reads a repository: docs/Architecture.md, "Refreshing
+the playbooks".
 """
 
 import json

@@ -802,11 +802,8 @@ def narrowed_findings(*, principal: Principal, **narrowing: object) -> NarrowedF
     """The findings ``narrowing`` keeps and the summary of them, for every door
     that answers a read of the open problems.
 
-    ``narrowing`` is judged by ``FindingsQuery`` once the caller may read.
-    ``severity`` is a floor (``attention`` also returns ``serious``) and
-    ``limit`` bounds how many are returned, most severe first. The summary
-    still counts every finding, and says how many came back and whether the
-    limit held some back.
+    The summary still counts every finding, and says whether ``limit`` held
+    some back.
     """
 
     query = FindingsQuery.model_validate(narrowing).model_dump()

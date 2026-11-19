@@ -62,12 +62,8 @@ _ONE_PORT = re.compile(r"(?:(tcp|udp):)?([0-9]+)")
 def loopback_grants() -> tuple[LoopbackGrant, ...]:
     """Each grant port on a machine where what HQ knows listens there is bound to loopback.
 
-    HQ knows two listeners: its own, from where its image serves, and each
-    container's, from Docker's port bindings. A port is said only where one
-    of them binds it to loopback and nothing else HQ reads serves it there:
-    no container publishing it on another address, no host-network container
-    exposing it, no SSH or service connection on it. A machine whose
-    containers were not read says nothing.
+    Said only where nothing else HQ reads serves the port there, and never for
+    a machine whose containers were not read.
     """
 
     with projection_scope():

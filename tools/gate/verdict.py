@@ -1,12 +1,7 @@
-"""A gate's last lines name what failed and the command that reruns just that,
-so nobody reads back through its output, and above them each failed task's
-last lines and each failed test's last frame.
+"""A gate's last lines name what failed and the command that reruns just that, so nobody reads back through its output.
 
-Each failed task is named as mise's run report names it, its last lines as
-mise logged them, and each failed test as the test runner records it, and `var/gate/<name>.txt` keeps the lines whole, beside the
-run before it in `<name>.prev.txt`, under a first line naming the tree the gate
-judged; `var/gate/<name>.log` keeps all the run printed (docs/Development.md,
-The gates).
+`var/gate/<name>.txt` keeps the lines whole beside the run before it, and
+`var/gate/<name>.log` all the run printed (docs/Development.md, The gates).
 `python -m tools.gate.verdict <name> <command...>` runs one command so, and
 `--step <label> <command...>...` several.
 """
@@ -459,16 +454,10 @@ OPENED: Gate | None = None
 class Gate:
     """One gate's run, opened before anything it prints and closed on its verdict.
 
-    Its first line names the file the verdict is kept in and the log that
-    keeps all the run printed: a long output read back through a tool that
-    keeps only its head loses the last line, and the head is the one part
-    every cut copy shows. `close` is reached only through an opened gate, so
-    no gate ends on a verdict without having said where it is kept.
-
-    The kept file opens on the tree the gate judged, taken as it opens and
-    again as it closes, so a pass is attested from the file alone: it holds
-    for a commit whose tree that line names. A checkout that changed in the
-    run judged no one tree, and the line says so.
+    Its first line names where the verdict and the log are kept, since a cut
+    copy always shows the head. The kept file opens on the tree the gate
+    judged, read as it opens and closes, so a pass is attested from the file
+    alone.
     """
 
     def __init__(self, name: str, root: Path = JUDGED) -> None:

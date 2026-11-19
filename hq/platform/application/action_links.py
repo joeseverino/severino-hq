@@ -85,12 +85,9 @@ COMMAND_ROUTE = "command"
 def command_url(name: str, target: str = "", *, kinds: Iterable[str] = (), **query: str | tuple[str, ...]) -> str:
     """The one way to link to a command's form: its page, its target, encoded.
 
-    Every remedy, action item and page action reaches a command through here,
-    so a target is always encoded the same way the form reads it back, and a
-    command whose route is not mounted yields "" rather than a dead link.
-    ``kinds`` narrows the target choices (``?kind=`` once per kind), and a
-    tuple in ``query`` is sent once per value (a run's machines). An
-    architecture test holds every other module to it.
+    So a target is encoded as the form reads it back, and an unmounted command
+    yields "" rather than a dead link. An architecture test holds every other
+    module to it.
     """
 
     try:
@@ -124,13 +121,8 @@ def command_action(
     """A link that runs a command, in the command's own words.
 
     The one place an ``ActionLink`` names a capability (an architecture test
-    holds every other module to it), so its label and effect are read from the
-    declaration and cannot drift from it. Its address and method are the
-    command's too (``pages.command_reach``), as a page's control for it is:
-    the route whose view runs it, posted where that view draws no page.
-    ``target`` is the record it runs on, or the route's arguments by name;
-    ``query`` is added to the address. A ``url`` and ``method`` handed in
-    are the remedies' that still carry their own (``FindingRemedy``).
+    holds the rest), so its label, effect, address and method come from the
+    declaration and cannot drift from it.
     """
 
     spec = capabilities.command_spec(capability)

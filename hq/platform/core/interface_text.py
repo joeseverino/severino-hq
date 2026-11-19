@@ -1,11 +1,8 @@
 """What HQ and its extensions show people: their markup and counts, read as source.
 
-Their wording is Vale's (``tools/lint/vale``, ``mise run lint:prose``). These
-are properties of the source, so a gate reads them and a running HQ never does:
-``read`` walks each tree once, and ``InterfaceTextTests`` (the architecture
-tests) fails on anything it finds. The walk imports only the standard library
-and answers JSON, so a test runs it in a process of its own (``apart``), which
-gives back what its parses took when it exits.
+A gate reads these and a running HQ never does (``InterfaceTextTests``). The
+walk imports only the standard library, so a test runs it in a process of its
+own (``apart``).
 """
 
 import ast

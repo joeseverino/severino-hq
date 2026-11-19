@@ -117,14 +117,11 @@ CACHE_HINTS: dict[CacheableMethod, CacheHint] = {
 
 
 def structured(result: Any, tool: Tool | None = None) -> tuple[Any, Refusal | None]:
-    """``result`` as JSON a caller reads it, MCP's and the operator's shell's
-    alike, and the refusal it stands for.
+    """``result`` as JSON a caller reads it, MCP's and the operator's shell's alike, and the refusal it stands for.
 
-    A held change is ``ok`` with ``status: "awaiting_approval"``, and stays a
-    success. A refusal (``ok`` false) is answered whole, as the ``Refusal`` it
-    stands for, so a code the contract does not hold reaches the caller as
-    ``operation_failed``, as it does from every other door. A success leaves
-    out each field that holds its default, as ``tool`` answers it.
+    A held change stays a success. A refusal is answered as its ``Refusal``, so
+    an unknown code reaches the caller as ``operation_failed`` as from every
+    door.
     """
 
     refusal = refusal_of(result) if isinstance(result, dict) and result.get("ok") is False else None

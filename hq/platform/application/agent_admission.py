@@ -1,12 +1,7 @@
 """How a bearer token is let through an agent door, the same on /mcp/ and the machine API.
 
-Each door parses its own transport and answers in its own protocol; what it
-asks is answered here, once. ``admit`` says who a token is, ``refused``
-whether that caller may act right now, ``at_once`` holds one of its calls at
-once, and ``stream_opened`` one of its listen streams. They are apart because
-the doors ask them at different moments: the machine API at the door, MCP at
-each tool call, so a paused or throttled agent keeps its connection and its
-next call after that runs on it.
+Each door parses its own transport; what it asks is answered here, once. The
+questions are apart because the doors ask them at different moments.
 """
 
 import contextlib
@@ -58,14 +53,10 @@ _carried: ContextVar[Limited | AgentRefusal | None] = ContextVar("hq_agent_stopp
 def admit(bearer: str, *, interface: str, source: str) -> Principal | Stopped | Unadmitted:
     """The principal ``bearer`` names on ``interface``, or why there is none.
 
-    A refused token is recorded against ``source``, the peer that sent it,
-    since no identity was established. An admitted one spends one call of its
-    rate before anything is written, so a flood costs no write past its
-    refusal's; within its rate it is placed on the tailnet device at
-    ``source`` and observed, before any brake, so a paused agent and a device
-    awaiting approval are still registered. A call the tailnet could not
-    place is stopped here, where the two doors meet, so neither door can let
-    it through as the client alone.
+    A refused token is recorded against ``source``. An admitted one spends its
+    rate before any write, so a flood costs no write past its refusal. A call
+    the tailnet could not place is stopped here, where the two doors meet, so
+    neither can let it through as the client alone.
     """
 
     if not bearer:

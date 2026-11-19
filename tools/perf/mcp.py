@@ -1,20 +1,10 @@
-"""`mise run audit:mcp [--base <ref>] [--defer-build]`: what HQ's MCP tool list costs a client, and the server a process.
+"""`mise run audit:mcp [--base <ref>] [--defer-build]`: what HQ's MCP tool list costs a client and the server a process.
 
-For the host alone and for the extension set dev:scratch composes, each measured by
-tools.perf.mcp_probe in a process of its own, served as production serves it: the tools/list
-answer's bytes and approximate tokens, each tool's part of it, the bytes of the prompt, resource and
-resource template lists, of a describe_resources answer and of the action queue's page through
-list_resource on the standard data set, each listed tool's answer there, its bytes and the share of
-them that is empty values and long text said again, and what loading the server and
-answering its first requests added to the process, the API document's build and the SDK's modules
-named apart, and what as many slow calls at once as the agent limits let in cost against the same
-calls one after another. With ``--base``, the same of the ref beside this tree's, measured in a throwaway
-worktree of it by this tree's probe. With ``--defer-build``, this tree again with the SDK's wire
-models built on first use, as pydantic's ``defer_build`` would have them. Each run is kept as
-var/perf/mcp-<commit>-<time>.json.
-
-Tokens are approximate, four bytes of JSON to a token: the stack has no tokenizer, and a model's
-own count is a request to its provider.
+For the host alone and the dev:scratch extension set, each measured by
+tools.perf.mcp_probe in a process of its own. ``--base`` measures the ref too,
+in a throwaway worktree; ``--defer-build`` measures pydantic's ``defer_build``.
+Each run is kept as var/perf/mcp-<commit>-<time>.json. Tokens are approximate,
+four bytes of JSON to a token, since the stack has no tokenizer.
 """
 
 import json

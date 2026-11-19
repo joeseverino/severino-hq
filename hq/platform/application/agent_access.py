@@ -266,14 +266,9 @@ class AgentRemoved(TypedDict):
 def remove_agent(_command: AgentRemoveCommand, *, principal: Principal, current_key: str) -> AgentRemoved:
     """Remove one agent HQ has seen, by its subject, with its devices and its own rules. People only.
 
-    Removal grants nothing. A client that signs in again afterwards is a new
-    identity, as one HQ has never seen: its first call from each device waits
-    for approval again, and its grant is whatever its next token carries.
-    Removal never lifts a block, since the block lives on the row removed:
-    a blocked agent is refused until a person allows it, which is the one
-    way a block ends. What the agent did and asked for stays as history: the
-    audit log, which the Agents page counts its activity from, and the
-    changes it asked for, which a person still decides.
+    Removal grants nothing: a client that signs in again is a new identity
+    whose calls wait for approval again. It never lifts a block, which only a
+    person's allow ends. The audit log and held changes stay.
     """
 
     person(principal)

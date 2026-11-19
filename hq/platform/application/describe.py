@@ -1,26 +1,9 @@
 """What a field is, in a sentence, carried in its ``Annotated`` type.
 
-A leaf of its own, importing nothing of HQ, so a contract that must stay a
-leaf (``workflow_contracts``) describes its fields too. The other markers live
-in ``command_fields``, which re-exports this one.
-
-A description is the field's meaning, said once in the words a page shows,
-since a command's form shows it as the field's help. What the schema's
-keywords already say stays out of it: a closed set is the field's type (a
-``Literal`` from the constant the model's choices come from, so the schema
-carries its ``enum``), and a date's format is its ``format``. What only a
-client reading JSON needs (what null or empty means, a ``type:key`` shape,
-that the value is a slug or an id) is the marker's second part, ``api``,
-which the schema's description adds after the meaning and a form leaves off
-(``meanings``). A field whose label says all a person needs has only the
-``api`` part. ``lint:prose`` holds both, as every string under ``hq/``
-that can reach a page.
-
-A value a reader could not guess from the type (a name's pattern, a
-reference's shape) is the marker's ``examples``, which the schema carries as
-JSON Schema's ``examples``, through pydantic's ``Examples``: the API's viewer
-draws its sample answers and bodies from them, and generated API cases try
-them.
+A leaf importing nothing of HQ, so a leaf contract (``workflow_contracts``)
+describes its fields too. The meaning is in a page's words, since a form shows
+it as help; what only a JSON client needs is ``api``, which a form leaves off.
+What the schema's keywords already say stays out.
 """
 
 from collections.abc import Iterable

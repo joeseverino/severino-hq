@@ -1,11 +1,8 @@
-"""The CI legs a pull request's change can affect, as mise's ``--affected`` reads each leg's sources
-(docs/Development.md, What a pull request runs).
+"""The CI legs a pull request's change can affect, as mise's ``--affected``
+reads each leg's sources (docs/Development.md, What a pull request runs).
 
-    python3 -m tools.pipeline.legs <base> [head]
-
-prints each leg and whether it runs, and with ``GITHUB_OUTPUT`` set writes ``<output>=true|false``
-there and the table to ``GITHUB_STEP_SUMMARY``. Stdlib only: the job that runs it sets up no
-toolchain.
+``python3 -m tools.pipeline.legs <base> [head]``. Stdlib only: the job that
+runs it sets up no toolchain.
 """
 
 from __future__ import annotations

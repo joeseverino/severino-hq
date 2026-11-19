@@ -1,13 +1,8 @@
-"""All the work HQ started, as one list: its own jobs and the automation work
-it queued (each procedure's runs and the source's scans), each said in the
-same words and drawn in the same row shape.
+"""All the work HQ started, as one list: its jobs and its queued automation work, in the same words and row shape.
 
-A job stays a ``jobs.Job`` and a run an ``OperationRequest``, since the
-runner's lock and the worker's claim and lease need each record as it is. The
-list is a database union of the two, filtered, ordered and paginated there,
-whose page of ids is then read back with one query per source, so a page
-costs the same however much work has run. A held run is an
-``ApprovalRequest``, not an operation, and is not listed here.
+Each stays its own record, since the runner's lock and the worker's lease need
+it as it is. The list is a database union, so a page costs the same however
+much work has run.
 """
 
 import json

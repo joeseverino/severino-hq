@@ -1,12 +1,7 @@
 """Findings about what each container runs, each with the help HQ derived.
 
-One per image version on its machine, naming every container that runs it,
-for a known advisory, for a newer release (an update is a chore to schedule,
-not a fire) and for being run by tag alone; and one per container for the
-serious checks of the standard it fails, offering its compose change
-(``application.container_hardening``) or, for the Docker socket, the
-declaration that holding it is the container's job. An image's are read once
-for the three rules about it; a container's are the container standard's
+One per image version on its machine for an advisory, a newer release or a bare
+tag, and one per container for the hardening standard it fails
 (``HARDENING_STANDARD``).
 """
 

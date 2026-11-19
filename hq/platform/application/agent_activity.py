@@ -1,12 +1,7 @@
-"""Each agent HQ has seen, as the Agents page shows it: its grant against its
-person's role, the devices it called from, what it did and was refused lately,
-and the listen streams it holds open now.
+"""Each agent HQ has seen, as the Agents page shows it: grant, devices, recent activity and open listen streams.
 
-The audit log names an agent's client as each event's ``actor`` and its device
-as ``device``, columns indexed with the time, so one windowed query over the
-last ``RECENT`` reads every agent's latest events and its counts together, one
-more each device's, and the page costs the same however long the log or how
-many agents and devices it holds.
+One windowed query over the indexed audit columns reads every agent's events,
+so the page costs the same however long the log.
 """
 
 from dataclasses import dataclass, replace

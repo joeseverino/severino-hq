@@ -1,11 +1,8 @@
-"""The worker's spans, for a trace viewer on a developer's machine: none
-unless ``OTEL_EXPORTER_OTLP_ENDPOINT`` names a collector
-(docs/Development.md, "Tracing").
+"""The worker's spans, for a trace viewer on a developer's machine: none unless
+``OTEL_EXPORTER_OTLP_ENDPOINT`` names a collector.
 
-Its own, since the worker imports nothing of HQ, and like HQ's: unset, as in
-the worker's image, which installs no SDK, each call does nothing and nothing
-of OpenTelemetry is loaded. A span carries the run's operation, procedure and
-outcomes, and never who asked for it or its parameters.
+Its own, since the worker imports nothing of HQ. A span never carries who asked
+for a run or its parameters.
 """
 
 import os

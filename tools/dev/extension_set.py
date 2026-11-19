@@ -1,12 +1,10 @@
-"""The extension set: named in this checkout's mise.local.toml from the extension checkouts themselves,
-and picked from there for each host tree a step composes.
+"""The extension set: named in this checkout's mise.local.toml from the
+extension checkouts themselves, and picked from there for each host tree a
+step composes.
 
-Each package is read the way admission reads it (tools.pipeline.plugin_identity),
-so the set named here is the one Compose builds. mise writes the file, which
-keeps every other value already in it.
-
-`pick` is the one place a step that composes HQ with its extensions learns
-which extension trees to load, so no step composes a set its host refuses.
+Each package is read the way admission reads it, so the set named is the one
+Compose builds. ``pick`` is the one place a step learns which trees to load, so
+no step composes a set its host refuses.
 """
 
 from __future__ import annotations
@@ -349,18 +347,14 @@ def pick(
     host: Path | None = None,
     environ: Mapping[str, str] = os.environ,
 ) -> Pick:
-    """The set ``environ`` names, as the host at ``where``, which ``speaks`` the plugin API it returns,
-    can load it.
+    """The set ``environ`` names, as the host at ``where``, which ``speaks`` the plugin API it returns, can load it.
 
-    Where ``host`` is the host's tree, a package is named from its repository's main checkout, and the
-    repository carries a branch named as the one that tree lands on, that branch is composed, as CI
-    composes a coordinated change: the worktree checked out
-    on it as it stands, else the branch's commit, unpacked under SNAPSHOTS. Each other package is asked
-    the API it requires. Where every one requires ``api`` and ``as_they_stand``, the trees named are
-    composed as they stand, uncommitted work included. Otherwise each repository's newest commit whose
-    manifests all require ``api``, made before ``before`` when given, is composed instead, unpacked under
-    SNAPSHOTS. Where it has none, no extension is composed, since the host refuses a package of another
-    API."""
+    A package whose repository carries the host tree's landing branch is
+    composed at that branch, as CI composes a coordinated change. Where every
+    package requires ``api`` and ``as_they_stand``, the trees are composed as
+    they stand; otherwise each repository's newest commit requiring ``api``
+    (before ``before``), or no extension where none does.
+    """
 
     plugins, sources = _named(environ)
     if not plugins:

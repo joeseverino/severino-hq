@@ -1,11 +1,7 @@
-"""The open problems about one thing, for that thing's own page.
+"""The open problems about one thing, for that thing's own page: the queue's items whose subject is that page.
 
-Every queue item names its subject, a link to that thing's page, so the problems
-about a machine, service, record, domain or connection are the queue's items
-whose subject is that page, as the queue's own cards; nothing is detected here.
-Only the host's sections are read: their queue is stored until the estate
-changes, while an extension's is composed per request about its own records.
-Each answer is the reader's, through ``attention.readable_by``.
+Nothing is detected here, and each answer is the reader's, through
+``attention.readable_by``.
 """
 
 from collections.abc import Iterable, Mapping

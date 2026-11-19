@@ -313,13 +313,9 @@ def enqueue(
     while one waits, and once for ``once``. Returns it and whether this call
     queued it.
 
-    ``once`` is what HQ's own work is queued once for (a generation, a
-    finding's evidence, a day's renewal), so the operation it already queued
-    answers before ``prepare`` checks anything. A caller's retry key is the
-    capability runner's (``execute_once``), never the row's. Otherwise
-    ``prepare`` checks the request and returns the record and the row's
-    fields. The key's unique column decides between two writers on one key:
-    ``get_or_create`` hands the second one the first one's row.
+    ``once`` is what HQ's own work is queued once for, answered before
+    ``prepare`` checks anything. A caller's retry key is the capability
+    runner's, never the row's.
     """
 
     key = once or f"{action}:{secrets.token_urlsafe(18)}"

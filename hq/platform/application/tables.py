@@ -304,12 +304,8 @@ class TableListMixin:
         """The rows of a list a projection fills, for what its address asks;
         None, the default, lists the model's queryset.
 
-        A projected list hands each filter, the search and the sort to its
-        projection as its parameters, so a ``TableFilter``'s ``lookup`` and a
-        ``TableSort``'s ``ordering`` go unread, its columns declare their kinds
-        with no model to read them from. A
-        host list still names the model its rows are derived from, which the
-        derived-estate gate reads.
+        A projection takes each filter, the search and the sort as parameters,
+        so a filter's ``lookup`` and a sort's ``ordering`` go unread.
         """
 
         return None

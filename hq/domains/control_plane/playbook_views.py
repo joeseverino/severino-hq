@@ -1,13 +1,7 @@
-"""The Playbooks page: the playbooks HQ runs from, the commit they were
-last adopted at, and, while a newer scanned commit waits, how it changes
-each playbook and a person's decision on each and on all of them.
+"""The Playbooks page: the adopted playbooks, their commit, and a newer scanned commit's changes awaiting a decision.
 
-Every value is the catalog's or a scan's (``automation_sources.standing``);
-the host names no procedure, machine or repository, and the source's
-repository is the deployment's own configuration, so the page names a
-commit by its branch and id alone. What a scanned commit changes is the
-audit entry that records the scan's read (``automation_sources.entry_url``),
-which View diff opens.
+Every value is the catalog's or a scan's (``automation_sources.standing``), so
+the host names no procedure, machine or repository.
 """
 
 from functools import cached_property

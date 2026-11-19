@@ -1,11 +1,8 @@
 """`mise run release:report [pages]... [--base <ref>]`: one release, after its Deploy job is green.
 
-Writes var/release/<commit>.md for this checkout's HEAD: its performance beside
-the release production ran before it (`perf --base`), production's memory and
-CPU, and the deploy host's health (release_readings.py, run there over SSH).
-Read-only everywhere: GitHub's deployments, the host as an unprivileged account.
-No standard tool composes these, so this joins the commands that already give
-each piece. A reading that fails is a row saying so.
+Writes var/release/<commit>.md: performance against the release before it,
+production's memory and CPU, and the host's health. Read-only everywhere. No
+standard tool composes these, so this joins the commands that give each.
 """
 
 import json

@@ -1,11 +1,7 @@
-"""The one way HQ adds a query to an address it links.
+"""The one way HQ adds a query to an address it links, keeping the query it holds and every value of a sequence.
 
-``with_query`` appends to whatever query the address already holds, before
-its fragment, and encodes through Django's ``urlencode`` with ``doseq``, so a
-sequence is one pair per value and a ``QueryDict`` keeps every value of a key.
-Django's own ``reverse(query=...)`` does this only for an address it reverses,
-and Starlette's ``URL.include_query_params`` replaces a key and loses the
-other values of a sequence, so neither serves an address another part built.
+Django's ``reverse(query=...)`` serves only an address it reverses, and
+Starlette's ``include_query_params`` loses a sequence's other values.
 """
 
 from collections.abc import Iterable, Mapping

@@ -1,13 +1,8 @@
 """The frame every page shares: its head, its actions, its section navigation.
 
-A view says what its page is (a title, a lede, the actions it offers) and
-``templates/page.html`` draws it the same way on every page, host or extension.
-A page template fills only ``{% block page %}``, so it never writes its own head
-or a form for one button (a posting ``button``). Class-based views mix in
-``PageMixin``; function views pass ``page_context`` to ``render``.
-
-Every page also reads under one capability, checked before its view runs
-(``page_refusal``, docs/Security.md#what-a-page-reads-under).
+A view says what its page is and ``templates/page.html`` draws it the same way
+on every page. Every page reads under one capability, checked before its view
+runs (docs/Security.md#what-a-page-reads-under).
 """
 
 import dataclasses
@@ -69,11 +64,7 @@ class PageDialog:
 class PageAction:
     """One control in a page's head or a row's end.
 
-    Built as it is, it is a link (GET) somewhere, and may open a dialog
-    (``modal``) while still pointing at a page that does the same job: a
-    ``PageDialog`` the page draws, or the id of one the host already draws on
-    every page. A control for a command is built by ``command`` alone, which
-    reads its words, address, method, danger and permission from the
+    A control for a command is built by ``command`` alone, from the
     declarations, so a hand-built one cannot post, look destructive or say
     words of its own.
     """
@@ -115,21 +106,13 @@ class PageAction:
         modal: PageDialog | str = "",
         confirms: bool = False,
     ) -> PageAction | None:
-        """The control that runs the command ``name`` on ``target``, or None
-        when the person the page is for may not run it.
+        """The control that runs the command ``name`` on ``target``, or None when the page's person may not run it.
 
-        Its words are the command's (``variant`` one of its declared modes),
-        it looks destructive when the command is, and it reaches the route
-        whose view declares it ``runs`` the command (``command_route``), else
-        the command's own page. A press that sends something (``value``,
-        ``fields``) posts it, as one to a view that answers only POST does;
-        any other opens the form or confirmation its view draws. ``target`` is the route's one argument, or its arguments
-        by name; ``query`` is added to the address (a ``next``, a form's
-        first values). One that opens its view's form may open it in a
-        dialog instead (``modal``). It is drawn unusable, saying why, while the command
-        would be refused for ``target`` (``refused``, else the work's own).
-        The press on the confirmation that view draws ``confirms``: it posts
-        there.
+        Its words (``variant`` a declared mode), danger, address and method are
+        the command's. ``value`` or ``fields`` make the press post, ``query``
+        is added to the address, ``modal`` opens a dialog, and ``confirms`` is
+        the press on its view's confirmation. It is drawn unusable, saying why,
+        while the command would be refused for ``target``.
         """
 
         if not runs_here(name):
@@ -496,12 +479,8 @@ class PageMixin(FragmentMixin):
 def page_capabilities(view: Callable[..., Any]) -> tuple[str, ...]:
     """What the routed ``view`` reads under: READ, and the one ``required_capability`` it declares.
 
-    Every page reads the estate HQ draws around it (its navigation, a
-    reference picker, the calendar's events), so READ is never replaced, only
-    added to. A class declares its own as an attribute, a function view
-    through ``hq_sdk.web.capability_required``. One that declares the
-    attribute and leaves it empty (``hq_sdk.web.CapabilityRequiredMixin``'s
-    default) is refused, since it meant to name one.
+    READ is never replaced, since every page reads the estate around it. A
+    declared but empty attribute is refused, since it meant to name one.
     """
 
     # A class view's attributes are its class's; a function view's are its own.

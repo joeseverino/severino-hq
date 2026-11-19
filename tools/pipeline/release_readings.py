@@ -1,11 +1,8 @@
 """What the deploy host says about the release it runs, read as any account: one JSON document.
 
-`mise run release:report` sends this file over SSH to the host's own python3
-(`python3 -I -`), so it is the standard library alone, at the host's Python,
-and reads only what an account with no sudo and no docker group can: the
-serving container's cgroup files (world-readable), systemd's record of each
-unit's last run, and the journal of the drift check's last run. A reading that
-fails is an ``error`` in its place, so one missing file never hides the rest.
+Sent over SSH to the host's python3, so it is the standard library alone and
+reads only what an account with no sudo or docker group can. A failed reading
+is an ``error`` in its place.
 """
 
 import json

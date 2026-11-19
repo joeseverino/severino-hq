@@ -103,16 +103,12 @@ def counted(count: int, one: str, many: str | None = None) -> str:
 
 
 def measured(value: Decimal | float | str | None, unit: str, places: int | None = None, *, plus: bool = False) -> str:
-    """A figure and its unit: "4.25 mi", "1,250 ft", "12%", "72°", "3 more", or
-    with no unit the figure alone.
+    """A figure and its unit: "4.25 mi", "1,250 ft", "12%", "72°", "3 more", or with no unit the figure alone.
 
-    ``places`` rounds the figure half away from zero, as ``floatformat`` does:
-    that many decimals, or with a negative count that many only when the figure
-    is not whole. Left out, a number is written as it came. A figure is
-    grouped by thousands and signed as ``money.signed_number`` signs one, so a
-    figure that rounds to zero is never negative, and ``plus`` signs a change.
-    Zero is a figure; a ``no_value`` is the missing mark. A figure already
-    written as words ("1:23") is written as it is.
+    ``places`` rounds half away from zero, as ``floatformat`` does, a negative
+    count only when the figure is not whole. Grouped and signed as
+    ``money.signed_number`` does, so a figure that rounds to zero is never
+    negative; ``plus`` signs a change. A ``no_value`` is the missing mark.
     """
 
     if no_value(value):

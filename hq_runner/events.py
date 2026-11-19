@@ -1,15 +1,9 @@
-"""A run's task outcomes as its report carries them: one per task and machine,
-struck of secrets and held to the bridge's ``RunEvent`` bounds; and what its
-playbook stated as it ended (``stated``), held to ``RunStated``'s.
+"""A run's task outcomes, struck of secrets and held to the bridge's bounds, and what its playbook stated.
 
-An event is built from four fields of what Ansible said (the host, the task's
-name, its outcome and its own one-line ``msg``), never from its whole result,
-its stdout or its arguments, so what a module returned beside its message
-never leaves the worker. A task marked ``no_log`` says only that it was hidden.
-The one line of stdout read is the error that stops a run before any task
-ends (``Stopped``), struck as a task's message is. HQ strikes the credential
-shapes it knows again at the bridge's door; this is the worker's own strike,
-of what it alone knows to be secret.
+An event takes four fields of what Ansible said, never its whole result or
+stdout, so what a module returned beside its message never leaves the worker.
+HQ strikes known credential shapes again at the bridge; this is the worker's
+own strike, of what it alone knows to be secret.
 """
 
 import json
@@ -146,14 +140,11 @@ def _printed(event: Mapping[str, Any]) -> str | None:
 
 
 class Stopped:
-    """Why Ansible stopped a run before any task ended: the first line it
-    printed as an error (a playbook or role file that does not parse, a module
-    no collection installed provides), with the file and line it named when
-    that file is in the project.
+    """Why Ansible stopped a run before any task ended: the first error line it
+    printed, with the project file and line it named.
 
-    It is the one event read from stdout, so it keeps that one line, struck of
-    secrets and clipped as a task's message is, and a path outside the project
-    (the worker's own directories) is never said.
+    The one event read from stdout, struck and clipped as a task's message is,
+    and a path outside the project is never said.
     """
 
     def __init__(self, project_dir: PurePath, secrets: Collection[str] = ()) -> None:
@@ -336,17 +327,11 @@ class _Parts:
 
 
 def stated(event: Mapping[str, Any], hosts: Collection[str] = (), secrets: Collection[str] = ()) -> Stated | None:
-    """What a playbook stated as it ended, from the ``playbook_on_stats``
-    event that ends its run, or None for any other event.
+    """What a playbook stated as it ended, from the ``playbook_on_stats`` event, or None for any other event.
 
-    ansible-runner carries a run's stats set with ``per_host: false`` as that
-    event's ``artifact_data``, each machine's merged into one where the stat
-    is keyed by machine. Only ``result``, ``readings`` and ``preview`` are
-    read; any other stat is dropped. What it states about a machine that is
-    not one of ``hosts``, the run's, is left out, so a run states nothing
-    about a machine it was not asked on; so is a part that is misshapen or
-    past a bound of ``RunStated``, and everything when all of it is past
-    ``STATED_BYTES``. What is kept is struck of secrets.
+    Only ``result``, ``readings`` and ``preview`` are read. A machine outside
+    the run's ``hosts``, a misshapen part or one past ``RunStated``'s bounds is
+    left out, and what is kept is struck of secrets.
     """
 
     data = event.get("event_data")

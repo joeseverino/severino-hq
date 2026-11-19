@@ -1,11 +1,8 @@
 """The root .gitattributes, written from the derived files the tasks declare.
 
-Each file a task's ``vars.writes`` names is marked linguist-generated, so
-GitHub folds it in a diff and audit:churn and audit:loc leave it out. git reads
-attributes only from files it tracks, never from a program, so the file is
-committed and lint:drift-gitattributes holds it to the declarations; its fix
-mode (`mise run fix`) writes it. Every other attribute is a hand-written one,
-kept in a .gitattributes in the directory it is about.
+Each file a task's ``vars.writes`` names is marked linguist-generated. git
+reads attributes only from tracked files, so the file is committed and
+lint:drift-gitattributes holds it.
 """
 
 from hq.platform.core.tests.task import usage

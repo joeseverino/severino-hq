@@ -59,17 +59,11 @@ TARGET_KINDS: dict[str, TargetKind] = {
 
 @cache
 def command_adapter(command_type: type) -> TypeAdapter[Any]:
-    """The one validator of a command and of the schema published for it,
-    closed at every depth: a field the command does not have is refused, never
-    dropped, so a misspelled or retired field cannot return success for work
-    the caller did not ask for.
+    """The one validator of a command and of the schema published for it, closed at every depth.
 
-    A stdlib dataclass or TypedDict with no config of its own takes the config
-    of whatever holds it, so the command and every such type inside it take
-    this one. Pydantic accepts a config only for a type that has none of its
-    own to hold, which an alias of the command is. A command is such a type;
-    ``CapabilitySpec`` refuses one whose own config leaves it open. A field a
-    model stores is held to its column's rules as well (``stored_columns``).
+    A field the command does not have is refused, never dropped, so a
+    misspelled or retired field cannot return success for work the caller did
+    not ask for.
     """
 
     alias: Any = TypeAliasType(command_type.__name__, stored_columns.held(command_type))
@@ -162,12 +156,9 @@ def takes_sent_fields(handler: Callable[..., Any]) -> bool:
 class Kept:
     """What a write to the record it targets keeps, so it needs only its target.
 
-    ``read`` takes the target, as its kind coerces it, and answers the record's
-    value for each field of the command, in the shape a caller sends it. The
-    fields sent are laid over that and the whole is validated as one command
-    (``capabilities.validate_command``). ``always_sent`` names a field the
-    record holds nothing to send back for (a replaced file), which the write
-    still requires.
+    ``read`` answers the record's value for each field; the fields sent are
+    laid over it and validated as one command. ``always_sent`` names a field
+    the record cannot send back.
     """
 
     read: Callable[[Any], Mapping[str, Any]]
@@ -385,13 +376,9 @@ def answer_type(spec: CapabilitySpec) -> Any | None:
     """What ``spec`` answers when it runs, the TypedDict its handler's return
     annotation names, or None where that names no precise shape.
 
-    The annotation is the one declaration of a capability's result, so every
-    door that publishes it reads it from there. A refusal the handler returns
-    rather than raises (``RefusalEnvelope``) is the runner's to answer, so it
-    is no part of the result. A plain dict, or an annotation that cannot be
-    resolved (an extension's name for a type it cannot import here), answers
-    None: such a capability is published as answering an object, and never
-    fails the document that lists it.
+    The annotation is the one declaration of a capability's result. An
+    unresolvable one answers None, so an extension's result never fails the
+    document that lists it.
     """
 
     try:

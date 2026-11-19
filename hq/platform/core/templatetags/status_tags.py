@@ -1,18 +1,8 @@
 """A status: one short state, drawn in its tone and said in sentence case.
 
-The one way a page draws a state (`{% status %}` in a template, `status_pill`
-in Python), so every state reads alike wherever it stands: "Online" and
-"Exited" beside "Running", never one page's "online" beside another's "Done".
-It is a pill, or with ``pill=False`` its words in its tone alone, as a figure
-that says which way it went is drawn among others, or with ``dot=True`` those
-words after a steady dot in the same tone, as a standing state reads ("Allowed",
-"Paused"), its words in the ink around them with ``ink="context"`` where
-they are a heading's or a menu's own words, or with ``icon=`` those words
-after an icon in the same tone in place of the dot, or with ``chip=True`` a
-neutral chip: one of a record's names (a technology, a domain, a role), said
-as written. A source test in
-`test_status_tags.py` refuses a pill or tone class written by hand in any
-template the host or an extension ships.
+The one way a page draws a state (`{% status %}`, `status_pill` in Python), so
+every state reads alike wherever it stands. `test_status_tags.py` refuses a
+pill or tone class written by hand in any shipped template.
 """
 
 from typing import Annotated, Any, Literal, get_args
@@ -115,23 +105,13 @@ def status_pill(
     icon: str = "",
     **data: object,
 ) -> SafeString:
-    """The pill for a state: ``parts`` its words, the first said in sentence
-    case and each held as ``breakable`` holds a value; ``tone`` its color,
-    a subject's state (``Toned``) its own when it is the first part.
-    ``pill=False`` draws the words in that color with no pill around them,
-    on fixed digit widths, and ``dot=True`` those words after a dot in that
-    color, which never moves; ``ink="context"`` leaves those words in the
-    ink around them, so only the dot carries the tone. ``chip=True`` draws
-    a name a record carries, in no tone and in its own case: "django" and
-    "example.com" stay as written. ``icon`` names a mark (partials/_icon.html)
-    drawn before the words of ``pill=False`` in their tone, where the dot
-    would stand, so a cell says its state by its mark as well as its color;
-    with ``ink="context"`` only the mark takes the tone.
+    """The pill for a state: ``parts`` its words, the first in sentence case; ``tone`` its color, a ``Toned``'s own.
 
-    ``href`` makes it a link, ``title`` names it on hover, ``tip`` gives it
-    HQ's tooltip (and the focus a tooltip needs), ``css`` adds classes (a
-    queue row's ``is-mark``), and each ``data_*`` keyword is a ``data-``
-    attribute, drawn as ``html_attributes`` draws one.
+    ``pill=False`` draws the words in that color alone, ``dot=True`` after a
+    steady dot, ``icon`` after a mark (partials/_icon.html), and
+    ``ink="context"`` leaves the words in the surrounding ink so only the dot
+    or mark is toned. ``chip=True`` draws a record's name in no tone and its
+    own case.
     """
 
     if not tone and parts and isinstance(parts[0], Toned):
@@ -233,16 +213,13 @@ def status(
     icon: Annotated[str, Describe("Its words after an icon in its tone, beside `pill=False`.")] = "",
     **data: Annotated[Any, Describe("Each a `data-` attribute.")],
 ):
-    """``{% status "Blocked" tone="attention" %}``: a state as a pill in a Tone,
-    a subject's state in its own words and tone (``{% status machine.state %}``),
-    or with ``pill=False`` as its words in its tone (``{% status change tone="good" pill=False %}``),
-    or with ``dot=True`` as those words after a steady dot (``{% status "Allowed" tone="good" dot=True %}``),
-    with ``ink="context"`` the words in the ink around them and only the dot toned,
-    or with ``icon=`` after a mark in its tone (``{% status "1 serious" tone="serious" pill=False icon="shield" %}``),
-    or with ``chip=True`` as a neutral chip for a name (``{% status domain chip=True %}``).
+    """``{% status "Blocked" tone="attention" %}``: a state as a pill in a
+    Tone, or a subject's state in its own words and tone (``{% status
+    machine.state %}``).
 
-    Several parts are one label ("HQ expects" and the value it expects), only
-    the first sentence-cased.
+    ``pill``, ``dot``, ``ink``, ``icon`` and ``chip`` are ``status_pill``'s
+    (``{% status "Allowed" tone="good" dot=True %}``). Several parts are one
+    label, only the first sentence-cased.
     """
 
     return status_pill(

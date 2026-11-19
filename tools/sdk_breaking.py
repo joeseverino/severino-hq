@@ -1,19 +1,10 @@
-"""lint:sdk-breaking: a change that breaks what ``hq_sdk`` offers an extension fails, unless
-``PLUGIN_API_VERSION`` moves with it.
+"""lint:sdk-breaking: a change that breaks what ``hq_sdk`` offers an extension
+fails, unless ``PLUGIN_API_VERSION`` moves with it.
 
-Griffe reads ``hq_sdk`` here and at the base, statically, and judges each change by its own checks
-(``find_breaking_changes``). Its ``check`` command is not used: it resolves no import from outside
-the package, and the SDK's exports are re-exported from ``hq``, so it would compare names alone; and
-it checks the base out on a branch named for the ref, which two worktrees checking against one base
-cannot both create. An addition breaks nothing, so there is nothing to regenerate.
-
-    python -m tools.sdk_breaking [base]
-
-The base is fast's: the merge base with the ref named, or else with the branch HEAD lands on.
-The breaks listed are those since that base. The version admits them when it differs from the
-base's or from the one released extensions speak, read at the merge base with the default branch:
-a branch stacked on another that already moved the version lands with it as one release, so each
-later break on it is admitted by that one move.
+Griffe's ``find_breaking_changes`` judges it. Its ``check`` command would
+compare names alone, since the exports are re-exported from ``hq``, and it
+checks the base out on a branch two worktrees cannot both create. A break is
+admitted by a version other than the base's or the released extensions'.
 """
 
 import io

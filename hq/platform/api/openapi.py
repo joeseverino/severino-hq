@@ -264,14 +264,8 @@ class _Builder:
         """Each request an answer leads to, as Link Objects (OpenAPI 3.2.0,
         section 4.20) keyed by the operation they call.
 
-        Derived from what the registries say of the answer: an answer typed
-        as ``READ_BY`` names leads to the read of what it carries; a page of
-        ``resource`` (``listed``, its query parameters ``query``) leads to the
-        page after it, with the same query, and its first item to that item's
-        read; a page or a record leads to each command on ``resource`` that
-        takes it as its target, with its ``updated_at`` where the command
-        checks for a stale write. A value is a runtime expression (section
-        4.20.3), one in a request body embedded in its string in braces.
+        Derived from the registries: a ``READ_BY`` answer, a page's next page
+        and first item, and each command that takes the record as its target.
         """
 
         found: dict[str, Any] = {}

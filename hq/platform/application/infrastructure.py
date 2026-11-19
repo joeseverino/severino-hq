@@ -498,13 +498,9 @@ def save_adopted(
 ) -> ResourceSaved:
     """Write down, under ``key``, a declaration of what HQ's last read found live.
 
-    Asks no consent and applies nothing: HQ's copy then equals what is live,
-    so nothing anybody would agree to, publish or manage has changed, and
-    refusing to *write down* a record that is already published would stop
-    nothing and leave every public record unadopted. It takes a ``Live``,
-    which only a read of the last sweep makes, so nothing authored reaches
-    it. HQ's own sweep adopts through this, outside any capability run, and
-    so does keeping what is live over HQ's copy (``accept_observed``).
+    Asks no consent and applies nothing, since HQ's copy then equals what is
+    live. It takes a ``Live``, which only a read of the last sweep makes, so
+    nothing authored reaches it.
     """
 
     read = live_read(live)
@@ -614,14 +610,9 @@ SAVED_REASON = "HQ's copy of it changed."
 def _apply_saved(resource: ManagedResource, replaced: dict[str, Any], *, consented: Consented) -> OperationItem | None:
     """Queue the reconcile that applies a saved declaration, as the save's own act.
 
-    Every kind's change is applied by the save that made it, so one consent
-    (a person's save, an approval) covers the apply and nothing is asked twice.
-    A kind the controller converges on its own would be queued at its next
-    pass anyway. A kind applied only by hand writes HQ's whole copy over what
-    is live, so its reconcile carries the copy it ``replaced``, and the claim
-    applies it only over a live record read since then as that copy
-    (``controller.over_live``): the live change is then exactly the change
-    that was saved or approved, and a live record that drifted is refused.
+    So one consent covers the apply. A kind applied only by hand carries the
+    copy it ``replaced``, and applies only over a live record read since as
+    that copy (``controller.over_live``), so a drifted record is refused.
     """
 
     kind_action = (resource.kind, OperationRequest.Action.RECONCILE)

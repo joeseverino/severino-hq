@@ -1,17 +1,7 @@
-"""The audit log is append-only, by SQLite's own rule.
+"""The audit log is append-only, by SQLite's own rule (docs/Security.md says what the triggers let through).
 
-Two triggers refuse an UPDATE or DELETE of an audit row from every write path
-(the ORM, raw SQL, a shell), except the changes HQ's own contract makes:
-
-- the daily prune of routine machine events (``audit.prune_routine``), the rows
-  ``audit.ROUTINE_EVENTS`` names with no user;
-- a deleted user's ``SET_NULL``, which changes ``user_id`` alone;
-- a coalesced refusal's count (``denials.COUNT``, ``denials.LAST_AT``), which
-  only grows and only moves forward, on a denied row otherwise unchanged.
-
-The triggers are installed after every migrate, beside the revision triggers
-(``revisions.install``), because SQLite drops a table's triggers whenever
-Django rebuilds the table, and so a changed generator replaces the old SQL.
+They are installed after every migrate, since SQLite drops a table's triggers
+whenever Django rebuilds it.
 """
 
 from collections.abc import Iterator

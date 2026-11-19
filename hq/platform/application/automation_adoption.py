@@ -1,30 +1,10 @@
-"""Adopting a proposal: one scanned commit of the automation source becomes
-the catalog HQ runs procedures from, playbook by playbook or all at once, once
-an operator agrees.
+"""Adopting a proposal: one scanned commit of the automation source becomes the
+catalog HQ runs procedures from, once an operator agrees.
 
-A Refresh proposes (``automation_sources``); this adopts. How a commit is
-judged and how an adoption reaches every process: docs/Architecture.md,
-"Adopting the playbooks".
-
-Security properties:
-
-- Only a commit GitHub verified as signed is adopted. The scan read that with
-  the worker's token (``hq_runner.catalog.github_verify``); this process holds
-  no token and asks nothing of GitHub, so it trusts the verification the
-  scan recorded and nothing else.
-- A commit carrying an ``ansible.cfg`` or a directory Ansible loads code from
-  (``unpinned``, kinds ``config`` and ``plugins``) is refused, since a run
-  would load what no reviewer of a procedure reads.
-- Adoption is a person's act. Adopting and rejecting take
-  ``adopt_playbooks``, held only at the operator's own interfaces
-  (``security.HELD_ONLY_AT``): an agent may refresh, and its adoption is
-  refused, never held for approval.
-- Each procedure runs at the commit it was adopted from, which pins every
-  file a run checks out, so a file a newer commit changes (a role two
-  playbooks share) reaches only a playbook adopted from that commit.
-- Each input is closed: a text input has its choices or a sidecar's pattern
-  and length, and a free-form type is refused, so a run's parameters can
-  name no execution field (``automation_manifest._closed``).
+How a commit is judged, what is refused and how an adoption reaches every
+process: docs/Architecture.md, "Adopting the playbooks". Adoption is a person's
+act: ``adopt_playbooks`` is held only at the operator's own interfaces
+(``security.HELD_ONLY_AT``), so an agent's adoption is refused, never held.
 """
 
 import json

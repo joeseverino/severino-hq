@@ -290,18 +290,12 @@ def stage_tokens(tasks: tuple[str, ...], source: list[str], labels: list[str], p
 def run_command(
     tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str, paths: list[str], base: str
 ) -> list[str]:
-    """The run of the tests beside the gates that run in the heavy turn
-    (``tasks``), each that reads a file at a time on ``paths``, with ``base``
-    named to them, in one run of mise, in one share of the turn sized by
-    ``stage_tokens``. The share tells each task under it that it holds the
-    turn, as mise hands a lock down, so each gate that takes the lock itself
-    and the tests' task go ahead at once and side by side, never queued on the
-    share their own run holds. A test both selected and tagged tree runs once,
-    since Django's runner drops a repeated test.
+    """The run of the tests beside the heavy turn's gates (``tasks``), in one
+    run of mise in one share of the turn sized by ``stage_tokens``.
 
-    A task's own output setting outranks the config's but not ``--output``, so
-    the summary is the environment's: the tests' task prints as it runs, beside
-    each gate's line as it ends."""
+    The share tells each task under it that it holds the turn, as mise hands a
+    lock down, so the gates and the tests go ahead side by side.
+    """
 
     gates = [word for task in tasks for word in (*handed(task, paths), ":::")]
     tests = [TESTS, "--parallel", parallel, *labels]

@@ -410,12 +410,9 @@ class AgentIdentity(models.Model):
 class AgentDevice(models.Model):
     """A tailnet device one agent's client has called HQ from, for one person.
 
-    Tailscale's word, "device": HQ's "machine" is a host it manages. Keyed by
-    Tailscale's stable id, never a name or node key, which a rename or a
-    re-authentication changes. A call from it does nothing until it is
-    approved (``agent_devices.refusal``): the person approves their own
-    client's device, and that approval is what links their HQ person to the
-    device's tailnet owner.
+    Keyed by Tailscale's stable id, which no rename or re-authentication
+    changes. A call from it does nothing until the person approves it, which is
+    what links their HQ person to the device's tailnet owner.
     """
 
     identity = models.ForeignKey(AgentIdentity, on_delete=models.CASCADE, related_name="devices")

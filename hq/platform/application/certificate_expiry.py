@@ -1,11 +1,6 @@
-"""Certificates a reading reports, near or past expiry.
+"""Certificates a reading reports, near or past expiry, about the connection that read each.
 
-Every reading with the certificate facet that states an expiry counts, whichever
-provider holds it, and so does a certificate a proxy serves a name with, which
-may be loaded from a file on the proxy's host and read nowhere else. Each is
-about the connection that read it, where the certificate lives
-(``topology_estate.readers_of``); the names it serves are evidence. Days left
-come from ``application.expiry``.
+A certificate a proxy serves counts too, since it may be read nowhere else.
 """
 
 from collections.abc import Callable, Hashable, Iterable, Iterator

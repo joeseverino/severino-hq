@@ -409,14 +409,9 @@ def _endpoint(
 ) -> Callable[[APIView], View]:
     """Authenticate, then put every failure in the same envelope.
 
-    Every argument is the endpoint's declaration, which ``openapi.py`` reads:
-    ``requires`` who may call it, which every call is refused by before the
-    view runs, as an MCP tool's is, so the read behind it asks nobody again;
-    ``data`` is what a success carries under ``data`` (None: not enveloped),
-    ``held`` what it carries there at HELD_STATUS (None: it holds nothing),
-    ``codes`` the error codes it answers beside ENDPOINT_CODES, ``title``
-    the operation in a few words, and ``page`` the route of the web page that
-    shows what it answers, for one that serves a single domain.
+    Every argument is the endpoint's declaration, which ``openapi.py`` reads.
+    ``requires`` refuses a call before the view runs, as an MCP tool's does, so
+    the read behind it asks nobody again.
     """
 
     # ``operator_session`` lets a signed-in operator's session read a GET view

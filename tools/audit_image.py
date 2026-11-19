@@ -1,11 +1,7 @@
 """`mise run audit:image [IMAGE]`: what a built image's bytes are, layer by layer, read-only.
 
-The image is saved once under var/audit/image/, and that archive is read twice:
-here, layer by layer, for the bytes each layer holds under the paths that
-make up HQ (the collected static trees, the code, site-packages, the stdlib,
-the Go binaries), with each layer's whiteouts applied to find the filesystem a
-container sees; and by dive, for the bytes a later layer leaves wasted. dive
-reports no layer's paths, so the walk is ours; the wasted figure is dive's.
+dive reports the bytes a later layer wastes but no layer's paths, so the walk
+of each layer under HQ's paths is ours.
 """
 
 import json

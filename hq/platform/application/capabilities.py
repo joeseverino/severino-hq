@@ -280,13 +280,9 @@ def run_capability(
 ) -> Ran:
     """Run one capability: the one place a retry key is read, required and kept.
 
-    Every door runs a capability here or through ``execute_capability``, which
-    is this with the answer alone: that is the signature ``hq_sdk`` publishes to
-    the extensions, while a door also hands over the key it carries beside the
-    payload (the API's header, a form's hidden field) and says whether the
-    answer was replayed. A door with no place beside the payload (an MCP tool
-    call) sends the key as the payload's ``idempotency_key``; one that takes it
-    beside the payload alone says ``key_in_payload=False`` (the API's header).
+    ``execute_capability`` is this with the answer alone, the signature
+    ``hq_sdk`` publishes. A door with no place beside the payload sends the key
+    as its ``idempotency_key``; the API's header says ``key_in_payload=False``.
     """
 
     with span(f"capability {name}", **{"hq.capability": name, "hq.interface": principal.interface}):
@@ -621,12 +617,6 @@ def _field_adapter(command_type: type, name: str) -> TypeAdapter[Any] | None:
 def _wrong_type(error: JSONSchemaError) -> tuple[Any, JSONSchemaError] | None:
     """The JSON type ``error`` says a value should have been sent in, and the
     error that holds the value; ``None`` for an error of another kind.
-
-    A union whose every branch is only a type (``boolean`` or ``null``) is
-    that type; a union of shapes, such as a manifest entry's, none of which
-    the value fits, is the deepest type error found when every branch finds
-    one. A branch refusing the value on another keyword alone (a number past
-    its maximum) admits its type, so Pydantic judges it.
     """
 
     if error.validator == "type":
@@ -654,22 +644,11 @@ NEEDS_APPROVAL = "This change needs approval. Ask for it through the API or MCP,
 class Consented(Sealed):
     """What the capability runner decided for one run, which every declaration write asks (``sealing``).
 
-    A declaration writer (``save_managed_resource``, the operation queue's
-    ``_queue_operation``, and every handler that reaches one) takes this in
-    place of a principal, reads it through ``consent``, and asks that for the
-    kind it writes before writing (``Consent.require``). That gives one
-    property: no gated declaration is written without a person's consent,
-    whichever capability's handler writes it.
-
-    - Two places make one, both in this module: the runner's consent step
-      (``_consent``), once operator policy and the default hold have let the
-      run through, and ``execute_approved``, handed the ``approvals.Approved``
-      only a person's approval makes (``approved``). Only this module holds its seal, so a path
-      that writes a declaration without passing either has no value to hand
-      the writer, and ``consent`` refuses anything else.
-    - The runner hands one only to a handler that names ``consented``, never
-      a principal beside it, so who acts and who approved are read from the
-      consent alone and cannot disagree with it.
+    A declaration writer takes this in place of a principal and asks it for the
+    kind it writes (``Consent.require``), so no gated declaration is written
+    without a person's consent, whichever handler writes it. Only ``_consent``
+    and ``execute_approved`` make one, and who acts and who approved are read
+    from it alone.
     """
 
     __slots__ = ()
@@ -685,13 +664,9 @@ class Consent:
     def admits(self, kind: str) -> bool:
         """Whether this run may write a declaration of ``kind``.
 
-        The one place the rule lives: a kind that waits for a person
-        (``default_hold.kind_waits``) is written only by an interactive
-        principal, under standing policy or a person's approval
-        (``approved_by``), or in an approved run. The hold judges a run by the
-        kind its target or command names; this judges the kind actually
-        written, so a capability of any subject, writing a kind its command
-        never named, is refused at the write all the same.
+        The one place the rule lives. The hold judges a run by the kind its
+        command names; this judges the kind actually written, so a write of a
+        kind the command never named is refused all the same.
         """
 
         provider = PROVIDERS.get(kind)

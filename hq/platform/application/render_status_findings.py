@@ -341,12 +341,9 @@ def _stale_title(machine: str, stale: tuple[Rendering, ...]) -> str:
 def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
     """A renderer that has stopped running, or stopped reading in full.
 
-    The last run it recorded did not fail, and nothing has confirmed the
-    installed files since: the timer is not firing, the unit does not start, or
-    it fails before taking the lock, which records nothing. A controller that
-    stopped reading raises ``render-status-unread`` instead, since its reading
-    no longer says whether the job runs; a failed run is ``render-failing``'s
-    to say.
+    Its last run did not fail and nothing has confirmed the installed files
+    since. A stopped reading is ``render-status-unread``'s to say, and a failed
+    run ``render-failing``'s.
     """
 
     found = []

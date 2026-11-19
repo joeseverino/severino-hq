@@ -295,12 +295,9 @@ class NotManaged(TimestampedModel):
 class RefusedReport(models.Model):
     """A controller call the bridge refused, kept until that call is next accepted.
 
-    A refused report writes nothing else, so this row is the only record that a
-    controller's work stopped landing (``application.refused_reports``). It
-    holds what the bridge already answered the controller: the action, the
-    controller the call named once its query was held to the contract, and the
-    refusal's detail, struck of secrets and cut to the problem's length. Never
-    the payload. One row per action and controller.
+    The only record that a controller's work stopped landing
+    (``application.refused_reports``). It holds the refusal's detail, struck of
+    secrets, never the payload. One row per action and controller.
     """
 
     action = models.CharField(max_length=64)
@@ -646,14 +643,11 @@ class SourceProposal(TimestampedModel):
 
 
 class AdoptedCatalog(TimestampedModel):
-    """The procedures HQ runs, each adopted by a person from what a scan
-    proposed, each at the commit it was adopted from.
+    """The procedures HQ runs, each adopted by a person from what a scan proposed, at the commit it was adopted from.
 
-    The newest row is the catalog every procedure's command is built from;
-    each earlier one is what was adopted before it. The row names the commit
-    of the scan it was adopted from, and each procedure carries the commit it
-    runs at and every file it pins, so a pruned proposal leaves it whole.
-    Written by ``automation_adoption.adopt``, its one writer.
+    The newest row is the catalog every procedure's command is built from. Each
+    procedure carries its commit and pinned files, so a pruned proposal leaves
+    it whole. Written only by ``automation_adoption.adopt``.
     """
 
     proposal = models.ForeignKey(SourceProposal, on_delete=models.SET_NULL, null=True, related_name="adoptions")

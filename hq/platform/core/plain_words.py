@@ -1,12 +1,8 @@
 """The words in a template that Vale cannot read, handed to Vale.
 
-Vale (``mise run lint:prose``) reads a template's text but not its attributes or
-tags. ``shown`` finds the rest of what the reader sees as words, and ``main``
-hands each to Vale as a paragraph of its own, reported at the template line it
-came from. Like ``interface_text``, a gate reads this and a running HQ never does.
-lint:prose runs ``main --whole``, which has Vale read the whole tree too, or
-``main --changed`` on the files a change touched, of which it reads those the
-whole run would.
+Vale reads a template's text but not its attributes or tags, so ``shown`` finds
+the rest, reported at the template line it came from. A gate reads this and a
+running HQ never does.
 """
 
 import json

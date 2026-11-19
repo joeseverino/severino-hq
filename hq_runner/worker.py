@@ -1,13 +1,8 @@
-"""One pass of the automation worker: claim a run or a scan, hold a run's lease
-while it runs, and report how it ended.
+"""One pass of the automation worker: claim a run or a scan, hold a run's lease while it runs, and report how it ended.
 
 The runner and the scan are handed in, so a test runs the whole pass with
-fakes: ``ansible`` (``hq_runner.ansible``) runs a playbook through
-ansible-runner and ``catalog`` reads the source, and anything with their
-signatures stands in for them. Whatever runs, the worker decides when it
-stops: when HQ answers a renewal with stop (the asker is held, or the run was
-cancelled), or when a renewal fails so the lease cannot be held; past the
-procedure's timeout, ansible-runner stops it.
+fakes. The worker stops when HQ answers a renewal with stop or a renewal fails;
+past the timeout, ansible-runner stops it.
 """
 
 import time

@@ -13,12 +13,9 @@ from django.db.models.enums import ChoicesType, TextChoices
 class Tone(StrEnum):
     """How a thing stands, most severe first.
 
-    Every surface that shows state draws from it, so a state means the same
-    thing and looks the same wherever it is rendered: the stylesheet keys on
-    each value (``data-tone``, ``tone-<tone>``). Reserved: a tone never
-    doubles as a categorical series color, and is always drawn with its own
-    words, so state is never carried by color alone. A thing nothing has read
-    is neutral: no fifth tone says "unknown".
+    Every surface that shows state draws from it, so a state looks the same
+    everywhere. A tone is never a series color and is always drawn with its
+    words, so state is never carried by color alone. Unread is neutral.
     """
 
     SERIOUS = "serious"

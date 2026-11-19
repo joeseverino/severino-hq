@@ -1,15 +1,8 @@
 """The queries each page makes, counted in the measured server's own code and database.
 
-Never imported: its text is run as `manage.py shell -c` where the server runs
-(a checkout, a worktree of the base, the image), so the count is that code's.
-It prints one line, MARKER and a JSON object of each page in PERF_PAGES to its
-counts, or to None where the page did not answer 200.
-
-A page's queries are counted by the statement each sends, its SQL before its
-parameters are bound. The first of each statement is the page's own cost;
-every repeat of one is a query the page runs again for another of its rows
-(N+1), so `repeated_queries` grows with the rows a page draws and the rest do
-not.
+Never imported: run as `manage.py shell -c` where the server runs. A repeat of
+a statement is a query the page runs again for another row (N+1), so
+`repeated_queries` grows with the rows a page draws.
 """
 
 import json

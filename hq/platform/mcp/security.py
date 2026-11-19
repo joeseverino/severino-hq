@@ -1,20 +1,8 @@
 """Fail-closed ASGI boundary for the tailnet-only MCP endpoint and its resource metadata.
 
-The bearer is read and the 401 challenge written by the MCP SDK's own
-middleware (``BearerAuthBackend``, ``RequireAuthMiddleware``); who a token is
-comes from HQ's one admission, which the machine API asks too. What stays
-HQ's own here, and why:
-
-- The tailnet, Host and Origin gates. The SDK's ``TransportSecuritySettings``
-  matches the raw Host header as written, so it refuses a case or port
-  spelling HQ admits, and its ``host:*`` form admits a port that is not a
-  number, which HQ refuses. It also runs inside the transport, after
-  authentication, and never in front of the metadata route.
-- The 403 for a token that verified but grants nothing HQ can use. The SDK's
-  scope check asks for every scope it is given, where HQ asks for any grant,
-  and its challenge carries no ``scope`` parameter.
-- A body read as strict JSON (``strict_json``). The SDK's parsers keep the
-  last of a repeated field and accept NaN and Infinity, and take no hook.
+The bearer and the 401 are the MCP SDK's own middleware's; who a token is comes
+from HQ's one admission. Where HQ keeps its own (the network gates, the 403,
+the strict body), the code says why the SDK's does not serve.
 """
 
 import asyncio
@@ -68,6 +56,10 @@ METHOD_HEADER = "mcp-method"
 LISTEN = "subscriptions/listen"
 
 
+# Not the SDK's TransportSecuritySettings: it matches the raw Host header, so
+# it refuses a case or port spelling HQ admits and its host:* admits a port
+# that is no number, and it runs after authentication, never in front of the
+# metadata route.
 class TailnetGate:
     """The network gates every MCP route stands behind: a tailnet peer, an allowed Host, no foreign Origin.
 
@@ -223,7 +215,11 @@ class MCPBoundary:
 
 
 class _StrictBody:
-    """A POST whose body is not strict JSON, answered as the SDK answers one that is not JSON at all."""
+    """A POST whose body is not strict JSON, answered as the SDK answers one that is not JSON at all.
+
+    The SDK's parsers keep the last of a repeated field, accept NaN and
+    Infinity, and take no hook.
+    """
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -359,6 +355,9 @@ def metadata_url(resource: str) -> str:
 
 async def _insufficient_scope(scope: Scope, receive: Receive, send: Send, location: str, refused: Unadmitted) -> None:
     """A verified token with no grant HQ can use: the spec's step-up challenge, naming the least scope."""
+
+    # Not the SDK's scope check, which asks for every scope it is given where
+    # HQ asks for any grant, and whose challenge carries no scope.
 
     header = challenge(
         ("error", "insufficient_scope"),

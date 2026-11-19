@@ -443,12 +443,8 @@ def command_form_class(
 ) -> type[CapabilityCommandForm]:
     """Build the complete browser form from one canonical capability spec.
 
-    ``record_choices`` holds the records each record-naming field offers
-    (``command_targets.record_options``); a field without them is typed.
-    ``fields`` names the command's fields a page's own form draws, as
-    ``modelform_factory`` takes them: the page names the record it acts on
-    and where to go next, so the form draws neither, and a field it leaves
-    out is never sent.
+    ``fields`` names the fields a page's own form draws, as
+    ``modelform_factory`` takes them; a field left out is never sent.
     """
 
     schema = command_schema(spec.command_type)

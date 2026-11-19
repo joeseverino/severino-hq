@@ -635,15 +635,12 @@ class Cells(HTMLParser):
                 self.roles.setdefault(start, set()).add("name")
 
     def _detail(self, row: _Row, width: int, levels: dict[int, int]) -> None:
-        """The row's open line as the server draws it: the blocks it moves
-        there (its editor first, then each block it keeps beneath itself and
-        its buttons past the first few), each labeled one under its label.
-        What a cell holds back (its column left, `data-drop`; a part only the
-        open line shows, `row-more` or `line-rest`) is written once, in the
-        cell: tables.js copies it onto the line as the row opens, and a
-        narrow box shows the row's `narrow-more` parts in place.
-        So a cell that holds something back holds no control, which a copy
-        would draw twice."""
+        """The row's open line as the server draws it, each moved block under its label.
+
+        What a cell holds back is written once, in the cell, and tables.js
+        copies it onto the line, so such a cell holds no control, which a copy
+        would draw twice.
+        """
 
         blocks: list[Span] = []
         entries: list[LineEntry] = []

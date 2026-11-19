@@ -1,14 +1,9 @@
-"""The structural bar as a gate: fail on a near-duplicate function pair
-outside tests that the baseline does not list, so the code stays one system
-(Structural Gate, in docs). ``--record`` rewrites the baseline from this tree;
-``--pairs`` first prints every pair outside tests with what explains it, so a
-change to the classifier is read as a diff of that list.
+"""The structural bar as a gate: fail on a near-duplicate function pair outside
+tests that the baseline does not list (Structural Gate, in docs).
 
-The graph is the codebase-memory-mcp release mise.toml pins, since the
-answer's shape is that release's; an answer the classifier refuses fails too.
-The pairs are kept under var/structural by a digest of everything they depend
-on (``inputs_key``), so a run on inputs already read answers without the graph.
-The graph's own store stays there too, so the graph reindexes only what changed.
+``--record`` rewrites the baseline; ``--pairs`` prints every pair with what
+explains it. The pairs are kept under var/structural by a digest of their
+inputs, so a run on inputs already read answers without the graph.
 """
 
 from __future__ import annotations

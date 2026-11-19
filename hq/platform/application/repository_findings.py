@@ -1,12 +1,7 @@
 """Findings from what GitHub says of the repositories HQ is built from: what waits on a person there.
 
-A deploy held for approval, a default branch failing, a deploy that failed its
-own verification, a serious alert, an admission about to lapse, and each check
-of HQ's repository standard some repository misses. Read from the
-``github.repository`` reading (``github_estate``) and raised under Projects.
-Once a repository's reading is out of date, a finding about it says what was
-read, in the past tense, and only as a notice, so an old reading never stands
-as a current fact.
+Read from the ``github.repository`` reading. One about an out-of-date reading
+says what was read, in the past tense, as a notice only.
 """
 
 from collections.abc import Callable, Iterator

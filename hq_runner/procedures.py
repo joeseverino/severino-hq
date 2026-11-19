@@ -1,20 +1,10 @@
-"""The reviewed procedure a claim names, fetched at its pinned commit, and the
-tip of the repository's default branch a scan reads.
+"""The reviewed procedure a claim names, fetched at its pinned commit, and the tip a scan reads.
 
-A procedure's playbook is a path inside one repository at one commit: the
-commit HQ's manifest pins and its reviewers approved, in the repository this
-worker's own configuration names (never the claim), whose root is an Ansible
-project. Each run fetches that commit alone into a fresh directory, as Flux's
-source-controller and Argo CD's repo-server fetch a pinned revision, and runs
-only once the checkout's ``HEAD`` is that commit: a commit id names its whole
-tree, so no other tree can answer it, and an id that names something else (a
-tag object, a tree) is refused. A scan asks the repository which commit its
-default branch points at (``tip``), then fetches that commit the same way.
-
-Git reads no configuration but what is given here (no system or global file,
-no hooks, no submodules, one transport) and checks every object it receives.
-The token, when there is one, reaches git through its environment, never its
-command line, where any process on the machine could read it.
+The repository is the worker's own configuration's, never the claim's. A run
+starts only once the checkout's ``HEAD`` is the pinned commit, as Flux and Argo
+CD fetch a pinned revision. Git reads no configuration but what is given here
+(no hooks, no submodules, one transport) and checks every object; the token
+reaches it through its environment, never its command line.
 """
 
 import base64

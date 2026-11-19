@@ -9,12 +9,9 @@ from django.utils.text import capfirst
 class Records:
     """A plain record domain: one model created, changed and deleted by command.
 
-    Declared once, it yields the create, update and delete capabilities, the
-    write and delete permissions, deletion itself, the count on the health
-    reading and the record's form (``writes.RecordFormMixin``); anything else is
-    a command through ``integration.capabilities``. References are
-    ``module:attribute`` strings so it stays importable from settings, before
-    any model is.
+    Declared once, it yields the capabilities, permissions, deletion, health
+    count and form (``writes.RecordFormMixin``). References are
+    ``module:attribute`` strings so it stays importable from settings.
     """
 
     # Names the commands: "expense" gives expense.create, expense.delete.

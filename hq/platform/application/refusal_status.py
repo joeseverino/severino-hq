@@ -1,13 +1,8 @@
 """The one refusal contract: what every code HQ answers with means, and how a failure becomes one.
 
-HQ answers a failed call with its own error code, and each code has one HTTP
-status wherever it is answered. Mapping the ones that mean something other
-than "you sent nonsense" keeps a client on HTTP status alone for control flow,
-which is all a Shortcut can branch on comfortably, and keeps a refusal from
-being logged as something it is not.
-
-``refusal_of`` is the one place an exception becomes a refusal, so it is also
-the one place an authorization refusal is recorded in the audit log.
+Each code has one HTTP status everywhere, so a client branches on status alone.
+``refusal_of`` is the one place an exception becomes a refusal, so the one
+place an authorization refusal is audited.
 """
 
 import logging

@@ -1,11 +1,9 @@
-"""The capability catalog as ``describe_capabilities`` answers an agent, in two
-levels as an API catalog is read: an index of every capability, then the
-full entries of those a name or a resource narrows to.
+"""The capability catalog as ``describe_capabilities`` answers an agent: an
+index of every capability, then the full entries a name or resource narrows
+to.
 
-A narrowed answer carries each schema definition once, at its root, where
-every ``input_schema``'s ``#/$defs/<name>`` reads it from, since the entries
-of one domain share most of theirs. The machine API answers every entry in
-full, each schema whole (``api.views.capabilities``).
+A narrowed answer carries each schema definition once, at its root, since a
+domain's entries share most of theirs.
 """
 
 from typing import Annotated, Any, TypedDict

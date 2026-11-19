@@ -1,16 +1,9 @@
-"""The estate's automation: the example repository's procedures adopted, then
-weeks of one procedure's runs on the server, each way a run ends, and a run
-working and one waiting now, each asked for and carried out through the paths
-a real one takes (a Refresh, the worker's scan, Adopt; then
-``automation_runs.request_run``, the worker's claim, renewal and report, or
-its lease running out).
+"""The estate's automation: the example procedures adopted, weeks of runs
+ending each way, and a run working and one waiting now.
 
-The repository is synthetic, as a scan of it would report it: three
-``example.*`` procedures, each with a default for every input, so a seed can
-ask for a run of one it knows only by its id. A procedure has one active run,
-and a machine one active run, at a time, so the run that waits is another
-procedure's on another machine, and the read and the machines neither holds
-are free to run.
+Each is carried out through the paths a real one takes. The repository is
+synthetic, three ``example.*`` procedures with a default for every input, so a
+seed can ask for a run knowing only its id.
 """
 
 import hashlib
@@ -415,14 +408,10 @@ def runs(
     past: int | None = None,
 ) -> None:
     """The example procedures adopted, then past runs of the first on
-    ``server``, ``past`` of them (one of each ending by default) three days
-    apart, a finished run of the second on ``read_on``, then one run working
-    and one waiting now.
+    ``server``, a finished run of the second on ``read_on``, and one run
+    working and one waiting now.
 
-    Every machine but the two those hold is free, and so is the second
-    procedure, a read: a person can run it at once. A claim whose lease ran
-    out is ended by the next ask, so none is seeded; how such a run ends is
-    the past run whose worker stopped renewing (``_outlived``).
+    Every other machine and the second procedure, a read, stay free to run.
     """
 
     owner = owner or get_user_model().objects.order_by("pk").first()

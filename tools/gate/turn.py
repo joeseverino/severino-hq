@@ -1,13 +1,10 @@
-"""The machine's heavy turn (mise's task lock `heavy`): what a run weighs in
-tokens of the machine's budget, the share of those tokens it takes beside
-other runs, and the gate a landing closes in front of them.
+"""The machine's heavy turn (mise's task lock `heavy`): what a run weighs, its
+share beside other runs, and the gate a landing closes in front of them.
 
-`python -m tools.gate.turn [manage.py test arguments...]` prints the tokens a
-run of manage.py test takes. `python -m tools.gate.turn --share <tokens|all>
-<bound> <command...>` runs a command in a share. `python -m tools.gate.turn
---landing <command...>` runs a landing's command (mise-tasks/landing). How the
-turn is shared, and how a landing goes first: docs/Development.md, Heavy gates
-take turns.
+`python -m tools.gate.turn [manage.py test arguments...]` prints a run's
+tokens, `--share <tokens|all> <bound> <command...>` runs a command in a share,
+and `--landing <command...>` runs a landing's. How the turn is shared:
+docs/Development.md, Heavy gates take turns.
 """
 
 import contextlib

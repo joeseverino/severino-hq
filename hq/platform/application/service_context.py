@@ -214,15 +214,10 @@ RUNS_SECTION = "runs"
 def recent_work(
     runs: Sequence[WorkRun], *, by_machine: bool, more_url: str, principal: Principal | None = None
 ) -> ServiceSection | None:
-    """The latest ``runs`` as a section, each state in its word and tone; None
-    when there are none. A machine's page names what each run was
-    (``by_machine``), a playbook's page leads with when each was asked and
-    the machines each acted on, and ``more_url`` is every run of the two on
-    Jobs. Each row leads with the link to the run's own page.
+    """The latest ``runs`` as a section, each state in its word and tone; None when there are none.
 
-    Who asked for each run and its evidence are Jobs' to show, so only a
-    ``principal`` who may open Jobs reads them here, and opens a run's page;
-    without one, nobody does.
+    Who asked and the evidence are Jobs' to show, so only a ``principal`` who
+    may open Jobs reads them here.
     """
 
     shows = principal is not None and principal_opens(principal, urls.resolve(reverse("jobs:list")).func)

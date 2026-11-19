@@ -1,36 +1,10 @@
 """The automation worker beside a development server: always beside `mise run
 dev`, and beside `mise run dev:scratch --runner`.
 
-The server serves the bridge on a socket of its own, as the image does, and
-`watch` stands where the host's automation units stand: when HQ rings the
-automation doorbell, or a floor's time after the last worker ended, it writes
-the worker's connections from the server database's machines and starts the
-real worker (`work`), which drains what is queued and exits.
-
-Its security properties:
-
-- The bridge is a Unix socket in a directory only this account can enter,
-  answered only to this account; nothing new listens on a network address.
-- The worker is given the `HQ_AUTOMATION_*` variables and nothing of HQ's own
-  environment: no signing key, no database path.
-- Its repository is `scratch_playbooks/`, committed to a repository beside
-  the server's database and fetched over git's file transport, with no token,
-  so no fetch leaves this machine, whatever the database adopted before.
-- It is given a login to one machine alone, the one HQ's inventory says
-  this server runs on (``runs_hq``), so a run is asked, and recorded, only
-  on the machine it really runs on. A scratch server whose inventory has no
-  such machine declares one in its own database, at this host's addresses,
-  through the operator's create command; `dev` declares none in its real
-  data and gives the worker no login. That login reaches 127.0.0.1 and
-  every play there runs with connection local, so no run reaches another
-  host.
-- The change playbook writes one file, in the run's own temporary
-  directory, which goes when the run ends.
-
-What it cannot show: GitHub's word on a commit's signature, since the
-repository is local, so `work` vouches for each commit it scans; the
-renderer's copy of real runner connections and identities; and the egress
-table and container confinement the host gives the worker.
+`watch` stands where the host's automation units stand, starting the real
+worker (`work`) when HQ rings the automation doorbell. What it holds to and
+what it cannot show: docs/Development.md, "The automation worker beside a
+development server".
 """
 
 import contextlib

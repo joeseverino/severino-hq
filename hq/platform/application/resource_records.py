@@ -1,15 +1,7 @@
 """The shapes the host's own resources answer in: each list's item, row and record.
 
-An item is one entry of a list whole, and a list answers no key beside it; a
-row is what a list keeps of each item unless the caller names its own fields,
-so its keys are the kind's ``ListRead.fields``; a record is what a read of one
-answers. The API document types each read by them, and a test holds every
-answer on the showcase data to its type. Each part of a record HQ builds is a type here too, so every object
-the API document writes names its fields; a part in its source's own shape is
-``AsRead``.
-
-Each field says what it holds where it is declared, and a closed set of values
-is named from the constant that holds it (``describe.listed``).
+The API document types each read by them, and a test holds every answer on the
+showcase data to its type. A part in its source's own shape is ``AsRead``.
 """
 
 from typing import Annotated, Any, NotRequired, TypedDict

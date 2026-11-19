@@ -1,22 +1,8 @@
 """Django's answers, compressed as they are sent, in the smallest coding the client takes.
 
-Collected assets never pass through here: the image build compressed each one
-once (core.static). The proxy in front of HQ gzips only what arrives without a
-coding, so a response encoded here crosses it as it is.
-
-Brotli is preferred over gzip because every browser HQ serves sends br over
-HTTPS, and at quality 5 a page is smaller than gzip's and costs less CPU than
-gzip at 6. Zstandard is left off: starlette-compress ranks it first whenever a
-client offers it, and at a comparable cost a page is larger in it than in br.
-
-BREACH: a compressed page that reflects input beside a secret leaks the secret
-through its length to whoever can watch the encrypted traffic and make the
-browser ask many times. Brotli is no different from gzip there. The secrets a
-page carries are each fresh per response, so a guess at one says nothing of the
-next: Django masks the CSRF token, and the CSP nonce is new each time. The
-session cookie is never in a body. What is left is the operator's own data, on
-a host reached only over the tailnet, behind cookies that are SameSite=Lax.
-Nothing here pads a body to a random length, so no property above leans on one.
+Collected assets were compressed once by the image build (core.static). Brotli
+at quality 5 beats gzip on size and CPU; Zstandard is off, since starlette-
+compress ranks it first and a page is larger in it. BREACH: docs/Security.md.
 """
 
 import brotli

@@ -1,11 +1,7 @@
 """How this request reached HQ, and what had to be true for it to arrive.
 
-It describes the reader: their address, device and person, and each check of
-the request standard (``request_standard``) that had to hold for the request
-to get this far. Every line is read from something that would change if the
-fact changed (the settings the middleware enforces, the installed backends,
-the tailnet, the policy as Tailscale evaluated it), so a check can say it is
-not met, where "secure" would stay with the gate off.
+Every line is read from something that would change if the fact changed, so a
+check can say it is not met, where "secure" would stay with the gate off.
 """
 
 from dataclasses import dataclass
