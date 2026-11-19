@@ -15,8 +15,6 @@ from typing import Any
 lazy import inspect
 lazy from annotationlib import Format
 
-# Read only by hand_drawn_rules, which development alone runs: no image installs it.
-lazy import yaml
 lazy from django.template import engines
 lazy from django.template.backends.django import get_installed_libraries
 lazy from django.template.base import FilterExpression, NodeList, Variable
@@ -25,11 +23,11 @@ lazy from django.template.library import import_library
 lazy from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
 lazy from django.template.smartif import TokenBase
 
+lazy from hq.platform.core.hand_drawn import SHAPES
 lazy from hq.platform.core.included_parts import PARTS
 lazy from hq.platform.core.interface_text import TEMPLATE_COMMENT
 lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.table_cells import ROLE_CLASSES
-lazy from hq.platform.core.template_engine import DRAWN
 lazy from hq.platform.core.template_parts import Part
 lazy from hq.platform.core.templatetags.value_tags import PresentNode
 
@@ -213,21 +211,6 @@ HOOKS = (
 # nothing.
 STYLED = ("data-chart",)
 
-
-# The value tags that write a figure together with its own words, each joined
-# where a line could break inside it (value_tags, through line_breaks.held).
-# The hand-drawn-split-figure rule leaves each alone (test_template_values).
-WORDED_FIGURES = {
-    "bytes": "a byte count",
-    "counted": "a count and the words for it",
-    "expiry": "a date and a count of days",
-    "measured": "a figure and its unit",
-    "money": "an amount",
-    "seconds": "a run time",
-    "signed_in": "an age in words",
-    "span": "a length of time",
-    "when_text": "a moment in words",
-}
 
 # Read by every template through the host's context processors and Django's
 # own; never a parameter a page passes.
@@ -647,17 +630,6 @@ def _cell(text: str) -> str:
     return re.sub(r"(\{%.*?%\}|<[a-z/][^>]*>|partials/\S+\.html)", r"`\1`", text).replace("|", "\\|")
 
 
-def hand_drawn_rules() -> list[dict[str, str]]:
-    """Each rule that refuses a shape a shared part draws, drawn by hand in a
-    template (``tools/lint/ast-grep/rules/hand-drawn-*.yml``), which the host's
-    lint and an extension's ``plugin:check`` both run."""
-
-    return [
-        yaml.safe_load(path.read_text(encoding="utf-8"))
-        for path in sorted((ROOT / "tools/lint/ast-grep/rules").glob("hand-drawn-*.yml"))
-    ]
-
-
 def _literal(value: Any) -> str:
     """A default as a template writes it; nothing for one that is empty."""
 
@@ -730,13 +702,9 @@ def markdown(templates: dict[str, Any]) -> str:
         "",
         f"Script hooks: {_code(templates['hooks'])}. Styled attributes: {_code(templates['styled'])}.",
         "",
-        "| Rule | Drawn by hand | Write instead |",
+        "| Shape | Drawn by hand | Write instead |",
         "| --- | --- | --- |",
-        *(f"| `{rule['id']}` | {_cell(rule['message'])} | {_cell(rule['note'])} |" for rule in hand_drawn_rules()),
-        *(
-            f"| `<{element}>` | Refused as its template loads. | {_cell(instead)} |"
-            for element, instead in sorted(DRAWN.items())
-        ),
+        *(f"| `{shape.name}` | {_cell(shape.said)} | {_cell(shape.instead)} |" for shape in SHAPES),
         "",
         "## Each part's rules",
     ]

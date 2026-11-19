@@ -477,7 +477,7 @@ CELL_LINE = Part(
     cell_line %}`. Its words alone are `{% cell_line text=... url=... %}`. Markup is its block, its
     second line after `{% detail %}`: `{% cell_line %}{% entity link %}{% detail %}Docker host{%
     endcell_line %}`. The part draws that line on its own, so no page writes a break or styles a line
-    of its own. No template writes a `<br>`: `hand-drawn-line-break` refuses one, in an extension too.
+    of its own. No template writes a `<br>`: the `line-break` shape refuses one, in an extension too.
     """,
     classes=("cell-line", "cell-detail"),
     partial="partials/_cell_line.html",

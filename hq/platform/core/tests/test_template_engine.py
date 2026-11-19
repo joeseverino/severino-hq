@@ -52,12 +52,23 @@ class DrawnTests(SimpleTestCase):
             with override_settings(TEMPLATES=[backend]):
                 return engines["django"].get_template(name)
 
-    def test_a_fold_drawn_by_hand_fails_as_it_loads(self):
-        with self.assertRaisesMessage(TemplateSyntaxError, "example/page.html:2: <details>"):
+    def test_a_shape_drawn_by_hand_fails_as_its_template_loads(self):
+        with self.assertRaisesMessage(TemplateSyntaxError, "example/page.html:2: A fold drawn by hand"):
             self.loaded("<p>Example</p>\n<DETAILS open><summary>More</summary></DETAILS>")
 
     def test_a_template_comment_holds_none(self):
         self.loaded("{% comment %}<details>{% endcomment %}{# <details> #}<p>Example</p>")
 
-    def test_a_part_that_declares_the_element_draws_it(self):
+    def test_a_template_that_draws_the_shape_itself_loads(self):
         self.loaded("<details><summary>Example</summary></details>", "partials/_check_rung.html")
+
+    def test_each_shape_refuses_its_examples_and_keeps_the_rest(self):
+        from hq.platform.core.hand_drawn import SHAPES, Source
+
+        for shape in SHAPES:
+            for source in shape.refuses:
+                with self.subTest(shape.name, refused=source):
+                    self.assertTrue(list(shape.find(Source(source))))
+            for source in shape.keeps:
+                with self.subTest(shape.name, kept=source):
+                    self.assertEqual(list(shape.find(Source(source))), [])

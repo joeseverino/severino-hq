@@ -15,9 +15,7 @@ its id, is shown again if it was open.
   answer fetches the region, which then follows the reading while it is on its
   way. Its note is heard; the panel's own line says how its reading stands.
   {% endcomment %}
-  {% if dashboard_due %}{% comment %}
-  <!-- ast-grep-ignore: hand-drawn-form --> a hidden form the page's script submits, with no fields
-  {% endcomment %}<form method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-auto hidden>{% write_token %}<input type="hidden" name="scope" value="stale"></form>{% endif %}
+  {% if dashboard_due %}<form method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-auto hidden>{% write_token %}<input type="hidden" name="scope" value="stale"></form>{% endif %}
   {% facts layout="band" label="At a glance" %}
     {% include "core/_dashboard_connection.html" with connection=request_connection only %}
     {% include "core/_dashboard_controller.html" with controller=controller only %}

@@ -472,9 +472,9 @@ TABLE_REGION = table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  #
     **A table is laid out before any script runs.** Nothing is measured to lay a table out:
     `tables.js` only sorts, selects and opens rows, and loads deferred (*Gate:*
     `test_the_table_script_lays_nothing_out`). No table is drawn by hand, an extension's included:
-    ast-grep's `hand-drawn-table` refuses a table outside its region, in the host and through the
-    plugin check in every extension, and the host's suite reads every installed extension's templates
-    for a heading, a region or a drop rank written by hand. *Gates:* `hand-drawn-table`,
+    the `table` shape of `hand_drawn.SHAPES` refuses a table outside its region as any template of
+    the host or an extension loads, and the host's suite reads every installed extension's templates
+    for a heading, a region or a drop rank written by hand. *Gates:* the `table` shape,
     `test_every_table_is_declared_through_the_tags`.
 
     A long value in a cell (a line past `table_cells.LONG`) wraps, and in a narrow box is held to its
@@ -767,7 +767,7 @@ ROW_ACTIONS = Part(
     page sets its table's cells otherwise. What can be done to a row's record ends the row as
     `{% row_actions actions %}`, under a heading of kind `control`. Each is a `PageAction` drawn as a
     compact control with its middle on the first line's. A page never draws a button in a cell
-    (*Gate:* the `hand-drawn-row-actions` rule). A row's controls stand side by side on one line,
+    (*Gate:* the `row-actions` shape). A row's controls stand side by side on one line,
     which their column asks for, and the words beside them wrap first; in a narrow box they take the
     row's last line. Every row's controls end on one edge, and each draws its edge of its own but the
     last, which is quiet only when it sets the row aside (`put_away`, a button). A cell of the row's

@@ -54,10 +54,7 @@ sizes and counts, so the service's name keeps its column's whole line.
                   {% for line in facet.reading_lines %}
                     <li><span title="{{ line.hint }}">{{ line.label|breakable }}{% if line.detail %}{% muted %}{% dot %}{{ line.detail|breakable }}{% endmuted %}{% endif %}</span></li>
                   {% endfor %}
-                  {% if not facet.claims and not facet.readings %}{% comment %}
-                  a facet with nothing to show, said as No record where the DNS path has a gap
-                  <!-- ast-grep-ignore: hand-drawn-missing-value -->
-                  {% endcomment %}<li>{% if service.is_observed and facet.id == dns_facet and service.path.gaps %}{% include "partials/_empty_state.html" with message="No record" inline=True only %}{% else %}{% empty_value %}{% endif %}</li>{% endif %}
+                  {% if not facet.claims and not facet.readings %}<li>{% if service.is_observed and facet.id == dns_facet and service.path.gaps %}{% include "partials/_empty_state.html" with message="No record" inline=True only %}{% else %}{% empty_value %}{% endif %}</li>{% endif %}
                 {% endif %}
                 {% endlist %}
               </td>

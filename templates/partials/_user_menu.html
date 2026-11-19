@@ -45,9 +45,7 @@ switches and theme they set, and the places and verbs of their session.
     site. Agents is global, unlike Demo, and sends a state, not a toggle.
     {% endcomment %}
     <div class="menu-settings">
-      {% comment %}
-      <!-- ast-grep-ignore: hand-drawn-form --> the frame's menu verbs, each one button, and the one form every post button names
-      {% endcomment %}<form action="{% url 'demo_mode' %}" method="post">
+      <form action="{% url 'demo_mode' %}" method="post">
         {% write_token %}
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
         <button type="submit" class="menu-item menu-setting" role="switch" aria-checked="{% if request.showing_demo %}true{% else %}false{% endif %}">
@@ -55,9 +53,7 @@ switches and theme they set, and the places and verbs of their session.
           <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
         </button>
       </form>
-      {% comment %}
-      <!-- ast-grep-ignore: hand-drawn-form --> the frame's menu verbs, each one button, and the one form every post button names
-      {% endcomment %}<form action="{% url 'agent_access' %}" method="post">
+      <form action="{% url 'agent_access' %}" method="post">
         {% write_token %}
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
         <input type="hidden" name="paused" value="{% if agents_paused %}0{% else %}1{% endif %}">
@@ -71,9 +67,7 @@ switches and theme they set, and the places and verbs of their session.
     Three choices, so a set of buttons rather than a switch; each sends
     the choice it names. System follows the operating system.
     {% endcomment %}
-    {% comment %}
-    <!-- ast-grep-ignore: hand-drawn-form --> the frame's menu verbs, each one button, and the one form every post button names
-    {% endcomment %}<form action="{% url 'theme' %}" method="post" class="menu-theme">
+    <form action="{% url 'theme' %}" method="post" class="menu-theme">
       {% write_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
       <span class="menu-theme-label" id="menu-theme-label">Theme</span>
@@ -98,9 +92,7 @@ switches and theme they set, and the places and verbs of their session.
         <span>Connection</span>
         <span class="menu-item-status">{% status CONNECTION_CHANNEL.label tone=CONNECTION_CHANNEL.tone dot=True ink="context" css="menu-item-note" %}</span>
       </a>
-      {% comment %}
-      <!-- ast-grep-ignore: hand-drawn-form --> the frame's menu verbs, each one button, and the one form every post button names
-      {% endcomment %}<form action="{% url 'logout' %}" method="post">
+      <form action="{% url 'logout' %}" method="post">
         {% write_token %}
         <button type="submit" class="menu-item">Sign out</button>
       </form>

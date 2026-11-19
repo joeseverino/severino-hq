@@ -27,16 +27,15 @@ hooks {
       // repository root, so a file handed to the scan is held as the whole
       // scan holds it. A suppression no match needs any more fails.
       ["ast-grep"] {
-        glob = List("**/*.py", "**/templates/**/*.html")
+        glob = List("**/*.py")
         check = "\(astGrep) --error=unused-suppression {{files}}"
         fix = "\(astGrep) --update-all {{files}} >/dev/null"
       }
       // A rule's cases (rule-tests/) prove it refuses what it is for before its
-      // scan is trusted to find nothing, and the template rules' snapshots hold
-      // what each fix writes.
+      // scan is trusted to find nothing.
       ["ast-grep-whole"] {
         glob = List("tools/lint/ast-grep/**") + toolchain
-        check = "ast-grep test -c tools/lint/ast-grep/sgconfig.yml --skip-snapshot-tests && ast-grep test -c tools/lint/ast-grep/sgconfig.yml --filter '^hand-drawn-' && \(astGrep) --error=unused-suppression ."
+        check = "ast-grep test -c tools/lint/ast-grep/sgconfig.yml --skip-snapshot-tests && \(astGrep) --error=unused-suppression ."
         fix = "\(astGrep) --update-all . >/dev/null"
       }
       // No fix mode: a correction can rename an identifier in one file and not

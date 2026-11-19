@@ -913,14 +913,10 @@ by hand: the pill and tone classes are not public.
 
 No template draws by hand what a shared part draws. The table at the end of
 this section names each such shape (a `<section>`, a heading, a fold, a form
-that writes, a notice and the rest) beside the part to write instead. `hq plugin
-check` refuses each where it is drawn, with the host's `hand-drawn-*` ast-grep
-rules (`tools/lint/ast-grep/rules`), which hold the host's own templates
-too. `ast-grep scan --update-all` moves the ones whose rule carries a fix. A shape a page still draws is marked on the line above it, inside a
-Django comment no page receives, with why:
-`{% comment %}`, then `<!-- ast-grep-ignore: hand-drawn-form --> why` alone
-on its line, then `{% endcomment %}` on the shape's own line before it. A
-mark no shape needs any more fails the check, so the marks only fall.
+that writes, a notice and the rest) beside the part to write instead. HQ's
+template loaders refuse a template that draws one as it loads, with its line
+and what to write (`hq/platform/core/hand_drawn.py`), and `hq plugin check`
+reads every template of the extension the same way.
 `PLUGIN_API_VERSION` 11 retires `{% section_head %}`, whose head
 `{% section %}` draws, and publishes `partials/_icon.html`.
 `PLUGIN_API_VERSION` 12 retires the classes a page drew by hand before the

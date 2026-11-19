@@ -4,42 +4,31 @@ shared part draws, written by hand.
 
 A page shows a moment through ``when`` alone, so a template that asks for
 ``date``, ``time``, ``timesince``, ``timeuntil`` or ``{% now %}`` fails as it
-compiles: "Invalid filter: 'date'". An element a shared part draws
-(``DRAWN``) is written only in the templates of a part that declares it
-(``Part.elements``), so a template of HQ or an extension that writes one
-anywhere else fails as it loads.
+compiles: "Invalid filter: 'date'". A template of HQ or an extension that
+draws by hand a shape a shared part draws (``hand_drawn.SHAPES``) fails as it
+loads.
 """
 
-import functools
 import os
-import re
 from pathlib import Path
 from typing import override
 
 from django.template import TemplateSyntaxError
 from django.template.backends.django import DjangoTemplates
-from django.template.base import Lexer, Origin, TokenType
+from django.template.base import Origin
 from django.template.library import Library
 from django.template.loaders import app_directories, base, filesystem
-
 lazy from django.apps import apps
 lazy from django.conf import settings
 
 lazy from hq.platform.application.plugins import installed_plugin_apps
-lazy from hq.platform.core.template_contract import parts
+lazy from hq.platform.core.hand_drawn import hand_drawn
 
 # What each builtin library loses, by the module Django names it with.
 WITHHELD = {
     "django.template.defaultfilters": frozenset({"date", "time", "timesince", "timeuntil"}),
     "django.template.defaulttags": frozenset({"now"}),
 }
-
-# Each element a shared part draws, and how a page writes that part instead.
-DRAWN = {
-    "details": '{% section "Heading" fold=True %}',
-}
-
-_START = re.compile(r"<([a-zA-Z][a-zA-Z0-9-]*)")
 
 
 def _without(library: Library, names: frozenset[str]) -> Library:
@@ -86,38 +75,6 @@ def ours() -> tuple[str, ...]:
         ),
     ]
     return tuple(f"{Path(directory)}{os.sep}" for directory in directories)
-
-
-@functools.cache
-def _drawn_in() -> dict[str, frozenset[str]]:
-    """The elements of ``DRAWN`` each part's template writes, by its name."""
-
-    drawn: dict[str, frozenset[str]] = {}
-    for part in parts():
-        for name in part.files():
-            drawn[name] = drawn.get(name, frozenset()) | frozenset(part.elements)
-    return drawn
-
-
-def hand_drawn(source: str, name: str) -> list[tuple[int, str]]:
-    """Each element of ``DRAWN`` the template ``name`` writes outside a part
-    that declares it, by line. Read from Django's own tokens, so a
-    ``{% comment %}``, which no page receives, holds none."""
-
-    own = _drawn_in().get(name, frozenset())
-    found: list[tuple[int, str]] = []
-    commented = False
-    for token in Lexer(source).tokenize():
-        if token.token_type is TokenType.BLOCK:
-            command = token.contents.partition(" ")[0]
-            commented = command == "comment" or (commented and command != "endcomment")
-        elif token.token_type is TokenType.TEXT and not commented:
-            for match in _START.finditer(token.contents):
-                element = match.group(1).lower()
-                if element in DRAWN and element not in own:
-                    line = token.lineno + token.contents.count("\n", 0, match.start())
-                    found.append((line, f"<{element}> is a shared part's: write {DRAWN[element]}"))
-    return found
 
 
 class _Refusing(base.Loader):

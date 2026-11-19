@@ -62,10 +62,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
                 </div>
               </td>
               <td>{% if plan %}{% cell_line %}{{ plan.change_label|breakable }}{% detail %}risk {{ plan.risk|breakable }}{% endcell_line %}{% else %}{% include "partials/_empty_state.html" with message="No newer release" inline=True %}{% endif %}</td>
-              <td>{% if plan.fixes %}{% list %}<li>{% status "Vulnerable" tone=standing.serious|yesno:"serious,attention" %}</li><li>{% comment %}
-              the mark follows the image's standing, which no one value holds
-              <!-- ast-grep-ignore: hand-drawn-missing-value -->
-              {% endcomment %}{% muted %}the change fixes {{ plan.fixes|length|counted:"advisory,advisories" }}{% endmuted %}</li>{% endlist %}{% elif standing.state == "vulnerable" %}{% status "Vulnerable" tone=standing.serious|yesno:"serious,attention" %}{% else %}{% empty_value %}{% endif %}</td>
+              <td>{% if plan.fixes %}{% list %}<li>{% status "Vulnerable" tone=standing.serious|yesno:"serious,attention" %}</li><li>{% muted %}the change fixes {{ plan.fixes|length|counted:"advisory,advisories" }}{% endmuted %}</li>{% endlist %}{% elif standing.state == "vulnerable" %}{% status "Vulnerable" tone=standing.serious|yesno:"serious,attention" %}{% else %}{% empty_value %}{% endif %}</td>
               <td>{% list %}{% for item in group.containers %}<li class="prose"><a href="{{ item.url }}">{{ item.running.name|breakable }}</a> {% muted %}on {{ item.machine.name|breakable }}{% endmuted %}</li>{% endfor %}{% endlist %}</td>
             </tr>
           {% endwith %}{% endfor %}

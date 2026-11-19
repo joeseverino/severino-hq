@@ -156,7 +156,7 @@ FACT = FactTakes(
     of what runs now) follows them in the detail, so a page's summary cards are a band of facts too,
     never a grid of its own. A fact drawn by hand (a page's own band) writes the part's classes, which
     no page may, and a figure set bold apart from the words that count it is refused by the
-    `hand-drawn-split-count` rule.
+    `split-count` shape of `hand_drawn.SHAPES`.
 
     **A figure may be drawn as well as said.** `Kpi` (and `{% fact %}`) takes one `drawing`, or none,
     drawn beside its value or under its detail:

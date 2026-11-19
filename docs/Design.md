@@ -382,8 +382,8 @@ miles|measured:"mi,2" }}` for a unit or a word the count leaves alone
 (`measured:"more"`), never `floatformat` before it: the count after the comma
 rounds the figure as `floatformat` would, and `ui.measured` writes the same
 in Python. A measured zero is 0; the missing mark is for no value. The value tags that say a figure in words (`bytes`,
-`seconds`, `when`) join theirs. *Gate:* the `hand-drawn-split-figure` rule,
-over the host's templates and every extension's.
+`seconds`, `when`) join theirs. *Gate:* the `split-figure` shape (`hand_drawn.SHAPES`),
+refused as any template of the host or an extension loads.
 
 A bare figure counting what a heading heads (`.count`) stands in that
 heading after its words: `<h2>Readings <span class="count">7</span></h2>`,

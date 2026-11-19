@@ -16,7 +16,7 @@ lazy from django.apps import apps
 lazy from django.template.base import Lexer, TokenType
 
 lazy from hq.platform.core import template_contract
-lazy from hq.platform.core.template_engine import hand_drawn
+lazy from hq.platform.core.hand_drawn import hand_drawn
 
 # Sentence checks ------------------------------------------------------------
 
@@ -215,7 +215,6 @@ _FILTER = re.compile(r"\|\s*(\w+)(\s*:)?")
 _TEMPLATE_TAG = re.compile(r"\{[{%#].*?[}%#]\}", re.DOTALL)
 _HOOK = re.compile(r"\s(data-[a-z][a-z0-9-]*)")
 _STYLE = re.compile(r"\sstyle\s*=", re.IGNORECASE)
-_HEADING = re.compile(r"<h1[\s>]", re.IGNORECASE)
 
 
 def _is_register(node: ast.AST) -> bool:
@@ -451,11 +450,6 @@ class _Template:
         for match in _STYLE.finditer(markup):
             line = markup.count("\n", 0, match.start()) + 1
             self.problem(line, "writes a style attribute, which HQ's policy refuses; draw it through a public partial")
-        # A page's heading is its frame's, drawn from page_context's title, so
-        # it is the title the window's tab says.
-        for match in _HEADING.finditer(markup):
-            line = markup.count("\n", 0, match.start()) + 1
-            self.problem(line, "writes an h1, which the frame draws from page_context's title")
 
 
 def template_violations(source_root: str | Path) -> list[str]:

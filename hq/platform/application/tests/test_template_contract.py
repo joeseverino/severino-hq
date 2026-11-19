@@ -90,7 +90,7 @@ class TemplateValidationTests(SimpleTestCase):
             "markup.html:1": "invented",
             "markup.html:2": "data-secret",
             "markup.html:3": "style attribute",
-            "markup.html:4": "h1",
+            "markup.html:4": "heading",
             "beside.html:1": "class chip ",
             "beside.html:2": "class kpi ",
             "beside.html:3": "class tone-* ",

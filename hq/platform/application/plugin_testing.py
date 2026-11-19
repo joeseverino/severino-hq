@@ -152,7 +152,7 @@ def _unshared_tables(markup: str) -> list[str]:
 
 def table_problems(source: str) -> list[str]:
     """What keeps a template's tables off the contract, past a table outside
-    its region (ast-grep's hand-drawn-table): a heading written by hand, a
+    its region (the table shape of hand_drawn.SHAPES): a heading written by hand, a
     region written by hand, a dropped name column, and a region or heading
     around a table the shared stylesheet does not draw."""
 

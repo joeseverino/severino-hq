@@ -101,7 +101,7 @@ LIST = Part(
     name="list",
     rules="""
     Each item is an `<li>` and nothing stands between them. A list with no class, or a kind's class
-    written by hand, is refused by `hand-drawn-list`. A list with no item draws nothing, so a page
+    written by hand, is refused by the `list` shape. A list with no item draws nothing, so a page
     writes each `<li>` under its own test.
 
     A plain list read down (a row's notes, a record's statuses, a section's records) is `{% list %}`.

@@ -118,7 +118,7 @@ slotted(
         line under the table. A record a held request's warning names has its rows marked for attention
         (`data-attention` on the `tr`), and the card does not say the warning again. The rows keep the
         change's own order. An empty preview draws nothing. An approval card and an audit event draw it
-        (*Gate:* `hand-drawn-change-table`).
+        (*Gate:* the `change-table` shape of `hand_drawn.SHAPES`).
         """,
         partial="partials/_change_table.html",
         function=change_table,
