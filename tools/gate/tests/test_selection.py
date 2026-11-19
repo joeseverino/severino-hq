@@ -2,12 +2,12 @@
 carries, and every check that reads a changed file."""
 
 import ast
+import tempfile
 from pathlib import Path
 
 import grimp
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
 from tools.gate import chain, selection
 
 # An edit inside one test's body, which no other test reads: a module no source names, so none is chosen by it.
@@ -43,7 +43,6 @@ SAMPLE = (
 
 
 @tag("source", "tree")
-@reads("**/*.py", lists=("**",))
 class LoadedImportTests(SimpleTestCase):
     def test_a_change_selects_every_test_module_that_loads_it(self):
         """The walk along the imports a module runs as it loads, which a change no name carries takes, goes all
@@ -80,7 +79,7 @@ NAMED = {
 TESTS = {"example.tests.test_page", "example.tests.test_registry", "example.tests.test_patch"}
 
 
-def named_reach(tree: dict[str, str], edits: dict[str, str]):
+def named_reach(tree: dict[str, str], edits: dict[str, str], recorded: dict[str, frozenset[str]] | None = None):
     from tools.gate.names import changes, name_reach, outline
 
     modules = frozenset(selection.module_name(Path(path)) for path in tree)
@@ -88,7 +87,12 @@ def named_reach(tree: dict[str, str], edits: dict[str, str]):
         selection.module_name(Path(p)): outline(ast.parse(edits.get(p, t)), Path(p), modules) for p, t in tree.items()
     }
     seeds = {selection.module_name(Path(p)): changes(tree[p], text) for p, text in edits.items()}
-    return name_reach(seeds, every, TESTS | {"example.urls"})
+    return name_reach(seeds, every, TESTS | {"example.urls"}, recorded)
+
+
+# Every module of the tree but the tests, as a record of what each test ran holds them, with no body run as
+# the suite started.
+RECORDED = dict.fromkeys(("example.limits", "example.page", "example.registry", "example.urls"), frozenset[str]())
 
 
 class NameReachTests(SimpleTestCase):
@@ -102,10 +106,9 @@ class NameReachTests(SimpleTestCase):
 
     def test_a_comment_or_a_docstring_reaches_nothing(self):
         edited = '"""Limits."""\n# How many.\n' + NAMED["example/limits.py"]
-        found = named_reach(NAMED, {"example/limits.py": edited})
+        found = named_reach(NAMED, {"example/limits.py": edited}, RECORDED)
 
-        self.assertEqual(found.names, {"example.limits": set()})
-        self.assertEqual(found.dynamic, set())
+        self.assertEqual((found.names, found.ran, found.dynamic), ({}, {}, set()))
 
     def test_what_a_name_cannot_carry_reaches_every_module_that_loads_it(self):
         """A bare statement, a definition a decorator of this tree takes or one nothing refers to."""
@@ -119,3 +122,87 @@ class NameReachTests(SimpleTestCase):
             with self.subTest(edit=edit.splitlines()[-1]):
                 found = named_reach(NAMED, {"example/limits.py": edit.replace("LIMIT = 4", "LIMIT = 5")})
                 self.assertEqual(found.dynamic, {"example.limits"})
+
+
+class RecordedReachTests(SimpleTestCase):
+    """A body the record holds reaches the tests that ran it, and through no definition that refers to it."""
+
+    def test_an_edited_body_reaches_the_tests_that_ran_it_and_none_that_refer_to_it(self):
+        edited = NAMED["example/limits.py"].replace("return rows[:LIMIT]", "return rows[LIMIT:]")
+        found = named_reach(NAMED, {"example/limits.py": edited}, RECORDED)
+
+        self.assertEqual((found.names, found.ran), ({}, {"example.limits": {"recent"}}))
+        # Read from the source alone, it reaches every test that refers to the page.
+        self.assertIn("example.tests.test_page", named_reach(NAMED, {"example/limits.py": edited}).names)
+
+    def test_a_constant_reaches_the_bodies_that_read_it(self):
+        edited = NAMED["example/limits.py"].replace("LIMIT = 4", "LIMIT = 5")
+        found = named_reach(NAMED, {"example/limits.py": edited}, RECORDED)
+
+        self.assertEqual(found.ran, {"example.limits": {"recent"}})
+        self.assertNotIn("example.tests.test_page", found.names)
+
+    def test_a_body_a_module_runs_as_it_loads_or_a_cache_keeps_reaches_what_reads_its_answer(self):
+        tree = NAMED | {"example/registry.py": "from example.limits import unread\n\nCOUNTS = (unread(),)\n"}
+        cached = NAMED["example/limits.py"].replace("def unread", "@functools.cache\ndef unread")
+        for name, base in (("called as it loads", tree), ("cached", NAMED | {"example/limits.py": cached})):
+            with self.subTest(name):
+                edited = base["example/limits.py"].replace("return OTHER", "return OTHER + 1")
+                found = named_reach(base, {"example/limits.py": edited}, RECORDED)
+                self.assertIn("example.tests.test_registry", found.names)
+
+    def test_a_body_that_ran_as_the_suite_started_reaches_what_refers_to_it(self):
+        edited = NAMED["example/limits.py"].replace("return OTHER", "return OTHER + 1")
+        found = named_reach(NAMED, {"example/limits.py": edited}, RECORDED | {"example.limits": frozenset({"unread"})})
+
+        self.assertIn("example.tests.test_registry", found.names)
+
+    def test_a_body_a_registry_only_holds_reaches_no_reader_of_the_registry(self):
+        edited = NAMED["example/limits.py"].replace("return OTHER", "return OTHER + 1")
+        found = named_reach(NAMED, {"example/limits.py": edited}, RECORDED)
+
+        self.assertEqual((found.names, found.ran), ({}, {"example.limits": {"unread"}}))
+
+    def test_a_type_a_signature_names_reaches_only_a_function_a_decorator_of_this_tree_takes(self):
+        limits = NAMED["example/limits.py"] + "\n\nclass Shape:\n    size = 1\n"
+        page = "from example.limits import Shape, unread\n\n\n{}def show(shape: Shape) -> int:\n    return 1\n"
+        edited = limits.replace("size = 1", "size = 2")
+        for decorator, reached in (("", False), ("@unread\n", True)):
+            with self.subTest(decorator=decorator):
+                tree = NAMED | {"example/limits.py": limits, "example/page.py": page.format(decorator)}
+                found = named_reach(tree, {"example/limits.py": edited}, RECORDED)
+                self.assertEqual("show" in found.names.get("example.page", set()), reached)
+
+    def test_an_added_method_reaches_the_tests_that_ran_its_class(self):
+        edited = NAMED["example/page.py"] + "\n    def post(self):\n        return 1\n"
+        found = named_reach(NAMED, {"example/page.py": edited}, RECORDED)
+
+        self.assertIn("Page.get", found.ran["example.page"])
+        self.assertEqual(found.dynamic, set())
+
+    def test_a_decorator_imported_from_outside_the_tree_leaves_a_class_to_its_names(self):
+        from tools.gate.names import outline
+
+        text = "from dataclasses import dataclass\n\n\n@dataclass\nclass Row:\n    size: int = 1\n"
+        statements = outline(ast.parse(text), Path("example/rows.py"), frozenset({"example.rows"}))
+
+        self.assertFalse(statements[-1].decorated)
+
+    def test_the_record_answers_with_the_tests_and_the_start_that_ran_a_line_of_a_body(self):
+        from coverage import CoverageData
+
+        from tools.gate.ran import Record
+
+        with tempfile.TemporaryDirectory() as folder:
+            data = CoverageData(str(Path(folder, "data")))
+            ran = (("", [10]), ("example.tests.test_page", [6]), ("example.tests.test_registry", [10]))
+            for test, lines in ran:
+                data.set_context(test)
+                data.add_lines({"example/limits.py": lines})
+            data.write()
+            record = Record("tree", Path(folder, "data"))
+            texts = {"example/limits.py": NAMED["example/limits.py"]}
+
+            self.assertEqual(record.tests, {"example.tests.test_page", "example.tests.test_registry"})
+            self.assertEqual(record.ran({"example.limits": {"recent"}}, texts), {"example.tests.test_page"})
+            self.assertEqual(record.started(texts)["example.limits"], {"unread"})

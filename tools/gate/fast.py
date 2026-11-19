@@ -21,7 +21,7 @@ from typing import Any
 
 from hq.platform.core.tests.task import Usage, changed_paths, usage
 from tests.mise_tasks import HEAVY_LOCK, locks, mise_tasks
-from tools.gate import chain, turn as gate_turn
+from tools.gate import chain, ran, turn as gate_turn
 from tools.gate.chain import SENT, fast_base, record_pass
 from tools.gate.selection import python_files, selection, source_first, whole_suite
 from tools.gate.turn import ONE, in_share, weighed
@@ -361,6 +361,7 @@ def main(asked: Usage) -> int:
     labels, total = selection(changed, deleted, files, base)
     counts = f"{len(changed)} changed, {len(deleted)} deleted, {len(labels)}/{total} test modules"
     print(f"[fast] base {base[:9]}, {why}: {counts}")
+    print(f"[fast] {ran.said()}")
     every_test = len(labels) == total > 0
     if gate and not every_test and whole_asked:
         print("[fast] asked for: the whole suite and every quick gate run, so a pass records this tree")

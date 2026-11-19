@@ -1,0 +1,23 @@
+#!/bin/sh
+#MISE description="Record which lines each test module runs, which fast selects tests from: after a landing, or when fast says its record is behind"
+#MISE extends="django"
+#MISE lock=["gate", "heavy"]
+#MISE timeout="30m"
+
+# The suite fast runs (no tree test) under coverage's C tracer, the core that
+# keeps a context per line, each class's under its module's name
+# (hq/platform/core/run_report.py, measuring). The record is kept for every
+# worktree, named by the tree the run measured (tools/gate/ran.py), whether or
+# not every test passed: a failure's lines are what it ran too.
+set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+tree="$(uv run python -m tools.gate.ran --tree)"
+rm -rf var/test-map
+mkdir -p var/test-map
+status=0
+env -u MISE_ENV COVERAGE_CORE=ctrace COVERAGE_FILE=var/test-map/data uv run coverage run \
+    manage.py test --noinput --exclude-tag tree --parallel auto || status=$?
+COVERAGE_FILE=var/test-map/data uv run coverage combine -q
+uv run python -m tools.gate.ran --keep var/test-map/data "$tree"
+exit "$status"

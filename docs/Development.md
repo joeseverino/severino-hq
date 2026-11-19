@@ -366,17 +366,39 @@ check.
 
 The tests it selects are:
 
-- the test modules that refer to a top-level definition the change edits
-  (a function, a class, a constant, an import), or to one that refers to
-  such a definition, all the way. The edit is read from the changed
-  modules' text at the base, so a comment or a docstring changes nothing.
-  The references are read from the source: a name an import binds, an
-  attribute read off an imported module (`inbox.recent`), a name the module
-  defines, and in a module under a `tests` directory a dotted string (a
-  mock target). A module used as a value (`mock.patch.object(inbox, ...)`)
-  refers to every name in it. This is pytest-testmon's model of a test
-  depending on the blocks it runs, read statically. A constant edited in a
-  module most of the suite loads reaches only what uses the constant;
+- the test modules that ran a function body the change reaches, as the
+  record of what each test ran says. `mise run fast:map` makes it: the suite
+  fast runs, under coverage.py's C tracer, each class's lines kept under its
+  module's name (a dynamic context), in coverage's own database, kept under
+  the common git directory for every worktree and named by the tree it
+  measured (`tools/gate/ran.py`). It takes about three minutes; run it after
+  a landing, or when fast's line says many files changed since its tree. A
+  change reaches the bodies it edits, and the bodies and the top-level
+  definitions (a function's defaults and decorators, a class's body, a
+  constant, an import) that refer to a definition it edits as its module
+  loads, all the way through those definitions. A method's signature is part
+  of its body; a method added to a class reaches the bodies of its other
+  methods; a type a function's signature names reaches the function only
+  when a decorator of this tree takes it, since only something that reads
+  the signature sees it. A body reaches no further
+  than the tests that ran it, since a test that runs what calls it runs it
+  too, except to what calls it as a module loads (`COUNTS = (unread(),)`)
+  and, for a body a cache keeps (`functools.cache`) or one the record says
+  ran as the suite started, before any test (a registry's assembly), to all
+  that refers to it. The edit is read from the changed modules' text at the base and at the
+  record's tree, so what a test runs that its record predates is a change
+  too, and a comment or the module's docstring changes nothing. The
+  references are read from the source: a name an import binds, an attribute
+  read off an imported module (`inbox.recent`), a name the module defines,
+  and in a module under a `tests` directory a dotted string (a mock target).
+  A module used as a value (`mock.patch.object(inbox, ...)`) refers to every
+  name in it. This is pytest-testmon's model. A body in a module the record
+  does not hold (a test, a helper under `tests`, a module new since), and a
+  test module the record does not hold or that holds a test tagged `source`
+  (which reads files, and which the record's run leaves out), take the reach
+  read from the source
+  alone, a body reaching every definition that refers to it, as every body
+  does when there is no record;
 - the test modules that load a changed module, where a name cannot carry
   the change: a statement that binds nothing
   changed or was reached, a decorator of this tree takes a reached

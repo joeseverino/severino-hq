@@ -16,10 +16,10 @@ from typing import NamedTuple
 
 import grimp
 
-from hq.platform.core.tests.task import RefError, names
+from hq.platform.core.tests.task import RefError, changed_paths, names
 from tests.mise_tasks import run_files
-from tools.gate import chain
-from tools.gate.names import at_base, changes, module_name, name_reach, outlines
+from tools.gate import chain, ran
+from tools.gate.names import Edit, at_base, changes, module_name, name_reach, outlines
 
 # Never part of the Django suite: other languages and vendored trees.
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
@@ -240,24 +240,38 @@ def reached(
     """(each module the change reaches through the names it changed since ``base``, with the names it
     changes there; the modules it reaches as they load).
 
-    A test depends on the top-level definitions it refers to and those they refer to, pytest-testmon's
-    blocks read from the source, so an edit to one constant reaches what uses it, never every test that
-    loads its module. What a name cannot carry (a deleted module, a migration, a task definition, a
+    A test depends on what it runs, pytest-testmon's model: an edited function body reaches the tests the
+    record says ran it (tools/gate/ran.py), and a definition edited as its module loads (a constant, a
+    class's body, a signature) reaches the bodies and the definitions that refer to it, read from the
+    source (tools/gate/names.py ``name_reach``). The record is read against what changed since its own
+    tree as well as since ``base``, so what a test runs that its record predates is a change too. A test
+    module the record does not hold, or the whole selection when there is no record, takes the reach read
+    from the source alone. What a name cannot carry (a deleted module, a migration, a task definition, a
     statement reached only as its module loads) reaches every module that loads it (``importing``).
     """
 
     every = outlines(files)
-    edited = [path for path in changed if path.endswith(".py") and module_name(Path(path)) in every]
-    was = at_base(base, edited)
-    seeded = {
-        module_name(Path(path)): changes(was.get(path), (chain.ROOT / path).read_text(encoding="utf-8"))
-        for path in edited
-    }
+    record = ran.recorded()
+    since = [p for p in changed_paths(record.tree, chain.ROOT)[0] if p.endswith(".py")] if record else []
+    edited = [path for path in {*changed, *since} if path.endswith(".py") and module_name(Path(path)) in every]
+    was, held = at_base(base, edited), at_base(record.tree, edited) if record else {}
+    seeded: dict[str, Edit] = {}
+    for path in edited:
+        now = (chain.ROOT / path).read_text(encoding="utf-8")
+        edit = changes(was.get(path), now)
+        seeded[module_name(Path(path))] = edit.joined(changes(held.get(path), now)) if record else edit
     tests = {module_name(path) for path in files if is_test(path)}
-    found = name_reach(seeded, every, urls | tests)
+    found = name_reach(seeded, every, urls | tests, record.started(held) if record else None)
+    names = found.names
+    if record:
+        # A source test reads the repository's files, which the record's run leaves out and no record of the
+        # lines run would see.
+        sourced = {module_name(p) for p in files if is_test(p) and '@tag("source"' in (chain.ROOT / p).read_text()}
+        static = name_reach(seeded, every, urls | tests).names.keys() & (tests - (record.tests - sourced))
+        names = names | {test: set() for test in record.ran(found.ran, held) | static}
     start = (seeds([*changed, *deleted]) - seeded.keys()) | found.dynamic
     loading = importing(start, with_gone(importers(files), deleted, files), files) if start else set()
-    return found.names, loading
+    return names, loading
 
 
 def requested(index: dict[tuple[tuple[str, ...], bool], set[str]], every: tuple[Route, ...]) -> dict[Route, set[str]]:

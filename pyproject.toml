@@ -461,6 +461,9 @@ source = ["."]
 parallel = true
 concurrency = ["multiprocessing", "thread"]
 sigterm = true
+# Paths from the checkout, so the record fast selects tests from, made in one
+# worktree, reads in another (tools/gate/ran.py).
+relative_files = true
 # tools/ and demo/ are development tooling, tested by lint:source, which the
 # suite this measures leaves out.
 omit = ["*/migrations/*", "*/tests/*", "manage.py", "hq/config/*", ".venv/*", "tools/*", "demo/*"]

@@ -54,7 +54,7 @@ worktree() { # <checkout> <id> <commit> <worktree> [<head>]
     [ "${5:-$3}" = "$3" ] || git -C "$4" reset --quiet --mixed "$5"
     touch "$4"
     # The worktree holds the commit now; a ref left behind would keep every tree ever sent.
-    for ref in "$2" "$2-base" "$2-at"; do
+    for ref in "$2" "$2-base" "$2-at" "$2-record"; do
         git -C "$1" update-ref -d "refs/gate/$ref"
     done
 }
