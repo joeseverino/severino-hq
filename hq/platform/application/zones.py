@@ -32,12 +32,12 @@ from .answer_fields import CallMessage
 from .card_items import ListRow
 from .command_fields import Describe
 from .contracts import Effect
+from .domain_records import DomainRecord, DomainRow
 from .entity_links import entity_link
 from .infrastructure import enabled_resources, resource_health
 from .integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from .managed_records import ManagedResourceItem
 from .record_errors import PolicyError, RecordNotFound
-from .resource_records import DomainRecord, DomainRow
 from .resources import BoundedQuery
 from .security import Capability, Principal
 from .ui import counted

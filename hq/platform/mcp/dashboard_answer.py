@@ -8,7 +8,7 @@ that reads each other list.
 from typing import Any, TypedDict
 
 from hq.platform.application.dashboard import WITHHELD_ACTIVITY, Kpis, Upstreams, listed_item, operating_snapshot
-from hq.platform.application.resource_records import ActionItem
+from hq.platform.application.estate_records import ActionItem
 from hq.platform.application.resources import readable, resource_registry
 from hq.platform.application.security import Principal
 

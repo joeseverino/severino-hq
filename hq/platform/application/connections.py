@@ -52,8 +52,9 @@ lazy from . import connection_context, derived_reads, machines
 lazy from .connection_records import ConnectionStandingRecord, ConnectionStandingRow, CredentialRecord, CredentialRow
 lazy from .infrastructure import enabled_resources
 lazy from .locate import index_of
+lazy from .path_records import HopRow
 lazy from .projection import read_once
-lazy from .resource_records import HopRow, ReadingItem, ReadingRecord, ReadingRow
+lazy from .reading_records import ReadingItem, ReadingRecord, ReadingRow
 lazy from .resource_refusals import READINGS
 
 

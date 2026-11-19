@@ -377,7 +377,7 @@ class DescribedOnceTests(SimpleTestCase):
             shapeless(openapi.document()),
             [],
             "Each part of an answer HQ builds names its fields: declare a TypedDict beside the record that "
-            "holds it (hq/platform/application/resource_records.py), each field with `Describe`. A part in its "
+            "holds it (its kind's hq/platform/application/<kind>_records.py), each field with `Describe`. A part in its "
             "source's own shape uses the open alias `AsRead` (hq/platform/application/answer_fields.py).",
         )
 

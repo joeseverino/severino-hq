@@ -23,11 +23,11 @@ from .sight_part import KEYLESS, HqSight, Sees, sight, sight_json, sight_tile
 from .work_part import Renderer, Work, WorkUnit, work, work_json
 lazy from .. import hq_self, request_context, service_health
 lazy from ..entity_links import entity_link
+lazy from ..estate_records import Problem
 lazy from ..findings import finding_key
 lazy from ..hq_self import hq_hostnames, own_machine, serving, site_label
 lazy from ..problems import About, grouped, problems_by_part
 lazy from ..request_path import request_path
-lazy from ..resource_records import Problem
 lazy from ..security import Capability, Principal
 
 

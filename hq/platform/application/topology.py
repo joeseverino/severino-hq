@@ -74,7 +74,7 @@ lazy from .adoption import manages_through
 lazy from .facts import kinds_read
 lazy from .hq_self import serving
 lazy from .integration_specs import ResourceSpec
-lazy from .resource_records import RelationshipsRecord
+lazy from .relationship_records import RelationshipsRecord
 lazy from .topology_estate import add_estate
 
 

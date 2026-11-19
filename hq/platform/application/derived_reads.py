@@ -28,35 +28,22 @@ lazy from .action_items import filter_items
 lazy from .command_center import estate_search
 lazy from .connection_records import CredentialRecord, TallyPart
 lazy from .credential_sight import credential_sight, sight
+lazy from .domain_records import DnsRecordPart, DomainRecord, DomainRow
 lazy from .entity_links import entity_link
 lazy from .estate import estate_reading
 lazy from .glance import machine_metrics
 lazy from .hq_self import serving
 lazy from .infrastructure import enabled_resources
 lazy from .machine_context import header_addresses
+lazy from .machine_records import LoadPart, MachineRecord, PeeringPart, PresencePart
+lazy from .path_records import HopRow, ObservedPart, PathRecord, RoutePart
 lazy from .paths import path_to
+lazy from .reading_records import ReadingItem, ReadingRecord
+lazy from .record_parts import CheckPart, MeasurementPart
 lazy from .record_saves import row
+lazy from .relationship_records import JoinedReadingPart, RelationshipsRecord
 lazy from .relationships import readout_records, relationships_for
 lazy from .request_path import request_path, serialize_request_path
-lazy from .resource_records import (
-    CheckPart,
-    DnsRecordPart,
-    DomainRecord,
-    DomainRow,
-    HopRow,
-    JoinedReadingPart,
-    LoadPart,
-    MachineRecord,
-    MeasurementPart,
-    ObservedPart,
-    PathRecord,
-    PeeringPart,
-    PresencePart,
-    ReadingItem,
-    ReadingRecord,
-    RelationshipsRecord,
-    RoutePart,
-)
 lazy from .search import global_search
 lazy from .service_list import services_by_zone
 lazy from .tailnet_signers import signer_of

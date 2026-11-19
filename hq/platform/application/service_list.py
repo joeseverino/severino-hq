@@ -6,21 +6,20 @@ list page, the topology, the domain cards and the API read this one list.
 """
 
 from dataclasses import dataclass, replace
-from typing import Annotated, Any
+from typing import Any
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 
 from .adoption import ADOPT, AdoptCommand, adopt
-from .answer_fields import PageUrl
 from .contracts import Effect
-from .describe import Describe
 from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
+from .path_records import PathRecord
 from .projection import complete, projection_scope, read_once
 from .record_errors import RecordNotFound
-from .resource_records import FacetPart, PathRecord, ServiceItem, ServiceRow
 from .resources import EmptyQuery
 from .security import Capability
 from .service_facets import zone_holding
+from .service_records import FacetPart, ServiceItem, ServiceRecord, ServiceRow
 from .services import (
     CONTAINER_KIND,
     HQ_MARK,
@@ -64,20 +63,6 @@ def _listed(favorites: tuple[str, ...]) -> tuple[Service, ...]:
     marked = tuple(replace(service, mark=HQ_MARK) if service.hostname in own_names else service for service in catalog)
     unlisted = tuple(replace(service, mark=wanted[service.hostname]) for service in prospects(tuple(wanted)))
     return ordered_services(tuple(sorted(marked + unlisted, key=lambda service: service.hostname)), favorites)
-
-
-class ServiceRecord(ServiceItem):
-    """One service name whole and the path a request for it takes."""
-
-    url: PageUrl
-    listing: Annotated[
-        str,
-        Describe(
-            f"`{LISTED}` for a listed service, `{PROSPECT}` for a hostname nothing serves yet, whose facets "
-            "each read as not set up."
-        ),
-    ]
-    path: PathRecord
 
 
 def listed_service(hostname: str) -> Service:

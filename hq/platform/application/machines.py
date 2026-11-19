@@ -33,10 +33,10 @@ lazy from .connections import connection_rows
 lazy from .entity_links import entity_link
 lazy from .facts import Subject, snapshots_of
 lazy from .infrastructure import declared_machines, enabled_resources
+lazy from .machine_records import MachineRecord, MachineRow
 lazy from .machine_roles import role_context, roles_of
 lazy from .projection import read_once
 lazy from .reach import network_of
-lazy from .resource_records import MachineRecord, MachineRow
 lazy from .service_facets import connected_kinds
 lazy from .whereabouts import locate, whereabouts
 

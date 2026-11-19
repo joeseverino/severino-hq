@@ -1,10 +1,5 @@
 """The shapes the infrastructure resource answers in: the records HQ manages,
-their operations, and what HQ derives from each.
-
-As ``resource_records`` declares the rest of the host's resources: the API
-document types each read by them, and a test holds every answer on the
-showcase data to its type.
-"""
+their operations, and what HQ derives from each."""
 
 from typing import Annotated, Any, NotRequired, TypedDict
 
