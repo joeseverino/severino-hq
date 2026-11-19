@@ -247,8 +247,10 @@ def list_shell(root: Path, paths: list[str]) -> list[str]:
 # with the quick gates (mise.fast.toml), whose output is mise's summary.
 TESTS = "fast:tests"
 ENVIRONMENT = "fast"
-# The variable fast:tests reads the labels of fast:source from, its dependency.
+# The variable fast:tests reads the labels of fast:source from, its dependency,
+# and the one a gate in the heavy turn reads fast's base from (fast:look's look).
 SOURCE = "HQ_FAST_SOURCE"
+BASE = "HQ_FAST_BASE"
 
 
 def heavy_gates(tasks: tuple[str, ...]) -> tuple[str, ...]:
@@ -285,9 +287,12 @@ def stage_tokens(tasks: tuple[str, ...], source: list[str], labels: list[str], p
     return min(max(tests, ONE if source else 0) + ONE * len(tasks), gate_turn.CAPACITY)
 
 
-def run_command(tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str) -> list[str]:
+def run_command(
+    tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str, paths: list[str], base: str
+) -> list[str]:
     """The run of the tests beside the gates that run in the heavy turn
-    (``tasks``), in one run of mise, in one share of the turn sized by
+    (``tasks``), each that reads a file at a time on ``paths``, with ``base``
+    named to them, in one run of mise, in one share of the turn sized by
     ``stage_tokens``. The share tells each task under it that it holds the
     turn, as mise hands a lock down, so each gate that takes the lock itself
     and the tests' task go ahead at once and side by side, never queued on the
@@ -298,9 +303,9 @@ def run_command(tasks: tuple[str, ...], source: list[str], labels: list[str], pa
     the summary is the environment's: the tests' task prints as it runs, beside
     each gate's line as it ends."""
 
-    gates = [word for task in tasks for word in (task, ":::")]
+    gates = [word for task in tasks for word in (*handed(task, paths), ":::")]
     tests = [TESTS, "--parallel", parallel, *labels]
-    command = ["env", f"{SOURCE}={' '.join(source)}", *mise_run([*gates, *tests], parallel)]
+    command = ["env", f"{SOURCE}={' '.join(source)}", f"{BASE}={base}", *mise_run([*gates, *tests], parallel)]
     tokens = stage_tokens(tasks, source, labels, parallel)
     return [*in_share(tokens, TURN_BOUND), *command] if tokens else command
 
@@ -323,12 +328,14 @@ def gates_and_tests(
     files: list[Path],
     parallel: str,
     paths: list[str],
+    base: str,
     *,
     again: str = "",
 ) -> list[Step]:
-    """The quick gates among ``tasks``, each that reads a file at a time on
-    ``paths``, then, once they pass, the tests beside the rest, which run in
-    the heavy turn; ``again`` names a rerun in its labels."""
+    """The quick gates among ``tasks``, then, once they pass, the tests beside
+    the rest, which run in the heavy turn, each gate that reads a file at a time
+    on ``paths``, those in the turn told ``base``; ``again`` names a rerun in
+    its labels."""
 
     steps = quick_stage(tasks, parallel, paths, again)
     if not all(each.ok for each in steps):
@@ -341,7 +348,7 @@ def gates_and_tests(
     if source:
         print(f"[fast] first, the source checks that read the browser gate's modules: {' '.join(source)}")
     label = "tests and the gates in the heavy turn" if slow else "tests"
-    return [*steps, step(f"{label}{again}", run_command(slow, source, rest, parallel))]
+    return [*steps, step(f"{label}{again}", run_command(slow, source, rest, parallel, paths, base))]
 
 
 def step(label: str, cmd: list[str]) -> Step:
@@ -419,7 +426,7 @@ def main(asked: Usage) -> int:
     tasks = whole if every_test else (*selected, *group_tasks(files, reached, touched))
     whole_run = every_test and set(tasks) == set(whole)
     rest = tuple(task for task in tasks if task not in early)
-    steps = [*first, *gates_and_tests(rest, labels, files, parallel, handing)]
+    steps = [*first, *gates_and_tests(rest, labels, files, parallel, handing, base)]
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))

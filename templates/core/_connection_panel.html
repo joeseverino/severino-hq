@@ -143,7 +143,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
                 {% body %}
                   {% if result.reading.detail %}{% muted element="p" %}{{ result.reading.detail|breakable }}{% endmuted %}{% endif %}
                   {% if result.reading.rules %}
-                    {% stack_list %}{% for rule in result.reading.rules %}<li><code>{{ rule|breakable }}</code></li>{% endfor %}{% endstack_list %}
+                    {% list %}{% for rule in result.reading.rules %}<li><code>{{ rule|breakable }}</code></li>{% endfor %}{% endlist %}
                   {% endif %}
                 {% endcheck_rung %}
               {% endfor %}

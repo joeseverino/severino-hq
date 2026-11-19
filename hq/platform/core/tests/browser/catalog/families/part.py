@@ -120,13 +120,13 @@ _GLANCE = (
     '{% fact "example-host-01" icon="server" id="example-host" tone="attention" title="Example containers" '
     'data_fragment_part="example-host" %}12 <small>containers</small>'
     '{% detail %}<small>{% status "2 example alerts" tone="attention" pill=False %}</small>'
-    "{% dot_list %}<li>CPU 4%</li><li>Memory 48%</li>{% enddot_list %}"
+    '{% list kind="dots" %}<li>CPU 4%</li><li>Memory 48%</li>{% endlist %}'
     "{% heading %}<strong>Example host</strong><span>An example summary</span>"
     '{% panel %}{% facts %}{% fact "Example CPU" value="4%" %}{% fact "Example memory" value="583 MB" %}{% endfacts %}'
     '{% foot %}<a href="/example/">Example containers</a><span><button type="button">Refresh</button>'
     '<a href="/example/settings/">Settings</a></span>{% endfact %}'
     '{% fact "Example weather" icon="cloud" id="example-weather" data_fragment_part="example-weather" %}71°'
-    "{% detail %}{% dot_list %}<li>Example Mostly Cloudy</li><li>71–86°</li>{% enddot_list %}"
+    '{% detail %}{% list kind="dots" %}<li>Example Mostly Cloudy</li><li>71–86°</li>{% endlist %}'
     "<small>Last read an example 3 days ago · out of date</small>"
     "{% heading %}<strong>Example weather</strong>"
     "{% panel %}<p>The last reading failed (ExampleError). This is the one before it.</p>"
@@ -145,8 +145,8 @@ _GLANCE_EMPTY = (
     "{% detail %}<small>No reading yet</small>"
     "{% heading %}<strong>Example host</strong>{% panel %}<p>An example host has not been read yet.</p>{% endfact %}"
     '{% fact "Example weather" icon="cloud" id="example-long" data_fragment_part="example-long" %}71°'
-    "{% detail %}{% dot_list %}<li>Example Mostly Cloudy with an example chance of showers later</li><li>71–86°</li>"
-    "<li>Example wind 12 mph</li>{% enddot_list %}"
+    '{% detail %}{% list kind="dots" %}<li>Example Mostly Cloudy with an example chance of showers later</li>'
+    "<li>71–86°</li><li>Example wind 12 mph</li>{% endlist %}"
     "{% heading %}<strong>Example weather</strong>{% panel %}<p>An example forecast.</p>{% endfact %}"
     "{% endfacts %}</div>"
 )
@@ -1236,27 +1236,27 @@ ENTRIES = {
         '{% step icon="card" %}<strong>Example step</strong> <span class="muted">An example sentence that says what the step is for.</span>{% endstep %}'
         "{% endsteps %}{% endsection %}"
     ),
-    # A stack list ({% stack_list %}): a status with its words, one whose
+    # A list read down ({% list %}): a status with its words, one whose
     # link stands alone, and a note; then in a table, a row's notes under its name and a list
     # the open row shows under its label. A new option of the tag comes with
     # an entry here (CatalogTests in test_part_tags).
-    "part/stack-list-states": Entry(
-        '{% section "Example advisories" %}{% stack_list data_example="example" %}'
+    "part/list-down-states": Entry(
+        '{% section "Example advisories" %}{% list data_example="example" %}'
         '<li class="prose">{% status "High" tone="serious" %} <a href="/example/advisory/">EXAMPLE-2026-0001</a> '
         "An example advisory long enough to wrap onto a second line on a phone.</li>"
         '<li>{% status "Low" tone="attention" %} <a href="/example/advisory/2/">EXAMPLE-2026-0002</a></li>'
         '<li class="muted">and 2 more on its page</li>'
-        "{% endstack_list %}{% endsection %}"
+        "{% endlist %}{% endsection %}"
     ),
-    "part/stack-list-in-a-row": Entry(
+    "part/list-down-in-a-row": Entry(
         '{% section "Example checks" %}{% table_region "Example checks" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Check" %}{% table_heading "Result" %}</tr></thead><tbody>'
         "<tr><td>Example reading"
-        '{% stack_list %}<li class="muted">An example reason it is not read.</li>'
-        '<li class="muted">Another example reason.</li>{% endstack_list %}</td>'
+        '{% list %}<li class="muted">An example reason it is not read.</li>'
+        '<li class="muted">Another example reason.</li>{% endlist %}</td>'
         '<td class="cell-data">{% status "Failed" tone="serious" %}<br><strong>2 example names differ</strong>'
-        '{% stack_list below="Example affected" %}<li><strong>example-proxy</strong>{% dot %}example.com</li>'
-        "<li><strong>example-mail</strong>{% dot %}mail.example.com</li>{% endstack_list %}</td></tr>"
+        '{% list below="Example affected" %}<li><strong>example-proxy</strong>{% dot %}example.com</li>'
+        "<li><strong>example-mail</strong>{% dot %}mail.example.com</li>{% endlist %}</td></tr>"
         "</tbody></table>{% endtable_region %}{% endsection %}"
     ),
     # A calendar's sources, each a toggle in its color: one shown with what it
@@ -1486,8 +1486,8 @@ ENTRIES = {
         '{% fact "Example count" value=0 %}'
         '{% fact "Example link" value="example.com" url="/example/" %}'
         '{% fact "An example label long enough to take its column\'s room" value="Example value" %}'
-        '{% fact "Example list" %}<ul class="dot-list"><li>example-one</li><li>example-two</li>'
-        "<li>example-three</li></ul>{% endfact %}"
+        '{% fact "Example list" %}{% list kind="dots" %}<li>example-one</li><li>example-two</li>'
+        "<li>example-three</li>{% endlist %}{% endfact %}"
         '{% fact "Example prose" %}An example value that is a sentence long enough to wrap onto a second '
         "line at the narrower widths, as a reading's note does.{% endfact %}"
         "{% endfacts %}",
@@ -1497,11 +1497,11 @@ ENTRIES = {
     # what each phrase reaches: every line a target tall.
     "part/facts-list-links": Entry(
         "{% facts %}"
-        '{% fact "Example forwards to" %}<ul class="dot-list">'
+        '{% fact "Example forwards to" %}{% list kind="dots" %}'
         '<li><a href="/example/one/">example-app-one</a></li><li><a href="/example/two/">example-app-two</a></li>'
         '<li><a href="/example/three/">example-app-three</a></li><li><a href="/example/four/">example-four</a></li>'
         '<li><a href="/example/five/">example-five</a></li><li><a href="/example/six/">example-app-six</a></li>'
-        "</ul>{% endfact %}"
+        "{% endlist %}{% endfact %}"
         "{% endfacts %}"
     ),
     # A list on the page and one in a disclosure under it, as a resource's
@@ -1920,13 +1920,13 @@ ENTRIES = {
     ),
     # A row of places to go, each a chip: one of HQ's own pages, outside ones
     # with their arrow, and a name long enough to wrap on a phone.
-    "part/link-chips-states": Entry(
-        '{% section "Example links" %}{% link_chips %}'
+    "part/list-chips-states": Entry(
+        '{% section "Example links" %}{% list kind="chips" %}'
         '<li><a href="/example/" title="An example page of HQ">Example page</a></li>'
         '<li>{% entity "https://example.com/"|outside label="Example site" %}</li>'
         '<li>{% entity "https://docs.example.com/"|outside label="Example documentation" %}</li>'
         '<li>{% entity "https://example.org/"|outside label="An example tool whose name runs long enough to wrap" %}</li>'
-        "{% endlink_chips %}{% endsection %}"
+        "{% endlist %}{% endsection %}"
     ),
     # Readings that need reading, each tone: one a link, one with its next
     # step, one with neither a value nor an eyebrow.
@@ -2025,8 +2025,8 @@ ENTRIES = {
         '{% check_rung state="met" evidence="192.0.2.10" %}Example address is the device\'s'
         "{% body %}<p>The address the request came from is the device's own.</p>{% endcheck_rung %}"
         '{% check_rung state="unmet" evidence=long %}Example policy admits the device'
-        "{% body %}<p>No example rule admits it.</p>{% stack_list %}<li><code>example:rule-one</code></li>"
-        "<li><code>example:rule-two</code></li>{% endstack_list %}{% endcheck_rung %}"
+        "{% body %}<p>No example rule admits it.</p>{% list %}<li><code>example:rule-one</code></li>"
+        "<li><code>example:rule-two</code></li>{% endlist %}{% endcheck_rung %}"
         "{% endcheck_ladder %}{% endcheck_rung %}"
         '{% check_rung kind="Tailnet" %}example-tailnet.example.com{% more %}Details'
         "{% body %}<p>Example HQ could not read the tailnet.</p>{% endcheck_rung %}"
@@ -2187,21 +2187,21 @@ ENTRIES = {
         },
         heads_the_page=True,
     ),
-    # The facts on a title's line ({% title_meta %}): a list of parts with a
+    # The facts on a title's line ({% list kind="dots" muted=True %}): a list of parts with a
     # dot between each, long enough to wrap under the title on a phone, each
     # part wrapping whole, a state as a pill and as words among them. A new option of the tag comes with an entry here
     # (CatalogTests in test_part_tags).
-    "part/title-meta-states": Entry(
+    "part/list-title-states": Entry(
         '{% include "partials/_page_head.html" %}{% section "Example section 3" %}<p>An example line.</p>{% endsection %}',
         {
             "page": Page(title="example-host-01"),
             "page_aside": _Drawn(
-                '{% title_meta data_example="example" %}<li>{% status "Online" tone="good" %} since 3 days ago</li>'
+                '{% list kind="dots" muted=True data_example="example" %}<li>{% status "Online" tone="good" %} since 3 days ago</li>'
                 "<li>example role</li><li><code>192.0.2.10</code></li>"
                 "<li>also known as <code>example-host-01.example.com</code></li>"
                 '<li><strong>{% status "Out of date" tone="attention" pill=False %}</strong> since 2 hours ago</li>'
                 '<li>{% status "An example sentence that says what the state means." tone="attention" pill=False %}</li>'
-                "{% endtitle_meta %}"
+                "{% endlist %}"
             ),
         },
         heads_the_page=True,

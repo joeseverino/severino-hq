@@ -57,7 +57,7 @@ MARKUP_ATTRIBUTES = {
 }
 MARKUP_FILTERS = {
     "safe": "markup its author wrote",
-    "title_parts": "the list items a title's line is given, refused when they are anything else",
+    "list_items": "a list's items, refused when they are anything but <li> elements",
 }
 
 # Elements whose text is never a token: a span inside one is not markup, is

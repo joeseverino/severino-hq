@@ -44,20 +44,19 @@ fails when this file falls behind. The rules around it are in
 | `{% button %}` | nothing | Every control that looks like a button: a link, a post through the page's one shared form, its form's own, or one a script acts on. | `{% button restart.label offer=restart look="primary" %}` |
 | `{% button_row %}` | nothing | A row of buttons that stands on its own: a form's closing row, a card's decisions, a page's way on. | `{% button_row %}{% button "Save" submit=True look="primary" %}{% endbutton_row %}` |
 | `{% card %}` | nothing | The frame a page's content is grouped in; a titled part of a page is a `{% section %}`. | `{% card label="Hosts" %}<p>Body</p>{% endcard %}` |
-| `{% cell_line %}` | `detail` | A fact in a table cell as a line of its own, and the words said quietly on the line under it: given `text=` it encloses nothing, its words a link to `url=`; a line of markup is its block, its second line after `{% detail %}`. A second line that is a status, code or a link is a `{% stack_list %}` item. | `{% cell_line %}{% entity "machine"\|entity_of:"example-host-01" %}{% detail %}Docker host{% endcell_line %}` |
+| `{% cell_line %}` | `detail` | A fact in a table cell as a line of its own, and the words said quietly on the line under it: given `text=` it encloses nothing, its words a link to `url=`; a line of markup is its block, its second line after `{% detail %}`. A second line that is a status, code or a link is a `{% list %}` item. | `{% cell_line %}{% entity "machine"\|entity_of:"example-host-01" %}{% detail %}Docker host{% endcell_line %}` |
 | `{% data_table %}` | nothing | A table drawn whole from its declaration: its columns' headings and a row of cells for each record. | `{% data_table table %}` |
 | `{% dot %}` | nothing | The middle dot between two parts of one line, written straight after the first. | `{{ count }}{% dot %}{{ age }}` |
-| `{% dot_list %}` | nothing | A run of whole parts on one line, each an `<li>`, a dot between each that no line opens on: a fact's links, a row's context line, a band's details. | `{% dot_list %}<li><a href="/example/">example-host</a></li><li>2 days ago</li>{% enddot_list %}` |
 | `{% empty_value %}` | nothing | The mark for a value that is not there, where there is no value to test; `\|or_empty` tests one. | `{% empty_value %}` |
 | `{% entity %}` | nothing | One thing named, as the link builder answered for it: a link to its page, or its name. | `{% entity "machine"\|entity_of:name %}` |
 | `{% fact %}` | `detail`, `heading`, `panel`, `foot` | One fact of a `{% facts %}`: its label, its value and the detail under it. Given `value=` it encloses nothing; a value in markup is its block, its detail after `{% detail %}`, and a panel its value opens in place after `{% heading %}`, `{% panel %}` and `{% foot %}`. | `{% facts %}{% fact "Version" icon="layers" %}<code>1.4.2</code>{% detail %}Tag only{% endfact %}{% endfacts %}` |
 | `{% facts %}` | nothing | Every label and its value a page shows, each a `{% fact %}`; given `items=` it draws each item as a fact and encloses nothing. | `{% facts layout="band" %}{% fact "Running" value="3" url="/example/" %}{% endfacts %}` |
 | `{% filter_bar %}` | `choices`, `summary` | Every query a page asks of what it lists, in one bar: its search and any controls of its own, its `choices` part, the one button that sends them, then its `summary` part. A list's table toolbar is the same bar. | `{% filter_bar search="Filter by name" query=q filtered=narrowed clear=every_url %}{% choices %}{% select "kind" kinds label="Kind" every="kind" %}{% endfilter_bar %}` |
-| `{% muted %}` | nothing | Words said quietly beside what they are about: a context line, a sentence under a value. A cell or a list item holds it; a run of parts said quietly is `{% dot_list muted=True %}`. | `{% muted element="p" %}A sentence under it.{% endmuted %}` |
+| `{% list %}` | nothing | A list, each `<li>` an item, read as its kind says. | `{% list %}<li>{% status "High" tone="serious" %}</li><li>An example advisory</li>{% endlist %}{% list kind="dots" %}<li><a href="/example/">example-host</a></li><li>2 days ago</li>{% endlist %}{% list kind="prose" %}<li>An example sentence.</li><li>Another example sentence.</li>{% endlist %}{% list kind="chips" %}<li><a href="/example/">Example page</a></li><li><a href="/example/2/">Another example page</a></li>{% endlist %}{% list kind="codes" %}<li><code>example:read</code></li><li><code>example:write</code></li>{% endlist %}{% list kind="labeled" %}<li><span>Example network</span> <code>192.0.2.10</code></li><li><span>Example tailnet</span> <code>192.0.2.20</code></li>{% endlist %}` |
+| `{% muted %}` | nothing | Words said quietly beside what they are about: a context line, a sentence under a value. A cell or a list item holds it; a run of parts said quietly is `{% list kind="dots" muted=True %}`. | `{% muted element="p" %}A sentence under it.{% endmuted %}` |
 | `{% notice %}` | `title` | Every banner and message a page shows, in one of its tones; a message among the page's messages is the same part in a toast's placement. A title the page composes is its `{% title %}` part, after the body. | `{% notice tone="warning" title="2 jobs failed" %}<p>What to do.</p>{% endnotice %}` |
 | `{% outside_link %}` | nothing | A link to a page outside HQ around markup of the page's own (a chip, an icon, a card); a name is `{% entity url\|outside label=name %}`. | `{% outside_link url="https://example.com/docs/" %}<span class="tag">Docs</span>{% endoutside_link %}` |
 | `{% present %}` | nothing | What it encloses, drawn only when the value is there, else the mark for a missing value. | `{% present repo.release %}<code>{{ repo.release }}</code>{% endpresent %}` |
-| `{% prose_list %}` | nothing | A list of sentences, each an `<li>` marked as the browser marks it. | `{% prose_list %}<li>A sentence.</li>{% endprose_list %}` |
 | `{% reference %}` | nothing | The link for the reference a record holds, for `{% entity %}`, or none the viewer may not see. | `{% reference expense "paid_from" as account %}{% entity account %}` |
 | `{% referenced_by %}` | nothing | Everything that names a thing, for that thing's page, a card per kind of reference. | `{% referenced_by "machine" machine.name %}` |
 | `{% row_actions %}` | nothing | The cell that ends a row with what can be done to its record, each a compact control. | `{% table_region "Example actions" %}<table class="data-table"><tbody><tr><td>{{ row.name }}</td>{% row_actions row.actions %}</tr></tbody></table>{% endtable_region %}` |
@@ -65,7 +64,6 @@ fails when this file falls behind. The rules around it are in
 | `{% row_group %}` | nothing | The heading row of one group of a table's rows, first in its `tbody`: its name and how many rows. | `{% table_region "Example groups" %}<table class="data-table"><tbody>{% row_group "Example group" 3 %}<tr><td>example-host</td></tr></tbody></table>{% endtable_region %}` |
 | `{% row_toggle %}` | nothing | The toggle that opens a row to all it holds, last in the cell that names it, in a table with no headings. | `{% table_region "Example toggles" %}<table class="data-table"><tbody><tr><td>{{ row.name }}{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}` |
 | `{% section %}` | `aside`, `empty`, `foot` | A titled part of a page in its frame, its head on the page and its body in the frame. | `{% section "Agents" count=n %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}` |
-| `{% stack_list %}` | nothing | A list read down, each `<li>` a line of its own: the notes under a row's name, the statuses a record carries, the records a section lists. | `{% stack_list %}<li>{% status "High" tone="serious" %}</li><li>An example advisory</li>{% endstack_list %}` |
 | `{% status %}` | nothing | One short state, drawn in its tone and said in sentence case, the one way a page draws a state. | `{% status "Blocked" tone="attention" %}` |
 | `{% table_heading %}` | nothing | One column heading of a table: its kind, the rank it leaves by and its sort control. | `{% table_region "Example updates" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}{% table_heading "Updated" "status" drop=2 %}</tr></thead><tbody><tr><td>example-host</td><td>An hour ago</td></tr></tbody></table>{% endtable_region %}` |
 | `{% table_region %}` | nothing | The box a table fits, which draws what follows from its headings, and, with no rows, the one empty state in its place. | `{% table_region "Hosts" empty="No hosts yet." %}<table class="data-table"><thead><tr>{% table_heading "Name" %}</tr></thead><tbody><tr><td>example-host</td></tr></tbody></table>{% endtable_region %}` |
@@ -109,8 +107,6 @@ fails when this file falls behind. The rules around it are in
 | `cell_line` | `text` |  |  | Its words, which make it one tag with no end. |
 | `cell_line` | `url` |  |  | The page its words link to. |
 | `data_table` | `table`, first and unnamed | required |  | A `DataTable`: its columns and its rows. |
-| `dot_list` | `muted` | `False` | `False`, `True` | Said quietly. |
-| `dot_list` | `data_*` | | | Each a `data-` attribute. |
 | `entity` | `link`, first and unnamed | required |  | The thing's link, as the link builder answered for it. |
 | `entity` | `code` | `False` |  | Its name drawn as code. |
 | `entity` | `label` |  |  | The words it is named by, in place of its own. |
@@ -149,6 +145,11 @@ fails when this file falls behind. The rules around it are in
 | `filter_bar` | `total` | `None` |  | How many there are. |
 | `filter_bar` | `verb` |  |  | The words of the button that sends it, Filter unless told. |
 | `filter_bar` | `data_*` | | | Each a `data-` attribute. |
+| `list` | `below` |  |  | The open row's label, for a `down` list the open row shows under it. |
+| `list` | `kind` | `"down"` | `down`, `dots`, `prose`, `chips`, `codes`, `labeled` | `down`, read down, each item a line of its own: the notes under a row's name, a record's statuses; `dots`, a run on one line, a dot between each that no line opens on: a fact's links, a row's context line; `prose`, sentences, each marked as the browser marks it; `chips`, places to go, each item one link drawn as a chip of its own; `codes`, names in code, wrapping between them: policy names, ports, permissions; `labeled`, each item a label then its value, the labels in one column: addresses. |
+| `list` | `muted` | `False` | `False`, `True` | A `dots` run said quietly. |
+| `list` | `numbered` | `False` | `False`, `True` | `prose` items read in order, each numbered. |
+| `list` | `data_*` | | | Each a `data-` attribute. |
 | `muted` | `css` |  |  | The classes of where it stands (`narrow-more`, `row-more`, `cell-part`). |
 | `muted` | `element` | `"span"` | `span`, `p`, `div` | A line among other words, a paragraph or a block. |
 | `muted` | `hidden` |  |  | Drawn hidden, for a line a script shows. |
@@ -170,7 +171,6 @@ fails when this file falls behind. The rules around it are in
 | `outside_link` | `tone` |  |  | A status tone its words are drawn in. |
 | `outside_link` | `url` |  |  | Where it leads; anything but a web address draws what it holds, unlinked. |
 | `present` | `value`, first and unnamed | required |  | The value whose markup it holds. |
-| `prose_list` | `numbered` |  |  | Each numbered, for items read in order. |
 | `reference` | `row`, first and unnamed | required |  | The record that holds the reference. |
 | `reference` | `field`, second and unnamed | required |  | The field it is held in. |
 | `referenced_by` | `thing`, first and unnamed | required |  | A record, or the kind of thing it is. |
@@ -208,8 +208,6 @@ fails when this file falls behind. The rules around it are in
 | `section` | `remedy_url` |  |  | Where the empty line's link leads. |
 | `section` | `when` |  |  | The `when` form the moment is drawn in. |
 | `section` | `data_*` | | | Each a `data-` attribute. |
-| `stack_list` | `below` |  |  | The open row's label, for a list the open row shows under it. |
-| `stack_list` | `data_*` | | | Each a `data-` attribute. |
 | `status` | `*parts`, first and unnamed |  |  | Its words, several being one label, only the first sentence-cased. |
 | `status` | `chip` | `False` |  | A neutral chip for a name, never a state. |
 | `status` | `css` |  |  | The classes of where it stands. |
@@ -250,7 +248,7 @@ fails when this file falls behind. The rules around it are in
 
 Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|queue_entries`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `address-list`, `allocation`, `cell-data`, `cell-part`, `cell-whole`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `two-col`, `visually-hidden`, `whole`, `wide-only`.
+Classes: `actions-col`, `allocation`, `cell-data`, `cell-part`, `cell-whole`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `two-col`, `visually-hidden`, `whole`, `wide-only`.
 
 Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
 
@@ -263,9 +261,9 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `hand-drawn-form` | A form that writes drawn by hand, where the form part draws it. | Write `{% include "partials/_form.html" %}`, or `{% include "partials/_page_action.html" with action=... %}` of a PageAction.command for a single verb. |
 | `hand-drawn-heading` | A heading drawn by hand, where the section part or the page frame draws it. | Write the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it (it heads itself a level down); the page's own title is the frame's, from page. |
 | `hand-drawn-icon` | An icon drawn by hand, where the icon part draws it. | Write `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img". |
-| `hand-drawn-line-break` | A line broken by hand with `<br>`, where the cell line or the stack list part draws the lines. | Write `{% cell_line %}`first line`{% detail %}`quiet second line`{% endcell_line %}`, or `{% stack_list %}``<li>`...`</li>``<li>`...`</li>``{% endstack_list %}` for lines read down. |
+| `hand-drawn-line-break` | A line broken by hand with `<br>`, where the cell line or the stack list part draws the lines. | Write `{% cell_line %}`first line`{% detail %}`quiet second line`{% endcell_line %}`, or `{% list %}``<li>`...`</li>``<li>`...`</li>``{% endlist %}` for lines read down. |
+| `hand-drawn-list` | A list drawn by hand, where the list part draws it. | Write `{% list kind="down\|dots\|prose\|chips\|codes\|labeled" %}``<li>`...`</li>``{% endlist %}`; numbered=True on prose for items read in order. |
 | `hand-drawn-missing-value` | A missing value's mark drawn by an if, where the value's own tag or filter draws it. | Write {{ x\|or_empty }} for a plain value, {{ x\|money }} (or measured, seconds, bytes, when) alone for a figure or a moment, and `{% present x %}`...`{% endpresent %}` for a value shown in markup. |
-| `hand-drawn-prose-list` | A list of sentences drawn by hand, where the prose list part draws it. | Write `{% prose_list %}``<li>`...`</li>``{% endprose_list %}`, with numbered=True for items read in order. |
 | `hand-drawn-query` | A query added to an address by hand, where the with_query tag adds and encodes it. | Write `{% with_query url name=value as named_url %}` and link named_url, or `{% with_query url name=value %}` where the address stands. |
 | `hand-drawn-record-link` | A link to a record's page drawn by hand, where the entity tag names the record by the page its model declares. | Write `{% entity row\|record label=row.name %}`, or row\|record:"section" for a part of its page. |
 | `hand-drawn-row-actions` | A row's actions drawn by hand, where the row actions part draws them. | Write `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell. |

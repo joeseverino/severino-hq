@@ -29,7 +29,7 @@ its id, is shown again if it was open.
         {% comment %}Its age is said only when it is news: a current reading needs no age.{% endcomment %}
         {% if panel.lead %}
           {% if panel.alert %}<small>{% status panel.alert tone="attention" pill=False %}</small>{% endif %}
-          {% if panel.caption %}{% dot_list %}{% for metric in panel.caption %}<li title="{{ metric.tip }}">{% if metric.unit %}{{ metric.unit|breakable }} {% endif %}{{ metric.value|breakable }}</li>{% endfor %}{% enddot_list %}{% endif %}
+          {% if panel.caption %}{% list kind="dots" %}{% for metric in panel.caption %}<li title="{{ metric.tip }}">{% if metric.unit %}{{ metric.unit|breakable }} {% endif %}{{ metric.value|breakable }}</li>{% endfor %}{% endlist %}{% endif %}
         {% elif not panel.refreshing %}<small>No reading yet</small>{% endif %}
         {% if panel.refreshing %}<small>{% refreshing %}</small>{% elif panel.payload.refresh_failed %}<small>{% status panel.standing.label tone="attention" pill=False %}</small>{% elif panel.outdated %}<small>{% include "partials/_reading_age.html" with reading=panel.freshness only %}</small>{% endif %}
       {% heading %}

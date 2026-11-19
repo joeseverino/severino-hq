@@ -77,11 +77,11 @@ declaration's machinery: the controller's actions are the buttons above, and
       {% endcomment %}
       {% if resource.status.unreachable_consumers %}
         {% section "Unchecked" count=resource.status.unreachable_consumers|length fold=True open=True %}
-          {% prose_list %}
+          {% list kind="prose" %}
             {% for item in resource.status.unreachable_consumers %}
               <li>{% if item.domain %}<strong>{{ item.consumer|breakable }}</strong>{% dot %}{{ item.domain|breakable:":" }}{% else %}<strong>{{ item.consumer|breakable:":" }}</strong>{% endif %} {{ item.reason|breakable }}</li>
             {% endfor %}
-          {% endprose_list %}
+          {% endlist %}
         {% endsection %}
       {% endif %}
     {% empty %}Not installed anywhere yet.
@@ -199,7 +199,7 @@ certificate, so the relation reads from both ends.
     {% if certificate_use.used_by %}
       <p>{{ certificate_use.used_by|length|counted:"service" }}: {% for hostname in certificate_use.used_by %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
       {% if certificate_use.unused %}
-        {% facts %}{% fact "Not served" %}<span class="code-list">{% for name in certificate_use.unused %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endfact %}{% endfacts %}
+        {% facts %}{% fact "Not served" %}{% list kind="codes" %}{% for name in certificate_use.unused %}<li><code>{{ name|breakable }}</code></li>{% endfor %}{% endlist %}{% endfact %}{% endfacts %}
       {% endif %}
     {% endif %}
   {% empty %}No service is served with this certificate.
@@ -221,12 +221,12 @@ certificate, so the relation reads from both ends.
               <td><strong>{{ publication.target|breakable }}</strong></td>
               <td>
                 {% if publication.detail %}
-                  {% stack_list %}<li>{% status "Not saved" tone="serious" %}</li><li>{% muted %}{{ publication.detail|breakable }}{% endmuted %}</li>{% endstack_list %}
+                  {% list %}<li>{% status "Not saved" tone="serious" %}</li><li>{% muted %}{{ publication.detail|breakable }}{% endmuted %}</li>{% endlist %}
                 {% elif publication.written %}
-                  {% stack_list %}<li>{% status "Saved" tone="good" %}</li>
+                  {% list %}<li>{% status "Saved" tone="good" %}</li>
                   {% if publication.fields or publication.material == "written" %}
                     <li>{% muted %}{% if publication.material == "written" %}certificate, key{% if publication.fields %}, {% endif %}{% endif %}{% for field in publication.fields %}{{ field|lower|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}</li>
-                  {% endif %}{% endstack_list %}
+                  {% endif %}{% endlist %}
                 {% else %}
                   {% status "Already up to date" tone="good" %}
                 {% endif %}

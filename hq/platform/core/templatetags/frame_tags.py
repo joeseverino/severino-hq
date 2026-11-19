@@ -65,7 +65,7 @@ MUTED = Part(
     partial="partials/_muted.html",
     about=(
         "Words said quietly beside what they are about: a context line, a sentence under a value. "
-        "A cell or a list item holds it; a run of parts said quietly is `{% dot_list muted=True %}`."
+        'A cell or a list item holds it; a run of parts said quietly is `{% list kind="dots" muted=True %}`.'
     ),
     options={
         "element": Option(
@@ -110,28 +110,6 @@ slotted(
             "done": Option(about="A finished step, drawn quiet."),
             "title": Option(about="Its tooltip."),
         },
-    ),
-)
-slotted(
-    library=register,
-    part=Part(
-        name="prose_list",
-        classes=("prose-list",),
-        partial="partials/_prose_list.html",
-        about="A list of sentences, each an `<li>` marked as the browser marks it.",
-        options={"numbered": Option(about="Each numbered, for items read in order.")},
-        public=True,
-        example="{% prose_list %}<li>A sentence.</li>{% endprose_list %}",
-    ),
-)
-slotted(
-    library=register,
-    part=Part(
-        name="link_chips",
-        example='{% link_chips %}<li><a href="/example/">Example page</a></li>{% endlink_chips %}',
-        classes=("link-chips",),
-        partial="partials/_link_chips.html",
-        about="A row of places to go, each `<li>` one link drawn as a chip of its own.",
     ),
 )
 slotted(

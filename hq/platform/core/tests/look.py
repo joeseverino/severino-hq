@@ -99,6 +99,7 @@ from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.agents import example_viewer
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
+lazy from hq.platform.core.tests import look_reach
 
 # The catalog builds its entries from the shared parts' constructors as it is
 # imported, so a base whose constructors this tree's catalog does not fit still
@@ -1111,6 +1112,22 @@ class Asked:
     undrawn: tuple[str, ...] = ()
 
 
+def _reached(names: tuple[str, ...]) -> tuple[list[str], tuple[str, ...]]:
+    """(the catalog entries the ``catalog:`` names of ``names`` reach, each once, those names that reach
+    none), each said with why: a name that reaches nothing is undrawn, never left out unsaid."""
+
+    entries: list[str] = []
+    unreached: list[str] = []
+    for name in names:
+        if name.startswith(task.CATALOG):
+            reach = look_reach.reach(name.removeprefix(task.CATALOG))
+            print(f"{task.CATALOG}{reach.said}", flush=True)
+            entries += reach.entries
+            if not reach.entries:
+                unreached.append(name)
+    return list(dict.fromkeys(entries)), tuple(unreached)
+
+
 def _checked(records: task.Records | None) -> Asked:
     """What the run was asked, or AssertionError naming what it refuses and
     what to type instead: the seed first, as a record's page is found in its
@@ -1129,6 +1146,11 @@ def _checked(records: task.Records | None) -> Asked:
         if name.removeprefix(task.TEMPLATE) in DRAWN_BY_NOTHING and name.startswith(task.TEMPLATE)
     )
     rest = tuple(name for name in names if name not in undrawn)
+    if records is not None:
+        # Without records ``_pages`` leaves a catalog: name to the run, which draws the entries it reaches.
+        entries, unreached = _reached(rest)
+        undrawn += unreached
+        rest = tuple(dict.fromkeys([*(name for name in rest if not name.startswith(task.CATALOG)), *entries]))
     pages = _served(rest, records) if rest or not undrawn else []
     if (rule := Look.rule_asked()) and rule not in _rules():
         raise AssertionError(no_rule(rule))

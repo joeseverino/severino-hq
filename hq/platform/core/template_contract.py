@@ -82,11 +82,9 @@ LIBRARIES = ("static",)
 # missing from both is the host's to add, never the extension's to invent.
 CLASSES = (
     "actions-col",
-    "address-list",
     "cell-data",
     "cell-part",
     "cell-whole",
-    "code-list",
     "compact",
     "compact-table",
     "count",

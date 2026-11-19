@@ -652,8 +652,13 @@ are `{% steps numbered=True %}`: read down wider columns, as many as fit up
 to three, so a short run fills a wide frame; each step's number stands where
 its icon would be, so its steps take no icon.
 
+A list is `{% list %}`, each item an `<li>` and nothing between them, read
+as its `kind` says: `down` (the default), `dots`, `prose`, `chips`, `codes`
+or `labeled`. A list with no class, or a kind's class written by hand, is
+refused by `hand-drawn-list`. *Catalog:* `part/list`.
+
 A plain list read down (a row's notes, a record's statuses, a section's
-records) is `{% stack_list %}`. Its `<li>`s each run their parts inline a small
+records) is `{% list %}`. Its `<li>`s each run their parts inline a small
 gap apart, and an item that reads as a sentence is marked `.prose`. In a
 table's cell its items are the cell's own lines: a status and the line under
 it, links one to a line, a name's notes. They sit at the row's rhythm with no
@@ -668,10 +673,11 @@ text=... url=... %}`. Markup is its block, its second line after `{% detail
 styles a line of its own. No template writes a `<br>`: `hand-drawn-line-break`
 refuses one, in an extension too. *Catalog:* `part/cell-line`.
 A run of whole parts read across one line (a fact's links, a row's context
-line, a band's details) is `{% dot_list %}`, each part an `<li>`, with
-`muted=True` for one said quietly. The stylesheet draws the dot in the gap
-before each part, so no template writes a separator and no line opens on one.
-`below="Label"` makes it a block the open row shows under that label.
+line, a band's details) is `{% list kind="dots" %}`, each part an `<li>`,
+with `muted=True` for one said quietly. The stylesheet draws the dot in the
+gap before each part, so no template writes a separator and no line opens on
+one. `below="Label"` makes a `down` list a block the open row shows under
+that label.
 
 Text to paste somewhere else is `{% command %}`, its Copy button in the
 code's corner. A command is `{% command text=... %}`, one tag with no end. A
@@ -699,9 +705,8 @@ page's ground: beside the title while its facts fit there, and on a line of
 its own under it, from the page's edge, where not.
 
 The facts a page states on its title's line (a record's state, a machine's
-addresses) are `{% title_meta %}`, written by the template its view names as
-`page_aside`. Its parts are `<li>` elements with a dot between each, and each
-wraps whole, so no line opens on a dot.
+addresses) are `{% list kind="dots" muted=True %}`, written by the template
+its view names as `page_aside`, where the stylesheet sets it small.
 
 **A route reads in one direction.** A path from one thing to another
 (`partials/_path_hops.html`) is one surface, each hop a stop on one
@@ -1227,10 +1232,10 @@ the last word on its line. A chip in a table is a box, so its link lays the
 chip and the arrow out as one row, since a line may break after any box.
 
 A row of places to go (the dashboard's links, a saved copy's own pages) is
-`{% link_chips %}`, each item an `<li>` holding one link, `{% entity
+`{% list kind="chips" %}`, each item an `<li>` holding one link, `{% entity
 url|outside label=... %}` for a page outside HQ. Each link is a chip, a target
 by its frame and never underlined at rest, and an outside one's arrow sits
-quieter than its name. A run of names inside a line stays a `{% dot_list %}`, and a
+quieter than its name. A run of names inside a line stays a `dots` list, and a
 choice of the view's state is a `.scope-chip`.
 
 **A change is one primitive.** A value and the one it changes into (a running
@@ -1261,7 +1266,7 @@ refuses a generated string with no alternative, or a space before a mark.
 parts of a line is `{% dot %}` and a link's onward arrow `{% arrow %}`, each
 written straight after its part. A no-break space joins the mark to that
 part and a reader never hears it, so no line starts with a mark or holds one
-alone. A run of whole parts is `{% dot_list %}`; any other mark is the text of
+alone. A run of whole parts is `{% list kind="dots" %}`; any other mark is the text of
 an `aria-hidden` element. Text built in Python joins its parts with
 `dotted(...)` (`hq_sdk.ui`), which holds each dot to the part before it, and
 `breakable` draws that dot as `{% dot %}` does; markup built in Python joins
@@ -1511,8 +1516,8 @@ search draws the machines, pages and commands it found, is included `with
 whole_rows=True`. Each row is its title's link, stretched over the row, so the
 row is one target and its markup stays a link around a name.
 
-A pair whose value is a list of names (`.address-list`, or a `.code-list` of
-two or more) takes a row of its own. So it never wraps beside another pair and
+A pair whose value is a list of names (a `labeled` list, or a `codes` list
+of two or more) takes a row of its own. So it never wraps beside another pair and
 leaves that pair's row a gap.
 
 A value goes under its label only where the box cannot hold both on one line.
@@ -1893,7 +1898,7 @@ smaller asks for that area in its own partial with `data-hit` (`hit=True` on
 `{% button %}`), or with `data-hit="coarse"` where it is packed too close
 to its neighbors for one under a mouse; page.css hangs it, and the quiet link
 (`.subtle-link`) and a pill's link always have one. A run of names that links
-them (`.code-list`) wraps onto lines a target tall, as a value holding a
+them (a `codes` list) wraps onto lines a target tall, as a value holding a
 pill's link does. A smaller target passes only through one of the criterion's
 exceptions:
 

@@ -1,9 +1,0 @@
-{% comment %}
-A stack list, drawn by {% stack_list %}: {% stack_list %}<li>A note</li>{% endstack_list %}.
-Its items are the page's <li>s, read down with a small gap between them (in a
-table's cell, as the cell's own lines), each running its parts inline (a
-status, a link, its words). A note in it is an <li> holding {% muted %}, and
-an item that reads as a sentence, a link among its words, a <li class="prose">.
-A list with no item draws nothing. Its options are its Part's (stack_tags).
-{% endcomment %}{% if not content %}{% elif below %}<ul class="stack-list row-below" data-label="{{ below }}"{{ data }}>{{ content|safe }}</ul>{% else %}
-<ul class="stack-list"{{ data }}>{{ content|safe }}</ul>{% endif %}

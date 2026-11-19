@@ -956,6 +956,10 @@ address gets a query, and `{% with_query url name=value as named %}` is its
 template form: `hq plugin check` refuses a query added by hand. It retires
 `{% table_heading %}`'s `gutter` option too: the region keeps the gutter in
 the column that names each row wherever a row can hold anything back.
+`PLUGIN_API_VERSION` 20 retires `{% stack_list %}`, `{% dot_list %}`,
+`{% prose_list %}`, `{% link_chips %}` and `{% title_meta %}`: `{% list
+kind=... %}` draws every list, and the classes `code-list` and `address-list`
+are its `codes` and `labeled` kinds.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body

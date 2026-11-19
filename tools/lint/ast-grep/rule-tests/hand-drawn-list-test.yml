@@ -1,0 +1,15 @@
+id: hand-drawn-list
+valid:
+  - '{% list kind="prose" %}<li>A sentence.</li>{% endlist %}'
+  - '<ol class="step-list"></ol>'
+  - '<ul class="prose-list-wide"></ul>'
+  - '<ul class="list-rows"><li>A</li></ul>'
+invalid:
+  - '<ul><li>A sentence.</li></ul>'
+  - |
+    <ol>
+      <li>A sentence.</li>
+    </ol>
+  - '<ul role="list"><li>A</li></ul>'
+  - '<ul class="stack-list"><li>A</li></ul>'
+  - '<ul class="muted dot-list"><li>A</li></ul>'

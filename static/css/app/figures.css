@@ -229,12 +229,14 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* Policy names and ports, wrapping between them: in a table a chip is held whole, elsewhere a chip wider than its line breaks at its seams. */
 /* A run of chips is no wider than what holds it, and a chip longer than the run gives way inside it, where it is cut or broken as its own rules say. */
 .code-list { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); max-inline-size: 100%; }
-.code-list > * { min-inline-size: 0; }
+/* Each item lays its one part out as a run item of its own, so a name sits in the run as it would standing alone. */
+.code-list > li { display: flex; }
+.code-list > li, .code-list > li > * { min-inline-size: 0; }
 /* A run that links its names wraps onto lines a target tall (`--target-min`), each link as tall as its line, in a cell too, so a name is hit through a target's height wherever the run is drawn. */
-.code-list:has(> [href]) { line-height: var(--target-min); }
+.code-list:has(> li > [href]) { line-height: var(--target-min); }
 /* The title says where the link goes, so the arrow is for the eye alone. */
 .external-link::after { content: "\00a0\2197" / ""; font-size: .85em; }
-/* A row of links, each a chip (partials/_link_chips.html): a place to go, so
+/* A row of links, each a chip (`{% list kind="chips" %}`): a place to go, so
    it reads as a target by its frame, with no underline at rest. An outside
    one's arrow sits in the chip's gap, quieter than the name. */
 .link-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); }
@@ -372,14 +374,15 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .page-title-row > h1 { margin: 0; max-width: 100%; }
-.page-title-meta { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+/* The line of facts a page states on its title's line (`page_aside`), a quiet dot list, is set small. */
+:is(.page-head, .page-title-row) > .dot-list { font-size: var(--text-sm); }
 
 /* With the line set's paint, which each symbol of img/icons.svg inherits through its <use> unless it says its own. */
 .icon { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 /* Each control is its own POST, so its own form, laid inline so the actions row does not stack them as blocks. */
 .page-actions form { margin: 0; display: inline-flex; }
 
-/* A stack list ({% stack_list %}): items read down, each its parts inline. */
+/* A list read down (`{% list %}`): items read down, each its parts inline. */
 .stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; }
 /* In a table's cell its items are the cell's own lines, read at the row's rhythm: one that opens the cell starts on the row's first line, and one that holds something to press is a target tall, so links one to a line are a target apart. Each wraps as its cell does, so a state's lines keep theirs as the state does (tables.css), where a list's items in a cell otherwise wrap. */
 .data-table td .stack-list { gap: 0; margin: 0; }

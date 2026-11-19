@@ -77,12 +77,20 @@ class HandedFilesTests(SimpleTestCase):
             "example:whole": {"file": None, "usage": 'flag "--fix"'},
         }
         gates = ("example:files", "example:whole")
-        with mock.patch.object(fast, "quick_tasks", return_value=listed):
+        with (
+            mock.patch.object(fast, "quick_tasks", return_value=listed),
+            mock.patch.object(fast, "stage_tokens", return_value=0),
+        ):
             checked = fast.quick_command(gates, "auto", ["hq/example.py"])
             fixing = fast.handed("example:files", ["hq/example.py"])
+            heavy = fast.run_command(gates, [], [], "auto", ["static/example.css"], "example-base")
 
         self.assertEqual(checked[-4:], ["example:files", "hq/example.py", ":::", "example:whole"])
         self.assertEqual(fixing, ["example:files", "hq/example.py"])
+        # A gate in the heavy turn is handed them too, and told the base they changed from.
+        self.assertIn(f"{fast.BASE}=example-base", heavy)
+        at = heavy.index("example:files")
+        self.assertEqual(heavy[at : at + 4], ["example:files", "static/example.css", ":::", "example:whole"])
 
 
 @tag("source")
@@ -142,3 +150,15 @@ class SelectableTests(SimpleTestCase):
                 sources = listed[name]["sources"]
                 self.assertTrue(matched(PurePath(path), sources), f"{name} is not selected by {path}, which it reads")
                 self.assertFalse(matched(leaf, sources), f"{name} is selected by {leaf}, which it never reads")
+
+    def test_only_a_file_a_page_draws_selects_the_look(self):
+        """fast's browser look runs on a change to a sheet or a template, and
+        never on a change to Python alone."""
+
+        from tests.mise_tasks import matched
+
+        sources = mise_tasks()["fast:look"]["sources"]
+        for path in ("static/css/app/figures.css", "templates/partials/_chart_legend.html"):
+            self.assertTrue(matched(PurePath(path), sources), path)
+        for path in ("hq/platform/core/templatetags/part_tags.py", "static/js/app.js"):
+            self.assertFalse(matched(PurePath(path), sources), path)

@@ -9,5 +9,5 @@ The title over the code, the code with its Copy button in its corner
   {% if title %}<strong>{{ title|safe }}</strong>{% endif %}
   {% if text or content %}<div class="command-code"><pre tabindex="0" class="operator-command"><code>{% if text %}{{ text|breakable }}{% else %}{{ content|safe }}{% endif %}</code></pre>{% button "Copy" look="compact ghost" data_copy=True %}</div>{% endif %}
   {% if detail %}{% muted element="p" %}{{ detail|safe }}{% endmuted %}{% endif %}
-  {% if notes %}{% stack_list %}{{ notes|safe }}{% endstack_list %}{% endif %}
+  {% if notes %}{% list %}{{ notes|safe }}{% endlist %}{% endif %}
 </div>

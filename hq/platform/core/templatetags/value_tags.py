@@ -114,7 +114,7 @@ def dot():
     after the first part. A no-break space holds it to that part and the line
     may break only after it, so no line starts with a dot or holds one alone;
     a reader hears the two parts. A run of whole parts that is a list of its
-    own is ``{% dot_list %}``; Python joins text as ``labels.dotted`` does."""
+    own is ``{% list kind="dots" %}``; Python joins text as ``labels.dotted`` does."""
     return mark_safe(DOT_MARKUP)  # noqa: S308 - HQ's own literal markup
 
 
@@ -473,7 +473,7 @@ CELL_LINE = Part(
         "A fact in a table cell as a line of its own, and the words said quietly on the line under it: "
         "given `text=` it encloses nothing, its words a link to `url=`; a line of markup is its block, "
         "its second line after `{% detail %}`. A second line that is a status, code or a link is a "
-        "`{% stack_list %}` item."
+        "`{% list %}` item."
     ),
     options={
         "text": Option(about="Its words, which make it one tag with no end."),

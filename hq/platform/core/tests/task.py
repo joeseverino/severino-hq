@@ -51,6 +51,8 @@ PREFIX = "usage_"
 ESTATE = "estate"
 # A page named by a template it draws.
 TEMPLATE = "template:"
+# Every catalog entry a change to a sheet or a template reaches (look_reach.py).
+CATALOG = "catalog:"
 # How many names a refused page is offered.
 _NEAREST = 5
 _RECORDS_OFFERED = 5
@@ -263,9 +265,10 @@ def _takes_a_record(address: str) -> bool:
 
 
 def _names_a_record(name: str, record_routes: set[str]) -> bool:
-    """Whether ``name`` is found only in the estate drawn: a route that takes a record, or ``template:<name>``."""
+    """Whether ``name`` is found only in the estate drawn: a route that takes a record, ``template:<name>``, or
+    ``catalog:<path>``, which the catalog's entries drawn as the run draws them resolve."""
 
-    return name.startswith(TEMPLATE) or name in record_routes
+    return name.startswith((TEMPLATE, CATALOG)) or name in record_routes
 
 
 def naming_records(asked: Sequence[str]) -> list[str]:

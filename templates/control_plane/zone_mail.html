@@ -34,7 +34,7 @@ not designed. Adding or removing one is a record, through the domain's own
   {% if section.records and section.id == "receiving" or section.records and section.id == "signing" %}
     {% if section.id == "receiving" %}{% firstof "Delivery (MX)" as heading %}{% firstof "delivery" as anchor %}{% else %}{% firstof "Signing (DKIM)" as heading %}{% firstof "signing" as anchor %}{% endif %}
     {% section heading id=anchor %}
-      {% stack_list %}
+      {% list %}
         {% for record in section.records %}
           <li>
             <code>{{ record.name|breakable }}</code>
@@ -51,7 +51,7 @@ not designed. Adding or removing one is a record, through the domain's own
             {% endif %}
           </li>
         {% endfor %}
-      {% endstack_list %}
+      {% endlist %}
       {% if section.source %}<p class="help">{{ section.source|breakable }}</p>{% endif %}
     {% endsection %}
   {% endif %}

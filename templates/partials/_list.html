@@ -1,0 +1,11 @@
+{% comment %}
+A list, drawn by {% list %}: {% list kind="dots" %}<li>A link</li><li>A value</li>{% endlist %}.
+Its items are the page's <li>s, read as its kind says (list_tags.KINDS). Down,
+with a small gap between them (in a table's cell, as the cell's own lines),
+each running its parts inline; an item that reads as a sentence, a link among
+its words, is a <li class="prose">, and a note an <li> holding {% muted %}.
+Dots, wrapping whole with a dot the stylesheet draws in the gap before each,
+so no line opens on a dot and a reader never hears one. Prose, each marked as
+the browser marks it. A list with no item draws nothing.
+<!-- ast-grep-ignore: muted-said-by-muted-tag --> the part itself, which says a quiet run in the muted voice
+{% endcomment %}{% if not content %}{% elif kind == "dots" %}<ul class="{% if muted %}muted {% endif %}dot-list"{{ data }}>{{ content|list_items }}</ul>{% elif kind == "prose" %}{% if numbered %}<ol class="prose-list"{{ data }}>{{ content|list_items }}</ol>{% else %}<ul class="prose-list"{{ data }}>{{ content|list_items }}</ul>{% endif %}{% elif kind == "chips" %}<ul class="link-chips"{{ data }}>{{ content|list_items }}</ul>{% elif kind == "codes" %}<ul class="code-list"{{ data }}>{{ content|list_items }}</ul>{% elif kind == "labeled" %}<ul class="address-list"{{ data }}>{{ content|list_items }}</ul>{% elif below %}<ul class="stack-list row-below" data-label="{{ below }}"{{ data }}>{{ content|list_items }}</ul>{% else %}<ul class="stack-list"{{ data }}>{{ content|list_items }}</ul>{% endif %}

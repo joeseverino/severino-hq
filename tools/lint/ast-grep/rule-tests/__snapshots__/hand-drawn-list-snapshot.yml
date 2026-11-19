@@ -1,0 +1,99 @@
+id: hand-drawn-list
+snapshots:
+  "<ol>\n  <li>A sentence.</li>\n</ol>\n":
+    labels:
+    - source: |-
+        <ol>
+          <li>A sentence.</li>
+        </ol>
+      style: primary
+      start: 0
+      end: 33
+    - source: ol
+      style: secondary
+      start: 1
+      end: 3
+    - source: <ol>
+      style: secondary
+      start: 0
+      end: 4
+  <ul class="muted dot-list"><li>A</li></ul>:
+    labels:
+    - source: <ul class="muted dot-list"><li>A</li></ul>
+      style: primary
+      start: 0
+      end: 42
+    - source: ul
+      style: secondary
+      start: 1
+      end: 3
+    - source: class
+      style: secondary
+      start: 4
+      end: 9
+    - source: "\"muted dot-list\""
+      style: secondary
+      start: 10
+      end: 26
+    - source: class="muted dot-list"
+      style: secondary
+      start: 4
+      end: 26
+    - source: <ul class="muted dot-list">
+      style: secondary
+      start: 0
+      end: 27
+  <ul class="stack-list"><li>A</li></ul>:
+    labels:
+    - source: <ul class="stack-list"><li>A</li></ul>
+      style: primary
+      start: 0
+      end: 38
+    - source: ul
+      style: secondary
+      start: 1
+      end: 3
+    - source: class
+      style: secondary
+      start: 4
+      end: 9
+    - source: "\"stack-list\""
+      style: secondary
+      start: 10
+      end: 22
+    - source: class="stack-list"
+      style: secondary
+      start: 4
+      end: 22
+    - source: <ul class="stack-list">
+      style: secondary
+      start: 0
+      end: 23
+  <ul role="list"><li>A</li></ul>:
+    labels:
+    - source: <ul role="list"><li>A</li></ul>
+      style: primary
+      start: 0
+      end: 31
+    - source: ul
+      style: secondary
+      start: 1
+      end: 3
+    - source: <ul role="list">
+      style: secondary
+      start: 0
+      end: 16
+  <ul><li>A sentence.</li></ul>:
+    labels:
+    - source: <ul><li>A sentence.</li></ul>
+      style: primary
+      start: 0
+      end: 29
+    - source: ul
+      style: secondary
+      start: 1
+      end: 3
+    - source: <ul>
+      style: secondary
+      start: 0
+      end: 4

@@ -29,7 +29,7 @@ row after, their facts across it. A reading with nothing in it is not drawn.
   {% section "By status" %}
     {% facts %}
       {% for group in status_groups %}
-        {% fact group.label %}{% dot_list %}{% for status in group.counts %}<li><a href="{{ status.url }}">{{ status.label|breakable }} {{ status.count|breakable }}</a></li>{% endfor %}{% enddot_list %}{% endfact %}
+        {% fact group.label %}{% list kind="dots" %}{% for status in group.counts %}<li><a href="{{ status.url }}">{{ status.label|breakable }} {{ status.count|breakable }}</a></li>{% endfor %}{% endlist %}{% endfact %}
       {% endfor %}
     {% endfacts %}
   {% endsection %}
@@ -46,9 +46,9 @@ row after, their facts across it. A reading with nothing in it is not drawn.
 {% section "Exports" lede="Leaves out secrets, sensitive text and receipts." %}
   {% facts %}
     {% url 'reports:expenses_csv' as expenses_csv %}{% url 'reports:assets_csv' as assets_csv %}{% url 'reports:year_summary_json' as summary_json %}{% url 'reports:year_summary_md' as summary_md %}
-    {% fact "Expenses" %}{% dot_list %}<li><a href="{% with_query expenses_csv year=year %}">{{ year|breakable }} CSV</a></li><li><a href="{{ expenses_csv }}">All years CSV</a></li>{% enddot_list %}{% endfact %}
-    {% fact "Assets" %}{% dot_list %}<li><a href="{% with_query assets_csv year=year %}">{{ year|breakable }} CSV</a></li><li><a href="{{ assets_csv }}">All years CSV</a></li>{% enddot_list %}{% endfact %}
-    {% fact "Year summary" %}{% dot_list %}<li><a href="{% with_query summary_json year=year %}">{{ year|breakable }} JSON</a></li><li><a href="{% with_query summary_md year=year %}">{{ year|breakable }} Markdown</a></li>{% enddot_list %}{% endfact %}
+    {% fact "Expenses" %}{% list kind="dots" %}<li><a href="{% with_query expenses_csv year=year %}">{{ year|breakable }} CSV</a></li><li><a href="{{ expenses_csv }}">All years CSV</a></li>{% endlist %}{% endfact %}
+    {% fact "Assets" %}{% list kind="dots" %}<li><a href="{% with_query assets_csv year=year %}">{{ year|breakable }} CSV</a></li><li><a href="{{ assets_csv }}">All years CSV</a></li>{% endlist %}{% endfact %}
+    {% fact "Year summary" %}{% list kind="dots" %}<li><a href="{% with_query summary_json year=year %}">{{ year|breakable }} JSON</a></li><li><a href="{% with_query summary_md year=year %}">{{ year|breakable }} Markdown</a></li>{% endlist %}{% endfact %}
     {% fact "Writeups and pages" %}<a href="{% url 'reports:content_csv' %}">CSV</a>{% endfact %}
     {% fact "Projects" %}<a href="{% url 'reports:projects_csv' %}">CSV</a>{% endfact %}
     {% fact "Documents" %}<a href="{% url 'reports:documentation_csv' %}">CSV</a>{% endfact %}

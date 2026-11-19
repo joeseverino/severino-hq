@@ -454,6 +454,18 @@ about the whole (the import contracts, the types, the derived files) keeps
 its whole input, and one whose run never reads a test module leaves the tests
 out of its sources, so an edit inside a test selects none of them.
 
+A change to a stylesheet under `static/css/app/` or a template selects
+`fast:look`, which runs in the heavy turn beside the tests and holds the
+component catalog entries the change reaches to every layout check, in
+WebKit at 320 and 1280 pixels: `mise run dev:look --rule
+every_layout_check_holds catalog:<path>` for each such file. A template
+reaches each entry whose page draws it; a sheet reaches each entry whose
+markup holds a class or data attribute named by a rule a changed line lies in
+(`hq/platform/core/tests/look_reach.py`), and every entry when such a rule names
+neither (an element, `:root`, a token). A file that reaches no entry is
+named in the look's output, never skipped unsaid. A Python-only change
+selects no look, and the whole catalog stays CI's Browser job.
+
 A test module that a `test:*` task runs by its label in a dependency group's
 environment (`uv run --group fuzz`), which the tests' environment lacks, is
 never a label. When the selection above would reach it, its task runs as a
