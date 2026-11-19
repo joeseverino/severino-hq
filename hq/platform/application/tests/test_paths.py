@@ -634,7 +634,16 @@ class ObservedNameTests(TestCase):
 
         (observed,) = found["path"]["observed"]
         self.assertEqual((observed["relation"], observed["name"]), ("Behind Access", "Admin"))
-        self.assertEqual(found["service"]["status"], "unknown")
+        self.assertEqual(found["status"], "unknown")
+
+    def test_a_name_nothing_serves_reads_as_a_prospect_and_is_not_listed(self):
+        from ..service_list import get_service, list_services
+        from ..services import PROSPECT
+
+        found = get_service("New.Example.com")
+
+        self.assertEqual((found["hostname"], found["listing"]), ("new.example.com", PROSPECT))
+        self.assertNotIn("new.example.com", [item["hostname"] for item in list_services()["items"]])
 
 
 @PUBLIC_RANGE

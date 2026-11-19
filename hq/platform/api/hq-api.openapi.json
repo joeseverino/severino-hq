@@ -2070,23 +2070,24 @@
         "schema": {
           "items": {
             "enum": [
-              "service",
-              "service.hostname",
-              "service.status",
-              "service.status_label",
-              "service.origin",
-              "service.origin.address",
-              "service.origin.host",
-              "service.origin.container",
-              "service.project",
-              "service.faults",
-              "service.mark",
-              "service.facets",
-              "service.facets.id",
-              "service.facets.label",
-              "service.facets.present",
-              "service.facets.state",
-              "service.facets.resources",
+              "hostname",
+              "status",
+              "status_label",
+              "origin",
+              "origin.address",
+              "origin.host",
+              "origin.container",
+              "project",
+              "faults",
+              "mark",
+              "facets",
+              "facets.id",
+              "facets.label",
+              "facets.present",
+              "facets.state",
+              "facets.resources",
+              "url",
+              "listing",
               "path",
               "path.hostname",
               "path.line",
@@ -25693,7 +25694,7 @@
             "type": "string"
           },
           "url": {
-            "description": "The service's page in HQ.",
+            "description": "That service's page in HQ.",
             "type": "string"
           }
         },
@@ -25717,30 +25718,95 @@
       },
       "ServiceRecord": {
         "additionalProperties": false,
-        "description": "One service name and the path a request for it takes.",
+        "description": "One service name whole and the path a request for it takes.",
         "properties": {
+          "facets": {
+            "$ref": "#/components/schemas/ServiceItem/properties/facets"
+          },
+          "faults": {
+            "$ref": "#/components/schemas/ServiceRow/properties/faults"
+          },
+          "hostname": {
+            "$ref": "#/components/schemas/ServiceRow/properties/hostname"
+          },
+          "listing": {
+            "description": "`listed` for a listed service, `prospect` for a hostname nothing serves yet, whose facets each read as not set up.",
+            "type": "string"
+          },
+          "mark": {
+            "$ref": "#/components/schemas/ServiceItem/properties/mark"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ServiceRow/properties/origin"
+          },
           "path": {
             "$ref": "#/components/schemas/PathRecord"
           },
-          "service": {
-            "$ref": "#/components/schemas/ServiceItem"
+          "project": {
+            "$ref": "#/components/schemas/ServiceRow/properties/project"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ServiceRow/properties/status"
+          },
+          "status_label": {
+            "$ref": "#/components/schemas/ServiceRow/properties/status_label"
+          },
+          "url": {
+            "description": "The service's page in HQ.",
+            "type": "string"
           }
         },
         "required": [
-          "service",
+          "hostname",
+          "status",
+          "status_label",
+          "origin",
+          "project",
+          "faults",
+          "mark",
+          "facets",
+          "url",
+          "listing",
           "path"
         ],
         "type": "object"
       },
       "ServiceRecordPartial": {
         "additionalProperties": false,
-        "description": "One service name and the path a request for it takes.",
+        "description": "One service name whole and the path a request for it takes.",
         "properties": {
+          "facets": {
+            "$ref": "#/components/schemas/ServiceItemPartial/properties/facets"
+          },
+          "faults": {
+            "$ref": "#/components/schemas/ServiceRowPartial/properties/faults"
+          },
+          "hostname": {
+            "$ref": "#/components/schemas/ServiceRowPartial/properties/hostname"
+          },
+          "listing": {
+            "$ref": "#/components/schemas/ServiceRecord/properties/listing"
+          },
+          "mark": {
+            "$ref": "#/components/schemas/ServiceItemPartial/properties/mark"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ServiceRowPartial/properties/origin"
+          },
           "path": {
             "$ref": "#/components/schemas/PathRecordPartial"
           },
-          "service": {
-            "$ref": "#/components/schemas/ServiceItemPartial"
+          "project": {
+            "$ref": "#/components/schemas/ServiceRowPartial/properties/project"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ServiceRowPartial/properties/status"
+          },
+          "status_label": {
+            "$ref": "#/components/schemas/ServiceRowPartial/properties/status_label"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ServiceRecord/properties/url"
           }
         },
         "type": "object"

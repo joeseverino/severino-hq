@@ -176,13 +176,6 @@ class PathRecord(TypedDict):
     ]
 
 
-class ServiceRecord(TypedDict):
-    """One service name and the path a request for it takes."""
-
-    service: ServiceItem
-    path: PathRecord
-
-
 # Where a hop is one the calling request walked, which a path of a service has none of.
 _WALKED = "Present only on a hop the calling request walked."
 
@@ -807,7 +800,6 @@ __all__ = [
     "ReadingRow",
     "RelationshipsRecord",
     "ServiceItem",
-    "ServiceRecord",
     "ServiceRow",
     "UpgradeRecord",
     "UpgradeRow",

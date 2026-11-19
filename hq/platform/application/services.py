@@ -39,6 +39,10 @@ lazy from .service_health import service_health
 
 HQ_MARK = "hq"
 OBSERVED_MARK = "observed"
+# Whether a read of one service found it listed, or a hostname nothing
+# serves yet: the empty shape a service there would take.
+LISTED = "listed"
+PROSPECT = "prospect"
 
 
 @dataclass(frozen=True)

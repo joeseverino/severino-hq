@@ -60,7 +60,7 @@ class MissingRecordReadTests(TestCase):
     def test_every_host_resource_answers_a_missing_record_as_not_found(self):
         cases = {
             "infrastructure": SENT,
-            "services": f"{SENT}.example.com",
+            "services": f"not a host {SENT}",
             "machines": SENT,
             "containers": f"{SENT}:{SENT}",
             "upgrades": f"{SENT}:{SENT}",

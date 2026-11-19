@@ -3,7 +3,6 @@
 from functools import cached_property
 from typing import override
 
-from django.http import Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 from django.views import View
@@ -17,7 +16,7 @@ from hq.platform.application.exposure_fixes import gate_links
 from hq.platform.application.hq_self import LABEL as HQ_LABEL, hq_service
 from hq.platform.application.inventory import inventory_state
 from hq.platform.application.labels import sentence
-from hq.platform.application.pages import PageAction, PageMixin, RowMark, RowOrder, page_context
+from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin, RowMark, RowOrder, page_context
 from hq.platform.application.resource_capabilities import (
     LIFECYCLE_VERBS,
     resource_capabilities,
@@ -135,14 +134,16 @@ class ServiceListView(PageMixin, TemplateView):
         return context
 
 
-class ServiceDetailView(PageMixin, TemplateView):
+class ServiceDetailView(RecordPageMixin, TemplateView):
     """One hostname, whether or not anything has been declared for it yet.
 
-    A name with nothing behind it still has a page: it is where publishing a
-    service starts.
+    A name with nothing behind it still has a page, its record a prospect:
+    it is where publishing a service starts.
     """
 
     template_name = "control_plane/service_detail.html"
+    resource = "services"
+    context_object_name = "record"
 
     @override
     def get(self, request, *args, **kwargs):
@@ -153,8 +154,6 @@ class ServiceDetailView(PageMixin, TemplateView):
         contradicting itself about its own data.
         """
 
-        if not entity_link("service", kwargs["hostname"]).url:
-            raise Http404("Not a host name.")
         canonical = alias_target(kwargs["hostname"])
         if canonical:
             return redirect("control_plane:service", hostname=canonical)
@@ -162,7 +161,7 @@ class ServiceDetailView(PageMixin, TemplateView):
 
     @cached_property
     def service(self):
-        return listed_service(self.kwargs["hostname"])
+        return listed_service(self.record["hostname"])
 
     @cached_property
     def own(self):
@@ -186,10 +185,6 @@ class ServiceDetailView(PageMixin, TemplateView):
         # Everything else HQ holds about this name, gathered by the name. Only
         # here: the board builds every service and needs none of it.
         return sections_for(self.service)
-
-    @override
-    def get_page_title(self):
-        return self.service.hostname
 
     page_trail = (("Services", reverse_lazy("control_plane:services")),)
 
@@ -242,7 +237,7 @@ class ServiceDetailView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["service"] = self.service
-        context["page_visit"] = page_visit("service", self.service.hostname)
+        context["page_visit"] = page_visit("service", self.record["hostname"])
         context["summary"] = service_summary(self.service)
         context["page_badges"] = service_badges(self.service, own=self.own is not None)
         context.update(page_parts(self.service, self.request))

@@ -171,7 +171,7 @@ class MachinePointer(TypedDict):
 
 class ServicePointer(TypedDict):
     hostname: Annotated[str, Describe("The service's hostname.")]
-    url: Annotated[str, Describe("The service's page in HQ.")]
+    url: Annotated[str, Describe("That service's page in HQ.")]
 
 
 class ReadoutPart(TypedDict):

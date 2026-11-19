@@ -6,22 +6,26 @@ list page, the topology, the domain cards and the API read this one list.
 """
 
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Annotated, Any
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 
 from .adoption import ADOPT, AdoptCommand, adopt
 from .contracts import Effect
+from .describe import Describe
 from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
 from .projection import complete, projection_scope, read_once
 from .record_errors import RecordNotFound
+from .resource_records import FacetPart, PathRecord, ServiceItem, ServiceRow
 from .resources import EmptyQuery
 from .security import Capability
 from .service_facets import zone_holding
 from .services import (
     CONTAINER_KIND,
     HQ_MARK,
+    LISTED,
     OBSERVED_MARK,
+    PROSPECT,
     Service,
     ordered_services,
     prospects,
@@ -33,7 +37,6 @@ lazy from .derived_reads import get_path, serialize_path
 lazy from .facts import readings
 lazy from .hq_self import hq_service
 lazy from .record_saves import row
-lazy from .resource_records import FacetPart, PathRecord, ServiceItem, ServiceRecord, ServiceRow
 
 
 def listed_services(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
@@ -60,6 +63,20 @@ def _listed(favorites: tuple[str, ...]) -> tuple[Service, ...]:
     marked = tuple(replace(service, mark=HQ_MARK) if service.hostname in own_names else service for service in catalog)
     unlisted = tuple(replace(service, mark=wanted[service.hostname]) for service in prospects(tuple(wanted)))
     return ordered_services(tuple(sorted(marked + unlisted, key=lambda service: service.hostname)), favorites)
+
+
+class ServiceRecord(ServiceItem):
+    """One service name whole and the path a request for it takes."""
+
+    url: Annotated[str, Describe("The service's page in HQ.")]
+    listing: Annotated[
+        str,
+        Describe(
+            f"`{LISTED}` for a listed service, `{PROSPECT}` for a hostname nothing serves yet, whose facets "
+            "each read as not set up."
+        ),
+    ]
+    path: PathRecord
 
 
 def listed_service(hostname: str) -> Service:
@@ -101,14 +118,18 @@ def list_services() -> dict[str, Any]:
 
 
 def get_service(hostname: str) -> ServiceRecord:
-    """One listed hostname, with the resources behind each facet and its request path."""
+    """One hostname with the resources behind each facet and its request path:
+    a listed one, or any other hostname, which nothing serves yet."""
 
     wanted = normalized_hostname(hostname)
     with projection_scope():
         found = next((service for service in listed_services() if service.hostname == wanted), None)
+        listing = LISTED
         if found is None:
-            raise RecordNotFound("No service is listed for that hostname.")
-        return {"service": serialize_service(found), "path": serialize_path(found.path)}
+            if not is_hostname(wanted):
+                raise RecordNotFound("That is not a hostname.")
+            (found,), listing = prospects((wanted,)), PROSPECT
+        return {**serialize_service(found), "url": found.url, "listing": listing, "path": serialize_path(found.path)}
 
 
 @dataclass(frozen=True, slots=True)
