@@ -36,6 +36,12 @@ class Capability(StrEnum):
     WRITE_CALENDAR = "write_calendar"
     MANAGE_CONTACTS = "manage_contacts"
     SYNC_DOCUMENTATION = "sync_documentation"
+    # Reads a sensitive or restricted doc whole: its record, its paths and
+    # notes, and the links other records keep to it. Held only by a person
+    # (``HELD_ONLY_AT``), so no agent's token reads past the AI-export rule
+    # (``application.sensitivity``) whatever its grant says, and a person reads
+    # in HQ what HQ holds.
+    READ_SENSITIVE_DOCUMENTATION = "read_sensitive_documentation"
     PRUNE_DOCUMENTATION = "prune_documentation"
     DELETE_CALENDAR = "delete_calendar"
     MANAGE_INFRASTRUCTURE = "manage_infrastructure"
@@ -137,9 +143,10 @@ AGENT_SURFACES = frozenset({MCP_INTERFACE, API_INTERFACE})
 # Capabilities held only at these interfaces, whatever a grant says: the two
 # that would let an agent lift its own limits, HQ's own back-channel logout,
 # the uploads, whose bytes this keeps out of a hold, the audit log and an
-# answer, and adopting playbooks, which decides what code HQ runs. An
-# agent's token that names one is refused it in ``Principal.require``, the
-# first thing the capability runner asks, so nothing it sends is held for
+# answer, adopting playbooks, which decides what code HQ runs, and reading
+# a sensitive doc, which the AI-export rule keeps from agents. An agent's
+# token that names one is refused it in ``Principal.require``, the first
+# thing the capability runner asks, so nothing it sends is held for
 # approval, stored or logged.
 HELD_ONLY_AT: dict[str, frozenset[str]] = {
     Capability.UPLOAD_CERTIFICATE: OPERATOR_INTERFACES,
@@ -149,6 +156,7 @@ HELD_ONLY_AT: dict[str, frozenset[str]] = {
     Capability.GOVERN_AGENTS: INTERACTIVE_INTERFACES,
     Capability.END_SESSIONS: frozenset({INTERNAL_INTERFACE}),
     Capability.SHOW_DEMO: INTERACTIVE_INTERFACES,
+    Capability.READ_SENSITIVE_DOCUMENTATION: INTERACTIVE_INTERFACES,
 }
 
 # Capabilities that keep something of a person's, held only by a principal with

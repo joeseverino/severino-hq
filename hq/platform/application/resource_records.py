@@ -12,33 +12,17 @@ from hq.domains.control_plane.provider_adapters.contracts import REFUSALS
 from .answer_fields import (
     AsRead,
     DateTime,
-    LinkedAssets,
-    LinkedProjects,
     ObservedAt,
-    RecordedExpenses,
     Since,
     UpdatedAt,
 )
 from .credential_sight import STATE_LABELS
 from .describe import Describe, listed
-from .documentation import (
-    DocEnvironment,
-    DocId,
-    DocSensitivity,
-    DocStatus,
-    DocType,
-    DocumentationTitle,
-    ExternalUrl,
-    GithubPath,
-    LastReviewed,
-    ObsidianPath,
-)
 from .entity_links import EntityLink
 from .finding_steps import WrittenCheck, WrittenReason, WrittenSteps
 from .json_schemas import Written
 from .path_model import Certificate, Evidence, HopCheck, HopSource
 from .plugins import ATTENTION_ORDER
-from .record_fields import Notes, PublishedAt
 from .services import HQ_MARK, OBSERVED_MARK
 from .standards import INTENDED, Standing
 from .tone import Tone
@@ -743,49 +727,11 @@ class Match(TypedDict):
     group: Annotated[str, Describe("The heading a list of results files it under.")]
 
 
-# ----- Documentation ---------------------------------------------------------
-
-
-class DocumentationRow(TypedDict):
-    """One documentation pointer; a path or note it may not show is blank."""
-
-    doc_id: DocId
-    title: DocumentationTitle
-    doc_type: DocType
-    system: Annotated[str, Describe("The system or service it is about; empty for none.")]
-    environment: DocEnvironment
-    status: DocStatus
-    sensitivity: DocSensitivity
-    obsidian_path: ObsidianPath
-    github_path: GithubPath
-    external_url: ExternalUrl
-    last_reviewed: LastReviewed
-    published_at: PublishedAt
-    notes: Notes
-    updated_at: UpdatedAt
-
-
-class DocumentationLinks(TypedDict):
-    """The records a documentation pointer is linked to."""
-
-    projects: LinkedProjects
-    assets: LinkedAssets
-    expense_ids: RecordedExpenses
-
-
-class DocumentationItem(DocumentationRow):
-    """One documentation pointer with the records it is linked to."""
-
-    relationships: DocumentationLinks
-
-
 __all__ = [
     "ActionItem",
     "ActionItemRow",
     "ContainerRecord",
     "ContainerRow",
-    "DocumentationItem",
-    "DocumentationRow",
     "DomainRecord",
     "DomainRow",
     "EstateFigure",

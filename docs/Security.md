@@ -37,7 +37,7 @@ or anything acting for them may do. The roles are declared once, in
 | Role | Holds |
 | --- | --- |
 | `operator` | every capability, the host's and every extension's (`operator_capabilities`) |
-| `viewer` | the reads: `read` and every extension's read capabilities, and `show_demo`, which switches stand-in values on in their own browser |
+| `viewer` | the reads: `read` and every extension's read capabilities, `read_sensitive_documentation`, and `show_demo`, which switches stand-in values on in their own browser |
 
 What each subject holds, with `HELD_ONLY_AT` and `NEEDS_A_PERSON` applied on top:
 

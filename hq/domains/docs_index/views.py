@@ -1,4 +1,5 @@
 import json
+from functools import cached_property
 from typing import override
 
 from django.contrib import messages
@@ -8,8 +9,8 @@ from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
     DeleteView,
-    DetailView,
     ListView,
+    TemplateView,
     UpdateView,
     View,
 )
@@ -17,7 +18,8 @@ from django.views.generic import (
 from hq.platform.application import related
 from hq.platform.application.documentation import SYNC
 from hq.platform.application.labels import dotted
-from hq.platform.application.pages import PageAction, PageMixin, page_context
+from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin, page_context
+from hq.platform.application.sensitivity import SAFE_SENSITIVITIES
 from hq.platform.application.tables import (
     TableColumn,
     TableFilter,
@@ -31,7 +33,7 @@ from hq.platform.core.templatetags.value_tags import breakable
 from hq.platform.core.web_refusals import refused
 
 from .forms import ManifestImportForm
-from .models import DocumentationRecord
+from .models import DocStatus, DocumentationRecord
 
 DOCS_TRAIL = (("Docs", reverse_lazy("docs_index:list")),)
 
@@ -123,50 +125,56 @@ class DocsPage(PageMixin):
         return record.doc_id
 
 
-class DocsDetailView(PageMixin, DetailView):
-    model = DocumentationRecord
+class DocsDetailView(RecordPageMixin, TemplateView):
+    resource = "documentation"
+    context_object_name = "record"
     page_trail = DOCS_TRAIL
     template_name = "docs_index/docs_detail.html"
-    slug_field = "doc_id"
-    slug_url_kwarg = "doc_id"
-    context_object_name = "record"
-    queryset = DocumentationRecord.objects.prefetch_related(
-        "related_projects",
-        "related_assets",
-        "related_expenses",
-        "content_items",
-    )
+
+    @cached_property
+    def found(self) -> DocumentationRecord:
+        """The doc as stored, which the records of other kinds it is linked to are asked by."""
+
+        return DocumentationRecord.objects.prefetch_related(
+            "related_projects", "related_assets", "related_expenses", "content_items"
+        ).get(doc_id=self.record["doc_id"])
 
     @override
     def get_context_data(self, **kwargs):
-        record = self.object
+        found = self.found
         return super().get_context_data(**kwargs) | {
+            "safe_for_ai_export": self.record["sensitivity"] in SAFE_SENSITIVITIES,
             "related": related.related(
-                related.projects(record.related_projects.all()),
-                related.assets(record.related_assets.all()),
-                related.expenses(record.related_expenses.all()),
-                related.writeups(record.content_items.all()),
-            )
+                related.projects(found.related_projects.all()),
+                related.assets(found.related_assets.all()),
+                related.expenses(found.related_expenses.all()),
+                related.writeups(found.content_items.all()),
+            ),
         }
 
     @override
     def get_page_title(self):
-        return self.object.title
+        return self.record["title"]
 
     @override
     def get_page_lede(self):
-        record = self.object
+        record = self.record
         return format_html(
             "{} {} {} {}",
-            format_html("<code>{}</code>", breakable(record.doc_id, "·")),
-            breakable(dotted(record.get_doc_type_display(), record.get_environment_display())),
-            breakable(status_pill(record.state)),
-            breakable(status_pill(record.get_sensitivity_display(), chip=True)),
+            format_html("<code>{}</code>", breakable(record["doc_id"], "·")),
+            breakable(
+                dotted(
+                    DocumentationRecord.DocType(record["doc_type"]).label,
+                    DocumentationRecord.Environment(record["environment"]).label,
+                )
+            ),
+            breakable(status_pill(DocStatus(record["status"]))),
+            breakable(status_pill(DocumentationRecord.Sensitivity(record["sensitivity"]).label, chip=True)),
         )
 
     @override
     def get_page_actions(self):
-        doc_id = self.object.doc_id
+        doc_id = self.record["doc_id"]
         return (
             PageAction.command("documentation.update", doc_id),
             PageAction.command("documentation.delete", doc_id),

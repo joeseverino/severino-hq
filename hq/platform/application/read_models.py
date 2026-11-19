@@ -9,10 +9,10 @@ from django.utils import timezone
 from hq.platform.core.models import AuditLog
 
 from . import history, records
+from .documentation import DocumentationRow
 from .projection import NextPage, page_size
-from .resource_records import DocumentationRow
 from .routes import reverse
-from .sensitivity import safe_records
+from .sensitivity import readable_records
 lazy from .resources import list_resource
 lazy from .security import Principal
 
@@ -27,10 +27,11 @@ class DocumentationStatus(TypedDict):
 
 
 def documentation_status(*, principal: Principal) -> DocumentationStatus:
-    """Counts of the AI-safe documentation pointers, and the first page of them
-    as the documentation list reads it, whose ``next`` it is read on by."""
+    """Counts of the documentation pointers ``principal`` may read, and the
+    first page of them as the documentation list reads it, whose ``next`` it
+    is read on by."""
 
-    safe = safe_records().fetch_mode(FETCH_RAISE)
+    safe = readable_records(principal).fetch_mode(FETCH_RAISE)
     page = list_resource("documentation", {}, principal=principal)
     return {
         "total": safe.count(),

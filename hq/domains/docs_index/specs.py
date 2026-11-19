@@ -4,8 +4,8 @@ from pydantic import Field, create_model
 
 from hq.platform.application import documentation
 from hq.platform.application.contracts import Effect
+from hq.platform.application.documentation import DocumentationItem, DocumentationRow
 from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
-from hq.platform.application.resource_records import DocumentationItem, DocumentationRow
 from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
@@ -60,6 +60,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             listing=ListRead(documentation.list_documentation, DocumentationQuery, DocumentationRow),
             detail_handler=documentation.get_documentation,
             identifier="doc_id",
+            pass_principal=True,
             search=SearchDefinition(
                 "documentation",
                 DocumentationRecord,
