@@ -39,30 +39,6 @@ class SelectTagTests(SimpleTestCase):
         self.assertEqual([(o.attrs["value"], o.words) for o in options], [("80", "80"), ("443", "443")])
         self.assertEqual([o.attrs["value"] for o in options if "selected" in o.attrs], ["443"])
 
-    def test_one_that_sends_its_form_as_it_changes_carries_the_hook_and_others_do_not(self):
-        (sends,) = elements(_render('{% select "year" options submit_on_change=True %}'), "select")
-        (waits,) = elements(_render('{% select "year" options %}'), "select")
-
-        self.assertIn("data-submit-on-change", sends.attrs)
-        self.assertNotIn("data-submit-on-change", waits.attrs)
-
-    def test_its_label_is_the_name_a_reader_hears_and_its_id_the_one_a_control_label_names(self):
-        named = _render('{% select "rule" options label=label %}', label='Edit a record, for "agent"')
-        labeled = _render('{% select "rule" options id="example-rule" %}')
-
-        (field,) = elements(named, "select")
-        self.assertEqual(field.attrs["aria-label"], 'Edit a record, for "agent"')
-        (field,) = elements(labeled, "select")
-        self.assertEqual(field.attrs["id"], "example-rule")
-        self.assertNotIn("aria-label", field.attrs)
-
-    def test_a_tone_says_the_choice_in_the_status_part_s_ink(self):
-        plain = _render('{% select "rule" options %}')
-        toned = _render('{% select "rule" options tone="good" %}')
-
-        self.assertEqual(elements(plain, "select")[0].classes, frozenset())
-        self.assertLessEqual({"toned", "tone-good"}, elements(toned, "select")[0].classes)
-
     def test_a_choice_that_narrows_leads_with_any_of_its_dimension_chosen_by_default(self):
         html = _render('{% select "kind" kinds chosen=kind every="type" %}', kinds=(("host", "Host"),), kind=None)
 

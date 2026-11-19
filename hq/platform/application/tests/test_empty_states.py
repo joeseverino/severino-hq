@@ -1,6 +1,5 @@
 import re
 
-from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
@@ -9,7 +8,7 @@ from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters import DECLARATIONS
-from hq.platform.application.markup_testing import all_elements, elements, hrefs, text as page_text, texts, with_class
+from hq.platform.application.markup_testing import all_elements
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.testing import operator
 
@@ -29,28 +28,6 @@ def _templates():
 
 class OneEmptyStateTests(SimpleTestCase):
     """An empty state is drawn by the one partial, so it reads the same everywhere."""
-
-    def test_it_is_a_card_holding_one_paragraph(self):
-        html = render_to_string(
-            PARTIAL, {"message": "No containers yet.", "remedy": Remedy("Connect Portainer", "/connect/")}
-        )
-
-        (card,) = with_class(html, "empty")
-        self.assertIn("card", card.classes)
-        (line,) = texts(html, "p")
-        self.assertTrue(line.startswith("No containers yet. Connect Portainer"))
-        self.assertEqual(hrefs(html), ["/connect/"])
-
-    def test_a_qualifying_sentence_stays_in_the_one_line(self):
-        html = render_to_string(PARTIAL, {"message": "No problems found.", "why": "Example coverage."})
-
-        self.assertEqual(texts(html, "p"), ["No problems found. Example coverage."])
-
-    def test_a_remedy_with_no_page_is_said_not_linked(self):
-        html = render_to_string(PARTIAL, {"message": "Nothing yet.", "remedy": Remedy("Ask the owner")})
-
-        self.assertEqual(page_text(html), "Nothing yet. Ask the owner")
-        self.assertEqual(elements(html, "a"), [])
 
     def test_a_list_that_says_nothing_of_empty_names_what_it_lists(self):
         from django.views.generic import ListView

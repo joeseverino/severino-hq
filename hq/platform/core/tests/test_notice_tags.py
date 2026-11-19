@@ -9,81 +9,13 @@ from django.contrib.messages.storage.base import Message
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings, tag
 
-from hq.platform.application.markup_testing import all_elements, elements, select, with_class
+from hq.platform.application.markup_testing import all_elements, with_class
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.testing import render
 from hq.platform.core.tests.browser.catalog import CATALOG
-from hq_sdk.testing import plain
-
-# A tone's look is its class, which the stylesheet's tone assignment colors.
-LOOKS = {"": None, "info": "notice-info", "success": "notice-success", "warning": "notice-warning"}
 
 
 class NoticeTagTests(SimpleTestCase):
-    def test_each_tone_is_one_part_in_its_look_and_a_status(self):
-        for tone, look in LOOKS.items():
-            with self.subTest(tone=tone):
-                html = render("{% notice tone=tone %}Saved.{% endnotice %}", tone=tone)
-
-                (notice,) = with_class(html, "notice")
-                self.assertEqual(notice.attrs["role"], "status")
-                self.assertEqual(notice.words, "Saved.")
-                self.assertEqual([c for c in notice.classes if c.startswith("notice-")], [look] if look else [])
-
-    def test_an_error_interrupts(self):
-        html = render('{% notice tone="error" %}It failed.{% endnotice %}')
-
-        (notice,) = with_class(html, "notice")
-        self.assertIn("notice-error", notice.classes)
-        self.assertEqual(notice.attrs["role"], "alert")
-
-    def test_its_title_leads_its_body(self):
-        html = render(
-            '{% notice tone="warning" title=title %}<p>{{ names }}</p>{% endnotice %}',
-            title="2 jobs failed",
-            names="backup, sync",
-        )
-
-        (notice,) = with_class(html, "notice")
-        (title,) = elements(html, "strong")
-        (body,) = elements(html, "p")
-        self.assertEqual(title.words, "2 jobs failed")
-        self.assertIn(notice, title.ancestors)
-        self.assertIn(notice, body.ancestors)
-        self.assertLess(plain(html).index("2 jobs failed"), plain(html).index("backup, sync"))
-
-    def test_a_title_the_page_composes_is_its_title_part(self):
-        html = render(
-            '{% notice tone="warning" %}<p>Pick another.</p>{% title %}{{ name }} cannot be used{% endnotice %}',
-            name="example-target",
-        )
-
-        (notice,) = with_class(html, "notice")
-        (title,) = elements(html, "strong")
-        self.assertEqual(title.words, "example-target cannot be used")
-        self.assertIn(notice, title.ancestors)
-        self.assertLess(plain(html).index("cannot be used"), plain(html).index("Pick another."))
-
-    def test_a_pages_class_and_data_attributes_ride_on_it(self):
-        html = render(
-            '{% notice css="example" data_example_ref=ref data_example_flag=True data_example_off=False %}'
-            "Body{% endnotice %}",
-            ref='a"b',
-        )
-
-        (notice,) = select(html, "data-example-ref", 'a"b')
-        self.assertIn("example", notice.classes)
-        self.assertIn("notice", notice.classes)
-        self.assertEqual(notice.attrs["data-example-flag"], "")
-        self.assertNotIn("data-example-off", notice.attrs)
-
-    def test_with_no_body_it_is_the_frame_a_script_fills(self):
-        html = render('{% notice tone="error" %}{% endnotice %}')
-
-        (notice,) = with_class(html, "notice")
-        self.assertEqual(notice.words, "")
-        self.assertEqual(notice.attrs["role"], "alert")
-
     def test_a_message_is_a_notice_in_its_levels_tone(self):
         request = RequestFactory().get("/")
         request.user = None

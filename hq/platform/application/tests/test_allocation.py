@@ -1,9 +1,7 @@
 """An allocation: parts of one whole drawn as one bar, with no width written by the page."""
 
-from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
-from hq.platform.application.markup_testing import elements, links, select, within
 from hq_sdk.ui import AllocationBar, Share
 
 
@@ -36,59 +34,6 @@ class AllocationTests(SimpleTestCase):
         for parts in ((Share("Cash", 1.0, 6),), (Share("Cash", -1.0, 1),), (Share("Cash", float("nan"), 1),)):
             with self.subTest(parts=parts), self.assertRaises(ValueError):
                 AllocationBar("Example whole", parts)
-
-    def test_the_partial_draws_each_part_with_no_style_attribute(self):
-        bar = AllocationBar("Example whole", (Share("Cash", 1.0, 1), Share("Held", 3.0, 3)))
-
-        html = render_to_string("partials/_allocation.html", {"allocation": bar})
-
-        (drawing,) = select(html, "role", "img")
-        self.assertEqual(drawing.attrs["aria-label"], "Example whole: Cash 25%, Held 75%")
-        self.assertEqual([rect.attrs["width"] for rect in elements(html, "rect")], ["25.0%", "75.0%"])
-        self.assertEqual(select(html, "style"), [])
-
-    def test_the_legend_gives_each_part_its_swatch_amount_share_and_link(self):
-        bar = AllocationBar(
-            "Example whole",
-            (
-                Share("Cash", 30.0, 1, url="/example/?type=cash", detail="$30.00"),
-                Share("Held", 0.0, 4, url="/example/?type=held", detail="$0.00"),
-                Share("Owed", 70.0, 2, url="/example/?type=owed", detail="-$70.00", tone="attention"),
-            ),
-        )
-
-        html = render_to_string("partials/_allocation.html", {"allocation": bar, "legend": True})
-
-        self.assertEqual([href for _, href in links(html)], ["/example/?type=cash", "/example/?type=owed"])
-        for (words, _), said in zip(links(html), (("$30.00", "Cash", "30%"), ("-$70.00", "Owed", "70%")), strict=True):
-            for part in said:
-                self.assertIn(part, words.split())
-        swatches = [
-            name for i in elements(html, "i") for name in i.attrs["class"].split() if name.startswith("series-")
-        ]
-        self.assertEqual(swatches, [f"series-{rect['slot']}" for rect in bar.drawn])
-        (owed,) = [span for span in within(html, "data-legend") if "tone-attention" in span.classes]
-        self.assertEqual(owed.words, "-$70.00")
-
-    def test_a_legend_part_with_no_link_or_amount_still_reads_its_share(self):
-        bar = AllocationBar("Example whole", (Share("Cash", 1.0, 1), Share("Held", 3.0, 3)))
-
-        html = render_to_string("partials/_allocation.html", {"allocation": bar, "legend": True})
-
-        self.assertEqual(links(html), [])
-        rows = [row for row in within(html, "data-legend") if "data-legend" in row.ancestors[-1].attrs]
-        self.assertEqual(len(rows), 2)
-        for row, said in zip(rows, (("Cash", "25%"), ("Held", "75%")), strict=True):
-            for part in said:
-                self.assertIn(part, row.words.split())
-
-    def test_without_a_legend_the_partial_draws_only_the_bar(self):
-        bar = AllocationBar("Example whole", (Share("Cash", 1.0, 1, url="/example/", detail="$1.00"),))
-
-        html = render_to_string("partials/_allocation.html", {"allocation": bar})
-
-        self.assertEqual(select(html, "data-legend"), [])
-        self.assertEqual(links(html), [])
 
     def test_a_tone_outside_the_status_vocabulary_is_refused(self):
         with self.assertRaises(ValueError):

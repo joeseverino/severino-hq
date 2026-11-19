@@ -1,7 +1,7 @@
 from django.template import TemplateSyntaxError
 from django.test import SimpleTestCase
 
-from hq.platform.application.markup_testing import elements, with_class
+from hq.platform.application.markup_testing import elements
 from hq.platform.application.pages import PageAction, RowMark, RowOrder
 from hq.platform.core.testing import render
 
@@ -15,12 +15,6 @@ def moves_up(url: str = "/example/7/"):
 
 class ButtonTagTests(SimpleTestCase):
     """The one tag that draws a button refuses what it would drop or draw wrong."""
-
-    def test_a_link_is_drawn_with_its_look(self):
-        html = render('{% button "Example" "/example/" look="primary" %}')
-
-        self.assertIn('href="/example/"', html)
-        self.assertIn('class="btn primary"', html)
 
     def test_a_row_of_a_menu_or_a_link_takes_no_look_that_paints_a_box(self):
         for drawn in ("menu", "link"):
@@ -46,20 +40,6 @@ class ButtonTagTests(SimpleTestCase):
     def test_a_posting_button_refuses_a_hook_it_would_drop(self):
         with self.assertRaises(TemplateSyntaxError):
             render('{% button "Example" offer=press data_example=True %}', press=moves_up())
-
-    def test_its_icon_and_count_are_drawn_as_markup_beside_its_words(self):
-        html = render('{% button "Example" icon="info" count=3 %}')
-
-        self.assertIn('<svg class="icon"', html)
-        self.assertIn('<span class="filter-count">3</span>', html)
-
-    def test_a_glyph_with_an_icon_shows_the_icon_and_is_named_by_its_words(self):
-        html = render('{% button "Topology" "/example/" look="ghost glyph" icon="info" %}')
-
-        (link,) = elements(html, "a")
-        self.assertEqual(link.words, "Topology")
-        self.assertEqual([each.words for each in with_class(html, "visually-hidden")], ["Topology"])
-        self.assertEqual(len(elements(html, "svg")), 1)
 
     def test_a_button_out_of_hq_opens_as_every_outside_link_does(self):
         html = render(

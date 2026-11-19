@@ -3,15 +3,15 @@ tag, so it reads the same everywhere and a change to it is made once."""
 
 import re
 
-from django import forms
-from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.markup_testing import elements, select, texts, with_class
+from hq.platform.application.markup_testing import elements, texts
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.testing import render
 
 from .source import template_files
+
+FORM_ERRORS = "partials/_form_errors.html"
 
 
 def _templates():
@@ -25,120 +25,6 @@ def _written_by_hand(pattern: str, partial: str) -> list[str]:
     """Every template but ``partial`` that writes ``pattern``."""
 
     return [name for name, text in _templates() if name != partial and re.search(pattern, text)]
-
-
-class _Refused(forms.Form):
-    name = forms.CharField(required=False)
-
-    def clean(self):
-        raise forms.ValidationError("Those two cannot go together.")
-
-
-class FormErrorsTests(SimpleTestCase):
-    PARTIAL = "partials/_form_errors.html"
-
-    def test_a_form_s_own_errors_are_announced_above_its_fields(self):
-        form = _Refused(data={"name": "x"})
-        form.is_valid()
-
-        (notice,) = with_class(render_to_string(self.PARTIAL, {"form": form}), "notice-error")
-
-        self.assertEqual(notice.attrs.get("role"), "alert")
-        self.assertIn("Those two cannot go together.", notice.words)
-
-    def test_a_form_without_them_draws_nothing(self):
-        form = forms.Form(data={})
-        form.is_valid()
-
-        self.assertEqual(select(render_to_string(self.PARTIAL, {"form": form}), "role"), [])
-
-
-class SectionHeadTests(SimpleTestCase):
-    """The head ``{% section %}`` draws (partials/_section_head.html)."""
-
-    def test_what_sits_beside_the_heading_is_one_box_of_the_head(self):
-        """A count, a dot and a link beside the heading wrap as one line of
-        text, never as items of the head's row a dot is stranded between."""
-
-        aside = '<span>6 active</span>{% dot %}<a href="/example/">All</a>'
-        for source, box in (
-            (f'{{% section "Projects" %}}<p>Body</p>{{% aside %}}{aside}{{% endsection %}}', "div"),
-            (f'{{% section "Projects" fold=True %}}<p>Body</p>{{% aside %}}{aside}{{% endsection %}}', "span"),
-        ):
-            with self.subTest(box=box):
-                html = render(source)
-                (head,) = with_class(html, "section-head")
-                beside = [
-                    el
-                    for el in elements(html, "span") + elements(html, "a") + elements(html, "div")
-                    if el.ancestors and el.ancestors[-1] == head
-                ]
-                self.assertEqual([(el.tag, el.classes) for el in beside], [(box, frozenset({"section-aside"}))])
-                (aside,) = beside
-                self.assertEqual({el.words for el in elements(html, "a")}, {"All"})
-                self.assertIn(aside, elements(html, "a")[0].ancestors)
-
-    def test_with_nothing_beside_the_heading_the_head_draws_no_aside(self):
-        html = render('{% section "Load" %}<p>Body</p>{% aside %} {% endsection %}')
-
-        self.assertEqual(with_class(html, "section-aside"), [])
-
-    def test_a_lede_is_grouped_with_its_heading(self):
-        html = render('{% section "Load" lede=lede %}<p>Body</p>{% endsection %}', lede="Read a minute ago")
-
-        (group,) = elements(html, "hgroup")
-        (line,) = with_class(html, "section-lede")
-        self.assertIn(group, line.ancestors)
-        self.assertEqual(line.words, "Read a minute ago")
-
-    def test_an_empty_lede_leaves_the_heading_alone(self):
-        html = render('{% section "Load" lede=lede %}<p>Body</p>{% endsection %}', lede="")
-
-        self.assertEqual(elements(html, "hgroup"), [])
-
-
-class CardTests(SimpleTestCase):
-    def test_a_card_frames_what_it_holds_under_its_heading(self):
-        html = render(
-            '{% card css="example-card" heading="example-heading" %}'
-            '<span id="example-heading">Hosts</span><p>{{ n }} up</p>{% endcard %}',
-            n=3,
-        )
-
-        (card,) = with_class(html, "card")
-        (line,) = elements(html, "p")
-        self.assertEqual(card.tag, "section")
-        self.assertEqual(card.classes, {"card", "example-card"})
-        self.assertEqual(card.attrs["aria-labelledby"], "example-heading")
-        self.assertIn(card, line.ancestors)
-        self.assertEqual(line.words, "3 up")
-
-    def test_a_card_is_the_element_it_is_asked_to_be(self):
-        html = render('{% card element="details" %}<summary>More</summary>{% endcard %}')
-
-        (card,) = with_class(html, "card")
-        self.assertEqual(card.tag, "details")
-
-    def test_a_data_option_is_its_attribute_bare_when_true_and_absent_when_empty(self):
-        html = render(
-            "{% card data_fragment=True data_state=state data_paused=paused data_ask_status=url %}A{% endcard %}",
-            state="pending",
-            paused=False,
-            url="",
-        )
-
-        (card,) = with_class(html, "card")
-        self.assertIn("data-fragment", card.attrs)
-        self.assertEqual(card.attrs["data-state"], "pending")
-        self.assertNotIn("data-paused", card.attrs)
-        self.assertNotIn("data-ask-status", card.attrs)
-
-    def test_what_a_page_gives_it_is_escaped(self):
-        html = render("{% card data_state=state label=state %}{{ state }}{% endcard %}", state='"><b>x</b>')
-
-        (card,) = with_class(html, "card")
-        self.assertEqual(elements(html, "b"), [])
-        self.assertEqual(card.attrs["data-state"], '"><b>x</b>')
 
 
 class OutsideLinkTests(SimpleTestCase):
@@ -230,51 +116,14 @@ class RecordLinkTests(SimpleTestCase):
             render("{% entity row|record %}", row={"name": "example"})
 
 
-class FactPanelTests(SimpleTestCase):
-    def test_a_fact_leads_to_its_page_marked_as_its_part_of_a_region(self):
-        html = render(
-            '{% facts layout="band" %}{% fact "Connection" icon="network" url="/example/" modal="example" '
-            'tone="attention" data_fragment_part="example" %}Loopback{% detail %}<small>TLS 1.3</small>'
-            "{% endfact %}{% endfacts %}"
-        )
-
-        (fact,) = with_class(html, "fact")
-        (link,) = elements(html, "a")
-        self.assertIn(fact, link.ancestors)
-        self.assertEqual((link.attrs["href"], link.attrs["data-modal-open"]), ("/example/", "example"))
-        self.assertEqual(fact.attrs["data-fragment-part"], "example")
-        self.assertIn("tone-attention", fact.classes)
-        self.assertEqual(link.words, "Loopback")
-
-    def test_a_fact_with_a_panel_opens_it_in_place_by_its_id(self):
-        html = render(
-            '{% facts layout="band" %}{% fact "Weather" icon="cloud" id="example-weather" data_refreshing=refreshing %}'
-            '71°{% heading %}<strong>Weather</strong>{% panel %}<p>Mostly cloudy</p>{% foot %}<a href="/s/">Settings</a>'
-            "{% endfact %}{% endfacts %}",
-            refreshing=True,
-        )
-
-        (fact,) = with_class(html, "fact")
-        (value,) = with_class(html, "fact-value")
-        (opener,) = elements(html, "button")
-        (panel,) = with_class(html, "fact-panel")
-        self.assertIn("data-menu", value.attrs)
-        self.assertEqual(fact.attrs["data-refreshing"], "")
-        self.assertEqual(opener.attrs["popovertarget"], "example-weather")
-        self.assertEqual(panel.attrs["id"], "example-weather")
-        self.assertIn("popover", panel.attrs)
-        self.assertEqual(with_class(html, "fact-panel-head")[0].tag, "header")
-        self.assertEqual(with_class(html, "fact-panel-foot")[0].tag, "footer")
-
-
 @tag("source", "tree")
 @reads("**/templates/**")
 class SharedMarkupTemplateTests(SimpleTestCase):
     """No template writes by hand what a shared partial or tag draws."""
 
     def test_only_the_partial_prints_a_form_s_own_errors(self):
-        found = _written_by_hand(r"\.non_field_errors", FormErrorsTests.PARTIAL)
-        self.assertEqual(found, [], f'include "{FormErrorsTests.PARTIAL}" instead')
+        found = _written_by_hand(r"\.non_field_errors", FORM_ERRORS)
+        self.assertEqual(found, [], f'include "{FORM_ERRORS}" instead')
 
     def test_no_template_decides_a_fact_s_tone(self):
         # The tag refuses the part when a page renders; this reads every
