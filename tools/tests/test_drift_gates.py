@@ -47,7 +47,10 @@ def records_itself(run: str) -> bool:
     return bool(RUNS_TASK.search(ECHOED.sub("", run)))
 
 
-@tag("source", "tree")
+# No walk of this checkout: what it holds comes from the task definitions
+# (tests.mise_tasks, which fast selects on a change to a task or a file a task
+# runs), and the rewrites run in a worktree of their own.
+@tag("source")
 class DriftGateTests(SimpleTestCase):
     def test_every_drift_gate_is_a_declaration_or_records_itself(self):
         gates = drift_gates()
