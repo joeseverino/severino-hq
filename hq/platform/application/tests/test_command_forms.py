@@ -177,7 +177,7 @@ class CapabilityCommandFormTests(SimpleTestCase):
         @dataclass(frozen=True, slots=True)
         class ExampleCommand:
             reviewed_on: ExampleLastChecked = None
-            ttl: Annotated[int, Field(title="TTL in seconds"), Describe("How long it lasts.")] = 60
+            ttl: Annotated[int, Field(le=86400, title="TTL in seconds"), Describe("How long it lasts.")] = 60
 
         spec = CapabilitySpec(
             "example.check.run", "Check it.", "remote_write", "example.write", ExampleCommand, lambda command, **_: {}

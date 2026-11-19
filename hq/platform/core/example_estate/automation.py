@@ -116,7 +116,7 @@ PROCEDURES = (
         verification=["The report names the mount's size and use."],
         argument_spec={
             "short_description": "Report one mount",
-            "options": {"mount": {"type": "path", "default": "/"}},
+            "options": {"mount": {"type": "path", "default": "/", "description": "The mount point to report on."}},
         },
     ),
     _procedure(

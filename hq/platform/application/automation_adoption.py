@@ -342,6 +342,10 @@ def _input(option: str, terms: Mapping[str, Any], bound: InputBound | None, inpu
         return f"The input name {option} isn't allowed; use lowercase letters, digits and underscores."
     if kind not in (*SCALARS, "list") or terms.get("elements") not in (None, *SCALARS):
         return f"The input {option} takes {kind}, a free-form type; name each value it allows."
+    # A run's command is published with each input's words, and a model
+    # filling one in has only them to go by.
+    if not _description(terms.get("description")).strip():
+        return f"The input {option} says nothing of what it is; give it a description in its argument_specs."
     try:
         adopted = AdoptedInput.model_validate_json(
             json.dumps(
@@ -759,14 +763,14 @@ class Adopted(TypedDict):
 PlaybookKey = Annotated[RequiredText, Strict(), Field(max_length=200, title="Playbook")]
 
 # The scan result a change of a scan is adopted or rejected from.
-type ScanResult = Annotated[RecordId, Strict(), Field(title="Scan result"), Describe("The scan result's ID.")]
+type ScanResult = Annotated[RecordId, Strict(), Describe("The scan result's ID.")]
 
 
 @dataclass(frozen=True, slots=True)
 class AdoptProposal:
     """The scan result to adopt, and the one playbook to adopt from it."""
 
-    proposal: ScanResult
+    proposal: Annotated[ScanResult, Field(title="Scan result")]
     playbook: Annotated[
         PlaybookKey | None,
         Describe("The playbook whose change to adopt, by its id; left out, every change that waits is adopted."),
@@ -848,7 +852,7 @@ class Rejected(TypedDict):
 class RejectProposal:
     """The scan result to reject, and the one playbook to reject from it."""
 
-    proposal: ScanResult
+    proposal: Annotated[ScanResult, Field(title="Scan result")]
     playbook: Annotated[
         PlaybookKey | None,
         Describe(

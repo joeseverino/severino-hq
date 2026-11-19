@@ -191,9 +191,17 @@ class AdoptTests(AdoptionTestCase):
         self.assertIn("playbooks/check.hq.yml", said)
         self.assertIn("playbooks/other.hq.yml", said)
 
+    def test_an_input_that_says_nothing_of_what_it_is_refuses_the_commit(self):
+        unsaid = procedure("check")
+        unsaid["roles"][0]["argument_spec"]["options"] = {"cache": {"type": "str", "choices": ["web"]}}
+
+        self.assertIn("cache says nothing", self.refused(self.adopt(self.proposed(catalog(unsaid)))))
+
     def test_a_procedure_s_inputs_are_its_role_s_argument_spec_bounded_by_its_sidecar(self):
         bounded = procedure("check", inputs={"unit": {"pattern": "^[a-z]+$", "max_length": 8}})
-        bounded["roles"][0]["argument_spec"]["options"] = {"unit": {"type": "str", "required": True}}
+        bounded["roles"][0]["argument_spec"]["options"] = {
+            "unit": {"type": "str", "required": True, "description": "The unit to check."}
+        }
         self.adopt(self.proposed(catalog(bounded)))
         machines = patch("hq.platform.application.automation_runs.machine_catalog", return_value=(Machine(APP),))
 

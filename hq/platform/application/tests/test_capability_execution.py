@@ -238,9 +238,13 @@ class CapabilityTests(TestCase):
         self.assertEqual(result["error"]["message"], "project.create: name is required.")
 
     def test_a_wrong_type_names_the_field_and_the_type(self):
+        from typing import Annotated
+
+        from pydantic import Field
+
         @dataclass(frozen=True, slots=True)
         class CountCommand:
-            counts: list[int]
+            counts: list[Annotated[int, Field(le=100)]]
 
         error = self._refusal(CountCommand, {"counts": [1, "two"]})
 

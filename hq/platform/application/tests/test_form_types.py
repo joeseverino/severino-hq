@@ -26,7 +26,7 @@ Weekday = Annotated[int, Field(ge=0, le=6)]
 class PlanCommand:
     days: list[Weekday] | None = None
     split: list[tuple[Weekday, str]] | None = None
-    sessions: int | None = None
+    sessions: Annotated[int, Field(le=100)] | None = None
 
 
 # What a plan's form posts: each number as its text, as a choice sends it.
