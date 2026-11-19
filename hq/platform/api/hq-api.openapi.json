@@ -1150,16 +1150,20 @@
               "name",
               "url",
               "state",
+              "tone",
               "role",
               "roles",
               "roles.id",
               "roles.label",
+              "roles.detail",
               "addresses",
               "hostnames",
               "runs_hq",
               "node",
               "declaration",
               "aliases",
+              "address",
+              "tailnet_device",
               "header_addresses",
               "header_addresses.label",
               "header_addresses.address",
@@ -1179,6 +1183,13 @@
               "containers.published",
               "containers.watcher",
               "containers.observed_at",
+              "running",
+              "load",
+              "load.metrics",
+              "load.metrics.label",
+              "load.metrics.value",
+              "load.metrics.detail",
+              "load.observed_at",
               "presence",
               "presence.online",
               "presence.last_seen",
@@ -1198,6 +1209,26 @@
               "presence.exit_node_approved",
               "presence.ssh_enabled",
               "presence.blocks_incoming",
+              "presence.external",
+              "presence.lock_error",
+              "presence.signs_tailnet_lock",
+              "presence.unapproved_routes",
+              "presence.observer",
+              "presence.reached_hq",
+              "presence.reached_hq.last_seen",
+              "presence.reached_hq.how",
+              "presence.peering",
+              "presence.peering.last_handshake",
+              "presence.peering.active",
+              "presence.peering.path",
+              "presence.peering.direct_endpoint",
+              "presence.peering.relay",
+              "presence.peering.rx_bytes",
+              "presence.peering.tx_bytes",
+              "presence.peering.public_key",
+              "presence.openings",
+              "presence.openings.port",
+              "presence.openings.open_to",
               "presence.observed_at",
               "*"
             ],
@@ -5054,6 +5085,37 @@
           "ok",
           "data"
         ],
+        "type": "object"
+      },
+      "ArrivalPart": {
+        "additionalProperties": false,
+        "properties": {
+          "how": {
+            "description": "How that request came, such as `directly over the tailnet`.",
+            "type": "string"
+          },
+          "last_seen": {
+            "description": "When a request last came to HQ from it, an ISO 8601 date-time.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "last_seen",
+          "how"
+        ],
+        "type": "object"
+      },
+      "ArrivalPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "how": {
+            "$ref": "#/components/schemas/ArrivalPart/properties/how"
+          },
+          "last_seen": {
+            "$ref": "#/components/schemas/ArrivalPart/properties/last_seen"
+          }
+        },
         "type": "object"
       },
       "AsRead": {
@@ -15911,6 +15973,56 @@
         ],
         "type": "object"
       },
+      "LoadPart": {
+        "additionalProperties": false,
+        "properties": {
+          "metrics": {
+            "description": "Each measure of the last reading, less a count of containers where `containers` lists them.",
+            "items": {
+              "$ref": "#/components/schemas/MetricPart"
+            },
+            "type": "array"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObservedAt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "metrics",
+          "observed_at"
+        ],
+        "type": "object"
+      },
+      "LoadPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "metrics": {
+            "description": "Each measure of the last reading, less a count of containers where `containers` lists them.",
+            "items": {
+              "$ref": "#/components/schemas/MetricPartPartial"
+            },
+            "type": "array"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObservedAt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
       "LookupAddressReadRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -16082,6 +16194,10 @@
         "additionalProperties": false,
         "description": "One machine whole: how it is reached, what it serves and what runs on it.",
         "properties": {
+          "address": {
+            "description": "The address its connection reaches it at; empty when none says.",
+            "type": "string"
+          },
           "addresses": {
             "$ref": "#/components/schemas/MachineRow/properties/addresses"
           },
@@ -16123,6 +16239,18 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "load": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LoadPart",
+                "title": "Load part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its last reading of load; null when nothing reads it."
           },
           "name": {
             "$ref": "#/components/schemas/MachineRow/properties/name"
@@ -16170,11 +16298,22 @@
           "roles": {
             "$ref": "#/components/schemas/MachineRow/properties/roles"
           },
+          "running": {
+            "description": "How many of `containers` are running.",
+            "type": "integer"
+          },
           "runs_hq": {
             "$ref": "#/components/schemas/MachineRow/properties/runs_hq"
           },
           "state": {
             "$ref": "#/components/schemas/MachineRow/properties/state"
+          },
+          "tailnet_device": {
+            "description": "The key of HQ's record of its tailnet device, which approves its routes; empty for none.",
+            "type": "string"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/MachineRow/properties/tone"
           },
           "unanswered": {
             "description": "Those of `reached_by` that did not answer their last check.",
@@ -16191,6 +16330,7 @@
           "name",
           "url",
           "state",
+          "tone",
           "role",
           "roles",
           "addresses",
@@ -16199,6 +16339,8 @@
           "node",
           "declaration",
           "aliases",
+          "address",
+          "tailnet_device",
           "header_addresses",
           "containers_visible",
           "hq_hostnames",
@@ -16207,6 +16349,8 @@
           "unanswered",
           "resources",
           "containers",
+          "running",
+          "load",
           "presence"
         ],
         "type": "object"
@@ -16245,6 +16389,9 @@
         "additionalProperties": false,
         "description": "One machine whole: how it is reached, what it serves and what runs on it.",
         "properties": {
+          "address": {
+            "$ref": "#/components/schemas/MachineRecord/properties/address"
+          },
           "addresses": {
             "$ref": "#/components/schemas/MachineRowPartial/properties/addresses"
           },
@@ -16276,6 +16423,18 @@
           },
           "hq_hostnames": {
             "$ref": "#/components/schemas/MachineRecord/properties/hq_hostnames"
+          },
+          "load": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LoadPartPartial",
+                "title": "Load part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its last reading of load; null when nothing reads it."
           },
           "name": {
             "$ref": "#/components/schemas/MachineRowPartial/properties/name"
@@ -16310,11 +16469,20 @@
           "roles": {
             "$ref": "#/components/schemas/MachineRowPartial/properties/roles"
           },
+          "running": {
+            "$ref": "#/components/schemas/MachineRecord/properties/running"
+          },
           "runs_hq": {
             "$ref": "#/components/schemas/MachineRowPartial/properties/runs_hq"
           },
           "state": {
             "$ref": "#/components/schemas/MachineRowPartial/properties/state"
+          },
+          "tailnet_device": {
+            "$ref": "#/components/schemas/MachineRecord/properties/tailnet_device"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/MachineRowPartial/properties/tone"
           },
           "unanswered": {
             "$ref": "#/components/schemas/MachineRecord/properties/unanswered"
@@ -16382,6 +16550,10 @@
             "description": "Whether it can be reached now, such as `online`, `away` for a personal device that is off, `offline` or `not monitored`.",
             "type": "string"
           },
+          "tone": {
+            "description": "How its state is colored: `good`, `neutral` or `serious`.",
+            "type": "string"
+          },
           "url": {
             "description": "The machine's page in HQ.",
             "type": "string"
@@ -16391,6 +16563,7 @@
           "name",
           "url",
           "state",
+          "tone",
           "role",
           "roles",
           "addresses",
@@ -16426,6 +16599,9 @@
           },
           "state": {
             "$ref": "#/components/schemas/MachineRow/properties/state"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/MachineRow/properties/tone"
           },
           "url": {
             "$ref": "#/components/schemas/MachineRow/properties/url"
@@ -17620,6 +17796,44 @@
         ],
         "type": "object"
       },
+      "MetricPart": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "description": "A line under it, such as `4 cores`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "What it measures, such as `CPU`.",
+            "type": "string"
+          },
+          "value": {
+            "description": "The measure, as a page shows it, such as `12%`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "MetricPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/MetricPart/properties/detail"
+          },
+          "label": {
+            "$ref": "#/components/schemas/MetricPart/properties/label"
+          },
+          "value": {
+            "$ref": "#/components/schemas/MetricPart/properties/value"
+          }
+        },
+        "type": "object"
+      },
       "MissingConnection": {
         "additionalProperties": false,
         "properties": {
@@ -18142,6 +18356,39 @@
           "info",
           "paths"
         ],
+        "type": "object"
+      },
+      "OpeningPart": {
+        "additionalProperties": false,
+        "properties": {
+          "open_to": {
+            "description": "Who the policy lets in at that port, as the policy writes them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "port": {
+            "description": "A port the tailnet policy opens on it.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "port",
+          "open_to"
+        ],
+        "type": "object"
+      },
+      "OpeningPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "open_to": {
+            "$ref": "#/components/schemas/OpeningPart/properties/open_to"
+          },
+          "port": {
+            "$ref": "#/components/schemas/OpeningPart/properties/port"
+          }
+        },
         "type": "object"
       },
       "OperationAction": {
@@ -18958,6 +19205,84 @@
         ],
         "type": "string"
       },
+      "PeeringPart": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "description": "Whether traffic is passing between the two now.",
+            "type": "boolean"
+          },
+          "direct_endpoint": {
+            "description": "The address a direct path reaches it at; empty for none.",
+            "type": "string"
+          },
+          "last_handshake": {
+            "description": "When it and HQ's machine last completed a handshake, as reported.",
+            "type": "string"
+          },
+          "path": {
+            "description": "How the two reach each other: `direct`, `relayed`, or `negotiating` before any traffic.",
+            "type": "string"
+          },
+          "public_key": {
+            "description": "Its node key.",
+            "type": "string"
+          },
+          "relay": {
+            "description": "The relay that carries a path with no direct one, or stands by for one.",
+            "type": "string"
+          },
+          "rx_bytes": {
+            "description": "The bytes HQ's machine has received from it.",
+            "type": "integer"
+          },
+          "tx_bytes": {
+            "description": "The bytes HQ's machine has sent it.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "last_handshake",
+          "active",
+          "path",
+          "direct_endpoint",
+          "relay",
+          "rx_bytes",
+          "tx_bytes",
+          "public_key"
+        ],
+        "type": "object"
+      },
+      "PeeringPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "$ref": "#/components/schemas/PeeringPart/properties/active"
+          },
+          "direct_endpoint": {
+            "$ref": "#/components/schemas/PeeringPart/properties/direct_endpoint"
+          },
+          "last_handshake": {
+            "$ref": "#/components/schemas/PeeringPart/properties/last_handshake"
+          },
+          "path": {
+            "$ref": "#/components/schemas/PeeringPart/properties/path"
+          },
+          "public_key": {
+            "$ref": "#/components/schemas/PeeringPart/properties/public_key"
+          },
+          "relay": {
+            "$ref": "#/components/schemas/PeeringPart/properties/relay"
+          },
+          "rx_bytes": {
+            "$ref": "#/components/schemas/PeeringPart/properties/rx_bytes"
+          },
+          "tx_bytes": {
+            "$ref": "#/components/schemas/PeeringPart/properties/tx_bytes"
+          }
+        },
+        "type": "object"
+      },
       "Permitted": {
         "description": "Whether the caller holds every permission `required_capabilities` names; absent from a read that names no caller.",
         "type": "boolean"
@@ -19758,6 +20083,10 @@
             "description": "Whether the tailnet has approved it as an exit node.",
             "type": "boolean"
           },
+          "external": {
+            "description": "Whether it belongs to another tailnet, shared into this one.",
+            "type": "boolean"
+          },
           "key_expires": {
             "anyOf": [
               {
@@ -19784,6 +20113,10 @@
             ],
             "description": "When the tailnet last saw it, as reported; null when not said."
           },
+          "lock_error": {
+            "description": "Why tailnet lock has not signed it; empty when signed or lock is off.",
+            "type": "string"
+          },
           "observed_at": {
             "anyOf": [
               {
@@ -19794,6 +20127,10 @@
               }
             ]
           },
+          "observer": {
+            "description": "Whether it is HQ's own machine, whose tailnet client this reading is from.",
+            "type": "boolean"
+          },
           "offers_exit_node": {
             "description": "Whether it offers to be an exit node.",
             "type": "boolean"
@@ -19802,9 +20139,44 @@
             "description": "Whether the tailnet says it is online now.",
             "type": "boolean"
           },
+          "openings": {
+            "description": "Who the tailnet policy lets in, per port.",
+            "items": {
+              "$ref": "#/components/schemas/OpeningPart"
+            },
+            "type": "array"
+          },
           "os": {
             "description": "The operating system its client reports.",
             "type": "string"
+          },
+          "peering": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeeringPart",
+                "title": "Peering part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How it and HQ's machine are talking; null until a handshake completes."
+          },
+          "reached_hq": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArrivalPart",
+                "title": "Arrival part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last request that came to HQ from it; null when none came lately."
+          },
+          "signs_tailnet_lock": {
+            "description": "Whether its device is one tailnet lock trusts to sign.",
+            "type": "boolean"
           },
           "ssh_enabled": {
             "description": "Whether Tailscale SSH is on for it.",
@@ -19824,6 +20196,13 @@
           "tailnet_name": {
             "description": "What the tailnet calls it.",
             "type": "string"
+          },
+          "unapproved_routes": {
+            "description": "Those of its advertised routes the tailnet has not approved, which reach nothing.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "update_available": {
             "description": "Whether a newer client is published for it.",
@@ -19849,6 +20228,14 @@
           "exit_node_approved",
           "ssh_enabled",
           "blocks_incoming",
+          "external",
+          "lock_error",
+          "signs_tailnet_lock",
+          "unapproved_routes",
+          "observer",
+          "reached_hq",
+          "peering",
+          "openings",
           "observed_at"
         ],
         "type": "object"
@@ -19877,6 +20264,9 @@
           "exit_node_approved": {
             "$ref": "#/components/schemas/PresencePart/properties/exit_node_approved"
           },
+          "external": {
+            "$ref": "#/components/schemas/PresencePart/properties/external"
+          },
           "key_expires": {
             "$ref": "#/components/schemas/PresencePart/properties/key_expires"
           },
@@ -19885,6 +20275,9 @@
           },
           "last_seen": {
             "$ref": "#/components/schemas/PresencePart/properties/last_seen"
+          },
+          "lock_error": {
+            "$ref": "#/components/schemas/PresencePart/properties/lock_error"
           },
           "observed_at": {
             "anyOf": [
@@ -19896,14 +20289,51 @@
               }
             ]
           },
+          "observer": {
+            "$ref": "#/components/schemas/PresencePart/properties/observer"
+          },
           "offers_exit_node": {
             "$ref": "#/components/schemas/PresencePart/properties/offers_exit_node"
           },
           "online": {
             "$ref": "#/components/schemas/PresencePart/properties/online"
           },
+          "openings": {
+            "description": "Who the tailnet policy lets in, per port.",
+            "items": {
+              "$ref": "#/components/schemas/OpeningPartPartial"
+            },
+            "type": "array"
+          },
           "os": {
             "$ref": "#/components/schemas/PresencePart/properties/os"
+          },
+          "peering": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeeringPartPartial",
+                "title": "Peering part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How it and HQ's machine are talking; null until a handshake completes."
+          },
+          "reached_hq": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArrivalPartPartial",
+                "title": "Arrival part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last request that came to HQ from it; null when none came lately."
+          },
+          "signs_tailnet_lock": {
+            "$ref": "#/components/schemas/PresencePart/properties/signs_tailnet_lock"
           },
           "ssh_enabled": {
             "$ref": "#/components/schemas/PresencePart/properties/ssh_enabled"
@@ -19916,6 +20346,9 @@
           },
           "tailnet_name": {
             "$ref": "#/components/schemas/PresencePart/properties/tailnet_name"
+          },
+          "unapproved_routes": {
+            "$ref": "#/components/schemas/PresencePart/properties/unapproved_routes"
           },
           "update_available": {
             "$ref": "#/components/schemas/PresencePart/properties/update_available"
@@ -23194,6 +23627,10 @@
       "RolePart": {
         "additionalProperties": false,
         "properties": {
+          "detail": {
+            "description": "What the role means, and what was read that shows it.",
+            "type": "string"
+          },
           "id": {
             "description": "The role's stable id, such as `tailnet-dns`.",
             "type": "string"
@@ -23205,13 +23642,17 @@
         },
         "required": [
           "id",
-          "label"
+          "label",
+          "detail"
         ],
         "type": "object"
       },
       "RolePartPartial": {
         "additionalProperties": false,
         "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/RolePart/properties/detail"
+          },
           "id": {
             "$ref": "#/components/schemas/RolePart/properties/id"
           },

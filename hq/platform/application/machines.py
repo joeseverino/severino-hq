@@ -355,16 +355,6 @@ def _with_roles(machines) -> tuple[Machine, ...]:
     return tuple(replace(item, roles=roles_of(item, context)) for item in machines)
 
 
-def declaration_seed(found: Machine) -> dict[str, Any]:
-    """What a machine declaration starts from: the name and addresses HQ knows.
-
-    Keyed by the machine spec's own fields, so it seeds the form through the
-    same query parameters every other create does.
-    """
-
-    return {"name": found.name, "addresses": list(found.addresses)}
-
-
 def _host_addresses(containers: dict[str, list[Running]]) -> dict[str, str]:
     """Where the sweep says each name it filed containers under actually is."""
 

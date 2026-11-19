@@ -30,6 +30,7 @@ lazy from .connection_records import CredentialRecord, TallyPart
 lazy from .credential_sight import credential_sight, sight
 lazy from .entity_links import entity_link
 lazy from .estate import estate_reading
+lazy from .glance import machine_metrics
 lazy from .hq_self import serving
 lazy from .infrastructure import enabled_resources
 lazy from .machine_context import header_addresses
@@ -44,10 +45,12 @@ lazy from .resource_records import (
     DomainRow,
     HopRow,
     JoinedReadingPart,
+    LoadPart,
     MachineRecord,
     MeasurementPart,
     ObservedPart,
     PathRecord,
+    PeeringPart,
     PresencePart,
     ReadingItem,
     ReadingRecord,
@@ -56,6 +59,7 @@ lazy from .resource_records import (
 )
 lazy from .search import global_search
 lazy from .service_list import services_by_zone
+lazy from .tailnet_signers import signer_of
 lazy from .topology import relation_graph
 lazy from .zones import ZONE_KIND, domain_context
 
@@ -114,10 +118,31 @@ def list_action_items(
 # ----- Machines ---------------------------------------------------------------
 
 
-def _presence(presence: Any) -> PresencePart | None:
+def _presence(machine: Any) -> PresencePart | None:
+    presence = machine.presence
     if presence is None:
         return None
-    return row(presence, PresencePart, lan_address=tailnet_sightings().lan_address(presence))
+    return row(
+        presence,
+        PresencePart,
+        lan_address=tailnet_sightings().lan_address(presence),
+        signs_tailnet_lock=signer_of(machine.name) is not None,
+        peering=row(presence, PeeringPart, path=presence.peer_path) if presence.peered else None,
+        openings=[{"port": port, "open_to": list(who)} for port, who in presence.openings],
+    )
+
+
+def _load(machine: Any) -> LoadPart | None:
+    if not machine.telemetry:
+        return None
+    # The container list is the count of what runs, so a reading taken at
+    # another moment does not state a second one beside it.
+    metrics = [
+        metric
+        for metric in machine_metrics(machine.telemetry)
+        if not (machine.containers and metric["label"] == "Containers")
+    ]
+    return {"metrics": metrics, "observed_at": _moment(machine.telemetry_observed_at)}
 
 
 def serialize_machine(machine: Any) -> MachineRecord:
@@ -126,10 +151,13 @@ def serialize_machine(machine: Any) -> MachineRecord:
         MachineRecord,
         node=Kind.MACHINE.of(machine.name),
         state=machine.state.label,
+        tone=machine.state.tone,
+        tailnet_device=machine.route_approval_key,
         header_addresses=[
             {"label": kind, "address": address, "holder": holder} for kind, address, holder in header_addresses(machine)
         ],
-        presence=_presence(machine.presence),
+        presence=_presence(machine),
+        load=_load(machine),
     )
 
 

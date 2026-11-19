@@ -176,6 +176,15 @@ class MachinePageTests(TestCase):
         self.assertContains(response, "nginx:alpine")
         self.assertContains(response, "8081")
 
+    def test_the_page_draws_the_record_its_api_read_answers(self):
+        from ..resources import get_resource
+        from ..security import web_principal
+
+        response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-docker-host"}))
+
+        read = get_resource("machines", "a-docker-host", principal=web_principal(self.user))
+        self.assertEqual(response.context["machine"], read)
+
     def test_a_name_nothing_reported_is_not_a_page(self):
         response = self.client.get(reverse("control_plane:machine", kwargs={"name": "nowhere"}))
 

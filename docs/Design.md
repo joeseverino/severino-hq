@@ -356,6 +356,7 @@ column needs nothing else.
 | `when:"dateline"` | "Wednesday, Nov 18" | the day a page opens on, over its title |
 | `when:"length"` | "5 minutes", either way from now | a wait |
 | `when:"ahead"` | "in 3 days" | a wait |
+| `when:"expiry"` | "expires in 3 days", "expired 4 days ago" | a deadline |
 | `{{ at\|when_text:"ago" }}` | the words of any form, as plain text | an attribute, or a table cell's line, which sorts on the first `<time>` it holds |
 | `when_range` | "Oct 3 – Oct 9", a year both ends share said once | a run of days |
 

@@ -237,19 +237,16 @@ class ReachedThroughTests(TestCase):
         provider, kind = next(iter(CONNECTION_LABELS.items()))
         connection(provider, "box")
         connection(provider, "example-other")
-        machine = SimpleNamespace(
-            name="box",
-            aliases=(),
-            addresses=(),
-            reached_by=("box", "example-other"),
-            unanswered=(),
-            other_declarations=(),
-            presence=None,
-            roles=(),
-        )
+        record = {
+            "name": "box",
+            "aliases": [],
+            "addresses": [],
+            "reached_by": ["box", "example-other"],
+            "unanswered": [],
+            "presence": None,
+        }
 
-        with mock.patch("hq.platform.application.machine_context.serves_links", return_value=()):
-            (own, _), (other, _) = machine_links(machine, None)["reached_links"]
+        (own, _), (other, _) = machine_links(record)["reached_links"]
 
         self.assertEqual((own.label, own.title), (kind, "box"))
         self.assertTrue(own.url)

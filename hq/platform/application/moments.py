@@ -336,4 +336,5 @@ WHEN_FORMS = {
     "numeral": numeral,  # "3", the day of the month in a calendar's cell
     "length": length,  # "5 minutes", how far it lies from now either way
     "ahead": ahead,  # "in 3 days", or "5 days ago" once it has passed
+    "expiry": expiry_words,  # "expires in 3 days", "expired 4 days ago"
 }

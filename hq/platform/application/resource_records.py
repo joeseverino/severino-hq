@@ -402,6 +402,7 @@ class ActionItem(ActionItemRow):
 class RolePart(TypedDict):
     id: Annotated[str, Describe("The role's stable id, such as `tailnet-dns`.")]
     label: Annotated[str, Describe("The role, in words.")]
+    detail: Annotated[str, Describe("What the role means, and what was read that shows it.")]
 
 
 class MachineRow(TypedDict):
@@ -413,6 +414,9 @@ class MachineRow(TypedDict):
             "Whether it can be reached now, such as `online`, `away` for a personal device that is off, "
             "`offline` or `not monitored`."
         ),
+    ]
+    tone: Annotated[
+        str, Describe(ended(f"How its state is colored: {listed((Tone.GOOD, Tone.NEUTRAL, Tone.SERIOUS))}"))
     ]
     role: Annotated[
         str, Describe("The role HQ's record of the machine gives it, such as `Docker host`; empty for none.")
@@ -446,6 +450,43 @@ class MachineContainerPart(TypedDict):
     observed_at: ObservedAt | None
 
 
+class MetricPart(TypedDict):
+    label: Annotated[str, Describe("What it measures, such as `CPU`.")]
+    value: Annotated[str, Describe("The measure, as a page shows it, such as `12%`.")]
+    detail: Annotated[str, Describe("A line under it, such as `4 cores`.")]
+
+
+class LoadPart(TypedDict):
+    metrics: Annotated[
+        list[MetricPart],
+        Describe("Each measure of the last reading, less a count of containers where `containers` lists them."),
+    ]
+    observed_at: ObservedAt | None
+
+
+class ArrivalPart(TypedDict):
+    last_seen: Annotated[str, DateTime(), Describe("When a request last came to HQ from it, an ISO 8601 date-time.")]
+    how: Annotated[str, Describe("How that request came, such as `directly over the tailnet`.")]
+
+
+class PeeringPart(TypedDict):
+    last_handshake: Annotated[str, Describe("When it and HQ's machine last completed a handshake, as reported.")]
+    active: Annotated[bool, Describe("Whether traffic is passing between the two now.")]
+    path: Annotated[
+        str, Describe("How the two reach each other: `direct`, `relayed`, or `negotiating` before any traffic.")
+    ]
+    direct_endpoint: Annotated[str, Describe("The address a direct path reaches it at; empty for none.")]
+    relay: Annotated[str, Describe("The relay that carries a path with no direct one, or stands by for one.")]
+    rx_bytes: Annotated[int, Describe("The bytes HQ's machine has received from it.")]
+    tx_bytes: Annotated[int, Describe("The bytes HQ's machine has sent it.")]
+    public_key: Annotated[str, Describe("Its node key.")]
+
+
+class OpeningPart(TypedDict):
+    port: Annotated[int, Describe("A port the tailnet policy opens on it.")]
+    open_to: Annotated[list[str], Describe("Who the policy lets in at that port, as the policy writes them.")]
+
+
 class PresencePart(TypedDict):
     online: Annotated[bool, Describe("Whether the tailnet says it is online now.")]
     last_seen: Annotated[str | None, Describe("When the tailnet last saw it, as reported; null when not said.")]
@@ -465,6 +506,20 @@ class PresencePart(TypedDict):
     exit_node_approved: Annotated[bool, Describe("Whether the tailnet has approved it as an exit node.")]
     ssh_enabled: Annotated[bool, Describe("Whether Tailscale SSH is on for it.")]
     blocks_incoming: Annotated[bool, Describe("Whether it accepts no inbound connection at all.")]
+    external: Annotated[bool, Describe("Whether it belongs to another tailnet, shared into this one.")]
+    lock_error: Annotated[str, Describe("Why tailnet lock has not signed it; empty when signed or lock is off.")]
+    signs_tailnet_lock: Annotated[bool, Describe("Whether its device is one tailnet lock trusts to sign.")]
+    unapproved_routes: Annotated[
+        list[str], Describe("Those of its advertised routes the tailnet has not approved, which reach nothing.")
+    ]
+    observer: Annotated[bool, Describe("Whether it is HQ's own machine, whose tailnet client this reading is from.")]
+    reached_hq: Annotated[
+        ArrivalPart | None, Describe("The last request that came to HQ from it; null when none came lately.")
+    ]
+    peering: Annotated[
+        PeeringPart | None, Describe("How it and HQ's machine are talking; null until a handshake completes.")
+    ]
+    openings: Annotated[list[OpeningPart], Describe("Who the tailnet policy lets in, per port.")]
     observed_at: ObservedAt | None
 
 
@@ -474,6 +529,10 @@ class MachineRecord(MachineRow):
     node: Annotated[str, Describe("The machine's id on the map: `machine:` and its name.")]
     declaration: Annotated[str, Describe("The key of HQ's record of the machine; empty when HQ keeps none.")]
     aliases: Annotated[list[str], Describe("Other names the same machine is known by.")]
+    address: Annotated[str, Describe("The address its connection reaches it at; empty when none says.")]
+    tailnet_device: Annotated[
+        str, Describe("The key of HQ's record of its tailnet device, which approves its routes; empty for none.")
+    ]
     header_addresses: Annotated[
         list[HeaderAddressPart], Describe("The addresses you reach it at, tailnet then LAN then public.")
     ]
@@ -489,6 +548,8 @@ class MachineRecord(MachineRow):
     unanswered: Annotated[list[str], Describe("Those of `reached_by` that did not answer their last check.")]
     resources: Annotated[list[str], Describe("The keys of HQ's records on the machine.")]
     containers: Annotated[list[MachineContainerPart], Describe("The containers last read on it.")]
+    running: Annotated[int, Describe("How many of `containers` are running.")]
+    load: Annotated[LoadPart | None, Describe("Its last reading of load; null when nothing reads it.")]
     presence: Annotated[
         PresencePart | None, Describe("What the tailnet reports of it; null when the tailnet does not know it.")
     ]

@@ -15,6 +15,8 @@ from urllib.parse import urlsplit
 from weakref import WeakKeyDictionary
 
 from django.core.exceptions import ImproperlyConfigured
+from django.http import Http404
+from django.shortcuts import redirect
 from django.urls import NoReverseMatch, Resolver404, get_resolver, get_script_prefix, get_urlconf, resolve
 from django.utils.functional import Promise
 
@@ -28,9 +30,11 @@ lazy from .capabilities import command_spec
 lazy from .contracts import Effect
 lazy from .outbound_work import refusal as outbound_refusal
 lazy from .page_reads import remedy
+lazy from .record_errors import RecordNotFound
 lazy from .refusal_status import Refusal, refusal_of
 lazy from .request_context import current as current_request
 lazy from .request_identity import signed_in
+lazy from .resources import get_resource, resource_registry
 lazy from .routes import reverse, routed
 lazy from .security import AuthorizationError, Capability, web_principal
 
@@ -473,6 +477,47 @@ class PageMixin(FragmentMixin):
                 reads=self.page_reads,
             )
         )
+        return context
+
+
+class RecordPageMixin(PageMixin):
+    """The page of one record of a resource kind, drawn from the record that
+    kind's API and MCP read answer (``resources.get_resource``), so what the
+    three say of a thing is computed once. The template reads it as
+    ``context_object_name``; what else the view adds is presentation, or
+    another kind's records about this one."""
+
+    # The ``ResourceSpec`` whose read of one draws the page, by its name.
+    resource = ""
+    context_object_name = ""
+    record: dict[str, Any]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if not (cls.resource and cls.context_object_name):
+            raise ImproperlyConfigured(f"{cls.__name__} names the resource it reads and its context_object_name.")
+
+    @property
+    def identifier(self) -> str:
+        return str(resource_registry()[self.resource].identifier)
+
+    def get(self, request: Any, *args: Any, **kwargs: Any) -> Any:
+        asked = kwargs[self.identifier]
+        try:
+            self.record = get_resource(self.resource, asked, principal=web_principal(request.user), strict=False)
+        except RecordNotFound as exc:
+            raise Http404(str(exc)) from exc
+        if str(self.record[self.identifier]).casefold() != str(asked).strip().casefold():
+            # Asked for by another of its names; the page lives at one.
+            return redirect(self.record["url"])
+        return super().get(request, *args, **kwargs)
+
+    def get_page_title(self) -> str:
+        return str(self.record[self.identifier])
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        context[self.context_object_name] = self.record
         return context
 
 

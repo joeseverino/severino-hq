@@ -590,7 +590,9 @@ class MachineRoleTests(TestCase):
 
 
 def addresses(response):
-    return list(response.context["header_addresses"])
+    return [
+        (item["label"], item["address"], item["holder"]) for item in response.context["machine"]["header_addresses"]
+    ]
 
 
 class PublicAddressTests(TestCase):
@@ -722,7 +724,7 @@ class ContainerVisibilityTests(TestCase):
     def test_no_connection_reads_containers_so_none_are_not_visible(self):
         self.assertContains(self.listing(), "Not visible")
         # The machine's own page draws no box for what it cannot see.
-        self.assertFalse(self.page().context["machine"].containers)
+        self.assertFalse(self.page().context["machine"]["containers"])
 
     def test_a_connected_container_reader_makes_none_a_reading(self):
         from ..services import CONTAINER_KIND
