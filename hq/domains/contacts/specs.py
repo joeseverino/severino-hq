@@ -38,6 +38,7 @@ class ContactSubmissionRow(TypedDict):
     """
 
     id: Annotated[int, Describe("The message's id in the form's table, which the review and delete commands take.")]
+    url: Annotated[str, Describe("The message's page in HQ.")]
     connection_ref: NotRequired[Annotated[str, Describe("The Cloudflare connection it was read through, by name.")]]
     account_id: NotRequired[Annotated[str, Describe("The id of the Cloudflare account that holds the table.")]]
     database_id: NotRequired[Annotated[str, Describe("The id of the D1 database that holds the table.")]]
@@ -73,6 +74,10 @@ class ContactSubmissionRow(TypedDict):
     message_preview: Annotated[str, Describe(f"The message's first {PREVIEW_LENGTH} characters, for a list to show.")]
 
 
+# A message's page and row mark it as one review state in one press.
+MARKS = (("read", "Mark read"), ("replied", "Mark replied"), ("archived", "Archive"), ("spam", "Spam"))
+
+
 def capabilities() -> tuple[CapabilitySpec, ...]:
     return (
         CapabilitySpec(
@@ -94,8 +99,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
                 "Record the attributed change in HQ's audit log.",
             ),
             label="Review a message",
-            # A message's page and row mark it as one review state in one press.
-            variants=(("read", "Mark read"), ("replied", "Mark replied"), ("archived", "Archive"), ("spam", "Spam")),
+            variants=MARKS,
         ),
         CapabilitySpec(
             contact_submissions.DELETE,

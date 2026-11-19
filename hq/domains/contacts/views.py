@@ -5,12 +5,15 @@ review or a deletion waits for the controller to apply it, the message showing
 it as waiting until then, and every change is recorded in the audit log.
 """
 
+from functools import cached_property
+from typing import Any, override
 from urllib.parse import quote
 
 from django.contrib import messages
 from django.shortcuts import redirect, render
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from django.views.decorators.http import require_POST
+from django.views.generic import TemplateView
 
 from hq.domains.control_plane.provider_adapters.cloudflare import SubmissionStatus
 from hq.platform.application.asks import WAITING
@@ -26,14 +29,15 @@ from hq.platform.application.contact_submissions import (
 )
 from hq.platform.application.labels import dotted
 from hq.platform.application.moments import moment, when
-from hq.platform.application.pages import PageAction, page_context, runs_here
-from hq.platform.application.security import safe_next
+from hq.platform.application.pages import PageAction, RecordPageMixin, page_context, runs_here
+from hq.platform.application.security import Capability, safe_next
 from hq.platform.application.ui import counted
 from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.core.web_refusals import refused
 
 from . import inbox
+from .specs import MARKS
 
 GONE = "That message was not found."
 
@@ -84,8 +88,7 @@ def _page_actions(submission: dict) -> tuple[PageAction, ...]:
     """What a message's page offers: every review it is not already in, and
     its deletion."""
 
-    marks = (mark for mark, _words in command_spec(REVIEW).variants)
-    return _offered(submission, [mark for mark in marks if mark != submission.get("status")])
+    return _offered(submission, [mark for mark, _words in MARKS if mark != submission.get("status")])
 
 
 def _offered(submission: dict, marks: list[str]) -> tuple[PageAction, ...]:
@@ -151,46 +154,72 @@ def contact_list(request):
 contact_list.page_reads = ("cloudflare.contact_submission",)  # type: ignore[attr-defined]
 
 
-def contact_detail(request, pk: int):
-    submission = find_submission(pk)
-    if not submission:
-        messages.error(request, GONE)
-        return redirect("contacts:list")
+class ContactDetailView(RecordPageMixin, TemplateView):
+    """One message, and its review, which posts through the review's capability."""
 
-    review_form = command_form_class(command_spec(REVIEW), fields=inbox.REVIEWED)
+    resource = "contact.submissions"
+    context_object_name = "submission"
+    url_kwarg = "pk"
+    required_capability = Capability.MANAGE_CONTACTS
+    runs = (REVIEW,)
+    template_name = "contacts/contact_detail.html"
+    page_trail = (("Messages", reverse_lazy("contacts:list")),)
     status = 200
-    if request.method == "POST":
-        form = review_form(request.POST)
-        if not form.is_valid():
-            status = 400
-        elif refusal := refused(request, execute_posted(request, REVIEW, form.command_payload, target=pk), form=form):
-            status = refusal.status
-        else:
-            return redirect("contacts:detail", pk=pk)
-    else:
-        form = review_form(initial={name: submission.get(name) or "" for name in inbox.REVIEWED})
+    form: Any = None
 
-    reply = reply_mailto(submission.get("email", ""))
-    return render(
-        request,
-        "contacts/contact_detail.html",
-        {
-            "submission": submission,
-            "state": submission_state(submission),
-            "reply_href": reply,
-            "form": form,
-            "gap": change_gap(),
-            "offered": _page_actions(submission),
-            "notes_kept": runs_here(REVIEW),
-            **page_context(
-                f"Message #{pk}",
-                dotted(submission.get("name", ""), _sent(submission)),
-                actions=(PageAction("Reply by email", reply),),
-                trail=(("Messages", reverse("contacts:list")),),
-            ),
-        },
-        status=status,
-    )
+    @cached_property
+    def review_form(self) -> Any:
+        return command_form_class(command_spec(REVIEW), fields=inbox.REVIEWED)
+
+    @override
+    def post(self, request, *args, **kwargs):
+        if (elsewhere := self.read(request, kwargs)) is not None:
+            return elsewhere
+        pk = self.record["id"]
+        self.form = self.review_form(request.POST)
+        if not self.form.is_valid():
+            self.status = 400
+        elif refusal := refused(
+            request, execute_posted(request, REVIEW, self.form.command_payload, target=pk), form=self.form
+        ):
+            self.status = refusal.status
+        else:
+            return redirect(self.record["url"])
+        return self.render_to_response(self.get_context_data(**kwargs))
+
+    @override
+    def get_page_title(self):
+        return f"Message #{self.record['id']}"
+
+    @override
+    def get_page_lede(self):
+        return dotted(self.record.get("name", ""), _sent(self.record))
+
+    @override
+    def get_page_actions(self):
+        return (PageAction("Reply by email", self.reply),)
+
+    @cached_property
+    def reply(self) -> str:
+        return reply_mailto(self.record.get("email", ""))
+
+    @override
+    def get_context_data(self, **kwargs):
+        submission = self.record
+        form = self.form or self.review_form(initial={name: submission.get(name) or "" for name in inbox.REVIEWED})
+        return super().get_context_data(
+            **kwargs,
+            state=submission_state(submission),
+            reply_href=self.reply,
+            form=form,
+            gap=change_gap(),
+            offered=_page_actions(submission),
+            notes_kept=runs_here(REVIEW),
+        )
+
+    @override
+    def render_to_response(self, context, **response_kwargs):
+        return super().render_to_response(context, status=self.status, **response_kwargs)
 
 
 def _safe_next(request) -> str:
@@ -206,7 +235,8 @@ def contact_set_status(request, pk: int):
     return redirect(_safe_next(request))
 
 
-contact_set_status.runs = (REVIEW,)  # type: ignore[attr-defined]
+# Each mark's press; the review as a whole is the message page's form.
+contact_set_status.runs = tuple((REVIEW, mark) for mark, _words in MARKS)  # type: ignore[attr-defined]
 
 
 def contact_delete(request, pk: int):

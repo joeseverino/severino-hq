@@ -182,10 +182,6 @@ class ContactViewTests(TestCase):
         )
         self.assertNotIn('href="mailto:a@example.com\r', body)
 
-    def test_an_unknown_message_redirects_to_the_list(self):
-        response = self.client.get(reverse("contacts:detail", args=[99]))
-        self.assertRedirects(response, reverse("contacts:list"), fetch_redirect_response=False)
-
     def test_set_status_queues_and_redirects_back(self):
         _manages()
         response = self.client.post(

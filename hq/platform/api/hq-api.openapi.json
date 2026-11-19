@@ -460,6 +460,7 @@
           "items": {
             "enum": [
               "id",
+              "url",
               "connection_ref",
               "account_id",
               "database_id",
@@ -9041,6 +9042,10 @@
             ],
             "description": "When the table last changed it, an ISO 8601 date-time; null when the table says nothing."
           },
+          "url": {
+            "description": "The message's page in HQ.",
+            "type": "string"
+          },
           "user_agent": {
             "description": "The visitor's browser's whole user agent string.",
             "type": "string"
@@ -9048,6 +9053,7 @@
         },
         "required": [
           "id",
+          "url",
           "pending",
           "message_preview"
         ],
@@ -9149,6 +9155,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/ContactSubmissionRow/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ContactSubmissionRow/properties/url"
           },
           "user_agent": {
             "$ref": "#/components/schemas/ContactSubmissionRow/properties/user_agent"

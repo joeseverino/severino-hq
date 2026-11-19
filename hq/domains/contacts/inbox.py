@@ -17,7 +17,9 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.cloudflare import CONTACT_SUBMISSION_KIND
 from hq.domains.control_plane.provider_adapters.cloudflare import CONTACT_INBOX_KIND
 from hq.platform.application.conditions import DEGRADED, holding
+lazy from hq.platform.application.entity_links import entity_link
 lazy from hq.platform.application.projection import read_once
+lazy from hq.platform.application.references import Kind
 
 READING = CONTACT_SUBMISSION_KIND
 DECLARATION = CONTACT_INBOX_KIND
@@ -122,7 +124,12 @@ def _laid_over(rows: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[st
             {**row, **{name: review.get(name, "") for name in REVIEWED}} if waiting and review is not None else row
         )
         shown.append(
-            {**reviewed, "pending": waiting, "message_preview": str(reviewed.get("message", ""))[:PREVIEW_LENGTH]}
+            {
+                **reviewed,
+                "url": entity_link(Kind.MESSAGE, str(identifier)).url,
+                "pending": waiting,
+                "message_preview": str(reviewed.get("message", ""))[:PREVIEW_LENGTH],
+            }
         )
     return shown
 

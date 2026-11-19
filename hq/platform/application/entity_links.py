@@ -106,6 +106,8 @@ NODE_KINDS: Mapping[str, NodeKind] = {
     ),
     Kind.EXPENSE: NodeKind("expense", "expenses", lambda pk: reverse("expenses:detail", kwargs={"pk": pk})),
     Kind.RECEIPT: NodeKind("receipt", "receipts", lambda pk: reverse("receipts:detail", kwargs={"pk": pk})),
+    Kind.MESSAGE: NodeKind("message", "messages", lambda pk: reverse("contacts:detail", kwargs={"pk": pk})),
+    Kind.RUN: NodeKind("run", "runs", lambda pk: reverse("jobs:run", kwargs={"pk": pk})),
     Kind.TARGET: NodeKind("account or item", "accounts and items"),
     Kind.DEPENDENCY: NodeKind("not in HQ", "not in HQ"),
 }

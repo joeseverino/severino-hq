@@ -65,6 +65,9 @@ class Kind(StrEnum):
     DOCUMENT = "document"
     EXPENSE = "expense"
     RECEIPT = "receipt"
+    # A message sent through the site's contact form, and a run of a playbook or a scan.
+    MESSAGE = "message"
+    RUN = "run"
 
     def of(self, identity: str) -> str:
         """The reference to the thing of this kind named ``identity``."""
