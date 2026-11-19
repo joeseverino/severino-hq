@@ -67,7 +67,7 @@ class ReadOneRunTests(RunReadTestCase):
         queued = AuditLog.objects.get(object_id=operation_id, action=AuditLog.Action.CREATED)
         self.assertEqual((run["by"], run["approved_by"]), (queued.who.words, queued.who.approved_by))
         self.assertTrue(run["approved_by"])
-        self.assertEqual(run["events"], [task])
+        self.assertEqual(run["events"], [{**task, "tone": "good"}])
         self.assertIsNotNone(run["finished_at"])
 
     def test_a_run_shows_only_what_jobs_draws_of_its_result(self):
@@ -85,7 +85,9 @@ class ReadOneRunTests(RunReadTestCase):
 
         run = get_resource(RUNS, operation_id, principal=MCP_READER)
 
-        self.assertEqual(run["events"], [{"host": APP, "task": "Restart", "outcome": "ok", "message": ""}])
+        self.assertEqual(
+            run["events"], [{"host": APP, "task": "Restart", "outcome": "ok", "message": "", "tone": "good"}]
+        )
         self.assertNotIn("example-secret", str(run))
         self.assertNotIn("192.0.2.10", str(run))
 
@@ -98,14 +100,27 @@ class ReadOneRunTests(RunReadTestCase):
         self.assertEqual((run["state"], run["worker"]), ("running", WORKER))
         self.assertIsNotNone(run["lease_until"])
 
-    def test_an_id_no_run_holds_is_not_found(self):
+    def test_a_scan_of_the_source_is_read_as_a_run_of_no_playbook(self):
         scan = OperationRequest.objects.create(
             resource=OperationRequest.objects.get(pk=self.asked(APP)).resource,
             action=OperationRequest.Action.SCAN,
             requested_actor="example-operator",
             requested_interface="web",
         )
-        for missing in ("00000000-0000-4000-8000-000000000000", "not-an-id", str(scan.pk)):
+
+        run = get_resource(RUNS, str(scan.pk), principal=MCP_READER)
+
+        self.assertEqual((run["operation_id"], run["playbook"]), (str(scan.pk), ""))
+
+    def test_an_id_no_run_holds_is_not_found(self):
+        # An operation of the controller's, which no worker of playbooks runs.
+        applied = OperationRequest.objects.create(
+            resource=OperationRequest.objects.get(pk=self.asked(APP)).resource,
+            action=OperationRequest.Action.RECONCILE,
+            requested_actor="example-operator",
+            requested_interface="web",
+        )
+        for missing in ("00000000-0000-4000-8000-000000000000", "not-an-id", str(applied.pk)):
             with self.subTest(missing=missing), self.assertRaises(RecordNotFound):
                 get_resource(RUNS, missing, principal=MCP_READER)
 

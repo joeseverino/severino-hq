@@ -241,7 +241,9 @@ class AutomationLoopTests(TestCase):
                 self.assertTrue(settled["done"])
                 runs = _named(" ".join(command["execution_notes"]), resources)
                 run = door("get_resource", name=runs, identifier=settled["operation"])
-                self.assertEqual((run["playbook"], run["state"], run["events"]), (RESTART, "succeeded", [TASK]))
+                self.assertEqual(
+                    (run["playbook"], run["state"], run["events"]), (RESTART, "succeeded", [{**TASK, "tone": "good"}])
+                )
 
     def test_a_caller_that_only_reads_runs_a_read_unheld_from_what_each_answer_says(self):
         # The worker reaches one machine, which the read offers as the one to name.

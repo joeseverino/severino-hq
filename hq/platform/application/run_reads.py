@@ -1,7 +1,8 @@
-"""The runs of HQ's playbooks as a readable resource, declared beside Jobs.
+"""The runs of HQ's playbooks and the scans of their source as a readable
+resource, declared beside Jobs.
 
-Each run says what Jobs shows of it to anyone who may read it, and nothing
-more.
+Each run says what Jobs and its own page show of it to anyone who may read
+it, and nothing more.
 """
 
 import uuid
@@ -13,7 +14,7 @@ from pydantic import Field, create_model
 from hq.domains.jobs.models import JobState
 
 from .automation_manifest import DottedName
-from .automation_runs import CORRELATION_LONGEST, CORRELATION_PATTERN, capability_name
+from .automation_runs import CORRELATION_LONGEST, CORRELATION_PATTERN
 from .command_fields import RequiredText
 from .describe import Describe, listed
 from .integration_specs import ListRead, ResourceSpec
@@ -22,8 +23,9 @@ from .projection import iso, keyset_page
 from .record_errors import RecordNotFound
 from .resources import BoundedQuery, one_of
 from .security import Capability
+from .tone import Tone
 from .ui import ended
-from .work_runs import WorkRun, operation_of, playbook_runs, run_rows
+from .work_runs import WorkRun, listed_runs, operation_of, run_of, run_rows
 
 RUNS = "runs"
 
@@ -35,14 +37,29 @@ class RunTask(TypedDict):
     task: Annotated[str, Describe("The task, by its name in the playbook.")]
     outcome: Annotated[str, Describe("How it ended: `ok`, `changed`, `skipped`, `failed` or `unreachable`.")]
     message: Annotated[str, Describe("What the task said; empty when it said nothing.")]
+    tone: Annotated[str, Describe(ended(f"How its outcome is colored: {listed(Tone)}"))]
+
+
+class ServedPart(TypedDict):
+    """One name a certificate check found serving another certificate."""
+
+    consumer: Annotated[str, Describe("What serves the name, as the check names it.")]
+    domain: Annotated[str, Describe("The name it serves.")]
+    fingerprint_sha256: Annotated[str, Describe("The SHA-256 fingerprint of the certificate it serves.")]
 
 
 class RunRow(TypedDict):
     operation_id: Annotated[
         str, Describe("The run's id: the `operation.id` its command answered, which a read of one names.")
     ]
-    playbook: Annotated[str, Describe("The id of the playbook it runs, which the `playbook` filter takes.")]
-    capability: Annotated[str, Describe("The command it was asked for through, by name.")]
+    url: Annotated[str, Describe("The run's page in HQ.")]
+    title: Annotated[str, Describe("What it is, in words.")]
+    playbook: Annotated[
+        str, Describe("The id of the playbook it runs, which the `playbook` filter takes; empty for a scan.")
+    ]
+    capability: Annotated[
+        str, Describe("The command it was asked for through, by name: a playbook's, or the scan's refresh.")
+    ]
     state: Annotated[
         str,
         Describe(
@@ -51,6 +68,7 @@ class RunRow(TypedDict):
         ),
     ]
     state_label: Annotated[str, Describe("That state in the words HQ's pages say it in.")]
+    tone: Annotated[str, Describe(ended(f"How that state is colored: {listed(Tone)}"))]
     headline: Annotated[str, Describe("What it is doing or how it ended, in a sentence.")]
     hosts: Annotated[list[str], Describe("The machines it acts on, each by its name in HQ.")]
     by: Annotated[str, Describe("Who asked for it, through which door, and who approved it, as Jobs names them.")]
@@ -68,12 +86,23 @@ class RunRow(TypedDict):
 class RunRecord(RunRow):
     """One run whole: its row, the worker's lease while it holds it, and each task's outcome."""
 
+    reason: Annotated[str, Describe("Why its asker asked for it; empty when they gave no reason.")]
+    effect: Annotated[
+        str, Describe("What its playbook changes, as its record pins it, which cancelling it takes the authority of.")
+    ]
+    attempts: Annotated[int, Describe("How many times a worker has taken it up.")]
     worker: Annotated[str, Describe("The worker running it now; empty unless one is.")]
     lease_until: Annotated[
         str | None,
         Describe("When that worker must next report, or HQ reads the run as stopped; null unless one runs it."),
     ]
     events: Annotated[list[RunTask], Describe("Each task's outcome on each machine, in the order the worker ran them.")]
+    expected: Annotated[
+        str,
+        Describe("The SHA-256 fingerprint of the certificate it checked each name for; empty when it checked none."),
+    ]
+    affected: Annotated[list[ServedPart], Describe("Each name it found serving another certificate.")]
+    matched: Annotated[int, Describe("How many names it found serving the certificate it checked for.")]
 
 
 RunQuery = create_model(
@@ -113,13 +142,15 @@ _ORDER = ("-created_at",)
 
 
 def _row(run: WorkRun) -> dict[str, Any]:
-    playbook = operation_of(run.kind)
     return {
         "operation_id": run.id,
-        "playbook": playbook,
-        "capability": capability_name(playbook),
+        "url": run.url,
+        "title": run.title,
+        "playbook": operation_of(run.kind),
+        "capability": run.kind,
         "state": run.state,
         "state_label": run.word,
+        "tone": run.tone,
         "headline": run.note,
         "hosts": list(run.evidence.hosts),
         "by": run.by.words,
@@ -134,14 +165,22 @@ def _row(run: WorkRun) -> dict[str, Any]:
     }
 
 
-def _record(run: WorkRun) -> dict[str, Any]:
+def _record(run: WorkRun, reason: str) -> dict[str, Any]:
     evidence = run.evidence
     return {
         **_row(run),
+        "reason": reason,
+        "effect": run.effect,
+        "attempts": evidence.attempts,
         "worker": evidence.worker,
         "lease_until": iso(evidence.lease_until),
-        # The four fields a task's line on Jobs draws, whatever else the report held.
+        # The fields a task's line on Jobs draws, whatever else the report held.
         "events": [{name: str(event.get(name) or "") for name in RunTask.__annotations__} for event in evidence.events],
+        "expected": evidence.expected,
+        "affected": [
+            {name: str(item.get(name) or "") for name in ServedPart.__annotations__} for item in evidence.affected
+        ],
+        "matched": evidence.matched,
     }
 
 
@@ -155,7 +194,7 @@ def list_runs(
 ) -> dict[str, Any]:
     """The runs that match, newest first, a page at a time."""
 
-    found = playbook_runs(
+    found = listed_runs(
         playbook=playbook or "", host=machine or "", correlation=correlation or "", state=(state,) if state else ()
     )
     page = keyset_page(found, _ORDER, limit)
@@ -163,15 +202,16 @@ def list_runs(
 
 
 def get_run(run_id: str) -> dict[str, Any]:
-    """One run by its operation id."""
+    """One run or scan by its operation id."""
 
     try:
-        operation = playbook_runs().filter(pk=uuid.UUID(run_id)).first()
+        found = run_of(str(uuid.UUID(run_id)))
     except ValueError, DjangoValidationError:
-        operation = None
-    if operation is None:
-        raise RecordNotFound("No run of a playbook has that id.")
-    return _record(run_rows((operation,))[0])
+        found = None
+    if found is None:
+        raise RecordNotFound("No run of a playbook or scan of its source has that id.")
+    run, operation = found
+    return _record(run, operation.reason)
 
 
 def resources() -> tuple[ResourceSpec, ...]:
@@ -179,7 +219,8 @@ def resources() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             RUNS,
             "Playbook runs",
-            "Every run of a playbook: its machines, who asked and approved it, its state and each task's outcome.",
+            "Every run of a playbook, and every scan of their source: its machines, who asked and approved it, "
+            "its state and each task's outcome.",
             Capability.READ,
             listing=ListRead(list_runs, RunQuery, RunRow),
             detail_handler=get_run,

@@ -69,5 +69,5 @@ class AutomationLoopTests(TestCase):
         self.assertFalse(result.is_error)
         self.assertEqual(result.structured_content["operation"]["id"], str(operation.pk))
         self.assertEqual((run["playbook"], run["state"], run["correlation"]), (RESTART, "succeeded", "example-loop"))
-        self.assertEqual(run["events"], [TASK])
+        self.assertEqual(run["events"], [{**TASK, "tone": "good"}])
         self.assertTrue(run["approved_by"])

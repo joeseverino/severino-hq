@@ -2003,10 +2003,13 @@
           "items": {
             "enum": [
               "operation_id",
+              "url",
+              "title",
               "playbook",
               "capability",
               "state",
               "state_label",
+              "tone",
               "headline",
               "hosts",
               "by",
@@ -2017,6 +2020,9 @@
               "finished_at",
               "duration_seconds",
               "stated",
+              "reason",
+              "effect",
+              "attempts",
               "worker",
               "lease_until",
               "events",
@@ -2024,6 +2030,13 @@
               "events.task",
               "events.outcome",
               "events.message",
+              "events.tone",
+              "expected",
+              "affected",
+              "affected.consumer",
+              "affected.domain",
+              "affected.fingerprint_sha256",
+              "matched",
               "*"
             ],
             "type": "string"
@@ -2043,10 +2056,13 @@
           "items": {
             "enum": [
               "operation_id",
+              "url",
+              "title",
               "playbook",
               "capability",
               "state",
               "state_label",
+              "tone",
               "headline",
               "hosts",
               "by",
@@ -25150,8 +25166,19 @@
         "additionalProperties": false,
         "description": "One run whole: its row, the worker's lease while it holds it, and each task's outcome.",
         "properties": {
+          "affected": {
+            "description": "Each name it found serving another certificate.",
+            "items": {
+              "$ref": "#/components/schemas/ServedPart"
+            },
+            "type": "array"
+          },
           "approved_by": {
             "$ref": "#/components/schemas/RunRow/properties/approved_by"
+          },
+          "attempts": {
+            "description": "How many times a worker has taken it up.",
+            "type": "integer"
           },
           "by": {
             "$ref": "#/components/schemas/RunRow/properties/by"
@@ -25168,12 +25195,20 @@
           "duration_seconds": {
             "$ref": "#/components/schemas/RunRow/properties/duration_seconds"
           },
+          "effect": {
+            "description": "What its playbook changes, as its record pins it, which cancelling it takes the authority of.",
+            "type": "string"
+          },
           "events": {
             "description": "Each task's outcome on each machine, in the order the worker ran them.",
             "items": {
               "$ref": "#/components/schemas/RunTask"
             },
             "type": "array"
+          },
+          "expected": {
+            "description": "The SHA-256 fingerprint of the certificate it checked each name for; empty when it checked none.",
+            "type": "string"
           },
           "finished_at": {
             "$ref": "#/components/schemas/RunRow/properties/finished_at"
@@ -25195,11 +25230,19 @@
             ],
             "description": "When that worker must next report, or HQ reads the run as stopped; null unless one runs it."
           },
+          "matched": {
+            "description": "How many names it found serving the certificate it checked for.",
+            "type": "integer"
+          },
           "operation_id": {
             "$ref": "#/components/schemas/RunRow/properties/operation_id"
           },
           "playbook": {
             "$ref": "#/components/schemas/RunRow/properties/playbook"
+          },
+          "reason": {
+            "description": "Why its asker asked for it; empty when they gave no reason.",
+            "type": "string"
           },
           "started_at": {
             "$ref": "#/components/schemas/RunRow/properties/started_at"
@@ -25213,6 +25256,15 @@
           "stated": {
             "$ref": "#/components/schemas/RunRow/properties/stated"
           },
+          "title": {
+            "$ref": "#/components/schemas/RunRow/properties/title"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/RunRow/properties/tone"
+          },
+          "url": {
+            "$ref": "#/components/schemas/RunRow/properties/url"
+          },
           "worker": {
             "description": "The worker running it now; empty unless one is.",
             "type": "string"
@@ -25220,10 +25272,13 @@
         },
         "required": [
           "operation_id",
+          "url",
+          "title",
           "playbook",
           "capability",
           "state",
           "state_label",
+          "tone",
           "headline",
           "hosts",
           "by",
@@ -25234,9 +25289,15 @@
           "finished_at",
           "duration_seconds",
           "stated",
+          "reason",
+          "effect",
+          "attempts",
           "worker",
           "lease_until",
-          "events"
+          "events",
+          "expected",
+          "affected",
+          "matched"
         ],
         "type": "object"
       },
@@ -25244,8 +25305,18 @@
         "additionalProperties": false,
         "description": "One run whole: its row, the worker's lease while it holds it, and each task's outcome.",
         "properties": {
+          "affected": {
+            "description": "Each name it found serving another certificate.",
+            "items": {
+              "$ref": "#/components/schemas/ServedPartPartial"
+            },
+            "type": "array"
+          },
           "approved_by": {
             "$ref": "#/components/schemas/RunRowPartial/properties/approved_by"
+          },
+          "attempts": {
+            "$ref": "#/components/schemas/RunRecord/properties/attempts"
           },
           "by": {
             "$ref": "#/components/schemas/RunRowPartial/properties/by"
@@ -25262,12 +25333,18 @@
           "duration_seconds": {
             "$ref": "#/components/schemas/RunRowPartial/properties/duration_seconds"
           },
+          "effect": {
+            "$ref": "#/components/schemas/RunRecord/properties/effect"
+          },
           "events": {
             "description": "Each task's outcome on each machine, in the order the worker ran them.",
             "items": {
               "$ref": "#/components/schemas/RunTaskPartial"
             },
             "type": "array"
+          },
+          "expected": {
+            "$ref": "#/components/schemas/RunRecord/properties/expected"
           },
           "finished_at": {
             "$ref": "#/components/schemas/RunRowPartial/properties/finished_at"
@@ -25281,11 +25358,17 @@
           "lease_until": {
             "$ref": "#/components/schemas/RunRecord/properties/lease_until"
           },
+          "matched": {
+            "$ref": "#/components/schemas/RunRecord/properties/matched"
+          },
           "operation_id": {
             "$ref": "#/components/schemas/RunRowPartial/properties/operation_id"
           },
           "playbook": {
             "$ref": "#/components/schemas/RunRowPartial/properties/playbook"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/RunRecord/properties/reason"
           },
           "started_at": {
             "$ref": "#/components/schemas/RunRowPartial/properties/started_at"
@@ -25298,6 +25381,15 @@
           },
           "stated": {
             "$ref": "#/components/schemas/RunRowPartial/properties/stated"
+          },
+          "title": {
+            "$ref": "#/components/schemas/RunRowPartial/properties/title"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/RunRowPartial/properties/tone"
+          },
+          "url": {
+            "$ref": "#/components/schemas/RunRowPartial/properties/url"
           },
           "worker": {
             "$ref": "#/components/schemas/RunRecord/properties/worker"
@@ -25334,7 +25426,7 @@
             "type": "string"
           },
           "capability": {
-            "description": "The command it was asked for through, by name.",
+            "description": "The command it was asked for through, by name: a playbook's, or the scan's refresh.",
             "type": "string"
           },
           "correlation": {
@@ -25382,7 +25474,7 @@
             "type": "string"
           },
           "playbook": {
-            "description": "The id of the playbook it runs, which the `playbook` filter takes.",
+            "description": "The id of the playbook it runs, which the `playbook` filter takes; empty for a scan.",
             "type": "string"
           },
           "started_at": {
@@ -25410,14 +25502,29 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "title": {
+            "description": "What it is, in words.",
+            "type": "string"
+          },
+          "tone": {
+            "description": "How that state is colored: `serious`, `attention`, `neutral` or `good`.",
+            "type": "string"
+          },
+          "url": {
+            "description": "The run's page in HQ.",
+            "type": "string"
           }
         },
         "required": [
           "operation_id",
+          "url",
+          "title",
           "playbook",
           "capability",
           "state",
           "state_label",
+          "tone",
           "headline",
           "hosts",
           "by",
@@ -25508,6 +25615,15 @@
           },
           "stated": {
             "$ref": "#/components/schemas/RunRow/properties/stated"
+          },
+          "title": {
+            "$ref": "#/components/schemas/RunRow/properties/title"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/RunRow/properties/tone"
+          },
+          "url": {
+            "$ref": "#/components/schemas/RunRow/properties/url"
           }
         },
         "type": "object"
@@ -25531,13 +25647,18 @@
           "task": {
             "description": "The task, by its name in the playbook.",
             "type": "string"
+          },
+          "tone": {
+            "description": "How its outcome is colored: `serious`, `attention`, `neutral` or `good`.",
+            "type": "string"
           }
         },
         "required": [
           "host",
           "task",
           "outcome",
-          "message"
+          "message",
+          "tone"
         ],
         "type": "object"
       },
@@ -25556,6 +25677,9 @@
           },
           "task": {
             "$ref": "#/components/schemas/RunTask/properties/task"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/RunTask/properties/tone"
           }
         },
         "type": "object"
@@ -26052,6 +26176,46 @@
           },
           "title": {
             "$ref": "#/components/schemas/FindingFactsPartial/properties/title"
+          }
+        },
+        "type": "object"
+      },
+      "ServedPart": {
+        "additionalProperties": false,
+        "description": "One name a certificate check found serving another certificate.",
+        "properties": {
+          "consumer": {
+            "description": "What serves the name, as the check names it.",
+            "type": "string"
+          },
+          "domain": {
+            "description": "The name it serves.",
+            "type": "string"
+          },
+          "fingerprint_sha256": {
+            "description": "The SHA-256 fingerprint of the certificate it serves.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "consumer",
+          "domain",
+          "fingerprint_sha256"
+        ],
+        "type": "object"
+      },
+      "ServedPartPartial": {
+        "additionalProperties": false,
+        "description": "One name a certificate check found serving another certificate.",
+        "properties": {
+          "consumer": {
+            "$ref": "#/components/schemas/ServedPart/properties/consumer"
+          },
+          "domain": {
+            "$ref": "#/components/schemas/ServedPart/properties/domain"
+          },
+          "fingerprint_sha256": {
+            "$ref": "#/components/schemas/ServedPart/properties/fingerprint_sha256"
           }
         },
         "type": "object"
@@ -38745,7 +38909,7 @@
     },
     "/api/v2/resources/runs/": {
       "get": {
-        "description": "Every run of a playbook: its machines, who asked and approved it, its state and each task's outcome.",
+        "description": "Every run of a playbook, and every scan of their source: its machines, who asked and approved it, its state and each task's outcome.",
         "operationId": "listRunsV2",
         "parameters": [
           {

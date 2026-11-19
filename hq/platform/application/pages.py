@@ -549,7 +549,8 @@ class RecordPageMixin(PageMixin):
         """Read ``record``, the one the route names, or answer with where its
         page is when that is not here. A page that posts reads it first too."""
 
-        asked = kwargs[self.url_kwarg or self.identifier]
+        # As the route wrote it, which the read parses as its kind's identifier.
+        asked = str(kwargs[self.url_kwarg or self.identifier])
         try:
             self.record = get_resource(self.resource, asked, principal=web_principal(request.user), strict=False)
         except RecordNotFound as exc:

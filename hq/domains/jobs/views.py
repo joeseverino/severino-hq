@@ -7,13 +7,13 @@ from django.http import Http404, JsonResponse
 from django.urls import reverse, reverse_lazy
 from django.views.generic import DetailView, ListView, TemplateView, View
 
-from hq.platform.application.pages import PageAction, PageBadge, PageMixin, RouteNamed
+from hq.platform.application.pages import PageAction, PageBadge, PageMixin, RecordPageMixin, RouteNamed
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Projected, TableColumn, TableFilter, TableListMixin, TableQuery, TableSort
 from hq.platform.application.tone import Tone
 lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import AskMixin
-lazy from hq.platform.application.automation_runs import AGAIN, cancel_action, capability_name, listed_with_actions
+lazy from hq.platform.application.automation_runs import AGAIN, cancel_action, listed_with_actions
 lazy from hq.platform.application.capabilities import capability_spec
 lazy from hq.platform.application.labels import lower_first
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
@@ -111,37 +111,33 @@ class JobListView(PageMixin, TableListMixin, ListView):
         return context
 
 
-class RunView(PageMixin, TemplateView):
+class RunView(RecordPageMixin, TemplateView):
     """One run of a playbook, or one scan of its source: who asked, its
-    approval, its lease, how it ended and each task's outcome
-    (``application.run_pages``). Jobs' own page for a row, read as Jobs is."""
+    approval, its lease, how it ended and each task's outcome, from its
+    record (``application.run_reads``), beside what ``run_pages`` adds."""
 
+    resource = "runs"
+    context_object_name = "run"
+    url_kwarg = "pk"
     template_name = "jobs/run_detail.html"
     page_trail = (("Background jobs", reverse_lazy("jobs:list")),)
 
     @override
-    def get(self, request, *args, **kwargs):
-        found = work_runs.run_of(str(kwargs["pk"]))
-        if found is None:
-            raise Http404("No run has that id.")
-        self.run, self.operation = found
-        return super().get(request, *args, **kwargs)
-
-    @override
     def get_page_title(self):
-        return self.run.title
+        return self.record["title"]
 
     @override
     def get_page_actions(self):
-        cancel = cancel_action(self.run, web_principal(self.request.user))
-        playbook = work_runs.operation_of(self.run.kind)
+        run = self.record
+        playbook = run["playbook"]
+        cancel = cancel_action(
+            run["operation_id"], playbook, run["state"], run["effect"], web_principal(self.request.user)
+        )
         # Its playbook again on the same machines, once it has ended, while that playbook is adopted.
-        ended = self.run.state not in {JobState.QUEUED, JobState.RUNNING}
+        ended = run["state"] not in {JobState.QUEUED, JobState.RUNNING}
         again = (
-            PageAction.command(
-                capability_name(playbook), variant=AGAIN, query={"hosts": tuple(self.run.evidence.hosts)}
-            )
-            if ended and playbook and capability_spec(self.run.kind)
+            PageAction.command(run["capability"], variant=AGAIN, query={"hosts": tuple(run["hosts"])})
+            if ended and playbook and capability_spec(run["capability"])
             else None
         )
         return tuple(action for action in (again, cancel) if action is not None)
@@ -149,8 +145,8 @@ class RunView(PageMixin, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["page_badges"] = (PageBadge(self.run.word, self.run.tone),)
-        context.update(run_context(self.run, self.operation, user=self.request.user))
+        context["page_badges"] = (PageBadge(self.record["state_label"], Tone(self.record["tone"])),)
+        context.update(run_context(self.record, user=self.request.user))
         return context
 
 

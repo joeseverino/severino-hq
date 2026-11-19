@@ -597,12 +597,13 @@ def _cancel_button(operation_id: str) -> PageAction | None:
     return pages.PageAction.command(CANCEL, field="operation_id", value=operation_id)
 
 
-def cancel_action(run: WorkRun, principal: Principal) -> PageAction | None:
-    """The button that cancels ``run`` where it is listed, posting its id, or None."""
+def cancel_action(operation_id: str, playbook: str, state: str, effect: str, principal: Principal) -> PageAction | None:
+    """The button that cancels the run of ``playbook`` ``operation_id`` names,
+    posting its id, or None; a scan runs no playbook, and is never cancelled."""
 
-    if run.source != RUN or not operation_of(run.kind) or not _offers_cancel(run.state, run.effect, principal):
+    if not playbook or not _offers_cancel(state, effect, principal):
         return None
-    return _cancel_button(run.id)
+    return _cancel_button(operation_id)
 
 
 def run_here_url(operation_id: str, hosts: tuple[str, ...]) -> str:
@@ -663,7 +664,13 @@ def _fixes(manifest: OperationManifest) -> tuple[CommandFact, ...]:
 def listed_with_actions(runs: Iterable[WorkRun], principal: Principal) -> list[WorkRun]:
     """``runs`` each with what ``principal`` may do to it where it is listed."""
 
-    return [replace(run, actions=(action,)) if (action := cancel_action(run, principal)) else run for run in runs]
+    return [
+        replace(run, actions=(action,))
+        if run.source == RUN
+        and (action := cancel_action(run.id, operation_of(run.kind), run.state, run.effect, principal))
+        else run
+        for run in runs
+    ]
 
 
 # What a manifest's ``retry`` lets a run that stopped without a known
