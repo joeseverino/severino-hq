@@ -58,7 +58,7 @@
 }
 .table-scroll:is([data-chart], .is-pane) > .data-table > thead > tr > th { inset-block-start: 0; }
 /* A pane is the scroll container, as tall as its rows up to a fixed reading height, as a ledger is; scroll chaining is kept, so reaching its last row hands the wheel back to the page. */
-.table-scroll.is-pane:not([data-chart]) { max-block-size: 480px; overflow-y: auto; }
+.table-scroll.is-pane:not([data-chart]) { max-block-size: 480px; overflow: auto; }
 .table-scroll.is-pane:not([data-chart]) .data-table:has(> thead) > tbody :is(tr, a, button, input, select, textarea, summary, [tabindex]) {
   scroll-margin-block-start: var(--heading-height);
 }

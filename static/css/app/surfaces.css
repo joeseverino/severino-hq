@@ -37,6 +37,16 @@
     border-radius: var(--surface-radius, var(--radius));
     background: var(--surface-bg, var(--surface));
     box-shadow: var(--surface-shadow, var(--shadow-sm));
+    /* The frame clips what it holds to its rounded inner edge, so nothing
+       inside (a table's fill, a hovered or washed row, a heading row) can
+       paint a square corner over the frame's round one. `clip` makes no
+       scroll container, so a sticky heading inside still sticks to the page.
+       What must stand outside a frame is drawn in the top layer (a menu, a
+       filter's options, a dialog) or fixed to the viewport (the tooltip), and
+       a focus ring is drawn inside its control (base.css), so the clip cuts
+       none of them. A frame inside a frame draws none and clips nothing. */
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the frame clips its corners, not text */
+    overflow: var(--surface-overflow, clip);
     --ground: var(--surface);
 
     & > * {
@@ -46,6 +56,7 @@
       --surface-bg: transparent;
       --surface-shadow: none;
       --surface-inset: 0;
+      --surface-overflow: visible;
     }
   }
   /* What a figure looks like, beside it: dots for a part of a whole, a line
@@ -253,25 +264,20 @@
    side meet only across the flow's gap. */
 .section-body > .section-flow > .section > :is(.section-head, .section-body) { padding-inline: var(--section-side); }
 /* What also draws its first and last rows reaches the frame's top and foot
-   when it starts or ends the frame, its corners the frame's. A list of rows
-   or a month, whose outer rows draw no edge there, keeps the frame's padding
-   above and below it. */
+   when it starts or ends the frame; the frame clips its corners. A list of
+   rows or a month, whose outer rows draw no edge there, keeps the frame's
+   padding above and below it. */
 :is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .posture-repos,
   .insight-grid) {
-  --section-corner: calc(var(--radius) - 1px);
   /* In a form that starts the body, its hidden fields draw nothing, so they
      do not count. */
   &:where(.section-body > *):first-child,
   &:where(.section-body > :is(form, [data-fragment]):first-child > *):nth-child(1 of :not(input[type="hidden"])) {
     margin-block-start: calc(-1 * var(--section-start));
-    border-start-start-radius: min(var(--section-start), var(--section-corner));
-    border-start-end-radius: min(var(--section-start), var(--section-corner));
   }
   &:where(.section-body > *):last-child,
   &:where(.section-body > :is(form, [data-fragment]):last-child > *):last-child {
     margin-block-end: calc(-1 * var(--section-end));
-    border-end-start-radius: min(var(--section-end), var(--section-corner));
-    border-end-end-radius: min(var(--section-end), var(--section-corner));
   }
 }
 .section-body > * + .section, .section-body > .section + * { margin-block-start: var(--stack-gap); }
