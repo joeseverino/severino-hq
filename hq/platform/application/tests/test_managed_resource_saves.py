@@ -1,5 +1,5 @@
-"""A declaration is written only once the capability runner authorized its caller,
-and as that caller last read it."""
+"""A declaration is written as its caller last read it; that the capability
+runner authorized the caller first is test_runner_authority's walk."""
 
 from django.test import TestCase
 
@@ -9,7 +9,7 @@ from hq.platform.application.tests.consent import consented
 from ..adoption_testing import managing_everything
 from ..capabilities import execute_capability
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
-from ..security import Capability, Principal, cli_principal
+from ..security import cli_principal
 
 PROXY = {
     "domain_names": ["app.example.com"],
@@ -17,21 +17,6 @@ PROXY = {
     "forward_host": "192.0.2.10",
     "forward_port": 8000,
 }
-
-# Every capability whose handler writes a declaration through
-# save_managed_resource, with a target where it takes one.
-WRITERS = (
-    ("infrastructure.resource.create", None),
-    ("infrastructure.resource.update", "example-proxy"),
-    ("infrastructure.resource.adopt", None),
-    ("infrastructure.service.adopt", None),
-    ("infrastructure.zone.adopt", None),
-    ("infrastructure.resource.accept_observed", "example-proxy"),
-    ("tailnet.reach.allow", "example-proxy"),
-    ("tailnet.policy.remove_empty_groups", "example-proxy"),
-)
-
-READER = Principal("example-reader", "cli", frozenset({Capability.READ}))
 
 
 class _Declared(TestCase):
@@ -56,16 +41,7 @@ class _Declared(TestCase):
         return ManagedResource.objects.get(key="example-proxy").spec["forward_port"]
 
 
-class AuthorizedAtTheRunnerTests(_Declared):
-    def test_every_writer_refuses_a_caller_without_infrastructure_authority_and_writes_nothing(self):
-        before = list(ManagedResource.objects.values_list("key", "spec", "generation"))
-        for name, target in WRITERS:
-            with self.subTest(capability=name):
-                result = execute_capability(name, {}, principal=READER, target=target)
-                self.assertEqual(result["error"]["code"], "forbidden", result)
-        self.assertEqual(list(ManagedResource.objects.values_list("key", "spec", "generation")), before)
-        self.assertFalse(OperationRequest.objects.exists())
-
+class AuthorizedWriterTests(_Declared):
     def test_an_authorized_writer_saves(self):
         result = self.update(forward_port=8080)
 

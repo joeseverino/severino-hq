@@ -97,6 +97,7 @@ WORK_QUEUE = _part(
     "What waits on the operator, each row what wants doing and why, or that nothing does.",
     *("attention-clear", "attention-links", "attention-reason", "is-mark", "row-line"),
     pieces=("partials/_queue_entries.html", "partials/_queue_rows.html", "partials/_urgency_pill.html"),
+    public=True,
 )
 
 TOPOLOGY_MAP = _part(
@@ -150,11 +151,6 @@ PARTS = (
         "Parts of one whole as one bar, from `hq_sdk.ui.AllocationBar`.",
         public_classes=("allocation",),
         draws=(CHART,),
-        public=True,
-    ),
-    _part(
-        "attention_list",
-        "Decisions waiting on the operator, from the entries `hq_sdk.plugin.plugin_attention_items` gathers.",
         public=True,
     ),
     _part(

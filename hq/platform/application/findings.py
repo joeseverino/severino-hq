@@ -79,7 +79,6 @@ from .finding_steps import Do, Press, Run, WrittenCheck, WrittenReason, WrittenS
 from .first_seen import recorded
 from .integration_validation import required_capability_names
 from .integrations import IntegrationGraph, held_graph, integration_graph
-from .json_schemas import as_written
 from .projection import MAX_PAGE_SIZE, QUERY, projection_scope
 from .security import Principal
 from .tone import Tone
@@ -98,6 +97,7 @@ lazy from .domains import resources_of
 lazy from .estate import estate_reading
 lazy from .gathered_findings import gather_findings
 lazy from .moments import ago
+lazy from .record_saves import row
 lazy from .ui import counted
 
 _CLAIM_NAMESPACE = "infrastructure.finding"
@@ -698,30 +698,19 @@ class SerializedFinding(FindingFacts):
     ]
 
 
-def finding_facts(finding: Finding) -> FindingFacts:
+def _computed(finding: Finding) -> dict[str, Any]:
     return {
         "id": finding_id(finding),
-        "rule": finding.rule,
-        "subject": finding.subject or None,
-        "scope": finding.scope or None,
-        "affected_scopes": list(finding.affected_scopes),
-        "title": finding.title,
-        "severity": finding.severity,
-        "explanation": finding.explanation,
         "evidence": [{"label": label, "value": value} for label, value in finding.evidence],
-        "no_help_reason": finding.no_help_reason,
-        "since": finding.since.isoformat() if finding.since else None,
     }
+
+
+def finding_facts(finding: Finding) -> FindingFacts:
+    return row(finding, FindingFacts, **_computed(finding))
 
 
 def serialize_finding(finding: Finding) -> SerializedFinding:
-    return {
-        **finding_facts(finding),
-        "steps": [as_written(step) for step in finding.steps],
-        "check": as_written(finding.check) if finding.check else None,
-        "offers": [as_written(action) for action in finding.offers],
-        "investigations": [as_written(action) for action in finding.investigations],
-    }
+    return row(finding, SerializedFinding, **_computed(finding))
 
 
 # Built from the declarations, so a type checker reads each as a value.

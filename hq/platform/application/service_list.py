@@ -10,11 +10,16 @@ from typing import Any
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 
-from .json_schemas import as_written
+from .adoption import ADOPT, AdoptCommand, adopt
+from .contracts import Effect
+from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
 from .projection import complete, projection_scope, read_once
 from .record_errors import RecordNotFound
+from .resources import EmptyQuery
+from .security import Capability
 from .service_facets import zone_holding
 from .services import (
+    CONTAINER_KIND,
     HQ_MARK,
     OBSERVED_MARK,
     Service,
@@ -24,10 +29,11 @@ from .services import (
 )
 from .tone import Tone
 lazy from . import connections, zones
-lazy from .derived_reads import serialize_path
+lazy from .derived_reads import get_path, serialize_path
 lazy from .facts import readings
 lazy from .hq_self import hq_service
-lazy from .resource_records import ServiceItem, ServiceRecord
+lazy from .record_saves import row
+lazy from .resource_records import FacetPart, PathRecord, ServiceItem, ServiceRecord, ServiceRow
 
 
 def listed_services(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
@@ -76,25 +82,14 @@ def observed_names() -> tuple[str, ...]:
 
 
 def serialize_service(service: Service) -> ServiceItem:
-    return {
-        "hostname": service.hostname,
-        "mark": service.mark,
-        "status": service.status,
-        "status_label": service.status_label,
-        "facets": [
-            {
-                "id": facet.id,
-                "label": facet.label,
-                "present": facet.present,
-                "state": facet.state,
-                "resources": [claim.resource_key for claim in facet.claims],
-            }
-            for facet in service.facets
+    return row(
+        service,
+        ServiceItem,
+        facets=[
+            row(facet, FacetPart, resources=[claim.resource_key for claim in facet.claims]) for facet in service.facets
         ],
-        "origin": as_written(service.origin) if service.origin else None,
-        "project": service.project["name"] if service.project else None,
-        "faults": list(service.faults),
-    }
+        project=service.project["name"] if service.project else None,
+    )
 
 
 def list_services() -> dict[str, Any]:
@@ -140,3 +135,52 @@ def services_by_zone(zones) -> dict[str, tuple[ZoneMember, ...]]:
         if zone:
             found.setdefault(zone, []).append(member)
     return {zone: tuple(items) for zone, items in found.items()}
+
+
+def capabilities() -> tuple[CapabilitySpec, ...]:
+    return (
+        CapabilitySpec(
+            ADOPT,
+            "Manage a record HQ found live, starting from exactly what is live.",
+            Effect.REMOTE_WRITE,
+            Capability.MANAGE_INFRASTRUCTURE,
+            AdoptCommand,
+            adopt,
+            subject_resource="infrastructure",
+            execution_notes=(
+                "Read the record again as HQ last found it live, never from the request.",
+                "Write HQ's copy equal to it, so applying it changes nothing.",
+            ),
+            label="Manage a record in HQ",
+            verb="Manage in HQ",
+            variants=((CONTAINER_KIND, "Watch container"),),
+            wants="manage a record HQ found live",
+            reached_from="control_plane:services",
+        ),
+    )
+
+
+def resources() -> tuple[ResourceSpec, ...]:
+    return (
+        ResourceSpec(
+            "services",
+            "Services",
+            "Every service name and the state of its DNS, proxy and certificate.",
+            Capability.READ,
+            listing=ListRead(list_services, EmptyQuery, ServiceItem, fields=typed_keys(ServiceRow)),
+            detail_handler=get_service,
+            identifier="hostname",
+            web_route="control_plane:services",
+            record_type=ServiceRecord,
+        ),
+        ResourceSpec(
+            "service.paths",
+            "Service paths",
+            "The path a request for a service's hostname takes, hop by hop, with each hop's reading and certificate.",
+            Capability.READ,
+            detail_handler=get_path,
+            identifier="hostname",
+            web_route="control_plane:services",
+            record_type=PathRecord,
+        ),
+    )

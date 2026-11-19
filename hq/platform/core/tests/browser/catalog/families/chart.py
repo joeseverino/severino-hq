@@ -103,7 +103,7 @@ ENTRIES = {
                 ),
                 markers=(PathMarker(20, 40, "Start"), PathMarker(150, 120, "Finish")),
                 scale=PathScale(20, 180, 80, "100 m"),
-                legend=((1, "Lower"), (5, "Higher")),
+                bands=((1, "Lower"), (5, "Higher")),
                 width=400,
                 height=220,
                 note="An example reading.",

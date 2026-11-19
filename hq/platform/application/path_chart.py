@@ -44,7 +44,7 @@ class PathScale:
 
 @display(kw_only=True)
 class PathChart:
-    """A spatial path with an ordered legend, markers and an optional scale.
+    """A spatial path with its named bands, markers and an optional scale.
 
     Coordinates are supplied by the caller. Rendering makes no outside request
     and places no location in an address; paths and text are escaped in HTML.
@@ -57,7 +57,8 @@ class PathChart:
     height: int
     markers: tuple[PathMarker, ...] = ()
     scale: PathScale | None = None
-    legend: tuple[tuple[int, str], ...] = ()
+    # Each band a segment may take, by its slot, and the name its legend shows.
+    bands: tuple[tuple[int, str], ...] = ()
     note: str = ""
     spatial: ClassVar[bool] = True
 
@@ -67,6 +68,6 @@ class PathChart:
 
     @property
     def legend_keys(self) -> tuple[LegendKey, ...]:
-        """Each ordered band as its legend's key."""
+        """Each band as its legend's key."""
 
-        return tuple(LegendKey(mark=f"swatch-key chart-band-{slot}", label=label) for slot, label in self.legend)
+        return tuple(LegendKey(mark=f"swatch-key chart-band-{slot}", label=label) for slot, label in self.bands)

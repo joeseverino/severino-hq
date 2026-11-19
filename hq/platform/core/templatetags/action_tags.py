@@ -88,9 +88,9 @@ def urgency(status):
 
 @register.filter
 def queue_entries(entries):
-    """Keep the SDK attention include on the queue's single projection."""
+    """The entries ``plugin_attention_items`` gathers as the queue's rows."""
 
-    return gathered_rows({"source_id": "", **entry} for entry in entries)
+    return gathered_rows(entries)
 
 
 @register.filter

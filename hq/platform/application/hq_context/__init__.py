@@ -12,7 +12,9 @@ from typing import Any
 
 from hq.platform.application.labels import dotted
 
+from ..integration_specs import ListRead, ResourceSpec
 from ..projection import complete, projection_scope
+from ..resources import EmptyQuery
 from ..tone import Tone
 from .band import Tile
 from .release_part import Release, release, release_json, release_tile, repository as repository_of
@@ -24,7 +26,8 @@ lazy from ..findings import finding_key
 lazy from ..hq_self import hq_hostnames, own_machine, serving, site_label
 lazy from ..problems import About, problems_by_part
 lazy from ..request_path import request_path
-lazy from ..security import Principal
+lazy from ..resource_records import Problem
+lazy from ..security import Capability, Principal
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,3 +253,18 @@ __all__ = [
     "read_hq",
     "serialize_hq",
 ]
+
+
+def resources() -> tuple[ResourceSpec, ...]:
+    return (
+        ResourceSpec(
+            "hq",
+            "HQ",
+            "HQ itself: its release and branch, machine and container, background jobs, "
+            "what it reads and open problems.",
+            Capability.READ,
+            listing=ListRead(read_hq, EmptyQuery, Problem),
+            web_route="hq_self",
+            pass_principal=True,
+        ),
+    )

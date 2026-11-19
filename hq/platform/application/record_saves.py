@@ -13,7 +13,21 @@ from dataclasses import asdict, dataclass, fields
 from datetime import date
 from decimal import Decimal
 from functools import cache
-from typing import Annotated, Any, Literal, TypedDict, get_type_hints
+from types import NoneType, UnionType
+from typing import (
+    Annotated,
+    Any,
+    Literal,
+    NotRequired,
+    Required,
+    TypeAliasType,
+    TypedDict,
+    get_args,
+    get_origin,
+    get_type_hints,
+    is_typeddict,
+)
+from uuid import UUID
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
@@ -24,6 +38,7 @@ from .command_fields import Names, names_of
 from .describe import Describe
 from .domains import load, records_of
 from .integration_specs import TARGET_KINDS, Kept, keeps
+from .json_schemas import Written, as_written
 from .record_declaration import Records
 from .record_errors import RecordConflict, RecordNotFound, Sentence
 from .security import Principal
@@ -131,21 +146,25 @@ def as_sent(record: Model, command: type, keys: Mapping[str, str]) -> dict[str, 
     return values
 
 
-def row(record: Model, shape: Any, **given: Any) -> Any:
-    """``record`` read as ``shape``, the TypedDict its resource declares: each
-    field's value, an amount as its decimal string, a day or time in ISO 8601,
-    and a linked record by the key its ``Names`` gives, or null for a doc too
-    sensitive to share. A field the record does not hold as the shape says it
-    is ``given``; a field the shape does not require is left out unless given."""
+def row(record: Any, shape: Any, **given: Any) -> Any:
+    """``record``, a model or any object, read as ``shape``, the TypedDict that
+    declares the answer: each field's attribute as the field's type says, an
+    amount as its decimal string, a day or time in ISO 8601, an id as its
+    string, empty text null where the type allows null, a sequence as a list,
+    a part a TypedDict types read the same way, one ``Written`` types as
+    ``as_written`` writes it, and a linked record by the key its ``Names``
+    gives, or null for a doc too sensitive to share. A field the record does
+    not hold under its name is ``given``, read by its type too; a field the
+    shape does not require is left out unless given."""
 
     values: dict[str, Any] = {}
-    for name, names in _row_fields(shape):
+    for name, names, read in _row_fields(shape):
         if name in given:
-            values[name] = given[name]
+            values[name] = read(given[name])
         elif name not in shape.__required_keys__:
             continue
         elif names is None:
-            values[name] = _plain(getattr(record, name))
+            values[name] = read(getattr(record, name))
         else:
             values[name] = _linked(record, name, names)
     return values
@@ -163,12 +182,37 @@ def _linked(record: Model, name: str, names: Names) -> Any:
 
 
 @cache
-def _row_fields(shape: type) -> tuple[tuple[str, Names | None], ...]:
-    return tuple((name, names_of(hint)) for name, hint in get_type_hints(shape, include_extras=True).items())
+def _row_fields(shape: type) -> tuple[tuple[str, Names | None, Callable[[Any], Any]], ...]:
+    hints = get_type_hints(shape, include_extras=True)
+    return tuple((name, names_of(hint), _reader(hint)) for name, hint in hints.items())
+
+
+def _reader(hint: Any) -> Callable[[Any], Any]:
+    """How a field of type ``hint`` is read from the value its record holds;
+    a part already held as a mapping, as a JSON field holds one, is kept."""
+
+    if isinstance(hint, TypeAliasType):
+        return _reader(hint.__value__)
+    origin, args = get_origin(hint), get_args(hint)
+    if origin is Annotated and any(isinstance(mark, Written) for mark in args[1:]):
+        return lambda value: value if isinstance(value, Mapping) else as_written(value)
+    if origin is Annotated:
+        return _reader(args[0])
+    if origin in (NotRequired, Required):
+        return _reader(args[0])
+    if origin is UnionType and NoneType in args and len(args) == 2:
+        read = _reader(next(arg for arg in args if arg is not NoneType))
+        return lambda value: None if value is None or value == "" else read(value)
+    if origin is list:
+        each = _reader(args[0])
+        return lambda value: [each(item) for item in value]
+    if is_typeddict(hint):
+        return lambda value: value if isinstance(value, Mapping) else row(value, hint)
+    return _plain
 
 
 def _plain(value: Any) -> Any:
-    if isinstance(value, Decimal):
+    if isinstance(value, Decimal | UUID):
         return str(value)
     if isinstance(value, date):
         return value.isoformat()

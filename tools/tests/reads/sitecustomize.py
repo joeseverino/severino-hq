@@ -2,13 +2,28 @@
 
 Python imports ``sitecustomize`` from its path as it starts, so a directory holding this module on
 PYTHONPATH reaches every Python process a command starts, however deep: test_drift_sources.py
-puts it there to see what a drift gate reads. A bytecode cache read is its source file's, which
-a fresh cache would have read instead."""
+puts it there to see what a gate reads. A bytecode cache read is its source file's, which
+a fresh cache would have read instead. What the code's identity digests is no read: every Django
+process digests each module of hq and hq_sdk outside tests as its settings load (code_identity.py), which keys a
+cache and reaches no gate's output."""
 
 import importlib.util
 import os
 import sys
 from pathlib import Path
+
+# The module whose digest of the source is left out, and the function that reads it.
+DIGEST = (str(Path("hq", "platform", "application", "code_identity.py")), "code_identity")
+
+
+def _digesting() -> bool:
+    # A file Python opens before any frame runs, such as the script it is handed, has no caller.
+    frame = sys._getframe(0).f_back
+    while frame is not None:
+        if frame.f_code.co_name == DIGEST[1] and frame.f_code.co_filename.endswith(DIGEST[0]):
+            return True
+        frame = frame.f_back
+    return False
 
 
 def _install(log_path: str) -> None:
@@ -22,6 +37,8 @@ def _install(log_path: str) -> None:
         if not isinstance(target, str | bytes | os.PathLike):
             return
         if isinstance(flags, int) and flags & os.O_ACCMODE == os.O_WRONLY:
+            return
+        if _digesting():
             return
         path = str(Path(os.fsdecode(target)).resolve())
         if path.endswith(".pyc") and f"{os.sep}__pycache__{os.sep}" in path:

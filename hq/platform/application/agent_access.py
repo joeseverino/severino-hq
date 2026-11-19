@@ -1,6 +1,7 @@
 """The brakes on agents, on /mcp/ and on the machine API: the switch that pauses
 every agent, a person's block on one client, and the approval and block of
-each tailnet device an agent calls from (``agent_devices``)."""
+each tailnet device an agent calls from (``agent_devices``). The Agents
+domain's commands, a session's sign-out among them, are declared here."""
 
 import logging
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from hq.domains.control_plane.models import CapabilityRule
 from hq.platform.application.security import (
     AGENT_SURFACES,
     DEVICE_INTERFACE,
+    Capability,
     Principal,
     person,
     subject_of,
@@ -23,9 +25,14 @@ from hq.platform.core.models import AgentAccess, AgentIdentity
 from . import agent_devices
 from .agent_devices import DeviceStanding, Unplaced
 from .agent_registry import identity_of
+from .capability_policy import SET_POLICY, PolicyCommand, apply_changes
 from .command_fields import Describe
+from .contracts import Effect
+from .integration_specs import CapabilitySpec
+from .own_devices import SET_OWN_DEVICE, OwnDeviceCommand, set_own_device
 from .record_errors import PolicyError, RecordNotFound
 from .refusal_status import Refusal
+from .sessions import SIGN_OUT, SignOutCommand, sign_out
 
 logger = logging.getLogger("severino.agents")
 
@@ -281,3 +288,145 @@ def remove_agent(_command: AgentRemoveCommand, *, principal: Principal, current_
         row.audit_gone = f"Removed {row}"
         row.delete()
     return {"ok": True, "client_id": row.client_id, "subject": current_key, "devices": devices, "rules": rules}
+
+
+def capabilities() -> tuple[CapabilitySpec, ...]:
+    return (
+        # Who may act as an agent, decided by a person (security.HELD_ONLY_AT), so
+        # no credential widens or frees itself.
+        CapabilitySpec(
+            SET_AGENT_ACCESS,
+            "Pause every agent, on MCP and the machine API, or let them back in.",
+            Effect.REMOTE_WRITE,
+            Capability.GOVERN_AGENTS,
+            AgentAccessCommand,
+            set_agents_paused,
+            execution_notes=("Set the state rather than toggle it, so asking twice changes nothing.",),
+            label="Pause or resume agents",
+            variants=(("on", "Pause all agents"), ("off", "Resume agents")),
+            state=agents_paused,
+        ),
+        CapabilitySpec(
+            SET_AGENT_BLOCK,
+            "Block one agent's client on MCP and the machine API, or let it back in.",
+            Effect.REMOTE_WRITE,
+            Capability.GOVERN_AGENTS,
+            AgentBlockCommand,
+            set_agent_blocked,
+            "key",
+            target_label="Client",
+            target_help="The client id of an agent HQ has seen.",
+            execution_notes=(
+                "Refuse a client HQ has never seen.",
+                "Set the state rather than toggle it, so asking twice changes nothing.",
+            ),
+            label="Block or allow an agent",
+            variants=(("on", "Block"), ("off", "Allow")),
+            reached_from="agent_policy",
+            state=blocked,
+        ),
+        CapabilitySpec(
+            REMOVE_AGENT,
+            "Remove one agent HQ has seen, with its devices and its own rules, so it is listed no more.",
+            Effect.DESTRUCTIVE,
+            Capability.GOVERN_AGENTS,
+            AgentRemoveCommand,
+            remove_agent,
+            "key",
+            target_label="Client",
+            target_help="The client id of an agent HQ has seen.",
+            execution_notes=(
+                "Refuse a client HQ has never seen.",
+                "Refuse a blocked agent, so removing it never lifts its block.",
+                "Keep the audit log and what it asked for; a client that signs in again is a new agent.",
+            ),
+            label="Remove an agent",
+            verb="Remove",
+            reached_from="agent_policy",
+        ),
+        CapabilitySpec(
+            agent_devices.APPROVE_AGENT_DEVICE,
+            "Approve a tailnet device an agent called from, so its calls from there run, or withdraw the approval.",
+            Effect.REMOTE_WRITE,
+            Capability.GOVERN_AGENTS,
+            agent_devices.AgentDeviceApprovalCommand,
+            agent_devices.set_device_approved,
+            "key",
+            target_label="Device",
+            target_help="The record of a device an agent has called HQ from.",
+            execution_notes=(
+                "Refuse a device no agent has called from.",
+                "Only the user an agent acts for approves the device it called from.",
+                "Set the state rather than toggle it, so asking twice changes nothing.",
+            ),
+            label="Approve an agent's device",
+            variants=(("on", "Approve"), ("off", "Withdraw")),
+            reached_from="agent_policy",
+            state=agent_devices.device_approved,
+        ),
+        CapabilitySpec(
+            agent_devices.BLOCK_AGENT_DEVICE,
+            "Block one tailnet device an agent calls from, on MCP and the machine API, or let it back in.",
+            Effect.REMOTE_WRITE,
+            Capability.GOVERN_AGENTS,
+            agent_devices.AgentDeviceBlockCommand,
+            agent_devices.set_device_blocked,
+            "key",
+            target_label="Device",
+            target_help="The record of a device an agent has called HQ from.",
+            execution_notes=(
+                "Refuse a device no agent has called from.",
+                "Set the state rather than toggle it, so asking twice changes nothing.",
+            ),
+            label="Block or allow an agent's device",
+            variants=(("on", "Block"), ("off", "Allow")),
+            reached_from="agent_policy",
+            state=agent_devices.device_blocked,
+        ),
+        CapabilitySpec(
+            SET_OWN_DEVICE,
+            "Register a client as one of your own devices, so its token acts as you, or remove it.",
+            Effect.REMOTE_WRITE,
+            Capability.GOVERN_AGENTS,
+            OwnDeviceCommand,
+            set_own_device,
+            "client_id",
+            target_label="Client",
+            target_help="The client id Pocket ID registered for your device.",
+            execution_notes=(
+                "Register the device only as your own, never as another user's.",
+                "Refuse a client id Pocket ID could not have registered.",
+                "Set the state rather than toggle it, so asking twice changes nothing.",
+            ),
+            label="Register or remove your device",
+            variants=(("on", "Register"), ("off", "Remove")),
+            reached_from="agent_policy",
+        ),
+        CapabilitySpec(
+            SET_POLICY,
+            "Set whether one agent's call to one action runs, waits for approval, or is refused.",
+            Effect.REMOTE_WRITE,
+            Capability.GOVERN_AGENTS,
+            PolicyCommand,
+            apply_changes,
+            execution_notes=(
+                "Change only the rules that differ from the current ones, each recorded on its own.",
+                "Narrow only what Pocket ID granted: refuse a rule for an action the agent's grant does not carry.",
+                "Refuse a rule for an action taken only in the browser, and approval for a read.",
+            ),
+            label="Set the agent policy",
+        ),
+        CapabilitySpec(
+            SIGN_OUT,
+            "Sign a user out of every HQ session when Pocket ID signs them out.",
+            Effect.REMOTE_WRITE,
+            Capability.END_SESSIONS,
+            SignOutCommand,
+            sign_out,
+            execution_notes=(
+                "Find the user who signed in as Pocket ID's subject; if none did, there is nothing to do.",
+                "End every live session of theirs, leaving the account and any local password alone.",
+            ),
+            label="Sign a user out",
+        ),
+    )

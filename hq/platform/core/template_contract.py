@@ -65,6 +65,7 @@ FILTERS = (
     "money",
     "or_empty",
     "outside",
+    "queue_entries",
     "readout",
     "record",
     "span",
@@ -291,27 +292,36 @@ class _Reads:
             optional = guarded or defaulted or name in guards
             self.found[name] = self.found.get(name, False) or not optional
 
-    def walk(self, nodelist: Iterable[Any], bound: set[str], guards: frozenset[str]) -> None:
+    def walk(self, nodelist: Iterable[Any], bound: set[str], guards: frozenset[str]) -> set[str]:
+        """Note what the nodes read, and answer what is bound after them."""
+
         bound = set(bound)
         for node in nodelist:
-            self._node(node, bound, guards)
+            bound |= self._node(node, bound, guards)
             for binding in ("target_var", "asvar", "var_name"):
                 name = getattr(node, binding, None)
                 if isinstance(name, str) and name:
                     bound.add(name)
+        return bound
 
-    def _node(self, node: Any, bound: set[str], guards: frozenset[str]) -> None:
+    def _node(self, node: Any, bound: set[str], guards: frozenset[str]) -> set[str]:
+        """Note what the node reads, and answer what it binds for the nodes after it."""
+
         if isinstance(node, CommentNode):
-            return
+            return set()
         if isinstance(node, ForNode):
             self.note(node.sequence, bound, guards)
             self.walk(node.nodelist_loop, bound | set(node.loopvars) | {"forloop"}, guards)
             self.walk(node.nodelist_empty, bound, guards)
         elif isinstance(node, IfNode):
+            branches = []
             for condition, branch in node.conditions_nodelists:
                 names = frozenset(name for name, _ in _expression_names(condition))
                 self.note(condition, bound, guards, guarded=True)
-                self.walk(branch, bound, guards | names)
+                branches.append(self.walk(branch, bound, guards | names))
+            # What every branch binds, an else among them, is bound after it.
+            if node.conditions_nodelists[-1][0] is None:
+                return set.intersection(*branches)
         elif isinstance(node, PresentNode):
             # What its body reads of the value is read only when it is there.
             names = frozenset(name for name, _ in _expression_names(node.value))
@@ -329,6 +339,7 @@ class _Reads:
             self.walk(node.nodelist, bound, guards)
         else:
             self._generic(node, bound, guards)
+        return set()
 
     def _include(self, node: Any, bound: set[str], guards: frozenset[str]) -> None:
         self.note(node.template, bound, guards)

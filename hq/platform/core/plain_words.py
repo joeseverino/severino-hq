@@ -4,7 +4,9 @@ Vale (``mise run lint:prose``) reads a template's text but not its attributes or
 tags. ``shown`` finds the rest of what the reader sees as words, and ``main``
 hands each to Vale as a paragraph of its own, reported at the template line it
 came from. Like ``interface_text``, a gate reads this and a running HQ never does.
-lint:prose runs ``main --whole``, which has Vale read the whole tree too.
+lint:prose runs ``main --whole``, which has Vale read the whole tree too, or
+``main --changed`` on the files a change touched, of which it reads those the
+whole run would.
 """
 
 import json
@@ -44,7 +46,9 @@ TREE = (
     *("hq", "hq_sdk", "templates", "static", "controller", "tools", "tests", "demo", "deploy", "composition"),
     *("docs", "mise-tasks", "AGENTS.md", "README.md", "CLAUDE.md", "manage.py", "entrypoint.sh"),
 )
-_TREE_GLOB = "--glob=!{**/node_modules/**,**/vendor/**,**/__pycache__/**,**/*.gen.go}"
+_LEFT_OUT = ("node_modules", "vendor", "__pycache__")
+_GENERATED = ".gen.go"
+_TREE_GLOB = f"--glob=!{{{','.join(f'**/{name}/**' for name in _LEFT_OUT)},**/*{_GENERATED}}}"
 # What plain_words reads itself: the templates' pieces.
 WHOLE = ("templates", "hq", "hq_sdk")
 # Vale's listing of the text Plain reads, which no gate fails on.
@@ -222,16 +226,32 @@ def by_file(lines: list[str]) -> str:
     return "\n".join([*rows, f"{len(lines):6} lines in {len(counts)} files"])
 
 
+def within(path: Path, tops: Iterable[str]) -> bool:
+    """Whether the whole run reads ``path``, from the repository's root, under ``tops``."""
+
+    return (
+        path.parts[:1] in {(top,) for top in tops}
+        and not set(_LEFT_OUT) & set(path.parts[:-1])
+        and not path.name.endswith(_GENERATED)
+    )
+
+
 def main(arguments: list[str]) -> int:
     """With ``--whole``, run from the repository's root, Vale reads ``TREE``
-    and plain_words ``WHOLE``; otherwise both read the ``paths`` given.
+    and plain_words ``WHOLE``; otherwise both read the ``paths`` given, with
+    ``--changed`` only those of them the whole run reads.
     ``--dump`` prints each line of text the rules read, at its file and line,
     and ``--by-file`` how many lines each file holds."""
 
-    flags = {"--whole", "--dump", "--by-file"} & set(arguments)
-    whole = "--whole" in flags
-    paths = [Path(path) for path in WHOLE] if whole else [Path(a) for a in arguments if a not in flags]
-    tree, tree_flags = (TREE, (_TREE_GLOB,)) if whole else (paths, ())
+    flags = {"--whole", "--changed", "--dump", "--by-file"} & set(arguments)
+    given = [Path(path) for path in arguments if path not in flags]
+    if "--whole" in flags:
+        paths, tree, tree_flags = [Path(path) for path in WHOLE], TREE, (_TREE_GLOB,)
+    elif "--changed" in flags:
+        tree, tree_flags = [path for path in given if within(path, TREE)], ()
+        paths = [path for path in tree if within(path, WHOLE)]
+    else:
+        paths, tree, tree_flags = given, given, ()
     if {"--dump", "--by-file"} & flags:
         return _dumped(paths, tree, tree_flags, counted="--by-file" in flags)
     status, found, read = _found(paths, tree, tree_flags)

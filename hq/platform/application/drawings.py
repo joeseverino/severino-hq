@@ -207,37 +207,32 @@ class AllocationBar:
         return tuple(drawn)
 
     @property
-    def legend(self) -> tuple[tuple[Share, str], ...]:
-        """Each part with a value, and its share of the whole as a percent."""
+    def legend_keys(self) -> tuple[LegendKey, ...]:
+        """Each part with a value as its legend's key, with its share of the whole as a percent."""
 
         whole = sum(part.value for part in self.parts)
-        return tuple((part, measured(part.value * 100 / whole, "%", 0)) for part in self.parts if part.value > 0)
-
-    @property
-    def legend_keys(self) -> tuple[LegendKey, ...]:
-        """Each part with a value as its legend's key."""
-
         return tuple(
             LegendKey(
                 mark=f"swatch-key series-{part.slot}",
                 label=part.label,
                 figure=part.detail,
                 tone=part.tone,
-                share=percent,
+                share=measured(part.value * 100 / whole, "%", 0),
                 url=part.url,
             )
-            for part, percent in self.legend
+            for part in self.parts
+            if part.value > 0
         )
 
     @property
     def links(self) -> bool:
         """Whether a part leads somewhere, so a figure drawn with the bar cannot itself be one link."""
 
-        return any(part.url for part, _percent in self.legend)
+        return any(key.url for key in self.legend_keys)
 
     @property
     def spoken(self) -> str:
         """The bar as a screen reader hears it: the whole, then each part and its share."""
 
-        heard = ", ".join(f"{part.label} {percent}" for part, percent in self.legend)
+        heard = ", ".join(f"{key.label} {key.share}" for key in self.legend_keys)
         return f"{self.label}: {heard}" if heard else self.label

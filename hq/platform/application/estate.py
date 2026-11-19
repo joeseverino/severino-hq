@@ -26,19 +26,22 @@ from .connection_lifecycle import Lifecycle, probed, standing
 from .drawings import Dot, Dots
 from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
+from .integration_specs import ListRead, ResourceSpec
 from .moments import moment, when_day
 from .projection import read_once
-from .security import Principal
+from .resources import EmptyQuery
+from .security import Capability, Principal
 from .tone import Tone
 from .ui import DomainOverview, counted
 from .workflow_contracts import ActionLink
-lazy from . import connections, services, zones
+lazy from . import connections, derived_reads, services, zones
 lazy from .connection_catalog import connection_total
 lazy from .connections import connection_rows
 lazy from .credential_sight import credential_sight
 lazy from .facts import Subject, inventory_about, readings
 lazy from .infrastructure import enabled_resources
 lazy from .machines import MachineState
+lazy from .resource_records import EstateFigure
 lazy from .services import service_reading
 lazy from .zones import ZONE_KIND
 
@@ -437,5 +440,19 @@ def overview(*, principal: Principal):
                 drawing=drawings.get(card["id"]),
             )
             for card in shown
+        ),
+    )
+
+
+def resources() -> tuple[ResourceSpec, ...]:
+    return (
+        ResourceSpec(
+            "estate",
+            "Estate",
+            "Machines online, services, domains, next renewals and connections needing attention.",
+            Capability.READ,
+            listing=ListRead(derived_reads.list_estate, EmptyQuery, EstateFigure),
+            web_route="dashboard",
+            pass_principal=True,
         ),
     )

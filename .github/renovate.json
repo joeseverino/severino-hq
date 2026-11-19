@@ -123,12 +123,28 @@
       "groupName": "playwright"
     },
     {
+      "description": "hk and the schema hk.pkl amends move as one update.",
+      "matchPackageNames": ["jdx/hk", "aqua:jdx/hk"],
+      "groupName": "hk"
+    },
+    {
       "description": "min_version and the mise image the image builds copy move as one update: lint:toolchain holds the image's tag to min_version.",
       "matchPackageNames": ["jdx/mise", "ghcr.io/jdx/mise"],
       "groupName": "mise"
     }
   ],
   "customManagers": [
+    {
+      "description": "The release of hk whose schema hk.pkl amends.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^hk\\.pkl$/"],
+      "matchStrings": ["package://github\\.com/jdx/hk/releases/download/v(?<currentValue>[^/]+)/hk@[^#]+#/Config\\.pkl"],
+      "autoReplaceStringTemplate": "package://github.com/jdx/hk/releases/download/v{{{newValue}}}/hk@{{{newValue}}}#/Config.pkl",
+      "depNameTemplate": "jdx/hk",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
     {
       "description": "The mise release CI installs, which min_version decides; mise's own manager reads only the tools.",
       "customType": "regex",

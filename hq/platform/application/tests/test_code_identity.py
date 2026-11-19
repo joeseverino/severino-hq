@@ -43,9 +43,14 @@ class CodeIdentityTests(SimpleTestCase):
         with importable({"nodes.py": FIRST}):
             self.assertEqual(identity(), here)
 
-    def test_a_class_that_changes_shape_moves_it(self):
-        with importable({"nodes.py": FIRST}) as root:
+    def test_a_class_that_changes_shape_moves_it_and_a_test_module_does_not(self):
+        """A running HQ never imports a test module, so nothing it stores is one."""
+
+        with importable({"nodes.py": FIRST, "tests/test_nodes.py": FIRST}) as root:
             before = identity()
+            (root / "tests" / "test_nodes.py").write_text(SECOND)
+            (root / "tests" / "test_more.py").write_text("")
+            self.assertEqual(identity(), before)
             (root / "nodes.py").write_text(SECOND)
             self.assertNotEqual(identity(), before)
 

@@ -1,0 +1,65 @@
+// The linters that read one file at a time, which hk hands only the files it is
+// given (mise.toml, the hk task template). Each gate is two steps:
+// <gate> reads each file it is handed that its glob matches, and <gate>-whole
+// reads the whole tree, run when a file it names changed (the tool's own
+// config, its pins) or when the gate is run alone, on every file.
+amends "package://github.com/jdx/hk/releases/download/v2.12.0/hk@2.12.0#/Config.pkl"
+
+// What every gate reads besides its files: the tools' pins and the tasks.
+local toolchain = List("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env")
+local astGrep = "ast-grep scan -c tools/lint/ast-grep/sgconfig.yml"
+
+hooks {
+  ["check"] {
+    steps {
+      // Ruff's own excludes hold for a file it is handed too (--force-exclude).
+      ["ruff"] {
+        glob = List("**/*.py")
+        check = "uv run ruff check --force-exclude {{files}} && uv run ruff format --check --force-exclude {{files}}"
+        fix = "uv run ruff check --fix-only --quiet --force-exclude {{files}} && uv run ruff format --quiet --force-exclude {{files}}"
+      }
+      ["ruff-whole"] {
+        glob = toolchain
+        check = "uv run ruff check . && uv run ruff format --check ."
+        fix = "uv run ruff check --fix-only --quiet . && uv run ruff format --quiet ."
+      }
+      // Each rule's files: and ignores: say which modules it holds, from the
+      // repository root, so a file handed to the scan is held as the whole
+      // scan holds it. A suppression no match needs any more fails.
+      ["ast-grep"] {
+        glob = List("**/*.py", "**/templates/**/*.html")
+        check = "\(astGrep) --error=unused-suppression {{files}}"
+        fix = "\(astGrep) --update-all {{files}} >/dev/null"
+      }
+      // A rule's cases (rule-tests/) prove it refuses what it is for before its
+      // scan is trusted to find nothing, and the template rules' snapshots hold
+      // what each fix writes.
+      ["ast-grep-whole"] {
+        glob = List("tools/lint/ast-grep/**") + toolchain
+        check = "ast-grep test -c tools/lint/ast-grep/sgconfig.yml --skip-snapshot-tests && ast-grep test -c tools/lint/ast-grep/sgconfig.yml --filter '^hand-drawn-' && \(astGrep) --error=unused-suppression ."
+        fix = "\(astGrep) --update-all . >/dev/null"
+      }
+      // No fix mode: a correction can rename an identifier in one file and not
+      // where it is used. _typos.toml's excludes hold for a file handed to it.
+      ["spelling"] {
+        glob = List("**/*")
+        check = "typos --force-exclude {{files}}"
+      }
+      ["spelling-whole"] {
+        glob = List("_typos.toml") + toolchain
+        check = "typos"
+      }
+      // plain_words leaves out a file outside the tree Vale reads
+      // (plain_words.TREE), and hands Vale the template attributes and tag
+      // literals it cannot read, so one report names every finding.
+      ["prose"] {
+        glob = List("**/*.py", "**/*.html", "**/*.md", "**/*.js", "**/*.css", "**/*.go", "**/*.sh")
+        check = "uv run python -m hq.platform.core.plain_words --changed {{files}}"
+      }
+      ["prose-whole"] {
+        glob = List("tools/lint/vale/**", "hq/platform/core/plain_words.py", "hq/platform/core/interface_text.py") + toolchain
+        check = "uv run python -m hq.platform.core.plain_words --whole"
+      }
+    }
+  }
+}

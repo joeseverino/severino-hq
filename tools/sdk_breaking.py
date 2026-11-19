@@ -18,6 +18,7 @@ later break on it is admitted by that one move.
 
 import io
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -31,10 +32,17 @@ from tools.gate.chain import ROOT, answered, merge_base, released_fork
 from tools.pipeline.plugin_identity import PLUGINS, plugin_api_version, spoken
 
 PACKAGE = "hq_sdk"
-# The SDK and the host modules it re-exports from.
-SOURCES = (":(glob)hq_sdk/**/*.py", ":(glob)hq/**/*.py")
-# A breakage removed at the base reads its file from the base's copy; under a directory named so,
-# griffe prints that file as the repository names it (its diff.py, Breakage._location).
+# The SDK and the host modules it re-exports from, less the tests: griffe would parse every module
+# under hq to resolve the SDK's aliases, and none of them resolves into a test.
+SOURCES = (
+    ":(glob)hq_sdk/**/*.py",
+    ":(glob)hq/**/*.py",
+    ":(glob,exclude)**/tests/**",
+    ":(glob,exclude)**/test_*.py",
+    ":(glob,exclude)**/tests.py",
+)
+# Each side is read from a copy of SOURCES; under a directory named so, griffe prints a breakage's
+# file as the repository names it (its diff.py, Breakage._location).
 BASE_PREFIX = "griffe-worktree-"
 _COLOR = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -97,11 +105,18 @@ def breakages(base: str, root: Path) -> tuple[list[str], str]:
     and the ``PLUGIN_API_VERSION`` the base speaks."""
 
     with tempfile.TemporaryDirectory(prefix=BASE_PREFIX) as folder:
-        before = Path(folder, "base")
+        before, after = Path(folder, "base"), Path(folder, "head")
         archive = subprocess.run(["git", "archive", base, "--", *SOURCES], cwd=root, check=True, capture_output=True)
         with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
             tar.extractall(before, filter="data")
-        found = griffe.find_breaking_changes(load(before), load(root))
+        # The checkout as it stands: its uncommitted and untracked work, less a deleted file.
+        listed = ("ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *SOURCES)
+        held = subprocess.run(["git", *listed], cwd=root, check=True, capture_output=True, text=True).stdout
+        for name in filter(None, held.split("\0")):
+            if (root / name).is_file():
+                (after / name).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(root / name, after / name)
+        found = griffe.find_breaking_changes(load(before), load(after))
         lines = [_COLOR.sub("", breakage.explain(style=griffe.ExplanationStyle.ONE_LINE)) for breakage in found]
         return lines, plugin_api_version(before)
 

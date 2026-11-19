@@ -21,16 +21,20 @@ from hq.platform.application.describe import meanings
 from hq.platform.application.domains import records_of
 from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.routes import routed
+from hq.platform.application.writes import CommandFormPage, RecordFormMixin
 
-# Each page that makes a record from its form, and the command it makes it by.
-CREATES = (
-    ("assets:create", "asset.create"),
-    ("expenses:create", "expense.create"),
-    ("projects:create", "project.create"),
-    ("docs_index:create", "documentation.create"),
-    ("calendar:entry_new", "calendar.entry.create"),
-    ("receipts:create", "receipt.upload"),
-)
+
+def creates() -> dict[str, str]:
+    """Each page that makes a record from its form, by route, with the command it makes it by."""
+
+    return {
+        route.name: route.view().creates
+        for route in routed()
+        if isinstance(route.view, type)
+        and issubclass(route.view, CreateView)
+        and issubclass(route.view, (RecordFormMixin, CommandFormPage))
+    }
 
 
 def submits(page) -> list[str]:
@@ -55,16 +59,21 @@ class RecordFormTests(TestCase):
         self.client.force_login(self.user)
 
     def test_a_new_record_is_made_by_its_create_command_words(self):
-        for route, capability in CREATES:
+        pages = creates()
+        self.assertTrue(pages, "no page makes a record from its form")
+        for route, capability in pages.items():
             with self.subTest(route=route):
                 page = self.client.get(reverse(route))
+                spec = capability_registry()[capability]
 
-                self.assertEqual(submits(page), [capability_registry()[capability].words()])
+                # Its words, or a mode of them its declaration names.
+                (said,) = submits(page)
+                self.assertIn(said, {spec.words(), *dict(spec.variants).values()})
                 self.assertEqual(len(cancels(page)), 1)
                 self.assertTrue(cancels(page)[0])
 
     def test_a_field_says_what_its_command_says_of_it(self):
-        for route, capability in CREATES:
+        for route, capability in creates().items():
             with self.subTest(route=route):
                 page = self.client.get(reverse(route))
                 form = page.context["form"]

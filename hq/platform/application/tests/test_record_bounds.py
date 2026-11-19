@@ -15,11 +15,17 @@ from hq.platform.application.json_schemas import fields
 
 class RecordBoundsTests(SimpleTestCase):
     def test_a_bounded_number_says_its_models_bounds(self):
-        registry = capability_registry()
-        for name in ("asset.create", "asset.update", "expense.create", "expense.update"):
+        bounded = {
+            name: field
+            for name, spec in capability_registry().items()
+            if (field := fields(capability_schema(spec)).get(business_use.FIELD))
+        }
+        self.assertTrue(bounded, f"no command takes {business_use.FIELD}")
+        for name, field in bounded.items():
             with self.subTest(name):
-                field = fields(capability_schema(registry[name]))[business_use.FIELD]
-                self.assertEqual((field["minimum"], field["maximum"]), (business_use.MINIMUM, business_use.MAXIMUM))
+                self.assertEqual(
+                    (field.get("minimum"), field.get("maximum")), (business_use.MINIMUM, business_use.MAXIMUM)
+                )
 
     def test_a_number_its_model_leaves_to_the_column_says_no_bound(self):
         # The column type's own range is the database's, not a rule a client works within.

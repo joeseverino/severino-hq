@@ -8,4 +8,4 @@ Every coordinate and label belongs to the supplied PathChart.
     {% if chart.scale %}<line class="chart-path-scale" x1="{{ chart.scale.x }}" y1="{{ chart.scale.y }}" x2="{{ chart.scale.end }}" y2="{{ chart.scale.y }}"></line><text class="chart-axis" x="{{ chart.scale.x }}" y="{{ chart.scale.label_y }}">{{ chart.scale.label }}</text>{% endif %}
   </svg>
 </div>
-{% if chart.legend %}{% include "partials/_chart_legend.html" with drawing=chart only %}{% endif %}
+{% if chart.legend_keys %}{% include "partials/_chart_legend.html" with drawing=chart only %}{% endif %}

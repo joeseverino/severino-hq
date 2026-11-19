@@ -334,7 +334,7 @@ On an 8 GB Apple silicon machine:
 | Run | Takes |
 | --- | --- |
 | `mise run test <label>` | a few seconds |
-| `mise run lint:prose` | about five seconds |
+| `mise run lint:prose` | about six seconds; under a second on one file |
 | `mise run lint` | about a minute |
 | `mise run fast` | one to two minutes |
 
@@ -443,6 +443,16 @@ shell gate also runs when a path the change touched is one
 no glob can say. `mise run --tag fast --affected --affected-base <ref>
 --affected-json` names each gate it would pick and why, running none. A lint gate that reaches the network, or whose check
 fast makes another way, is left untagged.
+
+A gate whose linter reads one file at a time (`lint:ruff`, `lint:ast-grep`,
+`lint:spelling`, `lint:prose`) runs through hk, as `hk.pkl` declares it, and
+fast hands it the files the change touched: its step reads those its glob
+matches, and its `-whole` step reads the whole tree when one of them is a file
+that step names (the tool's config, the pins). Run alone, with no files, as
+the Lint job runs it, it reads the whole tree. A gate that answers a question
+about the whole (the import contracts, the types, the derived files) keeps
+its whole input, and one whose run never reads a test module leaves the tests
+out of its sources, so an edit inside a test selects none of them.
 
 A test module that a `test:*` task runs by its label in a dependency group's
 environment (`uv run --group fuzz`), which the tests' environment lacks, is

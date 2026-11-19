@@ -29442,7 +29442,7 @@
         ],
         "summary": "Show a machine on the dashboard",
         "tags": [
-          "hq.infrastructure"
+          "hq.dashboard"
         ],
         "x-hq-capability": "dashboard.machine.select",
         "x-hq-effect": "remote_write"
@@ -35058,7 +35058,7 @@
         ],
         "summary": "Estate: the list",
         "tags": [
-          "hq.dashboard"
+          "hq.estate"
         ],
         "x-hq-resource": "estate"
       }
@@ -37636,6 +37636,12 @@
       "name": "hq.tools",
       "parent": "hq.infrastructure",
       "summary": "Tools"
+    },
+    {
+      "description": "Machines, services, domains, renewals and connections, counted as one estate.",
+      "kind": "nav",
+      "name": "hq.estate",
+      "summary": "Estate"
     },
     {
       "description": "One query across every domain, answered with what the reader may read.",

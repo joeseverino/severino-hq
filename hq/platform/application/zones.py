@@ -31,13 +31,16 @@ from .adoption import NOTHING_LIVE_CHANGED, AdoptCommand, unmanaged
 from .answer_fields import CallMessage
 from .card_items import ListRow
 from .command_fields import Describe
+from .contracts import Effect
 from .entity_links import entity_link
 from .infrastructure import enabled_resources, resource_health
+from .integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from .record_errors import PolicyError, RecordNotFound
-from .resource_records import ManagedResourceItem
-from .security import Principal
+from .resource_records import DomainRecord, DomainRow, ManagedResourceItem
+from .resources import BoundedQuery
+from .security import Capability, Principal
 from .ui import counted
-lazy from . import adoption, plugins
+lazy from . import adoption, derived_reads, plugins
 lazy from .facts import snapshots_of, stored_snapshots
 lazy from .projection import read_once
 lazy from .resource_context import shared_names, value_summary
@@ -685,3 +688,40 @@ def public_answers_for(hostname: str) -> tuple[str, ...]:
             if content and content not in found:
                 found.append(content)
     return tuple(found)
+
+
+def capabilities() -> tuple[CapabilitySpec, ...]:
+    return (
+        CapabilitySpec(
+            ADOPT_ZONE,
+            "Manage a domain HQ found live, and every record in it, exactly as they are.",
+            Effect.REMOTE_WRITE,
+            Capability.MANAGE_INFRASTRUCTURE,
+            AdoptZoneCommand,
+            adopt_zone,
+            subject_resource="infrastructure",
+            execution_notes=(
+                "Adopt the domain as HQ last found it live.",
+                "Adopt every record in it HQ can, in one transaction; the domain stands if none can be.",
+            ),
+            label="Manage a domain in HQ",
+            verb="Manage domain",
+            reached_from="zones:index",
+        ),
+    )
+
+
+def resources() -> tuple[ResourceSpec, ...]:
+    return (
+        ResourceSpec(
+            "domains",
+            "Domains",
+            "Every domain HQ manages or has read, its services and registration.",
+            Capability.READ,
+            listing=ListRead(derived_reads.list_domains, BoundedQuery, DomainRow),
+            detail_handler=derived_reads.get_domain,
+            identifier="name",
+            web_route="zones:index",
+            record_type=DomainRecord,
+        ),
+    )

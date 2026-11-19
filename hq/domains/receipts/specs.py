@@ -1,4 +1,4 @@
-"""The receipts resource, declared on its domain in application/domains.py."""
+"""The receipts' file commands and resource, declared on its domain in application/domains.py."""
 
 from typing import Annotated, TypedDict
 
@@ -6,9 +6,13 @@ from pydantic import Field
 
 from hq.platform.application import receipts
 from hq.platform.application.answer_fields import UpdatedAt
+from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe, listed
-from hq.platform.application.integration_specs import ListRead, ResourceSpec
+from hq.platform.application.domains import records_of
+from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
+from hq.platform.application.labels import adding
 from hq.platform.application.record_fields import Notes
+from hq.platform.application.records import KEPT
 from hq.platform.application.resources import BoundedQuery
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
@@ -16,6 +20,45 @@ from hq.platform.application.ui import ended
 
 from .models import Receipt
 from .validation import FILE_TYPE_LABELS
+
+_FILE_NOTES = (
+    "Refuse base64 text longer than the size limit allows, before decoding it.",
+    "Refuse a file over the limit, or of a type a receipt cannot be.",
+    "Record the file's name, size and SHA-256 digest; its bytes are kept only as the receipt's file.",
+)
+
+
+def capabilities() -> tuple[CapabilitySpec, ...]:
+    # A receipt's file arrives only through an operator in the browser or at
+    # the host (security.HELD_ONLY_AT), though a token may read the schema.
+    authority = (records_of("receipts").write, Capability.UPLOAD_RECEIPT)
+    return (
+        CapabilitySpec(
+            receipts.UPLOAD,
+            "Keep a receipt's file, out of reach of any public address, with its details.",
+            Effect.REMOTE_WRITE,
+            authority,
+            receipts.ReceiptUploadCommand,
+            receipts.upload_receipt,
+            subject_resource="receipts",
+            execution_notes=_FILE_NOTES,
+            label=adding("receipt"),
+        ),
+        CapabilitySpec(
+            receipts.REPLACE,
+            f"Replace a receipt's file, and change its details with it. {KEPT}",
+            Effect.REMOTE_WRITE,
+            authority,
+            receipts.ReceiptUploadCommand,
+            receipts.replace_receipt,
+            "integer",
+            "receipts",
+            target_label="Receipt",
+            target_help="The receipt whose file to replace.",
+            execution_notes=_FILE_NOTES,
+            label="Replace a receipt's file",
+        ),
+    )
 
 
 class ReceiptQuery(BoundedQuery):

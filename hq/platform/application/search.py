@@ -1,18 +1,23 @@
 """Canonical search use case shared by web, CLI, TUI, and MCP adapters."""
 
 import threading
+from typing import Annotated
 
 from django.db import connection
 from django.db.models import CharField, F, IntegerField, Q, QuerySet, Value
 from django.db.models.functions import Cast
+from pydantic import Field
 
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.search_index.backends import SnippetParts, search_backend
 from hq.platform.search_index.registry import by_scope
 
-from .projection import page_size, projection_scope
-from .resources import resource_search_capabilities
+from .integration_specs import ListRead, ResourceSpec
+from .projection import MAX_PAGE_SIZE, page_size, projection_scope
+from .resources import TopQuery, resource_search_capabilities
 from .security import Capability, Principal
+lazy from . import derived_reads
+lazy from .resource_records import Match
 
 MAX_SEARCH_RESULTS = 5000
 
@@ -274,3 +279,34 @@ def search_records(scope: str, query: str, *, principal: Principal, limit: int =
             }
         )
     return {"scope": scope, "query": query, "items": items}
+
+
+# Search's, which answers fewer unless asked for more.
+type SearchLimit = Annotated[
+    int, Field(ge=1, le=MAX_PAGE_SIZE, description=f"How many matches to return, 1 to {MAX_PAGE_SIZE}, best first.")
+]
+
+
+# Search ranks each scope apart and cuts each before merging them, so no one
+# order holds a place to resume from: a caller narrows the query instead.
+class SearchQuery(TopQuery):
+    query: str = Field(
+        default="",
+        max_length=200,
+        description="What to look for in names and records' text; blank finds nothing.",
+    )
+    limit: SearchLimit = 20
+
+
+def resources() -> tuple[ResourceSpec, ...]:
+    return (
+        ResourceSpec(
+            "search",
+            "Search",
+            "Machines, services and domains, then records, matching a query.",
+            Capability.READ,
+            listing=ListRead(derived_reads.search, SearchQuery, Match),
+            web_route="search",
+            pass_principal=True,
+        ),
+    )

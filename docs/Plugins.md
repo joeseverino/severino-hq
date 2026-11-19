@@ -526,7 +526,9 @@ out while its own page still shows it. The title states
 what is wrong, with its count where it stands for several; the body says what
 it means. A domain whose items are also decided together on one page of its
 own names it in `PluginIntegration.attention_url`, and the Needs you page's
-heading for the domain links there.
+heading for the domain links there. A page of its own draws the entries
+`plugin_attention_items` gathers as the queue:
+`{% include "partials/_work_queue.html" with items=entries|queue_entries only %}`.
 
 An item's `key` (else its eyebrow and title) is what the queue knows it by:
 its row and its dismissal. Two of one provider's items under one key are one
@@ -1000,8 +1002,11 @@ sentence at its status. A form view whose write is a service call of
 its own inherits `hq_sdk.writes`' mixins, which run it once under the same key.
 A service refuses in words the person reads by raising
 `hq_sdk.capabilities.InputError(sentence)`, a sentence the extension wrote
-(`PLUGIN_API_VERSION` 13); any other exception's text stays in the log, and
-the person reads that the capability could not be executed.
+(`PLUGIN_API_VERSION` 13), and a record the call names that is not there by
+raising `hq_sdk.capabilities.RecordNotFound(sentence)`, answered `not_found`
+(`PLUGIN_API_VERSION` 20). Neither sentence names what the caller sent. Any
+other exception's text stays in the log, and the person reads that the
+capability could not be executed.
 A test that posts a form without opening its page first sends
 `hq_sdk.testing.form_keyed(data)`.
 

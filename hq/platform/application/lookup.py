@@ -22,7 +22,8 @@ from hq.platform.core.outbound import allowed
 
 from .answer_fields import ObservedAt
 from .command_fields import Describe
-from .integration_specs import command_adapter
+from .contracts import Effect
+from .integration_specs import CapabilitySpec, command_adapter
 from .projection import iso
 from .reach import is_documentation, is_public, network_of
 from .security import Capability, Principal
@@ -358,3 +359,49 @@ def look_up_address(
     observed_at = now()
     readings.record(readings.public_address(str(parsed)), reading, observed_at=observed_at)
     return {**reading, "observed_at": observed_at.isoformat()}
+
+
+def capabilities() -> tuple[CapabilitySpec, ...]:
+    return (
+        # Capabilities that read something HQ does not hold. Both are `read`, so
+        # neither takes an idempotency key and neither writes: asking a
+        # registry the same question twice is the same question twice.
+        CapabilitySpec(
+            LOOK_UP_NAME,
+            "Ask a public resolver what the internet returns for a hostname.",
+            Effect.READ,
+            Capability.LOOK_UP_PUBLIC_RECORDS,
+            NameCommand,
+            look_up_name,
+            execution_notes=(
+                "Validate the hostname before anything leaves this machine.",
+                (
+                    "Ask one resolver outside this network, so internal rewrites cannot "
+                    "answer a question about the public internet."
+                ),
+                "Return the records as the resolver gave them, without the TTL, which this resolver fixes.",
+            ),
+            label="Look up a name",
+        ),
+        CapabilitySpec(
+            LOOK_UP_ADDRESS,
+            "Ask what name and which allocation a public address belongs to.",
+            Effect.READ,
+            Capability.LOOK_UP_PUBLIC_RECORDS,
+            AddressCommand,
+            look_up_address,
+            execution_notes=(
+                (
+                    "Refuse a private address locally; nothing outside can describe it, "
+                    "and asking would disclose it for no answer."
+                ),
+                "Read reverse DNS, which the address holder publishes and which usually carries a brand name.",
+                (
+                    "Read the RDAP allocation, which the registry publishes and which "
+                    "carries the company. Either registry may fail without the other."
+                ),
+            ),
+            label="Look up an address",
+            variants=((FIRST, "Look up"), (AGAIN, "Look up again")),
+        ),
+    )

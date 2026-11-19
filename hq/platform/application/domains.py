@@ -215,8 +215,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # head of the bar rather than a dropdown of one.
         navigation=(NavigationItem("Dashboard", "dashboard", "", 0, ""),),
         integration=PluginIntegration(
-            capabilities=_provider("hq.platform.application.core_capabilities:dashboard"),
-            resources=_provider("hq.platform.application.core_resources:dashboard"),
+            capabilities=_provider("hq.platform.application.dashboard_specs:capabilities"),
+            resources=_provider("hq.platform.application.dashboard_specs:resources"),
             connections=_provider("hq.platform.application.glance:connection_specs"),
         ),
     ),
@@ -244,6 +244,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # only months of work clear it, so it does not belong in the queue.
         # The number shows on the projects card as "N need output".
         integration=PluginIntegration(
+            capabilities=_provider("hq.domains.projects.specs:capabilities"),
             resources=_provider("hq.domains.projects.specs:resources"),
             dashboard=_provider("hq.platform.application.sections:projects"),
             outbound=_provider("hq.platform.application.projects:outbound_work"),
@@ -267,7 +268,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         description="Repositories starred on GitHub, and what changed in them.",
         navigation=(NavigationItem("Starred repos", "watching", "", 102, "Projects"),),
         integration=PluginIntegration(
-            capabilities=_provider("hq.platform.application.core_capabilities:watching"),
+            capabilities=_provider("hq.platform.application.github_profile:capabilities"),
             dashboard=_provider("hq.platform.application.sections:watching"),
         ),
     ),
@@ -282,7 +283,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Docs",
         description="Pointers to the documentation of each system and project, kept by sensitivity.",
         navigation=(NavigationItem("Docs", "docs_index:list", "docs_index", 101, "Projects"),),
-        integration=PluginIntegration(resources=_provider("hq.domains.docs_index.specs:resources")),
+        integration=PluginIntegration(
+            capabilities=_provider("hq.domains.docs_index.specs:capabilities"),
+            resources=_provider("hq.domains.docs_index.specs:resources"),
+        ),
         apps=("hq.domains.docs_index",),
         mounts=(Mount("docs/", "hq.domains.docs_index.urls"),),
         records=Records(
@@ -363,6 +367,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # records themselves are read and changed, which is a different job done
         # on a different day.
         navigation=(NavigationItem("Domains", "zones:index", "zones", 113, "Web"),),
+        integration=PluginIntegration(
+            capabilities=_provider("hq.platform.application.zones:capabilities"),
+            resources=_provider("hq.platform.application.zones:resources"),
+        ),
         mounts=(Mount("domains/", "hq.domains.control_plane.zone_urls"),),
     ),
     DomainDescriptor(
@@ -402,7 +410,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Receipts",
         description="Receipts, matched to the expense or asset each paid for.",
         navigation=(NavigationItem("Receipts", "receipts:list", "receipts", 121, "Business"),),
-        integration=PluginIntegration(resources=_provider("hq.domains.receipts.specs:resources")),
+        integration=PluginIntegration(
+            capabilities=_provider("hq.domains.receipts.specs:capabilities"),
+            resources=_provider("hq.domains.receipts.specs:resources"),
+        ),
         apps=("hq.domains.receipts",),
         mounts=(Mount("receipts/", "hq.domains.receipts.urls"),),
         # Receipts arrive as uploads, so there is no create command.
@@ -481,6 +492,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
+        integration=PluginIntegration(resources=_provider("hq.platform.application.topology:resources")),
     ),
     DomainDescriptor(
         id="hq.services",
@@ -499,6 +511,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
+        integration=PluginIntegration(
+            capabilities=_provider("hq.platform.application.service_list:capabilities"),
+            resources=_provider("hq.platform.application.service_list:resources"),
+        ),
     ),
     DomainDescriptor(
         id="hq.estate",
@@ -510,6 +526,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             dashboard=Viewed("hq.platform.application.estate:cards"),
             overview=Viewed("hq.platform.application.estate:overview"),
             calendars=_provider("hq.platform.application.calendar_sources:estate_sources"),
+            resources=_provider("hq.platform.application.estate:resources"),
         ),
     ),
     DomainDescriptor(
@@ -524,6 +541,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 131,
                 "Infrastructure",
             ),
+        ),
+        integration=PluginIntegration(
+            capabilities=_provider("hq.platform.application.infrastructure_specs:capabilities"),
+            resources=_provider("hq.platform.application.infrastructure_specs:resources"),
         ),
         apps=("hq.domains.control_plane",),
         mounts=(Mount("infrastructure/", "hq.domains.control_plane.urls"),),
@@ -547,7 +568,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             ),
         ),
         integration=PluginIntegration(
-            capabilities=_provider("hq.platform.application.core_capabilities:tools"),
+            capabilities=_provider("hq.platform.application.lookup:capabilities"),
             connections=_provider("hq.domains.control_plane.dns_lookup:connection_specs"),
         ),
     ),
@@ -567,6 +588,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
+        integration=PluginIntegration(resources=_provider("hq.platform.application.machines:resources")),
     ),
     DomainDescriptor(
         id="hq.containers",
@@ -583,6 +605,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
+        integration=PluginIntegration(resources=_provider("hq.platform.application.container_reads:resources")),
     ),
     DomainDescriptor(
         id="hq.tailnet",
@@ -600,6 +623,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
+        integration=PluginIntegration(resources=_provider("hq.platform.application.tailnet_context:resources")),
     ),
     DomainDescriptor(
         id="hq.connections",
@@ -619,8 +643,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             ),
         ),
         integration=PluginIntegration(
-            capabilities=_provider("hq.platform.application.core_capabilities:connections"),
-            resources=_provider("hq.platform.application.core_resources:connections"),
+            capabilities=_provider("hq.platform.application.connections:capabilities"),
+            resources=_provider("hq.platform.application.connections:resources"),
             connections=_provider("hq.platform.application.connections:connection_specs"),
         ),
     ),
@@ -652,6 +676,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Audit",
         description="Every security-relevant change HQ made, who asked for it and when.",
         navigation=(NavigationItem("Audit log", "core:audit_list", "core", HOST_ORDER_MACHINERY, "System"),),
+        integration=PluginIntegration(resources=_provider("hq.platform.application.audit_specs:resources")),
         mounts=(Mount("audit/", "hq.platform.core.urls"),),
     ),
     DomainDescriptor(
@@ -663,6 +688,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # audit log's approval queue, which the queue's heading opens.
         integration=PluginIntegration(
             attention_url=_provider("hq.platform.application.attention:approval_queue"),
+            capabilities=_provider("hq.platform.application.held_reads:capabilities"),
             resources=_provider("hq.platform.application.held_reads:resources"),
         ),
     ),
@@ -679,7 +705,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Search",
         description="One query across every domain, answered with what the reader may read.",
         # No nav item: the bar's own search field opens its page.
-        integration=PluginIntegration(resources=_provider("hq.platform.application.core_resources:search")),
+        integration=PluginIntegration(resources=_provider("hq.platform.application.search:resources")),
     ),
     DomainDescriptor(
         id="hq.self",
@@ -687,6 +713,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         description="How HQ itself is doing, read as its own page shows it.",
         # HQ itself, after what configures it: the page that says how it is doing.
         navigation=(NavigationItem("HQ", "hq_self", "", HOST_ORDER_MACHINERY + 3, "System"),),
+        integration=PluginIntegration(resources=_provider("hq.platform.application.hq_context:resources")),
     ),
     DomainDescriptor(
         id="hq.design",
@@ -700,6 +727,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Agents",
         description="What each agent may do, and the brakes on it.",
         navigation=(NavigationItem("Agents", "agent_policy", "", HOST_ORDER_MACHINERY + 1, "System"),),
+        integration=PluginIntegration(capabilities=_provider("hq.platform.application.agent_access:capabilities")),
     ),
     DomainDescriptor(
         id="hq.api",
@@ -812,10 +840,8 @@ def composition() -> tuple[tuple[str, str, str], ...]:
 def host_specs(kind: str) -> tuple[Any, ...]:
     """What the host's domains declare of one kind: connections, capabilities, resources, outbound work.
 
-    Extensions cross a separate admission boundary and continue through the
-    plugin registry. Host domains use the same late-bound provider shape, so a
-    command, a readable resource or a gateway is registered once beside its
-    domain instead of being copied into a central list that every domain grows.
+    Each is declared once beside its domain, in the provider shape an
+    extension's integration has; no central list names any of them.
     """
 
     return tuple(

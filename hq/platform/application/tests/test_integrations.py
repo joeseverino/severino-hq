@@ -73,11 +73,12 @@ class IntegrationGraphTests(TestCase):
         from dataclasses import replace
         from unittest.mock import patch
 
-        from ..core_capabilities import CORE_CAPABILITY_SPECS
+        from ..records import capability_specs
 
-        squatter = replace(CORE_CAPABILITY_SPECS[0], name="automation.example.check.run")
+        specs = capability_specs()
+        squatter = replace(specs[0], name="automation.example.check.run")
         with (
-            patch("hq.platform.application.integrations.CORE_CAPABILITY_SPECS", (*CORE_CAPABILITY_SPECS, squatter)),
+            patch("hq.platform.application.integrations.record_capability_specs", return_value=(*specs, squatter)),
             self.assertRaises(IntegrationGraphError) as raised,
         ):
             clear_integration_graph_cache()

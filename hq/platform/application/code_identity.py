@@ -86,8 +86,11 @@ def _distributions() -> list[str]:
 
 
 def _sources(package: str) -> Iterable[tuple[str, Path]]:
-    """Every Python file of a top-level package or module, by its path inside
-    it, in an order every process walks alike."""
+    """Every Python file a running HQ can import from a top-level package or
+    module, by its path inside it, in an order every process walks alike.
+
+    A ``tests`` directory is left out: the web process never imports one (the
+    import contracts in pyproject.toml), so nothing it holds is ever stored."""
 
     spec = find_spec(package)
     if spec is None or (spec.submodule_search_locations is None and spec.origin is None):
@@ -99,7 +102,7 @@ def _sources(package: str) -> Iterable[tuple[str, Path]]:
     for location in sorted(spec.submodule_search_locations):
         root = Path(location)
         for directory, children, files in root.walk():
-            children.sort()
+            children[:] = sorted(child for child in children if child != "tests")
             inside = directory.relative_to(root).as_posix()
             for file in sorted(files):
                 if file.endswith(".py"):

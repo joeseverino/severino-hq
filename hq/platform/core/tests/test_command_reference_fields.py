@@ -8,21 +8,20 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.assets.models import Asset
-from hq.domains.calendars.models import Entry
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application import references
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.command_targets import record_options
 from hq.platform.application.domains import records_of
-from hq.platform.application.integration_specs import capability_schema
+from hq.platform.application.integration_specs import capability_fields, capability_schema
 from hq.platform.application.markup_testing import within
 from hq.platform.application.records import record_form
-from hq.platform.application.references import Referable, Target
+from hq.platform.application.references import Referable, ReferenceField, Target
 from hq.platform.application.security import Principal, web_principal
+from hq.platform.application.stored_columns import _model_of
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
 
@@ -30,13 +29,17 @@ from .command_shapes import field_schema
 
 User = get_user_model()
 
-# The host's commands whose field is a type:identity reference, and the column each fills.
-HOST_REFERENCES = {
-    ("asset.create", "infrastructure"): (Asset, "infrastructure"),
-    ("expense.create", "paid_from"): (Expense, "paid_from"),
-    ("expense.create", "about"): (Expense, "about"),
-    ("calendar.entry.create", "about"): (Entry, "about"),
-}
+
+def stored_references() -> dict[tuple[str, str], tuple[type, str]]:
+    """``(model, column)`` by ``(command, field)`` for each command field its
+    model stores in a type:identity column."""
+
+    found = {}
+    for name, spec in capability_registry().items():
+        if (model := _model_of(spec.command_type)) is not None:
+            columns = {column.name for column in model._meta.get_fields() if isinstance(column, ReferenceField)}
+            found |= {(name, column): (model, column) for column in columns & set(capability_fields(spec))}
+    return found
 
 
 def offered(page, name: str) -> dict[str, str]:
@@ -95,11 +98,13 @@ class ReferenceFieldTests(TestCase):
         self.client.force_login(self.user)
 
     def test_every_type_identity_field_says_which_column_it_fills(self):
-        self.assertLessEqual(HOST_REFERENCES.items(), reference_fields().items())
+        stored = stored_references()
+        self.assertTrue(stored, "no record domain stores a type:identity column")
+        self.assertLessEqual(stored.items(), reference_fields().items())
 
     def test_each_command_form_offers_what_the_record_form_offers(self):
         principal = web_principal(self.user)
-        for (name, field), (model, column) in {**HOST_REFERENCES, **reference_fields()}.items():
+        for (name, field), (model, column) in reference_fields().items():
             with self.subTest(command=name, field=field):
                 page = self.client.get(f"/commands/{name}/")
                 expected = grouped(model._meta.get_field(column), principal)

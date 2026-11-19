@@ -2404,7 +2404,6 @@ _SIGNED_IN.user = get_user_model()(username="example-owner")
 ENTRIES |= {
     "part/allocation": Entry(context=ENTRIES["part/allocation-legend"].context),
     "part/ask": Entry(context={"ask": ENTRIES["part/ask-states"].context["idle"]}),
-    "part/attention-list": Entry(context={"entries": [], "empty": "No example decision waits."}),
     "part/button": Entry(
         context={"restart": PageAction._built(label="Restart", url="/example/restart/", method="post")}
     ),

@@ -23,7 +23,13 @@ hide = true
 tags = ["fast"]
 sources = [
   "hq/**/*.py",
+  "!**/tests/**",
+  "!**/test_*.py",
+  "!**/tests.py",
   "manage.py",
+  "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
+  "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",

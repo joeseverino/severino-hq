@@ -1,19 +1,82 @@
-"""The projects resource, declared on its domain in application/domains.py."""
+"""The projects' commands and resource, declared on its domain in application/domains.py."""
 
 from typing import Annotated, NotRequired, TypedDict
 
 from pydantic import Field, create_model
 
-from hq.platform.application import projects
+from hq.platform.application import dependency_updates, projects, registry_import
 from hq.platform.application.answer_fields import LinkedContent, LinkedDocs, LinkedExpenses, RecordSlug, UpdatedAt
+from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe
-from hq.platform.application.integration_specs import ListRead, ResourceSpec
+from hq.platform.application.domains import records_of
+from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from hq.platform.application.record_fields import PublishedUrl
 from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
 
 from .models import Project
+
+
+def capabilities() -> tuple[CapabilitySpec, ...]:
+    return (
+        CapabilitySpec(
+            "hq.import",
+            "Import projects and assets from one file. Nothing is saved unless every record in it is valid.",
+            Effect.REMOTE_WRITE,
+            # The capabilities of the upserts it runs, both of them.
+            registry_import.REQUIRED_CAPABILITIES,
+            registry_import.HQImportCommand,
+            registry_import.execute_hq_import,
+            subject_resource="projects",
+            execution_notes=(
+                "Validate every record before writing any.",
+                "Upsert each record through project.upsert or asset.upsert, in one transaction.",
+                "Keep a stored derived field that differs, and report it.",
+                "Record one audit event per record and one for the import.",
+            ),
+            label="Import projects and assets",
+        ),
+        CapabilitySpec(
+            projects.DEPENDENCY_UPDATES,
+            "Turn HQ's dependency update pull requests on or off for a project's repository, from the next run.",
+            Effect.REMOTE_WRITE,
+            records_of("projects").write,
+            projects.DependencyUpdatesCommand,
+            projects.set_dependency_updates,
+            "slug",
+            "projects",
+            target_label="Project",
+            target_help="The project whose repository to update.",
+            execution_notes=(
+                "Refuse a project that names no repository.",
+                "Turn updates on only while the repository passes its vulnerability-alerts check.",
+                "Record the switch and who set it; the next update run reads it.",
+            ),
+            target_initial_fields=("dependency_updates",),
+            label="Turn dependency updates on or off",
+            variants=(("on", "Turn on updates"), ("off", "Turn off updates")),
+            wants="turn dependency updates on or off for {target}",
+        ),
+        CapabilitySpec(
+            dependency_updates.RUN_NOW,
+            "Update dependencies in every opted-in repository.",
+            # The controller's run opens pull requests on GitHub.
+            Effect.INFRASTRUCTURE_CHANGE,
+            # The ask is a controller read, which needs infrastructure as well.
+            (records_of("projects").write, Capability.MANAGE_INFRASTRUCTURE),
+            dependency_updates.DependencyRunCommand,
+            dependency_updates.request_run,
+            subject_resource="projects",
+            execution_notes=(
+                "Refuse when no project is opted in.",
+                "Ask the controller for a run and wake it; it hands one token per account to the host.",
+                "The run's outcome comes back as the github.dependency_run reading.",
+            ),
+            label="Update dependencies",
+        ),
+    )
+
 
 ProjectQuery = create_model(
     "ProjectQuery",

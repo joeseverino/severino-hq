@@ -1927,7 +1927,7 @@ layout checks read.
 
 
 Spatial drawings use the same chart frame as time series: `PathChart` supplies
-paths, markers, an optional scale and the ordered legend. The drawing makes
+paths, markers, an optional scale and its named bands, which its legend keys. The drawing makes
 no outside requests. A printed page's provenance belongs in its frame's
 `print_footer` block; the page frame owns its visibility and typography.
 

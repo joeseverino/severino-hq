@@ -103,6 +103,9 @@ def _quick_tasks(root: Path) -> dict[str, dict[str, Any]]:
 # A quick gate whose tool fixes what it finds declares this flag, which writes
 # the fixes instead of checking (mise-tasks/lint.toml); fast runs it first.
 FIX = re.compile(r'^flag "--fix"', re.MULTILINE)
+# A quick gate whose tool reads a file at a time declares this argument, and is
+# handed the files the change touched (mise.toml, the hk task template).
+FILES = re.compile(r'^arg "\[files\]\.\.\."', re.MULTILINE)
 # A file task declares its usage in its own header, which mise's listing leaves out.
 FILE_USAGE = re.compile(r"^#USAGE (.*)$", re.MULTILINE)
 
@@ -112,6 +115,13 @@ def fixers(tasks: tuple[str, ...]) -> tuple[str, ...]:
 
     quick = quick_tasks()
     return tuple(task for task in tasks if task in quick and FIX.search(usage_of(quick[task])))
+
+
+def handed(task: str, paths: list[str]) -> list[str]:
+    """The words that run ``task``: with ``paths`` when it reads a file at a time."""
+
+    quick = quick_tasks()
+    return [task, *paths] if task in quick and FILES.search(usage_of(quick[task])) else [task]
 
 
 def usage_of(task: dict[str, Any]) -> str:
@@ -128,13 +138,13 @@ REWROTE = "the fixes rewrote, uncommitted:"
 
 
 def fixed_first(
-    gate: Gate, tasks: tuple[str, ...], base: str, paths: tuple[list[str], list[str]]
+    gate: Gate, tasks: tuple[str, ...], base: str, paths: tuple[list[str], list[str]], *, whole: bool = False
 ) -> tuple[tuple[list[str], list[str]], list[str]]:
     """The changed and deleted paths once the fix modes of ``tasks`` have run,
-    and the files they rewrote. The gate is set to judge the tree they left,
-    the one a commit of those files gives."""
+    on the whole tree when ``whole``, and the files they rewrote. The gate is
+    set to judge the tree they left, the one a commit of those files gives."""
 
-    fixed = fix(tasks)
+    fixed = fix(tasks, [] if whole else [*paths[0], *paths[1]])
     if not fixed:
         return paths, []
     print(f"[fast] the quick gates' fixes rewrote: {' '.join(fixed)}", flush=True)
@@ -152,13 +162,14 @@ def fixed_before_sending(base: str) -> list[str]:
     which only checks."""
 
     changed, deleted = changed_paths(base, chain.ROOT)
-    return fix(selected_tasks([*changed, *deleted], base))
+    return fix(selected_tasks([*changed, *deleted], base), [*changed, *deleted])
 
 
-def fix(tasks: tuple[str, ...]) -> list[str]:
-    """Run the fix mode of each of ``tasks`` that has one, in one run of mise,
-    and return the paths it rewrote, so the gates then judge fixed files and
-    formatting never fails a run. What a fixer still finds, its gate reports."""
+def fix(tasks: tuple[str, ...], paths: list[str]) -> list[str]:
+    """Run the fix mode of each of ``tasks`` that has one, in one run of mise, on
+    ``paths`` where it reads a file at a time, and return the paths it rewrote,
+    so the gates then judge fixed files and formatting never fails a run. What
+    a fixer still finds, its gate reports."""
 
     fixing = fixers(tasks)
     # A run sent from another machine only checks, as CI does: a fix written there never reaches the checkout
@@ -167,7 +178,7 @@ def fix(tasks: tuple[str, ...]) -> list[str]:
     if not fixing or os.environ.get(SENT):
         return []
     before = dirty()
-    words = [word for task in fixing for word in (":::", task, "--fix")][1:]
+    words = [word for task in fixing for word in (":::", *handed(task, paths), "--fix")][1:]
     subprocess.run(["mise", "run", "--continue-on-error", *words], cwd=chain.ROOT, check=False, capture_output=True)
     after = dirty()
     # A path in one alone was rewritten too: one the fix left as HEAD has it is no longer dirty.
@@ -256,10 +267,10 @@ def mise_run(words: list[str], parallel: str) -> list[str]:
     return ["mise", "--env", ENVIRONMENT, "run", "--continue-on-error", *jobs, *words]
 
 
-def quick_command(tasks: tuple[str, ...], parallel: str) -> list[str]:
-    """The run of the quick gates, side by side."""
+def quick_command(tasks: tuple[str, ...], parallel: str, paths: list[str]) -> list[str]:
+    """The run of the quick gates, side by side, each that reads a file at a time on ``paths``."""
 
-    return mise_run([word for task in tasks for word in (task, ":::")][:-1], parallel)
+    return mise_run([word for task in tasks for word in (*handed(task, paths), ":::")][:-1], parallel)
 
 
 def stage_tokens(tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str) -> int:
@@ -294,15 +305,16 @@ def run_command(tasks: tuple[str, ...], source: list[str], labels: list[str], pa
     return [*in_share(tokens, TURN_BOUND), *command] if tokens else command
 
 
-def quick_stage(tasks: tuple[str, ...], parallel: str, again: str = "") -> list[Step]:
+def quick_stage(tasks: tuple[str, ...], parallel: str, paths: list[str], again: str = "") -> list[Step]:
     """The run of those of ``tasks`` that are quick, side by side, or none
-    when none is; ``again`` names a rerun in its label."""
+    when none is, each that reads a file at a time on ``paths``; ``again``
+    names a rerun in its label."""
 
     quick = tuple(task for task in tasks if task not in heavy_gates(tasks))
     if not quick:
         return []
     print(f"[fast] the quick gates that read what changed: {' '.join(quick)}")
-    return [step(f"quick gates{again}", quick_command(quick, parallel))]
+    return [step(f"quick gates{again}", quick_command(quick, parallel, paths))]
 
 
 def gates_and_tests(
@@ -310,13 +322,15 @@ def gates_and_tests(
     labels: list[str],
     files: list[Path],
     parallel: str,
+    paths: list[str],
     *,
     again: str = "",
 ) -> list[Step]:
-    """The quick gates among ``tasks``, then, once they pass, the tests beside
-    the rest, which run in the heavy turn; ``again`` names a rerun in its labels."""
+    """The quick gates among ``tasks``, each that reads a file at a time on
+    ``paths``, then, once they pass, the tests beside the rest, which run in
+    the heavy turn; ``again`` names a rerun in its labels."""
 
-    steps = quick_stage(tasks, parallel, again)
+    steps = quick_stage(tasks, parallel, paths, again)
     if not all(each.ok for each in steps):
         print(QUICK_FAILED, flush=True)
         return steps
@@ -373,11 +387,14 @@ def main(asked: Usage) -> int:
     early: tuple[str, ...] = ()
     first: list[Step] = []
     fixed: list[str] = []
+    # What a gate that reads a file at a time is handed: none, the whole tree, when the whole is asked.
+    handing: list[str] = []
     if gate:
-        (changed, deleted), fixed = fixed_first(gate, selected, base, (changed, deleted))
+        (changed, deleted), fixed = fixed_first(gate, selected, base, (changed, deleted), whole=whole_asked)
+        handing = [] if whole_asked else [*changed, *deleted]
         early = quick_gates() if whole_asked else selected
         early = tuple(task for task in early if task not in heavy_gates(early))
-        first = quick_stage(early, parallel)
+        first = quick_stage(early, parallel, handing)
         if not all(each.ok for each in first):
             print(QUICK_FAILED, flush=True)
             steps = [*first, step("patch integrity", ["git", "diff", "--check", base])]
@@ -402,7 +419,7 @@ def main(asked: Usage) -> int:
     tasks = whole if every_test else (*selected, *group_tasks(files, reached, touched))
     whole_run = every_test and set(tasks) == set(whole)
     rest = tuple(task for task in tasks if task not in early)
-    steps = [*first, *gates_and_tests(rest, labels, files, parallel)]
+    steps = [*first, *gates_and_tests(rest, labels, files, parallel, handing)]
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
