@@ -22,6 +22,7 @@ from hq.platform.application.tests.tree import TreeTests, tree_tests
 from hq.platform.core.tests.task import RefError, names
 from tests.mise_tasks import run_files
 from tools.gate import chain
+from tools.gate.names import at_base, changes, module_name, name_reach, outlines
 
 # Never part of the Django suite: other languages and vendored trees.
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
@@ -43,13 +44,6 @@ def defines_tasks(path: str) -> bool:
     which the tests that read the tasks read with it."""
 
     return path == "mise.toml" or path.startswith("mise-tasks/") or path in run_files()
-
-
-def module_name(path: Path) -> str:
-    parts = list(path.with_suffix("").parts)
-    if parts[-1] == "__init__":
-        parts.pop()
-    return ".".join(parts)
 
 
 def python_files() -> list[Path]:
@@ -208,18 +202,18 @@ def string_attributes(node: ast.ClassDef) -> dict[str, str]:
     }
 
 
-def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple[set[str], set[str]]:
+def affected(changed: list[str], deleted: list[str], files: list[Path], base: str) -> tuple[set[str], set[str]]:
     """(modules the change reaches, the apps whose models it reaches).
 
-    It reaches the modules that import what it touched, those that name a file it touched, and those that
-    name a route whose view it reaches, by its name or its path: a test that drives a view through the
-    client imports its models, never its views.
+    It reaches the modules that refer to what it changed (``reached``), those that name a file it touched,
+    and those that name a route whose view it reaches, by its name or its path: a test that drives a view
+    through the client imports its models, never its views.
     """
 
-    reverse = with_gone(importers(files), deleted, files)
     paths = [*changed, *deleted]
     started = seeds(paths)
-    imported = importing(started, reverse, files)
+    every = routes(chain.ROOT, tuple(files))
+    names, loading = reached(changed, deleted, files, base, {route.urls for route in every})
     read = reading(paths, files)
     index = named(chain.ROOT, tuple(files))
     shown = [path for path in rendering(paths) if not path.endswith(".py")]
@@ -227,20 +221,46 @@ def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple
     readers = {
         module_name(Path(path)): path for parts in (Path(p).parts for p in shown) for path in Naming(index).file(parts)
     }
-    every = routes(chain.ROOT, tuple(files))
     hit = {
         route
         for route in every
         if route.urls in started
-        or route.view in imported
+        or route.view in loading
+        or (route.definition in names.get(route.view, ()) if route.definition else bool(names.get(route.view)))
         or (route.view in read and route.view not in readers)
         or (route.view in readers and route.definition in defined_naming(readers[route.view], tuple(shown)))
     }
-    near = imported | read
+    near = set(names) | loading | read
     by_name = {path for route in hit for path in Naming(index)((route.name,))}
     by_path = {path for parts, paths in requested(index, every).items() if parts in hit for path in paths}
     touched = {label for prefix, label in django_apps(files).items() if f"{prefix.replace('/', '.')}.models" in near}
     return near | {module_name(Path(path)) for path in by_name | by_path}, touched
+
+
+def reached(
+    changed: list[str], deleted: list[str], files: list[Path], base: str, urls: set[str]
+) -> tuple[dict[str, set[str]], set[str]]:
+    """(each module the change reaches through the names it changed since ``base``, with the names it
+    changes there; the modules it reaches as they load).
+
+    A test depends on the top-level definitions it refers to and those they refer to, pytest-testmon's
+    blocks read from the source, so an edit to one constant reaches what uses it, never every test that
+    loads its module. What a name cannot carry (a deleted module, a migration, a task definition, a
+    statement reached only as its module loads) reaches every module that loads it (``importing``).
+    """
+
+    every = outlines(files)
+    edited = [path for path in changed if path.endswith(".py") and module_name(Path(path)) in every]
+    was = at_base(base, edited)
+    seeded = {
+        module_name(Path(path)): changes(was.get(path), (chain.ROOT / path).read_text(encoding="utf-8"))
+        for path in edited
+    }
+    tests = {module_name(path) for path in files if is_test(path)}
+    found = name_reach(seeded, every, urls | tests)
+    start = (seeds([*changed, *deleted]) - seeded.keys()) | found.dynamic
+    loading = importing(start, with_gone(importers(files), deleted, files), files) if start else set()
+    return found.names, loading
 
 
 def requested(index: dict[tuple[tuple[str, ...], bool], set[str]], every: tuple[Route, ...]) -> dict[Route, set[str]]:
@@ -717,7 +737,7 @@ def source_first(labels: list[str], files: list[Path]) -> tuple[list[str], list[
     return first, [label for label in labels if label not in first]
 
 
-def selection(changed: list[str], deleted: list[str], files: list[Path]) -> tuple[list[str], int]:
+def selection(changed: list[str], deleted: list[str], files: list[Path], base: str) -> tuple[list[str], int]:
     """(the test modules to run, how many there are)."""
 
-    return test_labels(files, *affected(changed, deleted, files))
+    return test_labels(files, *affected(changed, deleted, files, base))

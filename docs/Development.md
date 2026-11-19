@@ -366,13 +366,31 @@ check.
 
 The tests it selects are:
 
-- the test modules that load a changed file: through the imports a module
-  runs as it loads (at its top level or in a class body, never in a function,
-  a `lazy` import or one under `TYPE_CHECKING`), as grimp, import-linter's
-  graph, reads them, all the way; and through any import, those in functions
-  and lazy ones too, directly or through one module between, since further
-  out those close a cycle through the shared layers that reaches most of the
-  suite;
+- the test modules that refer to a top-level definition the change edits
+  (a function, a class, a constant, an import), or to one that refers to
+  such a definition, all the way. The edit is read from the changed
+  modules' text at the base, so a comment or a docstring changes nothing.
+  The references are read from the source: a name an import binds, an
+  attribute read off an imported module (`inbox.recent`), a name the module
+  defines, and in a module under a `tests` directory a dotted string (a
+  mock target). A module used as a value (`mock.patch.object(inbox, ...)`)
+  refers to every name in it. This is pytest-testmon's model of a test
+  depending on the blocks it runs, read statically. A constant edited in a
+  module most of the suite loads reaches only what uses the constant;
+- the test modules that load a changed module, where a name cannot carry
+  the change: a statement that binds nothing
+  changed or was reached, a decorator of this tree takes a reached
+  definition (it may register it), nothing else refers to a reached
+  definition (Django, a registry or a string reaches it), a module was
+  deleted, a migration changed its app's models, or a task definition
+  changed. These walk the imports a module runs as it loads (at its top
+  level or in a class body, never in a function, a `lazy` import or one
+  under `TYPE_CHECKING`), as grimp, import-linter's graph, reads them, all
+  the way. They also walk any import, those in functions and lazy ones too,
+  directly or through one module between, since further out those close a
+  cycle through the shared layers that reaches most of the suite. A test
+  module and a URL module never take this walk: the runner runs the one, and
+  the routes reach through the other;
 - every test that names a route whose view the change reaches, by its name
   (`reverse("control_plane:detail")`) or by a path it answers
   (`"/infrastructure/topology/"`, an f-string's field filling a converter),
@@ -381,7 +399,8 @@ The tests it selects are:
   A route is read from each URL module's `path()` calls, its prefix from the
   call that mounts its module (`Mount("infrastructure/", "<module>")`,
   `include()`) or from `ROOT_URLCONF`. A view is reached when the change
-  imports into its module, when its module imports a module that names a
+  reaches its definition by name, when its module is walked as it loads,
+  when its module imports a module that names a
   changed file, or, for the module that names the file itself, when the view
   (or a class it derives from) is the definition that names it. A template
   reaches through every template that includes or extends it, and a tag

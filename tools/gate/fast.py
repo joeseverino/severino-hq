@@ -400,7 +400,7 @@ def main(asked: Usage) -> int:
             return judge(gate, steps, base, whole=False, fixed=fixed)
     walking = walk_for_tree() if changed or deleted else None
     files = python_files()
-    labels, total = selection(changed, deleted, files)
+    labels, total = selection(changed, deleted, files, base)
     counts = f"{len(changed)} changed, {len(deleted)} deleted, {len(labels)}/{total} test modules"
     print(f"[fast] base {base[:9]}, {why}: {counts}")
     every_test = len(labels) == total > 0

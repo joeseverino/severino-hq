@@ -1,4 +1,5 @@
-"""What fast selects: every test that loads a changed module, and every check that reads a changed file."""
+"""What fast selects: every test that refers to a changed definition, every test that loads a change no name
+carries, and every check that reads a changed file."""
 
 import ast
 from pathlib import Path
@@ -57,7 +58,8 @@ SAMPLE = (
 @reads("**/*.py", lists=("**",))
 class LoadedImportTests(SimpleTestCase):
     def test_a_change_selects_every_test_module_that_loads_it(self):
-        """The walk along the imports a module runs as it loads goes all the way, as grimp reads them."""
+        """The walk along the imports a module runs as it loads, which a change no name carries takes, goes all
+        the way, as grimp reads them."""
 
         files = selection.python_files()
         tests = {selection.module_name(path) for path in files if selection.is_test(path)}
@@ -74,3 +76,58 @@ class LoadedImportTests(SimpleTestCase):
                 expected = graph.find_downstream_modules(module) & tests
                 self.assertGreater(len(expected), 1, "the sample module is loaded by too few tests to tell")
                 self.assertLessEqual(expected, selection.importing({module}, {}, files))
+
+
+# A tree of its own: a constant two definitions read, one of them through a page a test drives, the other
+# through a registry another test reads, and a test that patches one by its dotted name.
+NAMED = {
+    "example/limits.py": "LIMIT = 4\nOTHER = 1\n\n\ndef recent(rows):\n    return rows[:LIMIT]\n\n\ndef unread():\n    return OTHER\n",
+    "example/page.py": "from example import limits\n\n\nclass Page:\n    def get(self):\n        return limits.recent([])\n",
+    "example/registry.py": "from example.limits import unread\n\nCOUNTS = (unread,)\n",
+    "example/urls.py": "from example.page import Page\n\nurlpatterns = [Page]\n",
+    "example/tests/test_page.py": "from example.page import Page\n\n\nclass PageTests:\n    page = Page\n",
+    "example/tests/test_registry.py": "from example import registry\n\n\nclass CountTests:\n    counts = registry.COUNTS\n",
+    "example/tests/test_patch.py": 'class PatchTests:\n    target = "example.limits.recent"\n',
+}
+TESTS = {"example.tests.test_page", "example.tests.test_registry", "example.tests.test_patch"}
+
+
+def named_reach(tree: dict[str, str], edits: dict[str, str]):
+    from tools.gate.names import changes, name_reach, outline
+
+    modules = frozenset(selection.module_name(Path(path)) for path in tree)
+    every = {
+        selection.module_name(Path(p)): outline(ast.parse(edits.get(p, t)), Path(p), modules) for p, t in tree.items()
+    }
+    seeds = {selection.module_name(Path(p)): changes(tree[p], text) for p, text in edits.items()}
+    return name_reach(seeds, every, TESTS | {"example.urls"})
+
+
+class NameReachTests(SimpleTestCase):
+    def test_an_edited_definition_reaches_the_tests_that_refer_to_it_and_no_other_loader(self):
+        edited = NAMED["example/limits.py"].replace("LIMIT = 4", "LIMIT = 5")
+        found = named_reach(NAMED, {"example/limits.py": edited})
+
+        self.assertEqual(found.names.keys() & TESTS, {"example.tests.test_page", "example.tests.test_patch"})
+        self.assertIn("Page", found.names["example.page"])
+        self.assertEqual(found.dynamic, set())
+
+    def test_a_comment_or_a_docstring_reaches_nothing(self):
+        edited = '"""Limits."""\n# How many.\n' + NAMED["example/limits.py"]
+        found = named_reach(NAMED, {"example/limits.py": edited})
+
+        self.assertEqual(found.names, {"example.limits": set()})
+        self.assertEqual(found.dynamic, set())
+
+    def test_what_a_name_cannot_carry_reaches_every_module_that_loads_it(self):
+        """A bare statement, a definition a decorator of this tree takes or one nothing refers to."""
+
+        base = NAMED["example/limits.py"]
+        for edit in (
+            base + "\nprint(LIMIT)\n",
+            base.replace("def recent", "@unread\ndef recent"),
+            base + "\n\ndef unused():\n    return LIMIT\n",
+        ):
+            with self.subTest(edit=edit.splitlines()[-1]):
+                found = named_reach(NAMED, {"example/limits.py": edit.replace("LIMIT = 4", "LIMIT = 5")})
+                self.assertEqual(found.dynamic, {"example.limits"})
