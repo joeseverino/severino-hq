@@ -4,6 +4,7 @@ import re
 from typing import Any, ClassVar, override
 lazy from datetime import timedelta
 
+from django import forms
 from django.conf import settings
 from django.contrib.auth.views import LoginView
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
@@ -51,7 +52,7 @@ lazy from hq.platform.application.visit_refresh import worth_asking
 lazy from hq.platform.mcp import listing
 
 from . import design_gallery
-from .forms import OwnDeviceForm, PolicyForm
+from .forms import OwnDeviceForm
 from .models import AuditLog
 from .write_bounds import Bound, RowCap, writes
 lazy from .network import client_ip
@@ -387,7 +388,9 @@ class AgentPolicyView(PageMixin, TemplateView):
         if runs_here(SET_OWN_DEVICE):
             context["device_form"] = OwnDeviceForm()
         if context["rules_settable"]:
-            context.setdefault("form", PolicyForm())
+            # The rules post as the selects their cells draw, so the form holds
+            # no field: it carries what was wrong with a save, said over the tables.
+            context.setdefault("form", forms.Form())
         context["awaiting_count"] = len(awaiting_ids())
         context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
         return context
@@ -406,7 +409,7 @@ class AgentPolicyView(PageMixin, TemplateView):
         return policy
 
     def post(self, request):
-        form = PolicyForm(request.POST)
+        form = forms.Form(request.POST)
         form.is_valid()
         result = execute_posted(
             request, capability_policy.SET_POLICY, {"rules": capability_policy.submitted_rules(request.POST)}

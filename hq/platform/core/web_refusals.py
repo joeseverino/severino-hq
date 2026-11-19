@@ -54,14 +54,16 @@ def refusal_response(answer: dict[str, Any]) -> HttpResponse:
 
 def _placed(form: BaseForm, details: Any) -> bool:
     """Put each field's problem from an ``invalid_input`` refusal's details (the list ``input_errors``
-    describes, its location's first part the field) beside it; whether all were."""
+    describes, its location the field) beside it; whether all were. A problem
+    inside a field (one coordinate of a point) is left to the sentence, which
+    names the part."""
 
     if not isinstance(details, list) or not details:
         return False
     placed = True
     for item in details:
         location = item.get("loc") if isinstance(item, dict) else None
-        field = str(location[0]) if location else ""
+        field = str(location[0]) if location and len(location) == 1 else ""
         if field in form.fields and item.get("msg"):
             form.add_error(field, item["msg"])
         else:

@@ -470,6 +470,15 @@ class DashboardGlanceTests(TestCase):
         self.assertEqual(configuration.weather_label, "Outside")
         self.assertEqual(configuration.infrastructure_label, "Lab")
 
+    def test_a_label_longer_than_its_column_is_refused_never_cut(self):
+        for field in ("weather_label", "infrastructure_label"):
+            with self.subTest(field=field):
+                answer = execute_capability(DASHBOARD_SETTINGS, keyed({field: "x" * 41}), principal=AN_OPERATOR)
+
+                self.assertEqual(answer["error"]["code"], "invalid_input")
+                self.assertEqual(answer["error"]["details"][0]["loc"], [field])
+                self.assertFalse(DashboardConfiguration.objects.filter(**{field: "x" * 40}).exists())
+
     def test_unsolicited_observation_is_rejected(self):
         with self.assertRaisesMessage(ValueError, "No refresh is pending"):
             bridged(
@@ -636,7 +645,7 @@ class GlanceRenderingTests(TestCase):
         response = self.client.get(reverse("dashboard_glance_settings"))
 
         (point,) = select(response, "name", "weather_point")
-        self.assertNotRegex(point.attrs["placeholder"], r"\d")
+        self.assertNotRegex(point.attrs.get("placeholder", ""), r"\d")
         self.assertTrue(select(response, "name", "infrastructure_label"))
 
     def test_weather_waits_on_a_machine_a_controller_reaches(self):

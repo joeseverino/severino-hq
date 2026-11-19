@@ -2,6 +2,7 @@
 
 from typing import override
 
+from django import forms
 from django.shortcuts import redirect
 from django.views.generic import TemplateView
 
@@ -10,8 +11,9 @@ from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.core.web_refusals import refused
-lazy from hq.domains.control_plane.forms import LOOKUP_FORMS
 lazy from hq.platform.application import security
+lazy from hq.platform.application.capabilities import command_spec
+lazy from hq.platform.application.command_forms import command_form_class
 lazy from hq.platform.application.lookup import LOOK_UP_ADDRESS
 lazy from hq.platform.application.toolkit import tab_named, tabs_for
 lazy from hq.platform.application.url_query import with_query
@@ -47,8 +49,7 @@ class ToolsView(PageMixin, TemplateView):
         # field is not a lookup of the empty string.
         asked = {name: self.request.GET.get(field, "").strip() for name, field in current.capabilities.items()}
         context["lookups"] = {
-            name: LOOKUP_FORMS[name](initial={"tab": current.id, field: asked[name]})
-            for name, field in current.capabilities.items()
+            name: self._lookup(name, field, current.id, asked[name]) for name, field in current.capabilities.items()
         }
         context["results"] = {
             name: execute_posted(self.request, name, {current.capabilities[name]: value})
@@ -70,6 +71,17 @@ class ToolsView(PageMixin, TemplateView):
                 LOOK_UP_ADDRESS, fields={"tab": current.id, "address": asked[LOOK_UP_ADDRESS]}
             )
         return context
+
+    @staticmethod
+    def _lookup(name: str, field: str, tab: str, asked: str) -> forms.Form:
+        """The one field a lookup asks, on the tab it answers on. Both lookups
+        stand on one page, so each names its own ids."""
+
+        form = command_form_class(command_spec(name), fields=(field,))(
+            initial={field: asked}, auto_id=f"{field}-lookup-%s"
+        )
+        form.fields["tab"] = forms.CharField(widget=forms.HiddenInput, initial=tab)
+        return form
 
     def post(self, request, *args, **kwargs):
         """Re-read an address's stored answer, then show it.

@@ -16,7 +16,9 @@ from hq.platform.application.asks import ASK, AskMixin
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
+from hq.platform.application.capabilities import command_spec
 from hq.platform.application.card_items import ListRow
+from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.connection_setup import docs_url
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot
 from hq.platform.application.derivations import every_revision
@@ -40,7 +42,7 @@ from hq.platform.application.web_writes import execute_posted
 from hq.platform.core.web_refusals import refused
 lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
 
-from .forms import DashboardLinksForm, DashboardSettingsForm
+from .forms import DashboardLinksForm
 
 # A queue of this many or fewer is read on the dashboard itself, each card
 # with its button; a longer one is a count and a link to its page, beneath
@@ -283,28 +285,33 @@ class DashboardGlanceView(AskMixin, View):
         return render(request, self.template_name, _glance(request), status=202 if result["requested"] else 200)
 
 
-def _settings_of(configuration) -> dict[str, str]:
-    return {name: getattr(configuration, name) for name in DashboardSettingsForm.base_fields}
+# The dashboard's settings as the command that saves them takes them.
+SETTINGS_FIELDS = ("infrastructure_label", "weather_point", "weather_label")
 
 
 class DashboardGlanceSettingsView(View):
     runs = (DASHBOARD_SETTINGS,)
 
-    def get(self, request):
+    def _page(self, request, form, status: int = 200):
         return render(
             request,
             "core/dashboard_glance_settings.html",
-            {
-                **page_context("Dashboard settings", trail=(("Dashboard", reverse("dashboard")),)),
-                "form": DashboardSettingsForm(initial=_settings_of(dashboard_configuration())),
-            },
+            {**page_context("Dashboard settings", trail=(("Dashboard", reverse("dashboard")),)), "form": form},
+            status=status,
         )
 
+    @staticmethod
+    def _form():
+        return command_form_class(command_spec(DASHBOARD_SETTINGS), fields=SETTINGS_FIELDS)
+
+    def get(self, request):
+        held = dashboard_configuration()
+        return self._page(request, self._form()(initial={name: getattr(held, name) for name in SETTINGS_FIELDS}))
+
     def post(self, request):
-        result = execute_posted(
-            request,
-            DASHBOARD_SETTINGS,
-            {field: request.POST.get(field, "") for field in DashboardSettingsForm.base_fields},
-        )
-        refused(request, result)
+        form = self._form()(request.POST)
+        if not form.is_valid():
+            return self._page(request, form, status=400)
+        if refusal := refused(request, execute_posted(request, DASHBOARD_SETTINGS, form.command_payload), form=form):
+            return self._page(request, form, status=refusal.status)
         return redirect("dashboard")

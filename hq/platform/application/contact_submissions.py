@@ -18,7 +18,9 @@ from hq.domains.contacts import inbox
 from hq.domains.control_plane.desired_state import desired_fingerprint
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.cloudflare import (
+    ASSIGNEE_LENGTH,
     CONTACT_CHANGES_LIMIT,
+    NOTES_LENGTH,
     ContactStatus,
     SubmissionStatus,
 )
@@ -38,19 +40,23 @@ from .ui import ended
 lazy from .asks import APPLIES_SHORTLY
 lazy from .capabilities import Consented, consent
 
-ASSIGNEE_LENGTH = 120
 # The inbox page reads its whole list at once, so a page may hold more than an API page.
 MOST_SHOWN = 500
 REVIEW = "contact.submission.review"
 DELETE = "contact.submission.delete"
 
 
-# A submission's review fields as its command writes them and its row reads them back, each said once.
-type ReviewStatus = Annotated[ContactStatus, Describe("Where its review stands.")]
+# A submission's review fields as its command writes them and its row reads them
+# back, each said once; each label says all a person needs.
+type ReviewStatus = Annotated[ContactStatus, Describe("", api="Where its review stands.")]
 type Assignee = Annotated[
-    str, Field(max_length=ASSIGNEE_LENGTH), Describe("Who is handling it.", api="Empty when unassigned.")
+    str, Field(max_length=ASSIGNEE_LENGTH), Describe("", api="Who is handling it. Empty when unassigned.")
 ]
-type AdminNotes = Annotated[str, Describe("The notes kept on it, for HQ only.", api="Empty for none.")]
+type AdminNotes = Annotated[
+    str,
+    Field(max_length=NOTES_LENGTH, json_schema_extra={"format": "textarea"}),
+    Describe("", api="The notes kept on it, for HQ only. Empty for none."),
+]
 
 
 @dataclass(frozen=True, slots=True)

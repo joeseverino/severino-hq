@@ -1,12 +1,6 @@
-"""The DNS tool's two lookups, each a form that asks rather than writes, the
-one question that starts publishing a service, the two policies a
+"""The one question that starts publishing a service, the two policies a
 domain's mail page publishes, a machine's identity, and why a record is
-removed.
-
-Each lookup field's name is the one its capability's command takes, which
-``application.toolkit`` names for the tab and the view reads from the query
-string, so a lookup's address is a link anyone can build.
-"""
+removed."""
 
 from collections.abc import Mapping
 from typing import ClassVar
@@ -16,7 +10,6 @@ from django.utils.html import format_html
 
 from hq.platform.application.asks import APPLIES_SHORTLY
 from hq.platform.application.forms import ChoiceCards, ReadAt, SuffixedInput
-from hq.platform.application.lookup import LOOK_UP_ADDRESS, LOOK_UP_NAME
 from hq.platform.application.mail_policy import (
     DMARC_TAGS,
     SPF_DEFAULTS,
@@ -34,44 +27,6 @@ from hq.platform.core.templatetags.action_tags import POST_FORM_ID
 from hq.platform.core.templatetags.value_tags import breakable
 
 from .names import is_hostname, normalized_hostname
-
-# A value typed to be looked up, never prose or a remembered entry.
-_TYPED = {"spellcheck": "false", "autocomplete": "off"}
-
-
-class LookupForm(forms.Form):
-    """One lookup on the tools page: the tab it answers on, and what it asks."""
-
-    # Both lookups stand on one page, so each names its own ids.
-    ids: ClassVar[str]
-
-    tab = forms.CharField(widget=forms.HiddenInput)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, auto_id=f"{self.ids}-%s", **kwargs)
-
-
-class NameLookupForm(LookupForm):
-    ids = "name-lookup"
-
-    name = forms.CharField(
-        label="Hostname",
-        required=False,
-        widget=forms.TextInput(attrs={**_TYPED, "placeholder": "example.com"}),
-    )
-
-
-class AddressLookupForm(LookupForm):
-    ids = "address-lookup"
-
-    address = forms.CharField(
-        label="IP address",
-        required=False,
-        widget=forms.TextInput(attrs={**_TYPED, "placeholder": "1.1.1.1"}),
-    )
-
-
-LOOKUP_FORMS: dict[str, type[LookupForm]] = {LOOK_UP_NAME: NameLookupForm, LOOK_UP_ADDRESS: AddressLookupForm}
 
 
 class ServiceStartForm(forms.Form):

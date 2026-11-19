@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 from django.utils.timezone import now
-from pydantic import BeforeValidator, IPvAnyAddress, StringConstraints
+from pydantic import BeforeValidator, Field, IPvAnyAddress, StringConstraints
 
 from hq.domains.control_plane.dns_lookup import LookupUnavailable, registry, resolve
 from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
@@ -62,7 +62,8 @@ class NameCommand:
     name: Annotated[
         str,
         StringConstraints(strip_whitespace=True, max_length=HOSTNAME_LENGTH, pattern=HOSTNAME.pattern),
-        Describe("The hostname to resolve."),
+        Field(title="Hostname"),
+        Describe("", api="The hostname to resolve.", examples=("example.com",)),
     ]
 
 
@@ -77,7 +78,12 @@ class AddressCommand:
     discloses, every time, which addresses HQ is interested in.
     """
 
-    address: Annotated[IPvAnyAddress, BeforeValidator(_stripped), Describe("The IP address to look up.")]
+    address: Annotated[
+        IPvAnyAddress,
+        BeforeValidator(_stripped),
+        Field(title="IP address"),
+        Describe("", api="The IP address to look up.", examples=("1.1.1.1",)),
+    ]
     refresh: Annotated[bool, Describe("Ask again rather than reading the stored answer.")] = False
 
 

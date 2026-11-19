@@ -12,8 +12,10 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from hq.domains.control_plane.provider_adapters.cloudflare import SubmissionStatus
 from hq.platform.application.asks import WAITING
 from hq.platform.application.capabilities import command_spec
+from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.contact_submissions import (
     DELETE,
     MOST_SHOWN,
@@ -32,9 +34,17 @@ from hq.platform.application.web_writes import execute_posted
 from hq.platform.core.web_refusals import refused
 
 from . import inbox
-from .forms import ContactReviewForm, SubmissionStatus, submission_state
 
 GONE = "That message was not found."
+
+
+def submission_state(submission: dict) -> SubmissionStatus | str:
+    """A stored message's status as the member its pill is drawn from, unread
+    when it has none; a word the table holds that HQ does not know stays a
+    word, drawn in no tone."""
+
+    status = str(submission.get("status") or SubmissionStatus.UNREAD)
+    return SubmissionStatus(status) if status in SubmissionStatus.values else status
 
 
 def reply_mailto(address: str, subject: str = "Re: your message") -> str:
@@ -141,31 +151,24 @@ def contact_list(request):
 contact_list.page_reads = ("cloudflare.contact_submission",)  # type: ignore[attr-defined]
 
 
-def _review(request, pk: int, review: dict[str, str]) -> None:
-    """Queue one review; say why not when it is refused."""
-
-    refused(request, execute_posted(request, REVIEW, review, target=pk))
-
-
 def contact_detail(request, pk: int):
     submission = find_submission(pk)
     if not submission:
         messages.error(request, GONE)
         return redirect("contacts:list")
 
+    review_form = command_form_class(command_spec(REVIEW), fields=inbox.REVIEWED)
+    status = 200
     if request.method == "POST":
-        form = ContactReviewForm(request.POST)
-        if form.is_valid():
-            _review(request, pk, dict(form.cleaned_data))
+        form = review_form(request.POST)
+        if not form.is_valid():
+            status = 400
+        elif refusal := refused(request, execute_posted(request, REVIEW, form.command_payload, target=pk), form=form):
+            status = refusal.status
+        else:
             return redirect("contacts:detail", pk=pk)
     else:
-        form = ContactReviewForm(
-            initial={
-                "status": submission.get("status") or "unread",
-                "assigned_to": submission.get("assigned_to") or "",
-                "admin_notes": submission.get("admin_notes") or "",
-            }
-        )
+        form = review_form(initial={name: submission.get(name) or "" for name in inbox.REVIEWED})
 
     reply = reply_mailto(submission.get("email", ""))
     return render(
@@ -186,6 +189,7 @@ def contact_detail(request, pk: int):
                 trail=(("Messages", reverse("contacts:list")),),
             ),
         },
+        status=status,
     )
 
 
@@ -198,7 +202,7 @@ def _safe_next(request) -> str:
 @require_POST
 def contact_set_status(request, pk: int):
     # The review keeps what it is not sent, so the status is all this sends.
-    _review(request, pk, {"status": request.POST.get("status", "")})
+    refused(request, execute_posted(request, REVIEW, {"status": request.POST.get("status", "")}, target=pk))
     return redirect(_safe_next(request))
 
 

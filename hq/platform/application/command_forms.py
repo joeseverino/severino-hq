@@ -1,12 +1,11 @@
 """Django forms derived from the capability registry's JSON Schemas."""
 
-import re
 from collections.abc import Mapping
 from typing import Any, ClassVar, override
 
 from django import forms
 from django.core.exceptions import ValidationError
-from django.core.validators import RegexValidator
+from django.core.validators import MaxLengthValidator, MaxValueValidator, MinLengthValidator, MinValueValidator
 from django.utils.datastructures import MultiValueDict
 
 from .capabilities import CapabilitySpec
@@ -178,16 +177,12 @@ def _field_for_schema(
     if kind == "boolean":
         return forms.BooleanField(**{**options, "required": False})
     if kind == "integer":
-        return forms.IntegerField(
-            min_value=effective.get("minimum"),
-            max_value=effective.get("maximum"),
-            **options,
+        return _drawn_only(
+            forms.IntegerField(min_value=effective.get("minimum"), max_value=effective.get("maximum"), **options)
         )
     if kind == "number":
-        return forms.DecimalField(
-            min_value=effective.get("minimum"),
-            max_value=effective.get("maximum"),
-            **options,
+        return _drawn_only(
+            forms.DecimalField(min_value=effective.get("minimum"), max_value=effective.get("maximum"), **options)
         )
     if kind == "array":
         item_schema = effective.get("items", {})
@@ -202,16 +197,40 @@ def _field_for_schema(
     if effective.get("format") == "date-time":
         return forms.DateTimeField(widget=forms.DateTimeInput(attrs={"type": "datetime-local"}), **options)
 
-    validators = []
-    if effective.get("pattern"):
-        validators.append(RegexValidator(re.compile(effective["pattern"])))
-    return forms.CharField(
-        widget=forms.Textarea(attrs={"rows": 4}) if effective.get("format") == "textarea" else None,
-        min_length=effective.get("minLength"),
-        max_length=effective.get("maxLength"),
-        validators=validators,
-        **options,
+    if effective.get("format") == "textarea":
+        widget: forms.Widget = forms.Textarea(attrs={"rows": 4})
+    else:
+        # A value of a declared shape is typed as itself, never prose or a
+        # remembered entry, and the schema's first example shows the shape.
+        typed = _TYPED if effective.get("pattern") or effective.get("format") else {}
+        examples = effective.get("examples") or ()
+        widget = forms.TextInput(attrs={**typed, **({"placeholder": str(examples[0])} if examples else {})})
+    return _drawn_only(
+        forms.CharField(
+            widget=widget,
+            min_length=effective.get("minLength"),
+            max_length=effective.get("maxLength"),
+            **options,
+        )
     )
+
+
+_TYPED = {"spellcheck": "false", "autocomplete": "off"}
+
+
+def _drawn_only[F: forms.Field](field: F) -> F:
+    """``field`` with the schema's bounds as its control's attributes alone.
+
+    The command refuses a value outside them as it is validated, in the words
+    every door says, and the form puts that refusal beside the field
+    (``web_refusals.refused``), so the form holds no second copy of the check.
+    """
+
+    field.validators = [rule for rule in field.validators if not isinstance(rule, _BOUNDS)]
+    return field
+
+
+_BOUNDS = (MinLengthValidator, MaxLengthValidator, MinValueValidator, MaxValueValidator)
 
 
 # Fields a command carries for its own bookkeeping, never as what it changes.
@@ -278,8 +297,8 @@ class CapabilityCommandForm(forms.Form):
         )
         if not self.is_bound or not isinstance(self.data, MultiValueDict):
             return
-        # And what ``{% write_token %}`` draws beside the fields.
-        allowed = set(self.fields) | {"csrfmiddlewaretoken", RETRY_KEY_FIELD}
+        # And what ``{% write_token %}`` and a page's ``next`` draw beside the fields.
+        allowed = set(self.fields) | {"csrfmiddlewaretoken", RETRY_KEY_FIELD, "next"}
         unknown = sorted(set(self.data) - allowed)
         repeated = sorted(
             name
@@ -382,11 +401,16 @@ def command_form_class(
     *,
     target_options: tuple[CommandTargetOption, ...] | None = None,
     record_choices: Mapping[str, tuple[CommandTargetOption, ...] | None] | None = None,
+    fields: tuple[str, ...] | None = None,
 ) -> type[CapabilityCommandForm]:
     """Build the complete browser form from one canonical capability spec.
 
     ``record_choices`` holds the records each record-naming field offers
     (``command_targets.record_options``); a field without them is typed.
+    ``fields`` names the command's fields a page's own form draws, as
+    ``modelform_factory`` takes them: the page names the record it acts on
+    and where to go next, so the form draws neither, and a field it leaves
+    out is never sent.
     """
 
     schema = command_schema(spec.command_type)
@@ -402,6 +426,10 @@ def command_form_class(
         for name, field in whole_fields(schema).items()
         if name != IDEMPOTENCY_FIELD and name not in agents_only
     }
+    if fields is not None:
+        if unknown := sorted(set(fields) - set(properties)):
+            raise ValueError(f"{spec.name} takes no {', '.join(unknown)} a person fills.")
+        properties = {name: properties[name] for name in fields}
     offered = {
         name: (record_choices or {}).get(name)
         for name, field in properties.items()
@@ -412,24 +440,11 @@ def command_form_class(
             allowed = frozenset(answer())
             offered[name] = tuple(option for option in listed if option.value in allowed)
     nested: dict[str, tuple[tuple[str, bool], ...]] = {}
-    fields = _own_controls(spec, schema, properties, required=required, offered=offered, nested=nested)
-    if spec.target_kind:
-        options = {"label": spec.target_label or "Which one", "help_text": spec.target_help}
-        if target_options is None:
-            target_field = forms.IntegerField if spec.target_kind == "integer" else forms.CharField
-            fields["__target"] = target_field(**options)
-        else:
-            empty_label = "Choose one…" if target_options else NOTHING_TO_CHOOSE
-            fields["__target"] = forms.ChoiceField(
-                choices=(("", empty_label), *grouped_choices(target_options)),
-                **options,
-            )
-        fields = {"__target": fields.pop("__target"), **fields}
-        # Filled from the record a chosen target loads.
-        fields["__expected_updated_at"] = ReadAt()
-    fields["next"] = forms.CharField(required=False, widget=forms.HiddenInput())
+    controls = _own_controls(spec, schema, properties, required=required, offered=offered, nested=nested)
+    if fields is None:
+        controls = _command_page_controls(spec, controls, target_options)
     if spec.effect.rank >= Effect.INFRASTRUCTURE_CHANGE.rank:
-        fields["__confirm_effect"] = forms.BooleanField(
+        controls["__confirm_effect"] = forms.BooleanField(
             label=(
                 "I understand this changes a live system."
                 if spec.effect is Effect.INFRASTRUCTURE_CHANGE
@@ -437,7 +452,7 @@ def command_form_class(
             )
         )
         # Read by templates/django/forms/field.html, which draws it as the callout closing the form.
-        fields["__confirm_effect"].confirms = True
+        controls["__confirm_effect"].confirms = True
     return type(
         f"{schema.get('title', 'Capability')}WebForm",
         (CapabilityCommandForm,),
@@ -448,6 +463,27 @@ def command_form_class(
             "record_names": tuple(name for name, choices in offered.items() if choices is not None),
             "nested": nested,
             "switch": switch_field(spec),
-            **fields,
+            **controls,
         },
     )
+
+
+def _command_page_controls(
+    spec: CapabilitySpec,
+    controls: dict[str, forms.Field],
+    target_options: tuple[CommandTargetOption, ...] | None,
+) -> dict[str, forms.Field]:
+    """What the command's own page draws beside its fields: the record it acts
+    on, when it acts on one, and where to go once it ran."""
+
+    if spec.target_kind:
+        options = {"label": spec.target_label or "Which one", "help_text": spec.target_help}
+        if target_options is None:
+            target_field = forms.IntegerField if spec.target_kind == "integer" else forms.CharField
+            target: forms.Field = target_field(**options)
+        else:
+            empty_label = "Choose one…" if target_options else NOTHING_TO_CHOOSE
+            target = forms.ChoiceField(choices=(("", empty_label), *grouped_choices(target_options)), **options)
+        # Filled from the record a chosen target loads.
+        controls = {"__target": target, **controls, "__expected_updated_at": ReadAt()}
+    return {**controls, "next": forms.CharField(required=False, widget=forms.HiddenInput())}

@@ -4639,6 +4639,8 @@
       },
       "AdminNotes": {
         "description": "The notes kept on it, for HQ only. Empty for none.",
+        "format": "textarea",
+        "maxLength": 10000,
         "type": "string"
       },
       "AdvisoryPart": {
@@ -10342,17 +10344,23 @@
               "infrastructure_label": {
                 "default": "",
                 "description": "What the infrastructure panel is called.",
+                "maxLength": 40,
+                "title": "Name for the machine card",
                 "type": "string"
               },
               "weather_label": {
                 "default": "",
                 "description": "What the weather panel calls that place.",
+                "maxLength": 40,
+                "title": "Name for the weather card",
                 "type": "string"
               },
               "weather_point": {
                 "default": "",
-                "description": "Where the weather is read for, as latitude,longitude.",
+                "description": "Where the weather is read for, as latitude, longitude; blank hides it.",
+                "maxLength": 64,
                 "pattern": "^\\s*(?:[+-]?(?:90(?:\\.0+)?|[1-8]?[0-9](?:\\.[0-9]+)?)\\s*,\\s*[+-]?(?:180(?:\\.0+)?|(?:1[0-7][0-9]|[1-9]?[0-9])(?:\\.[0-9]+)?)\\s*)?$",
+                "title": "Weather location",
                 "type": "string"
               }
             },
@@ -15862,6 +15870,10 @@
                   }
                 ],
                 "description": "The IP address to look up.",
+                "examples": [
+                  "1.1.1.1"
+                ],
+                "title": "IP address",
                 "type": "string"
               },
               "refresh": {
@@ -15894,8 +15906,12 @@
             "properties": {
               "name": {
                 "description": "The hostname to resolve.",
+                "examples": [
+                  "example.com"
+                ],
                 "maxLength": 253,
                 "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\\.?$",
+                "title": "Hostname",
                 "type": "string"
               }
             },

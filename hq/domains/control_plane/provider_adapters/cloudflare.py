@@ -609,6 +609,9 @@ CONTACT_INBOX_KIND = "cloudflare.contact_inbox"
 # declaration once the reading shows it applied, so this is a backlog the
 # controller has not caught up with, never a history.
 CONTACT_CHANGES_LIMIT = 200
+# The longest a review's assignee and notes may be.
+ASSIGNEE_LENGTH = 120
+NOTES_LENGTH = 10000
 
 
 class SubmissionStatus(TonedChoices):
@@ -628,8 +631,8 @@ ContactStatus = Annotated[str, Choices(SubmissionStatus.choices)]
 class ContactReview(ProviderModel):
     id: int = Field(ge=1, title="Message")
     status: ContactStatus = Field(title="Status")
-    assigned_to: str = Field(default="", max_length=120, title="Assigned to")
-    admin_notes: str = Field(default="", max_length=10000, title="Notes")
+    assigned_to: str = Field(default="", max_length=ASSIGNEE_LENGTH, title="Assigned to")
+    admin_notes: str = Field(default="", max_length=NOTES_LENGTH, title="Notes")
 
 
 class ContactInboxSpec(ProviderModel):

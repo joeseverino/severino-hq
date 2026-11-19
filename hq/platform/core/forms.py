@@ -7,23 +7,6 @@ from django import forms
 _TYPED = {"spellcheck": "false", "autocomplete": "off"}
 
 
-class DashboardSettingsForm(forms.Form):
-    """What the dashboard's glance strip calls its cards and where its weather is."""
-
-    infrastructure_label = forms.CharField(label="Name for the machine card", max_length=40, required=False)
-    weather_point = forms.CharField(
-        label="Weather location",
-        max_length=64,
-        required=False,
-        help_text="Latitude, longitude, for example 38.6, -90.3. Leave blank to hide the weather.",
-        widget=forms.TextInput(attrs={"placeholder": "latitude, longitude"}),
-    )
-    weather_label = forms.CharField(label="Name for the weather card", max_length=40, required=False)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, auto_id="glance-%s", **kwargs)
-
-
 class DashboardLinksForm(forms.Form):
     """Which outward links the dashboard shows, a box to tick for each, from
     ``outward_links.link_choices``."""
@@ -44,12 +27,3 @@ class OwnDeviceForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, auto_id="device-%s", **kwargs)
-
-
-class PolicyForm(forms.Form):
-    """The agents' rules, saved together.
-
-    Each rule is a select its table cell draws (core/_policy_setting.html),
-    named by its agent and action, so the form declares no field of its own:
-    it carries what was wrong with a save, said over the tables.
-    """
