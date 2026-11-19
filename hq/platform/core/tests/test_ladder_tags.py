@@ -49,3 +49,16 @@ class CheckLadderTagTests(SimpleTestCase):
         for part in ("ladder-kind", "ladder-detail", "ladder-evidence", "ladder-more", "ladder-page", "ladder-body"):
             with self.subTest(part=part):
                 self.assertEqual(with_class(html, part), [])
+
+    def test_a_stop_no_check_reads_draws_what_it_is_and_claims_no_standing(self):
+        html = _render(
+            "{% check_ladder route=True %}"
+            '{% check_rung icon="server" %}example-host-01{% endcheck_rung %}'
+            '{% check_rung icon="server" state="met" %}example-host-02{% endcheck_rung %}'
+            "{% endcheck_ladder %}"
+        )
+
+        unchecked, met = with_class(html, "ladder-rung")
+        self.assertNotIn("data-state", unchecked.attrs)
+        self.assertEqual([use.attrs["href"].rpartition("#")[2] for use in elements(html, "use")], ["server"])
+        self.assertEqual(met.attrs["data-state"], "met")

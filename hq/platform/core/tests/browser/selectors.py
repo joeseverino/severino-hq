@@ -49,7 +49,7 @@ SELECTORS = {
     # Read inside one row of the queue, so it names nothing above the row's own cell.
     "decision_dismiss": 'td.row-actions button[name="key"]',
     "decision_title": "[data-attention-title]",
-    "decision_steps": ".resolution-workflow",
+    "decision_steps": ".step-list",
     # What an item means: never cut.
     "decision_detail": "[data-attention-detail]",
     # Running text, and what an opened row shows beneath it: code in it is

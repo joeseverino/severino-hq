@@ -103,9 +103,17 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% endsection %}
 
   {% section "Path to HQ" data_connection_layers=True %}
+    {% with route=request_path.route %}
+    {% comment %}
+    A route as its stops, from where a request starts to where it ends: this
+    request's here, and on the HQ, service and connections pages, as
+    `core/_connection_panel.html#route` with that page's `route`. A stop a
+    check reads is ticked; one none reads draws what it is.
+    {% endcomment %}
+    {% partialdef route inline %}
     {% check_ladder route=True %}
-      {% for hop in request_path.hops %}
-        {% check_rung state=hop.check.state kind=hop.label open=hop.check.contradicted data_connection_hop=hop.step %}
+      {% for hop in route.line_hops %}
+        {% check_rung state=hop.standing icon=hop.icon kind=hop.label open=hop.check.contradicted data_connection_hop=hop.step %}
           {% if hop.link and hop.link.url %}{{ hop.link.label|breakable }}{% elif hop.name %}{{ hop.name|breakable }}{% else %}{{ hop.detail|or_empty }}{% endif %}
         {% detail %}
           {% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}{{ hop.detail|breakable }}{% elif hop.link.url and hop.name and hop.name != hop.link.label %}{{ hop.name|breakable }}{% endif %}
@@ -116,6 +124,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         {% body %}
           {% if hop.check.label or hop.check.detail or hop.source %}{% muted element="p" %}{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}{% endmuted %}{% endif %}
           {% if hop.check.step %}{% notice tone="warning" %}{{ hop.check.step|breakable }}{% endnotice %}{% endif %}
+          {% if hop.facts %}{% list kind="dots" muted=True %}{% for text, url in hop.facts %}<li>{% if url %}{% entity url|outside label=text %}{% else %}{{ text|breakable }}{% endif %}</li>{% endfor %}{% endlist %}{% endif %}
           {% if hop.certificate %}{% muted element="p" %}{{ hop.certificate.statement|breakable }}{% endmuted %}{% endif %}
           {% if hop.unread %}{% muted element="p" %}{{ hop.unread|capfirst|breakable }}{% endmuted %}{% endif %}
           {% for relation, link in hop.overlays %}{% muted element="p" %}{{ relation|breakable }} {% entity link %}{% endmuted %}{% endfor %}
@@ -152,6 +161,8 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         {% endcheck_rung %}
       {% endfor %}
     {% endcheck_ladder %}
+    {% endpartialdef %}
+    {% endwith %}
   {% aside %}<span class="count">{{ request_path.proof|breakable }}</span>
   {% endsection %}
   </div>

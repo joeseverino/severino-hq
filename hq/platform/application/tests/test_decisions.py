@@ -128,23 +128,23 @@ class DecisionTests(SimpleTestCase):
         self.assertEqual(shown["reason"], "Only the registrar can renew it.")
         self.assertEqual(shown["steps"], [])
         self.assertIn("Only the registrar can renew it.", texts(html, "p"))
-        self.assertEqual(with_class(html, "resolution-workflow"), [])
+        self.assertEqual(with_class(html, "step-list"), [])
         self.assertNotIn("Why HQ cannot", text(html))
 
-    def test_one_command_stands_alone_and_several_are_numbered(self):
-        one = card(self.item(steps=(Run("On the machine", "example --fix"),)))
-        two = card(self.item(steps=(Run("On the machine", "example --fix"), Do("Then sign in again."))))
+    def test_the_steps_are_one_list_in_their_order_and_never_folded(self):
+        html = card(self.item(steps=(Run("On the machine", "example --fix"), Do("Then sign in again."))))
 
-        self.assertEqual([steps.tag for steps in with_class(one, "resolution-workflow")], ["ul"])
-        self.assertIn("example --fix", texts(one, "code"))
-        self.assertEqual([steps.tag for steps in with_class(two, "resolution-workflow")], ["ol"])
-        self.assertIn("Then sign in again.", text(two))
-        self.assertEqual(elements(one, "details") + elements(two, "details"), [])
+        (steps,) = with_class(html, "step-list")
+        said = [step.words for step in elements(html, "li") if step.inside(steps)]
+        self.assertEqual(len(said), 2)
+        self.assertIn("example --fix", said[0])
+        self.assertIn("Then sign in again.", said[1])
+        self.assertEqual(elements(html, "details"), [])
 
     def test_a_steps_notes_are_said_under_it(self):
         html = card(self.item(steps=(Run("On the machine", "example --fix", ("Then press Refresh.",)),)))
 
-        (steps,) = with_class(html, "resolution-workflow")
+        (steps,) = with_class(html, "step-list")
         self.assertIn("Then press Refresh.", steps.words)
 
     def test_the_queue_holds_every_step_in_the_rows_opened_line(self):

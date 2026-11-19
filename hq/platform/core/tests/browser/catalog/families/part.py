@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Callable
-from dataclasses import asdict, replace
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from unittest import mock
 from uuid import UUID
@@ -31,7 +31,7 @@ from hq.platform.application.contracts import Effect
 from hq.platform.application.credential_mint import CredentialFix
 from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, Trend
 from hq.platform.application.entity_links import EntityLink
-from hq.platform.application.finding_steps import Do, Run
+from hq.platform.application.finding_steps import Run
 from hq.platform.application.freshness import CURRENT, STALE, Freshness
 from hq.platform.application.pages import Page, PageAction, PageVisit, RowMark, RowOrder
 from hq.platform.application.payload_words import ChangeRow
@@ -41,7 +41,7 @@ from hq.platform.application.request_connection import Connection, Peering
 from hq.platform.application.request_identity import Identity
 from hq.platform.application.request_standard import RequestFacts, ServingDeviceResolution
 from hq.platform.application.security import MCP_INTERFACE
-from hq.platform.application.standards import Check, Reading, Standing as CheckStanding, measure
+from hq.platform.application.standards import Check, Reading, measure
 from hq.platform.application.tables import Cell, DataTable, TableColumn, TableSort
 from hq.platform.application.tailnet import Device
 from hq.platform.application.tailnet_presence import Presence
@@ -59,7 +59,7 @@ lazy from hq.platform.application.dashboard import finding_rows
 lazy from hq.platform.application.finding_model import Finding
 lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
-lazy from hq.platform.application.path_model import Certificate, Hop, HopCheck, Route
+lazy from hq.platform.application.path_model import Certificate
 lazy from hq.platform.application.work_runs import RunEvidence, outcome_tone
 
 # The fields of an example record, as a change sets them and as two records hold them.
@@ -337,48 +337,6 @@ def _approval(state, **decided):
             else NO_OFFER,
         }
     }
-
-
-def _route():
-    """A route as ``application.paths`` hands it to the strip: a hop in each
-    state the strip draws, the first proven by the request."""
-
-    return Route(
-        via="example record",
-        hops=(
-            Hop(
-                "device",
-                "Your device",
-                name="example-laptop",
-                check=HopCheck(CheckStanding.MET, "Example address 192.0.2.10."),
-            ),
-            Hop(
-                "dns",
-                "Internal DNS",
-                name="app.example.com",
-                check=HopCheck(CheckStanding.MET, "Example answer 192.0.2.20."),
-            ),
-            Hop(
-                "ingress",
-                "Proxy",
-                name="example-proxy-host-with-a-long-name.example.com",
-                certificate=Certificate("Proxy", name="app.example.com", issuer="Example CA"),
-                check=HopCheck(CheckStanding.UNMET, "The example request came another way."),
-            ),
-            Hop(
-                "machine",
-                "Machine",
-                link=EntityLink("example-host-01", "/example/host/", kind="machine", kind_label="machine"),
-            ),
-            Hop(
-                "container",
-                "Container",
-                name="example-app",
-                facts=(("Up 3 days", ""), ("0a1b2c3", "https://example.com/example/app/commit/0a1b2c3")),
-            ),
-            Hop("served", "Served", unread="the example controller has not read it"),
-        ),
-    )
 
 
 def _arranged_rows():
@@ -2326,15 +2284,6 @@ ENTRIES = {
             )
         },
     ),
-    # A request's route as its strip of hops, every state a hop takes: proven
-    # by the request (so the key under the strip says so), contradicted, not
-    # read, with a certificate, with facts under its name, and a name long
-    # enough to break.
-    "part/path-hops-states": Entry(
-        '{% section "Example path 5" %}{% include "partials/_path_hops.html" with route=route '
-        'label="Path via example record" %}{% endsection %}',
-        {"route": _route()},
-    ),
     # A row's own arrangement in its controls column: favorites with the pair
     # that moves them (the first with no way up, the last with no way down),
     # and a row that is not one, which draws its star alone.
@@ -2444,20 +2393,9 @@ ENTRIES |= {
         context={"navigation": ENTRIES["part/page-navigation-states"].context["page"].navigation}
     ),
     "part/pagination": Entry(context=ENTRIES["part/pagination-states"].context, address="/example/"),
-    "part/path-hops": Entry(
-        context={"route": ENTRIES["part/path-hops-states"].context["route"], "label": "Path via example record"}
-    ),
     "part/present": Entry(context={"repo": {"release": "v1.4.2"}}),
     "part/reference": Entry(context={"request": _SIGNED_IN}),
     "part/referenced-by": Entry(context={"machine": {"name": "example-host-01"}, "request": _SIGNED_IN}),
-    "part/resolution-workflow": Entry(
-        context={
-            "steps": (
-                asdict(Run("Renew the example certificate", "example-cli renew")),
-                asdict(Do("Read it again once the example host runs it.")),
-            )
-        }
-    ),
     "part/row-editor": Entry(
         context={
             "form": ENTRIES["part/row-editor-states"].context["form"],

@@ -80,18 +80,6 @@ READING_AGE = _part(
     *("is-stale", "reading-age"),
     public=True,
 )
-PATH_HOPS = _part(
-    "path_hops",
-    "The hops a request takes to a service, each with the proof HQ holds of it.",
-    *("hop-body", "hop-icon", "hop-label", "hop-proof-key", "is-unknown"),
-    *("path-proof-note", "request-path", "route"),
-)
-RESOLUTION_WORKFLOW = _part(
-    "resolution_workflow",
-    "What a person does about a finding: a command to run, or what to do in words.",
-    "resolution-workflow",
-    example='{% include "partials/_resolution_workflow.html" with steps=steps only %}',
-)
 WORK_QUEUE = _part(
     "work_queue",
     "What waits on the operator, each row what wants doing and why, or that nothing does.",
@@ -134,8 +122,6 @@ PARTS = (
     PAGE_HEAD,
     MODAL,
     READING_AGE,
-    PATH_HOPS,
-    RESOLUTION_WORKFLOW,
     WORK_QUEUE,
     _part(
         "activity_calendar",

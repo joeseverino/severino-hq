@@ -149,9 +149,9 @@ one queue. Each item carries its finding's `steps`, `no_help_reason` and
 findings stay out of the queue; the contributing domain decides whether a
 reading needs a decision.
 
-The dashboard and the full queue share one row partial and one steps
-renderer (`_resolution_workflow.html`). A press keeps its action URL, method
-and CSRF protection; drawing one neither runs it nor grants authority.
+The dashboard and the full queue share one row partial, whose steps are a
+`{% steps numbered=True %}` list of `_operator_step.html`. A press keeps its
+action URL, method and CSRF protection; drawing one neither runs it nor grants authority.
 
 Every item HQ raises carries help. `Finding.steps` holds it, each step one of
 three kinds told apart by `kind` (`finding_steps.Step`):

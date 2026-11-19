@@ -15,13 +15,18 @@ register = template.Library()
 
 def rung_frame(_name: str, given: dict) -> dict:
     """What a rung's partial draws from what a page gave: its standing,
-    unavailable unless given, and its disclosure's attributes, opened when
+    unavailable unless given or the rung is a stop no check reads (an
+    ``icon`` and no state), and its disclosure's attributes, opened when
     ``open`` and each ``data_*`` option."""
 
-    state = Standing(given["state"] or Standing.UNAVAILABLE)
+    icon = given["icon"] or ""
+    state = Standing(given["state"]) if given["state"] else None
+    if state is None and not icon:
+        state = Standing.UNAVAILABLE
     return {
-        "state": state,
-        "tone": tone_class(state.tone),
+        "state": state or "",
+        "tone": tone_class(state.tone if state else ""),
+        "icon": icon,
         "kind": given["kind"] or "",
         "evidence": given["evidence"] or "",
         "attributes": html_attributes(
@@ -61,6 +66,7 @@ CHECK_RUNG = Part(
     options={
         "state": Option(choices=("", *Standing), about="How its check stands, unavailable when not read."),
         "kind": Option(about="What kind of check it is."),
+        "icon": Option(about="On a route, a stop no check reads: what it is, drawn untoned in place of the tick."),
         "evidence": Option(about="What it was read from."),
         "open": Option(about="Drawn opened."),
     },

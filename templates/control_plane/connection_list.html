@@ -113,7 +113,7 @@ part's heading shows only when there is more than one.
 
 {% section "Security checks" fold=True %}
   {% section "Request path" %}
-    {% if connections.caller_path.primary %}{% include "partials/_path_hops.html" with route=connections.caller_path.primary label="Request path" %}{% endif %}
+    {% if connections.caller_path.primary %}{% include "core/_connection_panel.html#route" with route=connections.caller_path.primary only %}{% endif %}
   {% empty %}HQ cannot work out the path to its own name.
   {% endsection %}
   <div class="section-flow">

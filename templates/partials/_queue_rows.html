@@ -38,7 +38,7 @@ whole.
         {% comment %}What was read that shows a problem (application.decisions): each label once, with every value it was given.{% endcomment %}
         {% if item.facts %}{% facts %}{% for fact in item.facts %}{% fact fact.label %}{% list kind="dots" %}{% for value in fact.values %}<li>{% if value.url %}{% entity value.url|outside label=value.text %}{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}{% endlist %}{% endfact %}{% endfor %}{% endfacts %}{% endif %}
         {% if item.advice %}<p>{{ item.advice|breakable }}</p>{% endif %}
-        {% include "partials/_resolution_workflow.html" with steps=item.steps only %}
+        {% if item.steps %}{% steps numbered=True %}{% for step in item.steps %}{% include "partials/_operator_step.html" %}{% endfor %}{% endsteps %}{% endif %}
         {% if item.reason %}<p class="attention-reason">{{ item.reason|breakable }}</p>{% endif %}
         {% if item.links %}<ul class="attention-links">{% for link in item.links %}<li>{% with icon=link|link_icon %}{% if icon %}{% button link.label link.url look="ghost glyph" icon=icon data_tip=link.label %}{% else %}<a href="{{ link.url }}">{{ link.label|breakable }}</a>{% endif %}{% endwith %}</li>{% endfor %}</ul>{% endif %}
       </div>

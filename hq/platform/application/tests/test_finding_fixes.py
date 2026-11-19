@@ -248,7 +248,7 @@ class FindingsPageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:findings"))
 
-        (steps,) = with_class(response, "resolution-workflow")
+        (steps,) = with_class(response, "step-list")
         self.assertIn("turn on Device approval", steps.words)
 
 
