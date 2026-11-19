@@ -372,6 +372,21 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .fact:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }
 .fact:is(.tone-good, .tone-attention, .tone-serious) .fact-value { color: var(--tone-ink); }
 
+/* A line of facts (`{% facts layout="inline" %}`): a card's summary, each fact one phrase, its value bold then its words ("3 rules"), a fixed gap apart, wrapping fact by fact. Under the card's head it takes a rule above. A fact with an address is a link whole: its value's link reaches over the fact, every line of which is a target tall. */
+.facts-inline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-10); margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--target-min); }
+.facts-inline:not(:first-child) { padding-block-start: var(--space-6); border-block-start: 1px solid var(--line-2); }
+/* A fact too long for its line wraps part by part, its detail under its words rather than a column beside them. */
+.facts-inline > .fact { position: relative; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 .3em; min-width: 0; }
+.facts-inline dt { display: contents; }
+.facts-inline .band-icon { order: 0; align-self: center; width: auto; height: auto; background: none; font-size: var(--text-md); }
+.facts-inline .fact-value { order: 1; margin: 0; color: var(--ink); font-weight: 650; font-variant-numeric: tabular-nums; }
+.facts-inline .fact-value a { color: inherit; text-decoration: none; }
+.facts-inline .fact-label { order: 2; min-width: 0; }
+.facts-inline .fact-detail { order: 3; margin: 0; }
+/* A linked fact is one target, a tile that tints under the pointer and the focus as a linked fact's in a band does, with no underline. The tint reaches past its words as a shadow, so nothing moves. */
+.facts-inline .fact:has(.fact-value a:is(:hover, :focus-visible)) { border-radius: var(--radius-sm); background: var(--surface-2); box-shadow: 0 0 0 var(--space-3) var(--surface-2); }
+.facts-inline .fact:has(.fact-value a:is(:hover, :focus-visible)) :is(.fact-value, .fact-label) { color: var(--ink); }
+
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .page-title-row > h1 { margin: 0; max-width: 100%; }
 /* The line of facts a page states on its title's line (`page_aside`), a quiet dot list, is set small. */

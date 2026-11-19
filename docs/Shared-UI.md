@@ -131,7 +131,7 @@ and those that hold across parts in [Design](Design.md).
 | `fact` | `data_*` | | | Each a `data-` attribute. |
 | `facts` | `items` |  |  | Figures (`Kpi`) to draw as its facts, which makes it one tag with no end. |
 | `facts` | `label` |  |  | What the whole is, for a reader, when nothing on the page heads it. |
-| `facts` | `layout` | `"list"` | `list`, `band` | A list, each label beside its value; a band, the few facts that sum up a page, each a cell. |
+| `facts` | `layout` | `"list"` | `list`, `band`, `inline` | A list, each label beside its value; a band, the few facts that sum up a page, each a cell; a line (`inline`), a card's summary, each fact its value then its words. |
 | `facts` | `size` | `"regular"` | `small`, `regular`, `large`, `lead` | How large a band sets its values: small figures read across, status facts, the headline figures a page is read for, or headline figures led by the first. |
 | `facts` | `data_*` | | | Each a `data-` attribute. |
 | `filter_bar` | `action` |  |  | The page it asks, when that is another. |
@@ -530,6 +530,11 @@ pair to a row too. Where it stands decides this, never an option, so the same su
 page and in a dialog takes each one's spacing. A pair whose value is a list of names (a `labeled`
 list, or a `codes` list of two or more) takes a row of its own, so it never wraps beside another
 pair and leaves that pair's row a gap.
+
+A line (`layout="inline"`) is a card's summary, the counts across a domain or the whole of HQ:
+each fact one phrase, its bold value then its words ("3 rules") then its detail, a fixed gap
+apart, wrapping fact by fact, so a wide card holds them on one line. Under the card's head it
+takes a rule above. A fact with an address is a link whole.
 
 **A frame is filled.** A list of facts lays its pairs across its frame. A card of only a pair or
 two shares a row with the sections beside it, so its values never end a third of the way across

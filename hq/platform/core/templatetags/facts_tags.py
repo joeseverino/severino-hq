@@ -14,7 +14,7 @@ FACTS_PARTIAL = "partials/_facts.html"
 FACT_PARTIAL = "partials/_fact.html"
 
 # Each layout, drawn as its class (``facts-band``) by the partial.
-LAYOUTS = ("list", "band")
+LAYOUTS = ("list", "band", "inline")
 # How large a band sets its values: a strip of small figures read across
 # (``small``), a page's status facts, its headline figures (``large``), or
 # headline figures led by the first (``lead``).
@@ -93,13 +93,18 @@ FACTS = Part(
     list, or a `codes` list of two or more) takes a row of its own, so it never wraps beside another
     pair and leaves that pair's row a gap.
 
+    A line (`layout="inline"`) is a card's summary, the counts across a domain or the whole of HQ:
+    each fact one phrase, its bold value then its words ("3 rules") then its detail, a fixed gap
+    apart, wrapping fact by fact, so a wide card holds them on one line. Under the card's head it
+    takes a rule above. A fact with an address is a link whole.
+
     **A frame is filled.** A list of facts lays its pairs across its frame. A card of only a pair or
     two shares a row with the sections beside it, so its values never end a third of the way across
     the page. A record page's facts are a `{% card %}` that opens its `{% layout %}`, beside its
     notes and related records. In a flow, a frame of facts grows into its row as every member does.
     *Gate:* `frames filled` in the layout survey.
     """,
-    classes=("facts-band", "facts-list", "is-large", "is-lead", "is-small"),
+    classes=("facts-band", "facts-inline", "facts-list", "is-large", "is-lead", "is-small"),
     partial=FACTS_PARTIAL,
     about=(
         "Every label and its value a page shows, each a `{% fact %}`; given `items=` it draws each item "
@@ -109,7 +114,10 @@ FACTS = Part(
         "layout": Option(
             default="list",
             choices=LAYOUTS,
-            about="A list, each label beside its value; a band, the few facts that sum up a page, each a cell.",
+            about=(
+                "A list, each label beside its value; a band, the few facts that sum up a page, each a cell; "
+                "a line (`inline`), a card's summary, each fact its value then its words."
+            ),
         ),
         "label": Option(about="What the whole is, for a reader, when nothing on the page heads it."),
         "size": Option(
