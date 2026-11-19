@@ -6,8 +6,8 @@ from django.utils.functional import cached_property
 from django.views.generic import (
     CreateView,
     DeleteView,
-    DetailView,
     ListView,
+    TemplateView,
     UpdateView,
 )
 
@@ -16,7 +16,7 @@ from hq.platform.application.analytics import CONTENT_TRAFFIC_DAYS, attach_traff
 from hq.platform.application.content import published_on
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.labels import adding, dotted_html
-from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.status_tags import status_pill
@@ -172,29 +172,32 @@ class ContentPage(PageMixin):
         return record.title
 
 
-class ContentDetailView(PageMixin, DetailView):
-    model = ContentItem
+class ContentDetailView(RecordPageMixin, TemplateView):
     page_trail = CONTENT_TRAIL
     template_name = "content/content_detail.html"
-    slug_field = "slug"
-    slug_url_kwarg = "slug"
+    resource = "content"
     context_object_name = "item"
-    queryset = ContentItem.objects.prefetch_related(
-        "related_projects",
-        "related_assets",
-        "related_documentation",
-        "related_expenses",
-    )
+
+    @cached_property
+    def found(self) -> ContentItem:
+        """The item as stored, which the records of other kinds about it are asked by."""
+
+        return ContentItem.objects.prefetch_related(
+            "related_projects",
+            "related_assets",
+            "related_documentation",
+            "related_expenses",
+        ).get(slug=self.record["slug"])
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        item = context["item"]
+        item = self.found
         documents = related_documents(
             item.related_documentation.all(), listed=item.related_projects.all(), sources=True
         )
         return context | {
-            "traffic": item_traffic(item),
+            "traffic": item_traffic(self.record["published_url"]),
             "related": related.related(
                 related.links("Source document", documents.sources),
                 related.projects(item.related_projects.all(), documents.projects),
@@ -206,24 +209,24 @@ class ContentDetailView(PageMixin, DetailView):
 
     @override
     def get_page_title(self):
-        return self.object.title
+        return self.record["title"]
 
     @override
     def get_page_lede(self):
         return dotted_html(
-            self.object.get_content_type_display(),
-            status_pill(self.object.state),
+            ContentItem.Type(self.record["content_type"]).label,
+            status_pill(ContentItem.Status(self.record["status"])),
         )
 
     @override
     def get_page_actions(self):
-        item = self.object
+        record = self.record
         actions = []
-        if item.published_url:
-            actions.append(PageAction("Open live page", item.published_url))
+        if record["published_url"]:
+            actions.append(PageAction("Open live page", record["published_url"]))
         actions += [
-            PageAction.command("content.update", item.slug),
-            PageAction.command("content.delete", item.slug),
+            PageAction.command("content.update", record["slug"]),
+            PageAction.command("content.delete", record["slug"]),
         ]
         return tuple(actions)
 

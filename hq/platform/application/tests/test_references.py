@@ -642,9 +642,10 @@ class PageTests(TestCase):
     def test_pages_keep_their_query_budgets(self):
         Entry.objects.create(title="Replace the fan", starts_on=date(2026, 3, 1), about="asset:a-server")
         expense = an_expense(about="machine:lab-1", about_name="lab-1", related_asset=self.asset)
-        # One statement for what names the record, and the topology's two
-        # reads from its store where the record names a machine.
-        for url, budget in ((self.asset.get_absolute_url(), 14), (expense.get_absolute_url(), 10)):
+        # One statement for what names the record, the topology's two reads
+        # from its store where the record names a machine, and the record's
+        # own read of what it links to, as its API answer holds it.
+        for url, budget in ((self.asset.get_absolute_url(), 18), (expense.get_absolute_url(), 10)):
             self.client.get(url)
             with self.subTest(url=url), CaptureQueriesContext(connection) as queries:
                 self.client.get(url)

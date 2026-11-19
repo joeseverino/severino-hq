@@ -582,6 +582,7 @@
               "published_url",
               "published_at",
               "notes",
+              "created_at",
               "updated_at",
               "relationships",
               "relationships.projects",
@@ -615,6 +616,7 @@
               "published_url",
               "published_at",
               "notes",
+              "created_at",
               "updated_at",
               "*"
             ],
@@ -1643,6 +1645,9 @@
               "public_url",
               "last_push_at",
               "dependency_updates",
+              "deployment_notes",
+              "security_notes",
+              "notes",
               "updated_at",
               "updates",
               "updates.open_pulls",
@@ -1685,6 +1690,9 @@
               "public_url",
               "last_push_at",
               "dependency_updates",
+              "deployment_notes",
+              "security_notes",
+              "notes",
               "updated_at",
               "updates",
               "updates.open_pulls",
@@ -4605,6 +4613,11 @@
           "answer"
         ],
         "type": "object"
+      },
+      "AddedAt": {
+        "description": "When it was added to HQ, an ISO 8601 date-time.",
+        "format": "date-time",
+        "type": "string"
       },
       "AddressLookedUp": {
         "additionalProperties": false,
@@ -9455,6 +9468,9 @@
           "content_type": {
             "$ref": "#/components/schemas/ContentRow/properties/content_type"
           },
+          "created_at": {
+            "$ref": "#/components/schemas/ContentRow/properties/created_at"
+          },
           "notes": {
             "$ref": "#/components/schemas/ContentRow/properties/notes"
           },
@@ -9496,6 +9512,7 @@
           "published_url",
           "published_at",
           "notes",
+          "created_at",
           "updated_at",
           "relationships"
         ],
@@ -9507,6 +9524,9 @@
         "properties": {
           "content_type": {
             "$ref": "#/components/schemas/ContentRowPartial/properties/content_type"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/ContentRowPartial/properties/created_at"
           },
           "notes": {
             "$ref": "#/components/schemas/ContentRowPartial/properties/notes"
@@ -9565,6 +9585,9 @@
           "content_type": {
             "$ref": "#/components/schemas/ContentType"
           },
+          "created_at": {
+            "$ref": "#/components/schemas/AddedAt"
+          },
           "notes": {
             "$ref": "#/components/schemas/Notes"
           },
@@ -9607,6 +9630,7 @@
           "published_url",
           "published_at",
           "notes",
+          "created_at",
           "updated_at"
         ],
         "type": "object"
@@ -9647,6 +9671,9 @@
         "properties": {
           "content_type": {
             "$ref": "#/components/schemas/ContentType"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/AddedAt"
           },
           "notes": {
             "$ref": "#/components/schemas/Notes"
@@ -20873,6 +20900,9 @@
           "dependency_updates": {
             "$ref": "#/components/schemas/ProjectRow/properties/dependency_updates"
           },
+          "deployment_notes": {
+            "$ref": "#/components/schemas/ProjectRow/properties/deployment_notes"
+          },
           "description": {
             "$ref": "#/components/schemas/ProjectRow/properties/description"
           },
@@ -20882,6 +20912,9 @@
           "name": {
             "$ref": "#/components/schemas/ProjectRow/properties/name"
           },
+          "notes": {
+            "$ref": "#/components/schemas/ProjectRow/properties/notes"
+          },
           "public_url": {
             "$ref": "#/components/schemas/ProjectRow/properties/public_url"
           },
@@ -20890,6 +20923,9 @@
           },
           "repository_url": {
             "$ref": "#/components/schemas/ProjectRow/properties/repository_url"
+          },
+          "security_notes": {
+            "$ref": "#/components/schemas/ProjectRow/properties/security_notes"
           },
           "slug": {
             "$ref": "#/components/schemas/ProjectRow/properties/slug"
@@ -20918,6 +20954,9 @@
           "public_url",
           "last_push_at",
           "dependency_updates",
+          "deployment_notes",
+          "security_notes",
+          "notes",
           "updated_at",
           "relationships"
         ],
@@ -20933,6 +20972,9 @@
           "dependency_updates": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/dependency_updates"
           },
+          "deployment_notes": {
+            "$ref": "#/components/schemas/ProjectRowPartial/properties/deployment_notes"
+          },
           "description": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/description"
           },
@@ -20942,6 +20984,9 @@
           "name": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/name"
           },
+          "notes": {
+            "$ref": "#/components/schemas/ProjectRowPartial/properties/notes"
+          },
           "public_url": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/public_url"
           },
@@ -20950,6 +20995,9 @@
           },
           "repository_url": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/repository_url"
+          },
+          "security_notes": {
+            "$ref": "#/components/schemas/ProjectRowPartial/properties/security_notes"
           },
           "slug": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/slug"
@@ -21023,6 +21071,9 @@
           "dependency_updates": {
             "$ref": "#/components/schemas/DependencyUpdates"
           },
+          "deployment_notes": {
+            "$ref": "#/components/schemas/DeploymentNotes"
+          },
           "description": {
             "$ref": "#/components/schemas/ProjectDescription"
           },
@@ -21040,11 +21091,17 @@
           "name": {
             "$ref": "#/components/schemas/ProjectName"
           },
+          "notes": {
+            "$ref": "#/components/schemas/Notes"
+          },
           "public_url": {
             "$ref": "#/components/schemas/PublishedUrl"
           },
           "repository_url": {
             "$ref": "#/components/schemas/RepositoryUrl"
+          },
+          "security_notes": {
+            "$ref": "#/components/schemas/SecurityNotes"
           },
           "slug": {
             "$ref": "#/components/schemas/RecordSlug"
@@ -21077,6 +21134,9 @@
           "public_url",
           "last_push_at",
           "dependency_updates",
+          "deployment_notes",
+          "security_notes",
+          "notes",
           "updated_at"
         ],
         "type": "object"
@@ -21121,6 +21181,9 @@
           "dependency_updates": {
             "$ref": "#/components/schemas/DependencyUpdates"
           },
+          "deployment_notes": {
+            "$ref": "#/components/schemas/DeploymentNotes"
+          },
           "description": {
             "$ref": "#/components/schemas/ProjectDescription"
           },
@@ -21130,11 +21193,17 @@
           "name": {
             "$ref": "#/components/schemas/ProjectName"
           },
+          "notes": {
+            "$ref": "#/components/schemas/Notes"
+          },
           "public_url": {
             "$ref": "#/components/schemas/PublishedUrl"
           },
           "repository_url": {
             "$ref": "#/components/schemas/RepositoryUrl"
+          },
+          "security_notes": {
+            "$ref": "#/components/schemas/SecurityNotes"
           },
           "slug": {
             "$ref": "#/components/schemas/RecordSlug"

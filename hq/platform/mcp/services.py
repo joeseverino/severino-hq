@@ -87,7 +87,7 @@ describe_capabilities.__doc__ = f"{describe_capabilities.__doc__}\n{effect_gloss
     "Run a capability",
     requires=RUNS_A_CAPABILITY,
     budget=Budget(
-        420,
+        460,
         frozendict(
             {
                 "name": "project.create",

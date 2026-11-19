@@ -101,15 +101,15 @@ def projects_by_repository() -> dict[str, Project]:
     return read_once("projects.by_repository", load)
 
 
-def hq_sections(project: Project) -> tuple[tuple[str, str], ...]:
-    """The sections of HQ built from this project's repository: ``(name, url)``.
+def hq_sections(repository_url: str) -> tuple[tuple[str, str], ...]:
+    """The sections of HQ built from the project repository at ``repository_url``: ``(name, url)``.
 
     An installed extension names the repository it is built from, and a
     project names its repository, so the two meet without either naming the
     other. The link opens the extension's first page in the nav.
     """
 
-    repository = repository_key(project.repository_url)
+    repository = repository_key(repository_url)
     if not repository:
         return ()
     found = []

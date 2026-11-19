@@ -42,6 +42,7 @@ type Outcome = Annotated[bool, Describe("Whether HQ did what was asked: true bes
 type ObservedAt = Annotated[str, DateTime(), Describe("When it was last read from its source, an ISO 8601 date-time.")]
 type NotRead = Annotated[Literal[""], Describe("Empty: nothing has read it.")]
 type UpdatedAt = Annotated[str, DateTime(), Describe("When it last changed in HQ, an ISO 8601 date-time.")]
+type AddedAt = Annotated[str, DateTime(), Describe("When it was added to HQ, an ISO 8601 date-time.")]
 # The one sentence a write says of what it did: every door carries it, and a
 # page shows it once the write runs (``web_writes.said``).
 type CallMessage = Annotated[str, Describe("What the call did, in a sentence.")]

@@ -2,11 +2,12 @@ from typing import override
 
 from django.db.models import Q, Sum
 from django.urls import reverse_lazy
+from django.utils.functional import cached_property
 from django.views.generic import (
     CreateView,
     DeleteView,
-    DetailView,
     ListView,
+    TemplateView,
     UpdateView,
 )
 
@@ -15,14 +16,14 @@ from hq.platform.application.assets import managed_domain
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.expenses import cost_totals
 from hq.platform.application.labels import dotted_html
-from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
 from hq.platform.application.references import reference_of, referenced_by_row
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.status_tags import status_pill
 
-from .models import ASSET_CATEGORY_CHOICES, Asset
+from .models import ASSET_CATEGORY_CHOICES, PAYMENT_METHOD_CHOICES, Asset
 
 ASSETS_TRAIL = (("Assets", reverse_lazy("assets:list")),)
 
@@ -83,34 +84,38 @@ class AssetPage(PageMixin):
         return record.item_name
 
 
-class AssetDetailView(PageMixin, DetailView):
-    model = Asset
+class AssetDetailView(RecordPageMixin, TemplateView):
     page_trail = ASSETS_TRAIL
     template_name = "assets/asset_detail.html"
-    slug_field = "slug"
-    slug_url_kwarg = "slug"
+    resource = "assets"
     context_object_name = "asset"
-    queryset = Asset.objects.prefetch_related(
-        "related_projects",
-        "content_items",
-        "documentation_records",
-        "expenses",
-        "receipts",
-    )
+
+    @cached_property
+    def found(self) -> Asset:
+        """The asset as stored, which the records of other kinds about it are asked by."""
+
+        return Asset.objects.prefetch_related(
+            "related_projects",
+            "content_items",
+            "documentation_records",
+            "expenses",
+            "receipts",
+        ).get(slug=self.record["slug"])
 
     @override
     def get_page_title(self):
-        return self.object.item_name
+        return self.record["item_name"]
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        asset = self.object
+        asset = self.found
         documents = related_documents(asset.documentation_records.all(), listed=asset.related_projects.all())
         principal = web_principal(self.request.user)
         context["thing"] = reference_of(asset, "infrastructure", principal=principal)
         # A domain asset with no link is matched to the domain of its name.
         context["domain"] = None if asset.infrastructure else managed_domain(asset)
+        context["payment_method"] = dict(PAYMENT_METHOD_CHOICES).get(self.record["payment_method"], "")
         context["related"] = related.related(
             related.projects(asset.related_projects.all(), documents.projects),
             related.writeups(asset.content_items.all()),
@@ -124,13 +129,13 @@ class AssetDetailView(PageMixin, DetailView):
     @override
     def get_page_lede(self):
         return dotted_html(
-            self.object.get_category_display(),
-            status_pill(self.object.state),
+            dict(ASSET_CATEGORY_CHOICES)[self.record["category"]],
+            status_pill(Asset.Status(self.record["status"])),
         )
 
     @override
     def get_page_actions(self):
-        slug = self.object.slug
+        slug = self.record["slug"]
         return (
             PageAction.command("asset.update", slug),
             PageAction.command("asset.delete", slug),

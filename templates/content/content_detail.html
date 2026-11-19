@@ -3,9 +3,9 @@
 {% layout %}
 {% card label="Writeup or page" %}{% facts %}
   {% if item.topic %}{% fact "Description" value=item.topic %}{% endif %}
-  {% if item.tag_list %}{% fact "Tags" %}{% for t in item.tag_list %}{% status t chip=True %}{% endfor %}{% endfact %}{% endif %}
+  {% if item.tags %}{% fact "Tags" %}{% for t in item.tags %}{% status t chip=True %}{% endfor %}{% endfact %}{% endif %}
   {% if item.published_url %}{% fact "Published URL" %}{% entity item.published_url|outside label=item.published_url %}{% endfact %}{% endif %}
-  {% if item.published_at %}{% fact item.is_published|yesno:"Published,Planned date" %}{{ item.published_at|when }}{% endfact %}{% endif %}
+  {% if item.published_at %}{% if item.status == "published" %}{% fact "Published" %}{{ item.published_at|when }}{% endfact %}{% else %}{% fact "Planned date" %}{{ item.published_at|when }}{% endfact %}{% endif %}{% endif %}
   {% fact "Added to HQ" %}{% muted %}{{ item.created_at|when }}{% endmuted %}{% endfact %}
   {% fact "Updated" %}{% muted %}{{ item.updated_at|when }}{% endmuted %}{% endfact %}
   {% comment %}No visits is a fact about the page, said beside the others rather than in a card of its own.{% endcomment %}

@@ -316,8 +316,8 @@ class LastRunSurfaceTests(TestCase):
     def test_the_control_is_drawn_only_for_a_principal_the_capability_permits(self):
         writer = Principal("example-writer", "web", frozenset({Capability.READ, records_of("projects").write}))
 
-        self.assertIsNotNone(run_now_ask(self.project, cli_principal(), None))
-        self.assertIsNone(run_now_ask(self.project, writer, None))
+        self.assertIsNotNone(run_now_ask(self.project.slug, cli_principal(), None))
+        self.assertIsNone(run_now_ask(self.project.slug, writer, None))
 
     def test_the_record_carries_the_last_run(self):
         self.assertIsNone(get_project("alpha")["updates"]["last_run"])

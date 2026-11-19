@@ -173,8 +173,8 @@ class ProjectSectionTests(ComposedPluginTestCase, TestCase):
             name="Example Tool", slug="example-tool", repository_url="https://github.com/example/tool"
         )
 
-        self.assertEqual(hq_sections(built), (("Alpha", reverse("projects:list")),))
-        self.assertEqual(hq_sections(other), ())
+        self.assertEqual(hq_sections(built.repository_url), (("Alpha", reverse("projects:list")),))
+        self.assertEqual(hq_sections(other.repository_url), ())
         response = self.client.get(reverse("projects:detail", args=[built.slug]))
         self.assertIn(("Alpha in HQ", reverse("projects:list")), links(response))
 

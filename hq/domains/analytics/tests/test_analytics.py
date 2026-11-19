@@ -351,7 +351,7 @@ class JoinTests(TestCase):
 
         (writeup,) = service.attach_traffic([self.writeup])
         self.assertEqual(writeup.pageviews, 412)
-        self.assertTrue(service.item_traffic(self.writeup)["measured"])
+        self.assertTrue(service.item_traffic(self.writeup.published_url)["measured"])
 
     def test_the_same_path_on_another_host_is_not_credited(self):
         path = "/portfolio/a-writeup/"
@@ -371,7 +371,7 @@ class JoinTests(TestCase):
         )
 
         self.assertEqual(service.attach_traffic([self.writeup])[0].pageviews, 412)
-        self.assertEqual(service.item_traffic(self.writeup)["pageviews"], 412)
+        self.assertEqual(service.item_traffic(self.writeup.published_url)["pageviews"], 412)
 
     def test_each_item_gets_its_own_path_and_the_unmeasured_read_as_unknown(self):
         """A path nobody measured is no figure, which a template tells from a real zero."""
@@ -390,7 +390,7 @@ class JoinTests(TestCase):
 
         items = service.attach_traffic([self.writeup, self.page, unread])
         self.assertEqual([item.pageviews for item in items], [412, 96, None])
-        self.assertFalse(service.item_traffic(unread)["measured"])
+        self.assertFalse(service.item_traffic(unread.published_url)["measured"])
 
     def test_a_trailing_slash_is_not_tidied_away(self):
         """The site serves one form and redirects the other."""

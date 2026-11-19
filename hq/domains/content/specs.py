@@ -6,6 +6,7 @@ from pydantic import Field, create_model
 
 from hq.platform.application import content
 from hq.platform.application.answer_fields import (
+    AddedAt,
     LinkedAssets,
     LinkedDocs,
     LinkedProjects,
@@ -42,6 +43,7 @@ class ContentRow(TypedDict):
     published_url: PublishedUrl
     published_at: PublishedAt
     notes: Notes
+    created_at: AddedAt
     updated_at: UpdatedAt
 
 
