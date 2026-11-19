@@ -380,6 +380,7 @@ files = [
     "hq/platform/application/outbound_work.py",
     "hq/platform/application/capabilities.py",
     "hq/platform/application/resources.py",
+    "hq/platform/application/core_resources.py",
     "hq/platform/application/sensitivity.py",
     "hq/platform/application/domains.py",
     "hq/platform/application/records.py",

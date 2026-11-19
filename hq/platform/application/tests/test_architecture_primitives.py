@@ -12,7 +12,7 @@ from .source import template_files
 
 
 @tag("source", "tree")
-@reads("**/*.py", "**/templates/**")
+@reads("**/*.py", "!**/test*.py", "**/templates/**")
 class OnePrimitiveTests(SimpleTestCase):
     """Questions asked in many places are answered by one function."""
 
@@ -126,7 +126,7 @@ class OnePrimitiveTests(SimpleTestCase):
         self.assertEqual(found, [])
 
 
-@reads("**/*.py")
+@reads("hq/**/*.py", "!**/tests/**/*.py")
 class RouteOwnerTests(SimpleTestCase):
     """Routes are resolved in one place, so the answer can be remembered."""
 

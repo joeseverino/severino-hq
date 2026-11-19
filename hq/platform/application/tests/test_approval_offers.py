@@ -142,7 +142,9 @@ class DecisionOfferTests(TestCase):
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "demo/**/*.py", "templates/**/*.html", lists=("hq/**", "demo/**", "templates/**"))
+@reads(
+    "hq/**/*.py", "demo/**/*.py", "templates/**/*.html", "!**/tests/**/*.py", lists=("hq/**", "demo/**", "templates/**")
+)
 class DecisionLinkSourceTests(SimpleTestCase):
     def test_only_the_rule_makes_a_decision_s_address(self):
         """A decision's button is made only by ``approvals.offers``, which

@@ -13,6 +13,20 @@ from .tone import Tone
 lazy from .ui import measured
 
 
+@display(kw_only=True)
+class LegendKey:
+    """One key of a drawing's legend (``partials/_chart_legend.html``): its
+    mark's classes and its name, and for a part of a whole its figure (in
+    ``tone`` when one is given), its share and the page it leads to."""
+
+    mark: str
+    label: str
+    figure: str = ""
+    tone: Tone | Literal[""] = ""
+    share: str = ""
+    url: str = ""
+
+
 @display
 class Dot:
     """One of the things a figure counts: a machine among the machines.
@@ -198,6 +212,22 @@ class AllocationBar:
 
         whole = sum(part.value for part in self.parts)
         return tuple((part, measured(part.value * 100 / whole, "%", 0)) for part in self.parts if part.value > 0)
+
+    @property
+    def legend_keys(self) -> tuple[LegendKey, ...]:
+        """Each part with a value as its legend's key."""
+
+        return tuple(
+            LegendKey(
+                mark=f"swatch-key series-{part.slot}",
+                label=part.label,
+                figure=part.detail,
+                tone=part.tone,
+                share=percent,
+                url=part.url,
+            )
+            for part, percent in self.legend
+        )
 
     @property
     def links(self) -> bool:

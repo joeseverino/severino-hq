@@ -159,11 +159,12 @@ class CompositionCheckTests(SimpleTestCase):
         )
 
     def test_an_unresolvable_resource_route_is_a_named_startup_error(self):
+        from hq.platform.application.integration_specs import ListRead
         from hq.platform.application.integration_testing import override_integration_graph
         from hq.platform.application.integrations import (
             compile_integration_graph,
         )
-        from hq.platform.application.resources import EmptyQuery, ListRead, ResourceSpec
+        from hq.platform.application.resources import EmptyQuery, ResourceSpec
 
         from ..checks import capability_contract_check
 

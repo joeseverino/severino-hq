@@ -14,6 +14,7 @@ from .business_use import BusinessUseShare
 from .card_items import Kpi
 from .command_fields import Day, Describe, Names, Refers
 from .money import money
+from .projection import listing
 from .record_fields import Notes, TotalCost, one_of
 from .record_saves import Held, Link, linked_saver, row
 from .url_query import with_query
@@ -143,6 +144,18 @@ class ExpenseCommand:
 
 def serialize_expense(expense: Expense) -> ExpenseRow:
     return row(expense, ExpenseRow)
+
+
+def list_expenses(*, year: int | None = None, category: str | None = None, limit: int = 50) -> dict[str, Any]:
+    """List expense records with stable, sensitivity-safe relationships."""
+    rows = Expense.objects.select_related(
+        "related_project", "related_asset", "related_content", "related_documentation"
+    )
+    if year is not None:
+        rows = rows.filter(date__year=year)
+    if category:
+        rows = rows.filter(category=category)
+    return listing(rows, serialize_expense, order=("-date", "-id"), limit=limit)
 
 
 save_expense = linked_saver(

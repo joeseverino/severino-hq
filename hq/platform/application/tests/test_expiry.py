@@ -56,7 +56,7 @@ class DaysUntilTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/*.py")
+@reads("**/*.py", "!*/**/tests/**/*.py")
 class DaysUntilSourceTests(SimpleTestCase):
     """No other module counts days itself."""
 

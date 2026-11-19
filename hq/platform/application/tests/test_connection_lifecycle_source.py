@@ -42,7 +42,7 @@ RULES = {
 
 
 def _modules(found: list[Found]) -> list[Found]:
-    return [each for each in found if not {"tests", "migrations"} & set(each.path.parts) and each.path != HOME]
+    return [each for each in found if "migrations" not in each.path.parts and each.path != HOME]
 
 
 def _named(listing: Found) -> set[str]:
@@ -62,7 +62,7 @@ def restated(*paths: Path) -> dict[str, list[str]]:
     """Where a module other than the lifecycle's lists two states or spells the unreported marker."""
 
     found: dict[str, set[str]] = {"listing": set(), "spelled": set()}
-    for each in _modules(scan(RULES, *paths)):
+    for each in _modules(scan(RULES, *paths, tests=False)):
         if each.rule == "listing" and len(_named(each)) > 1:
             found["listing"].add(f"{each.path.name}:{each.line}")
         elif each.rule == "spelled" or (each.rule == "joined" and _spells(each)):
@@ -71,7 +71,7 @@ def restated(*paths: Path) -> dict[str, list[str]]:
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", lists=("hq/**",))
+@reads("hq/**/*.py", "!**/tests/**/*.py", lists=("hq/**",))
 class LifecycleDeclaredOnceTests(SimpleTestCase):
     def test_no_other_module_lists_lifecycle_states_or_spells_the_unreported_marker(self):
         """A label table or a set of states spelled as strings restates the vocabulary."""

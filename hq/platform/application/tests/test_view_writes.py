@@ -254,7 +254,7 @@ def _planted(root: Path, files: dict[str, str]) -> None:
 
 
 @tag("source", "tree")
-@reads("**/*.py")
+@reads("**/*.py", "!**/tests/**/test_*.py")
 class ViewWriteTests(SimpleTestCase):
     def test_no_view_writes_outside_the_runner(self):
         modules = routed_modules(ROOT)

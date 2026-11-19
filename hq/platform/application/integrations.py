@@ -23,10 +23,10 @@ from .search_contracts import SearchDefinition
 from .ui import ended
 lazy from . import automation_adoption, automation_runs, outbound_work, plugins
 lazy from .core_capabilities import CORE_CAPABILITY_SPECS
+lazy from .core_resources import core_resource_specs
 lazy from .domains import host_specs
 lazy from .plugins import plugin_capability_specs, plugin_search_definitions
 lazy from .records import capability_specs as record_capability_specs
-lazy from .resources import core_resource_specs
 
 
 @dataclass(frozen=True, slots=True)

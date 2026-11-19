@@ -227,18 +227,6 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   background: var(--bg-tint);
   margin: var(--space-7) 0 var(--space-6);
 }
-/* A legend that is also the navigation, so no row of tiles says the same words a second time. */
-.allocation-legend { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-10); margin: 0; font-size: var(--text-sm); }
-/* Stacked for a narrow column: wrapped inline, the amounts stop lining up. */
-.allocation-legend.stacked { flex-direction: column; gap: var(--space-4); }
-.allocation-legend.stacked > * { justify-content: flex-start; }
-.allocation-legend.stacked b { min-inline-size: 5.5em; }
-.allocation-legend > * { display: inline-flex; align-items: baseline; gap: var(--space-4); color: inherit; }
-.allocation-legend a:hover { color: var(--accent); }
-.allocation-legend i { align-self: center; }
-.allocation-legend b { font-weight: 650; font-feature-settings: "tnum"; }
-.allocation-legend > * > span { color: var(--muted); }
-
 
 /* The classes a template may say about columns, named here since an extension's templates are held to this sheet; they carry no style. */
 .data-table :is(.key-col, .optional-col, .tight-col) { }

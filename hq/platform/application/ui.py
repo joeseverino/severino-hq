@@ -20,6 +20,7 @@ from .chart_numbers import (
     fitted_range,
 )
 from .display_words import display
+from .drawings import LegendKey
 from .labels import dotted, plural
 from .money import signed_number
 from .tone import Tone
@@ -379,6 +380,12 @@ class Chart:
         return tuple((series.slot, series.label) for series in self.series)
 
     @property
+    def legend_keys(self) -> tuple[LegendKey, ...]:
+        """Each series as its legend's key."""
+
+        return tuple(LegendKey(mark=f"swatch-key series-{slot}", label=label) for slot, label in self.legend)
+
+    @property
     def table_headings(self) -> tuple[str, ...]:
         """The data table's value columns, one per series."""
         return tuple(_table_heading(series.label, self.unit) for series in self.series)
@@ -731,6 +738,13 @@ class ActivityCalendar:
                     f"A calendar week needs 7 days for the columns to line up; "
                     f"got {len(week)}. Pad the ends with filler days."
                 )
+
+    @property
+    def legend_keys(self) -> tuple[LegendKey, ...]:
+        """Each series as a dot, as its days mark it, then the mark of a day missed."""
+
+        keys = tuple(LegendKey(mark=f"swatch series-{series.slot}", label=series.label) for series in self.series)
+        return (*keys, LegendKey(mark="swatch calendar-dot is-missed", label="Missed")) if keys else ()
 
     def _count(self, state: str) -> int:
         return sum(1 for week in self.weeks for day in week if day.state == state)

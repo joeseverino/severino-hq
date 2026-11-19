@@ -9,12 +9,7 @@ can be linked to directly and works without JavaScript.
 {% endcomment %}
 {% section calendar.title lede=calendar.description figure=True id=calendar_id|default:'training-calendar' data_fragment=True data_fragment_name="calendar" data_fragment_links=True data_fragment_history="replace" %}
   <div class="calendar-legend">
-    {% if calendar.series %}
-      <div class="chart-legend" aria-label="Legend">
-        {% for series in calendar.series %}<span><i class="swatch series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label|breakable }}</span>{% endfor %}
-        <span><i class="swatch calendar-dot is-missed" aria-hidden="true"></i>Missed</span>
-      </div>
-    {% endif %}
+    {% if calendar.legend_keys %}{% include "partials/_chart_legend.html" with drawing=calendar only %}{% endif %}
     {% if calendar.kept %}<span class="count">{{ calendar.kept|measured:"planned days kept" }}</span>{% endif %}
   </div>
   {% comment %}A chart for the layout audit: each day's tip repeats what its hidden text already says.{% endcomment %}

@@ -11,6 +11,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -20,6 +21,8 @@ LOCK = "heavy"
 # The lock every heavy task takes before the turn, which a landing holds for
 # its command's lifetime (tools/gate/turn.py, GATE's comment).
 GATE = "gate"
+# The lock a landing holds while it holds the gate, for a share to backfill past it (tools/gate/turn.py, backfills).
+LANDED = f"{GATE}.landing"
 # The machine's measured token count, set once on it in its clone's git config
 # (docs/Development.md, Gates on a second machine).
 DECLARED = "hq.gateTokens"
@@ -66,6 +69,21 @@ def capacity(root: Path) -> int:
     return int(said)
 
 
+def available() -> int:
+    """The bytes of memory the OS says a new process can have now without paging: macOS's memorystatus level,
+    the percentage memory_pressure(1) reports free, of the machine's memory; Linux's MemAvailable."""
+
+    try:
+        meminfo = Path("/proc/meminfo").read_text()
+    except OSError:
+        said = subprocess.run(["sysctl", "-n", "kern.memorystatus_level"], capture_output=True, text=True, check=False)
+        level = said.stdout.strip()
+        whole = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+        return whole * int(level) // 100 if level.isdigit() else 0
+    found = re.search(r"^MemAvailable:\s+(\d+) kB", meminfo, re.MULTILINE)
+    return int(found[1]) * 1024 if found else 0
+
+
 def lockable(descriptor: int, mode: int = fcntl.LOCK_EX) -> bool:
     """Whether the open file ``descriptor`` could be locked in ``mode`` now; the lock is kept until it closes."""
 
@@ -103,17 +121,19 @@ def holders(tokens: int) -> set[str]:
     """The folders the runs holding a share's tokens run in, as each share recorded its holder
     (tools/gate/turn.py, record)."""
 
-    return {root for n in range(tokens) if not free_now(slot(n), fcntl.LOCK_EX) and (root := recorded_root(slot(n)))}
+    taken = (slot(n) for n in range(tokens) if not free_now(slot(n), fcntl.LOCK_EX))
+    return {str(root) for name in taken if (root := recorded(name).get("root"))}
 
 
-def recorded_root(name: str) -> str:
-    """The folder the holder of ``name`` recorded, or nothing: a record cut short as it is written names none."""
+def recorded(name: str) -> dict:
+    """What the holder of ``name`` recorded, as mise's holders do, or nothing: a record cut short as it is
+    written says nothing."""
 
     try:
         found = json.loads(lock_file(name).with_suffix(".json").read_text())
     except (OSError, ValueError):
-        return ""
-    return str(found.get("root") or "") if isinstance(found, dict) else ""
+        return {}
+    return found if isinstance(found, dict) else {}
 
 
 def room(root: Path, *, gate_held: bool = False) -> tuple[int, int, set[str]]:

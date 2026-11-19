@@ -4,7 +4,7 @@ from typing import Annotated, TypedDict
 
 from pydantic import Field, create_model
 
-from hq.platform.application import expenses, read_models
+from hq.platform.application import expenses
 from hq.platform.application.answer_fields import DeductibleAmount, TotalCostAmount, UpdatedAt
 from hq.platform.application.assets import PaymentMethod
 from hq.platform.application.business_use import BusinessUseShare
@@ -58,7 +58,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Expenses",
             "Expense records with stable relationship identifiers.",
             Capability.READ,
-            listing=ListRead(read_models.list_expenses, ExpenseQuery, ExpenseRow),
+            listing=ListRead(expenses.list_expenses, ExpenseQuery, ExpenseRow),
             search=SearchDefinition(
                 "expenses",
                 Expense,

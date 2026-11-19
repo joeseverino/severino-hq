@@ -216,7 +216,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         navigation=(NavigationItem("Dashboard", "dashboard", "", 0, ""),),
         integration=PluginIntegration(
             capabilities=_provider("hq.platform.application.core_capabilities:dashboard"),
-            resources=_provider("hq.platform.application.resources:dashboard"),
+            resources=_provider("hq.platform.application.core_resources:dashboard"),
             connections=_provider("hq.platform.application.glance:connection_specs"),
         ),
     ),
@@ -620,7 +620,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         ),
         integration=PluginIntegration(
             capabilities=_provider("hq.platform.application.core_capabilities:connections"),
-            resources=_provider("hq.platform.application.resources:connections"),
+            resources=_provider("hq.platform.application.core_resources:connections"),
             connections=_provider("hq.platform.application.connections:connection_specs"),
         ),
     ),
@@ -679,7 +679,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Search",
         description="One query across every domain, answered with what the reader may read.",
         # No nav item: the bar's own search field opens its page.
-        integration=PluginIntegration(resources=_provider("hq.platform.application.resources:search")),
+        integration=PluginIntegration(resources=_provider("hq.platform.application.core_resources:search")),
     ),
     DomainDescriptor(
         id="hq.self",

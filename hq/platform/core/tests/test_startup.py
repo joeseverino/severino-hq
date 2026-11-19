@@ -52,6 +52,9 @@ def started_modules(start: str) -> list[str]:
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 
+# A start loads the shipped code, never a test, and what the lock installs.
+@tag("tree")
+@reads("hq/**/*.py", "hq_sdk/**/*.py", "!**/tests/**", "pyproject.toml", "uv.lock")
 class StartupBudgetTests(SimpleTestCase):
     @classmethod
     def setUpClass(cls):

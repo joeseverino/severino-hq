@@ -34,7 +34,7 @@ PAGE_SCRIPTS = {"js/topology.js": "data-topology"}
 
 
 @tag("source", "tree")
-@reads("**/*.py", "**/templates/**", "static/js/**")
+@reads("**/*.html", "static/js/**")
 class ScriptLoadingTests(SimpleTestCase):
     def test_every_script_is_deferred_but_the_one_answering_before_the_first_frame(self):
         blocking = [

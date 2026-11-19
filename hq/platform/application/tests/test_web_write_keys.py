@@ -37,7 +37,7 @@ def unkeyed_forms(source: str) -> list[str]:
 
 
 @tag("source", "tree")
-@reads("**/*.py", "**/templates/**")
+@reads("**/templates/**")
 class WriteFormTests(SimpleTestCase):
     def test_every_form_that_posts_draws_its_retry_key(self):
         templates = [path for root in TEMPLATE_ROOTS for path in source_files(root, "*.html")]

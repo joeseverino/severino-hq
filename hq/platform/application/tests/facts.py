@@ -61,8 +61,9 @@ def strings(found: Found) -> list[str]:
     return [node.value for node in ast.walk(literal) if isinstance(node, ast.Constant) and isinstance(node.value, str)]
 
 
-def scan(rules: dict[str, dict[str, Any]], *paths: str | Path) -> list[Found]:
-    """Every match of ``rules``, by id, in the Python under ``paths`` (the checkout by default).
+def scan(rules: dict[str, dict[str, Any]], *paths: str | Path, tests: bool = True) -> list[Found]:
+    """Every match of ``rules``, by id, in the Python under ``paths`` (the checkout by default), with
+    ``tests=False`` never reading a file under a tests directory.
 
     ast-grep reads a directory as git does, leaving out what .gitignore names
     and hidden directories.
@@ -86,7 +87,11 @@ def scan(rules: dict[str, dict[str, Any]], *paths: str | Path) -> list[Found]:
     with (
         tempfile.TemporaryFile("w+") as complaints,
         subprocess.Popen(
-            ["ast-grep", "scan", "--json=stream", "--inline-rules", inline, *(map(str, paths) if paths else ".")],
+            [
+                *("ast-grep", "scan", "--json=stream", "--inline-rules", inline),
+                *(() if tests else ("--globs", "!**/tests/**")),
+                *(map(str, paths) if paths else "."),
+            ],
             cwd=ROOT,
             stdout=subprocess.PIPE,
             stderr=complaints,

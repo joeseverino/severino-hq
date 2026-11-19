@@ -19,7 +19,7 @@ the command that starts it again on its machine.
   <p>The connection <code>{{ channel.connection_ref|breakable }}</code> runs in it. Once it stops, HQ can no longer read or change anything through that connection{% if channel.carries_its_verbs %}, so it cannot start this container again either{% endif %}.</p>
   {% if channel.start_command %}
   <p>To start it again on {{ host|breakable:"," }} run:</p>
-  {% include "partials/_command.html" with command=channel.start_command only %}
+  {% command text=channel.start_command %}
   {% else %}
   <p>To start it again, start the container on {{ host|breakable }} itself.</p>
   {% endif %}

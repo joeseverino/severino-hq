@@ -903,8 +903,7 @@ def builder_paths() -> list[Path]:
     """Each module of hq and hq_sdk, less their tests, that calls format_html: the only ones ``_Builders`` reads."""
 
     root = Path(settings.BASE_DIR)
-    found = scan({"builder": BUILDER}, root / "hq", root / "hq_sdk")
-    return sorted({match.path for match in found if "tests" not in match.path.parts})
+    return sorted({match.path for match in scan({"builder": BUILDER}, root / "hq", root / "hq_sdk", tests=False)})
 
 
 class UnheldBuilderTests(SimpleTestCase):
@@ -955,7 +954,7 @@ class UnheldBuilderTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "hq_sdk/**/*.py", lists=("hq/**", "hq_sdk/**"))
+@reads("hq/**/*.py", "hq_sdk/**/*.py", "!**/tests/**/*.py", lists=("hq/**", "hq_sdk/**"))
 class BuilderValueTests(SimpleTestCase):
     def test_every_value_a_builder_prints_as_text_holds_its_names(self):
         root = Path(settings.BASE_DIR)

@@ -44,18 +44,18 @@ lazy from hq.domains.control_plane.providers import PROVIDERS, enabled_controlle
 lazy from hq.platform.core.doorbell import ask_soon
 
 from . import readings
+from .action_links import READ_NOW_CAPABILITY
 from .asks import Asked, AskedAnswer, Standing, asked_read
 from .command_fields import Choices, Describe, Names
+from .contracts import Effect
 from .derivations import asked_ahead, holds_until, passed, present, since
-from .integration_specs import requested
+from .integration_specs import CapabilitySpec, requested
 from .moments import duration
 from .record_errors import NOT_FOUND, Sentence
-from .security import Principal
+from .security import Capability, Principal
 from .tone import Tone
 from .ui import ended
-lazy from .action_links import READ_NOW_CAPABILITY
 lazy from .adoption import manages_through, observes_only
-lazy from .capabilities import command_spec
 lazy from .credential_sight import fed_kinds
 lazy from .facts import stored_snapshots
 
@@ -922,6 +922,25 @@ def request_controller_sweep(
     }
 
 
+# Named, so prose that tells a person which button to press reads its words.
+CONTROLLER_REFRESH = CapabilitySpec(
+    READ_NOW_CAPABILITY,
+    "Ask HQ to read everything again now.",
+    Effect.INFRASTRUCTURE_CHANGE,
+    Capability.MANAGE_INFRASTRUCTURE,
+    ControllerSweepCommand,
+    request_controller_sweep,
+    execution_notes=(
+        "Mark HQ as in use, so readings are taken more often.",
+        "Wake the controller. HQ's web process holds no credential for any service.",
+        "The controller reads what HQ says is due, with its own credentials.",
+    ),
+    label="Refresh HQ's readings",
+    verb="Refresh",
+    variants=(("all", "Refresh all"),),
+)
+
+
 def _read_label(subject: tuple[str, str] | None) -> str:
     if subject is None:
         return ""
@@ -932,11 +951,10 @@ def _read_label(subject: tuple[str, str] | None) -> str:
 def _sweep_message(subject: tuple[str, str] | None, *, due: bool) -> str:
     """What asking says, in the refresh command's own words."""
 
-    refresh = command_spec(READ_NOW_CAPABILITY)
     ref, kind = subject or ("", "")
     if ref or kind:
-        return refresh.requested(ref or registry_label(kind))
-    asked = requested(refresh.words("all"))
+        return CONTROLLER_REFRESH.requested(ref or registry_label(kind))
+    asked = requested(CONTROLLER_REFRESH.words("all"))
     return asked if due or subject is not None else f"{asked} What HQ shows is already up to date."
 
 

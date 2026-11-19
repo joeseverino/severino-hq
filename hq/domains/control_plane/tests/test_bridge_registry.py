@@ -118,15 +118,13 @@ RULES = {
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", lists=("hq/**",))
+@reads("hq/**/*.py", "!**/tests/**/*.py", lists=("hq/**",))
 class WrittenFileTests(SimpleTestCase):
     def test_python_reads_no_fact_back_from_a_file_it_writes(self):
         """Only ``bridge_contract`` names the written files, and only to write them."""
 
         found = grouped(
-            each
-            for each in scan(RULES, PACKAGE.parents[1])
-            if "tests" not in each.path.parts and not each.path.name.startswith("test")
+            each for each in scan(RULES, PACKAGE.parents[1], tests=False) if not each.path.name.startswith("test")
         )
         self.assertEqual(sorted({each.path.name for each in found["named"]}), ["bridge_contract.py"])
 

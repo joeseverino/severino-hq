@@ -12,9 +12,10 @@ from django.test import TestCase
 
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
 from ..connections import ConnectionSpec, describe_connections
+from ..integration_specs import ListRead
 from ..integration_testing import override_integration_graph
 from ..integrations import compile_integration_graph
-from ..resources import EmptyQuery, ListRead, ResourceSpec, describe_resources, list_resource
+from ..resources import EmptyQuery, ResourceSpec, describe_resources, list_resource
 from ..security import (
     DEVICE_INTERFACE,
     INTERNAL_INTERFACE,

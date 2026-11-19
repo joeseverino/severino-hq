@@ -11,13 +11,13 @@ from hq.domains.projects.models import Project
 from hq.platform.application.contracts import Closed
 
 from ..command_center import command_center
+from ..integration_specs import ListRead
 from ..integrations import integration_graph
 from ..plugins import plugin_resource_specs
 from ..report_testing import bridged
 from ..resources import (
     EmptyQuery,
     InvalidResourceInput,
-    ListRead,
     ResourceSpec,
     describe_resources,
     get_resource,

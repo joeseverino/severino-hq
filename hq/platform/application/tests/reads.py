@@ -15,10 +15,12 @@ computed as it runs is no read the watch sees: such a test declares nothing.
 
 A file whose content the test reads is in ``*opened``. One it only lists by
 name, or asks whether it is there, is in ``lists``, which a change selects the test by when it adds or
-deletes such a file, since an edit leaves every listing as it was.
+deletes such a file, since an edit leaves every listing as it was. A glob in ``*opened`` that starts with
+``!`` takes the files it matches out of those opened and leaves them listed, as a walk that drops a path
+(a test module) before it reads it does.
 
 A program is allowed only where what it reads is known: the walk ``apart``
-runs, held to the same declaration through ``ENVIRONMENT``; ast-grep, Vale
+runs, held to the same declaration through ``ENVIRONMENT``; this interpreter on ``-c``, an import probe; ast-grep, Vale
 and git as program_reads.py reads them, each by the paths it is handed, a
 directory it walks being a listing of all below it; ``mise tasks ls`` or
 ``info``, which opens mise's config, the task files and each file mise.toml
@@ -67,16 +69,20 @@ class Reads:
     listed: tuple[str, ...] = ()
 
     def opens(self, path: PurePosixPath) -> bool:
-        return any(path.full_match(pattern) for pattern in self.opened)
+        return self._matched(path) and not any(path.full_match(glob[1:]) for glob in self.opened if glob[0] == "!")
 
     def lists(self, path: PurePosixPath) -> bool:
-        return self.opens(path) or any(path.full_match(pattern) for pattern in self.listed)
+        return self._matched(path) or any(path.full_match(pattern) for pattern in self.listed)
+
+    def _matched(self, path: PurePosixPath) -> bool:
+        return any(path.full_match(pattern) for pattern in self.opened if pattern[0] != "!")
 
     def lists_under(self, path: PurePosixPath) -> bool:
         """Whether every path an add could put at ``path`` or under it is one this lists: what a test that
         found nothing there would see come."""
 
-        return any(_under(PurePosixPath(pattern).parts, path.parts) for pattern in (*self.opened, *self.listed))
+        globs = [pattern for pattern in (*self.opened, *self.listed) if pattern[0] != "!"]
+        return any(_under(PurePosixPath(pattern).parts, path.parts) for pattern in globs)
 
     def selects(self, changed: Iterable[str], listed: Iterable[str]) -> bool:
         """Whether a change reaches what this declares: ``changed`` (each path edited, added or deleted)
@@ -171,6 +177,11 @@ class Watch:
     def started(self, argv: list[str], cwd: Any) -> None:
         program, words = PurePosixPath(argv[0]).name, argv[1:]
         if words[:2] == ["-m", APART]:
+            return
+        # This interpreter started on ``-c`` is an import probe (test_startup.py's): what it imports is the
+        # process's, as an import here is, and its declaration names the code it can load. Its code could
+        # also open a file of the checkout, which this never sees.
+        if argv[0] == sys.executable and words[:1] == ["-c"]:
             return
         if words[:1] in (["-C"], ["--cd"]) and len(words) > 1:
             cwd, words = words[1], words[2:]

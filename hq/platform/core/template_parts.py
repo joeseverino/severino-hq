@@ -259,7 +259,8 @@ def slotted(part: Part, *, library: template.Library) -> None:
     ``{% name option=value %}first{% second %}...{% endname %}``: markup a
     page would otherwise write by hand, drawn by the part's partial with each
     part as the variable it is named for. The later parts may be left out,
-    and come in their declared order."""
+    and come in their declared order; given its ``bare_with`` option, it
+    encloses nothing and has no end."""
 
     if part.function is not None:
         takes_context = next(iter(inspect.signature(part.function).parameters), "") == "context"
@@ -281,6 +282,8 @@ def slotted(part: Part, *, library: template.Library) -> None:
             raise template.TemplateSyntaxError(part.refused())
         if missing := part.missing(set(given)):
             raise template.TemplateSyntaxError(f"{part.name} is given {'=, '.join(missing)}=")
+        if part.bare_with in given:
+            return SlotsNode(part, {}, given)
         found = {name: template.NodeList() for name in part.parts}
         ahead = list(part.parts)
         while True:

@@ -73,9 +73,9 @@ def _found() -> dict[str, list[tuple[str, ast.expr]]]:
     """Each match in the host's own modules, by rule, as where it is and the expression."""
 
     def tested(path: Path) -> bool:
-        return "tests" in path.parts or path.name.startswith("test") or path.name.endswith("_tests.py")
+        return path.name.startswith("test") or path.name.endswith("_tests.py")
 
-    host = [match for match in scan(RULES, "hq") if not tested(match.path)]
+    host = [match for match in scan(RULES, "hq", tests=False) if not tested(match.path)]
     return {
         rule: [(f"{match.path.relative_to(ROOT)}:{match.line}", _expression(match.text)) for match in matches]
         for rule, matches in grouped(host).items()
@@ -169,7 +169,7 @@ class CommandBuilderTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "**/templates/**/*.html", lists=("hq/**", "**/templates/**"))
+@reads("hq/**/*.py", "!**/tests/**/*.py", "**/templates/**/*.html", lists=("hq/**", "**/templates/**"))
 class CallSiteWordsTests(SimpleTestCase):
     """No button, link or toast for a command brings text of its own.
 
@@ -244,7 +244,7 @@ class CallSiteWordsTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "**/templates/**/*.html", lists=("hq/**", "**/templates/**"))
+@reads("hq/**/*.py", "!**/tests/**/*.py", "**/templates/**/*.html", lists=("hq/**", "**/templates/**"))
 class DeclaredWordsTests(SimpleTestCase):
     """Every action has the words a surface asks it for."""
 

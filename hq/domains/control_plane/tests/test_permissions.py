@@ -66,7 +66,7 @@ def asked(provider: str) -> tuple[str, ...]:
 
 
 @tag("source", "tree")
-@reads("**/*.py", "controller/providers/*.go", lists=("*",))
+@reads("**/*.py", "!**/tests/**/*.py", "controller/providers/*.go", lists=("*",))
 class PermissionLiteralTests(SimpleTestCase):
     def assert_none(self, found: Iterable[str]) -> None:
         self.assertEqual(

@@ -23,14 +23,12 @@ from hq.platform.application.url_query import with_query
 from . import sections
 from .entity_links import EntityLink, entity_link
 from .finding_model import Finding, FindingEstate, FindingRule, opens
-from .projection import read_once
 from .references import UNLINK, naming_nothing
 from .tone import Tone
 from .ui import counted, ended
 
 # How many of a backlog's things a finding says by name before it counts the rest.
 MOST_NAMED = 3
-CONTACTS_STATE_KEY = "attention.contacts-state"
 
 CONTENT_DRAFTS = "content-drafts"
 CONTENT_UNDOCUMENTED = "content-undocumented"
@@ -38,13 +36,6 @@ CONTACTS_UNREAD = "contacts-unread"
 EXPENSES_WITHOUT_RECEIPTS = "expenses-without-receipts"
 RECEIPTS_UNLINKED = "receipts-unlinked"
 ASSETS_MISSING_PURCHASE = "assets-missing-purchase"
-
-
-def contacts_state() -> tuple[int, str]:
-    """Unread submissions and whether the last read reached D1. No network:
-    the snapshot and the queue both ask here, so they cannot disagree."""
-
-    return read_once(CONTACTS_STATE_KEY, inbox.unread)
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,7 +111,7 @@ def _unread() -> int:
     left them. An unreachable store reports nothing outstanding: the outage is
     its connection's to report."""
 
-    return contacts_state()[0]
+    return inbox.unread()[0]
 
 
 def _unpriced() -> tuple[EntityLink, ...]:

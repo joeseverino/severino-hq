@@ -88,8 +88,8 @@ def codes(*paths: Path) -> list[tuple[str, str]]:
 
     found = [
         each
-        for each in scan(RULES, *paths)
-        if not {"tests", "migrations"} & set(each.path.parts) and not each.path.name.startswith("test_")
+        for each in scan(RULES, *paths, tests=False)
+        if "migrations" not in each.path.parts and not each.path.name.startswith("test_")
     ]
     constants = {
         (each.path, each.captured["NAME"]): each.value("CODE")
@@ -115,6 +115,7 @@ def codes(*paths: Path) -> list[tuple[str, str]]:
     "hq/platform/application/**/*.py",
     "hq/platform/mcp/**/*.py",
     "hq_sdk/**/*.py",
+    "!**/tests/**/*.py",
     lists=("hq/domains/**", "hq/platform/api/**", "hq/platform/application/**", "hq/platform/mcp/**", "hq_sdk/**"),
 )
 class EveryCodeHasAStatusTests(SimpleTestCase):

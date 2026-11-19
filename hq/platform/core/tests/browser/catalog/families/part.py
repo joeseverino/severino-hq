@@ -1421,25 +1421,6 @@ ENTRIES = {
         "{% endfacts %}{% endcard %}",
         {"lines": ("Example issuer", "24 example days left")},
     ),
-    # A card's summary line under its head: a zero, a linked count, a toned
-    # count. Its labels read on from the value, so they are lower case.
-    "part/facts-inline": Entry(
-        '{% card %}<p>An example head of the card.</p>{% facts layout="inline" %}'
-        '{% fact "example rules" value=0 %}'
-        '{% fact "example held for approval" value=2 url="/example/?held=1" tone="attention" %}'
-        '{% fact "example refused in the last day" value=13 url="/example/?refused=1" %}'
-        "{% endfacts %}{% endcard %}"
-    ),
-    # Enough facts to wrap at the phone's width.
-    "part/facts-inline-many": Entry(
-        '{% card %}<p>An example head of the card.</p>{% facts layout="inline" %}'
-        '{% fact "example rules" value=0 %}'
-        '{% fact "example devices waiting" value=1 url="/example/?waiting=1" tone="serious" %}'
-        '{% fact "example calls in the last hour" value=1204 url="/example/?calls=1" %}'
-        '{% fact "example refused in the last day" value=13 url="/example/?refused=1" %}'
-        '{% fact "example agents blocked" value=0 %}'
-        "{% endfacts %}{% endcard %}"
-    ),
     # A few short pairs, one of them a long address that wraps in its own
     # value's track as the pairs go across the page.
     "part/facts-list": Entry(
@@ -1601,29 +1582,6 @@ ENTRIES = {
         "<td>{% status word tone=tone %}</td><td>{{ note }}{% run_evidence evidence %}</td></tr>{% endfor %}"
         "</tbody></table>{% endtable_region %}{% endsection %}",
         {"runs": _EXAMPLE_RUNS},
-    ),
-    # A code patch ({% patch %}), the declaration of its one caller's (a
-    # container's compose change): a title naming a long path, the code with a
-    # line longer than a phone's, the words under it and its notes.
-    "part/patch-states": Entry(
-        '{% section "Example runtime" %}{% patch id="example-patch" %}{{ yaml|breakable }}'
-        "{% title %}Add to <code>{{ compose_file|breakable }}</code>"
-        "{% detail %}Where its service already has one of these keys, replace it. Then run "
-        "<code>docker compose up -d {{ service|breakable }}</code> in that directory."
-        "{% notes %}<li><strong>Remove</strong> <code>pid: host</code></li>"
-        '<li><code>user</code> <span class="muted">Its files must be readable by 1000:1000.</span></li>'
-        '<li class="prose"><strong>Not included</strong> <span class="muted">An example reason it leaves out,'
-        ' with <a href="/example/">an example link</a>.</span></li>'
-        "{% endpatch %}{% endsection %}",
-        {
-            "yaml": "services:\n"
-            "  example-service-with-a-long-name:\n"
-            "    volumes:\n"
-            '      - "/opt/example-applications/an-example-application-with-a-long-name/configuration:/srv/configuration:ro"\n'
-            '    user: "1000:1000"',
-            "compose_file": "/opt/example-applications/an-example-application/compose.production.yaml",
-            "service": "example-service-with-a-long-name",
-        },
     ),
     # A change's before and after ({% change_table %}), each state its two
     # callers draw: an approval card's preview and an audit event's changes.
@@ -2029,14 +1987,31 @@ ENTRIES = {
         '{% include "partials/_document_picture.html" with src=picture alt="An example receipt" only %}'
         "{% endsection %}",
     ),
-    # A command to paste somewhere else, short and long enough to wrap at its
-    # slashes and spaces.
+    # Text to paste somewhere else: a command short and long enough to wrap
+    # at its slashes and spaces, then a block of code as a container's compose
+    # change draws it, a title naming a long path, a line longer than a
+    # phone's, the words under it and its notes.
     "part/command-states": Entry(
-        '{% section "Example setup" %}{% include "partials/_command.html" with command="example-cli status" %}'
-        '{% include "partials/_command.html" with command=long %}{% endsection %}',
+        '{% section "Example setup" %}{% command text="example-cli status" %}{% command text=long %}'
+        '{% command id="example-patch" %}{{ yaml|breakable }}'
+        "{% title %}Add to <code>{{ compose_file|breakable }}</code>"
+        "{% detail %}Where its service already has one of these keys, replace it. Then run "
+        "<code>docker compose up -d {{ service|breakable }}</code> in that directory."
+        "{% notes %}<li><strong>Remove</strong> <code>pid: host</code></li>"
+        '<li><code>user</code> <span class="muted">Its files must be readable by 1000:1000.</span></li>'
+        '<li class="prose"><strong>Not included</strong> <span class="muted">An example reason it leaves out,'
+        ' with <a href="/example/">an example link</a>.</span></li>'
+        "{% endcommand %}{% endsection %}",
         {
             "long": "example-cli connect --config /etc/example/example-agent/config.toml "
-            "--token-file /run/secrets/example-agent-token --name example-host-01.example.com"
+            "--token-file /run/secrets/example-agent-token --name example-host-01.example.com",
+            "yaml": "services:\n"
+            "  example-service-with-a-long-name:\n"
+            "    volumes:\n"
+            '      - "/opt/example-applications/an-example-application-with-a-long-name/configuration:/srv/configuration:ro"\n'
+            '    user: "1000:1000"',
+            "compose_file": "/opt/example-applications/an-example-application/compose.production.yaml",
+            "service": "example-service-with-a-long-name",
         },
     ),
     # A route as a check ladder: a stop that holds, opened to its own checks

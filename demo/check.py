@@ -510,7 +510,7 @@ class DemoSiteTests(unittest.TestCase):
             "an agent was seen within the hour",
         )
         # The count is the value of the fact its words label.
-        refused = re.search(r">refused in the last day<.*?<dd\b[^>]*>(?:<[^>]+>)*(\d+)<", page, re.DOTALL)
+        refused = re.search(r">Refused in the last day<.*?<dd\b[^>]*>(?:<[^>]+>)*(\d+)<", page, re.DOTALL)
         self.assertTrue(refused and int(refused.group(1)) > 0, "a refusal is counted")
 
     def test_every_page_is_drawn_in_the_reader_s_scheme(self):

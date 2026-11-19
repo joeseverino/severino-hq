@@ -7,10 +7,10 @@ the heading, then what the rules below allow and what they held or refused.
 {% if agents_paused %}{% firstof "Every agent call is refused." as said %}{% else %}{% firstof "" as said %}{% endif %}
 {% section "Access" lede=said id="agent-access" %}
   {% url 'core:audit_list' as audit_url %}{% with_query audit_url awaiting=1 as held_url %}{% with_query audit_url action="denied" as refused_url %}
-  {% facts layout="inline" %}
-    {% if rule_count == 1 %}{% fact "rule" value=rule_count %}{% else %}{% fact "rules" value=rule_count %}{% endif %}
-    {% if awaiting_count %}{% fact "held for approval" value=awaiting_count url=held_url %}{% endif %}
-    {% fact "refused in the last day" value=refused_count url=refused_url %}
+  {% facts layout="band" %}
+    {% if rule_count == 1 %}{% fact "Rule" value=rule_count %}{% else %}{% fact "Rules" value=rule_count %}{% endif %}
+    {% if awaiting_count %}{% fact "Held for approval" value=awaiting_count url=held_url %}{% endif %}
+    {% fact "Refused in the last day" value=refused_count url=refused_url %}
   {% endfacts %}
 {% aside %}
   {% if agents_paused %}{% status "Paused" tone="attention" dot=True %}{% else %}{% status "Allowed" tone="good" dot=True %}{% endif %}

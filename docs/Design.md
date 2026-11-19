@@ -625,11 +625,7 @@ opened to read more (in a disclosure, a popover, a dialog) or set above what a
 form changes keeps one pair to a row, sits closer and ends with what holds it.
 A table row's small print keeps one pair to a row too. Where it stands decides
 this, never an option, so the same summary drawn on a page and in a dialog
-takes each one's spacing. A line (`{% facts layout="inline" %}`) is a card's
-summary: each fact its bold value, then its words ("3 rules"). Its facts stand
-a fixed gap apart, under a rule when they follow the card's head. Its labels
-read on from the value, so they are written in lower case. A fact with an
-address is a link whole. A fact's detail is running words. Its lines are the
+takes each one's spacing. A fact's detail is running words. Its lines are the
 ones its markup declares: a `<small>` each, or a `detail=` given as a list.
 What a fact holds past its lines (its record list, a disclosure of what runs
 now) follows them in the detail, so a page's summary cards are a band of facts
@@ -677,12 +673,13 @@ line, a band's details) is `{% dot_list %}`, each part an `<li>`, with
 before each part, so no template writes a separator and no line opens on one.
 `below="Label"` makes it a block the open row shows under that label.
 
-A block of code to paste somewhere else (a container's compose change) is `{%
-patch id=... %}`. It holds its code, then `{% title %}` (where it goes, beside
-the Copy button that copies the code), `{% detail %}` (the words under it) and
-`{% notes %}` (`<li>`s, drawn as a stack list), in that order. The code wraps
-rather than scrolls, so a long path stays on screen; with no code the notes
-stand alone. *Catalog:* `part/patch`.
+Text to paste somewhere else is `{% command %}`, its Copy button in the
+code's corner. A command is `{% command text=... %}`, one tag with no end. A
+block of code (a container's compose change) is `{% command id=... %}` holding
+its code, then `{% title %}` (where it goes, over the code), `{% detail %}`
+(the words under it) and `{% notes %}` (`<li>`s, drawn as a stack list), in
+that order. The code wraps rather than scrolls, so a long path stays on
+screen; with no code the notes stand alone. *Catalog:* `part/command-states`.
 
 What a run of automation shows for itself is `{% run_evidence evidence %}`,
 given a `work_runs.RunEvidence` inside a row of a table region. That is its
@@ -1248,7 +1245,10 @@ values, with the arrow kept beside the new one, and a reader hears "1.2.3 to
 or a category (`swatch-key`, square), is the `swatch` class, colored by its
 `series-N` slot or what its part sets, one size wherever it stands: a legend's
 key is the mark it keys, and no part writes a dot's size or shape of its own.
-A mark drawn as generated content joins the swatch's rule in figures.css. A
+Every drawing's legend is `partials/_chart_legend.html`, given the drawing,
+which says its keys (`legend_keys`, each a `drawings.LegendKey`): a chart's
+series, a path's ordered bands, a calendar's kinds and its missed mark, a
+whole's parts with each figure, share and link. A mark drawn as generated content joins the swatch's rule in figures.css. A
 smaller one in a dense calendar day, or the dots figure's larger one, sets
 `--mark-size`.
 
@@ -1437,8 +1437,7 @@ with no script every row shows all of it. The line beneath holds, in order:
 - what was read that shows it (`Insight(facts=...)`), each label once with its
   values beside it;
 - what to do, where a command or an instruction is a step, one standing alone
-  and several numbered. A command is `partials/_command.html`, with its copy
-  button in its corner;
+  and several numbered. A command is `{% command text=... %}`;
 - the reason it cannot be done from here, as a sentence and never as a step;
 - the pages that help look into it (`Insight(links=...)`), the topology's as
   icons with HQ's tooltip;

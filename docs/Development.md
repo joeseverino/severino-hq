@@ -402,13 +402,14 @@ The tests it selects are:
   whole path, and a test alone by a directory of two parts or more above it.
   A test that reads a workflow through a helper naming the workflows'
   directory is one;
-- the architecture tests;
 - every test tagged `tree` the change reaches. Such a test finds its files (a
-  module, a template, a doc) by walking this checkout, which no import or name shows
+  module, a template, a doc) by walking this checkout, or loads what a fresh
+  process starts with (the startup budgets), which no import or name shows
   (a test that patches the `ROOT` of the code it drives walks a fixture and
   carries none). One whose
-  class declares what it reads, `@reads("**/templates/**", lists=("**",))`
-  (`hq/platform/application/tests/reads.py`), runs when the change edits, adds
+  class declares what it reads, `@reads("hq/**/*.py", "!**/tests/**/*.py", lists=("**",))`
+  (`hq/platform/application/tests/reads.py`, where a `!` glob takes the files
+  a walk drops before reading out of those it opens), runs when the change edits, adds
   or deletes a file it opens, or adds or deletes one it lists or stats; any other runs
   on every change. The declaration holds the class as it runs, as Bazel's
   sandbox holds a test to its declared inputs: an open, a listing, a stat or a program
@@ -727,7 +728,29 @@ lifetime: no other checkout starts a heavy run until the landing ends, and
 the landing waits behind only the run already in the turn, since it takes the
 gate with a blocking lock that the kernel hands over as the holder ends, where
 mise polls. The command's own heavy tasks inherit the gate
-(`MISE_TASK_LOCKS`) and take turns on `heavy` among themselves.
+(`MISE_TASK_LOCKS`) and take turns on `heavy` among themselves. A share of
+fewer than every token still passes a landing's gate when its tokens are free
+now, as EASY backfill starts a small job on idle nodes ahead of the reserved
+one: a narrow test run starts during the landing's quick gates, beside a
+share of the landing's that leaves it room, or while the landing runs on the
+second machine. It takes its tokens behind the door, where the landing's own
+share collects every token it waits for, so no backfill passes it. A
+landing marks its hold with a lock of its own, `gate.landing`, taken once it
+holds the gate and let go by the kernel as it ends, so a whole run waiting at
+the gate lets none through.
+
+A share's measured cost lets it start before tokens free up. The measurer
+records the peak each share's tree held, keyed by its task and arguments
+(`peak_file`), so every worktree reads the same record. A share of fewer than
+every token that waits for tokens starts on none once that peak fits the
+memory the OS has available now: macOS's memorystatus level (what
+`memory_pressure` reports free), Linux's `MemAvailable`. It still takes
+`heavy` shared, so never beside a whole run, and passes a closed gate only
+when a landing closes it. A narrow run then starts beside a landing's share of
+every token. A run that needs every token never does, since its memory may lie
+outside its tree (a Docker VM). A run with no record waits for its tokens.
+The peak is sampled every two seconds, so a run shorter than that records
+less than it held.
 
 A run of tests takes a token for each process it runs tests in
 (`tools/gate/turn.py`): one when it is serial (`--parallel 1`), and
@@ -764,10 +787,11 @@ Mac, and a 12-core, 32 GB machine holds twelve. That count takes every core
 as equal, so a machine whose cores are slow or throttled declares the count
 measured on it instead, once, in its clone's git config
 (`git config hq.gateTokens <tokens>`), which `tools/gate/room.py` reads
-before the fallback. mise's task lock is one
-exclusive flock with no shared or counted mode
-([task_lock.rs](https://github.com/jdx/mise/blob/v2026.11.8/src/task/task_lock.rs)),
-so a share is the counting semaphore the kernel's flock(2) makes, as
+before the fallback. mise's task lock pools take a count fixed where the task
+declares it, all or none with no queue
+([task_lock.rs](https://github.com/jdx/mise/blob/v2026.11.9/src/task/task_lock.rs)),
+so they hold neither a share weighed from its run nor a share of several
+waiting among shares of one. A share is the counting semaphore the kernel's flock(2) makes, as
 `flock -s` and GNU make's jobserver tokens do: it takes the lock `heavy` shared,
 which a whole run's exclusive lock waits for and keeps out, and its tokens
 from four slot files beside it, one share at a time behind a door, so a

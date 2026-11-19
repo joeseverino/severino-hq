@@ -12,7 +12,6 @@ import re
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
@@ -233,21 +232,15 @@ RULES = {
 }
 
 
-def outside_tests(path: Path) -> bool:
-    return "tests" not in path.parts
-
-
-def environment_reads(
-    *paths: Path, kept: Callable[[Path], bool] = outside_tests
-) -> tuple[dict[str, set[Path]], list[Found]]:
-    """Every environment variable the modules under ``paths`` that ``kept``
-    keeps read by name, directly or through a function of their own that is
+def environment_reads(*paths: Path) -> tuple[dict[str, set[Path]], list[Found]]:
+    """Every environment variable the modules under ``paths``, less their
+    tests, read by name, directly or through a function of their own that is
     handed it, with the modules that read it; and each read whose name none
     of them spells, so a guard over the names fails on it rather than reading
     past it. A name is spelled by a literal, a constant of the module, or a
     constant of the module it is imported from."""
 
-    found = grouped(each for each in scan(RULES, *paths) if kept(each.path))
+    found = grouped(scan(RULES, *paths, tests=False))
     constants = {(each.path, each.captured["NAME"]): each.value("VALUE") for each in found.get("constant", [])}
     forwarders, handed = _forwarders(found.get("forwarded", []))
     reads = [
@@ -379,7 +372,7 @@ def drift(read: set[str], listed: set[str]) -> dict[str, set[str]]:
 
 
 @tag("source", "tree")
-@reads("docs/Deployment.md", "hq/**/*.py", "hq_sdk/**/*.py", lists=("hq/**", "hq_sdk/**"))
+@reads("docs/Deployment.md", "hq/**/*.py", "hq_sdk/**/*.py", "!**/tests/**/*.py", lists=("hq/**", "hq_sdk/**"))
 class ConfigurationTableTests(SimpleTestCase):
     """Every variable HQ reads is in docs/Deployment.md's table, and nothing else is."""
 

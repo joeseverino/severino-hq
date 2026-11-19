@@ -1,1 +1,7 @@
-{% comment %}A chart's legend: its palette places and their names, ordered bands or distinct series.{% endcomment %}<div class="chart-legend" aria-label="Legend">{% for slot, label in items %}<span><i class="swatch-key {% if ordered %}chart-band-{{ slot }}{% else %}series-{{ slot }}{% endif %}" aria-hidden="true"></i>{{ label|breakable }}</span>{% endfor %}</div>
+{% comment %}
+A drawing's legend, the one way any drawing keys its marks: each of its
+`legend_keys` (`drawings.LegendKey`) its mark and its name, and for a part of
+a whole its figure, in its tone, before the name and its share after it,
+linked to its page. `stacked` sets the keys one under another, so the figures
+of a narrow column line up.
+{% endcomment %}<div class="chart-legend{% if stacked %} stacked{% endif %}" aria-label="Legend" data-legend>{% for key in drawing.legend_keys %}{% if key.url %}<a href="{{ key.url }}">{% else %}<span>{% endif %}<i class="{{ key.mark }}" aria-hidden="true"></i>{% if key.figure %}<b>{% if key.tone %}{% status key.figure tone=key.tone pill=False %}{% else %}{{ key.figure|breakable }}{% endif %}</b>{% endif %}{% if key.share %}<span>{{ key.label|breakable:"·" }}{{ key.share|breakable }}</span>{% else %}{{ key.label|breakable }}{% endif %}{% if key.url %}</a>{% else %}</span>{% endif %}{% endfor %}</div>

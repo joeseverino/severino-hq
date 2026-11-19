@@ -389,22 +389,27 @@ select.toned:not(.tone-neutral) { border-color: currentColor; }
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--tone-mark) 7%, var(--surface));
 }
-/* A command and its copy button, which sits in its corner rather than on a
-   line of its own; the command leaves room for it. */
-.command { position: relative; width: fit-content; max-width: 100%; min-width: 0; }
+/* Text to paste ({% command %}): its title over the code, the words and
+   notes under it. The copy button sits in the code's corner rather than on a
+   line of its own; the code leaves room for it. */
+.command { display: grid; gap: var(--space-4); width: fit-content; max-width: 100%; min-width: 0; }
+.command > p { margin: 0; font-size: var(--text-sm); }
+.command > .stack-list { margin: 0; gap: var(--space-3); font-size: var(--text-sm); }
+.command > .stack-list > li { min-width: 0; overflow-wrap: anywhere; }
+.command-code { position: relative; justify-self: start; max-width: 100%; min-width: 0; }
 /* It is a ghost, and stands on the code's dark ground in either palette, so
    its colors are the code's in every state: a ghost's own hover fill is a
    light one. */
-.command > [data-copy] { position: absolute; inset-block: 0; margin-block: auto; height: fit-content; inset-inline-end: var(--space-2); color: var(--code-muted); }
-.command > [data-copy]:is(:hover, :focus-visible, :active) { color: var(--code-ink); background: color-mix(in srgb, var(--code-ink) 16%, transparent); }
-.command > .operator-command { margin: 0; padding-inline-end: 4.5rem; }
-/* A command wraps rather than scrolling: selecting it copies it whole. It
+.command-code > [data-copy] { position: absolute; inset-block: 0; margin-block: auto; height: fit-content; inset-inline-end: var(--space-2); color: var(--code-muted); }
+.command-code > [data-copy]:is(:hover, :focus-visible, :active) { color: var(--code-ink); background: color-mix(in srgb, var(--code-ink) 16%, transparent); }
+/* The code wraps rather than scrolling: selecting it copies it whole. It
    breaks where `|breakable` lets it, a word only when nothing else fits. */
 .operator-command {
   width: fit-content;
   max-width: 100%;
-  margin: var(--space-2) 0 0;
+  margin: 0;
   padding: var(--space-2) var(--space-5);
+  padding-inline-end: 4.5rem;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   -webkit-user-select: all;

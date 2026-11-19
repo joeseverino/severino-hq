@@ -13,7 +13,7 @@ FACTS_PARTIAL = "partials/_facts.html"
 FACT_PARTIAL = "partials/_fact.html"
 
 # Each layout, drawn as its class (``facts-band``) by the partial.
-LAYOUTS = ("list", "band", "inline")
+LAYOUTS = ("list", "band")
 # How large a band sets its values: a strip of small figures read across
 # (``small``), a page's status facts, its headline figures (``large``), or
 # headline figures led by the first (``lead``).
@@ -44,7 +44,7 @@ class FactTakes(Part):
 
 FACTS = Part(
     name="facts",
-    classes=("facts-band", "facts-inline", "facts-list", "is-large", "is-lead", "is-small"),
+    classes=("facts-band", "facts-list", "is-large", "is-lead", "is-small"),
     partial=FACTS_PARTIAL,
     about=(
         "Every label and its value a page shows, each a `{% fact %}`; given `items=` it draws each item "
@@ -54,10 +54,7 @@ FACTS = Part(
         "layout": Option(
             default="list",
             choices=LAYOUTS,
-            about=(
-                "A list, each label beside its value; a band, the few facts that sum up a page, each a cell; "
-                "a line (`inline`), a card's summary, each fact its value then its words."
-            ),
+            about="A list, each label beside its value; a band, the few facts that sum up a page, each a cell.",
         ),
         "label": Option(about="What the whole is, for a reader, when nothing on the page heads it."),
         "size": Option(

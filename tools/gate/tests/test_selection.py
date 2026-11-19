@@ -1,12 +1,45 @@
-"""What fast selects: every test that loads a changed module."""
+"""What fast selects: every test that loads a changed module, and every check that reads a changed file."""
 
 import ast
+from pathlib import Path
 
 import grimp
 from django.test import SimpleTestCase, tag
 
+from hq.domains.control_plane.tests import test_bridge_registry
 from hq.platform.application.tests.reads import reads
+from hq.platform.core.tests import test_startup
+from tools.fonts.tests import test_font
 from tools.gate import chain, selection
+
+# An edit inside one test's body, which no other test reads: a module no source names, so none is chosen by it.
+LEAF = "hq/platform/mcp/tests/test_example_leaf.py"
+PROBES = Path("hq/platform/core/tests/test_startup.py")
+
+
+@tag("source")
+class ReaderSelectionTests(SimpleTestCase):
+    def test_a_changed_test_runs_and_no_check_is_selected_by_its_name(self):
+        changed = [Path(LEAF), Path("hq/platform/application/tests/test_architecture_pages.py")]
+        files = [*changed, Path("hq/platform/application/tests/test_architecture.py"), PROBES]
+        modules = sorted(map(selection.module_name, changed))
+
+        self.assertEqual(selection.test_labels(files, set(modules), set())[0], modules)
+        for check in (
+            test_startup.StartupBudgetTests,
+            test_bridge_registry.WrittenFileTests,
+            test_font.ServedFontTests,
+        ):
+            self.assertFalse(check.tree_reads.selects([LEAF], []), check.__name__)
+
+    def test_a_shipped_change_or_an_imported_helper_selects_the_checks_that_read_it(self):
+        for shipped in ("hq/platform/core/apps.py", "uv.lock"):
+            self.assertTrue(test_startup.StartupBudgetTests.tree_reads.selects([shipped], []), shipped)
+        self.assertTrue(test_font.ServedFontTests.tree_reads.selects(["templates/base.html"], []))
+        helper = Path("hq/platform/application/tests/facts.py")
+        reached = selection.import_reach({selection.module_name(helper)}, selection.importers([helper, PROBES]))
+        self.assertIn(selection.module_name(PROBES), reached)
+
 
 # Modules across the apps and layers, each imported by tests of other apps as they load.
 SAMPLE = (

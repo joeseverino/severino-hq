@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 if TYPE_CHECKING:
     from hq.domains.control_plane.models import RefusedReport
 
-from .core_capabilities import CONTROLLER_REFRESH
+from .cadence import CONTROLLER_REFRESH
 from .finding_model import Finding, FindingEstate, FindingRemedy, cannot_run_commands
 from .finding_steps import Do, Run
 from .freshness import LAST_READ, freshness

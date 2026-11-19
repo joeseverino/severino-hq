@@ -67,7 +67,7 @@ class AllocationTests(SimpleTestCase):
             name for i in elements(html, "i") for name in i.attrs["class"].split() if name.startswith("series-")
         ]
         self.assertEqual(swatches, [f"series-{rect['slot']}" for rect in bar.drawn])
-        (owed,) = [span for span in within(html, "data-allocation-legend") if "tone-attention" in span.classes]
+        (owed,) = [span for span in within(html, "data-legend") if "tone-attention" in span.classes]
         self.assertEqual(owed.words, "-$70.00")
 
     def test_a_legend_part_with_no_link_or_amount_still_reads_its_share(self):
@@ -76,9 +76,7 @@ class AllocationTests(SimpleTestCase):
         html = render_to_string("partials/_allocation.html", {"allocation": bar, "legend": True})
 
         self.assertEqual(links(html), [])
-        rows = [
-            row for row in within(html, "data-allocation-legend") if "data-allocation-legend" in row.ancestors[-1].attrs
-        ]
+        rows = [row for row in within(html, "data-legend") if "data-legend" in row.ancestors[-1].attrs]
         self.assertEqual(len(rows), 2)
         for row, said in zip(rows, (("Cash", "25%"), ("Held", "75%")), strict=True):
             for part in said:
@@ -89,7 +87,7 @@ class AllocationTests(SimpleTestCase):
 
         html = render_to_string("partials/_allocation.html", {"allocation": bar})
 
-        self.assertEqual(select(html, "data-allocation-legend"), [])
+        self.assertEqual(select(html, "data-legend"), [])
         self.assertEqual(links(html), [])
 
     def test_a_tone_outside_the_status_vocabulary_is_refused(self):

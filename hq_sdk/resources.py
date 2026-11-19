@@ -1,7 +1,7 @@
 """For exposing an extension's records to the API, MCP and the CLI as read resources with strict filters."""
 
+from hq.platform.application.integration_specs import ListRead
 from hq.platform.application.resources import (
-    ListRead,
     ResourceQuery,
     ResourceSpec,
     StatusFilter,

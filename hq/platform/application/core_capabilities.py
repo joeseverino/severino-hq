@@ -52,7 +52,7 @@ from .approvals import (
     reject,
     withdraw,
 )
-from .cadence import ControllerSweepCommand, request_controller_sweep
+from .cadence import CONTROLLER_REFRESH
 from .capability_policy import SET_POLICY, PolicyCommand, apply_changes
 from .certificates import UPLOAD, UploadCertificateCommand, store_certificate
 from .contracts import Effect
@@ -129,24 +129,6 @@ from .sync import HQSyncCommand, execute_hq_sync
 from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND, TAILNET_KIND
 from .visit_refresh import VISIT_REFRESH, VisitRefreshCommand, request_visit_refresh
 from .zones import ADOPT_ZONE, AdoptZoneCommand, adopt_zone
-
-# Named, so prose that tells a person which button to press reads its words.
-CONTROLLER_REFRESH = CapabilitySpec(
-    "infrastructure.controller.refresh",
-    "Ask HQ to read everything again now.",
-    Effect.INFRASTRUCTURE_CHANGE,
-    Capability.MANAGE_INFRASTRUCTURE,
-    ControllerSweepCommand,
-    request_controller_sweep,
-    execution_notes=(
-        "Mark HQ as in use, so readings are taken more often.",
-        "Wake the controller. HQ's web process holds no credential for any service.",
-        "The controller reads what HQ says is due, with its own credentials.",
-    ),
-    label="Refresh HQ's readings",
-    verb="Refresh",
-    variants=(("all", "Refresh all"),),
-)
 
 _RECEIPT_FILE_NOTES = (
     "Refuse base64 text longer than the size limit allows, before decoding it.",

@@ -68,7 +68,7 @@ class DottedTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/*.py")
+@reads("hq/**/*.py", "!**/tests/**/*.py")
 class LowerFirstSourceTests(SimpleTestCase):
     """One definition of lower_first in the source."""
 

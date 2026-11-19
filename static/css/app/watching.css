@@ -10,16 +10,6 @@
   .identity-words { flex: 1 1 260px; min-width: 0; }
   .identity-words p { margin: 0; }
   .identity-name { font-size: var(--text-xl); font-weight: 650; }
-  /* A code patch ({% patch %}): its title beside the Copy button, the block
-     to paste, then what each line can break and what it leaves out. */
-  .patch { display: grid; gap: var(--space-4); min-width: 0; }
-  .patch-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
-  /* Wrapped rather than scrolled: a long path stays on screen, and the copy
-     takes the text, not the wrapping. */
-  .patch > pre { margin: 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .patch > p { margin: 0; font-size: var(--text-sm); }
-  .patch > .stack-list { margin: 0; gap: var(--space-3); font-size: var(--text-sm); }
-  .patch > .stack-list > li { min-width: 0; overflow-wrap: anywhere; }
 
   /* Repositories' posture (projects/_repository_postures.html): a row per
      repository with a segment per check. A row is short: as many to a line

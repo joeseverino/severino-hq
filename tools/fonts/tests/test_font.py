@@ -60,10 +60,10 @@ _PAST_ASCII = {"kind": "string", "regex": r"[^\x00-\x7f]|\\[uUNx0-7]"}
 
 
 def _python_strings(*paths: Path) -> dict[Path, str]:
-    """Each module's text its string literals can print past ASCII, each literal parsed on its own."""
+    """Each module's text its string literals can print past ASCII, each literal parsed on its own, tests left out."""
 
     strings: dict[Path, str] = {}
-    for found in scan({"past-ascii": _PAST_ASCII}, *paths):
+    for found in scan({"past-ascii": _PAST_ASCII}, *paths, tests=False):
         literal = ast.parse(found.text, mode="eval")
         strings[found.path] = strings.get(found.path, "") + "".join(
             node.value for node in ast.walk(literal) if isinstance(node, ast.Constant) and isinstance(node.value, str)
@@ -95,8 +95,7 @@ def _shipped(root: Path):
             yield path, html.unescape(path.read_text(encoding="utf-8"))
     strings = _python_strings(root / "hq", root / "hq_sdk")
     for path in sorted(strings):
-        if "tests" not in path.relative_to(root).parts:
-            yield path, strings[path]
+        yield path, strings[path]
     for path in sorted((root / "static/js").glob("*.js")):
         yield path, _script_text(path)
     for path in sorted((root / "static/css").rglob("*.css")):
@@ -132,6 +131,7 @@ def _layout_features(font: Path) -> set[str]:
 @reads(
     "hq/**/*.py",
     "hq_sdk/**/*.py",
+    "!**/tests/**/*.py",
     "static/**/*.css",
     "static/js/**/*.js",
     "static/fonts/inter/inter-variable-latin.woff2",

@@ -72,19 +72,16 @@ class PageTitleTests(SimpleTestCase):
     inside the page that has it, so neither shows up in review.
     """
 
-    def title_blocks(self):
-
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         pattern = re.compile(r"\{%\s*block title\s*%\}(.*?)\{%\s*endblock", re.DOTALL)
-        for name, template in template_files():
-            if name == "base.html":
-                continue
-            match = pattern.search(template.read_text(encoding="utf-8"))
-            if match:
-                yield name, match.group(1).strip()
+        found = ((name, pattern.search(path.read_text(encoding="utf-8"))) for name, path in template_files())
+        cls.titles = {name: match.group(1).strip() for name, match in found if match and name != "base.html"}
 
     def test_no_page_appends_the_site_name_itself(self):
         offenders = [
-            f"{name}: {leaf}" for name, leaf in self.title_blocks() if "SITE_NAME" in leaf or "Severino HQ" in leaf
+            f"{name}: {leaf}" for name, leaf in self.titles.items() if "SITE_NAME" in leaf or "Severino HQ" in leaf
         ]
         self.assertEqual(
             offenders,
@@ -93,7 +90,7 @@ class PageTitleTests(SimpleTestCase):
         )
 
     def test_every_page_names_itself(self):
-        offenders = [str(name) for name, leaf in self.title_blocks() if not leaf]
+        offenders = [name for name, leaf in self.titles.items() if not leaf]
         self.assertEqual(
             offenders,
             [],
@@ -132,6 +129,8 @@ class CountedTests(SimpleTestCase):
         self.assertEqual(plain(rendered), "1 thing needs you")
 
 
+@tag("tree")
+@reads("**/*.html", "**/*.py", "!**/tests/**", lists=("**",))
 class InterfaceTextTests(SimpleTestCase):
     """What HQ and its extensions show people, read from source in one pass.
 
@@ -186,7 +185,7 @@ class InterfaceTextTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/*.py", "tools/lint/ast-grep/rules/page-trail-declared.yml")
+@reads("**/*.py", "!**/tests/**/test_*.py", "tools/lint/ast-grep/rules/page-trail-declared.yml")
 class PageTrailTests(SimpleTestCase):
     """A view says its trail with ``page_trail`` and ``trail_label``, not a ``get_page_trail`` that restates them.
 

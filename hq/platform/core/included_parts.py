@@ -24,7 +24,7 @@ CHART = _part(
     *("bar-chart", "chart-axis", "chart-band-*", "chart-category", "chart-cats", "chart-dot", "chart-frame"),
     *("chart-frame-dense", "chart-grid", "chart-hit", "chart-labels", "chart-legend", "chart-line"),
     *("chart-mark", "chart-mark-label", "chart-path", "chart-path-frame", "chart-path-marker", "chart-path-scale"),
-    *("chart-path-segment", "chart-scroll", "chart-tick", "chart-trend", "line-chart", "series-*"),
+    *("chart-path-segment", "chart-scroll", "chart-tick", "chart-trend", "line-chart", "series-*", "stacked"),
     pieces=("partials/_chart_legend.html", "partials/_chart_path.html"),
     public=True,
 )
@@ -148,7 +148,7 @@ PARTS = (
     _part(
         "allocation",
         "Parts of one whole as one bar, from `hq_sdk.ui.AllocationBar`.",
-        public_classes=("allocation", "allocation-legend", "stacked"),
+        public_classes=("allocation",),
         draws=(CHART,),
         public=True,
     ),
@@ -189,7 +189,6 @@ PARTS = (
         *("chart-panel", "chart-panel-*", "chart-tab", "chart-tab-input", "chart-tablist", "chart-tabs"),
         public=True,
     ),
-    _part("command", "A command to copy and run, with its copy control.", "command", "operator-command"),
     _part(
         "command_center",
         "Search across HQ, its results grouped, each a place to go or a command to run.",
