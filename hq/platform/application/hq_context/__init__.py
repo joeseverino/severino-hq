@@ -25,7 +25,7 @@ lazy from .. import hq_self, request_context, service_health
 lazy from ..entity_links import entity_link
 lazy from ..findings import finding_key
 lazy from ..hq_self import hq_hostnames, own_machine, serving, site_label
-lazy from ..problems import About, problems_by_part
+lazy from ..problems import About, grouped, problems_by_part
 lazy from ..request_path import request_path
 lazy from ..resource_records import Problem
 lazy from ..security import Capability, Principal
@@ -49,10 +49,7 @@ class HQContext:
     def problems_in(self) -> dict[str, tuple[Mapping[str, Any], ...]]:
         """The problems about each part of the page, by part."""
 
-        found: dict[str, list[Mapping[str, Any]]] = {}
-        for part, item in zip(self.parts, self.problems, strict=True):
-            found.setdefault(part, []).append(item)
-        return {part: tuple(items) for part, items in found.items()}
+        return grouped(zip(self.parts, self.problems, strict=True))
 
     @property
     def tiles(self) -> tuple[Tile, ...]:

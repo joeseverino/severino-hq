@@ -23,18 +23,16 @@ from .entity_links import entity_link, kind_label
 from .projection import projection_scope
 from .security import Principal
 from .service_context import Cell, ServiceSection, recent_changes, recent_work
-from .tone import Tone
 from .ui import MISSING
 lazy from . import connections, services
 lazy from .cadence import connection_providers
 lazy from .finding_model import CONTAINERS_CARD, TAILNET_CARD
-lazy from .findings import rule_for, rule_of
 lazy from .hq_self import hq_service
 lazy from .locate import host_of
 lazy from .machines import Machine
 lazy from .own_addresses import tailnet_sightings
 lazy from .policy_links import PolicyNames
-lazy from .problems import problems_about
+lazy from .problems import About, problems_about
 lazy from .public_registry import public_endpoints
 lazy from .reach import network_of
 lazy from .resource_records import MachineRecord
@@ -259,19 +257,15 @@ def machine_links(record: MachineRecord) -> dict[str, object]:
     return links
 
 
-def problems_by_part(machine: Machine, principal: Principal) -> dict[str, tuple[dict, ...]]:
-    """The machine's open problems ``principal`` may read, by where its page
-    draws them: under the card its rule declares (``FindingRule.card``) when
-    the page draws that card, and an urgent one, or any other, above the page
+def problem_parts(record: MachineRecord) -> dict[str, About]:
+    """Where a machine's page draws its problems (``problems_by_part``): under
+    each card the page draws that a rule declares, and the rest above the page
     with the machine's own state (``page``)."""
 
-    drawn = {CONTAINERS_CARD: bool(machine.containers), TAILNET_CARD: machine.presence is not None}
-    found: dict[str, list[dict]] = {"page": [], CONTAINERS_CARD: [], TAILNET_CARD: []}
-    for item in problems_about(machine.url, principal):
-        rule = rule_for(rule_of(item["key"]))
-        card = rule.card if rule is not None and item.get("status") != Tone.SERIOUS else ""
-        found[card if drawn.get(card) else "page"].append(item)
-    return {part: tuple(items) for part, items in found.items()}
+    url = (record["url"],)
+    drawn = {CONTAINERS_CARD: bool(record["containers"]), TAILNET_CARD: record["presence"] is not None}
+    cards = {card: About(urls=url, cards=(card,)) for card, shown in drawn.items() if shown}
+    return {**cards, "page": About(urls=url)}
 
 
 def _reached_through(record: MachineRecord, ref: str):

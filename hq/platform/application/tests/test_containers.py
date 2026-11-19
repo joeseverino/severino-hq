@@ -474,19 +474,40 @@ class PageTests(SignedInTestCase):
     def test_a_machine_draws_each_problem_where_its_rule_declares(self):
         from types import SimpleNamespace
 
-        from ..machine_context import problems_by_part
+        from ..machine_context import problem_parts
+        from ..problems import grouped, problems_by_part
 
-        machine = SimpleNamespace(url="/machines/example-box/", containers=("kuma",), presence=object())
+        url = "/machines/example-box/"
+        record = {"url": url, "containers": [{"name": "kuma"}], "presence": {}}
         keys = {
             "restart": "hq.infrastructure:finding:reboot-pending:machine:example-box",
             "key": "hq.infrastructure:finding:tailnet-key-expiring:machine:example-box",
             "image": "hq.infrastructure:finding:container-image-update:machine:example-box:kuma",
+            "urgent": "hq.infrastructure:finding:container-image-update:machine:example-box:db",
         }
-        items = [{"key": key, "status": "attention"} for key in keys.values()]
-        with mock.patch("hq.platform.application.machine_context.problems_about", return_value=items):
-            drawn = {part: [item["key"] for item in found] for part, found in problems_by_part(machine, None).items()}
+        items = [
+            {
+                "key": key,
+                "status": "serious" if name == "urgent" else "attention",
+                "notice": False,
+                "url": url,
+                "subject": {"url": url},
+            }
+            for name, key in keys.items()
+        ]
+        entries = [{"finding": SimpleNamespace(held=False, part="")} for _ in items]
+        with (
+            mock.patch("hq.platform.application.problems._host_entries", return_value=entries),
+            mock.patch("hq.platform.application.problems.gathered_rows", return_value=items),
+            mock.patch("hq.platform.application.problems.readable_by", side_effect=lambda _who, found: found),
+        ):
+            found = grouped(problems_by_part(problem_parts(record), None))
+        drawn = {part: [item["key"] for item in items] for part, items in found.items()}
 
-        self.assertEqual(drawn, {"page": [keys["restart"]], "containers": [keys["image"]], "tailnet": [keys["key"]]})
+        self.assertEqual(
+            drawn,
+            {"page": [keys["restart"], keys["urgent"]], "containers": [keys["image"]], "tailnet": [keys["key"]]},
+        )
 
     def test_a_machine_draws_a_containers_update_under_its_containers(self):
         estate()

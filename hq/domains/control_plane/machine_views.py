@@ -10,7 +10,7 @@ from hq.platform.application.connections import machines_once
 from hq.platform.application.hq_self import LABEL as HQ_LABEL
 from hq.platform.application.machine_context import (
     machine_links,
-    problems_by_part,
+    problem_parts,
     sections_for as machine_sections,
     serves_links,
 )
@@ -34,6 +34,7 @@ lazy from hq.platform.application.automation_runs import HERE, RUN_HERE, Playboo
 lazy from hq.platform.application.containers import on_machine
 lazy from hq.platform.application.docker_sections import docker_line
 lazy from hq.platform.application.page_relations import for_machine
+lazy from hq.platform.application.problems import grouped, problems_by_part
 lazy from hq.platform.application.request_channel import forwarding_of
 lazy from hq.platform.application.resource_operations import ACTION_CAPABILITY
 lazy from hq.platform.application.tailnet import declaration, may_reach, ports, proposed_grant
@@ -281,7 +282,7 @@ class MachineDetailView(RecordPageMixin, TemplateView):
         # containers page says it, and what the machine keeps that nothing runs.
         context.update(on_machine(found))
         # Each line under the part it is about, as HQ's own page draws them.
-        context["problems_in"] = problems_by_part(found, principal)
+        context["problems_in"] = grouped(problems_by_part(problem_parts(record), principal))
         # The same panel as the tailnet page, started on this machine. Asked
         # here it is nearly always about this one, so both ends default to it
         # and changing either is one dropdown rather than three.
