@@ -161,7 +161,9 @@
    one grid the steps share: the labels one column, as wide as the longest up
    to two fifths of the row, the commands the next, each note and any step in
    words across both. They sit close, as a command's chip has its own room. In
-   a narrow box each command goes under its label. */
+   a narrow box each command goes under its label, and so does one whose label
+   names an identifier (`breakable`'s token), which needs the row's whole width
+   to read whole. */
 .step-list.is-numbered:has(> li > div > strong + .command) {
   display: grid; grid-template-columns: [number] auto [label] fit-content(40%) [command] minmax(0, 1fr) [end];
   gap: var(--space-2) var(--space-3); container: steps / inline-size;
@@ -170,6 +172,7 @@
   & > li > div > * { grid-column: label / end; min-inline-size: 0; }
   & > li > div > strong:has(+ .command) { grid-column: label; }
   & > li > div > strong + .command { grid-column: command; margin: 0 0 0 var(--space-3); }
+  & > li > div > :is(strong:has(+ .command):has(.token), strong:has(.token) + .command) { grid-column: label / end; margin-inline-start: 0; }
   @container steps (width < 28rem) {
     & > li > div > :is(strong:has(+ .command), strong + .command) { grid-column: label / end; margin-inline-start: 0; }
   }
