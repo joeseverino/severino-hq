@@ -10,6 +10,7 @@ import re
 from collections.abc import Callable, Iterable, Mapping
 from copy import copy
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any
 from urllib.parse import urlsplit
 from weakref import WeakKeyDictionary
@@ -491,6 +492,10 @@ class RecordPageMixin(PageMixin):
     resource = ""
     context_object_name = ""
     record: dict[str, Any]
+    # The model whose stored row the records of other kinds about this one
+    # are asked by, and the relations they read (``stored``).
+    model: Any = None
+    stored_related: tuple[str, ...] = ()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -511,6 +516,13 @@ class RecordPageMixin(PageMixin):
             # Asked for by another of its names; the page lives at one.
             return redirect(self.record["url"])
         return super().get(request, *args, **kwargs)
+
+    @cached_property
+    def stored(self) -> Any:
+        """The record's row as stored, with ``stored_related`` fetched."""
+
+        identifier = self.identifier
+        return self.model.objects.prefetch_related(*self.stored_related).get(**{identifier: self.record[identifier]})
 
     def get_page_title(self) -> str:
         return str(self.record[self.identifier])

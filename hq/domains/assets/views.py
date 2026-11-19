@@ -2,7 +2,6 @@ from typing import override
 
 from django.db.models import Q, Sum
 from django.urls import reverse_lazy
-from django.utils.functional import cached_property
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -89,18 +88,8 @@ class AssetDetailView(RecordPageMixin, TemplateView):
     template_name = "assets/asset_detail.html"
     resource = "assets"
     context_object_name = "asset"
-
-    @cached_property
-    def found(self) -> Asset:
-        """The asset as stored, which the records of other kinds about it are asked by."""
-
-        return Asset.objects.prefetch_related(
-            "related_projects",
-            "content_items",
-            "documentation_records",
-            "expenses",
-            "receipts",
-        ).get(slug=self.record["slug"])
+    model = Asset
+    stored_related = ("related_projects", "content_items", "documentation_records", "expenses", "receipts")
 
     @override
     def get_page_title(self):
@@ -109,7 +98,7 @@ class AssetDetailView(RecordPageMixin, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        asset = self.found
+        asset = self.stored
         documents = related_documents(asset.documentation_records.all(), listed=asset.related_projects.all())
         principal = web_principal(self.request.user)
         context["thing"] = reference_of(asset, "infrastructure", principal=principal)

@@ -181,14 +181,8 @@ class ProjectDetailView(RecordPageMixin, TemplateView):
     template_name = "projects/project_detail.html"
     resource = "projects"
     context_object_name = "project"
-
-    @cached_property
-    def found(self) -> Project:
-        """The project as stored, which the records of other kinds about it are asked by."""
-
-        return Project.objects.prefetch_related("content_items", "assets", "documentation_records", "expenses").get(
-            slug=self.record["slug"]
-        )
+    model = Project
+    stored_related = ("content_items", "assets", "documentation_records", "expenses")
 
     @cached_property
     def repository(self):
@@ -207,7 +201,7 @@ class ProjectDetailView(RecordPageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["github"] = self.repository
-        project = self.found
+        project = self.stored
         documents = related_documents(project.documentation_records.all(), about=project)
         context["related"] = related.related(
             related.writeups(project.content_items.all(), status=True),

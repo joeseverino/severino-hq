@@ -177,22 +177,13 @@ class ContentDetailView(RecordPageMixin, TemplateView):
     template_name = "content/content_detail.html"
     resource = "content"
     context_object_name = "item"
-
-    @cached_property
-    def found(self) -> ContentItem:
-        """The item as stored, which the records of other kinds about it are asked by."""
-
-        return ContentItem.objects.prefetch_related(
-            "related_projects",
-            "related_assets",
-            "related_documentation",
-            "related_expenses",
-        ).get(slug=self.record["slug"])
+    model = ContentItem
+    stored_related = ("related_projects", "related_assets", "related_documentation", "related_expenses")
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        item = self.found
+        item = self.stored
         documents = related_documents(
             item.related_documentation.all(), listed=item.related_projects.all(), sources=True
         )
