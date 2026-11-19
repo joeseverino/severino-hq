@@ -8,7 +8,6 @@ import re
 from contextlib import contextmanager
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.db import connection
 from django.db.models.signals import post_init
 from django.test import TestCase
@@ -20,6 +19,7 @@ from hq.platform.application.markup_testing import select, text, within
 from hq.platform.application.read_models import recent_activity
 from hq.platform.core import append_only
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 OPERATION = "example-import"
 
@@ -59,7 +59,7 @@ def _read():
 
 class BoundedEventTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "x" * 14))
+        operator(self.client)
         with append_only.lifted():
             AuditLog.objects.all().delete()
 

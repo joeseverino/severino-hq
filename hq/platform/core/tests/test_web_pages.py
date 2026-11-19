@@ -3,8 +3,6 @@
 from datetime import timedelta
 from unittest.mock import call, patch
 
-from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -13,7 +11,6 @@ from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
     DashboardRefreshRequest,
-    ManagedResource,
     ProviderConnection,
     ProviderInventory,
 )
@@ -27,12 +24,11 @@ from hq.platform.application.markup_testing import elements, hrefs, select, text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.glance_readings import HOST, reported_machine
 from hq.platform.application.tests.host_only import host_only
+from hq.platform.core.testing import SignedInTestCase, declare
 from hq_sdk.testing import plain
 
-from .signed_in_case import _AuthedTestCase
 
-
-class SearchPageTests(_AuthedTestCase):
+class SearchPageTests(SignedInTestCase):
     def test_search_with_nothing_asked_is_a_search_box(self):
         with patch("hq.platform.core.views.command_center") as discovery:
             response = self.client.get("/search/")
@@ -71,7 +67,7 @@ class SearchPageTests(_AuthedTestCase):
         self.assertNotIn("What the example page lists", shown)
 
     def test_a_machine_found_carries_its_state_as_a_chip(self):
-        ManagedResource.objects.create(key="example-host", kind="machine", spec={"name": "example-host"})
+        declare("example-host", "machine", {"name": "example-host"})
 
         response = self.client.get("/search/", {"q": "example-host"})
 
@@ -182,7 +178,7 @@ class SearchPageTests(_AuthedTestCase):
         )
 
 
-class EmptyListTests(_AuthedTestCase):
+class EmptyListTests(SignedInTestCase):
     def test_an_empty_list_is_the_empty_state_and_no_table(self):
         """Headings over no rows say nothing; the one empty state says what is missing."""
 
@@ -199,7 +195,7 @@ class EmptyListTests(_AuthedTestCase):
         self.assertFalse(elements(page, "table"))
 
 
-class KeyColumnTests(_AuthedTestCase):
+class KeyColumnTests(SignedInTestCase):
     """A list says which columns a phone keeps, on the heading, sortable or not."""
 
     @classmethod
@@ -236,14 +232,10 @@ class KeyColumnTests(_AuthedTestCase):
                 self.assertTrue(any("key-col" in heading.attrs.get("class", "").split() for heading in headings))
 
 
-class DashboardWorkflowTests(_AuthedTestCase):
+class DashboardWorkflowTests(SignedInTestCase):
     def test_dashboard_and_machine_page_share_the_machine_observation(self):
         observed = timezone.now()
-        machine = ManagedResource.objects.create(
-            key="example-host",
-            kind="machine",
-            spec={"name": "example-host"},
-        )
+        machine = declare("example-host", "machine", {"name": "example-host"})
         readings.record(
             readings.machine_telemetry("example-host"),
             reported_machine("example-host", host=HOST),
@@ -258,11 +250,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertIn("9%", text(machine_page))
 
     def test_dashboard_refresh_is_one_explicit_controller_request(self):
-        machine = ManagedResource.objects.create(
-            key="example-host",
-            kind="machine",
-            spec={"name": "example-host"},
-        )
+        machine = declare("example-host", "machine", {"name": "example-host"})
         DashboardMachine.objects.create(machine=machine)
         ProviderConnection.objects.create(
             connection_ref="example-portainer",
@@ -398,10 +386,9 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertIn(found.transport, fact.text)
 
     def test_dashboard_routes_infrastructure_findings_to_their_evidence(self):
-        ManagedResource.objects.create(
-            key="example-wildcard",
-            kind="tls.certificate",
-            spec={},
+        declare(
+            "example-wildcard",
+            "tls.certificate",
             generation=2,
             observed_generation=1,
             conditions=[
@@ -528,15 +515,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertEqual(list(response.context["object_list"]), [matching])
 
 
-class NavigationTests(TestCase):
+class NavigationTests(SignedInTestCase):
     """The bar has to say where you are, and only where you are."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = get_user_model().objects.create_user(username="nav")
-
-    def setUp(self):
-        self.client.force_login(self.user)
 
     def _entries(self, url):
         from hq.platform.core.context_processors import nav

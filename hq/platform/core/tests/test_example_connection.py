@@ -1,19 +1,16 @@
 """A saved copy of HQ never states an example connection as the reader's own."""
 
-from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import override_settings
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import text, with_class
+from hq.platform.core.testing import SignedInTestCase
 
 NOTICE = "Not your connection."
 MARK = "example-connection"
 
 
-class ExampleConnectionTests(TestCase):
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("reader"))
-
+class ExampleConnectionTests(SignedInTestCase):
     def pages(self):
         return {
             "dashboard": self.client.get(reverse("dashboard")),

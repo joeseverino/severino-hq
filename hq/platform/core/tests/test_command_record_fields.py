@@ -1,8 +1,6 @@
 """A command field that names records is a choice of those records."""
 
 from django import forms
-from django.contrib.auth import get_user_model
-from django.test import TestCase
 
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
@@ -21,9 +19,8 @@ from hq.platform.application.references import NO_LONGER_OFFERED
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
+from hq.platform.core.testing import SignedInTestCase
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
-
-User = get_user_model()
 
 
 def option_values(page, name: str) -> list[str]:
@@ -34,18 +31,7 @@ def option_values(page, name: str) -> list[str]:
     return options + boxes
 
 
-class RecordFieldTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = User.objects.create_superuser(
-            username="record-fields",
-            email="operator@example.test",
-            password="strongtestpass-1234",
-        )
-
-    def setUp(self):
-        self.client.force_login(self.user)
-
+class RecordFieldTests(SignedInTestCase):
     def test_every_record_field_names_a_listable_resource(self):
         resources = integration_graph().resources
         for name, spec in capability_registry().items():

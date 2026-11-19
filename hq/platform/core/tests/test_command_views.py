@@ -4,8 +4,6 @@ import json
 from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
-from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
@@ -18,9 +16,8 @@ from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.ui import MISSING
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
 from hq.platform.core.models import AuditLog, IdempotencyRecord
+from hq.platform.core.testing import SignedInTestCase, declare
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
-
-User = get_user_model()
 
 
 def fields(page) -> set[str]:
@@ -52,18 +49,7 @@ def result_title(page) -> str | None:
     return found[0].words if found else None
 
 
-class CommandViewTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = User.objects.create_superuser(
-            username="command-operator",
-            email="operator@example.test",
-            password="strongtestpass-1234",
-        )
-
-    def setUp(self):
-        self.client.force_login(self.user)
-
+class CommandViewTests(SignedInTestCase):
     def _create_payload(self, *, slug="browser-command"):
         response = self.client.get("/commands/project.create/")
         return {
@@ -155,8 +141,8 @@ class CommandViewTests(TestCase):
         self.assertEqual(notes.tag, "textarea")
 
     def test_a_page_opened_for_one_thing_names_it_instead_of_listing_every_other(self):
-        ManagedResource.objects.create(key="example-certificate", kind="tls.certificate", spec={})
-        ManagedResource.objects.create(key="example-other", kind="tls.certificate", spec={})
+        declare("example-certificate", "tls.certificate")
+        declare("example-other", "tls.certificate")
 
         chosen = self.client.get("/commands/certificate.renew/", {"target": "example-certificate"})
         open_ = self.client.get("/commands/certificate.renew/")
@@ -179,16 +165,8 @@ class CommandViewTests(TestCase):
         self.assertEqual(chosen_options(response), ["hq"])
 
     def test_retry_keys_are_automatic_and_target_language_is_operator_facing(self):
-        ManagedResource.objects.create(
-            key="example-certificate",
-            kind="tls.certificate",
-            spec={},
-        )
-        ManagedResource.objects.create(
-            key="example-zone",
-            kind="cloudflare.zone",
-            spec={},
-        )
+        declare("example-certificate", "tls.certificate")
+        declare("example-zone", "cloudflare.zone")
         response = self.client.get("/commands/certificate.renew/")
 
         (label,) = select(response, "for", "id___target")
@@ -213,7 +191,7 @@ class CommandViewTests(TestCase):
 
         def arrange(count):
             for index in range(ManagedResource.objects.count(), count):
-                ManagedResource.objects.create(key=f"example-certificate-{index}", kind="tls.certificate", spec={})
+                declare(f"example-certificate-{index}", "tls.certificate")
 
         assert_cost_does_not_grow(
             self,
@@ -226,16 +204,8 @@ class CommandViewTests(TestCase):
         )
 
     def test_discovery_context_filters_and_explains_infrastructure_targets(self):
-        ManagedResource.objects.create(
-            key="example-device",
-            kind="tailscale.device",
-            spec={},
-        )
-        ManagedResource.objects.create(
-            key="example-zone",
-            kind="cloudflare.zone",
-            spec={},
-        )
+        declare("example-device", "tailscale.device")
+        declare("example-zone", "cloudflare.zone")
 
         response = self.client.get("/commands/infrastructure.resource.reconcile/", {"kind": "tailscale.device"})
 
@@ -243,10 +213,10 @@ class CommandViewTests(TestCase):
         self.assertNotIn("example-zone", options(response))
 
     def test_update_hydrates_the_selected_resource_and_concurrency_guard(self):
-        resource = ManagedResource.objects.create(
-            key="example-record",
-            kind="cloudflare.dns_record",
-            spec={"name": "www.example.test", "type": "A", "content": "192.0.2.1"},
+        resource = declare(
+            "example-record",
+            "cloudflare.dns_record",
+            {"name": "www.example.test", "type": "A", "content": "192.0.2.1"},
             enabled=True,
         )
 
@@ -333,19 +303,8 @@ class CommandViewTests(TestCase):
         self.assertEqual(result_title(shown), "Done")
 
 
-class CommandResultProjectionTests(TestCase):
+class CommandResultProjectionTests(SignedInTestCase):
     """A result is shown as what it says before it is shown as JSON."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = User.objects.create_superuser(
-            username="result-operator",
-            email="results@example.test",
-            password="strongtestpass-1234",
-        )
-
-    def setUp(self):
-        self.client.force_login(self.user)
 
     def _run(self, name, payload, form_data):
         key = drawn_key(self.client.get(f"/commands/{name}/"), "data-command-form")

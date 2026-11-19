@@ -15,7 +15,7 @@ from hq.platform.application.capability_policy import Rule
 from hq.platform.application.linked_accounts import bind_sign_in
 from hq.platform.core.audit import operation_context
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
-from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 
 EVERY_PART = {"HTTP_X_FRAGMENT": "every_rule"}
 
@@ -32,16 +32,15 @@ class AgentPageQueryBudgetTests(TestCase):
         while self.agents < upto:
             index = self.agents
             self.agents += 1
-            with no_default_role():
-                person = get_user_model().objects.create_user(f"person-{index}")
-            bind_sign_in(person, f"person-{index}")
-            roles.assign(person, roles.Role.VIEWER)
+            viewer = person(username=f"person-{index}")
+            bind_sign_in(viewer, f"person-{index}")
+            roles.assign(viewer, roles.Role.VIEWER)
             client = f"example-agent-{index}"
             identity = AgentIdentity.objects.create(
                 client_id=client,
                 interfaces=["mcp"],
                 granted=["read"],
-                person=person,
+                person=viewer,
                 blocked_at=timezone.now(),
                 blocked_by=self.owner,
             )
@@ -57,7 +56,7 @@ class AgentPageQueryBudgetTests(TestCase):
                     "approved",
                     {
                         "approved_at": timezone.now(),
-                        "approved_by": person,
+                        "approved_by": viewer,
                         "blocked_at": timezone.now(),
                         "blocked_by": self.owner,
                     },
@@ -65,7 +64,7 @@ class AgentPageQueryBudgetTests(TestCase):
                 ("awaiting", {}),
             ):
                 node_id = f"n{node}{index}CNTRL"
-                AgentDevice.objects.create(identity=identity, person=person, node_id=node_id, name=node_id, **state)
+                AgentDevice.objects.create(identity=identity, person=viewer, node_id=node_id, name=node_id, **state)
                 AuditLog.objects.create(
                     action=AuditLog.Action.UPDATED, metadata={"actor": client, "interface": "mcp", "device": node_id}
                 )

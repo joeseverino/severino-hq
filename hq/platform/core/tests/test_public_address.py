@@ -2,7 +2,6 @@
 
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -16,6 +15,7 @@ from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, 
 from hq.platform.application.tests.connection_requests import A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
 from hq.platform.application.tests.test_lookup import AN_ADDRESS, AN_ALLOCATION, GLOBAL as ADDRESS
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 KEY = readings.public_address(ADDRESS)
 STORED = {
@@ -45,7 +45,7 @@ def nobody_asked():
 
 class PublicAddressViewTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
+        operator(self.client, "op")
         self.url = reverse("tool_public_address")
 
     def look_up(self, address):

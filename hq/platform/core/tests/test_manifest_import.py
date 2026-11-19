@@ -20,11 +20,10 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core.testing import SignedInTestCase
 
-from .signed_in_case import _AuthedTestCase
 
-
-class ManifestUploadTests(_AuthedTestCase):
+class ManifestUploadTests(SignedInTestCase):
     def upload(self, content):
         from django.core.files.uploadedfile import SimpleUploadedFile
 
@@ -50,7 +49,7 @@ class ManifestUploadTests(_AuthedTestCase):
         self.assertGreater(MAX_MANIFEST_BYTES, 8)
 
 
-class ExportSmokeTests(_AuthedTestCase):
+class ExportSmokeTests(SignedInTestCase):
     def setUp(self):
         super().setUp()
         self.project = Project.objects.create(name="Lab: homelab DNS", status=Project.Status.ACTIVE)

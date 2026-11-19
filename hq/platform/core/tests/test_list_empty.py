@@ -1,11 +1,10 @@
 """An empty list says why it is empty."""
 
-from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.markup_testing import links
+from hq.platform.core.testing import SignedInTestCase
 
 
 def offers(page, label: str, href: str) -> bool:
@@ -14,14 +13,7 @@ def offers(page, label: str, href: str) -> bool:
     return any(words.startswith(label) and target == href for words, target in links(page))
 
 
-class EmptyListTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = get_user_model().objects.create_superuser("operator", "operator@example.com", "unused-password")
-
-    def setUp(self):
-        self.client.force_login(self.user)
-
+class EmptyListTests(SignedInTestCase):
     def test_a_list_with_nothing_in_it_says_so_in_its_own_words(self):
         response = self.client.get(reverse("assets:list"))
 

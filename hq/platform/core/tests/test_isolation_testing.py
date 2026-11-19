@@ -12,7 +12,6 @@ import logging
 import unittest
 import unittest.mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.platform.application import cadence
@@ -21,6 +20,7 @@ from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.security import web_principal
 from hq.platform.core.example_estate import automation
 from hq.platform.core.test_runner import SeverinoTestRunner
+from hq.platform.core.testing import operator
 
 
 def _run(*tests: unittest.TestCase, **options: bool) -> unittest.TestResult:
@@ -55,7 +55,7 @@ class ClassSetupStartsFreshTests(TestCase):
         class Adopts(unittest.TestCase):
             @classmethod
             def setUpClass(cls):
-                automation.adopted(web_principal(get_user_model().objects.create_user("example-adopter")))
+                automation.adopted(web_principal(operator()))
                 cadence.note_controller()
                 raise unittest.SkipTest("stops in its setup, so no test of it starts or stops")
 

@@ -4,7 +4,6 @@ field's help the command's meaning."""
 
 from datetime import date
 
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 from django.forms import ModelForm
 from django.test import TestCase
@@ -19,6 +18,7 @@ from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.routes import routed
 from hq.platform.application.writes import CommandFormPage, RecordFormMixin
+from hq.platform.core.testing import SignedInTestCase, operator
 
 
 def creates() -> dict[str, str]:
@@ -46,14 +46,7 @@ def help_of(page, name: str) -> str:
     return shown[0].words if shown else ""
 
 
-class RecordFormTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = get_user_model().objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
-
-    def setUp(self):
-        self.client.force_login(self.user)
-
+class RecordFormTests(SignedInTestCase):
     def test_a_new_record_is_made_by_its_create_command_words(self):
         pages = creates()
         self.assertTrue(pages, "no page makes a record from its form")
@@ -96,8 +89,7 @@ class DerivedRecordFormTests(TestCase):
     """A record's form is its command's fields, and what it posts is saved."""
 
     def test_a_field_posted_on_the_form_is_saved(self):
-        user = get_user_model().objects.create_superuser("example-saver", "saver@example.test", "x" * 20)
-        self.client.force_login(user)
+        operator(self.client, "example-saver")
 
         self.client.post(
             reverse("assets:create"),
@@ -122,8 +114,7 @@ class DerivedRecordFormTests(TestCase):
             type("NamesAForm", (RecordFormMixin, CreateView), {"model": Asset, "form_class": ModelForm})
 
     def test_a_slug_sent_with_spaces_around_it_is_saved_without_them(self):
-        user = get_user_model().objects.create_superuser("example-slugger", "slugger@example.test", "x" * 20)
-        self.client.force_login(user)
+        operator(self.client, "example-slugger")
 
         self.client.post(
             reverse("projects:create"),

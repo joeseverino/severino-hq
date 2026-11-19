@@ -1,14 +1,9 @@
 """The switch: a row of links to the same view, one current, is one part."""
 
-from django.template import Context, Template
 from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import elements, select, with_class
-
-
-def _render(source: str, **context) -> str:
-    return Template(source).render(Context(context))
-
+from hq.platform.core.testing import render
 
 _THREE = (
     '{% switch label="Domains" %}'
@@ -21,7 +16,7 @@ _THREE = (
 
 class SwitchTagTests(SimpleTestCase):
     def test_it_is_a_named_navigation_of_links_with_one_current(self):
-        html = _render(_THREE)
+        html = render(_THREE)
 
         (nav,) = elements(html, "nav")
         self.assertEqual(nav.attrs["aria-label"], "Domains")
@@ -33,7 +28,7 @@ class SwitchTagTests(SimpleTestCase):
         self.assertEqual(current.attrs["aria-current"], "page")
 
     def test_each_link_is_a_shared_chip(self):
-        html = _render(_THREE)
+        html = render(_THREE)
 
         chips = with_class(html, "scope-chip")
         self.assertEqual([chip.words for chip in chips], ["★ one.example", "two.example not managed", "three.example"])
@@ -41,7 +36,7 @@ class SwitchTagTests(SimpleTestCase):
             self.assertIn(link, chip.ancestors)
 
     def test_a_mark_is_hidden_from_a_reader_and_a_note_is_in_the_chip(self):
-        html = _render(_THREE)
+        html = render(_THREE)
 
         (mark,) = select(html, "aria-hidden", "true")
         self.assertEqual(mark.words, "★")
@@ -49,7 +44,7 @@ class SwitchTagTests(SimpleTestCase):
         self.assertIn("not managed", two.words)
 
     def test_a_count_is_in_its_link_beside_its_chip_and_nought_is_drawn(self):
-        html = _render(
+        html = render(
             '{% switch label="Status" %}'
             '{% choice url="?" current=True count=12 %}All{% endchoice %}'
             '{% choice url="?status=read" count=0 %}Read{% endchoice %}'
@@ -66,7 +61,7 @@ class SwitchTagTests(SimpleTestCase):
         self.assertEqual(links[2].words, "New")
 
     def test_a_summary_is_said_under_the_row_only_when_given(self):
-        html = _render(
+        html = render(
             '{% switch label="Tools" %}{% choice url="?tab=a" current=True %}A{% endchoice %}'
             "{% summary %}What A answers.{% endswitch %}"
         )
@@ -75,4 +70,4 @@ class SwitchTagTests(SimpleTestCase):
         (summary,) = elements(html, "p")
         self.assertEqual(summary.words, "What A answers.")
         self.assertNotIn(nav, summary.ancestors)
-        self.assertEqual(elements(_render(_THREE), "p"), [])
+        self.assertEqual(elements(render(_THREE), "p"), [])

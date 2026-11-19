@@ -6,12 +6,12 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.messages.storage.base import Message
-from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings, tag
 
 from hq.platform.application.markup_testing import all_elements, elements, select, with_class
 from hq.platform.application.tests.reads import reads
+from hq.platform.core.testing import render
 from hq.platform.core.tests.browser.catalog import CATALOG
 from hq_sdk.testing import plain
 
@@ -19,15 +19,11 @@ from hq_sdk.testing import plain
 LOOKS = {"": None, "info": "notice-info", "success": "notice-success", "warning": "notice-warning"}
 
 
-def _render(source: str, **context) -> str:
-    return Template(source).render(Context(context))
-
-
 class NoticeTagTests(SimpleTestCase):
     def test_each_tone_is_one_part_in_its_look_and_a_status(self):
         for tone, look in LOOKS.items():
             with self.subTest(tone=tone):
-                html = _render("{% notice tone=tone %}Saved.{% endnotice %}", tone=tone)
+                html = render("{% notice tone=tone %}Saved.{% endnotice %}", tone=tone)
 
                 (notice,) = with_class(html, "notice")
                 self.assertEqual(notice.attrs["role"], "status")
@@ -35,14 +31,14 @@ class NoticeTagTests(SimpleTestCase):
                 self.assertEqual([c for c in notice.classes if c.startswith("notice-")], [look] if look else [])
 
     def test_an_error_interrupts(self):
-        html = _render('{% notice tone="error" %}It failed.{% endnotice %}')
+        html = render('{% notice tone="error" %}It failed.{% endnotice %}')
 
         (notice,) = with_class(html, "notice")
         self.assertIn("notice-error", notice.classes)
         self.assertEqual(notice.attrs["role"], "alert")
 
     def test_its_title_leads_its_body(self):
-        html = _render(
+        html = render(
             '{% notice tone="warning" title=title %}<p>{{ names }}</p>{% endnotice %}',
             title="2 jobs failed",
             names="backup, sync",
@@ -57,7 +53,7 @@ class NoticeTagTests(SimpleTestCase):
         self.assertLess(plain(html).index("2 jobs failed"), plain(html).index("backup, sync"))
 
     def test_a_title_the_page_composes_is_its_title_part(self):
-        html = _render(
+        html = render(
             '{% notice tone="warning" %}<p>Pick another.</p>{% title %}{{ name }} cannot be used{% endnotice %}',
             name="example-target",
         )
@@ -69,7 +65,7 @@ class NoticeTagTests(SimpleTestCase):
         self.assertLess(plain(html).index("cannot be used"), plain(html).index("Pick another."))
 
     def test_a_pages_class_and_data_attributes_ride_on_it(self):
-        html = _render(
+        html = render(
             '{% notice css="example" data_example_ref=ref data_example_flag=True data_example_off=False %}'
             "Body{% endnotice %}",
             ref='a"b',
@@ -82,7 +78,7 @@ class NoticeTagTests(SimpleTestCase):
         self.assertNotIn("data-example-off", notice.attrs)
 
     def test_with_no_body_it_is_the_frame_a_script_fills(self):
-        html = _render('{% notice tone="error" %}{% endnotice %}')
+        html = render('{% notice tone="error" %}{% endnotice %}')
 
         (notice,) = with_class(html, "notice")
         self.assertEqual(notice.words, "")
@@ -122,7 +118,7 @@ class NoticeCatalogTests(SimpleTestCase):
         drawn = {
             name
             for entry in entries
-            for each in all_elements(_render(entry.template, **entry.context))
+            for each in all_elements(render(entry.template, **entry.context))
             for name in each.classes
         }
         drawn_tones = {tone for tone, classes in TONES.items() if tone and classes.split()[-1] in drawn}

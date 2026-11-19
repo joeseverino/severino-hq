@@ -15,7 +15,6 @@ from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings, tag
 from django.urls import Resolver404, resolve, reverse
 from django.urls.resolvers import RoutePattern
@@ -26,6 +25,7 @@ from hq.platform.application.tests.reads import reads
 from hq.platform.core.audit import stamped
 from hq.platform.core.models import AuditLog
 from hq.platform.core.network import parse_ip
+from hq.platform.core.testing import operator
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
 
@@ -95,7 +95,7 @@ class LoginThrottleTests(TestCase):
     """Guessing has to get expensive, and the evidence has to agree."""
 
     def setUp(self):
-        get_user_model().objects.create_user(username="joe", password="correct-horse")
+        operator(username="joe", password="correct-horse")
 
     def _attempt(self, username="joe", password="wrong", ip="100.64.0.1"):
         return self.client.post(
@@ -176,7 +176,7 @@ class SingleSignOnOnlyTests(TestCase):
     """With no password accepted, the guessing surface is gone, not throttled."""
 
     def setUp(self):
-        get_user_model().objects.create_user(username="joe", password="correct-horse")
+        operator(username="joe", password="correct-horse")
 
     def test_the_correct_password_is_refused(self):
         """A hidden form is not a closed one; nothing may accept a password."""
@@ -259,8 +259,7 @@ class HealthDisclosureTests(TestCase):
 
         from hq.platform.application.plugins import plugin_health
 
-        user = get_user_model().objects.create_user("opr", password="x")
-        self.client.force_login(user)
+        operator(self.client)
         response = self.client.get("/health/ready/")
         checks = response.json()["checks"]
         if plugin_health():
@@ -377,7 +376,7 @@ class AnonymousSweepTests(TestCase):
 
         self.assertFalse(apps.is_installed("django.contrib.admin"))
         self.assertFalse(any(route.startswith("admin/") for route, _view in _routes()))
-        for user in (None, get_user_model().objects.create_superuser("root-example", password="unused-test-pass")):
+        for user in (None, operator()):
             client = Client()
             if user is not None:
                 client.force_login(user)
@@ -450,13 +449,11 @@ class ReceiptUploadHardeningTests(TestCase):
     def test_the_served_type_never_comes_from_the_filename(self):
         """A stored row with an unaccepted or blank type serves inertly."""
 
-        from django.contrib.auth import get_user_model
         from django.core.files.base import ContentFile
 
         from hq.domains.receipts.models import Receipt
 
-        user = get_user_model().objects.create_user("op", password="x")
-        self.client.force_login(user)
+        operator(self.client, "op")
         receipt = Receipt.objects.create(vendor="v", amount=1, content_type="")
         receipt.file.save("note.html", ContentFile(b"markup"))
 
@@ -470,13 +467,11 @@ class ReceiptUploadHardeningTests(TestCase):
         self.assertEqual(b"".join(response.streaming_content), b"markup")
 
     def test_a_pdf_is_still_shown_in_place(self):
-        from django.contrib.auth import get_user_model
         from django.core.files.base import ContentFile
 
         from hq.domains.receipts.models import Receipt
 
-        user = get_user_model().objects.create_user("op2", password="x")
-        self.client.force_login(user)
+        operator(self.client, "op2")
         receipt = Receipt.objects.create(vendor="v", amount=1, content_type="application/pdf")
         receipt.file.save("r.pdf", ContentFile(b"%PDF-1.4"))
 

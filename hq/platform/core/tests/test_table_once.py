@@ -9,8 +9,7 @@ from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import all_elements, with_class
-
-from .signed_in_case import _AuthedTestCase
+from hq.platform.core.testing import SignedInTestCase
 
 # The bytes a row of `test_a_rows_bytes_hold_to_their_budget`'s table
 # may draw, its cells and their marks written once.
@@ -111,7 +110,7 @@ class RowWrittenOnceTests(SimpleTestCase):
 
 
 @override_settings(STORAGES=_PLAIN_ASSETS)
-class EmptyListBytesTests(_AuthedTestCase):
+class EmptyListBytesTests(SignedInTestCase):
     def test_a_page_with_no_rows_holds_to_its_chrome_budget(self):
         """What every page carries, read where no row adds to it: a number load
         does not move, so a frame or a part added to every page is weighed."""

@@ -3,7 +3,6 @@
 from unittest import mock
 
 from django.apps import apps
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
@@ -22,10 +21,9 @@ from hq.platform.application.security import Principal, web_principal
 from hq.platform.application.stored_columns import _model_of
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
+from hq.platform.core.testing import SignedInTestCase
 
 from .command_shapes import field_schema
-
-User = get_user_model()
 
 
 def stored_references() -> dict[tuple[str, str], tuple[type, str]]:
@@ -75,10 +73,10 @@ def reference_fields() -> dict[tuple[str, str], tuple[type, str]]:
     return found
 
 
-class ReferenceFieldTests(TestCase):
+class ReferenceFieldTests(SignedInTestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("operator", "operator@example.com", "a-password")
+        super().setUpTestData()
         ProviderConnection.objects.create(
             connection_ref="a-portainer",
             controller_id="a-controller",
@@ -91,9 +89,6 @@ class ReferenceFieldTests(TestCase):
         )
         Project.objects.create(name="An Example Project", slug="an-example")
         Asset.objects.create(item_name="A router", slug="a-router")
-
-    def setUp(self):
-        self.client.force_login(self.user)
 
     def test_every_type_identity_field_says_which_column_it_fills(self):
         stored = stored_references()

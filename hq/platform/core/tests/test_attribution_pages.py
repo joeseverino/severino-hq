@@ -6,11 +6,9 @@ entry, the audit log and the run read all say who asked and who approved it
 from that row. Every procedure and name here is a synthetic ``example.*`` one.
 """
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.markup_testing import all_elements, within
 from hq.platform.application.resources import get_resource
 from hq.platform.application.run_reads import RUNS
@@ -18,8 +16,8 @@ from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.procedures import APPROVER, Supply, approved_run, manifest, run_payload
 from hq.platform.core.attribution import operation_context
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import AGENT, declare, operator
 
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 READER = Principal("example-reader", "api", frozenset({Capability.READ}))
 
 
@@ -40,7 +38,7 @@ class OneRunReadsAlikeTests(TestCase):
         self.operation_id = answer["operation"]["id"]
         self.queued = AuditLog.objects.get(object_id=self.operation_id, action=AuditLog.Action.CREATED)
         self.assertEqual(self.queued.interface, "mcp")
-        self.client.force_login(get_user_model().objects.create_superuser("example-admin", "a@example.test", "x" * 14))
+        operator(self.client, email="a@example.test")
 
     def page(self, url: str) -> str:
         response = self.client.get(url)
@@ -65,14 +63,14 @@ class OneRunReadsAlikeTests(TestCase):
 
 class OneEventRowTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("example-admin", "a@example.test", "x" * 14))
+        operator(self.client, email="a@example.test")
 
     def test_an_entry_s_other_events_say_who_as_the_audit_log_does(self):
         with operation_context(
             interface="mcp", actor="example-agent", operation="example.change", approved_by="example-owner"
         ):
-            first = ManagedResource.objects.create(key="example-first", kind="example.record", spec={})
-            ManagedResource.objects.create(key="example-second", kind="example.record", spec={})
+            first = declare("example-first", "example.record")
+            declare("example-second", "example.record")
         row = AuditLog.objects.filter(object_id=str(first.pk)).first()
 
         html = self.client.get(reverse("core:audit_detail", args=[row.pk])).content.decode()

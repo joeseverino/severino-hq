@@ -1,6 +1,5 @@
 """The error pages say whose they are, in the site's frame."""
 
-from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import path
@@ -8,6 +7,7 @@ from django.urls import path
 from hq.config.urls import urlpatterns as site_urls
 from hq.platform.application.markup_testing import text, texts, with_class
 from hq.platform.core.error_views import server_error
+from hq.platform.core.testing import operator
 
 
 def refused(request):
@@ -40,7 +40,7 @@ class ServerErrorTests(SimpleTestCase):
 @override_settings(ROOT_URLCONF=__name__)
 class RefusalTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="reader")
+        self.user = operator(username="reader")
 
     def test_a_refused_page_is_hqs_own_and_keeps_the_permission_name_to_itself(self):
         self.client.force_login(self.user)
@@ -69,7 +69,7 @@ class NotFoundTests(TestCase):
     def test_a_404_offers_the_search_to_a_signed_in_reader_only(self):
         missing = "/no-such-page/"
         anonymous = self.client.get(missing)
-        self.client.force_login(get_user_model().objects.create_user(username="reader"))
+        operator(self.client, "reader")
         signed_in = self.client.get(missing)
 
         if anonymous.status_code == 404:

@@ -1,18 +1,14 @@
 """The check ladder: checks read down, each opening to why, are one part."""
 
-from django.template import Context, Template
 from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import elements, with_class
-
-
-def _render(source: str, **context) -> str:
-    return Template(source).render(Context(context))
+from hq.platform.core.testing import render
 
 
 class CheckLadderTagTests(SimpleTestCase):
     def test_a_rung_says_its_state_statement_and_evidence_and_opens_to_its_body(self):
-        html = _render(
+        html = render(
             "{% check_ladder route=True %}"
             '{% check_rung state="unmet" kind="Device" evidence=value open=True data_example="one" %}'
             "{{ said }}{% detail %}Example OS{% more %}2 checks{% page %}<a href='/example/'>Example</a>{% body %}<p>Why</p>{% endcheck_rung %}"
@@ -41,7 +37,7 @@ class CheckLadderTagTests(SimpleTestCase):
         self.assertIn(body, page.ancestors)
 
     def test_a_rung_given_no_state_was_not_read_and_draws_only_what_it_has(self):
-        html = _render("{% check_ladder %}{% check_rung %}Example check{% endcheck_rung %}{% endcheck_ladder %}")
+        html = render("{% check_ladder %}{% check_rung %}Example check{% endcheck_rung %}{% endcheck_ladder %}")
 
         self.assertNotIn("is-route", with_class(html, "check-ladder")[0].classes)
         self.assertEqual(with_class(html, "ladder-rung")[0].attrs["data-state"], "unavailable")
@@ -51,7 +47,7 @@ class CheckLadderTagTests(SimpleTestCase):
                 self.assertEqual(with_class(html, part), [])
 
     def test_a_stop_no_check_reads_draws_what_it_is_and_claims_no_standing(self):
-        html = _render(
+        html = render(
             "{% check_ladder route=True %}"
             '{% check_rung icon="server" %}example-host-01{% endcheck_rung %}'
             '{% check_rung icon="server" state="met" %}example-host-02{% endcheck_rung %}'

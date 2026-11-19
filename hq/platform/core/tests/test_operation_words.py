@@ -2,7 +2,6 @@
 
 from uuid import uuid7
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -12,6 +11,7 @@ from hq.platform.core import append_only
 from hq.platform.core.audit import record_event
 from hq.platform.core.middleware import request_operation
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 # A route whose words would show: its namespace and its name.
 ROUTE = "core:audit_list"
@@ -20,9 +20,8 @@ ROUTE_WORDS = ("core", "audit_list", "audit list", ":")
 
 class RequestWordsTests(TestCase):
     def setUp(self):
-        self.owner = get_user_model().objects.create_superuser("owner", "owner@example.test", "x" * 14)
-        self.client.force_login(self.owner)
-        self.records = [get_user_model().objects.create_user(name) for name in ("example-a", "example-b")]
+        self.owner = operator(self.client, "owner")
+        self.records = [operator(username=name) for name in ("example-a", "example-b")]
         with append_only.lifted():
             AuditLog.objects.all().delete()
         self.request_id = uuid7().hex

@@ -18,8 +18,7 @@ from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
-
-from .signed_in_case import _AuthedTestCase
+from hq.platform.core.testing import SignedInTestCase
 
 TEMPLATES = Path(__file__).resolve().parents[4] / "templates"
 
@@ -773,7 +772,7 @@ class TableColumnTests(SimpleTestCase):
         self.assertEqual(ranks, {"Name": 0, "Note": 2, "When": 1})
 
 
-class ListTableTests(_AuthedTestCase):
+class ListTableTests(SignedInTestCase):
     """The shared list draws its table through the tags, rows and all."""
 
     @classmethod

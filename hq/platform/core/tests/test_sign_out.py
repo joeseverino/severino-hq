@@ -4,12 +4,13 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 from django.conf import settings
-from django.contrib.auth import SESSION_KEY, get_user_model
+from django.contrib.auth import SESSION_KEY
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
 from hq.platform.api.tests.tokens import ISSUER, _serving
 from hq.platform.core.oidc import HQOIDCAuthenticationBackend
+from hq.platform.core.testing import operator
 from hq.platform.core.tests.test_id_token import CLIENT, NONCE, _id_token
 
 END_SESSION = f"{ISSUER}/api/oidc/end-session"
@@ -71,7 +72,7 @@ class SignOutTests(TestCase):
         self.assertNotIn(SESSION_KEY, self.client.session)
 
     def test_a_session_without_an_id_token_is_signed_out_of_hq_alone(self):
-        self.client.force_login(get_user_model().objects.create_user("example-person", password="x" * 20))
+        operator(self.client, "example-person")
 
         response = self.client.post(reverse("logout"))
 

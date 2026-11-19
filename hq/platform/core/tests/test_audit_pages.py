@@ -18,8 +18,7 @@ from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import hrefs, text, with_class, within
 from hq.platform.core.audit import audited_labels, operation_context
 from hq.platform.core.models import AuditLog
-
-from .signed_in_case import _AuthedTestCase
+from hq.platform.core.testing import SignedInTestCase, declare
 
 
 class AuditLogTests(TestCase):
@@ -80,7 +79,7 @@ class AuditChangeTests(TestCase):
         self.assertEqual(changes["token"], [REDACTED, REDACTED])
 
 
-class AuditDetailPageTests(_AuthedTestCase):
+class AuditDetailPageTests(SignedInTestCase):
     """Every row leads somewhere, and what it leads to answers the question."""
 
     def test_an_event_shows_the_fields_that_moved(self):
@@ -102,10 +101,10 @@ class AuditDetailPageTests(_AuthedTestCase):
     def test_a_record_field_that_moved_is_said_in_words(self):
         from hq.domains.control_plane.models import ManagedResource
 
-        resource = ManagedResource.objects.create(
-            key="example-policy",
-            kind="example.policy",
-            spec={"grants": [{"src": ["group:example"], "dst": ["tag:example"]}], "hosts": {"one": "192.0.2.1"}},
+        resource = declare(
+            "example-policy",
+            "example.policy",
+            {"grants": [{"src": ["group:example"], "dst": ["tag:example"]}], "hosts": {"one": "192.0.2.1"}},
         )
         resource = ManagedResource.objects.get(pk=resource.pk)
         resource.spec["grants"][0]["src"].append("group:elsewhere")
@@ -179,7 +178,7 @@ class AuditDetailPageTests(_AuthedTestCase):
         self.assertTrue(any(ancestor is folded for ancestor in link.ancestors))
 
     def test_a_row_written_before_rows_named_their_record_still_names_it(self):
-        resource = ManagedResource.objects.create(key="example-older", kind="example.record", spec={})
+        resource = declare("example-older", "example.record")
         label = audited_labels()[ManagedResource]
         older = AuditLog.objects.create(
             action=AuditLog.Action.UPDATED, object_type=label, object_id=str(resource.pk), object_repr="example-older"

@@ -3,7 +3,6 @@
 import json
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.platform.application import cadence
@@ -18,16 +17,13 @@ from hq.platform.application.plugins import gather_attention
 from hq.platform.application.tests.links import example_command
 from hq.platform.application.tests.test_decisions import row_hrefs
 from hq.platform.application.ui import DomainOverview
+from hq.platform.core.testing import SignedInTestCase, operator
 from hq_sdk.testing import plain
 
 
-class DashboardQueueTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = get_user_model().objects.create_user(username="queue-review")
-
+class DashboardQueueTests(SignedInTestCase):
     def setUp(self):
-        self.client.force_login(self.user)
+        super().setUp()
         check = example_command(
             "verify",
             "Recheck facts",
@@ -345,7 +341,7 @@ class EmptyQueueClaimTests(TestCase):
     """An empty queue is "Nothing needs you" only once something has been read."""
 
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user(username="fresh-install"))
+        operator(self.client)
         empty = patch("hq.platform.application.dashboard.domain_attention_items", return_value=())
         empty.start()
         self.addCleanup(empty.stop)

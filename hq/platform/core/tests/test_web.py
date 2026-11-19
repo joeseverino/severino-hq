@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
@@ -23,8 +24,9 @@ from hq.platform.application.markup_testing import elements, hrefs
 from hq.platform.core.audit import record_event
 from hq.platform.core.logging import JsonFormatter
 from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, HQOIDCAuthenticationBackend
+from hq.platform.core.testing import operator
 
-from .signed_in_case import User
+User = get_user_model()
 
 
 class AuthGateTests(TestCase):
@@ -331,7 +333,7 @@ class OIDCBackendTests(TestCase):
 
     @patch("mozilla_django_oidc.auth.OIDCAuthenticationBackend.get_or_create_user")
     def test_a_sign_in_links_the_github_account_it_claims(self, get_user):
-        user = User.objects.create_user("operator")
+        user = operator()
         get_user.return_value = user
         backend = HQOIDCAuthenticationBackend()
         backend.request = type("Request", (), {"session": {}})()
@@ -374,8 +376,8 @@ class OIDCBackendTests(TestCase):
     def test_a_signed_in_subject_keeps_its_account_whatever_it_is_renamed_to(self):
         """Once bound, a name or address that moves to another person moves nothing."""
 
-        first = User.objects.create_user(username="joe", email="joe@example.com")
-        other = User.objects.create_user(username="sam", email="sam@example.com")
+        first = operator(username="joe", email="joe@example.com")
+        other = operator(username="sam", email="sam@example.com")
         backend = HQOIDCAuthenticationBackend()
         backend.request = type("Request", (), {"session": {}})()
         with patch(
@@ -399,7 +401,7 @@ class OIDCBackendTests(TestCase):
         )
 
     def test_an_unverified_address_does_not_find_an_account(self):
-        User.objects.create_user(username="joe", email="joe@example.com")
+        operator(username="joe", email="joe@example.com")
         backend = HQOIDCAuthenticationBackend()
 
         users = backend.filter_users_by_claims(

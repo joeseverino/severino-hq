@@ -3,14 +3,11 @@ FORM_RENDERER finds before Django's own: what a field says about itself reaches
 the control, and every description the control names is on the page."""
 
 from django import forms
-from django.contrib.auth import get_user_model
 from django.template import Context, Template
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.markup_testing import Element, all_elements, select, with_class
-
-User = get_user_model()
+from hq.platform.core.testing import SignedInTestCase, declare
 
 
 def group_of(page, name: str) -> Element:
@@ -38,14 +35,11 @@ def unresolved_descriptions(page) -> list[str]:
     ]
 
 
-class CommandFieldTests(TestCase):
+class CommandFieldTests(SignedInTestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser(username="fields", email="fields@example.test", password="x-1234-y")
-        ManagedResource.objects.create(key="example-certificate", kind="tls.certificate", spec={})
-
-    def setUp(self):
-        self.client.force_login(self.user)
+        super().setUpTestData()
+        declare("example-certificate", "tls.certificate")
 
     def test_the_confirmation_is_a_box_ticked_by_its_sentence_in_the_callout_the_form_marks(self):
         page = self.client.get("/commands/certificate.renew/")

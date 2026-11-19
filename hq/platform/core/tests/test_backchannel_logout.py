@@ -9,7 +9,6 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import jwt
-from django.contrib.auth import get_user_model
 from django.contrib.sessions.backends.db import SessionStore
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -17,8 +16,8 @@ from django.urls import reverse
 from hq.platform.api.tests.tokens import _KEY, ISSUER, KID, OTHER_KEY, _serving
 from hq.platform.application.linked_accounts import bind_sign_in, sign_in_subject
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
-User = get_user_model()
 CLIENT = "example-hq"
 SUBJECT = "example-person"
 EVENT = "http://schemas.openid.net/event/backchannel-logout"
@@ -43,9 +42,9 @@ def _logout_token(key=_KEY, typ="logout+jwt", **overrides) -> str:
 @override_settings(OIDC_ISSUER=ISSUER, OIDC_RP_CLIENT_ID=CLIENT, OIDC_RP_SIGN_ALGO="RS256")
 class BackchannelLogoutTests(TestCase):
     def setUp(self):
-        self.person = User.objects.create_user("example-person")
+        self.person = operator(username="example-person")
         bind_sign_in(self.person, sign_in_subject(ISSUER, SUBJECT))
-        self.other = User.objects.create_user("example-other")
+        self.other = operator(username="example-other")
         self.sessions = [self._signed_in(self.person), self._signed_in(self.person)]
         self.others = self._signed_in(self.other)
 

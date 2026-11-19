@@ -1,7 +1,5 @@
 """A command that needs what only one page hands out is started from that page."""
 
-from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.capabilities import capability_registry
@@ -11,8 +9,8 @@ from hq.platform.application.integration_specs import ON_ITS_PAGE
 from hq.platform.application.markup_testing import select, within
 from hq.platform.application.security import Capability, Principal
 from hq.platform.core.models import Appearance
+from hq.platform.core.testing import SignedInTestCase
 
-User = get_user_model()
 OPERATOR = Principal("operator", "web", frozenset(Capability))
 
 
@@ -20,18 +18,7 @@ def commands_found(query: str) -> dict:
     return {item.name: item for item in command_center(query, principal=OPERATOR)["commands"]}
 
 
-class CommandStartTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = User.objects.create_superuser(
-            username="command-starts",
-            email="operator@example.test",
-            password="strongtestpass-1234",
-        )
-
-    def setUp(self):
-        self.client.force_login(self.user)
-
+class CommandStartTests(SignedInTestCase):
     def test_every_starting_page_is_a_named_page(self):
         for spec in capability_registry().values():
             if not spec.reached_from or spec.reached_from == ON_ITS_PAGE:

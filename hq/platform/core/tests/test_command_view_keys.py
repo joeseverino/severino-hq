@@ -1,13 +1,13 @@
 """A command form posts one retry key, and a resend under it acts once."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.models import OperationRequest
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
+from hq.platform.core.testing import declare, operator
 
 RESOURCE = "example-rewrite"
 
@@ -15,13 +15,8 @@ RESOURCE = "example-rewrite"
 class KeptKeyTests(TestCase):
     def setUp(self):
         managing_everything()
-        ManagedResource.objects.create(
-            key=RESOURCE,
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "192.0.2.10"},
-        )
-        user = get_user_model().objects.create_superuser("operator", "operator@example.com", "strongtestpass-1234")
-        self.client.force_login(user)
+        declare(RESOURCE, "adguard.rewrite", {"domain": "app.example.com", "answer": "192.0.2.10"})
+        operator(self.client)
 
     def test_a_resend_under_the_form_s_key_queues_nothing_more(self):
         opened = self.client.get("/commands/infrastructure.resource.reconcile/", {"target": RESOURCE})

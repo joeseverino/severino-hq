@@ -10,12 +10,11 @@ agent may ask for, a held request said as what it wants done to its target.
 from dataclasses import dataclass, replace
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ApprovalRequest, DashboardMachine, ManagedResource
+from hq.domains.control_plane.models import ApprovalRequest, DashboardMachine
 from hq.domains.projects.models import Project
 from hq.platform.application.action_links import command_url
 from hq.platform.application.agent_access import SET_AGENT_ACCESS
@@ -35,10 +34,10 @@ from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
 from hq.platform.core.attribution import operation_context
 from hq.platform.core.models import AgentAccess
+from hq.platform.core.testing import declare, operator
 
 from .command_shapes import SWITCH_WORDS, optional_fields, sets_yes_or_no
 
-User = get_user_model()
 # The changes said on their page, by the confirmation their button waits on.
 # A change to HQ alone is said by its button.
 CONFIRMED = {"infrastructure_change", "destructive"}
@@ -86,7 +85,7 @@ def checkboxes(page) -> list[str]:
 class EveryCommandPageTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
+        cls.user = operator(email="operator@example.test")
 
     def setUp(self):
         self.client.force_login(self.user)
@@ -153,7 +152,7 @@ class EveryHeldRequestTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
+        cls.user = operator(email="operator@example.test")
 
     def setUp(self):
         self.client.force_login(self.user)
@@ -195,7 +194,7 @@ class SwitchPageTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
+        cls.user = operator(email="operator@example.test")
         for slug, on in (("example-on", True), ("example-off", False)):
             Project.objects.create(
                 name=slug, slug=slug, repository_url=f"https://github.com/example/{slug}", dependency_updates=on
@@ -242,7 +241,7 @@ class DeclaredStateSwitchTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
+        cls.user = operator(email="operator@example.test")
 
     def setUp(self):
         self.client.force_login(self.user)
@@ -260,8 +259,7 @@ class DeclaredStateSwitchTests(TestCase):
     def test_a_machines_place_on_the_dashboard_says_where_it_stands(self):
         spec = capability_registry()[DASHBOARD_MACHINE]
         shown, hidden = (
-            ManagedResource.objects.create(key=key, kind="machine", spec={"name": key}, enabled=True)
-            for key in ("example-shown", "example-hidden")
+            declare(key, "machine", {"name": key}, enabled=True) for key in ("example-shown", "example-hidden")
         )
         DashboardMachine.objects.create(machine=shown)
         for machine, state, offered in ((shown, "On", spec.words("off")), (hidden, "Off", spec.words("on"))):
@@ -303,7 +301,7 @@ class WordlessSwitchTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
+        cls.user = operator(email="operator@example.test")
 
     def setUp(self):
         self.client.force_login(self.user)

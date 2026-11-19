@@ -17,6 +17,7 @@ from hq.platform.core import seeds
 from hq.platform.core.example_estate.automation import CACHE_FLUSH, PROCEDURES, REVISION
 from hq.platform.core.example_estate.names import MACHINE
 from hq.platform.core.example_estate.testing import throwaway_media
+from hq.platform.core.testing import declare
 
 RUN = f"automation.{CACHE_FLUSH}.run"
 
@@ -283,9 +284,7 @@ class ProcedurePageTests(TestCase):
 
         # A record the catalog does not name keeps its own page.
         record = ManagedResource.objects.get(key=resource_key(CACHE_FLUSH))
-        dropped = ManagedResource.objects.create(
-            key=resource_key("example.retired"), kind=record.kind, spec={**record.spec, "operation": "example.retired"}
-        )
+        dropped = declare(resource_key("example.retired"), record.kind, {**record.spec, "operation": "example.retired"})
         self.assertEqual(self.client.get(reverse("control_plane:detail", kwargs={"key": dropped.key})).status_code, 200)
 
 

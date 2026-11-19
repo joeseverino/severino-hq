@@ -2,24 +2,21 @@
 
 from datetime import date
 
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import Template, TemplateSyntaxError
 from django.test import SimpleTestCase
 from django.utils.functional import SimpleLazyObject
 
 from hq.platform.application.markup_testing import all_elements, elements, select, with_class
 from hq.platform.application.page_parts import SectionPart
+from hq.platform.core.testing import render
 lazy from hq.platform.core.tests.browser.catalog import CATALOG
 
 MONTH = date(2026, 11, 1)
 
 
-def _render(source: str, **context) -> str:
-    return Template(source).render(Context(context))
-
-
 class SectionTagTests(SimpleTestCase):
     def test_a_section_is_named_by_its_heading_its_head_on_the_page_and_its_body_framed(self):
-        html = _render(
+        html = render(
             '{% section "Hosts" count=n lede="Each host HQ reads." %}<p>Body</p>'
             '{% aside %}<a href="/example/">All</a>{% endsection %}',
             n=3,
@@ -45,12 +42,12 @@ class SectionTagTests(SimpleTestCase):
         self.assertEqual([p.words for p in elements(html, "p") if "section-lede" not in p.classes], ["Body"])
 
     def test_a_count_of_zero_is_said(self):
-        html = _render('{% section "Hosts" count=0 %}<p>Body</p>{% endsection %}')
+        html = render('{% section "Hosts" count=0 %}<p>Body</p>{% endsection %}')
 
         self.assertEqual([count.words for count in with_class(html, "count")], ["0"])
 
     def test_with_no_body_it_says_what_is_missing(self):
-        html = _render(
+        html = render(
             '{% section "Agents" %}{% if agents %}<p>Rows</p>{% endif %}'
             "{% empty %}No agent has connected yet.{% endsection %}",
             agents=[],
@@ -63,7 +60,7 @@ class SectionTagTests(SimpleTestCase):
         self.assertEqual(elements(html, "h2")[0].words, "Agents")
 
     def test_its_empty_line_offers_the_link_that_fills_it(self):
-        html = _render(
+        html = render(
             '{% section "Receipts" remedy_label="Upload one" remedy_url=url %}{% empty %}No receipts.{% endsection %}',
             url="/receipts/new/?related_expense=7",
         )
@@ -76,7 +73,7 @@ class SectionTagTests(SimpleTestCase):
         self.assertTrue(line.words.startswith("No receipts. Upload one"))
 
     def test_a_body_offers_no_remedy(self):
-        html = _render(
+        html = render(
             '{% section "Receipts" remedy_label="Upload one" remedy_url="/receipts/new/" %}<p>Rows</p>'
             "{% empty %}No receipts.{% endsection %}"
         )
@@ -84,7 +81,7 @@ class SectionTagTests(SimpleTestCase):
         self.assertEqual(elements(html, "a"), [])
 
     def test_a_heading_with_no_words_is_the_moment_it_names(self):
-        html = _render('{% section moment=month when="month" id="month" %}<p>Grid</p>{% endsection %}', month=MONTH)
+        html = render('{% section moment=month when="month" id="month" %}<p>Grid</p>{% endsection %}', month=MONTH)
 
         (landmark,) = elements(html, "section")
         (heading,) = elements(html, "h2")
@@ -96,7 +93,7 @@ class SectionTagTests(SimpleTestCase):
         self.assertEqual(landmark.attrs["aria-labelledby"], heading.attrs["id"])
 
     def test_a_moment_follows_the_heading_s_words(self):
-        html = _render('{% section "Today" moment=day when="day" %}<p>Rows</p>{% endsection %}', day=MONTH)
+        html = render('{% section "Today" moment=day when="day" %}<p>Rows</p>{% endsection %}', day=MONTH)
 
         (heading,) = elements(html, "h2")
         (moment,) = elements(html, "time")
@@ -105,15 +102,15 @@ class SectionTagTests(SimpleTestCase):
         self.assertTrue(heading.words.endswith(moment.words))
 
     def test_with_no_body_and_nothing_to_say_it_draws_nothing(self):
-        self.assertEqual(_render('{% section "Agents" %} {# none #} {% endsection %}').strip(), "")
+        self.assertEqual(render('{% section "Agents" %} {# none #} {% endsection %}').strip(), "")
 
     def test_a_body_draws_no_empty_line(self):
-        html = _render('{% section "Agents" %}<p>Rows</p>{% empty %}None yet.{% endsection %}')
+        html = render('{% section "Agents" %}<p>Rows</p>{% empty %}None yet.{% endsection %}')
 
         self.assertEqual(select(html, "data-empty-state"), [])
 
     def test_a_section_in_a_section_heads_itself_a_level_down(self):
-        html = _render(
+        html = render(
             '{% section "Outer" %}{% section "Inner" %}<p>A</p>{% endsection %}{% endsection %}'
             '{% section "After" %}<p>B</p>{% endsection %}'
         )
@@ -122,7 +119,7 @@ class SectionTagTests(SimpleTestCase):
         self.assertEqual([h.words for h in elements(html, "h3")], ["Inner"])
 
     def test_a_dialog_opened_inside_a_section_heads_its_sections_under_its_own_title(self):
-        html = _render(
+        html = render(
             '{% section "Outer" %}{% section "Inner" %}'
             '{% headed top %}{% section "In the dialog" %}<p>A</p>{% endsection %}{% endheaded %}'
             "{% endsection %}{% endsection %}"
@@ -131,14 +128,14 @@ class SectionTagTests(SimpleTestCase):
         self.assertEqual([h.words for h in elements(html, "h3")], ["Inner", "In the dialog"])
 
     def test_two_sections_of_one_heading_name_their_own(self):
-        html = _render('{% section "Hosts" %}<p>A</p>{% endsection %}{% section "Hosts" %}<p>B</p>{% endsection %}')
+        html = render('{% section "Hosts" %}<p>A</p>{% endsection %}{% section "Hosts" %}<p>B</p>{% endsection %}')
 
         ids = [heading.attrs["id"] for heading in elements(html, "h2")]
         self.assertEqual(len(set(ids)), 2)
         self.assertEqual([frame.attrs["aria-labelledby"] for frame in elements(html, "section")], ids)
 
     def test_its_id_and_data_options_are_the_frame_s(self):
-        html = _render('{% section "Hosts" id="hosts" data_fragment="hosts" %}<p>A</p>{% endsection %}')
+        html = render('{% section "Hosts" id="hosts" data_fragment="hosts" %}<p>A</p>{% endsection %}')
 
         (frame,) = elements(html, "section")
         self.assertEqual(frame.attrs["id"], "hosts")
@@ -158,17 +155,17 @@ class SectionTagTests(SimpleTestCase):
             for value in (False, None):
                 with self.subTest(part=name, value=value):
                     self.assertEqual(
-                        select(_render(source, flag=SimpleLazyObject(lambda value=value: value)), "data-example"), []
+                        select(render(source, flag=SimpleLazyObject(lambda value=value: value)), "data-example"), []
                     )
             with self.subTest(part=name, value=True):
-                (drawn,) = select(_render(source, flag=SimpleLazyObject(lambda: True)), "data-example")
+                (drawn,) = select(render(source, flag=SimpleLazyObject(lambda: True)), "data-example")
                 self.assertEqual(drawn.attrs["data-example"], "")
             with self.subTest(part=name, value=0):
-                (drawn,) = select(_render(source, flag=0), "data-example")
+                (drawn,) = select(render(source, flag=0), "data-example")
                 self.assertEqual(drawn.attrs["data-example"], "0")
 
     def test_a_folded_section_s_heading_is_its_toggle(self):
-        html = _render(
+        html = render(
             '{% section "Dismissed" count=2 fold=True open=True %}{% for x in items %}{{ x }}{% empty %}<p>None</p>'
             "{% endfor %}{% endsection %}",
             items=[],
@@ -191,13 +188,13 @@ class SectionTagTests(SimpleTestCase):
 
     def test_a_section_told_where_its_head_stands_says_so_and_keeps_its_head_and_body(self):
         source = '{% section "Hosts" HEAD%}<p>Body</p>{% aside %}<a href="/example/">View hosts</a>{% endsection %}'
-        on_the_page = _render(source.replace("HEAD", ""))
+        on_the_page = render(source.replace("HEAD", ""))
         (plain,) = elements(on_the_page, "section")
         # Left alone, the stylesheet decides from the body.
         self.assertNotIn("data-head", plain.attrs)
         for head in ("above", "inside"):
             with self.subTest(head=head):
-                told = _render(source.replace("HEAD", f'head="{head}" '))
+                told = render(source.replace("HEAD", f'head="{head}" '))
                 (landmark,) = elements(told, "section")
                 self.assertEqual(landmark.attrs["data-head"], head)
                 self.assertEqual(
@@ -207,8 +204,8 @@ class SectionTagTests(SimpleTestCase):
 
     def test_an_edged_section_wears_its_tone_and_keeps_its_head_and_body(self):
         source = '{% section "Request" EDGE%}<p>Body</p>{% endsection %}'
-        plain = _render(source.replace("EDGE", ""))
-        edged = _render(source.replace("EDGE", 'edge="attention" '))
+        plain = render(source.replace("EDGE", ""))
+        edged = render(source.replace("EDGE", 'edge="attention" '))
 
         (landmark,) = elements(edged, "section")
         self.assertIn("section-edge", landmark.classes)
@@ -219,7 +216,7 @@ class SectionTagTests(SimpleTestCase):
         )
 
     def test_its_foot_says_how_to_read_the_body_in_the_frame_after_it(self):
-        html = _render(
+        html = render(
             '{% section "Trends" %}<p>Body</p>{% aside %}<span>Weeks</span>'
             "{% foot %}It does not show cause.{% endsection %}"
         )
@@ -235,7 +232,7 @@ class SectionTagTests(SimpleTestCase):
         self.assertEqual(aside.words, "Weeks")
 
     def test_with_no_body_its_foot_has_nothing_to_read(self):
-        html = _render(
+        html = render(
             '{% section "Trends" %}{% empty %}No trends yet.{% foot %}It does not show cause.{% endsection %}'
         )
 
@@ -243,7 +240,7 @@ class SectionTagTests(SimpleTestCase):
         self.assertEqual(select(html, "data-empty-state")[0].words, "No trends yet.")
 
     def test_its_aside_ends_with_the_link_to_the_rest(self):
-        alone = _render(
+        alone = render(
             '{% section "Renewals" more_label="View renewals" more_url=url %}<p>Body</p>{% endsection %}',
             url="/example/",
         )
@@ -255,7 +252,7 @@ class SectionTagTests(SimpleTestCase):
         self.assertEqual(link.attrs["href"], "/example/")
         self.assertTrue(link.words.startswith("View renewals"))
 
-        after = _render(
+        after = render(
             '{% section "Renewals" more_label="View renewals" more_url="/example/" %}<p>Body</p>'
             '{% aside %}<span class="count">3 due</span>{% endsection %}'
         )
@@ -268,17 +265,17 @@ class SectionTagTests(SimpleTestCase):
         self.assertTrue(with_class(after, "end-run"))
 
     def test_its_link_to_the_rest_is_drawn_where_there_is_somewhere_to_go(self):
-        html = _render('{% section "Plan" more_label="Change plan" more_url=url %}<p>Body</p>{% endsection %}', url="")
+        html = render('{% section "Plan" more_label="Change plan" more_url=url %}<p>Body</p>{% endsection %}', url="")
 
         self.assertEqual(elements(html, "a"), [])
         self.assertEqual(with_class(html, "section-aside"), [])
 
     def test_its_link_to_the_rest_says_where_it_goes(self):
         with self.assertRaises(ValueError):
-            _render('{% section "Renewals" more_url="/example/" %}<p>Body</p>{% endsection %}')
+            render('{% section "Renewals" more_url="/example/" %}<p>Body</p>{% endsection %}')
 
     def test_a_figure_is_named_by_its_caption_which_is_its_head(self):
-        html = _render(
+        html = render(
             '{% section "Pace" figure=True lede="Each week." %}<svg role="img" aria-label="Pace"></svg>'
             "{% aside %}<span>Legend</span>{% endsection %}"
         )
@@ -298,13 +295,13 @@ class SectionTagTests(SimpleTestCase):
 
     def test_a_folded_section_s_toggle_holds_no_link(self):
         with self.assertRaises(ValueError):
-            _render(
+            render(
                 '{% section "Runs" fold=True more_label="All runs" more_url="/example/" %}<p>Body</p>{% endsection %}'
             )
 
     def test_a_figure_does_not_fold(self):
         with self.assertRaises(ValueError):
-            _render('{% section "Pace" figure=True fold=True %}<p>Body</p>{% endsection %}')
+            render('{% section "Pace" figure=True fold=True %}<p>Body</p>{% endsection %}')
 
     def test_a_section_needs_its_heading(self):
         with self.assertRaises(TemplateSyntaxError):
@@ -316,7 +313,7 @@ class SectionPartTests(SimpleTestCase):
         built = SectionPart(
             heading="Hosts", count=2, lede="Each host.", template="partials/_empty_state.html", context={"message": "A"}
         ).__html__()
-        written = _render(
+        written = render(
             '{% section "Hosts" count=2 lede="Each host." %}'
             '{% include "partials/_empty_state.html" with message="A" %}{% endsection %}'
         )
@@ -333,7 +330,7 @@ class SectionPartTests(SimpleTestCase):
             template="partials/_empty_state.html",
             context={"message": "A"},
         ).__html__()
-        written = _render(
+        written = render(
             '{% section "Pace" more_label="View runs" more_url="/example/" figure=True %}'
             '{% include "partials/_empty_state.html" with message="A" %}{% foot %}It does not show cause.{% endsection %}'
         )
@@ -359,7 +356,7 @@ class SectionPartTests(SimpleTestCase):
 
     def test_code_and_template_name_one_moment(self):
         built = SectionPart(moment=MONTH, when="month", template="partials/_empty_state.html", context={"message": "A"})
-        written = _render(
+        written = render(
             '{% section moment=month when="month" %}{% include "partials/_empty_state.html" with message="A" %}'
             "{% endsection %}",
             month=MONTH,

@@ -6,7 +6,6 @@ from datetime import timedelta
 from unittest import mock
 from uuid import uuid7
 
-from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -19,6 +18,7 @@ from hq.platform.application.markup_testing import Element, all_elements, hrefs,
 from hq.platform.core import append_only
 from hq.platform.core.audit import audited_labels, operation_context
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 
 # How many records one controller inventory pass changed, the shape that drew
 # a fold of rows linking nowhere.
@@ -132,7 +132,7 @@ def _rows(html: str) -> list[tuple[Element, list[Element], list[str]]]:
 
 class _Signed(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "x" * 14))
+        operator(self.client, "owner")
         with append_only.lifted():
             AuditLog.objects.all().delete()
 
@@ -142,7 +142,7 @@ class EveryLineOpensSomewhereTests(_Signed):
         now = timezone.now()
         _inventory(INVENTORY)
         with operation_context(interface="cli", actor="op", operation="example.one"):
-            ManagedResource.objects.create(key="example-lone", kind="example.record", spec={})
+            declare("example-lone", "example.record")
 
         with mock.patch("hq.platform.application.history.external", return_value=_moments(now)):
             page = self.client.get(reverse("core:audit_list"))
@@ -256,8 +256,8 @@ class TimeAndWhoTests(_Signed):
 class RecordStoryTests(_Signed):
     def test_about_a_record_shows_its_rows_and_no_other_records(self):
         with operation_context(interface="cli", actor="op", operation="example.one"):
-            ManagedResource.objects.create(key="example-mine", kind="example.record", spec={})
-            ManagedResource.objects.create(key="example-other", kind="example.record", spec={})
+            declare("example-mine", "example.record")
+            declare("example-other", "example.record")
 
         page = self.client.get(reverse("core:audit_list"), {"about": "example-mine"})
         shown = text(page)
@@ -266,7 +266,7 @@ class RecordStoryTests(_Signed):
         self.assertNotIn("example-other", shown)
 
     def test_a_records_page_links_to_its_whole_story(self):
-        resource = ManagedResource.objects.create(key="example-story", kind="machine", spec={})
+        resource = declare("example-story", "machine")
 
         page = self.client.get(reverse("control_plane:detail", args=[resource.key]))
 

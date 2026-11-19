@@ -3,8 +3,9 @@
 from html.parser import HTMLParser
 from typing import override
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
+
+from hq.platform.core.testing import operator
 
 
 class _Order(HTMLParser):
@@ -37,8 +38,7 @@ class FirstPaintTests(TestCase):
         the element it names is inserted, so that element must come after
         `</main>`, not be `<main>` or anything in it."""
 
-        user = get_user_model().objects.create_superuser(username="viewer", email="v@example.com", password="x")
-        self.client.force_login(user)
+        operator(self.client)
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         page = _Order()

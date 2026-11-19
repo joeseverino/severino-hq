@@ -11,7 +11,6 @@ from datetime import timedelta
 from unittest import mock
 
 from asgiref.sync import async_to_sync, sync_to_async
-from django.contrib.auth import get_user_model
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
@@ -22,6 +21,7 @@ from hq.domains.jobs.runner import start
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.core.audit import audit_operation, operation_context, record_event, record_operation
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 PASSWORD = "correct-horse-battery"
 
@@ -36,7 +36,7 @@ def _row(message: str) -> AuditLog:
 
 class RequestDoorTests(TestCase):
     def setUp(self):
-        get_user_model().objects.create_user(username="joe", password=PASSWORD)
+        operator(username="joe", password=PASSWORD)
 
     def test_a_web_request_is_one_operation_under_its_request_id_by_whoever_it_signed_in(self):
         failed = self.client.post("/accounts/login/", {"username": "joe", "password": "wrong"})
