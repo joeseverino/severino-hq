@@ -116,7 +116,7 @@ part's heading shows only when there is more than one.
     {% if connections.caller_path.primary %}{% include "core/_connection_panel.html#route" with route=connections.caller_path.primary only %}{% endif %}
   {% empty %}HQ cannot work out the path to its own name.
   {% endsection %}
-  <div class="section-flow">
+  {% layout %}
     {% for result in connections.posture.results %}
       {% section result.check.label data_connection_control=result.check.id %}
         {% if result.reading.evidence %}<p><strong>{{ result.reading.evidence|breakable }}</strong></p>{% endif %}
@@ -124,7 +124,7 @@ part's heading shows only when there is more than one.
       {% aside %}{% status result.answer tone=result.tone %}
       {% endsection %}
     {% endfor %}
-  </div>
+  {% endlayout %}
 {% aside %}{% muted %}This request and each connection's credentials: {{ connections.posture.check_summary|breakable }}{% endmuted %}
 {% endsection %}
 {% if connections.groups and not connections.setups and not connections.unconfigured and connections.again %}{% include "control_plane/_connection_setup.html" with setups=connections.again count=connections.again|length guide=connections.guide again=True only %}{% endif %}

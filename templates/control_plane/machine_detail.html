@@ -20,7 +20,7 @@
 Its latest runs, under how it is doing and above what it holds: what was
 last done to it is read before its parts.
 {% endcomment %}
-{% if runs %}<div class="section-flow">{% include "partials/_page_sections.html" with sections=runs spans_row=True %}</div>{% endif %}
+{% layout %}{% include "partials/_page_sections.html" with sections=runs spans_row=True %}{% endlayout %}
 
 {% if machine.containers or unused_images %}
   {% comment %}
@@ -57,7 +57,11 @@ last done to it is read before its parts.
   How it relates comes last, under that flow: it is far taller than a card
   of a record or two, so it never shares their row.
 {% endcomment %}
-<div class="section-flow">
+{% partialdef short %}
+{% include "partials/_page_sections.html" with spans_row=False %}
+{% referenced_by "machine" machine.name %}
+{% endpartialdef %}
+{% layout %}
 {% include "partials/_page_sections.html" with spans_row=True %}
 {% if machine.presence %}
 {% section "Tailnet" %}
@@ -134,9 +138,12 @@ last done to it is read before its parts.
     {% url 'control_plane:tailnet' as tailnet_url %}{% with_query tailnet_url source=asked.source target=asked.target as asked_url %}{% button "Policy test" asked_url modal="whatif" %}
   {% endif %}
 {% endsection %}
-</div>
-<div class="section-flow">
-
+{% else %}
+{% partial short %}
+{% endif %}
+{% endlayout %}
+{% if machine.presence %}
+{% layout %}
   {% if machine.presence.peered %}
     {% comment %}
     The peering, stated rather than implied. This reading comes from the daemon
@@ -165,11 +172,9 @@ last done to it is read before its parts.
       {% endfacts %}
     {% endsection %}
   {% endif %}
+{% partial short %}
+{% endlayout %}
 {% endif %}
-
-{% include "partials/_page_sections.html" with spans_row=False %}
-{% referenced_by "machine" machine.name %}
-</div>
 {% include "partials/_relationships.html" %}
 
 {% if device_names %}

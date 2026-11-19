@@ -1,33 +1,10 @@
-"""The section's examples: each way it heads, folds and holds, alone and in the flow."""
+"""The section's examples: each way it heads, folds and holds."""
 
 lazy from datetime import date
 
-from hq.platform.core.part_examples import NARROW
 from hq.platform.core.template_parts import Example
 lazy from hq.platform.application.card_items import ListRow
 lazy from hq.platform.application.drawings import AllocationBar, Share
-
-
-def _flow(*sections):
-    """A run of sections in the flow (`.section-flow`), each named and holding
-    what it is given."""
-
-    return (
-        '<div class="section-flow">'
-        + "".join(f'{{% section "{heading}" %}}{body}{{% endsection %}}' for heading, body in sections)
-        + "</div>"
-    )
-
-
-# A wide section's body: a table of four columns, which takes the whole row.
-_WIDE = (
-    '{% table_region "Example hosts" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Name" %}{% table_heading "State" drop=3 %}{% table_heading "Address" drop=1 %}'
-    '{% table_heading "Seen" drop=2 %}'
-    "</tr></thead><tbody><tr><td>example-01</td><td>Online</td><td>192.0.2.10</td><td>Today</td></tr></tbody>"
-    "</table>{% endtable_region %}"
-)
-
 
 SECTION_STATES = {
     # A table in a section of its own name, one that fits and one that
@@ -41,33 +18,6 @@ SECTION_STATES = {
         '{% table_region "Example ledger" pane=True %}'
         '<table class="data-table"><tbody><tr><td>Example</td></tr></tbody></table>'
         "{% endtable_region %}{% endcard %}"
-    ),
-    # Sibling sections in the flow: two, three and four narrow ones share a
-    # row as far as the box holds them, and a wide one, written ahead of the
-    # narrow ones, takes the row before they share theirs.
-    "flow-two": Example(_flow(("Example identity", NARROW), ("Example link", NARROW))),
-    "flow-three": Example(_flow(("Example identity 2", NARROW), ("Example link 2", NARROW), ("Example path", NARROW))),
-    "flow-four": Example(
-        _flow(
-            ("Example identity 3", NARROW),
-            ("Example link 3", NARROW),
-            ("Example path 2", NARROW),
-            ("Example device", NARROW),
-        )
-    ),
-    "flow-wide": Example(_flow(("Example hosts", _WIDE), ("Example identity 4", NARROW), ("Example link 4", NARROW))),
-    # A section that says how to read it beside a taller one: the row ends
-    # both together, and the foot stands at the bottom of its frame.
-    "flow-foot": Example(
-        _flow(
-            ("Example identity 5", NARROW + "{% foot %}Example of how to read it."),
-            (
-                "Example link 5",
-                "{% facts %}"
-                + "".join(f'{{% fact "Example fact {n}" value="example-{n:02}" %}}' for n in range(1, 7))
-                + "{% endfacts %}",
-            ),
-        )
     ),
     # The section part ({% section %}) in each state a page can give it; a new
     # option of the tag comes with an entry here (test_catalog's source check).

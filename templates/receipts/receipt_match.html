@@ -3,7 +3,7 @@
 {% if already_linked %}
   {% notice tone="info" %}Already linked to {% include "receipts/_linked_to.html" %}.{% endnotice %}
 {% endif %}
-<div class="section-flow">
+{% layout %}
 {% card label="Receipt" %}{% facts %}
   {% fact "Vendor" %}{{ receipt.vendor|or_empty }}{% endfact %}
   {% fact "Date" %}{{ receipt.date|when }}{% endfact %}
@@ -42,5 +42,5 @@
   {% empty %}None match.
   {% endsection %}
 {% endif %}
-</div>
+{% endlayout %}
 {% endblock %}

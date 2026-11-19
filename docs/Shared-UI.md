@@ -54,6 +54,7 @@ and those that hold across parts in [Design](Design.md).
 | `{% fact %}` | `detail`, `heading`, `panel`, `foot` | One fact of a `{% facts %}`: its label, its value and the detail under it. Given `value=` it encloses nothing; a value in markup is its block, its detail after `{% detail %}`, and a panel its value opens in place after `{% heading %}`, `{% panel %}` and `{% foot %}`. | `{% facts %}{% fact "Version" icon="layers" %}<code>1.4.2</code>{% detail %}Tag only{% endfact %}{% endfacts %}` |
 | `{% facts %}` | nothing | Every label and its value a page shows, each a `{% fact %}`; given `items=` it draws each item as a fact and encloses nothing. | `{% facts layout="band" %}{% fact "Running" value="3" url="/example/" %}{% endfacts %}` |
 | `{% filter_bar %}` | `choices`, `summary` | Every query a page asks of what it lists, in one bar: its search and any controls of its own, its `choices` part, the one button that sends them, then its `summary` part. A list's table toolbar is the same bar. | `{% filter_bar search="Filter by name" query=q filtered=narrowed clear=every_url %}{% choices %}{% select "kind" kinds label="Kind" every="kind" %}{% endfilter_bar %}` |
+| `{% layout %}` | nothing | A run of a page's sections, laid out as its kind says. | `{% layout %}{% section "Example identity" %}<p>An example line.</p>{% endsection %}{% section "Example link" %}<p>Another example line.</p>{% endsection %}{% endlayout %}` |
 | `{% list %}` | nothing | A list, each `<li>` an item, read as its kind says. | `{% list %}<li>{% status "High" tone="serious" %}</li><li>An example advisory</li>{% endlist %}{% list kind="dots" %}<li><a href="/example/">example-host</a></li><li>2 days ago</li>{% endlist %}{% list kind="prose" %}<li>An example sentence.</li><li>Another example sentence.</li>{% endlist %}{% list kind="chips" %}<li><a href="/example/">Example page</a></li><li><a href="/example/2/">Another example page</a></li>{% endlist %}{% list kind="codes" %}<li><code>example:read</code></li><li><code>example:write</code></li>{% endlist %}{% list kind="labeled" %}<li><span>Example network</span> <code>192.0.2.10</code></li><li><span>Example tailnet</span> <code>192.0.2.20</code></li>{% endlist %}` |
 | `{% muted %}` | nothing | Words said quietly beside what they are about: a context line, a sentence under a value. A cell or a list item holds it; a run of parts said quietly is `{% list kind="dots" muted=True %}`. | `{% muted element="p" %}A sentence under it.{% endmuted %}` |
 | `{% notice %}` | `title` | Every banner and message a page shows, in one of its tones; a message among the page's messages is the same part in a toast's placement. A title the page composes is its `{% title %}` part, after the body. | `{% notice tone="warning" title="2 jobs failed" %}<p>What to do.</p>{% endnotice %}` |
@@ -147,6 +148,10 @@ and those that hold across parts in [Design](Design.md).
 | `filter_bar` | `total` | `None` |  | How many there are. |
 | `filter_bar` | `verb` |  |  | The words of the button that sends it, Filter unless told. |
 | `filter_bar` | `data_*` | | | Each a `data-` attribute. |
+| `layout` | `aside` | `False` | `False`, `True` | Drawn as an `<aside>`, a split's companion. |
+| `layout` | `id` |  |  | The layout's own id, for a region refreshed in place. |
+| `layout` | `kind` | `"flow"` | `flow`, `charts`, `pair`, `split` | `flow`, as many to a row as keep each at least 22rem wide: the sections that close a page, a run of cards; `charts`, the flow at the width a chart keeps its scale, 30rem: a domain's charts; `pair`, two columns at most, like beside like: a table beside a table, a chart beside a chart; `split`, a main and its companion, sized to what it holds, sharing a row while both keep a readable width. |
+| `layout` | `data_*` | | | Each a `data-` attribute. |
 | `list` | `below` |  |  | The open row's label, for a `down` list the open row shows under it. |
 | `list` | `kind` | `"down"` | `down`, `dots`, `prose`, `chips`, `codes`, `labeled` | `down`, read down, each item a line of its own: the notes under a row's name, a record's statuses; `dots`, a run on one line, a dot between each that no line opens on: a fact's links, a row's context line; `prose`, sentences, each marked as the browser marks it; `chips`, places to go, each item one link drawn as a chip of its own; `codes`, names in code, wrapping between them: policy names, ports, permissions; `labeled`, each item a label then its value, the labels in one column: addresses. |
 | `list` | `muted` | `False` | `False`, `True` | A `dots` run said quietly. |
@@ -250,7 +255,7 @@ and those that hold across parts in [Design](Design.md).
 
 Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|queue_entries`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `allocation`, `cell-data`, `cell-part`, `cell-whole`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `two-col`, `visually-hidden`, `whole`, `wide-only`.
+Classes: `actions-col`, `allocation`, `cell-data`, `cell-part`, `cell-whole`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `visually-hidden`, `whole`, `wide-only`.
 
 Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
 
@@ -520,7 +525,7 @@ pair and leaves that pair's row a gap.
 
 **A frame is filled.** A list of facts lays its pairs across its frame. A card of only a pair or
 two shares a row with the sections beside it, so its values never end a third of the way across
-the page. A record page's facts are a `{% card %}` that opens its `.section-flow`, beside its
+the page. A record page's facts are a `{% card %}` that opens its `{% layout %}`, beside its
 notes and related records. In a flow, a frame of facts grows into its row as every member does.
 *Gate:* `frames filled` in the layout survey.
 
@@ -562,6 +567,38 @@ drawn `hidden` in the bar and stays so. *Gate:* the `hand-drawn-filter-bar` rule
 `.filter-bar`, a search field and a select written by hand, outside the parts that draw them.
 `test_filter_tags.FilterBarUseTests` reads every `{% filter_bar %}` in the templates. It refuses a
 count written in the summary and a narrowing bar with no count.
+
+### layout
+
+A run of sibling sections or cards (the sections that close a thing's page, the connection panel's
+identity, link and route, a page's run of cards) is one `{% layout %}`, the flow. It lays as many
+to a row as keep each at least `--flow-basis` wide (22rem), and one to a row where that is the whole
+width. A row's last ones share what it leaves, and each stands on a row as tall as the tallest, a
+section's foot at its frame's bottom. Every member grows into what its row leaves and none caps its
+width, so every row ends at the flow's end. It is measured against the box it sits in, so the same
+sections pair in a dialog and on a page. A part that needs more room before it shares a row sets a
+wider basis on itself (the connection panel's route); a run of charts is `kind="charts"`, the flow
+at the width a chart keeps its scale. A wide one (a table of four columns or more, a fold, anything
+that is not a section or card) goes across the row.
+
+The flow paints its members in the order the markup holds them, so what is read aloud and where the
+keyboard goes is what is drawn (WCAG 1.3.2, 2.4.3): nothing reorders them. A page therefore writes
+its wide ones ahead of its short ones, which collect after them to share rows rather than one
+standing beside the gap a wide one leaves. Registry sections say which they are
+(`ServiceSection.spans_row`), and `partials/_page_sections.html` draws one kind per pass,
+`spans_row=True` ahead of a page's short sections and `False` among them. *Gate:* `flows in reading
+order` in the layout survey.
+
+Content with a narrower companion is `kind="split"`: the two share a row while both keep a readable
+width and wrap to a column when they cannot. A month as the main takes the room, its companion
+keeping its basis beside it; a run of sections in a companion is a flow with `aside=True`, so wrapped
+under the main they pair up. A pair (`kind="pair"`) is two columns at most and pairs like with like:
+a table beside a table, a chart beside a chart, so each row ends together.
+
+Inside a layout the gap is the separation, so a member's own stacking margin is dead space and a
+member is as narrow as its track. No page writes a layout's class or an auto-fit grid of its own:
+the classes are this part's, and `lint:css` refuses `repeat(auto-fit` and `repeat(auto-fill` outside
+the parts that lay out something else inside themselves. A layout with nothing in it draws nothing.
 
 ### list
 
@@ -1167,7 +1204,7 @@ landmark that never pads itself, whatever `css` names: the frame holds the paddi
 A section draws its head inside its frame, over a rule, unless its body is one table region and
 nothing else. Then its head stands above the frame so the table reaches its edges (`:has()` in
 surfaces.css decides; a page picks nothing). `head="above"` or `head="inside"` overrides it for a
-page that needs the other look. Frames that share a row start together, so in a pair (`.two-col`)
+page that needs the other look. Frames that share a row start together, so in a pair (`{% layout kind="pair" %}`)
 a table section beside a section whose body is anything else takes its head inside its frame;
 alone, or beside another table, it keeps its head above. A section's heading that follows a form,
 a table or a list in the same box starts a section of its own: `.section-head` clears what is

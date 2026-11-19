@@ -95,7 +95,7 @@ FACTS = Part(
 
     **A frame is filled.** A list of facts lays its pairs across its frame. A card of only a pair or
     two shares a row with the sections beside it, so its values never end a third of the way across
-    the page. A record page's facts are a `{% card %}` that opens its `.section-flow`, beside its
+    the page. A record page's facts are a `{% card %}` that opens its `{% layout %}`, beside its
     notes and related records. In a flow, a frame of facts grows into its row as every member does.
     *Gate:* `frames filled` in the layout survey.
     """,

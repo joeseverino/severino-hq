@@ -39,7 +39,7 @@ declaration's machinery: the controller's actions are the buttons above, and
 {% endif %}
 
 {% if resolved_spec or resolution_error %}
-  <div class="two-col">
+  {% layout kind="pair" %}
     {% section "Certificate" %}
       {% include "control_plane/_record_says.html" %}
       {% facts %}
@@ -86,7 +86,7 @@ declaration's machinery: the controller's actions are the buttons above, and
       {% endif %}
     {% empty %}Not installed anywhere yet.
     {% endsection %}
-  </div>
+  {% endlayout %}
 {% endif %}
 
 {% comment %}
@@ -188,7 +188,7 @@ where it is saved and how it relates follow, short cards sharing rows.
   {% endsection %}
   {% endif %}
 
-<div class="section-flow">
+{% layout %}
 {% comment %}
 A certificate from the side of what it serves: each service served with it,
 and the names on it nothing is served under. The service's own page names the
@@ -240,7 +240,7 @@ certificate, so the relation reads from both ends.
   {% endif %}
 {% include "partials/_relationships.html" %}
 {% referenced_by resource.kind resource.key %}
-</div>
+{% endlayout %}
 
 {% section "Raw data" fold=True %}
   {% section "HQ's config" %}<pre tabindex="0">{{ spec_json|breakable }}</pre>{% endsection %}

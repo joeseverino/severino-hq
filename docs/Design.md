@@ -203,14 +203,6 @@ timeline's month, a calendar's weekdays, Command Center's group heads), and
 its part's own class says only where it stands; `lint:css` refuses a change of
 case in any rule but `.eyebrow`'s.
 
-**One main-and-aside.** Content with a narrower companion (`.split`) shares a
-row while both keep a readable width and wraps to a column when they cannot.
-A month as the main takes the room, its companion keeping its basis beside
-it; a run of sections in a companion is a `.section-flow`, so wrapped under
-the main they pair up.
-Pairs (`.two-col`) are at most two columns and pair like with like: a table
-beside a table, a chart beside a chart, so each row ends together.
-
 **Say what HQ knows, once.** A sentence on a page is derived from the record
 that holds its answer, never a generic placeholder or a hardcoded string. The
 registrar is the one the zone record names, and a certificate's issuer and
@@ -456,32 +448,6 @@ or narrowed to it. *Gate:* `frames filled` in the layout survey.
 A value goes under its label only where the box cannot hold both on one line.
 The same holds for a node key beside its machine and a piece of evidence beside
 its kind.
-
-**Sibling sections flow.** A run of sibling sections or cards (the sections
-that close a thing's page, the connection panel's identity, link and route, a
-page's run of cards) is one `.section-flow`. It lays as many to a row as keep
-each at least `--flow-basis` wide (22rem), and one to a row where that is the
-whole width. A row's last ones share what it leaves, and each stands on a row
-as tall as the tallest. Every member grows into what its row leaves and none
-caps its width, so every row ends at the flow's end. It is measured against the
-box it sits in, so the same sections pair in a dialog and on a page. A part
-that needs more room before it shares a row sets a wider basis on itself (the
-connection panel's route), and a run of narrower cards a narrower one on the
-flow. A wide one (a table of four columns or more, a fold, anything that is not
-a section or card) goes across the row. The flow paints its members in the
-order the markup holds them, so what is read aloud and where the keyboard goes
-is what is drawn (WCAG 1.3.2, 2.4.3): nothing reorders them. A page therefore
-writes its wide ones ahead of its short ones, which collect after them to share
-rows rather than one standing beside the gap a wide one leaves. Registry
-sections say which they are (`ServiceSection.spans_row`), and
-`partials/_page_sections.html` draws one kind per pass, `spans_row=True` ahead
-of a page's short sections and `False` among them. A command's page draws what the
-command says of itself (`CapabilitySpec.about`, a `CommandAbout` of facts and
-sections) under its form through the same parts. *Gate:* `flows in reading
-order` in the layout survey. No page writes an
-auto-fit grid of its own for this: `lint:css` refuses `repeat(auto-fit` and
-`repeat(auto-fill` outside the parts that lay out something else inside
-themselves, each of which says so in its disable comment.
 
 A link to a part of a page lands below the sticky header, from one
 `scroll-padding-top`. A table's row, or a control in one, lands below its

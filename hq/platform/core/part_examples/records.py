@@ -434,9 +434,9 @@ MONTH_GRID_STATES = {
     # A month compact, as the dashboard draws it beside its recent projects:
     # where things are, each a dot or a sliver, the day opening the rest.
     "compact": Example(
-        '<div class="section-flow">{% section "Example month 2" %}'
+        '{% layout %}{% section "Example month 2" %}'
         '{% include "partials/_month_grid.html" with compact=True %}{% endsection %}'
-        '{% section "Example projects" %}{% include "partials/_record_list.html" %}{% endsection %}</div>',
+        '{% section "Example projects" %}{% include "partials/_record_list.html" %}{% endsection %}{% endlayout %}',
         lambda: {
             "calendar": _month_gone_by(date(2026, 5, 1)),
             "rows": [
@@ -454,9 +454,9 @@ MONTH_GRID_STATES = {
     # flow of sections: the month takes the room, the sections keep their
     # basis beside it and pair up once they wrap under it.
     "split": Example(
-        '<div class="split">{% section "Example month 3" %}{% include "partials/_month_grid.html" %}'
-        '{% endsection %}<aside class="section-flow">{% section "Example identity 6" %}' + NARROW + "{% endsection %}"
-        '{% section "Example link 6" %}' + NARROW + "{% endsection %}</aside></div>",
+        '{% layout kind="split" %}{% section "Example month 3" %}{% include "partials/_month_grid.html" %}'
+        '{% endsection %}{% layout aside=True %}{% section "Example identity 6" %}' + NARROW + "{% endsection %}"
+        '{% section "Example link 6" %}' + NARROW + "{% endsection %}{% endlayout %}{% endlayout %}",
         lambda: {"calendar": _month_gone_by(date(2026, 9, 1))},
     ),
 }

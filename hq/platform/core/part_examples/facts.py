@@ -98,8 +98,8 @@ FACTS_STATES = {
     # A domain's overview as the dashboard draws it, its lead figure with the
     # line of its recent readings beside it.
     "figure-trend": Example(
-        '<div class="section-flow">{% section "Example overview" %}'
-        '{% facts layout="band" size="lead" items=items %}{% endsection %}</div>',
+        '{% layout %}{% section "Example overview" %}'
+        '{% facts layout="band" size="lead" items=items %}{% endsection %}{% endlayout %}',
         lambda: {
             "items": [
                 Kpi(

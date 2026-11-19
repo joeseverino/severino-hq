@@ -24,7 +24,7 @@ go across it, which a route down its start cannot. A card says only what the ban
 above does not: the band names the commit, the machine, the container's
 uptime and how the request came.
 {% endcomment %}
-<div class="section-flow">
+{% layout %}
 {% if machine %}
 {% section "Runs on" id="hq-where" %}
   {% include "partials/_problems.html#rest" with rest=hq.problems_in.where|not_urgent only %}
@@ -73,13 +73,13 @@ uptime and how the request came.
     {% fact "Extensions" %}{% for name, version in release.extensions %}{{ name|breakable }} {% muted %}{{ version|breakable }}{% endmuted %}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% include "partials/_empty_state.html" with message="None composed into this build" inline=True %}{% endfor %}{% endfact %}
   {% endfacts %}
 {% endsection %}
-</div>
+{% endlayout %}
 
 {% comment %}
 Each closing section is a table of four columns or more, so each takes its
 row in the flow.
 {% endcomment %}
-<div class="section-flow">
+{% layout %}
 {% section "Jobs" id="hq-work" %}
   {% if work.unread %}
     {% muted element="p" %}{{ work.unread|breakable }}{% endmuted %}
@@ -176,6 +176,6 @@ row in the flow.
   {% if sight.unconnected %}{% muted element="p" %}Not connected: {{ sight.unconnected|join:", "|breakable:"." }} <a href="{% url 'control_plane:connections' %}">Connections</a>{% endmuted %}{% endif %}
 {% endsection %}
 {% endif %}
-</div>
+{% endlayout %}
 {% endwith %}
 {% endblock %}

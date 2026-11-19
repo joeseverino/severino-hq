@@ -209,12 +209,12 @@ the same shape from the same file. The bands that take the whole row come
 first, so the short ones after them share rows in the order they are read. How
 it relates comes last, as on the machine page.
 {% endcomment %}
-<div class="section-flow">
+{% layout %}
 {% include "partials/_page_sections.html" with spans_row=True %}
 {% include "partials/_page_sections.html" with spans_row=False %}
 {% referenced_by "service" service.hostname %}
 {% include "partials/_relationships.html" %}
-</div>
+{% endlayout %}
 
 {% if service.alias_claims %}
 {% section "Other names" id="resources" fold=True %}

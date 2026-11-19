@@ -10,7 +10,7 @@ so, with how to set one up, stands above it (`problems`).
 {% endcomment %}
 {% block page %}
 {% include "partials/_problems.html" with problems=problems %}
-<div class="section-flow">
+{% layout %}
 {% section "Run" %}
   {% facts label="Run" %}
     {% if playbook_url %}{% fact ran_label value=run.title url=playbook_url %}{% else %}{% fact ran_label value=run.title %}{% endif %}
@@ -24,5 +24,5 @@ so, with how to set one up, stands above it (`problems`).
     {% run_evidence run.evidence layout="facts" %}
   {% endfacts %}
 {% endsection %}
-</div>
+{% endlayout %}
 {% endblock %}

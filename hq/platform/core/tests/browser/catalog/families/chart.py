@@ -98,9 +98,9 @@ ENTRIES = {
     # Shares of the largest, ranked, in a flow of sections: a whole row, a
     # sliver, and a label long enough to be cut on a phone.
     "chart/share-list": Example(
-        '<div class="section-flow">{% section "Example pages" %}{% include "partials/_share_list.html" %}'
+        '{% layout %}{% section "Example pages" %}{% include "partials/_share_list.html" %}'
         '{% endsection %}{% section "Example sources" %}{% include "partials/_share_list.html" with rows=few %}'
-        "{% endsection %}</div>",
+        "{% endsection %}{% endlayout %}",
         {
             "rows": SHARES,
             "few": ({"label": "example.org", "figure": "48", "share": 100},),

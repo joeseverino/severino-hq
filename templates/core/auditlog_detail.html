@@ -3,7 +3,7 @@
 {% if approval %}
 {% include "partials/approval_card.html" with entry=approval %}
 {% else %}
-<div class="section-flow">
+{% layout %}
 {% section event_heading %}
   {% facts label="Event" %}
     {% fact "When" %}{{ event.created_at|when:"exact" }}{% endfact %}
@@ -52,7 +52,7 @@
   {% endif %}
   {% if scan.preview %}{% change_table scan.preview %}{% endif %}
 {% endif %}
-</div>
+{% endlayout %}
 {% endif %}
 
 {% if other_events %}

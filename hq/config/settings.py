@@ -436,6 +436,7 @@ TEMPLATES = [
                 "hq.platform.core.templatetags.filter_tags",
                 "hq.platform.core.templatetags.facts_tags",
                 "hq.platform.core.templatetags.list_tags",
+                "hq.platform.core.templatetags.layout_tags",
                 "hq.platform.core.templatetags.label_tags",
                 "hq.platform.core.templatetags.switch_tags",
                 "hq.platform.core.templatetags.select_tags",

@@ -84,7 +84,7 @@ def _section() -> Part:
         A section draws its head inside its frame, over a rule, unless its body is one table region and
         nothing else. Then its head stands above the frame so the table reaches its edges (`:has()` in
         surfaces.css decides; a page picks nothing). `head="above"` or `head="inside"` overrides it for a
-        page that needs the other look. Frames that share a row start together, so in a pair (`.two-col`)
+        page that needs the other look. Frames that share a row start together, so in a pair (`{% layout kind="pair" %}`)
         a table section beside a section whose body is anything else takes its head inside its frame;
         alone, or beside another table, it keeps its head above. A section's heading that follows a form,
         a table or a list in the same box starts a section of its own: `.section-head` clears what is

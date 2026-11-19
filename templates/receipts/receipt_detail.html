@@ -6,7 +6,7 @@ picture of it is far taller than they are, so it stands on a row of its own
 under them.
 {% endcomment %}
 {% url "receipts:edit" receipt.pk as edit_url %}
-<div class="section-flow">
+{% layout %}
 {% card label="Receipt" %}{% facts %}
   {% fact "Date" %}{{ receipt.date|when }}{% endfact %}
   {% fact "Amount" %}{{ receipt.amount|money }}{% endfact %}
@@ -24,7 +24,7 @@ under them.
 {% endif %}
 
 {% if receipt.notes %}{% section "Notes" %}<p>{{ receipt.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
-</div>
+{% endlayout %}
 
 {% if file_picture %}
 {% section "File" figure=True lede=file_line data_receipt_file="picture" %}{% url 'receipts:picture' receipt.pk as picture_url %}{% firstof receipt.original_filename "as uploaded" as named %}{% include "partials/_document_picture.html" with src=picture_url alt="The receipt, "|add:named only %}{% endsection %}

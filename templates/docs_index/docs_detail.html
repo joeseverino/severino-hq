@@ -1,6 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-<div class="section-flow">
+{% layout %}
 {% card label="Document" %}{% facts %}
   {% if record.system_service %}{% fact "System / service" value=record.system_service %}{% endif %}
   {% if record.obsidian_path %}{% fact "Obsidian path" %}<code>{{ record.obsidian_path|breakable }}</code>{% endfact %}{% endif %}
@@ -13,5 +13,5 @@
 {% if record.notes %}{% section "Index notes" %}<p>{{ record.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 
 {% include "partials/_related.html" with groups=related %}
-</div>
+{% endlayout %}
 {% endblock %}

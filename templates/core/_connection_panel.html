@@ -34,7 +34,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% endif %}
 
   {% comment %}Who you are, the link and the path to HQ: as many side by side as the panel holds.{% endcomment %}
-  <div class="section-flow">
+  {% layout %}
   {% section "Identity" %}
     {% facts %}
       {% fact "Signed in" %}<strong>{{ connection.identity.full_name|default:connection.identity.username|breakable }}</strong>{% if connection.identity.email %} <code>{{ connection.identity.email|breakable }}</code>{% endif %}{% endfact %}
@@ -165,7 +165,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
     {% endwith %}
   {% aside %}<span class="count">{{ request_path.proof|breakable }}</span>
   {% endsection %}
-  </div>
+  {% endlayout %}
 
   {% section "Addresses" fold=True open=True lede="Yours and HQ's" %}
       {% section "Your addresses" %}

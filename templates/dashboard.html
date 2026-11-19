@@ -63,16 +63,16 @@ the row is gone once every step is done.
 Each domain's leading chart, a row of its own as a domain's page draws its
 charts, so however many there are they never break up the row under them.
 {% endcomment %}
-{% if dashboard_charts %}<div class="domain-charts">
+{% layout kind="charts" %}
   {% for chart in dashboard_charts %}{% include "partials/_chart.html" with chart=chart %}{% endfor %}
-</div>{% endif %}
+{% endlayout %}
 
 {% comment %}
 The calendar, recent projects, Publishing and Messages, as many to a row as
 fit. A domain's own calendar stays on its pages. How many projects are active
 is said here, over the ones most recently changed, and nowhere else on the page.
 {% endcomment %}
-<div class="section-flow">
+{% layout %}
   {% partialdef calendar inline %}
   {% if not calendar.empty %}
   {% section moment=calendar.month when="month" id="dashboard-calendar" data_fragment=True data_fragment_name="calendar" data_fragment_links=True data_fragment_history="replace" %}
@@ -106,7 +106,7 @@ is said here, over the ones most recently changed, and nowhere else on the page.
   or it is not: nothing arrives after the page to appear or vanish.
   {% endcomment %}
   {% include "core/_dashboard_contacts.html" %}
-</div>
+{% endlayout %}
 
 {% if external_links %}
 {% section "Links" %}
