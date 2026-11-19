@@ -523,8 +523,8 @@ class SbomAttestationTests(SimpleTestCase):
         self.assertLessEqual({"ci.yml", "compose.yml"}, signers)
 
 
-# The jobs in ci.yml that gate nothing: the two cache writers, fast's map and the two verdicts.
-NOT_GATES = {"build-cache", "caches", "map", "ready", "release"}
+# The jobs in ci.yml that gate nothing: the two cache writers and the two verdicts.
+NOT_GATES = {"build-cache", "caches", "ready", "release"}
 # Gates Ready waits for and Release does not: code scanning holds a merge, not a release.
 MERGE_ONLY = {"scan"}
 

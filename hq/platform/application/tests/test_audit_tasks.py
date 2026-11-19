@@ -22,7 +22,7 @@ UNSANDBOXED = {
     "audit:css-usage": "it draws every page in a browser on dev:look's test database, kept in var/dev-look",
 }
 # What a sandboxed task may write beyond the template's paths, each a path it keeps its run in.
-ALSO_WRITES = {"audit:memory": ["var/perf"], "audit:tests": ["var/audit/tests"]}
+ALSO_WRITES = {"audit:memory": ["var/perf"]}
 
 
 def declared(task: dict[str, Any]) -> dict[str, Any]:

@@ -267,12 +267,9 @@ def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
             for path in extras:
                 archive.add(ROOT / path, arcname=path)
         done(host_half(host, "stage", run), input=staged.getvalue())
-    # fast's chain: the trees passed here and CI's maps of the tests that ran each line, fetched here where gh
-    # is signed in, so it selects as it would here.
-    if task == "fast":
-        print(f"[{task}] {chain.fetch_map()}", file=sys.stderr, flush=True)
-    if folders := [str(folder) for folder in (chain.passes(), chain.maps()) if folder.is_dir()]:
-        done(["rsync", "-a", "-e", shlex.join(SSH), *folders, f"{remote}/.git/severino/"])
+    # fast's chain: the trees passed here, so it selects as it would here.
+    if chain.passes().is_dir():
+        done(["rsync", "-a", "-e", shlex.join(SSH), str(chain.passes()), f"{remote}/.git/severino/"])
     return Sent(tree, commit, argv, run, extension, packages, fixed)
 
 
