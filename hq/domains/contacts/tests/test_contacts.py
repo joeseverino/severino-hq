@@ -512,7 +512,7 @@ class WithheldSpecTests(TestCase):
 
         self.assertWithheld(str(listing))
         self.assertWithheld(str(detail))
-        self.assertEqual(detail["resource"]["spec"], {})
+        self.assertEqual(detail["spec"], {})
 
     def test_the_record_pages_report_and_form_show_no_spec(self):
         operator(self.client, "op")

@@ -20,11 +20,9 @@ class MaskedAnswerTests(TestCase):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving():
             listed = self.client.get("/api/v2/resources/infrastructure/?fields=key,health.state", **headers)
-            detail = self.client.get(
-                "/api/v2/resources/infrastructure/example-rewrite/?fields=resource.health.state", **headers
-            )
+            detail = self.client.get("/api/v2/resources/infrastructure/example-rewrite/?fields=health.state", **headers)
         self.assertEqual(listed.status_code, 200)
         self.assertEqual([set(item["health"]) for item in listed.json()["data"]["items"]], [{"state"}])
         self.assertEqual(detail.status_code, 200)
-        self.assertEqual(set(detail.json()["data"]), {"resource"})
-        self.assertEqual(set(detail.json()["data"]["resource"]["health"]), {"state"})
+        self.assertEqual(set(detail.json()["data"]), {"health"})
+        self.assertEqual(set(detail.json()["data"]["health"]), {"state"})

@@ -44,6 +44,7 @@ from .entity_links import container_link, web_url
 from .facts import inventory_records
 from .labels import lower_first, plural
 from .moments import moment
+from .projection import read_once
 from .routes import reverse
 from .ui import counted
 lazy from .inventory import READING_AUDIT_TYPE
@@ -586,11 +587,18 @@ class Acts:
 def who_did_each(*asked: Acts) -> list[dict[str, Attribution]]:
     """``who_did`` for each of ``asked``, in its order, read in one query: a
     page naming records of several kinds asks once, and a record of one kind
-    is never taken for another's of the same id."""
+    is never taken for another's of the same id. Two parts of one page asking
+    the same are answered by that one query (``read_once``)."""
 
+    wanted = [frozenset(str(one) for one in acts.ids) for acts in asked]
+    key = repr(tuple((acts.object_types, sorted(ids), acts.action) for acts, ids in zip(asked, wanted, strict=True)))
+    found = read_once(f"history.who_did_each:{key}", lambda: _who_did_each(asked, wanted))
+    return [dict(each) for each in found]
+
+
+def _who_did_each(asked: Sequence[Acts], ids: Sequence[frozenset[str]]) -> list[dict[str, Attribution]]:
     each = []
-    for place, acts in enumerate(asked):
-        wanted = {str(one) for one in acts.ids}
+    for place, (acts, wanted) in enumerate(zip(asked, ids, strict=True)):
         # Asked about no record it still asks, so a page costs the same
         # whether it names none or many.
         condition = Q(object_type__in=acts.object_types) & (Q(object_id__in=wanted) if wanted else Q(pk__lt=0))

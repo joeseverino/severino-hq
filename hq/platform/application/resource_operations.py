@@ -41,9 +41,7 @@ from .infrastructure import (
     save_adopted,
     save_managed_resource,
 )
-from .record_errors import PolicyError, RecordNotFound, Sentence
-from .record_saves import Created, row
-from .resource_records import (
+from .managed_records import (
     AskedAt,
     AttemptCount,
     CompletedAt,
@@ -57,6 +55,8 @@ from .resource_records import (
     RequestedActor,
     RequestedInterface,
 )
+from .record_errors import PolicyError, RecordNotFound, Sentence
+from .record_saves import Created, row
 from .security import CONTROLLER_INTERFACE, Principal
 from .ui import counted, ended
 lazy from . import tailnet

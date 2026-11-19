@@ -107,15 +107,13 @@ class OneAnswerTests(TestCase):
     def test_the_api_and_mcp_return_the_derived_facts(self):
         found = get_resource("infrastructure", "example-wildcard", principal=EVERYTHING)
 
-        derived = found["derived"]
-        self.assertEqual(derived["expiry"]["days_left"], 88)
+        self.assertEqual(found["expiry"]["days_left"], 88)
         self.assertEqual(
-            derived["expiry"]["renewal_at"],
+            found["expiry"]["renewal_at"],
             resource_context(self.resource).expiry.renewal_at.isoformat(),
         )
-        self.assertIn("renew", derived["actions"])
-        self.assertIn(derived["removal"]["mode"], {"delete", "forget", "unavailable"})
-        self.assertEqual(derived["health"], found["resource"]["health"])
+        self.assertIn("renew", found["actions"])
+        self.assertIn(found["removal"]["mode"], {"delete", "forget", "unavailable"})
 
     def test_an_unreadable_expiry_is_none_not_an_error(self):
         self.resource.status = {"not_after": "not a date"}

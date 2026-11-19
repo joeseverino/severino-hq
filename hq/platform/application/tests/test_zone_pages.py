@@ -420,7 +420,7 @@ class PendingRemovalTests(TestCase):
         response = self._page()
 
         self.assertIn(reverse("control_plane:reconcile", kwargs={"key": "going"}), self._offered(response))
-        self.assertFalse(response.context["removal_pending"])
+        self.assertFalse(response.context["resource"]["removal"]["pending"])
 
     def test_a_queued_removal_withdraws_them_and_leaves_the_report(self):
         from ..resource_operations import OperationCommand, request_removal
@@ -433,7 +433,7 @@ class PendingRemovalTests(TestCase):
 
         response = self._page()
 
-        self.assertTrue(response.context["removal_pending"])
+        self.assertTrue(response.context["resource"]["removal"]["pending"])
         self.assertNotIn(reverse("control_plane:reconcile", kwargs={"key": "going"}), self._offered(response))
         # The one thing still worth doing: reading what it was.
         self.assertContains(response, reverse("control_plane:report_download", args=["going"]))

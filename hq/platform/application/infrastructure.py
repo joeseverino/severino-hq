@@ -43,9 +43,9 @@ lazy from .cadence import ask, swept
 lazy from .capabilities import Consented, consent
 lazy from .delivery_progress import deploying_label
 lazy from .locate import names_by_connection
+lazy from .managed_records import HealthPart, ManagedResourceItem
 lazy from .resource_capabilities import kind_converges
 lazy from .resource_operations import OperationItem, ResourceSaved, queue_reconcile
-lazy from .resource_records import HealthPart, ManagedResourceItem
 
 if TYPE_CHECKING:
     from pydantic import GetJsonSchemaHandler

@@ -6,7 +6,7 @@ this says why. Otherwise the page would invite an operator to edit something
 about to stop existing, and to queue a convergence racing the deletion already
 waiting for the same controller.
 {% endcomment %}
-{% if removal_pending %}
+{% if resource.removal.pending %}
   {% notice tone="warning" title="Removal in progress" %}
     <p>HQ forgets this record once it is confirmed gone.</p>
   {% endnotice %}
@@ -38,38 +38,38 @@ declaration's machinery: the controller's actions are the buttons above, and
   {% if container.item %}{% include "control_plane/_container_detail.html" with item=container.item plan=container.plan readiness=container.readiness edit=container.edit %}{% endif %}
 {% endif %}
 
-{% if resolved_spec or resolution_error %}
+{% if resource.certificate %}
   {% layout kind="pair" %}
     {% section "Certificate" %}
       {% include "control_plane/_record_says.html" %}
       {% facts %}
-        {% fact "Name" value=resolved_spec.certificate_name %}
+        {% fact "Name" value=resource.certificate.certificate_name %}
         {% fact "Issuer" value=resource.status.issuer|default:"Not read yet" %}
         {% fact "Expires" %}{% if resource.status.not_after %}{{ resource.status.not_after|expiry }}{% else %}Not read yet{% endif %}{% endfact %}
-        {% fact "Renews" %}{% if renewal_at %}From {{ renewal_at|when:"day" }}, {% endif %}{{ resolved_spec.renewal_window_days|counted:"day" }} before it expires{% endfact %}
+        {% fact "Renews" %}{% if resource.expiry %}From {{ resource.expiry.renewal_at|when:"day" }}, {% endif %}{{ resource.certificate.renewal_window_days|counted:"day" }} before it expires{% endfact %}
       {% endfacts %}
-      {% section "Names" %}<p>{% for domain in resolved_spec.domains %}{% status domain chip=True %}{% endfor %}</p>{% endsection %}
+      {% section "Names" %}<p>{% for domain in resource.certificate.domains %}{% status domain chip=True %}{% endfor %}</p>{% endsection %}
     {% endsection %}
     {% section "Installed on" %}
-      {% if display_consumers %}
+      {% if resource.consumers %}
       {% table_region "Installed on" %}
       <table class="data-table compact-table">
         <thead><tr>{% table_heading "Place" "identifier" local_sort=True %}{% table_heading "Names checked" "identifier" local_sort=True %}</tr></thead>
         <tbody>
-          {% for consumer in display_consumers %}
+          {% for consumer in resource.consumers %}
             <tr>
               <td>
                 {% cell_line %}<strong>{% if consumer.url %}<a href="{{ consumer.url }}">{{ consumer.name|breakable }}</a>{% else %}{{ consumer.name|breakable }}{% endif %}</strong>{% detail %}through {% entity "connection"|entity_of:consumer.connection_ref %}{% endcell_line %}
               </td>
-              <td>{% for domain in consumer.display_domains %}{% entity "service"|entity_of:domain mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</td>
+              <td>{% for domain in consumer.domains %}{% entity "service"|entity_of:domain mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
       {% endtable_region %}
-      {% elif resolution_error %}
+      {% elif resource.resolution_error %}
         {% comment %}Why it is installed nowhere, where the list would be.{% endcomment %}
-        {% notice tone="warning" title="Not installed" %}<p>{{ resolution_error|breakable }}</p>{% endnotice %}
+        {% notice tone="warning" title="Not installed" %}<p>{{ resource.resolution_error|breakable }}</p>{% endnotice %}
       {% endif %}
       {% comment %}
       Named beside the consumers that answered. A reading that covers six of
@@ -104,7 +104,7 @@ where it is saved and how it relates follow, short cards sharing rows.
   are machinery, not a description, and no readout expresses them.
   {% endcomment %}
   {% comment %}A running container says all of this in its Upgrade and Runtime sections.{% endcomment %}
-  {% if not container.item and not resolved_spec and not resolution_error %}
+  {% if not container.item and not resource.certificate %}
   {% section label %}
     {% include "control_plane/_record_says.html" %}
     {% comment %}
@@ -118,16 +118,16 @@ where it is saved and how it relates follow, short cards sharing rows.
     "Runs on" would say the second, and a container managed by a Portainer one
     box over would carry the same two words for two different facts.
     {% endcomment %}
-    {% if provider_machine %}
-      {% muted element="p" %}Managed on {% entity provider_machine.link %}{% if managing_connections %} through {% for link in managing_connections %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% endmuted %}
+    {% if resource.provider_machine %}
+      {% muted element="p" %}Managed on {% entity "machine"|entity_of:resource.provider_machine.name %}{% if managing_connections %} through {% for link in managing_connections %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% endmuted %}
     {% endif %}
-    {% if origin_machine %}
-      {% muted element="p" %}{{ origin_phrase|breakable }} {% entity origin_machine.link %}{% endmuted %}
+    {% if resource.origin_machine %}
+      {% muted element="p" %}{{ origin_phrase|breakable }} {% entity "machine"|entity_of:resource.origin_machine.name %}{% endmuted %}
     {% endif %}
     {% if service_links %}
       {% muted element="p" %}
         For
-        {% for hostname, url in service_links %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}
+        {% for service in service_links %}{% entity "service"|entity_of:service.hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}
       {% endmuted %}
     {% endif %}
     {% comment %}
@@ -194,12 +194,12 @@ A certificate from the side of what it serves: each service served with it,
 and the names on it nothing is served under. The service's own page names the
 certificate, so the relation reads from both ends.
 {% endcomment %}
-{% if certificate_use %}
+{% if resource.certificate %}
   {% section "Used by" id="used-by" %}
-    {% if certificate_use.used_by %}
-      <p>{{ certificate_use.used_by|length|counted:"service" }}: {% for hostname in certificate_use.used_by %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
-      {% if certificate_use.unused %}
-        {% facts %}{% fact "Not served" %}{% list kind="codes" %}{% for name in certificate_use.unused %}<li><code>{{ name|breakable }}</code></li>{% endfor %}{% endlist %}{% endfact %}{% endfacts %}
+    {% if resource.used_by %}
+      <p>{{ resource.used_by|length|counted:"service" }}: {% for hostname in resource.used_by %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
+      {% if resource.unused_names %}
+        {% facts %}{% fact "Not served" %}{% list kind="codes" %}{% for name in resource.unused_names %}<li><code>{{ name|breakable }}</code></li>{% endfor %}{% endlist %}{% endfact %}{% endfacts %}
       {% endif %}
     {% endif %}
   {% empty %}No service is served with this certificate.
@@ -254,7 +254,7 @@ one thing worth doing then is reading what it was. The certificate's link only w
 saying a thing cannot be done yet is a status report filed in the wrong place.
 {% endcomment %}
 {% muted element="p" %}
-  {% url 'core:audit_list' as audit_url %}<a class="subtle-link" href="{% with_query audit_url about=resource.key %}">Audit log</a>{% dot %}<a class="subtle-link" href="{% url 'control_plane:report_download' resource.key %}">Download JSON</a>{% if resource.status.certificate_pem %}{% dot %}<a class="subtle-link" href="{% url 'control_plane:certificate_download' resource.key %}">Download PEM</a>
+  {% url 'core:audit_list' as audit_url %}<a class="subtle-link" href="{% with_query audit_url about=resource.key %}">Audit log</a>{% dot %}<a class="subtle-link" href="{% url 'control_plane:report_download' resource.key %}">Download JSON</a>{% if resource.status.certificate_available %}{% dot %}<a class="subtle-link" href="{% url 'control_plane:certificate_download' resource.key %}">Download PEM</a>
   {% endif %}
 {% endmuted %}
 

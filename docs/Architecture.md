@@ -79,7 +79,7 @@ every adapter:
 | Projection | Module | Also served as |
 |---|---|---|
 | Dashboard snapshot: KPIs, priority work, recent records, upstream state, activity | `dashboard.py` | MCP `dashboard_snapshot` |
-| A managed resource's allowed actions, removal mode, machines, services, readout, certificate expiry | `resource_context.py` | `derived` on the `infrastructure` detail |
+| A managed resource's allowed actions, removal mode, machines, services, readout, certificate expiry | `resource_context.py` | the `infrastructure` detail, and the record's page |
 | The tailnet page | `tailnet_context.py` | the `tailnet` resource |
 | The connections page | `connection_context.py` | the `connections` resource |
 | HQ's own page: release, machine and container, units, readings, problems | `hq_context/` (`release`, `work`, `sight`, composed in `__init__`) | the `hq` resource |

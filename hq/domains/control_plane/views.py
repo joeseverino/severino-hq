@@ -1,11 +1,12 @@
 import json
+from collections.abc import Iterable
 from functools import cached_property
 from typing import Any, override
 
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
-from django.views.generic import DetailView, ListView
+from django.views.generic import ListView, TemplateView
 
 from hq.platform.application.capabilities import capability_words, command_spec
 from hq.platform.application.certificates import UPLOAD as CERTIFICATE_UPLOAD
@@ -18,12 +19,11 @@ from hq.platform.application.history import asked_by
 from hq.platform.application.infrastructure import (
     declared_machines,
     delivery_targets,
-    serialize_public_status,
     serialize_resource,
 )
 from hq.platform.application.inventory import service_hostnames
 from hq.platform.application.labels import field_label
-from hq.platform.application.pages import PageAction, PageMixin, page_context
+from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin, page_context
 from hq.platform.application.payload_words import value_words
 from hq.platform.application.references import Kind
 from hq.platform.application.refusal_status import refuse
@@ -35,12 +35,14 @@ from hq.platform.application.resource_capabilities import (
     resource_capabilities,
 )
 from hq.platform.application.resource_context import (
+    awaiting_approval,
+    capabilities_of,
     controller_summary,
     origin_machine,
     record_list,
     record_status,
     record_summary,
-    resource_context,
+    stored,
 )
 from hq.platform.application.resource_operations import (
     ACTION_CAPABILITY,
@@ -49,6 +51,7 @@ from hq.platform.application.resource_operations import (
     changes,
     supervision,
 )
+from hq.platform.application.resource_refusals import INFRASTRUCTURE
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.service_context import operation_history
@@ -92,31 +95,34 @@ def _json(value: Any) -> str:
     return json.dumps(value, indent=2, sort_keys=True, default=str) if value else ""
 
 
-def _spec_rows(resource, *, beside_readout: bool = False) -> dict[str, tuple[tuple[str, str], ...]]:
+def _spec_rows(
+    kind: str, key: str, spec: dict[str, Any], rows: Iterable[tuple[str, str, str]], *, beside_readout: bool = False
+) -> dict[str, tuple[tuple[str, str], ...]]:
     """A spec as an operator reads it before a destructive action, split the way
     the form splits it: fields by their model titles, an unset optional left out
     rather than shown as "None", and fields the provider declares routine folded.
 
     ``beside_readout`` is the record's own page, where the readout and the page's
-    name stand above this: a value they already show is not repeated.
+    name stand above this: a value they already show is not repeated. ``rows``
+    is its readout, ``(label, desired, observed)``.
     """
 
-    provider = PROVIDERS[resource.kind]
+    provider = PROVIDERS[kind]
     fields = provider.spec_type.model_fields
     # What the readout above already printed. On anything with a handful of
     # fields the readout *is* the spec, and the disclosure would repeat it
     # whole.
-    rows = readout_rows(resource)
+    rows = tuple(rows)
     shown = {str(label).strip().casefold() for label, _, _ in rows}
     # A value the readout or the page's own name already shows is not said
     # again under a second label.
     said: set[str] = set()
     if beside_readout:
         said = {str(value) for _, desired, observed in rows for value in (desired, observed) if value}
-        said.update(service_hostnames(resource.kind, resource.spec))
+        said.update(service_hostnames(kind, spec))
     primary: list[tuple[str, str]] = []
     advanced: list[tuple[str, str]] = []
-    for name, value in shown_spec(resource.kind, resource.spec).items():
+    for name, value in shown_spec(kind, spec).items():
         # A reported field's setting is the fixed goal its readout already states.
         if value is None or name in provider.reported_fields:
             continue
@@ -131,14 +137,20 @@ def _spec_rows(resource, *, beside_readout: bool = False) -> dict[str, tuple[tup
         # Only when they are the same string: a declaration whose name differs
         # from its filing is telling you something, and that is the case worth
         # showing.
-        if rendered == resource.key or (rendered in said and not isinstance(value, bool)):
+        if rendered == key or (rendered in said and not isinstance(value, bool)):
             continue
         row = (label, rendered)
         (advanced if name in provider.advanced_fields else primary).append(row)
     return {"primary": tuple(primary), "advanced": tuple(advanced)}
 
 
-def _linked_readout(resource, relationships) -> tuple[tuple[str, str, str, tuple], ...]:
+def _readout(record) -> tuple[tuple[str, str, str], ...]:
+    """A record's readout as ``(label, desired, observed)``."""
+
+    return tuple((row["label"], row["desired"], row["observed"]) for row in record["readout"])
+
+
+def _linked_readout(record, relationships) -> tuple[tuple[str, str, str, tuple], ...]:
     """The readout, with each value that names a related entity as its link.
 
     A blank connection field is filled from the connections the relation graph
@@ -149,10 +161,10 @@ def _linked_readout(resource, relationships) -> tuple[tuple[str, str, str, tuple
     connections = tuple(
         item.entity for group in relationships.groups for item in group.items if item.entity.kind == "connection"
     )
-    field = PROVIDERS[resource.kind].spec_type.model_fields.get("connection_ref")
+    field = PROVIDERS[record["kind"]].spec_type.model_fields.get("connection_ref")
     connection_label = (field.title or "") if field is not None else ""
     rows = []
-    for label, desired, observed in readout_rows(resource):
+    for label, desired, observed in _readout(record):
         value = str(observed or desired or "")
         if value in related:
             links = (related[value],)
@@ -205,7 +217,7 @@ class ResourceRemoveView(View):
                 # housekeeping, and removing the last MX record stops the
                 # domain receiving mail.
                 "removal_note": _removal_note(resource),
-                "spec_rows": _spec_rows(resource),
+                "spec_rows": _spec_rows(resource.kind, resource.key, resource.spec, readout_rows(resource)),
                 "forget": forget,
                 "holds_records": bool(PROVIDERS[resource.kind].contains),
                 # The reason travels with the press, so it is asked only beside it.
@@ -276,74 +288,61 @@ class InfrastructureListView(PageMixin, ListView):
         return context
 
 
-class InfrastructureDetailView(PageMixin, DetailView):
-    model = ManagedResource
-    slug_field = "key"
-    slug_url_kwarg = "key"
+class InfrastructureDetailView(RecordPageMixin, TemplateView):
     template_name = "control_plane/resource_detail.html"
+    resource = INFRASTRUCTURE
     context_object_name = "resource"
 
     @cached_property
-    def _record(self):
-        return super().get_object()
+    def row(self) -> ManagedResource:
+        """The record as stored, which what may be done to it is asked of."""
 
-    @override
-    def get_object(self, queryset=None):
-        # Read once: ``get`` asks before deciding where the record lives, and
-        # the detail view asks again to draw it.
-        return self._record
+        return stored(self.record["key"])
 
     @override
     def get(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        home = self.object.get_absolute_url()
-        if home != request.path:
+        response = super().get(request, *args, **kwargs)
+        if response.status_code == 200 and self.record["url"] != request.path:
             # A kind with a page of its own, such as a machine, lives there.
-            return redirect(home)
-        return super().get(request, *args, **kwargs)
-
-    @cached_property
-    def derived(self):
-        return resource_context(self.object)
+            return redirect(self.record["url"])
+        return response
 
     @cached_property
     def capabilities(self):
-        return self.derived.capabilities
+        return capabilities_of(self.row)
 
     @cached_property
     def container(self):
         """What the sweep knows about a watched container, and nothing otherwise."""
 
-        if self.object.kind != CONTAINER_KIND:
+        if self.record["kind"] != CONTAINER_KIND:
             return None
 
-        return container_detail(self.object, self.request)
+        return container_detail(self.row, self.request)
 
     @override
     def get_page_title(self):
-        # A container by its own name: its machine is the trail above it.
-        if self.object.kind == CONTAINER_KIND and self.object.spec.get("name"):
-            return self.object.spec["name"]
-        return record_name(self.object.kind, self.object.spec, self.object.key)
+        return self.record["name"]
 
     @override
     def get_page_lede(self):
         # A record whose name is its type says what it does instead.
-        label = kind_label(self.object.kind)
-        return PROVIDERS[self.object.kind].summary if label == self.get_page_title() else label
+        kind = self.record["kind"]
+        label = kind_label(kind)
+        return PROVIDERS[kind].summary if label == self.get_page_title() else label
 
     @cached_property
     def all_relationships(self):
         """Every relation, for what the page derives from them (its home)."""
 
-        return relationships_for(Kind.RESOURCE.of(self.object.key), principal=web_principal(self.request.user))
+        return relationships_for(Kind.RESOURCE.of(self.record["key"]), principal=web_principal(self.request.user))
 
     @cached_property
     def relationships(self):
         """The relations the section shows: less what the page says elsewhere."""
 
         found = self.all_relationships
-        if self.object.kind == CONTAINER_KIND:
+        if self.record["kind"] == CONTAINER_KIND:
             return for_container(found)
         return found
 
@@ -370,12 +369,13 @@ class InfrastructureDetailView(PageMixin, DetailView):
 
     @override
     def get_page_actions(self):
-        if self.capabilities.removal_pending:
+        record = self.record
+        if record["removal"]["pending"]:
             return ()
-        key = self.object.key
+        key = record["key"]
         capabilities = self.capabilities
-        drifted = bool(holding(self.object.conditions, DRIFTED))
-        provider = PROVIDERS[self.object.kind]
+        drifted = bool(holding(record["conditions"], DRIFTED))
+        provider = PROVIDERS[record["kind"]]
         actions = [
             verb_action(
                 verb,
@@ -401,7 +401,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
                 ),
             )
         console = (
-            web_url(provider.console({**self.object.spec, **(self.object.status or {})}))
+            web_url(provider.console({**record["spec"], **record["status"]}))
             if provider.console and provider.console_label
             else ""
         )
@@ -412,8 +412,8 @@ class InfrastructureDetailView(PageMixin, DetailView):
             actions.append(PageAction(gap.needs, gap.setup_url, title=gap.reason))
         if edit := capabilities.offered.edit(key, next=self.request.get_full_path()):
             actions.append(edit)
-        if PROVIDERS[self.object.kind].material_form:
-            replaces = "replace" if getattr(self.object, "material", None) else ""
+        if provider.material_form:
+            replaces = "replace" if record["status"].get("certificate_available") else ""
             actions.append(PageAction.command(CERTIFICATE_UPLOAD, key, variant=replaces, primary=True))
         if capabilities.offered.removes:
             actions.append(PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant))
@@ -422,29 +422,24 @@ class InfrastructureDetailView(PageMixin, DetailView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        capabilities = self.capabilities
-        context["capabilities"] = capabilities
-        context["page_visit"] = page_visit("resource", self.object.key)
+        record = self.record
+        kind = record["kind"]
+        context["page_visit"] = page_visit("resource", record["key"])
         context["controller"] = controller_summary(
-            capabilities.actions, lambda verb: capability_words(ACTION_CAPABILITY[verb])
+            self.capabilities.actions, lambda verb: capability_words(ACTION_CAPABILITY[verb])
         )
-        derived = self.derived
-        context["status"] = record_status(self.object, health=derived.health)
+        context["status"] = record["standing"]
         # A running container is summarized by what it runs, in its own band.
         if not (self.container and self.container["standing"]):
             context["page_aside"] = "control_plane/_record_status.html"
         # What this resource does, said by its own provider.
-        context["label"] = kind_label(self.object.kind)
+        context["label"] = kind_label(kind)
         # Relationships names the service it is for; the head says it only when
         # that section does not.
         relations = {group.phrase for group in self.relationships.groups}
-        context["service_links"] = () if RELATIONS["declared_by"].inverse in relations else derived.service_links
-        # Where this resource sends traffic, when it sends it anywhere, and the
-        # machine running the provider that manages it.
-        context["origin_machine"] = derived.origin_machine
+        context["service_links"] = () if RELATIONS["declared_by"].inverse in relations else record["services"]
         # A DNS record answers with an address; a proxy sends requests on.
-        context["origin_phrase"] = "Points to" if PROVIDERS[self.object.kind].answers else "Forwards to"
-        context["provider_machine"] = derived.provider_machine
+        context["origin_phrase"] = "Points to" if PROVIDERS[kind].answers else "Forwards to"
         context["managing_connections"] = tuple(
             item.entity
             for group in self.relationships.groups
@@ -453,28 +448,21 @@ class InfrastructureDetailView(PageMixin, DetailView):
         )
         if self.container is not None:
             context["container"] = self.container
-        context["removal_pending"] = capabilities.removal_pending
         # A change a credential asked for that nobody has answered, said on the
         # page an operator opens when a declaration has not moved.
         # Each said as who asked for it, from the audit row that opened it.
-        asked = asked_by(ApprovalRequest, derived.awaiting_approval)
-        context["awaiting_approval"] = tuple(asked.get(str(held.pk), NOBODY) for held in derived.awaiting_approval)
+        held = awaiting_approval(record["key"])
+        asked = asked_by(ApprovalRequest, held)
+        context["awaiting_approval"] = tuple(asked.get(str(item.pk), NOBODY) for item in held)
         # Nothing for a container: its panel is the sweep's answer and a
         # container declares identity and nothing else.
-        context["readout_rows"] = (
-            () if self.object.kind == CONTAINER_KIND else _linked_readout(self.object, self.relationships)
-        )
+        context["readout_rows"] = () if kind == CONTAINER_KIND else _linked_readout(record, self.relationships)
         context["relationships"] = self.relationships
-        context["spec_rows"] = _spec_rows(self.object, beside_readout=True)
-        context["renewal_at"] = derived.expiry.renewal_at if derived.expiry else None
-        history = operation_history(run_rows(changes(self.object.operations.all(), HISTORY_ROWS)))
+        context["spec_rows"] = _spec_rows(kind, record["key"], record["spec"], _readout(record), beside_readout=True)
+        history = operation_history(run_rows(changes(self.row.operations.all(), HISTORY_ROWS)))
         context["history"] = (history,) if history else ()
-        context["resolved_spec"] = derived.resolved_spec
-        context["resolution_error"] = derived.resolution_error
-        context["display_consumers"] = derived.display_consumers
-        context["certificate_use"] = derived.certificate_use
-        context["spec_json"] = _json(self.object.spec)
-        context["diagnostic_status"] = _json(serialize_public_status(self.object.status))
+        context["spec_json"] = _json(record["spec"])
+        context["diagnostic_status"] = _json(record["status"])
         return context
 
 

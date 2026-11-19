@@ -1291,31 +1291,74 @@
         "schema": {
           "items": {
             "enum": [
-              "resource",
-              "resource.key",
-              "resource.kind",
-              "resource.enabled",
-              "resource.in_sync",
-              "resource.health",
-              "resource.health.state",
-              "resource.health.label",
-              "resource.health.reason",
-              "resource.health.message",
-              "resource.public_effect",
-              "resource.last_observed_at",
-              "resource.id",
-              "resource.spec",
-              "resource.status",
-              "resource.conditions",
-              "resource.conditions.type",
-              "resource.conditions.status",
-              "resource.conditions.reason",
-              "resource.conditions.message",
-              "resource.conditions.since",
-              "resource.generation",
-              "resource.observed_generation",
-              "resource.updated_at",
-              "derived",
+              "key",
+              "kind",
+              "enabled",
+              "in_sync",
+              "health",
+              "health.state",
+              "health.label",
+              "health.reason",
+              "health.message",
+              "public_effect",
+              "last_observed_at",
+              "id",
+              "spec",
+              "status",
+              "conditions",
+              "conditions.type",
+              "conditions.status",
+              "conditions.reason",
+              "conditions.message",
+              "conditions.since",
+              "generation",
+              "observed_generation",
+              "updated_at",
+              "url",
+              "name",
+              "standing",
+              "standing.state",
+              "standing.tone",
+              "standing.label",
+              "standing.detail",
+              "standing.since",
+              "standing.read_at",
+              "actions",
+              "removal",
+              "removal.mode",
+              "removal.reason",
+              "removal.pending",
+              "origin_machine",
+              "origin_machine.name",
+              "origin_machine.url",
+              "provider_machine",
+              "provider_machine.name",
+              "provider_machine.url",
+              "services",
+              "services.hostname",
+              "services.url",
+              "readout",
+              "readout.label",
+              "readout.desired",
+              "readout.observed",
+              "expiry",
+              "expiry.not_after",
+              "expiry.days_left",
+              "expiry.renewal_at",
+              "awaiting_approval",
+              "certificate",
+              "certificate.certificate_name",
+              "certificate.renewal_window_days",
+              "certificate.domains",
+              "consumers",
+              "consumers.name",
+              "consumers.kind",
+              "consumers.domains",
+              "consumers.connection_ref",
+              "consumers.url",
+              "resolution_error",
+              "used_by",
+              "unused_names",
               "operations",
               "operations.id",
               "operations.action",
@@ -3112,21 +3155,6 @@
           }
         }
       },
-      "ManagedResourceRecordSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ManagedResourceRecordSuccess"
-            }
-          }
-        },
-        "description": "Success.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        }
-      },
       "MatchPageSuccess": {
         "content": {
           "application/json": {
@@ -4585,6 +4613,44 @@
           },
           "url": {
             "$ref": "#/components/schemas/ActionLink/properties/url"
+          }
+        },
+        "type": "object"
+      },
+      "ActionPart": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic": {
+            "description": "Whether the controller does it on its own, unasked.",
+            "type": "boolean"
+          },
+          "enabled": {
+            "description": "Whether it may be asked for now.",
+            "type": "boolean"
+          },
+          "reason": {
+            "description": "Why it may not, as a sentence; empty when it may.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "reason",
+          "automatic"
+        ],
+        "type": "object"
+      },
+      "ActionPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic": {
+            "$ref": "#/components/schemas/ActionPart/properties/automatic"
+          },
+          "enabled": {
+            "$ref": "#/components/schemas/ActionPart/properties/enabled"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ActionPart/properties/reason"
           }
         },
         "type": "object"
@@ -6974,6 +7040,49 @@
         ],
         "type": "object"
       },
+      "CertificatePart": {
+        "additionalProperties": false,
+        "description": "A certificate as the controller resolves its declaration.",
+        "properties": {
+          "certificate_name": {
+            "description": "The name the certificate is filed under.",
+            "type": "string"
+          },
+          "domains": {
+            "description": "The names it is issued for.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "renewal_window_days": {
+            "description": "How many days before it expires it renews.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "certificate_name",
+          "renewal_window_days",
+          "domains"
+        ],
+        "type": "object"
+      },
+      "CertificatePartPartial": {
+        "additionalProperties": false,
+        "description": "A certificate as the controller resolves its declaration.",
+        "properties": {
+          "certificate_name": {
+            "$ref": "#/components/schemas/CertificatePart/properties/certificate_name"
+          },
+          "domains": {
+            "$ref": "#/components/schemas/CertificatePart/properties/domains"
+          },
+          "renewal_window_days": {
+            "$ref": "#/components/schemas/CertificatePart/properties/renewal_window_days"
+          }
+        },
+        "type": "object"
+      },
       "CertificatePartial": {
         "additionalProperties": false,
         "description": "The certificate one hop presents, or why HQ cannot say.",
@@ -8503,6 +8612,63 @@
           },
           "status_label": {
             "$ref": "#/components/schemas/ConnectionStandingRow/properties/status_label"
+          }
+        },
+        "type": "object"
+      },
+      "ConsumerPart": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_ref": {
+            "description": "The connection that installs it there, by ref; empty for none.",
+            "type": "string"
+          },
+          "domains": {
+            "description": "The names checked there: those last read, else those it is told to check.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "description": "What kind of place it is.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Where the certificate is installed, by the name its declaration gives it.",
+            "type": "string"
+          },
+          "url": {
+            "description": "The page in HQ of the record that delivers it there; empty for none.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "domains",
+          "connection_ref",
+          "url"
+        ],
+        "type": "object"
+      },
+      "ConsumerPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_ref": {
+            "$ref": "#/components/schemas/ConsumerPart/properties/connection_ref"
+          },
+          "domains": {
+            "$ref": "#/components/schemas/ConsumerPart/properties/domains"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ConsumerPart/properties/kind"
+          },
+          "name": {
+            "$ref": "#/components/schemas/ConsumerPart/properties/name"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ConsumerPart/properties/url"
           }
         },
         "type": "object"
@@ -13313,6 +13479,46 @@
         "description": "Who was paid.",
         "type": "string"
       },
+      "ExpiryPart": {
+        "additionalProperties": false,
+        "properties": {
+          "days_left": {
+            "description": "Whole days until it expires.",
+            "type": "integer"
+          },
+          "not_after": {
+            "description": "When the certificate expires, an ISO 8601 date-time.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "renewal_at": {
+            "description": "When its renewal window opens, an ISO 8601 date-time.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "not_after",
+          "days_left",
+          "renewal_at"
+        ],
+        "type": "object"
+      },
+      "ExpiryPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "days_left": {
+            "$ref": "#/components/schemas/ExpiryPart/properties/days_left"
+          },
+          "not_after": {
+            "$ref": "#/components/schemas/ExpiryPart/properties/not_after"
+          },
+          "renewal_at": {
+            "$ref": "#/components/schemas/ExpiryPart/properties/renewal_at"
+          }
+        },
+        "type": "object"
+      },
       "ExternalUrl": {
         "description": "Where it is published outside HQ. Empty for none.",
         "type": "string"
@@ -16217,6 +16423,36 @@
         },
         "type": "object"
       },
+      "MachinePointer": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "Which machine, by its name.",
+            "type": "string"
+          },
+          "url": {
+            "description": "That machine's page in HQ.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "type": "object"
+      },
+      "MachinePointerPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/MachinePointer/properties/name"
+          },
+          "url": {
+            "$ref": "#/components/schemas/MachinePointer/properties/url"
+          }
+        },
+        "type": "object"
+      },
       "MachineRecord": {
         "additionalProperties": false,
         "description": "One machine whole: how it is reached, what it serves and what runs on it.",
@@ -16874,11 +17110,83 @@
       },
       "ManagedResourceRecord": {
         "additionalProperties": false,
-        "description": "One managed record, what HQ derives from it, and the operations run on it.",
+        "description": "One managed record whole, what HQ derives from it, and the operations run on it.",
         "properties": {
-          "derived": {
-            "description": "What HQ derives from the record. It holds health, allowed actions, machines and services, expected beside live, certificate expiry, pending approvals and what uses it.",
+          "actions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ActionPart"
+            },
+            "description": "Each action of its controller, by verb, and whether it may run.",
             "type": "object"
+          },
+          "awaiting_approval": {
+            "description": "How many changes to it wait for an operator's approval.",
+            "type": "integer"
+          },
+          "certificate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CertificatePart",
+                "title": "Certificate part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A certificate as the controller resolves it; null for anything else."
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/conditions"
+          },
+          "consumers": {
+            "description": "Where a certificate is installed.",
+            "items": {
+              "$ref": "#/components/schemas/ConsumerPart"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/enabled"
+          },
+          "expiry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpiryPart",
+                "title": "Expiry part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A certificate's expiry and renewal; null for anything else."
+          },
+          "generation": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/generation"
+          },
+          "health": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/health"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/id"
+          },
+          "in_sync": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/in_sync"
+          },
+          "key": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/key"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/kind"
+          },
+          "last_observed_at": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/last_observed_at"
+          },
+          "name": {
+            "description": "The name its page is titled by.",
+            "type": "string"
+          },
+          "observed_generation": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/observed_generation"
           },
           "operations": {
             "description": "The latest operations that changed it, newest first.",
@@ -16887,23 +17195,197 @@
             },
             "type": "array"
           },
-          "resource": {
-            "$ref": "#/components/schemas/ManagedResourceItem"
+          "origin_machine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachinePointer",
+                "title": "Machine pointer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine it sends traffic to; null for none."
+          },
+          "provider_machine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachinePointer",
+                "title": "Machine pointer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine the provider that manages it runs on; null when unknown."
+          },
+          "public_effect": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/public_effect"
+          },
+          "readout": {
+            "description": "Its settings, what HQ expects beside what was last read.",
+            "items": {
+              "$ref": "#/components/schemas/ReadoutPart"
+            },
+            "type": "array"
+          },
+          "removal": {
+            "$ref": "#/components/schemas/RemovalPart"
+          },
+          "resolution_error": {
+            "description": "Why a certificate could not be resolved; empty when it was.",
+            "type": "string"
+          },
+          "services": {
+            "description": "The services it is part of.",
+            "items": {
+              "$ref": "#/components/schemas/ServicePointer"
+            },
+            "type": "array"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/spec"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingPart"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/status"
+          },
+          "unused_names": {
+            "description": "The names on a certificate nothing is served under.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/updated_at"
+          },
+          "url": {
+            "description": "Its page in HQ: its own, or the page of the machine it declares.",
+            "type": "string"
+          },
+          "used_by": {
+            "description": "The hostnames served with a certificate.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [
-          "resource",
-          "derived",
+          "key",
+          "kind",
+          "enabled",
+          "in_sync",
+          "health",
+          "public_effect",
+          "last_observed_at",
+          "id",
+          "spec",
+          "status",
+          "conditions",
+          "generation",
+          "observed_generation",
+          "updated_at",
+          "url",
+          "name",
+          "standing",
+          "actions",
+          "removal",
+          "origin_machine",
+          "provider_machine",
+          "services",
+          "readout",
+          "expiry",
+          "awaiting_approval",
+          "certificate",
+          "consumers",
+          "resolution_error",
+          "used_by",
+          "unused_names",
           "operations"
         ],
         "type": "object"
       },
       "ManagedResourceRecordPartial": {
         "additionalProperties": false,
-        "description": "One managed record, what HQ derives from it, and the operations run on it.",
+        "description": "One managed record whole, what HQ derives from it, and the operations run on it.",
         "properties": {
-          "derived": {
-            "$ref": "#/components/schemas/ManagedResourceRecord/properties/derived"
+          "actions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ActionPartPartial"
+            },
+            "description": "Each action of its controller, by verb, and whether it may run.",
+            "type": "object"
+          },
+          "awaiting_approval": {
+            "$ref": "#/components/schemas/ManagedResourceRecord/properties/awaiting_approval"
+          },
+          "certificate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CertificatePartPartial",
+                "title": "Certificate part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A certificate as the controller resolves it; null for anything else."
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/conditions"
+          },
+          "consumers": {
+            "description": "Where a certificate is installed.",
+            "items": {
+              "$ref": "#/components/schemas/ConsumerPartPartial"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/enabled"
+          },
+          "expiry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpiryPartPartial",
+                "title": "Expiry part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A certificate's expiry and renewal; null for anything else."
+          },
+          "generation": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/generation"
+          },
+          "health": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/health"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/id"
+          },
+          "in_sync": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/in_sync"
+          },
+          "key": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/key"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/kind"
+          },
+          "last_observed_at": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/last_observed_at"
+          },
+          "name": {
+            "$ref": "#/components/schemas/ManagedResourceRecord/properties/name"
+          },
+          "observed_generation": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/observed_generation"
           },
           "operations": {
             "description": "The latest operations that changed it, newest first.",
@@ -16912,8 +17394,73 @@
             },
             "type": "array"
           },
-          "resource": {
-            "$ref": "#/components/schemas/ManagedResourceItemPartial"
+          "origin_machine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachinePointerPartial",
+                "title": "Machine pointer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine it sends traffic to; null for none."
+          },
+          "provider_machine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachinePointerPartial",
+                "title": "Machine pointer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine the provider that manages it runs on; null when unknown."
+          },
+          "public_effect": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/public_effect"
+          },
+          "readout": {
+            "description": "Its settings, what HQ expects beside what was last read.",
+            "items": {
+              "$ref": "#/components/schemas/ReadoutPartPartial"
+            },
+            "type": "array"
+          },
+          "removal": {
+            "$ref": "#/components/schemas/RemovalPartPartial"
+          },
+          "resolution_error": {
+            "$ref": "#/components/schemas/ManagedResourceRecord/properties/resolution_error"
+          },
+          "services": {
+            "description": "The services it is part of.",
+            "items": {
+              "$ref": "#/components/schemas/ServicePointerPartial"
+            },
+            "type": "array"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/spec"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingPartPartial"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/status"
+          },
+          "unused_names": {
+            "$ref": "#/components/schemas/ManagedResourceRecord/properties/unused_names"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ManagedResourceRecord/properties/url"
+          },
+          "used_by": {
+            "$ref": "#/components/schemas/ManagedResourceRecord/properties/used_by"
           }
         },
         "type": "object"
@@ -22298,6 +22845,44 @@
         },
         "type": "object"
       },
+      "ReadoutPart": {
+        "additionalProperties": false,
+        "properties": {
+          "desired": {
+            "description": "What HQ expects of it; empty when HQ expects nothing.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The setting, as its type's card labels it.",
+            "type": "string"
+          },
+          "observed": {
+            "description": "What was last read of it; empty when not read.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "desired",
+          "observed"
+        ],
+        "type": "object"
+      },
+      "ReadoutPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "desired": {
+            "$ref": "#/components/schemas/ReadoutPart/properties/desired"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ReadoutPart/properties/label"
+          },
+          "observed": {
+            "$ref": "#/components/schemas/ReadoutPart/properties/observed"
+          }
+        },
+        "type": "object"
+      },
       "ReceiptAsset": {
         "anyOf": [
           {
@@ -23215,6 +23800,46 @@
           },
           "url": {
             "$ref": "#/components/schemas/ReleasePart/properties/url"
+          }
+        },
+        "type": "object"
+      },
+      "RemovalPart": {
+        "additionalProperties": false,
+        "description": "Whether and how it may be removed.",
+        "properties": {
+          "mode": {
+            "description": "How it is removed: `delete` at its provider, `forget` HQ's record of it, or `unavailable`.",
+            "type": "string"
+          },
+          "pending": {
+            "description": "Whether a removal is in flight.",
+            "type": "boolean"
+          },
+          "reason": {
+            "description": "Why it may not be removed now; empty when it may.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "reason",
+          "pending"
+        ],
+        "type": "object"
+      },
+      "RemovalPartPartial": {
+        "additionalProperties": false,
+        "description": "Whether and how it may be removed.",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/RemovalPart/properties/mode"
+          },
+          "pending": {
+            "$ref": "#/components/schemas/RemovalPart/properties/pending"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/RemovalPart/properties/reason"
           }
         },
         "type": "object"
@@ -25060,6 +25685,36 @@
         },
         "type": "object"
       },
+      "ServicePointer": {
+        "additionalProperties": false,
+        "properties": {
+          "hostname": {
+            "description": "The service's hostname.",
+            "type": "string"
+          },
+          "url": {
+            "description": "The service's page in HQ.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hostname",
+          "url"
+        ],
+        "type": "object"
+      },
+      "ServicePointerPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "hostname": {
+            "$ref": "#/components/schemas/ServicePointer/properties/hostname"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ServicePointer/properties/url"
+          }
+        },
+        "type": "object"
+      },
       "ServiceRecord": {
         "additionalProperties": false,
         "description": "One service name and the path a request for it takes.",
@@ -25592,6 +26247,86 @@
           "seconds",
           "percent"
         ],
+        "type": "object"
+      },
+      "StandingPart": {
+        "additionalProperties": false,
+        "description": "Where it stands, as the one line its page and its row say it.",
+        "properties": {
+          "detail": {
+            "description": "What the state means for it, as a sentence; empty for none.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Its state in the words a page shows, such as `Change waiting to apply`.",
+            "type": "string"
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it was last read, an ISO 8601 date-time; null when never."
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it came to stand so, an ISO 8601 date-time; null when unsaid."
+          },
+          "state": {
+            "description": "Its state in one word: `off`, `drifted`, `deploying`, `degraded`, `pending`, `unseen`, `working`, `recorded` or `unread`.",
+            "type": "string"
+          },
+          "tone": {
+            "description": "How its state is colored: `neutral`, `serious`, `attention` or `good`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "tone",
+          "label",
+          "detail",
+          "since",
+          "read_at"
+        ],
+        "type": "object"
+      },
+      "StandingPartPartial": {
+        "additionalProperties": false,
+        "description": "Where it stands, as the one line its page and its row say it.",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/StandingPart/properties/detail"
+          },
+          "label": {
+            "$ref": "#/components/schemas/StandingPart/properties/label"
+          },
+          "read_at": {
+            "$ref": "#/components/schemas/StandingPart/properties/read_at"
+          },
+          "since": {
+            "$ref": "#/components/schemas/StandingPart/properties/since"
+          },
+          "state": {
+            "$ref": "#/components/schemas/StandingPart/properties/state"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/StandingPart/properties/tone"
+          }
+        },
         "type": "object"
       },
       "Step": {
@@ -36057,7 +36792,103 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ManagedResourceRecordSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedResourceRecordSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "certificateRenewV2": {
+                "description": "Only for a record whose `kind` is `tls.certificate`.",
+                "operationId": "certificateRenewV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "dashboardMachineSelectV2": {
+                "description": "Only for a record whose `kind` is `machine`.",
+                "operationId": "dashboardMachineSelectV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceAcceptObservedV2": {
+                "operationId": "infrastructureResourceAcceptObservedV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceReconcileV2": {
+                "operationId": "infrastructureResourceReconcileV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceRemoveV2": {
+                "operationId": "infrastructureResourceRemoveV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceRestartV2": {
+                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "operationId": "infrastructureResourceRestartV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceStartV2": {
+                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "operationId": "infrastructureResourceStartV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceStopV2": {
+                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "operationId": "infrastructureResourceStopV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceUpdateV2": {
+                "operationId": "infrastructureResourceUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "tailnetPolicyRemoveEmptyGroupsV2": {
+                "description": "Only for a record whose `kind` is `tailscale.policy`.",
+                "operationId": "tailnetPolicyRemoveEmptyGroupsV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "tailnetReachAllowV2": {
+                "description": "Only for a record whose `kind` is `tls.certificate`.",
+                "operationId": "tailnetReachAllowV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "tailnetRoutesApproveV2": {
+                "description": "Only for a record whose `kind` is `tailscale.device`.",
+                "operationId": "tailnetRoutesApproveV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"

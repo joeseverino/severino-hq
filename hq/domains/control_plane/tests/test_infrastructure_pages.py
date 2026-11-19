@@ -131,8 +131,8 @@ class InfrastructureWebTests(TestCase):
 
         response = self.client.get(reverse("control_plane:detail", kwargs={"key": proxy.key}))
 
-        self.assertEqual(response.context["provider_machine"]["name"], "example-host")
-        self.assertEqual(response.context["origin_machine"].name, "app-server")
+        self.assertEqual(response.context["resource"]["provider_machine"]["name"], "example-host")
+        self.assertEqual(response.context["resource"]["origin_machine"]["name"], "app-server")
         # Two edges: the machine its provider runs on and the one it forwards to.
         links = hrefs(response)
         for name in ("example-host", "app-server"):
