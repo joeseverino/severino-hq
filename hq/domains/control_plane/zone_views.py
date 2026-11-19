@@ -16,7 +16,6 @@ from django.views import View
 
 from hq.domains.control_plane.forms import MailFailuresForm, MailPolicyForm, MailSendersForm
 from hq.domains.control_plane.models import ManagedResource
-from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.inventory import inventory_state
 from hq.platform.application.mail_policy import mail_overview, parse_spf
@@ -148,10 +147,7 @@ class ZoneMailView(View):
         """The page, with the form ``sent`` drawn as it was sent over what was wrong with it."""
 
         overview = mail_overview(found)
-        drawn = {
-            MailSendersForm.SECTION: MailSendersForm(policy=parse_spf(_spf_value(found))),
-            MailFailuresForm.SECTION: MailFailuresForm(tags=overview.dmarc_tags),
-        }
+        drawn = {section: _policy(section, found, overview)[0] for section in _SECTIONS}
         if sent is not None:
             drawn[sent.SECTION] = sent
         return render(
@@ -176,23 +172,15 @@ class ZoneMailView(View):
         """Publish a policy composed from the choices, not typed as a string."""
 
         found = self._zone(zone)
-        overview = mail_overview(found)
-        form: MailPolicyForm
-        if request.POST.get("section") == MailSendersForm.SECTION:
-            form = MailSendersForm(request.POST, policy=parse_spf(_spf_value(found)))
-            record = next(
-                (r for section in overview.sections if section.id == "sending" for r in section.records),
-                None,
-            )
-        else:
-            form = MailFailuresForm(request.POST, tags=overview.dmarc_tags)
-            record = overview.dmarc_record
+        section = request.POST.get("section")
+        form, resource = _policy(
+            section if section in _SECTIONS else MailFailuresForm.SECTION, found, mail_overview(found), request.POST
+        )
         if not form.is_valid():
             return self._page(request, found, form, status=400)
-        if record is None or not record.resource_key:
+        if resource is None:
             form.add_error(None, f"HQ does not manage a {form.record} record for this domain.")
             return self._page(request, found, form, status=409)
-        resource = ManagedResource.objects.get(key=record.resource_key)
         result = execute_posted(
             request,
             UPDATE_CAPABILITY,
@@ -203,10 +191,31 @@ class ZoneMailView(View):
                 "enabled": resource.enabled,
             },
             target=resource.key,
+            expected_updated_at=form.cleaned_data["expected_updated_at"] or None,
         )
         if refusal := refused(request, result, form=form):
             return self._page(request, found, form, status=refusal.status)
         return redirect("zones:mail", zone=found.zone)
+
+
+_SECTIONS = (MailSendersForm.SECTION, MailFailuresForm.SECTION)
+
+
+def _policy(section: str, found, overview, data=None) -> tuple[MailPolicyForm, ManagedResource | None]:
+    """One policy's form, drawn from the record it rewrites, and that record when HQ manages it."""
+
+    form: type[MailPolicyForm]
+    if section == MailSendersForm.SECTION:
+        record = next((r for part in overview.sections if part.id == "sending" for r in part.records), None)
+        form, drawn_from = MailSendersForm, {"policy": parse_spf(_spf_value(found))}
+    else:
+        record = overview.dmarc_record
+        form, drawn_from = MailFailuresForm, {"tags": overview.dmarc_tags}
+    resource = (
+        ManagedResource.objects.filter(key=record.resource_key).first() if record and record.resource_key else None
+    )
+    initial = {"expected_updated_at": resource.updated_at.isoformat()} if resource else {}
+    return form(data, initial=initial, **drawn_from), resource
 
 
 class ZonePinView(View):
@@ -215,10 +224,7 @@ class ZonePinView(View):
     runs = (PIN,)
 
     def post(self, request, zone: str):
-        name = normalized_hostname(zone)
-        if not name:
-            raise Http404("No such domain.")
-        refused(request, execute_posted(request, PIN, {"kind": DOMAIN, "key": name}))
+        refused(request, execute_posted(request, PIN, {"kind": DOMAIN, "key": zone}))
         # Checked, not trusted: a destination arriving in a form post is a
         # request, and an unchecked one redirects wherever it likes.
         return redirect(safe_next(request, fallback=reverse("zones:index")))

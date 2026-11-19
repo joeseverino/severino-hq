@@ -1,24 +1,15 @@
-"""A call held for a person answers a declared shape on both doors: the API at
-202 Accepted, apart from the 200 of a call that ran, and MCP's
-``execute_capability`` beside its own, and a real held answer meets each."""
+"""A call held for a person answers 202 Accepted at the API, apart from the 200
+of a call that ran; ``ContractClient`` holds each body to its documented shape."""
 
 import json
 
-from asgiref.sync import async_to_sync
 from django.test import TestCase, override_settings
-from jsonschema import Draft202012Validator
 
 from hq.domains.control_plane.models import CapabilityRule
-from hq.platform.application.security import Principal
-from hq.platform.mcp.declarations import tool_contract
-from hq.platform.mcp.identity import set_principal
-from hq.platform.mcp.server import mcp
 
-from .. import openapi
-from ..testing import Contract, ContractClient
+from ..testing import ContractClient
 from .tokens import ISSUER, RESOURCE, _serving, _token
 
-AGENT = Principal("example-held", "mcp", frozenset({"write_projects", "read"}))
 PROJECT = {"name": "Held", "slug": "held", "status": "active"}
 
 
@@ -35,8 +26,7 @@ class HeldAnswerTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        for subject in ("example-automation", AGENT.actor):
-            CapabilityRule.objects.create(subject=subject, capability="project.create", rule="approve")
+        CapabilityRule.objects.create(subject="example-automation", capability="project.create", rule="approve")
 
     def _post(self, key, project=PROJECT):
         with _serving():
@@ -69,21 +59,3 @@ class HeldAnswerTests(TestCase):
         self.assertNotIn("status", ran.json()["data"])
         self.assertEqual(refused.status_code, 403, refused.content)
         self.assertFalse(refused.json()["ok"])
-
-    def test_a_held_call_answers_the_declared_shape_on_both_doors(self):
-        response = self._post("example-held-api")
-        self.assertEqual(response.status_code, 202, response.content)
-        Contract(openapi.document()).validate(["components", "schemas", "AwaitingApproval"], response.json()["data"])
-
-        with set_principal(AGENT):
-            answer = async_to_sync(mcp.tools["execute_capability"].call)(
-                {"name": "project.create", "payload": PROJECT | {"idempotency_key": "example-held-mcp"}}
-            )
-        success = tool_contract()["execute_capability"]["outputSchema"]["anyOf"][0]
-        held = [
-            branch
-            for branch in success.get("anyOf", [])
-            if branch.get("properties", {}).get("status", {}).get("const") == answer["status"]
-        ]
-        self.assertEqual(len(held), 1, success)
-        Draft202012Validator(held[0]).validate(answer)

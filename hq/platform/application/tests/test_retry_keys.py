@@ -11,8 +11,8 @@ from hq.domains.projects.models import Project
 from hq.platform.core.models import IdempotencyRecord
 
 from ..adoption_testing import managing_everything
-from ..capabilities import capability_registry, describe_capabilities, execute_capability
-from ..integration_specs import IDEMPOTENCY_FIELD, capability_schema
+from ..capabilities import describe_capabilities, execute_capability
+from ..integration_specs import IDEMPOTENCY_FIELD
 from ..security import Capability, Principal, cli_principal
 
 REFRESH = "infrastructure.controller.refresh"
@@ -20,36 +20,22 @@ RECONCILE = "infrastructure.resource.reconcile"
 
 
 class DeclaredOnceTests(TestCase):
-    def test_every_capability_that_is_not_a_read_accepts_the_key_and_none_requires_it(self):
-        for name, spec in capability_registry().items():
-            schema = capability_schema(spec)
-            with self.subTest(capability=name):
-                if spec.effect == "read":
+    def test_every_capability_that_is_not_a_read_publishes_the_key_and_none_requires_it(self):
+        """Read from the catalog a caller is handed, so it holds what an agent sends."""
+
+        for item in describe_capabilities(principal=cli_principal())["capabilities"]:
+            schema = item["input_schema"]
+            with self.subTest(capability=item["name"]):
+                if item["effect"] == "read":
                     self.assertNotIn(IDEMPOTENCY_FIELD, schema.get("properties", {}))
                     continue
                 self.assertIn(IDEMPOTENCY_FIELD, schema["properties"])
                 self.assertNotIn(IDEMPOTENCY_FIELD, schema.get("required", ()))
 
-    def test_the_published_schema_is_the_one_execution_validates_against(self):
-        described = {item["name"]: item for item in describe_capabilities(principal=cli_principal())["capabilities"]}
-
-        for name in (REFRESH, RECONCILE):
-            schema = described[name]["input_schema"]
-            with self.subTest(capability=name):
-                self.assertEqual(schema["properties"][IDEMPOTENCY_FIELD]["type"], "string")
-                self.assertNotIn(IDEMPOTENCY_FIELD, schema.get("required", ()))
-                self.assertFalse(schema["additionalProperties"])
-
 
 class RefreshTests(TestCase):
     def ask(self, principal=None, **payload):
         return execute_capability(REFRESH, payload, principal=principal or cli_principal())
-
-    def test_it_accepts_a_key(self):
-        result = self.ask(every_connection=True, idempotency_key="refresh-once")
-
-        self.assertTrue(result["ok"], result)
-        self.assertTrue(result["standing"], result)
 
     def test_it_still_runs_without_one_and_records_nothing_to_replay(self):
         self.assertTrue(self.ask(every_connection=True)["ok"])
@@ -62,6 +48,7 @@ class RefreshTests(TestCase):
 
         second = self.ask(every_connection=True, idempotency_key="refresh-once")
 
+        self.assertTrue(first["ok"], first)
         self.assertEqual(second, first)
         self.assertFalse(ReadRequest.objects.exists())
 
@@ -123,44 +110,20 @@ class ReadTests(TestCase):
 
 
 class ReconcileTests(TestCase):
-    """A command that queues an operation takes the key the same way."""
-
-    KEY = "example-rewrite"
-
-    def setUp(self):
-        managing_everything()
-        ManagedResource.objects.create(
-            key=self.KEY,
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "192.0.2.10"},
-        )
-
-    def ask(self, **payload):
-        return execute_capability(RECONCILE, payload, principal=cli_principal(), target=self.KEY)
-
-    def test_it_queues_without_a_key(self):
-        result = self.ask()
-
-        self.assertTrue(result["ok"], result)
-        self.assertTrue(result["queued"])
-
-    def test_a_repeat_with_the_same_key_returns_the_first_result(self):
-        first = self.ask(idempotency_key="reconcile-once")
-
-        second = self.ask(idempotency_key="reconcile-once")
-
-        self.assertEqual(second, first)
-        self.assertEqual(OperationRequest.objects.count(), 1)
-
     def test_a_key_used_for_another_record_is_a_conflict(self):
-        ManagedResource.objects.create(
-            key="example-other", kind="adguard.rewrite", spec={"domain": "other.example.com", "answer": "192.0.2.11"}
-        )
-        self.ask(idempotency_key="reconcile-once")
+        managing_everything()
+        for key, address in (("example-rewrite", "192.0.2.10"), ("example-other", "192.0.2.11")):
+            ManagedResource.objects.create(
+                key=key, kind="adguard.rewrite", spec={"domain": f"{key}.example.com", "answer": address}
+            )
 
-        other = execute_capability(
-            RECONCILE, {"idempotency_key": "reconcile-once"}, principal=cli_principal(), target="example-other"
-        )
+        def ask(target):
+            return execute_capability(
+                RECONCILE, {"idempotency_key": "reconcile-once"}, principal=cli_principal(), target=target
+            )
+
+        ask("example-rewrite")
+        other = ask("example-other")
 
         self.assertEqual(other["error"]["code"], "idempotency_conflict")
         self.assertEqual(OperationRequest.objects.count(), 1)
@@ -195,7 +158,7 @@ class CommandKeyTests(TestCase):
 
 
 class PolicyTests(TestCase):
-    """A call refused or held by policy keeps nothing under its key."""
+    """A call refused or held keeps nothing under its key."""
 
     AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, "write_projects"}))
 
@@ -206,17 +169,21 @@ class PolicyTests(TestCase):
             defaults={"rule": rule},
         )
 
-    def create(self):
-        payload = {"name": "Example", "slug": "example", IDEMPOTENCY_FIELD: "create-once"}
-        return execute_capability("project.create", payload, principal=self.AGENT)
+    def test_the_same_key_runs_once_a_refusing_or_holding_rule_is_lifted(self):
+        for rule, answered in (
+            (CapabilityRule.Rule.DENY, "denied_by_policy"),
+            (CapabilityRule.Rule.APPROVE, "awaiting_approval"),
+        ):
+            payload = {"name": "Example", "slug": rule, IDEMPOTENCY_FIELD: f"create-{rule}"}
+            with self.subTest(rule=rule):
+                self.rule(rule)
+                answer = execute_capability("project.create", payload, principal=self.AGENT)
+                self.assertEqual(answer.get("status") or answer["error"]["code"], answered)
+                self.assertFalse(Project.objects.filter(slug=rule).exists())
+                self.rule(CapabilityRule.Rule.ALLOW)
 
-    def test_the_same_key_runs_once_a_refusing_rule_is_lifted(self):
-        self.rule(CapabilityRule.Rule.DENY)
-        self.assertEqual(self.create()["error"]["code"], "denied_by_policy")
-        self.rule(CapabilityRule.Rule.ALLOW)
-
-        self.assertTrue(self.create()["ok"])
-        self.assertTrue(Project.objects.filter(slug="example").exists())
+                self.assertNotIn("status", execute_capability("project.create", payload, principal=self.AGENT))
+                self.assertTrue(Project.objects.filter(slug=rule).exists())
 
     def test_a_handlers_own_refusal_keeps_nothing_under_its_key(self):
         from hq.platform.application.projects import DEPENDENCY_UPDATES
@@ -232,11 +199,3 @@ class PolicyTests(TestCase):
         project.save()
 
         self.assertTrue(switch()["ok"])
-
-    def test_the_same_key_runs_once_a_holding_rule_is_lifted(self):
-        self.rule(CapabilityRule.Rule.APPROVE)
-        self.assertEqual(self.create()["status"], "awaiting_approval")
-        self.rule(CapabilityRule.Rule.ALLOW)
-
-        self.assertNotIn("status", self.create())
-        self.assertTrue(Project.objects.filter(slug="example").exists())

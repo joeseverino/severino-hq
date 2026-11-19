@@ -8,16 +8,19 @@ controller: the world does not change because somebody starred a domain.
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal, TypedDict
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from pydantic import Field
 lazy from django.db.models import Max
 
+from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog, Pin
 
 from .command_fields import Choices, Describe
 from .projection import read_once
 from .security import Principal, person
+lazy from .outward_links import offered_links
 
 # What a pin is called on a page, wherever one is set or listed.
 FAVORITE = "favorite"
@@ -66,6 +69,12 @@ class ChooseCommand:
     keys: Annotated[list[str], Describe("Every pin of that type, in order.")] = field(default_factory=list)
 
 
+def _key(target_kind: str, key: Any) -> str:
+    """A pin's key in its one spelling: a domain or a service as its DNS name."""
+
+    return normalized_hostname(key) if target_kind in (DOMAIN, SERVICE) else str(key).strip().lower()
+
+
 def ordered(user, target_kind: str) -> tuple[str, ...]:
     """Pinned keys in the order the operator put them, lowercased.
 
@@ -97,7 +106,7 @@ def toggle(user, target_kind: str, target_key: str) -> bool:
     silently move everything the operator had already arranged.
     """
 
-    key = str(target_key).strip().lower()
+    key = _key(target_kind, target_key)
     if not key:
         return False
     existing = Pin.objects.filter(user=user, target_kind=target_kind, target_key=key)
@@ -119,17 +128,10 @@ def _next_position(user, target_kind: str) -> int:
 
 
 def move(user, target_kind: str, target_key: str, delta: int) -> None:
-    """Shift one pin up or down among its neighbors.
+    """Swap one pin with its neighbor, ``delta`` -1 for up and 1 for down."""
 
-    Implemented as a swap with the adjacent pin rather than by rewriting every
-    position, so two operators reordering different pairs do not clobber each
-    other's work.
-    """
-
-    if user is None or not user.is_authenticated or delta not in (-1, 1):
-        return
     keys = list(ordered(user, target_kind))
-    key = str(target_key).strip().lower()
+    key = _key(target_kind, target_key)
     if key not in keys:
         return
     index = keys.index(key)
@@ -148,10 +150,8 @@ def reorder(user, target_kind: str, keys) -> None:
     things without meaning to.
     """
 
-    if user is None or not user.is_authenticated:
-        return
     known = set(ordered(user, target_kind))
-    wanted = [key for key in (str(item).strip().lower() for item in keys) if key in known]
+    wanted = [key for key in (_key(target_kind, item) for item in keys) if key in known]
     rows = {row.target_key.lower(): row for row in Pin.objects.filter(user=user, target_kind=target_kind)}
     changed = []
     for position, key in enumerate(wanted):
@@ -170,9 +170,7 @@ def replace(user, target_kind: str, keys) -> None:
     on what was already stored and drift the moment two tabs disagree.
     """
 
-    if user is None or not user.is_authenticated:
-        return
-    wanted = {str(key).strip().lower() for key in keys if str(key).strip()}
+    wanted = {_key(target_kind, key) for key in keys} - {""}
     Pin.objects.filter(user=user, target_kind=target_kind).exclude(target_key__in=wanted).delete()
     existing = pinned(user, target_kind)
     start = _next_position(user, target_kind)
@@ -238,6 +236,14 @@ def choose(command: ChooseCommand, *, principal: Principal) -> PinsChanged:
 
     kind = command.kind
     user = person(principal)
+    if kind == DASHBOARD_LINK:
+        # The dashboard shows only links it offers, so a key it never offered
+        # would be stored as a shortcut to nothing.
+        offered = {item["href"].lower() for item in offered_links()}
+        if unknown := sorted({_key(kind, key) for key in command.keys} - {""} - offered):
+            raise ValidationError(
+                {"keys": ValidationError(f"Not a link HQ offers: {', '.join(unknown)}.", code="invalid_choice")}
+            )
     replace(user, kind, command.keys)
     _audit(user, "Chose what to pin.", kind=kind, count=len(command.keys))
     return {"ok": True, "kind": kind}

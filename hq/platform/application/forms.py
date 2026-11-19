@@ -101,6 +101,14 @@ class LinesField(forms.Field):
         return value
 
 
+class ReadAt(forms.CharField):
+    """When the record a form edits was read, never typed: sent back as the
+    call's ``expected_updated_at``, so a save over a change made since is refused."""
+
+    def __init__(self) -> None:
+        super().__init__(required=False, widget=forms.HiddenInput())
+
+
 def file_as_sent(upload: Any) -> dict[str, str]:
     """An uploaded file as a command takes one in JSON: its name, its media
     type, and its bytes base64-encoded (``command_fields.Upload``)."""

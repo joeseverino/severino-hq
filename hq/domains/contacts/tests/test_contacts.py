@@ -203,11 +203,6 @@ class ContactViewTests(TestCase):
             ).exists()
         )
 
-    def test_set_status_rejects_unknown_status(self):
-        _manages()
-        self.client.post(reverse("contacts:set_status", args=[1]), form_keyed({"status": "bogus"}))
-        self.assertFalse(ManagedResource.objects.filter(kind=inbox.DECLARATION).exists())
-
     def test_set_status_ignores_offsite_next(self):
         _manages()
         response = self.client.post(

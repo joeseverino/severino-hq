@@ -13,8 +13,10 @@ from datetime import datetime
 from typing import Annotated
 
 from django.utils import timezone
+from pydantic import Field
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory, attempted_at
+from hq.domains.control_plane.names import HOSTNAME_LENGTH
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.host import FIREWALL_KIND, TAILNET_LOCK_KIND
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
@@ -211,7 +213,8 @@ class VisitRefreshCommand:
     """The page that was opened: what it is about, and which one."""
 
     subject: Annotated[str, Describe("What type of page was opened.")]
-    name: Annotated[str, Describe("Which one.")]
+    # A hostname is the longest thing a page is named by.
+    name: Annotated[str, Field(max_length=HOSTNAME_LENGTH), Describe("Which one.")]
 
 
 def request_visit_refresh(command: VisitRefreshCommand, *, principal: Principal) -> VisitRefreshed:

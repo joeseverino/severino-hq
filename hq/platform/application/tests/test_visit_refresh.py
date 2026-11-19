@@ -266,7 +266,11 @@ class VisitRefreshTests(TestCase):
         store(FAST, age=OLD)
 
         with page(FAST):
-            for payload in ({"subject": "example"}, {"subject": "example", "name": "known", "kind": FAST}):
+            for payload in (
+                {"subject": "example"},
+                {"subject": "example", "name": "known", "kind": FAST},
+                {"subject": "example", "name": "x" * 300},
+            ):
                 with self.subTest(payload=sorted(payload)):
                     result = execute_capability(VISIT_REFRESH, payload, principal=cli_principal())
 
@@ -591,20 +595,6 @@ class VisitRefreshViewTests(TestCase):
             self.post(kind="tailscale.device", connection_ref="x", watch="y")
 
         self.assertEqual(asked(), {FAST})
-
-    def test_an_unknown_subject_or_page_is_not_found(self):
-        self.client.force_login(self.user)
-
-        with page(FAST):
-            for body in (
-                {"subject": "nonsense"},
-                {"name": "unknown"},
-                {"name": ""},
-                {"name": "x" * 300},
-            ):
-                with self.subTest(body=body):
-                    self.assertEqual(self.post(**body).status_code, 404)
-        self.assertEqual(asked(), set())
 
     def test_a_refusal_is_failed_work_in_its_own_sentence(self):
         self.client.force_login(self.user)

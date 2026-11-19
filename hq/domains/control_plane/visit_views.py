@@ -2,14 +2,10 @@
 
 from typing import override
 
-from django.http import Http404
 from django.views import View
 
 from hq.platform.application.asks import AskMixin
-from hq.platform.application.visit_refresh import VISIT_REFRESH, reads_of
-
-# A hostname's limit, which is the longest thing a subject is named by.
-NAME_LIMIT = 253
+from hq.platform.application.visit_refresh import VISIT_REFRESH
 
 
 class VisitRefreshView(AskMixin, View):
@@ -21,8 +17,4 @@ class VisitRefreshView(AskMixin, View):
 
     @override
     def payload(self):
-        subject = str(self.request.POST.get("subject", ""))
-        name = str(self.request.POST.get("name", "")).strip()
-        if len(name) > NAME_LIMIT or reads_of(subject, name) is None:
-            raise Http404("No such page.")
-        return {"subject": subject, "name": name}
+        return {"subject": self.request.POST.get("subject", ""), "name": self.request.POST.get("name", "")}

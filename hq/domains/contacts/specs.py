@@ -2,9 +2,9 @@
 
 from typing import Annotated, NotRequired, TypedDict
 
-from pydantic import Field
+from pydantic import Field, create_model
 
-from hq.domains.control_plane.provider_adapters.cloudflare import ContactStatus
+from hq.domains.control_plane.provider_adapters.cloudflare import SubmissionStatus
 from hq.platform.application import contact_submissions
 from hq.platform.application.contact_submissions import (
     ContactReviewCommand,
@@ -17,15 +17,17 @@ from hq.platform.application.describe import Describe
 from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from hq.platform.application.record_fields import RecordId
 from hq.platform.application.records import DELETE
-from hq.platform.application.resources import STATUS_FILTER, TEXT_FILTER, BoundedQuery
+from hq.platform.application.resources import STATUS_FILTER, TEXT_FILTER, BoundedQuery, one_of
 from hq.platform.application.security import Capability
 
 from .inbox import PREVIEW_LENGTH
 
-
-class ContactSubmissionQuery(BoundedQuery):
-    status: ContactStatus | None = Field(default=None, description=STATUS_FILTER)
-    query: str = Field(default="", description=TEXT_FILTER)
+ContactSubmissionQuery = create_model(
+    "ContactSubmissionQuery",
+    __base__=BoundedQuery,
+    status=(one_of(SubmissionStatus.values) | None, Field(default=None, description=STATUS_FILTER)),
+    query=(str, Field(default="", description=TEXT_FILTER)),
+)
 
 
 class ContactSubmissionRow(TypedDict):

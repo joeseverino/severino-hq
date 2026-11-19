@@ -532,17 +532,13 @@ class _Builder:
             )
 
     def typed(self, kind: type) -> dict[str, Any]:
-        """The ``$ref`` to a resource's list item or record, kept as the component of its name.
-
-        A caller's field mask cuts it, so neither it nor any part a mask can
-        reach promises a field (``Components.sparse``).
-        """
+        """The ``$ref`` to a resource's list item or record, which a caller's field mask cuts
+        (``Components.written``)."""
 
         name = kind.__name__
         if name not in self.components.schemas:
             self.components.typed({name: kind})
-        self.components.mask(name)
-        return {"$ref": SCHEMAS + name}
+        return self.components.mask(name)
 
     def page_of(self, name: str) -> tuple[str, dict[str, Any]] | None:
         """A list's answer: every list's page, its items of the type the
@@ -828,7 +824,7 @@ def document() -> dict[str, Any]:
             ),
             "responses": dict(sorted(builder.responses.items())),
             "headers": dict(sorted(builder.headers.items())),
-            "schemas": dict(sorted(builder.components.sparse().items())),
+            "schemas": dict(sorted(builder.components.written().items())),
         },
     }
 

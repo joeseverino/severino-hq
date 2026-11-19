@@ -23,7 +23,7 @@ from hq.domains.control_plane.provider_spec import NameContext, ProviderSpec
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
-from .forms import LinesField
+from .forms import LinesField, ReadAt
 from .plugins import import_reference
 from .references import keeping_held
 from .ui import button_classes
@@ -186,6 +186,7 @@ class ResourceIdentityForm(forms.Form):
         label="Managed by HQ",
         help_text="Turn off to stop HQ changing it. Nothing is removed.",
     )
+    expected_updated_at = ReadAt()
 
 
 class ProviderSpecForm(forms.Form):

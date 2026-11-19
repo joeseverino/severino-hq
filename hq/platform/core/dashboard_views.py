@@ -72,15 +72,7 @@ class DashboardLinkChoiceView(View):
         )
 
     def post(self, request):
-        offered = {item["href"].lower() for item in link_choices(None)}
-        keep = {
-            href.lower()
-            # Only what was offered. A key arriving in a form post is a request,
-            # and an unchecked one would let anything be stored as a shortcut.
-            for href in request.POST.getlist("href")
-            if href.lower() in offered
-        }
-        result = execute_posted(request, CHOOSE, {"kind": DASHBOARD_LINK, "keys": sorted(keep)})
+        result = execute_posted(request, CHOOSE, {"kind": DASHBOARD_LINK, "keys": request.POST.getlist("href")})
         refused(request, result)
         # One answer for both callers. A browser follows this and lands on the
         # dashboard; a fetch follows it too and reads the panel out of the page
