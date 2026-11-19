@@ -13,6 +13,7 @@ from typing import Any
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.portainer import IMAGE_KIND, RUNTIME_KIND, STACK_KIND, VOLUME_KIND
 
+from .references import Kind
 from .relationships import Relationships, relationships_for
 from .security import Principal
 from .topology_model import RELATIONS
@@ -44,7 +45,7 @@ def for_service(service: Any, sections: Iterable[Any], *, principal: Principal) 
     ]
     if any(section.id == "access" for section in sections):
         shown.append(OBSERVATIONS["npm.access_list"].relation)
-    return relationships_for(f"service:{service.hostname}", principal=principal).without(*shown)
+    return relationships_for(Kind.SERVICE.of(service.hostname), principal=principal).without(*shown)
 
 
 def for_machine(machine: Any, sections: Iterable[Any], *, principal: Principal) -> tuple[Relationships, Relationships]:
@@ -54,7 +55,7 @@ def for_machine(machine: Any, sections: Iterable[Any], *, principal: Principal) 
     "Declared as" names a tailnet device declaration. The band's links read
     every relation."""
 
-    whole = relationships_for(f"machine:{machine.name}", principal=principal)
+    whole = relationships_for(Kind.MACHINE.of(machine.name), principal=principal)
     if machine.route_approval_key:
         whole = whole.without(RELATIONS["on_tailnet"].phrase)
     rendered = {kind for section in sections for kind in section.renders}

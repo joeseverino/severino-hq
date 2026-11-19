@@ -33,6 +33,7 @@ from hq.domains.jobs.models import Job
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.application.conditions import READY
+from hq.platform.application.references import Kind
 from hq.platform.application.security import API_INTERFACE, WEB_INTERFACE
 from hq.platform.core.example_estate import automation
 from hq.platform.core.models import AuditLog
@@ -327,7 +328,7 @@ def _references(assets, expenses, entries) -> None:
     Asset.objects.filter(pk=asset.pk).update(infrastructure=machine, infrastructure_name="lab-1")
     Expense.objects.filter(pk__in=[expense.pk for expense in expenses[::25]]).update(about=machine, about_name="lab-1")
     about_asset = [entry.pk for entry in entries[::10]]
-    Entry.objects.filter(pk__in=about_asset).update(about=f"asset:{asset.slug}", about_name=asset.item_name)
+    Entry.objects.filter(pk__in=about_asset).update(about=Kind.ASSET.of(asset.slug), about_name=asset.item_name)
     Entry.objects.filter(pk=entries[1].pk).update(about=machine, about_name="lab-1")
 
 

@@ -34,6 +34,7 @@ from .finding_steps import Do, Run
 from .images import version
 from .lists import split_list
 from .projection import read_once
+from .references import Kind
 from .standard_findings import Help, Measured, Per, Standard
 from .standards import Check
 from .tone import Tone
@@ -306,7 +307,7 @@ def _on_machines(estate: FindingEstate) -> Iterator[Measured]:
 
     machines = {node.id for node in estate.nodes() if node.kind == "machine"}
     for item in containers():
-        if (node := f"machine:{item.machine.name}") in machines:
+        if (node := Kind.MACHINE.of(item.machine.name)) in machines:
             yield Measured(
                 measurement=item.posture,
                 name=f"{item.running.name} on {item.machine.name}",

@@ -1,0 +1,18 @@
+id: reference-built-by-kind
+valid:
+  - "node = Kind.MACHINE.of(machine.name)"
+  - 'node = Kind.ABILITY.of(f"{spec}:{name}")'
+  - "node = str(Reference(kind, identity))"
+  - "key = Kind.RESOURCE.identity_in(finding.subject)"
+  - 'key = f"controller:{action}:{pk}"'
+  - 'key = f"weather:{point}"'
+  - 'label = f"Machine: {name}"'
+  - 'said = "machine: down"'
+invalid:
+  - 'node = f"machine:{machine.name}"'
+  - 'node = f"ability:{spec}:{name}"'
+  - "node = f'resource:{key}'"
+  - 'node = "zone:" + name'
+  - 'wanted = subject.startswith("resource:")'
+  - 'node = Reference("service", hostname)'
+  - 'node = str(Reference("machine", name))'

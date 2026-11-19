@@ -19,6 +19,7 @@ from .finding_model import Finding, FindingEstate, FindingRemedy, cannot_run_com
 from .finding_steps import Do, Run
 from .freshness import LAST_READ, freshness
 from .moments import when
+from .references import Kind
 from .tone import Tone
 from .topology_model import TopologyNode, derived_id
 from .ui import ended
@@ -79,7 +80,7 @@ def placed(
 
     if through:
         return _reached(nodes, machine, through)
-    node_id = derived_id("controller", controller)
+    node_id = derived_id(Kind.CONTROLLER, controller)
     if node_id not in nodes:
         node_id = machine(controller) or node_id
     return nodes.get(node_id) or TopologyNode(
@@ -88,7 +89,7 @@ def placed(
 
 
 def _reached(nodes: Mapping[str, TopologyNode], machine: Callable[[Any], str], ref: str) -> TopologyNode:
-    node_id = machine(ref) or derived_id("target", ref)
+    node_id = machine(ref) or derived_id(Kind.TARGET, ref)
     return nodes.get(node_id) or TopologyNode(id=node_id, kind="target", label=ref, subtitle="Machine")
 
 

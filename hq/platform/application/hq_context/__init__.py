@@ -14,6 +14,7 @@ from hq.platform.application.labels import dotted
 
 from ..integration_specs import ListRead, ResourceSpec
 from ..projection import complete, projection_scope
+from ..references import Kind
 from ..resources import EmptyQuery
 from ..tone import Tone
 from .band import Tile
@@ -121,7 +122,7 @@ def _problems(
     names = [entity_link("service", name).url for name in hq_hostnames()]
     # A controller has no page of its own, so its findings are found by key.
     keys = [
-        finding_key(finding) for finding in service_health.hq_findings() if finding.subject.startswith("controller:")
+        finding_key(finding) for finding in service_health.hq_findings() if Kind.CONTROLLER.identity_in(finding.subject)
     ]
     repository = repository_of(container)
     return problems_by_part(

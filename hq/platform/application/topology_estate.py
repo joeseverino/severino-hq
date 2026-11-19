@@ -28,6 +28,7 @@ from .inventory import record_identity
 from .locate import Machines, index_of
 from .paths import path_to
 from .projection import read_once
+from .references import Kind
 from .tone import Tone
 from .topology_model import (
     RELATIONS,
@@ -95,7 +96,7 @@ def _machine_nodes() -> MachineNodes:
     ids: dict[str, str] = {}
     for machine in catalog:
         for name in (machine.name, *machine.aliases):
-            ids.setdefault(name, f"machine:{machine.name}")
+            ids.setdefault(name, Kind.MACHINE.of(machine.name))
     return MachineNodes(ids, index_of(declared=[{"name": item.name, "addresses": item.addresses} for item in catalog]))
 
 
@@ -172,7 +173,7 @@ def _machines(nodes, edges) -> _Estate:
             connections.setdefault(node.connection_ref, []).append(node.id)
     subjects: dict[str, Subject] = {}
     for machine in catalog:
-        node_id = f"machine:{machine.name}"
+        node_id = Kind.MACHINE.of(machine.name)
         nodes[node_id] = TopologyNode(
             id=node_id,
             kind="machine",
@@ -185,7 +186,7 @@ def _machines(nodes, edges) -> _Estate:
             actions=_open(machine.url),
         )
         if machine.declaration:
-            _declared_by(edges, node_id, f"resource:{machine.declaration}", nodes)
+            _declared_by(edges, node_id, Kind.RESOURCE.of(machine.declaration), nodes)
         # The connections the catalog says reach it, the same answer as the
         # machine list's "Reached through".
         for ref in machine.reached_by:
@@ -197,7 +198,7 @@ def _machines(nodes, edges) -> _Estate:
     # Its device reading, its telemetry and its containers.
     for machine in catalog:
         estate.saw(
-            f"machine:{machine.name}",
+            Kind.MACHINE.of(machine.name),
             machine.presence.observed_at if machine.presence is not None else None,
             machine.telemetry_observed_at,
             *(item.observed_at for item in machine.containers),
@@ -208,8 +209,8 @@ def _machines(nodes, edges) -> _Estate:
 def _zones(nodes, edges, resources, estate: _Estate) -> tuple[str, ...]:
     names, read = zone_reads(resources)
     for name in names:
-        estate.saw(f"zone:{name}", *read.get(name, ()))
-        node_id = f"zone:{name}"
+        estate.saw(Kind.ZONE.of(name), *read.get(name, ()))
+        node_id = Kind.ZONE.of(name)
         url = entity_link("zone", name).url
         nodes[node_id] = TopologyNode(
             id=node_id,
@@ -228,7 +229,7 @@ def _zones(nodes, edges, resources, estate: _Estate) -> tuple[str, ...]:
             continue
         name = normalized_hostname(str((resource.spec or {}).get("zone", "")))
         if name:
-            _declared_by(edges, f"zone:{name}", f"resource:{resource.key}", nodes)
+            _declared_by(edges, Kind.ZONE.of(name), Kind.RESOURCE.of(resource.key), nodes)
     return names
 
 
@@ -239,7 +240,7 @@ _SERVICE_SUBTITLES = {"observed": "Service not in HQ"}
 def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
     own = hq_service(catalog=machines_once())
     for service in listed_services():
-        node_id = f"service:{service.hostname}"
+        node_id = Kind.SERVICE.of(service.hostname)
         nodes[node_id] = TopologyNode(
             id=node_id,
             kind="service",
@@ -267,14 +268,14 @@ def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
             *(facet.observed.observed_at for facet in service.facets if facet.observed),
         )
         for claim in service.declared_claims:
-            _declared_by(edges, node_id, f"resource:{claim.resource_key}", nodes)
+            _declared_by(edges, node_id, Kind.RESOURCE.of(claim.resource_key), nodes)
         machine = estate.machine(_runs_on(service, own))
         if machine:
             relation = edge_between(node_id, machine, "runs_on")
             edges[relation.id] = relation
         zone = zone_holding(service.hostname, zones)
         if zone:
-            relation = edge_between(f"zone:{zone}", node_id, "contains")
+            relation = edge_between(Kind.ZONE.of(zone), node_id, "contains")
             edges[relation.id] = relation
     _redirect_edges(nodes, edges)
 
@@ -292,8 +293,8 @@ def _redirect_edges(nodes, edges) -> None:
 
     for node_id in [key for key, node in nodes.items() if node.kind == "service"]:
         target = path_to(nodes[node_id].label).redirects_to
-        if target and f"service:{target}" in nodes:
-            relation = edge_between(node_id, f"service:{target}", "redirects_to")
+        if target and Kind.SERVICE.of(target) in nodes:
+            relation = edge_between(node_id, Kind.SERVICE.of(target), "redirects_to")
             edges[relation.id] = relation
 
 
@@ -331,7 +332,7 @@ def _fold(nodes, edges, estate: _Estate) -> None:
             continue
         relation = replace(
             edge,
-            id=derived_id("edge", source, target, edge.kind),
+            id=derived_id(Kind.EDGE, source, target, edge.kind),
             source=source,
             target=target,
         )
@@ -369,7 +370,7 @@ def _named_estate_nodes(nodes, estate: _Estate) -> dict[str, str]:
         if node.kind != "target":
             continue
         name = normalized_hostname(node.label)
-        for candidate in (f"service:{name}", f"zone:{name}"):
+        for candidate in (Kind.SERVICE.of(name), Kind.ZONE.of(name)):
             if candidate in nodes:
                 named[node_id] = candidate
                 break
@@ -392,7 +393,7 @@ def _container_subjects(nodes, resources, estate: _Estate) -> None:
     joins to its machine."""
 
     for resource in resources:
-        node_id = f"resource:{resource.key}"
+        node_id = Kind.RESOURCE.of(resource.key)
         if resource.kind != CONTAINER_KIND or node_id not in nodes:
             continue
         spec = resource.spec or {}
@@ -405,7 +406,7 @@ def _container_subjects(nodes, resources, estate: _Estate) -> None:
 
 def _runs_edges(nodes, edges, resources, estate: _Estate) -> None:
     for resource in resources:
-        resource_id = f"resource:{resource.key}"
+        resource_id = Kind.RESOURCE.of(resource.key)
         if resource_id not in nodes or not declares_host(resource.kind):
             continue
         host = estate.machine((resource.spec or {}).get("host"))
@@ -417,7 +418,7 @@ def _runs_edges(nodes, edges, resources, estate: _Estate) -> None:
 def _tailnet_edges(nodes, edges, resources, estate: _Estate) -> None:
     devices = None
     for resource in resources:
-        device_id = f"resource:{resource.key}"
+        device_id = Kind.RESOURCE.of(resource.key)
         if resource.kind != tailnet.TAILNET_KIND or device_id not in nodes:
             continue
         devices = tailnet.devices() if devices is None else devices
@@ -450,7 +451,7 @@ def _holder_edges(nodes, edges, resources) -> None:
 
     declared: dict[tuple[str, tuple[str, ...]], list[str]] = {}
     for resource in resources:
-        node_id = f"resource:{resource.key}"
+        node_id = Kind.RESOURCE.of(resource.key)
         provider = PROVIDERS.get(resource.kind)
         if node_id in nodes and provider is not None and provider.from_record is not None:
             identity = record_identity(resource.kind, resource.spec or {})
@@ -575,7 +576,7 @@ def _reading_edges(nodes, edges, estate: _Estate) -> None:
             dict.fromkeys(entity_link(item.kind, "", record=item.record, label=_named(item, about)) for item in items)
         )
         relation = TopologyEdge(
-            id=derived_id("edge", source, target, kind),
+            id=derived_id(Kind.EDGE, source, target, kind),
             source=source,
             target=target,
             kind="reading",
@@ -611,7 +612,7 @@ def _readers(joined: Joined, by_ref, by_provider, nodes, machine: Callable[[Any]
     """The nodes that took this reading, from the most specific source the record names."""
 
     if joined.spec.read_by == "hq":
-        node_id = f"registry:{joined.spec.provider}"
+        node_id = Kind.REGISTRY.of(joined.spec.provider)
         nodes.setdefault(
             node_id,
             TopologyNode(
@@ -632,7 +633,7 @@ def _readers(joined: Joined, by_ref, by_provider, nodes, machine: Callable[[Any]
     if found:
         return tuple(found)
     if not joined.connection_ref and joined.controller_id:
-        controller = derived_id("controller", joined.controller_id)
+        controller = derived_id(Kind.CONTROLLER, joined.controller_id)
         own = controller if controller in nodes else machine(joined.controller_id)
         if own:
             return (own,)

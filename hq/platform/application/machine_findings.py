@@ -12,6 +12,7 @@ from datetime import timedelta
 from .derivations import reached
 from .finding_model import Finding, FindingEstate, FindingRule, opens
 from .moments import ago, duration, moment
+from .references import Kind
 from .tone import Tone
 from .ui import counted, ended
 lazy from .estate import estate_reading
@@ -39,7 +40,7 @@ def _offline(_estate: FindingEstate) -> tuple[Finding, ...]:
         found.append(
             Finding(
                 rule=OFFLINE,
-                subject=f"machine:{machine.name}",
+                subject=Kind.MACHINE.of(machine.name),
                 title=f"{machine.name} is offline",
                 severity=Tone.SERIOUS if machine.hostnames or machine.roles or machine.runs_hq else Tone.ATTENTION,
                 explanation=(

@@ -10,6 +10,7 @@ with neither naming the other.
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from functools import cache
 from typing import TYPE_CHECKING, Any, override
 
@@ -41,8 +42,42 @@ lazy from .topology import derive_topology
 if TYPE_CHECKING:
     from .entity_links import EntityLink
 
+
+class Kind(StrEnum):
+    """A kind HQ's own code names things by, so a reference to one is built
+    from its member and a misspelled kind does not load."""
+
+    CONTROLLER = "controller"
+    CONNECTION = "connection"
+    MACHINE = "machine"
+    SERVICE = "service"
+    ZONE = "zone"
+    ABILITY = "ability"
+    RESOURCE = "resource"
+    REGISTRY = "registry"
+    TARGET = "target"
+    DEPENDENCY = "dependency"
+    # A topology edge's id, which names no page.
+    EDGE = "edge"
+    PROJECT = "project"
+    ASSET = "asset"
+    WRITEUP = "writeup"
+    DOCUMENT = "document"
+    EXPENSE = "expense"
+    RECEIPT = "receipt"
+
+    def of(self, identity: str) -> str:
+        """The reference to the thing of this kind named ``identity``."""
+        return str(Reference(self, identity))
+
+    def identity_in(self, value: Any) -> str:
+        """What ``value`` names when it refers to a thing of this kind; "" otherwise."""
+        reference = Reference.parse(value)
+        return reference.identity if reference is not None and reference.kind == self else ""
+
+
 # The kinds the topology names by their label, which is what their page is addressed by.
-ESTATE_KINDS = ("machine", "zone", "service")
+ESTATE_KINDS = (Kind.MACHINE, Kind.ZONE, Kind.SERVICE)
 NAME_SUFFIX = "_name"
 # In a field's ``kinds``: every registry kind that is a certificate.
 CERTIFICATE = "certificate"

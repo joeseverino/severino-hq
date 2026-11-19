@@ -21,6 +21,7 @@ from hq.platform.application.inventory import inventory_state
 from hq.platform.application.mail_policy import mail_overview, parse_spf
 from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.pins import DOMAIN, PIN, pinned
+from hq.platform.application.references import Kind
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
     MAIL_POLICY,
@@ -249,7 +250,7 @@ class ZoneDetailView(View):
             raise Http404("No such domain.")
         found, zones = context.zone, context.zones
         relationships, read_with = _page_relationships(
-            found, relationships_for(f"zone:{found.zone}", principal=web_principal(request.user))
+            found, relationships_for(Kind.ZONE.of(found.zone), principal=web_principal(request.user))
         )
         return render(
             request,

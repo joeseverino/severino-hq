@@ -10,6 +10,7 @@ refused is refused whatever a probe found. ``standing`` holds that order.
 from dataclasses import dataclass
 from enum import StrEnum
 
+from .references import Kind
 from .tone import Tone
 
 
@@ -75,7 +76,7 @@ ATTENTION = frozenset(state for state in Lifecycle if state.needs_attention)
 # moment), and the id prefix of the node that stands in for a connection no
 # controller reports.
 UNREPORTED_FACT = f"connection-{Lifecycle.UNREPORTED}"
-UNREPORTED_NODE = f"connection:{Lifecycle.UNREPORTED}:"
+UNREPORTED_NODE = Kind.CONNECTION.of(f"{Lifecycle.UNREPORTED}:")
 
 
 def probed(*, reachable: bool, was_probed: bool) -> Lifecycle:

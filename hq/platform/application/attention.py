@@ -19,6 +19,7 @@ from .findings import estate_findings, finding_rules, rule_for
 from .infrastructure import ResourceState, enabled_resources, resource_health
 from .labels import lower_first
 from .projection import read_once
+from .references import Kind
 from .security import cli_principal, internal_principal
 from .tone import Tone
 from .ui import counted, ended
@@ -113,8 +114,8 @@ def _subject_confirmed(finding: Any, actionable_keys: set[str], actionable_kinds
     confirmed.
     """
 
-    if finding.subject.startswith("resource:"):
-        return finding.subject.removeprefix("resource:") in actionable_keys
+    if key := Kind.RESOURCE.identity_in(finding.subject):
+        return key in actionable_keys
     return bool(finding.subject) or not finding.scope or finding.scope in actionable_kinds
 
 

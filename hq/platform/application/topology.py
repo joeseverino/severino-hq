@@ -42,6 +42,7 @@ from .integration_validation import required_capability_names
 from .json_schemas import as_written
 from .projection import QUERY, projection_scope
 from .record_errors import RecordNotFound
+from .references import Kind
 from .resource_capabilities import REMOVAL_CAPABILITY, UPDATE_CAPABILITY, removals_pending, resource_capabilities
 from .resource_context import record_summary, shared_names
 from .security import Capability, Principal
@@ -115,7 +116,7 @@ def _resource_actions(
 
 
 def _link_node(
-    link: ConnectionLink, *, kind: str, read_capabilities: tuple[str, ...], through: str = ""
+    link: ConnectionLink, *, kind: Kind, read_capabilities: tuple[str, ...], through: str = ""
 ) -> TopologyNode:
     """A node for something a connection names and HQ keeps no record of.
 
@@ -296,7 +297,7 @@ def _declared_ability_nodes(group, nodes, principal) -> None:
     # between unsupported and temporarily unobserved explicit, and keeps
     # resources of that kind discoverable instead of orphaning them.
     for ability in group.spec.abilities:
-        ability_id = f"ability:{group.spec.name}:{ability.name}"
+        ability_id = Kind.ABILITY.of(f"{group.spec.name}:{ability.name}")
         nodes.setdefault(
             ability_id,
             TopologyNode(
@@ -314,7 +315,7 @@ def _declared_ability_nodes(group, nodes, principal) -> None:
 
 def _connection_node(group, instance, spec_actions, connection_url) -> TopologyNode:
     return TopologyNode(
-        id=f"connection:{group.spec.name}:{instance.id}",
+        id=Kind.CONNECTION.of(f"{group.spec.name}:{instance.id}"),
         kind="connection",
         label=instance.label,
         subtitle=CONNECTION_LABELS.get(instance.kind, group.spec.label),
@@ -339,7 +340,7 @@ def _connection_node(group, instance, spec_actions, connection_url) -> TopologyN
 
 
 def _controller_edge(group, instance, node, connection_url, nodes, edges, principal) -> None:
-    controller_id = derived_id("controller", instance.controller_id)
+    controller_id = derived_id(Kind.CONTROLLER, instance.controller_id)
     _merge_controller_node(
         nodes,
         node_id=controller_id,
@@ -357,12 +358,14 @@ def _controller_edge(group, instance, node, connection_url, nodes, edges, princi
 def _target_edges(instance, connection, nodes, edges) -> None:
     connection_id = connection.id
     for target in instance.targets:
-        node = _link_node(target, kind="target", read_capabilities=connection.read_capabilities, through=instance.label)
+        node = _link_node(
+            target, kind=Kind.TARGET, read_capabilities=connection.read_capabilities, through=instance.label
+        )
         _named_by(nodes, node)
         relation = edge_between(connection_id, node.id, "reaches", status=instance.status)
         edges[relation.id] = relation
         # A target that is also a declaration using this connection.
-        resource_id = f"resource:{target.resource_key}"
+        resource_id = Kind.RESOURCE.of(target.resource_key)
         if target.resource_key and resource_id in nodes:
             relation = edge_between(connection_id, resource_id, "used_by", status=instance.status)
             edges[relation.id] = relation
@@ -371,11 +374,11 @@ def _target_edges(instance, connection, nodes, edges) -> None:
 def _dependency_edges(instance, connection, nodes, edges) -> None:
     connection_id = connection.id
     for dependency in instance.dependencies:
-        resource_id = f"resource:{dependency.resource_key}"
+        resource_id = Kind.RESOURCE.of(dependency.resource_key)
         if dependency.resource_key and resource_id in nodes:
             target_id = resource_id
         else:
-            node = _link_node(dependency, kind="dependency", read_capabilities=connection.read_capabilities)
+            node = _link_node(dependency, kind=Kind.DEPENDENCY, read_capabilities=connection.read_capabilities)
             _named_by(nodes, node)
             target_id = node.id
         relation = edge_between(connection_id, target_id, "used_by", status=instance.status)
@@ -384,7 +387,7 @@ def _dependency_edges(instance, connection, nodes, edges) -> None:
 
 def _ability_edges(group, connection, connection_id, edges) -> None:
     for state in connection.abilities:
-        ability_id = f"ability:{group.spec.name}:{state.ability.name}"
+        ability_id = Kind.ABILITY.of(f"{group.spec.name}:{state.ability.name}")
         available = Tone.GOOD if state.available is True else Tone.SERIOUS if state.available is False else Tone.NEUTRAL
         relation = edge_between(connection_id, ability_id, "enables", status=available)
         edges[relation.id] = relation
@@ -450,7 +453,7 @@ def _resource_node(resource: ManagedResource) -> TopologyNode:
     label = name or resource.key
     shown = record_name(resource.kind, resource.spec or {}, resource.key)
     return TopologyNode(
-        id=f"resource:{resource.key}",
+        id=Kind.RESOURCE.of(resource.key),
         kind="resource",
         label=label,
         name=shown if shown != label else "",
@@ -568,10 +571,10 @@ def _governs_edges(groups, resources, edges: dict[str, TopologyEdge]) -> None:
 
     resources_by_kind: dict[str, list[str]] = {}
     for resource in resources:
-        resources_by_kind.setdefault(resource.kind, []).append(f"resource:{resource.key}")
+        resources_by_kind.setdefault(resource.kind, []).append(Kind.RESOURCE.of(resource.key))
     for group in groups:
         for ability in group.spec.abilities:
-            ability_id = f"ability:{group.spec.name}:{ability.name}"
+            ability_id = Kind.ABILITY.of(f"{group.spec.name}:{ability.name}")
             for kind in ability.governs_kinds:
                 for resource_id in resources_by_kind.get(kind, ()):
                     relation = edge_between(ability_id, resource_id, "governs")

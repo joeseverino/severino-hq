@@ -1,0 +1,31 @@
+# A reference, ``kind:identity``, is written by hq/platform/application/
+# references.Reference alone, and a kind HQ's code names is a member of its
+# Kind: Kind.MACHINE.of(name), so a misspelled kind does not load and the
+# format has one declaration. The kinds below are Kind's members, less
+# controller, whose word also starts an idempotency key that names no thing.
+id: reference-built-by-kind
+language: python
+severity: error
+message: A reference to a thing is written by hand, where its kind's Kind member builds it.
+note: Write Kind.<KIND>.of(identity), and Kind.<KIND>.identity_in(value) to read one back, from hq.platform.application.references.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+rule:
+  any:
+    # f"machine:{machine.name}"
+    - kind: string
+      regex: ^[fF][rR]?["'](connection|machine|service|zone|ability|resource|registry|target|dependency|edge|project|asset|writeup|document|expense|receipt):\{
+    # "machine:" + name, subject.startswith("resource:"), subject.removeprefix("resource:")
+    - kind: string
+      regex: ^["'](connection|machine|service|zone|ability|resource|registry|target|dependency|edge|project|asset|writeup|document|expense|receipt):["']$
+    # Reference("machine", name)
+    - pattern: Reference($KIND, $$$)
+constraints:
+  KIND:
+    kind: string

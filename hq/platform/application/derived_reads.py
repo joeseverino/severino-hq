@@ -20,6 +20,7 @@ from .labels import human_label
 from .own_addresses import tailnet_sightings
 from .projection import complete, page_size, projection_scope, window
 from .record_errors import RecordNotFound
+from .references import Kind
 from .security import Principal
 from .standards import CheckResult, Measurement
 lazy from . import connections, dashboard, estate, machines, request_context
@@ -123,7 +124,7 @@ def serialize_machine(machine: Any) -> MachineRecord:
     return row(
         machine,
         MachineRecord,
-        node=f"machine:{machine.name}",
+        node=Kind.MACHINE.of(machine.name),
         state=machine.state.label,
         header_addresses=[
             {"label": kind, "address": address, "holder": holder} for kind, address, holder in header_addresses(machine)
@@ -165,7 +166,7 @@ def _domains() -> list[DomainRow]:
         found.append(
             {
                 "name": name,
-                "node": f"zone:{name}",
+                "node": Kind.ZONE.of(name),
                 "url": entity_link("zone", name).url,
                 "declaration": declared.get(name, ""),
                 "services": [

@@ -16,6 +16,7 @@ from django.urls import NoReverseMatch
 from hq.platform.application.routes import reverse
 
 from .contracts import Effect, route_url
+from .references import Kind
 from .security import Principal
 from .ui import counted
 from .url_query import with_query
@@ -313,7 +314,7 @@ def connection_relationship_link(spec_name: str, instance_id: str) -> ActionLink
     """Focus the one derived topology node for a connection instance."""
 
     url = topology_url(
-        f"connection:{spec_name}:{instance_id}",
+        Kind.CONNECTION.of(f"{spec_name}:{instance_id}"),
         fragment="map",
     )
     if not url:

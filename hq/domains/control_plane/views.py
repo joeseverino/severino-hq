@@ -25,6 +25,7 @@ from hq.platform.application.inventory import service_hostnames
 from hq.platform.application.labels import field_label
 from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.payload_words import value_words
+from hq.platform.application.references import Kind
 from hq.platform.application.refusal_status import refuse
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
@@ -335,7 +336,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
     def all_relationships(self):
         """Every relation, for what the page derives from them (its home)."""
 
-        return relationships_for(f"resource:{self.object.key}", principal=web_principal(self.request.user))
+        return relationships_for(Kind.RESOURCE.of(self.object.key), principal=web_principal(self.request.user))
 
     @cached_property
     def relationships(self):
