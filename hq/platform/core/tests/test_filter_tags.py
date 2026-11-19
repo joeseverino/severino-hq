@@ -369,4 +369,4 @@ class FilterBarUseTests(SimpleTestCase):
 
         faults = [fault for name, source in template_sources().items() for fault in filter_bar_faults(name, source)]
 
-        self.assertEqual(faults, [], "docs/Design.md, One filter bar")
+        self.assertEqual(faults, [], "filter_bar's rules")

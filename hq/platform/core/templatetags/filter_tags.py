@@ -15,6 +15,7 @@ from django.utils.html import escape
 from django.utils.safestring import SafeString, mark_safe
 
 from hq.platform.application.page_parts import html_attributes
+from hq.platform.core.part_examples import forms
 from hq.platform.core.template_parts import Option, Part, slotted
 
 register = template.Library()
@@ -63,6 +64,44 @@ def filter_bar_frame(name: str, given: dict) -> dict:
 slotted(
     Part(
         name="filter_bar",
+        rules="""
+        **One filter bar.** `{% filter_bar filtered=... clear=... shown=... total=... %}` draws the page's
+        controls in one order: the search, then its selects, then its toggles. The search is the bar's
+        own: `search=` the words it is named by and shows empty, `query=` what was asked, sent as `q`, and
+        `autofocus=True` where it is the page's first act. Then come one Filter (or the bar's own `verb=`
+        for a bar that asks a question rather than narrows a list), Clear filters back to `clear` when
+        anything is set, and the summary at the row's end. A bar with a search puts what follows it after
+        `{% choices %}`: those choices, with the button that sends them and Clear, stand on the search's
+        row while it holds them all, and otherwise fold behind one Filters control, a popover panel under
+        the bar that sends without a script. That button reads Apply unless the bar names its own verb, so
+        Filter never stands beside Filters. The control counts the choices that narrow (a select off its
+        "Any", a table's filter with a box ticked, a set of toggles with one off, a ticked toggle), so a
+        folded bar never hides that its list is narrowed. The panel's id is drawn from the names its
+        choices send, and from the bar's `id=` where a page draws two bars sending the same names, as a
+        page of maps does.
+
+        The fold is the layout's own measure, never a width written for one page: the bar's sizer, an
+        inert copy of the row unfolded, takes the room the row needs, and the choices fold exactly when
+        what is left is none, which is where the row would otherwise wrap. The bar asks beside its summary
+        only the room of the search and the Filters control, so the summary shares the row where it fits,
+        as the queue's count does at a phone. The panel is drawn as the header's sections are: inline
+        while there is room, a popover once there is none (base.css). A bar with no search, or nothing
+        after it, keeps its controls in a box of their own, the button beside their last line, so it
+        never takes a line alone.
+
+        The summary is the part's words: "`shown` of `total` shown." Then comes what the page holds back
+        without being asked (`held=`, each part counted, as the map's main lanes hold back its context),
+        and the one link that shows it (`more=`). Last are the page's own facts about what shows (`{%
+        summary %}`, "1 needs a look."), never a count of its own. A page passes counts and links, never
+        the sentence. A list's table toolbar is the same bar, its count its pager's. A state no control
+        holds is the bar's `keep=`, the query's other fields as the view hands them, each sent again while
+        it has a value. The search takes the line's room; every other control is as wide as what it says,
+        a select its longest option. A control the script shows only once it has something to act on is
+        drawn `hidden` in the bar and stays so. *Gate:* the `hand-drawn-filter-bar` rule refuses
+        `.filter-bar`, a search field and a select written by hand, outside the parts that draw them.
+        `test_filter_tags.FilterBarUseTests` reads every `{% filter_bar %}` in the templates. It refuses a
+        count written in the summary and a narrowing bar with no count.
+        """,
         classes=(
             *("filter-bar-choices", "filter-bar-controls", "filter-bar-fit", "filter-bar-query"),
             *("filter-bar-send", "filter-bar-sizer", "filter-bar-summary"),
@@ -92,10 +131,7 @@ slotted(
         },
         data=True,
         public=True,
-        example=(
-            '{% filter_bar search="Filter by name" query=q filtered=narrowed clear=every_url %}'
-            '{% choices %}{% select "kind" kinds label="Kind" every="kind" %}{% endfilter_bar %}'
-        ),
+        example=forms.FILTER_BAR,
         shape=filter_bar_frame,
     ),
     library=register,

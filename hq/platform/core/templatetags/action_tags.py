@@ -19,6 +19,7 @@ from django.utils.safestring import mark_safe
 
 from hq.platform.application.describe import Describe
 from hq.platform.application.tone import Tone
+from hq.platform.core.part_examples import tags
 lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capabilities import capability_words
@@ -444,13 +445,44 @@ def link_icon(link):
 slotted(
     Part(
         name="button",
+        rules="""
+        Primary for the one thing a page is for; default for the rest; `ghost` for link-like actions that
+        sit inline; `danger` in red text on the same surface as its neighbors, loud only in its
+        confirmation; `compact` for one that stands in a row, a list or a head, a line tall; `glyph` for a
+        square that holds a glyph or an `icon` alone (a row's order and mark, a page's links on a queue
+        row with `ghost`), its words heard and unseen; `link` for one among words, drawn as a link; `menu`
+        for a row of a menu; `bar` for a control of the site header's bar, on the bar's ground. `link` and
+        `menu` draw no box, so `button_classes` drops a look that paints one beside them, and a
+        destructive row keeps only its red.
+
+        Every control that looks like a button is `{% button label url look="primary compact" %}`, the
+        one writer of `.btn` (`ui.button_classes` for Python's parts): a link, with `outside=True` one out
+        of HQ drawn as `{% outside_link %}` draws it, with an `offer` one that posts, with `submit=True`
+        its form's own, and with neither and no url one a script acts on (`data_*`, `popovertarget`,
+        `command`). Its words may open with an `icon`, close with a `count` or end with an `arrow`. A post
+        is only ever an offer's: a `PageAction` from `PageAction.command`, which is None for a reader who
+        may not run the command, or a `RowOrder`'s or `RowMark`'s press, so a page has no way to draw a
+        press its reader would be refused. `_page_action.html` draws one; a confirmation's is
+        `PageAction.command(..., confirms=True)`, loud where it destroys. A toggle that posts is a button
+        with `post` and `pressed`; the calendar's sources are a list of them, each in its series color
+        (`partials/_calendar_sources.html`).
+
+        The push button is `.btn`, and a `<button>` with no class of its own; a button with a class (a
+        menu row, a toggle, a close mark) starts from nothing painted (`base.css`) and draws itself, so no
+        rule takes the push button's look back off. A label keeps its line, from the button rule alone
+        (`page.css`); only a tight table lets one wrap. A label too long for a phone is shortened where it
+        is declared. A control drawn smaller than a target asks for its area with `hit=True`. *Gate:*
+        `test_a_controls_label_keeps_its_line_from_the_button_rule_alone`, and the
+        `action-intent-names-no-value` ast-grep rule.
+        """,
         about=(
             "Every control that looks like a button: a link, a post through the page's one shared form, its "
             "form's own, or one a script acts on."
         ),
         function=button,
         public=True,
-        example='{% button restart.label offer=restart look="primary" %}',
+        example=tags.BUTTON,
+        states=tags.BUTTON_STATES,
     ),
     library=register,
 )

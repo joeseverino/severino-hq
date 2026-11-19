@@ -1,8 +1,7 @@
-"""What every family of the catalog draws its entries through: the entry,
-and the page of its own it is drawn on."""
+"""What every family of the catalog draws its entries through: an entry,
+a part's ``Example``, drawn alone and on the page of its own."""
 
-from dataclasses import dataclass, field
-from typing import Any, Literal, override
+from typing import override
 from unittest import mock
 
 from django.forms import BaseForm
@@ -18,6 +17,8 @@ from django.utils.text import slugify
 from hq.platform.application import references
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.pages import Page
+from hq.platform.core.part_examples import DRAWN_AT
+from hq.platform.core.template_parts import Example
 from hq.platform.core.templatetags import write_tags
 from hq.platform.core.tests.browser.serving import NONCE
 
@@ -38,68 +39,40 @@ EXAMPLE_MENTIONS = (
 # same markup on every run, the image's gallery with it.
 EXAMPLE_KEY = "web:example"
 
-# The moment every entry is drawn at, and its example times are told from,
-# so a time a part counts from now draws the same between two renders.
-DRAWN_AT = timezone.now()
+
+def drawn(example: Example, name: str) -> str:
+    """The example under its name, as a page draws it under its head."""
+
+    head = "" if example.heads_the_page or example.frame else head_of(name)
+    return head + alone(example, name)
 
 
-@dataclass(frozen=True)
-class Entry:
-    """A part as a template writes it, with what it is given.
+def alone(example: Example, name: str) -> str:
+    """The part alone, as its template draws it."""
 
-    ``premise`` is what the entry must draw to stand for its state, as a probe
-    and its argument returning what falls short of it, which the survey finds
-    (`BrowserGate.premise_on`): a value meant to wrap that fits on one line
-    holds nothing the survey could find wrong.
-    ``heads_the_page`` says the part is a page's own head; any other is drawn
-    under one, as every HQ page is. ``frame`` says the part is the page
-    frame's own, which base.html draws beside the page's main rather than in
-    it, ``"before"`` or ``"after"``, so it is drawn there, beside a main that
-    holds a page head alone; ``"main"`` is the main itself, drawn in place of
-    the one each entry is drawn in. One with no ``template`` is a part's default
-    entry, drawn from its ``Part.example`` (``default_name``)."""
+    with (
+        override_settings(**example.settings),
+        mock.patch.object(write_tags, "new_key", return_value=EXAMPLE_KEY),
+        mock.patch.object(write_tags, "CsrfTokenNode", _NoToken),
+        mock.patch.object(timezone, "now", return_value=DRAWN_AT),
+        mock.patch.object(references, "referenced_by", return_value=EXAMPLE_MENTIONS),
+    ):
+        given = example.given()
+        # A form names its fields' ids after the entry, as a page drawing
+        # two forms gives each its own.
+        for form in (value for value in given.values() if isinstance(value, BaseForm)):
+            form.auto_id = f"{slugify(name)}-%s"
+        context = _Asked(given, example.address) if example.address else Context(given)
+        return Template(example.template).render(context)
 
-    template: str = ""
-    context: dict[str, Any] = field(default_factory=dict)
-    premise: tuple[str, Any] | None = None
-    heads_the_page: bool = False
-    frame: Literal["", "before", "after", "main"] = ""
-    # The address the part is drawn at, for a part that reads its request: a
-    # page's query, or the row its address opens.
-    address: str = ""
-    # The settings the part is drawn under, for a part only some deployments draw.
-    settings: dict[str, Any] = field(default_factory=dict)
 
-    def drawn(self, name):
-        """The entry under its name, as a page draws it under its head."""
+def page(example: Example, name: str) -> str:
+    """The example on a page of its own: in its main, or beside it for a part of the frame."""
 
-        head = "" if self.heads_the_page or self.frame else head_of(name)
-        return head + self.part(name)
-
-    def part(self, name):
-        """The part alone, as its template draws it."""
-
-        with (
-            override_settings(**self.settings),
-            mock.patch.object(write_tags, "new_key", return_value=EXAMPLE_KEY),
-            mock.patch.object(write_tags, "CsrfTokenNode", _NoToken),
-            mock.patch.object(timezone, "now", return_value=DRAWN_AT),
-            mock.patch.object(references, "referenced_by", return_value=EXAMPLE_MENTIONS),
-        ):
-            # A form names its fields' ids after the entry, as a page drawing
-            # two forms gives each its own.
-            for form in (value for value in self.context.values() if isinstance(value, BaseForm)):
-                form.auto_id = f"{slugify(name)}-%s"
-            context = _Asked(self.context, self.address) if self.address else Context(self.context)
-            return Template(self.template).render(context)
-
-    def page(self, name):
-        """The entry on a page of its own: in its main, or beside it for a part of the frame."""
-
-        drawn = self.drawn(name)
-        if self.frame == "main":
-            return part_page(name, "", main=drawn)
-        return part_page(name, head_of(name), **{self.frame: drawn}) if self.frame else part_page(name, drawn)
+    markup = drawn(example, name)
+    if example.frame == "main":
+        return part_page(name, "", main=markup)
+    return part_page(name, head_of(name), **{example.frame: markup}) if example.frame else part_page(name, markup)
 
 
 def head_of(name):

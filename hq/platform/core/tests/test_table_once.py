@@ -1,5 +1,5 @@
 """A table region writes each cell of a row once, and the bytes a row and a
-page with no rows draw hold to their budgets (docs/Design.md, Opening a row
+page with no rows draw hold to their budgets (``table_region``'s rules, Opening a row
 moves no column)."""
 
 import re

@@ -1055,10 +1055,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
         and still fits its box: a column leaves by the region's width alone,
         and what grows is cut in its cell."""
 
-        from hq.platform.core.tests.browser.catalog import CATALOG
+        from hq.platform.core.tests.browser.catalog import page
 
         name = "table/identifiers"
-        self.pages = {**self.pages, name: CATALOG[name].page(name)}
+        self.pages = {**self.pages, name: page(name)}
         self.open(name, 820)
         self.page.evaluate(SETTLE)
         shown = self.page.evaluate(COLUMNS_SHOWN)

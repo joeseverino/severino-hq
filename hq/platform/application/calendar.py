@@ -399,18 +399,21 @@ def _read(source: CalendarSource, first: date, last: date) -> tuple[tuple[Calend
 
 
 def gather(
-    first: date, last: date, choices: Mapping[str, bool] | None = None
+    first: date,
+    last: date,
+    choices: Mapping[str, bool] | None = None,
+    sources: tuple[tuple[str, CalendarSource], ...] = (),
 ) -> tuple[tuple[tuple[str, tuple[SourceView, ...]], ...], tuple[Placed, ...]]:
     """The calendar list, grouped, and every event in the window.
 
     ``choices`` are the operator's own checks, by source id; a source they have
     not touched keeps its default. Events of unchecked sources are returned
     too: the grid leaves them out, and the day panel shows everything a day
-    holds.
+    holds. ``sources`` stand in for the declared ones, as an example's do.
     """
 
     choices = choices or {}
-    declared = calendar_sources()
+    declared = sources or calendar_sources()
     slots = _slots(source for _group, source in declared)
     groups: dict[str, list[SourceView]] = {}
     placed: list[Placed] = []
@@ -453,11 +456,15 @@ def _grid(month: date) -> tuple[date, date]:
 
 
 def calendar_month(
-    month: date, *, choices: Mapping[str, bool] | None = None, today: date | None = None
+    month: date,
+    *,
+    choices: Mapping[str, bool] | None = None,
+    today: date | None = None,
+    sources: tuple[tuple[str, CalendarSource], ...] = (),
 ) -> CalendarMonth:
     today = today or timezone.localdate()
     first, last = _grid(month)
-    groups, placed = gather(first, last, choices)
+    groups, placed = gather(first, last, choices, sources)
     # Earlier first, then longer, then all-day before timed, so long bars
     # claim the top lanes.
     shown = sorted(

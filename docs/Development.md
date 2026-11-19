@@ -1226,8 +1226,8 @@ line names how many processes looked. A share that ends early fails the
 run, naming its pages. `--deep` stays one process.
 
 A component catalog entry (`part/notice-error`, `table/figures`, every key of
-`CATALOG`, which `hq/platform/core/tests/browser/catalog/` gathers from its
-families' modules) is drawn by the
+`CATALOG`, which `hq/platform/core/tests/browser/catalog/` gathers from each
+`Part`'s examples and its families' modules) is drawn by the
 catalog gate's own `catalog.page`, so a look and that gate never
 draw an entry apart. `gallery` is every entry on one page, each in a region
 named for it under its name, after a map of its families, each part in a

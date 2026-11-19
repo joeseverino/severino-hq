@@ -1,5 +1,5 @@
 """A row's controls stand in the row at every width, beside its words or on its
-last line, and no control is ever drawn twice (docs/Design.md, A row's
+last line, and no control is ever drawn twice (``row_actions``'s rules, A row's
 controls)."""
 
 from django.template import Context, Template

@@ -1,28 +1,16 @@
-"""The select: a choice of one, which may say what is chosen in a status tone.
-
-``{% select "rule" choices chosen=rule label="Edit a record, for example-agent" tone="good" %}``
-draws ``partials/_select.html``: a ``<select>`` named by its first argument
-with an option for each ``(value, words)`` of its second, or each value that
-is its own words, the one whose value is ``chosen`` selected. ``id`` is the one a ``{% control_label %}`` names it
-by; with no visible label, ``label`` is the name a reader hears (a table
-cell, whose row and column say what it sets). ``tone`` draws it in a status
-tone, the status part's ``toned`` ink, as a rule that allows reads "good".
-``every`` names the dimension a filter bar's choice narrows (``every="type"``),
-and leads with the option that narrows nothing, "Any type" (docs/Design.md,
-"One filter bar"). ``submit_on_change`` sends its form as soon as the choice
-changes, for a bar whose one choice is the whole query.
-"""
+"""The select: a choice of one, which may say what is chosen in a status tone."""
 
 from django import template
 
 from hq.platform.application.tone import Tone
+from hq.platform.core.part_examples import tags
+from hq.platform.core.template_parts import Part, slotted
 
 register = template.Library()
 
 SELECT_PARTIAL = "partials/_select.html"
 
 
-@register.inclusion_tag(SELECT_PARTIAL)
 def select(name, options, chosen=None, label="", id="", tone="", every="", submit_on_change=False) -> dict:
     """A choice of one: its field's name, each option with whether it is the
     chosen one, and the tone's classes."""
@@ -51,3 +39,30 @@ def select(name, options, chosen=None, label="", id="", tone="", every="", submi
         "classes": f"toned tone-{tone}" if tone else "",
         "submit_on_change": submit_on_change,
     }
+
+
+slotted(
+    Part(
+        name="select",
+        about="A choice of one, which may say what is chosen in a status tone.",
+        rules="""
+        A choice of one drawn from data is `{% select "rule" choices chosen=rule label="What it sets"
+        tone=tone %}`: a `<select>` named by its first argument, an option for each `(value, words)` of
+        its second, the chosen one selected, `id` the one a `{% control_label %}` names it by, and with
+        no visible label `label` the name a reader hears (a table cell's setting). A value alone is its
+        own words (a year, a port), and `submit_on_change=True` sends the form as the choice changes,
+        for a bar whose one choice is its whole query. `tone` says the choice in a status tone, the
+        status part's ink, edged in it unless neutral, as an agent's rule reads "On" in the good tone and
+        "Off" in the serious one. A select that narrows names the dimension it narrows (`every="type"`),
+        and the part leads it with "Any type", which claims no total, so no summary contradicts it. A
+        select that picks a view or an order (the map's View, a table's Sort) offers only named choices.
+        Its default is named for what it shows ("Main lanes"), never Any or All. The empty option comes
+        only from `every=`.
+        """,
+        partial=SELECT_PARTIAL,
+        function=select,
+        example=tags.SELECT,
+        states=tags.SELECT_STATES,
+    ),
+    library=register,
+)

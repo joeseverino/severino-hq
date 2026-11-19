@@ -36,6 +36,7 @@ from hq.platform.application.moments import (
 from hq.platform.application.money import money as _money
 from hq.platform.application.printable import admitted
 from hq.platform.application.ui import MISSING, counted as _counted, measured as _measured, no_value
+from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Option, Part, SlotsNode, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
 from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
@@ -466,6 +467,13 @@ def _cell_line_frame(_name: str, given: dict) -> dict:
 
 CELL_LINE = Part(
     name="cell_line",
+    rules="""
+    A fact in a cell with a quiet line under it (a name over its kind, a change over its risk) is `{%
+    cell_line %}`. Its words alone are `{% cell_line text=... url=... %}`. Markup is its block, its
+    second line after `{% detail %}`: `{% cell_line %}{% entity link %}{% detail %}Docker host{%
+    endcell_line %}`. The part draws that line on its own, so no page writes a break or styles a line
+    of its own. No template writes a `<br>`: `hand-drawn-line-break` refuses one, in an extension too.
+    """,
     classes=("cell-line", "cell-detail"),
     partial="partials/_cell_line.html",
     parts=("content", "detail"),
@@ -721,10 +729,20 @@ slotted(
     library=register,
     part=Part(
         name="dot",
+        rules="""
+        A dot between two parts of a line is `{% dot %}` and a link's onward arrow `{% arrow %}`, each
+        written straight after its part. A no-break space joins the mark to that part and a reader never
+        hears it, so no line starts with a mark or holds one alone. A run of whole parts is `{% list
+        kind="dots" %}`; any other mark is the text of an `aria-hidden` element. Text built in Python
+        joins its parts with `dotted(...)` (`hq_sdk.ui`), which holds each dot to the part before it, and
+        `breakable` draws that dot as this tag does; markup built in Python joins with
+        `dotted_html(...)`. *Gate:* `test_template_separators`, which follows every branch and include
+        before each held mark, over the host's templates and an extension's.
+        """,
         about="The middle dot between two parts of one line, written straight after the first.",
         function=dot,
         public=True,
-        example="{{ count }}{% dot %}{{ age }}",
+        example=tags.DOT,
     ),
 )
 slotted(
@@ -744,7 +762,7 @@ slotted(
         about="One thing named, as the link builder answered for it: a link to its page, or its name.",
         function=entity,
         public=True,
-        example='{% entity "machine"|entity_of:name %}',
+        example=tags.ENTITY,
     ),
 )
 slotted(
@@ -754,7 +772,7 @@ slotted(
         about="The link for the reference a record holds, for `{% entity %}`, or none the viewer may not see.",
         function=reference,
         public=True,
-        example='{% reference expense "paid_from" as account %}{% entity account %}',
+        example=tags.REFERENCE,
     ),
 )
 slotted(
@@ -765,7 +783,7 @@ slotted(
         partial="partials/_related.html",
         function=referenced_by,
         public=True,
-        example='{% referenced_by "machine" machine.name %}',
+        example=tags.REFERENCED_BY,
     ),
 )
 # The template contract reads a tag's declaration from what it wraps.
@@ -774,5 +792,5 @@ present_tag.__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's at
     about="What it encloses, drawn only when the value is there, else the mark for a missing value.",
     function=present,
     public=True,
-    example="{% present repo.release %}<code>{{ repo.release }}</code>{% endpresent %}",
+    example=tags.PRESENT,
 )

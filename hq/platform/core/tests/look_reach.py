@@ -78,9 +78,9 @@ def drawings() -> dict[str, Drawing]:
 
     template_rendered.connect(hear)
     try:
-        for name, entry in catalog.CATALOG.items():
+        for name in catalog.CATALOG:
             heard.clear()
-            markup = entry.page(name)
+            markup = catalog.page(name)
             words = {word for value in _CLASSES.findall(markup) for word in value.split()}
             found[name] = Drawing(frozenset(heard), frozenset(words.union(_DATA.findall(markup))))
     finally:

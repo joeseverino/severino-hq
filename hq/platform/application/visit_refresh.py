@@ -1,8 +1,8 @@
 """Asking for a page's own readings when somebody opens it.
 
 Whoever opened a page about one machine, service or record is looking at its
-readings now, so it asks for what it is assembled from (docs/Design.md, "A page
-about one thing asks"). It names only its subject, never a connection or a kind, so this
+readings now, so it asks for what it is assembled from
+(``partials/_visit_refresh.html``'s rules). It names only its subject, never a connection or a kind, so this
 cannot become a way to make HQ call its providers. This decides when to ask and
 for what; ``cadence.ask`` asks and ``asks.read_standing`` follows.
 """

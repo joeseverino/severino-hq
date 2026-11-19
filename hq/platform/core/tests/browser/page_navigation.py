@@ -55,7 +55,7 @@ _SCROLL_TO = "(id) => { window.scrollTo({top: document.getElementById(id).offset
 
 
 def _page(markup=_DENSE):
-    drawn = Template(markup).render(Context({**CATALOG[_MAP].context, "lines": range(40)}))
+    drawn = Template(markup).render(Context({**CATALOG[_MAP].given(), "lines": range(40)}))
     return part_page(_MAP, drawn)
 
 

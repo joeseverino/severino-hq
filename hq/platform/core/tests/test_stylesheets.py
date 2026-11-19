@@ -33,7 +33,7 @@ CLIPPED = re.compile(r"overflow(?:-x)?\s*:\s*(?:hidden|clip)")
 PUSH_BUTTON = ".btn, :where(button:not([class]))"
 # The one-pixel clip that keeps text for a screen reader alone.
 CLIP_RECIPE = re.compile(r"clip-path\s*:\s*inset\(50%\)")
-# The sheets the table primitive is drawn in (docs/Design.md).
+# The sheets the table primitive is drawn in (``table_region``'s rules).
 TABLE_PRIMITIVES = frozenset({"base.css", "cuts.css", "figures.css", "tables.css", "surfaces.css"})
 FONT_FACE = re.compile(r"@font-face\s*\{[^{}]*\}")
 FETCHED = re.compile(r"\burl\(|@import\b")

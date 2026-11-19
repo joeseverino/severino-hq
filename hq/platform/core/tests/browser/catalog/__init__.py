@@ -1,9 +1,11 @@
 """The component catalog: each shared part filled the way an extension's page
 fills it, which no host page does, drawn through its own partial or tag on a
-page of its own and held by the whole survey. A new state of a shared part is
-one entry in the module of its family under ``families/``, the prefix of its
-name (``part/``, ``table/``). A new family is a new module there and one
-import below."""
+page of its own and held by the whole survey. Each part's examples are its
+entries: its ``example`` and each of its ``states``, declared on its ``Part``.
+A family module under ``families/`` holds what a part's examples do not, the
+entries that draw several parts together, each named by its family's prefix
+(``table/``, ``form/``); a new family is a new module there and one import
+below."""
 
 import functools
 import re
@@ -14,10 +16,10 @@ from django.utils.html import escape
 
 from hq.platform.application.ui import PageNavigation, PageSection
 from hq.platform.core.template_contract import parts
-from hq.platform.core.template_parts import Part
+from hq.platform.core.template_parts import Example, Part
 from hq.platform.core.templatetags.stylesheet_tags import stylesheets
-from hq.platform.core.tests.browser.catalog.common import Entry, head_of, part_page
-from hq.platform.core.tests.browser.catalog.families import chart, form, graph, part, status, table
+from hq.platform.core.tests.browser.catalog.common import alone, head_of, page as entry_page, part_page
+from hq.platform.core.tests.browser.catalog.families import chart, form, graph, status, table
 
 
 def default_name(each: Part) -> str:
@@ -35,30 +37,25 @@ def _defaults() -> dict[str, Part]:
     return {default_name(each): each for each in parts()}
 
 
-def _assembled(*families) -> dict[str, Entry]:
-    """Every family's ``ENTRIES``, each in its module's own order, after each
-    part's default entry: its ``Part.example`` as a page writes it, given what
-    the entry of its name with no template gives it, in any family. A family
-    holds only names it begins, but for those, and never writes a default's
-    template, so no two modules name one entry and every part has its own."""
+def _assembled(*families) -> dict[str, Example]:
+    """Each part's default under its name and each of its states under the
+    default's name and the state's, then every family's ``ENTRIES``, each in
+    its module's own order, every name its family's prefix."""
 
-    named = _defaults()
-    given = {name: entry for family in families for name, entry in family.ENTRIES.items() if not entry.template}
-    if strays := sorted(given.keys() - named.keys()):
-        raise ImportError(f"an entry with no template is a part's default, but no part is named {strays}")
-    catalog = {name: replace(given.get(name, Entry()), template=each.example) for name, each in sorted(named.items())}
+    catalog: dict[str, Example] = {}
+    for name, each in sorted(_defaults().items()):
+        catalog[name] = each.default()
+        catalog |= {f"{name}-{state}": example for state, example in each.states.items()}
     for family in families:
         prefix = family.__name__.rpartition(".")[2]
-        drawn = {name: entry for name, entry in family.ENTRIES.items() if entry.template}
-        if strays := [name for name in drawn if not name.startswith(f"{prefix}/")]:
+        if strays := [name for name in family.ENTRIES if not name.startswith(f"{prefix}/")]:
             raise ImportError(f"families/{prefix}.py holds entries of another family: {strays}")
-        if restated := sorted(drawn.keys() & named.keys()):
-            raise ImportError(f"families/{prefix}.py writes a part's default entry, drawn from its example: {restated}")
-        catalog |= drawn
-    return catalog
+        catalog |= family.ENTRIES
+    # What an example is given, built once, as the catalog is drawn.
+    return {name: replace(entry, context=entry.given()) for name, entry in catalog.items()}
 
 
-CATALOG = _assembled(chart, form, graph, part, status, table)
+CATALOG = _assembled(chart, form, graph, status, table)
 
 # Every entry on one page (`gallery_body`), held by the survey as each entry
 # is (`layout.CatalogLayoutTests`), and the pages the catalog draws.
@@ -125,7 +122,7 @@ def gallery_body() -> str:
             families.append(family)
             anchor = f"design-{family}"
         heading = render_to_string(NAME, {"heading": escape(name)})
-        markup = TAG.sub(_inert, OWN_LINK.sub(rf"\g<1>#{escape(anchor)}\g<2>", entry.part(name)))
+        markup = TAG.sub(_inert, OWN_LINK.sub(rf"\g<1>#{escape(anchor)}\g<2>", alone(entry, name)))
         part = COLUMN.format(AUTOFOCUS.sub(r"\1", markup))
         drawn.append(
             f'<div id="{escape(anchor)}" role="region" aria-label="{escape(name)}">'
@@ -150,7 +147,7 @@ def _gallery_page() -> str:
 def page(name) -> str:
     """The page ``name`` of ``PAGES`` is drawn on."""
 
-    return _gallery_page() if name == GALLERY else CATALOG[name].page(name)
+    return _gallery_page() if name == GALLERY else entry_page(CATALOG[name], name)
 
 
 def left_out_on(name) -> tuple[str, ...]:

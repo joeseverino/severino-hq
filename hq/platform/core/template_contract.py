@@ -500,7 +500,7 @@ def _tag(compile_function: Any, part: Part) -> dict[str, Any]:
         "parameters": _tag_parameters(compile_function),
         "parts": list(part.parts[1:]),
         "about": part.about,
-        "example": part.example,
+        "example": part.default().template,
         "data": part.data,
         "ordered": list(part.ordered),
         "options": {
@@ -580,6 +580,17 @@ def _checked(names: Iterable[str], present: Any, what: str) -> list[str]:
     return sorted(names)
 
 
+def _rules() -> dict[str, dict[str, Any]]:
+    """Each part's rules by the name a page writes it by, its tag or its
+    partial, and whether an extension may draw it."""
+
+    return {
+        part.name or part.partial: {"public": part.public, "rules": inspect.cleandoc(part.rules)}
+        for part in parts()
+        if part.rules
+    }
+
+
 def describe() -> dict[str, Any]:
     """The template contract, derived from the host's templates, tags and assets,
     as plain JSON data in name order, so docs/Plugins.md's tables keep one order."""
@@ -598,6 +609,7 @@ def describe() -> dict[str, Any]:
         "classes": _checked(public_classes(), defined.__contains__, "classes"),
         "hooks": _checked(HOOKS, lambda hook: _read_by(scripts, hook), "hooks"),
         "styled": _checked(STYLED, lambda hook: f"[{hook}]" in sheets, "styled attributes"),
+        "rules": _rules(),
     }
     plain: dict[str, Any] = json.loads(json.dumps(contract, sort_keys=True))
     return plain
@@ -699,5 +711,9 @@ def markdown(templates: dict[str, Any]) -> str:
         "| Rule | Drawn by hand | Write instead |",
         "| --- | --- | --- |",
         *(f"| `{rule['id']}` | {_cell(rule['message'])} | {_cell(rule['note'])} |" for rule in hand_drawn_rules()),
+        "",
+        "## Each part's rules",
     ]
+    for name, rules in templates["rules"].items():
+        lines += ["", f"### {name}" + ("" if rules["public"] else " (host only)"), "", rules["rules"]]
     return "\n".join(lines) + "\n"

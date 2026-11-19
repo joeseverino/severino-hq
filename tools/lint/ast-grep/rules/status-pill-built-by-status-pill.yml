@@ -13,6 +13,9 @@ ignores:
   - "**/tests/**"
   - "**/test*.py"
   - "**/*_tests.py"
+  # A part's catalog example is a template, drawing the part inside the page
+  # markup around it; no page receives it.
+  - "hq/platform/core/part_examples/**"
 rule:
   kind: string
   regex: class=\\?["']pill(\s|\\?["'])

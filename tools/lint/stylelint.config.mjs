@@ -149,7 +149,7 @@ const boxWidth = ["/^(min-|max-)?(width|inline-size)$/", "flex", "flex-basis", "
 // A primitive looks one way, drawn in the sheets that draw it, so a page
 // built from it looks like every other (`hq/restyled-primitive`). Each is
 // the classes that name it, a table its own elements too, and those sheets.
-// The table's are where it is drawn (docs/Design.md, "A table fits its box"),
+// The table's are where it is drawn (`table_region`'s rules, docs/Shared-UI.md),
 // and its parts are what its rules tell a cell's parts apart by.
 const primitives = [
   {

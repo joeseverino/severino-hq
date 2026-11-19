@@ -52,7 +52,7 @@ class MultipleFileField(forms.FileField):
 
 class ChoiceCards(forms.RadioSelect):
     """One answer of a few, each a card that says what choosing it does
-    (docs/Design.md, "A choice that has a consequence says it").
+    (its widget's Part in ``included_parts``).
 
     ``described`` maps each value to its consequence, which the card's radio
     names as its description, so the answer's name stays its few words.

@@ -1,13 +1,4 @@
-"""The change table: what a change moves, each value before and after it.
-
-``{% change_table preview %}`` draws ``partials/_change_table.html`` from an
-``approval_review.ChangePreview``: a section named by its label, the rows
-under Field, Before and After in the change's own order, each row's kind of
-change under Status (Field and Value alone where nothing stood before), each
-changed record of many one row with its fields folded under it, the records
-that stay named on one line under it, and the line diff of what would not
-parse. An empty preview draws nothing.
-"""
+"""The change table: what a change moves, each value before and after it."""
 
 from typing import Any, NamedTuple
 
@@ -17,6 +8,8 @@ from django.utils.text import slugify
 
 from hq.platform.application.payload_words import ChangeRow
 from hq.platform.application.tone import Tone
+from hq.platform.core.part_examples import tags
+from hq.platform.core.template_parts import Part, slotted
 from hq.platform.core.templatetags.status_tags import status_pill
 lazy from hq.platform.application.approval_review import ChangeGroup, ChangePreview
 
@@ -69,7 +62,6 @@ def _head(group: ChangeGroup, preview: ChangePreview) -> ChangeRow:
     return ChangeRow(label=group.label, before="" if added else words, after=words if added else "", change=group.whole)
 
 
-@register.inclusion_tag("partials/_change_table.html")
 def change_table(preview: ChangePreview) -> dict[str, Any]:
     """The table of ``preview``: what belongs to no record, then each record
     that changes, one row with its fields folded under it by the id its fold
@@ -92,3 +84,30 @@ def change_table(preview: ChangePreview) -> dict[str, Any]:
                 }
             )
     return {"preview": preview, "bodies": bodies, "folds": any(body["folds"] for body in bodies)}
+
+
+slotted(
+    Part(
+        name="change_table",
+        about="What a change moves, each value before and after it, from an `approval_review.ChangePreview`.",
+        rules="""
+        A change's before and after is `{% change_table preview %}`: a section named by its label. Each
+        value that moves stands under Field, Before and After, which share the room evenly
+        (`table_region ... compare=True`), each row's kind of change under Status, or under Field and
+        Value where nothing stood before. A redacted value is said only to have changed, and a document
+        that would not parse is shown as its line diff. A comparison of many records of one kind (the
+        adopted playbooks, from `approval_review.grouped`) names each field a record moves by the
+        record and the field ("Empty a cache › Access"), says a record that comes or goes whole on one
+        row (its name and its summary, its fields folded under it), and names the ones that stay on one
+        line under the table. A record a held request's warning names has its rows marked for attention
+        (`data-attention` on the `tr`), and the card does not say the warning again. The rows keep the
+        change's own order. An empty preview draws nothing. An approval card and an audit event draw it
+        (*Gate:* `hand-drawn-change-table`).
+        """,
+        partial="partials/_change_table.html",
+        function=change_table,
+        example=tags.CHANGE_TABLE,
+        states=tags.CHANGE_TABLE_STATES,
+    ),
+    library=register,
+)

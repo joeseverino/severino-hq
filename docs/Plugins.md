@@ -559,8 +559,8 @@ the extension's own pages say which setting is missing and where its guide
 is. It is never a readiness failure, so an install without production's
 secrets, such as a development one, still answers ready.
 
-Supply the help the shared card shows ([Design](Design.md), "A card says what
-is wrong and holds what fixes it"):
+Supply the help the shared card shows (`partials/_work_queue.html` in
+[Shared UI](Shared-UI.md#each-parts-rules)):
 
 | Field | For |
 | --- | --- |
@@ -873,7 +873,7 @@ rather than silently ignored the day the frame stops rendering it.
 A data table is declared through the table tags, so its shape is in the HTML on
 first paint. `{% table_region "Label" %}…{% endtable_region %}` wraps it in the box it
 fits, which takes the label as its name only when it scrolls. The region derives the width its columns leave at, by rank,
-from what each column holds ([Design](Design.md)). It draws the empty state in
+from what each column holds (`table_region` in [Shared UI](Shared-UI.md#each-parts-rules)). It draws the empty state in
 place of tables with no row beneath their heads; an `{% if %}` around the
 region says what is missing in the page's own words.
 
@@ -963,7 +963,7 @@ are its `codes` and `labeled` kinds.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
-([Design](Design.md)). Its classes (`notice`, `notice-*`) are the host's, so
+(`notice` in [Shared UI](Shared-UI.md#each-parts-rules)). Its classes (`notice`, `notice-*`) are the host's, so
 `hq plugin check` refuses one written by hand.
 
 A `TableListMixin` list declares the same through `TableColumn(kind=)`, its
@@ -1024,7 +1024,7 @@ Extension templates supply domain content; HQ owns layout, tokens, responsive
 rules, accessibility states and visual change. A class, partial or hook an
 extension needs and this contract lacks belongs in HQ first; copying host CSS
 or markup into an extension is a contract failure. The rules the classes follow are
-in [Design](Design.md).
+each part's, in [Shared UI](Shared-UI.md#each-parts-rules), and those across parts are in [Design](Design.md).
 
 What the host writes for a value is pinned by example in
 `hq/platform/application/tests/test_sdk_text.py`: `span`, `when`, `when_day`,

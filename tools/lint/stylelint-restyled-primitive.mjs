@@ -15,7 +15,7 @@ const ruleName = "hq/restyled-primitive";
 
 const messages = ruleMessages(ruleName, {
   rejected: (selector, primitive, sheets) =>
-    `"${selector}" restyles the ${primitive} primitive from a page's class: grow it in ${sheets} (a variant docs/Design.md names) and draw the page with it`,
+    `"${selector}" restyles the ${primitive} primitive from a page's class: grow it in ${sheets} (a variant its Part declares) and draw the page with it`,
 });
 
 // What a selector names inside `:not()` is what the element is not.

@@ -535,7 +535,7 @@ costs nobody:
 The request that asks answers at once, in one shape for both
 (`hq.platform.application.asks`): how the work stands and, while it is live, a
 status resource, with 202. `partials/_ask.html` draws the control and one
-script behavior follows it ([Design](Design.md), "Asked-for work is an ask").
+script behavior follows it (`partials/_ask.html` in [Shared UI](Shared-UI.md#each-parts-rules)).
 
 The interpreter holds the rule (`hq/platform/core/outbound.py`). Python raises
 an audit event whenever any library opens a connection, resolves a name,

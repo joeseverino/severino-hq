@@ -3,7 +3,7 @@ reporting window, a status filter, a tool's tabs or a zone's siblings are."""
 
 from django import template
 
-from hq.platform.core.template_parts import Option, Part, slotted
+from hq.platform.core.template_parts import Example, Option, Part, slotted
 
 register = template.Library()
 
@@ -35,7 +35,32 @@ def choice_frame(_name: str, given: dict) -> dict:
 slotted(
     Part(
         name="switch",
+        rules="""
+        `{% switch label=... %}{% choice url=... current=... %}...{% endchoice %}{% summary %}...{%
+        endswitch %}`: a row of links to the same view (a window, a status, a tab, a sibling), each a
+        `scope-chip`, the current one `aria-current="page"`, a choice's `count` beside its chip and its
+        `note` and `mark` inside it. A choice of the view's state is a `.scope-chip`, never a chip of
+        places to go.
+        """,
         example='{% switch label="Example domains" %}{% choice url="/example/one/" current=True %}example.com{% endchoice %}{% choice url="/example/two/" %}example.net{% endchoice %}{% endswitch %}',
+        states={
+            # A mark and a note on some choices, and the current one's summary under the row.
+            "marked": Example(
+                '{% switch label="Example domains" %}'
+                '{% choice url="/example/one/" current=True mark="★" %}example.com{% endchoice %}'
+                '{% choice url="/example/two/" %}example.net{% endchoice %}'
+                '{% choice url="/example/three/" note="not managed" %}example-long-domain-name.example.org{% endchoice %}'
+                "{% summary %}An example line that says what the current choice answers.{% endswitch %}"
+            ),
+            # A count beside each chip, nought included.
+            "counted": Example(
+                '{% switch label="Example status" %}'
+                '{% choice url="?" current=True count=128 %}All{% endchoice %}'
+                '{% choice url="?status=example-new" count=12 %}Example new{% endchoice %}'
+                '{% choice url="?status=example-read" count=0 %}Example read{% endchoice %}'
+                "{% endswitch %}"
+            ),
+        },
         classes=("scope-chip", "switch"),
         partial=SWITCH_PARTIAL,
         about=(

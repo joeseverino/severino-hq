@@ -2,8 +2,8 @@
 
 Each part has two spellings that draw through one partial: a block tag in a
 template (``part_tags``) and a dataclass here, which ``hq_sdk.ui`` exports so
-an extension builds the same part. docs/Design.md ("A section is drawn by
-{% section %}") says what each part carries.
+an extension builds the same part. ``section``'s rules say what each part
+carries.
 """
 
 from collections.abc import Mapping
@@ -111,7 +111,7 @@ class SectionPart:
     ) -> dict[str, Any] | None:
         """What the partial draws: the frame, then the head, then the body
         and its foot or the empty line. None when there is neither, since
-        nothing empty takes space (docs/Design.md)."""
+        nothing empty takes space (``partials/_empty_state.html``'s rules)."""
 
         empty = empty or self.empty
         heading_id = heading_id or self.heading_id
