@@ -509,6 +509,13 @@ def row_actions(
     }
 
 
+def data_table(table: Annotated[Any, Describe("A `DataTable`: its columns and its rows.")]) -> dict[str, Any]:
+    """A table drawn whole from its declaration, so a page writes no heading
+    or cell of its own."""
+
+    return {"table": table}
+
+
 def row_toggle() -> dict[str, Any]:
     """The toggle that opens a row to all it holds, last in the cell that names
     the row, in a table with no headings; in a table with headings the region
@@ -647,6 +654,17 @@ slotted(
         partial="partials/_row_select.html",
         function=row_select,
         classes=("select-column",),
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="data_table",
+        about="A table drawn whole from its declaration: its columns' headings and a row of cells for each record.",
+        partial="partials/_data_table.html",
+        function=data_table,
+        public=True,
+        example="{% data_table table %}",
     ),
     library=register,
 )

@@ -42,7 +42,7 @@ from hq.platform.application.request_identity import Identity
 from hq.platform.application.request_standard import RequestFacts, ServingDeviceResolution
 from hq.platform.application.security import MCP_INTERFACE
 from hq.platform.application.standards import Check, Reading, Standing as CheckStanding, measure
-from hq.platform.application.tables import TableSort
+from hq.platform.application.tables import Cell, DataTable, TableColumn, TableSort
 from hq.platform.application.tailnet import Device
 from hq.platform.application.tailnet_presence import Presence
 from hq.platform.application.tone import Tone
@@ -2435,6 +2435,19 @@ ENTRIES |= {
     ),
     "part/certificate-mark": Entry(
         context={"certificate": Certificate("Proxy", name="app.example.com", issuer="Example CA")}
+    ),
+    "part/data-table": Entry(
+        context={
+            "table": DataTable.of(
+                "Example hosts",
+                (
+                    TableColumn("Host", cell=lambda name: Cell(name, f"/example/{name}/")),
+                    TableColumn("State", cell=lambda name: Cell("Online", tone="good")),
+                    TableColumn("Cost", kind="numeric", cell=lambda name: Cell(f"${len(name)}.00")),
+                ),
+                ("example-host-01", "example-host-two"),
+            )
+        }
     ),
     "part/dots": Entry(context={"dots": _runs()}),
     "part/dot": Entry(context={"count": "3 example hosts", "age": "2 days ago"}),

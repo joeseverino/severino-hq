@@ -23,10 +23,10 @@ lazy from hq.platform.core.network import split_host_port
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
-from .display_words import display
 from .entity_links import EntityLink, entity_link, kind_label
 from .moments import ago
 from .published_sites import projects_by_hostname
+from .tables import Cell, DataTable, TableColumn
 from .tone import Tone
 from .ui import MISSING, PAGE_SECTION_ID, counted, ended
 lazy from . import history, machines
@@ -51,28 +51,6 @@ if TYPE_CHECKING:
     from .history import HistoryLine
     from .pages import PageAction
     from .work_runs import RunEvidence
-
-
-@display
-class Cell:
-    """One value in a section's table, and where it goes if anywhere."""
-
-    text: str
-    url: str = ""
-    # Leaves HQ. Rendered so the operator knows before clicking, and so the
-    # linked page cannot reach back through window.opener.
-    external: bool = False
-    muted: bool = False
-    # An entity mention, rendered through the link builder's answer.
-    link: EntityLink | None = None
-    # A state: ``text`` is its word and this its tone, drawn as a status.
-    tone: str = ""
-
-    @classmethod
-    def of(cls, link: EntityLink, *, muted: bool = False) -> Cell:
-        """A cell naming one entity, from ``entity_link``."""
-
-        return cls(link.label, link.url, external=link.external, muted=muted, link=link)
 
 
 # The columns from which a section's table takes the whole row of a flow
@@ -106,12 +84,8 @@ class ServiceSection:
     # quiet link ("All runs").
     more_label: str = ""
     more_url: str = ""
-    # What each row's open line shows beneath it, one for each record in its
-    # order (None for a row with nothing), drawn through the run evidence part.
+    # Its table's (``DataTable``).
     below: tuple[RunEvidence | None, ...] = ()
-    # What may be done to each row's record, one tuple for each record in its
-    # order, drawn as the row's last cell (``{% row_actions %}``); left empty,
-    # or with nothing in any, the table has no column for them.
     actions: tuple[tuple[PageAction, ...], ...] = ()
     # Audit events, drawn in place of ``records`` by the row the audit log
     # draws (``{% history_table %}``), who did each left out where ``hide_who``.
@@ -127,8 +101,6 @@ class ServiceSection:
             raise ValueError("ServiceSection below holds one entry for each record.")
         if self.actions and len(self.actions) != len(self.records):
             raise ValueError("ServiceSection actions holds one entry for each record.")
-        if not any(self.actions):
-            object.__setattr__(self, "actions", ())
         # A column no row has anything in is a heading over nothing. Dropped
         # here, so no section has to check its own; an unknown value (the dash placeholder) is
         # something to say and keeps its column.
@@ -158,13 +130,17 @@ class ServiceSection:
         return self.folded or bool(self.history) or len(self.columns) >= ROW_COLUMNS
 
     @property
-    def rows(self) -> tuple[tuple[tuple[Cell, ...], RunEvidence | None, tuple[PageAction, ...]], ...]:
-        """Each record with what its open line shows beneath it, if anything,
-        and what may be done to it."""
+    def table(self) -> DataTable:
+        """Its table, each record a row with its open line and actions."""
 
         below = self.below or (None,) * len(self.records)
         actions = self.actions or ((),) * len(self.records)
-        return tuple(zip(self.records, below, actions, strict=True))
+        return DataTable(
+            self.label,
+            tuple(TableColumn(name) for name in self.columns),
+            tuple(zip(self.records, below, actions, strict=True)),
+            compact=self.compact,
+        )
 
 
 def filled_columns(width: int, records: tuple[tuple[Cell, ...], ...]) -> tuple[int, ...]:
