@@ -11,14 +11,11 @@ import re
 import subprocess
 import sys
 from collections.abc import Iterable
-from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import NamedTuple
 
 import grimp
 
-from hq.platform.application.tests.reads import Reads
-from hq.platform.application.tests.tree import TreeTests, tree_tests
 from hq.platform.core.tests.task import RefError, names
 from tests.mise_tasks import run_files
 from tools.gate import chain
@@ -681,45 +678,6 @@ def chosen(modules: dict[str, Path], reached: set[str], touched: set[str]) -> se
         if name not in picked and any(word.search((chain.ROOT / path).read_text(encoding="utf-8")) for word in words):
             picked.add(name)
     return picked
-
-
-def with_tree(
-    labels: list[str],
-    paths: list[str],
-    listed: list[str] | None = None,
-    walking: Future[TreeTests] | None = None,
-) -> list[str]:
-    """The selected labels, and each test tagged tree that ``paths`` reach, of those
-    ``walking`` finds or else of a walk run now: a walk finds a file by no import or name, so one that declares
-    nothing runs on any change, and one that declares its reads (reads.py) on a change to them, ``listed``
-    (``paths`` when not given) being what was added or deleted."""
-
-    if not paths:
-        return labels
-    found = walking.result() if walking else tree_tests(chain.ROOT)
-    names = paths if listed is None else listed
-    reached = [label for label, held in found if held is None or Reads(*held).selects(paths, names)]
-    print(f"[fast] {len(reached)} of the {len(found)} tests tagged tree run: those the change reaches")
-    return [*labels, *reached]
-
-
-def listed_change(base: str, deleted: list[str]) -> list[str]:
-    """The paths a change adds or deletes since ``base``, untracked ones included: all a listing can tell."""
-
-    added = names("diff", "--name-only", "--no-renames", "--diff-filter=A", base, root=chain.ROOT)
-    return sorted({*added, *names("ls-files", "--others", "--exclude-standard", root=chain.ROOT), *deleted})
-
-
-def walk_for_tree() -> Future[TreeTests]:
-    """The walk for the tests tagged tree, started now on a thread: it runs in a
-    process of its own (``apart``), so it overlaps the reading of the import
-    graph and the paths the modules name, which it does not depend on."""
-
-    pool = ThreadPoolExecutor(max_workers=1)
-    walking = pool.submit(tree_tests, chain.ROOT)
-    # Leaving the pool's block would wait for the walk; this lets it run on.
-    pool.shutdown(wait=False)
-    return walking
 
 
 # The module every test that reads each of the browser gate's modules goes

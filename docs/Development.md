@@ -336,7 +336,7 @@ On an 8 GB Apple silicon machine:
 | `mise run test <label>` | a few seconds |
 | `mise run lint:prose` | about six seconds; under a second on one file |
 | `mise run lint` | about a minute |
-| `mise run fast` | one to two minutes |
+| `mise run fast` | under a minute |
 
 `mise run fast [BASE]` maps the changed files against a base. One asked for
 (`BASE`, `$CHECK_BASE`) is read as its merge base with HEAD. With none, the
@@ -355,7 +355,7 @@ what it finds runs its fix mode (`--fix` in its usage: `lint:ruff` with
 Ruff's fixes and format, `lint:css` with Stylelint's, `lint:js` with
 ESLint's, `lint:mise-format` with `mise fmt`, `lint:ast-grep` with each
 rule's `fix:`, `lint:controller` with gofmt, `go fix` and `go generate`, and
-each `lint:drift-*` gate with its file's writer), and the run names the files
+each quick `lint:drift-*` gate with its file's writer), and the run names the files
 they rewrote. The run then judges the tree the fixes left, and its verdict
 line ends by naming the files they rewrote, which the checkout holds
 uncommitted: a commit of them is the tree the run judged, the one a landing
@@ -421,30 +421,15 @@ The tests it selects are:
   whole path, and a test alone by a directory of two parts or more above it.
   A test that reads a workflow through a helper naming the workflows'
   directory is one;
-- every test tagged `tree` the change reaches. Such a test finds its files (a
-  module, a template, a doc) by walking this checkout, or loads what a fresh
-  process starts with (the startup budgets), which no import or name shows
-  (a test that patches the `ROOT` of the code it drives walks a fixture and
-  carries none). One whose
-  class declares what it reads, `@reads("hq/**/*.py", "!**/tests/**/*.py", lists=("**",))`
-  (`hq/platform/application/tests/reads.py`, where a `!` glob takes the files
-  a walk drops before reading out of those it opens), runs when the change edits, adds
-  or deletes a file it opens, or adds or deletes one it lists or stats; any other runs
-  on every change. The declaration holds the class as it runs, as Bazel's
-  sandbox holds a test to its declared inputs: an open, a listing, a stat or a program
-  that reaches past it fails the test, naming each path, so a declaration that
-  falls short fails in CI's whole run rather than going unselected. A program
-  is held by what its own tool says it reads of the paths it is handed
-  (ast-grep's `--inspect entity`, Vale's `ls-config`, the pathspecs of a
-  git listing, in `hq/platform/application/tests/program_reads.py`), and one
-  read nowhere there keeps its test running on every change;
-- the extensions' suites, composed, when `mise.local.toml` names a set and the
-  change reaches what extensions render through (`templates/`, `static/`,
-  `hq_sdk/`, the shared table, page, UI and moment modules, template tags).
+A test tagged `tree` finds its files by walking this checkout, or loads what a
+fresh process starts with (the startup budgets), so whatever the change, it
+reads the whole tree: fast's runs leave it out (`--exclude-tag tree`), and
+CI's `lint:source` runs it. So does the composed suite with the extensions,
+which is `mise run check --release`'s.
 
 A run runs its selection however wide it is. `--whole` runs the whole suite
-with every quick gate instead, whatever changed: the landing asks for it, and
-its pass records the tree.
+(the tests tagged `tree` aside) with every quick gate instead, whatever
+changed, and its pass records the tree.
 
 Before the tests it runs each quick gate the change affects, as mise's
 `--affected` reads it from the base: a quick gate is a task tagged
@@ -461,29 +446,32 @@ shell gate also runs when a path the change touched is one
 `tools/gate/shell-sources.sh` names (a deleted one as the base had it), which
 no glob can say. `mise run --tag fast --affected --affected-base <ref>
 --affected-json` names each gate it would pick and why, running none. A lint gate that reaches the network, or whose check
-fast makes another way, is left untagged.
+fast makes another way, is left untagged, and so is one whose input is the
+whole tree whatever changed: the `lint:drift-*` gates a Django command
+writes, `lint:deploycheck`, `lint:deptry`, `lint:imports`,
+`lint:sdk-breaking`, `lint:structural` and `test:migrations`. CI's Lint and
+Test jobs and `mise run check` run them. `lint:mypy` stays, since mypy's
+cache rechecks only a changed module and those whose imports' interfaces
+changed.
 
 A gate whose linter reads one file at a time (`lint:ruff`, `lint:ast-grep`,
 `lint:spelling`, `lint:prose`) runs through hk, as `hk.pkl` declares it, and
 fast hands it the files the change touched: its step reads those its glob
 matches, and its `-whole` step reads the whole tree when one of them is a file
 that step names (the tool's config, the pins). Run alone, with no files, as
-the Lint job runs it, it reads the whole tree. A gate that answers a question
-about the whole (the import contracts, the types, the derived files) keeps
-its whole input, and one whose run never reads a test module leaves the tests
-out of its sources, so an edit inside a test selects none of them.
+the Lint job runs it, it reads the whole tree.
 
 A change to a stylesheet under `static/css/app/` or a template selects
 `fast:look`, which runs in the heavy turn beside the tests and holds the
 component catalog entries the change reaches to every layout check, in
-WebKit at 320 and 1280 pixels: `mise run dev:look --rule
-every_layout_check_holds catalog:<path>` for each such file. A template
-reaches each entry whose page draws it; a sheet reaches each entry whose
-markup holds a class or data attribute named by a rule a changed line lies in
-(`hq/platform/core/tests/look_reach.py`), and every entry when such a rule names
-neither (an element, `:root`, a token). A file that reaches no entry is
-named in the look's output, never skipped unsaid. A Python-only change
-selects no look, and the whole catalog stays CI's Browser job.
+WebKit at 320 and 1280 pixels, through `mise run dev:look --rule
+every_layout_check_holds`. A template reaches each entry whose page draws it;
+a sheet reaches each entry whose markup holds a class or data attribute named
+by a rule a changed line lies in (`hq/platform/core/tests/look_reach.py`), and
+every entry when such a rule names neither (an element, `:root`, a token).
+`tools/gate/look_entries.py` names each file's reach in the look's output,
+and leaves out a file that reaches every entry: that look is the whole
+catalog, CI's Browser job, as is any look of a Python-only change.
 
 The generated API cases (`test:api-properties`) stay CI's Test job and
 `mise run check`'s: every change Django loads reaches every operation, and
@@ -639,7 +627,8 @@ suppressed problem leaves its count right. A count that rose is a new problem:
 
 Each `lint:drift-*` gate checks one against its source without writing. Its
 failure names the command that rewrites that file alone, in seconds; `fast`
-runs the ones a change reaches. A rebase conflict in one is settled by
+runs those tagged `fast` a change reaches, and `mise run fix` writes them all.
+A rebase conflict in one is settled by
 `mise run fix`, never by hand.
 
 ### The extension set

@@ -1,6 +1,6 @@
-"""Each lint:drift-* gate's sources, and READ_HELD's, match every file of this checkout its run reads,
-so no change to one of them can leave the gate unrun, and a test module they leave out is one no run
-reads: mise's --affected, which fast selects by, reads only sources.
+"""Each lint:drift-* gate fast runs, its sources match every file of this checkout its run reads, so no
+change to one of them can leave the gate unrun: mise's --affected, which fast selects by, reads only
+sources. A drift gate fast leaves to CI declares none.
 
 Each gate runs as mise runs it with reads/ on PYTHONPATH, whose sitecustomize logs every file
 each Python process the gate starts opens to read; each of these gates is Python alone."""
@@ -18,8 +18,7 @@ from django.test import SimpleTestCase, tag
 from tests.mise_tasks import ROOT, matched, mise_tasks
 
 DRIFT = "lint:drift-"
-# The other quick gates whose run is Python alone and whose sources leave the test modules out.
-READ_HELD = ("lint:deploycheck", "lint:sdk-breaking", "test:migrations")
+QUICK = "fast"
 READS = Path(__file__).resolve().parent / "reads"
 
 
@@ -72,7 +71,11 @@ class DriftSourcesTests(SimpleTestCase):
     @override
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.tasks = {name: task for name, task in mise_tasks().items() if name.startswith(DRIFT) or name in READ_HELD}
+        cls.tasks = {
+            name: task
+            for name, task in mise_tasks().items()
+            if name.startswith(DRIFT) and QUICK in (task.get("tags") or ())
+        }
         # Side by side: each run's outcome and reads stay its own, and the
         # whole takes as long as the slowest gate rather than their sum.
         with ThreadPoolExecutor(max_workers=len(cls.tasks) or 1) as pool:
@@ -99,8 +102,8 @@ class DriftSourcesTests(SimpleTestCase):
     def test_a_file_read_that_its_sources_leave_out_is_named(self) -> None:
         """A source taken out of a gate's list is the file the guard names, and only it."""
 
-        name = "lint:drift-connections-reference"
-        held = "docs/Connections.md"
+        name = "lint:drift-gitattributes"
+        held = "tools/gitattributes.py"
         task = self.tasks[name]
         _, read = self.runs[name]
         self.assertIn(ROOT / held, read, f"{name} no longer reads {held}; plant another of its sources")

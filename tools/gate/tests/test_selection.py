@@ -7,10 +7,7 @@ from pathlib import Path
 import grimp
 from django.test import SimpleTestCase, tag
 
-from hq.domains.control_plane.tests import test_bridge_registry
 from hq.platform.application.tests.reads import reads
-from hq.platform.core.tests import test_startup
-from tools.fonts.tests import test_font
 from tools.gate import chain, selection
 
 # An edit inside one test's body, which no other test reads: a module no source names, so none is chosen by it.
@@ -26,17 +23,8 @@ class ReaderSelectionTests(SimpleTestCase):
         modules = sorted(map(selection.module_name, changed))
 
         self.assertEqual(selection.test_labels(files, set(modules), set())[0], modules)
-        for check in (
-            test_startup.StartupBudgetTests,
-            test_bridge_registry.WrittenFileTests,
-            test_font.ServedFontTests,
-        ):
-            self.assertFalse(check.tree_reads.selects([LEAF], []), check.__name__)
 
-    def test_a_shipped_change_or_an_imported_helper_selects_the_checks_that_read_it(self):
-        for shipped in ("hq/platform/core/apps.py", "uv.lock"):
-            self.assertTrue(test_startup.StartupBudgetTests.tree_reads.selects([shipped], []), shipped)
-        self.assertTrue(test_font.ServedFontTests.tree_reads.selects(["templates/base.html"], []))
+    def test_an_imported_helper_selects_the_checks_that_read_it(self):
         helper = Path("hq/platform/application/tests/facts.py")
         reached = selection.import_reach({selection.module_name(helper)}, selection.importers([helper, PROBES]))
         self.assertIn(selection.module_name(PROBES), reached)

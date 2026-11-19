@@ -32,8 +32,8 @@ ROOT = Path(__file__).resolve().parents[2]
 REPORTS = "HQ_TEST_REPORTS"
 # A file each command is handed, where it may say what it judged, for a gate
 # whose name alone does not (the pages and widths a survey drew): its first
-# line, what the judging came to, ends the verdict line, and every line is
-# kept under it.
+# line, what the judging came to, joins the verdict line when the step failed,
+# and every line is kept under it.
 DETAIL = "HQ_GATE_DETAIL"
 # A file each command is handed for the one command that runs again what it
 # failed, for a command whose failures no task or test label reruns (a look
@@ -370,10 +370,11 @@ def verdict(name: str, started: float, steps: list[Step], passed: str = "", outc
     if waited := sum(step.waited for step in steps):
         elapsed += f", {waited:.0f}s of it waiting for the turn"
     failed = [failure for step in steps for failure in step.failures()]
-    said = [step.detail[0] for step in steps if step.detail]
+    # Only a failed step's judging is said, so the line reads as the failures alone.
+    said = [step.detail[0] for step in steps if step.detail and not step.ok]
     if failed:
         return f"[{name}] {outcome} in {elapsed}: {'; '.join([*said, *failed])}"
-    return f"[{name}] passed in {elapsed}" + (f": {'; '.join(said)}" if said else "") + passed
+    return f"[{name}] passed in {elapsed}" + passed
 
 
 def test_reruns(name: str, steps: list[Step], tests: str) -> dict[str, list[str]]:

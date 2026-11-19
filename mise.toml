@@ -195,33 +195,12 @@ env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "
 
 # A derived file a management command writes (docs/Development.md, Derived
 # files): django's env, the command its task names in `vars.command`, which
-# checks unless --fix, and the sources every such command reads with the file
-# it writes, `vars.writes`. A task that reads more names its whole `sources`,
-# since a task's list replaces its template's. tools/tests/test_drift_sources.py
-# holds each list, the test modules it leaves out included, to what the run
-# opens.
+# checks unless --fix, and the file it writes, `vars.writes`. Django loads the
+# whole tree to answer one, so fast leaves these to CI's Lint job and check.
 [task_templates.drift]
 env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_TEMPLATE_CACHE = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
-tags = ["fast", "derived"]
-sources = [
-  "**/*.py",
-  # Django never imports a test module to answer a command.
-  "!**/tests/**",
-  "!**/test_*.py",
-  "!**/tests.py",
-  "{{ vars.writes }}",
-  "hq/domains/control_plane/bridge_base.json",
-  "hq/domains/docs_index/schema.json",
-  "deploy/systemd/severino-hq-secrets.timer",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-]
-outputs = []
-usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+tags = ["derived"]
+usage = 'flag "--fix" help="Rewrite the file instead of checking: mise run fix runs it"'
 run = 'uv run python manage.py {{ vars.command }} $([ "${usage_fix:-}" = true ] || echo --check)'
 
 # A quick gate whose linter reads a file at a time, as hk runs it (hk.pkl):

@@ -20,24 +20,6 @@ run = "tools/pipeline/check-plugin.sh --plugin-root examples/extension"
 ["test:migrations"]
 description = "No model change without its migration"
 hide = true
-tags = ["fast"]
-sources = [
-  "hq/**/*.py",
-  "!**/tests/**",
-  "!**/test_*.py",
-  "!**/tests.py",
-  "manage.py",
-  "hq/domains/control_plane/bridge_base.json",
-  "hq/domains/docs_index/schema.json",
-  "deploy/systemd/severino-hq-secrets.timer",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-]
-outputs = []
 extends = "django"
 run = "uv run python manage.py makemigrations --check --dry-run"
 

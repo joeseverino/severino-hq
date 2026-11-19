@@ -22,10 +22,10 @@ mise prints the tasks live, so this file does not list them:
 
 What the listing does not say:
 
-- `fast` selects through Python imports, app names and the paths a module
-  names, and runs every walk of the tree the change reaches (each on any
-  change, unless its class declares what it reads with `@reads`), so only a
-  test that finds a file by a name computed as it runs needs `check`.
+- `fast` checks only the files a change touched and runs the tests it
+  reaches through imports, names and the paths a module names. A gate or test
+  that reads the whole tree (the derived files, the structural bar, a test
+  tagged `tree`) and the composed suite are CI's and `check`'s.
 - A new test is proven to fail without the fix by `mise run test --at <base>
   <labels>`, never by a base worktree, snapshot or checkout made by hand.
 - In a worktree of your own, try a change on `dev:scratch`, a throwaway
@@ -224,9 +224,9 @@ A piece of work is done when `mise run fast` passes on its tip, with the
 tests its change touches (`mise run test <labels>`). A change to what a page
 shows also needs `mise run dev:look` on each page its templates draw.
 
-The whole-tree runs belong to CI. A shared sheet or part reaches pages the
-change never named, so the browser suite on the pushed branch judges every
-page in both engines; no whole-tree run is repeated on the Mac.
+The whole-tree runs belong to CI and `check`. A shared sheet or part reaches
+pages the change never named, so the browser suite on the pushed branch judges
+every page in both engines; no whole-tree run is repeated on the Mac.
 
 That branch is ready when `mise run check --release` exits 0, or
 `mise run check --release --remote` for a pushed commit: every CI gate, the

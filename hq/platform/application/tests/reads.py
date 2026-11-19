@@ -1,8 +1,7 @@
 """The files of this checkout a ``tree`` test reads, declared on its class
 and held to the declaration while it runs.
 
-``mise run fast`` runs a declared tree test only on a change its globs
-match, and an undeclared one on every change. As in Bazel, where a test's
+As in Bazel, where a test's
 declared inputs are all its sandbox holds, a read outside the declaration
 fails the test: every open of a file under the checkout (``open``,
 ``os.open``, an object's source through ``inspect``), every name a
@@ -14,8 +13,7 @@ process's, which fast selects a test by, so a module imported by a name
 computed as it runs is no read the watch sees: such a test declares nothing.
 
 A file whose content the test reads is in ``*opened``. One it only lists by
-name, or asks whether it is there, is in ``lists``, which a change selects the test by when it adds or
-deletes such a file, since an edit leaves every listing as it was. A glob in ``*opened`` that starts with
+name, or asks whether it is there, is in ``lists``. A glob in ``*opened`` that starts with
 ``!`` takes the files it matches out of those opened and leaves them listed, as a walk that drops a path
 (a test module) before it reads it does.
 
@@ -83,14 +81,6 @@ class Reads:
 
         globs = [pattern for pattern in (*self.opened, *self.listed) if pattern[0] != "!"]
         return any(_under(PurePosixPath(pattern).parts, path.parts) for pattern in globs)
-
-    def selects(self, changed: Iterable[str], listed: Iterable[str]) -> bool:
-        """Whether a change reaches what this declares: ``changed`` (each path edited, added or deleted)
-        names a file it opens, or ``listed`` (each added or deleted) one it lists."""
-
-        return any(self.opens(PurePosixPath(path)) for path in changed) or any(
-            self.lists(PurePosixPath(path)) for path in listed
-        )
 
 
 def _under(pattern: tuple[str, ...], parts: tuple[str, ...]) -> bool:

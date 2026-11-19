@@ -1,7 +1,7 @@
 """Each lint:drift-* gate's failure names the command that rewrites its own files,
 and that command, run as named, brings the gate back to passing: one gate in
 seconds, where `mise run fix` rewrites every derived file. The gate's own fix
-mode, which fast runs first and fix:derived runs for every gate tagged derived,
+mode, which fix:derived runs for every gate tagged derived,
 writes the same files, and exactly the files its declaration names."""
 
 import os
@@ -88,8 +88,6 @@ class DriftGateTests(SimpleTestCase):
                 'description = "An example derived file"',
                 "hide = true",
                 'tags = ["derived"]',
-                f'sources = ["{declared}"]',
-                "outputs = []",
                 """usage = 'flag "--fix" help="Rewrite the file"'""",
                 f'vars = {{ writes = "{declared}" }}',
                 f"""run = 'if [ "${{usage_fix:-}}" = true ]; then echo example >{declared}; else test -f {declared}; fi'""",
