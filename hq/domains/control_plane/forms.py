@@ -1,6 +1,5 @@
 """The one question that starts publishing a service, the two policies a
-domain's mail page publishes, a machine's identity, and why a record is
-removed."""
+domain's mail page publishes, and a machine's identity."""
 
 from collections.abc import Mapping
 from typing import ClassVar
@@ -23,7 +22,6 @@ from hq.platform.application.mail_policy import (
 )
 from hq.platform.application.provider_forms import NameList, ResourceIdentityForm
 from hq.platform.application.ui import counted
-from hq.platform.core.templatetags.action_tags import POST_FORM_ID
 from hq.platform.core.templatetags.value_tags import breakable
 
 from .names import is_hostname, normalized_hostname
@@ -148,21 +146,6 @@ class MailFailuresForm(MailPolicyForm):
         return compose_dmarc(
             {**self.record_tags, **{key: "" if value is None else str(value) for key, value in given.items()}}
         )
-
-
-class RemovalReasonForm(forms.Form):
-    """Why a record is removed, saved with the removal. The confirmation
-    button posts through the page's shared form (``POST_FORM_ID``), so the
-    field joins that form by its ``form`` attribute rather than standing in
-    a form of its own."""
-
-    reason = forms.CharField(
-        required=False,
-        max_length=300,
-        label="Why (optional)",
-        help_text="Saved with the removal and in the audit log.",
-        widget=forms.TextInput(attrs={"form": POST_FORM_ID}),
-    )
 
 
 class MachineIdentityForm(ResourceIdentityForm):

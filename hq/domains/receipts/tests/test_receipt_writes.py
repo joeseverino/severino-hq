@@ -183,6 +183,22 @@ class CreateViewTests(_ReceiptForms):
         self.assertEqual((uploaded.metadata["actor"], uploaded.metadata["operation"]), ("op", UPLOAD))
         self.assertEqual(uploaded.metadata["sha256"], hashlib.sha256(CONTENT).hexdigest())
 
+    def test_an_expense_is_offered_by_what_it_is_called(self):
+        from hq.platform.application.markup_testing import within
+
+        expense = Expense.objects.create(
+            date="2026-01-02", vendor="Example Vendor", item="Example item", total_cost=Decimal("1.00")
+        )
+
+        page = self.client.get(reverse("receipts:create"))
+
+        offered = {
+            option.attrs["value"]: option.words
+            for option in within(page, "name", "related_expense")
+            if option.tag == "option" and option.attrs.get("value")
+        }
+        self.assertEqual(offered[str(expense.pk)], "Example Vendor · Example item")
+
 
 class EditViewTests(_ReceiptForms):
     def test_a_new_file_replaces_the_old_and_is_recorded(self):
@@ -236,8 +252,7 @@ class FormRefusalTests(_ReceiptForms):
             with self.subTest(form=post.__name__):
                 response = post(file=a_new_file("text/html", b"markup"))
 
-                self.assertEqual(response.status_code, 200)
-                self.assertTrue(response.context["form"].has_error("file"))
+                self.assertEqual(response.status_code, 400)
                 self.assertIn("A receipt cannot be this type of file.", text(response))
         self.assertUnchanged()
 

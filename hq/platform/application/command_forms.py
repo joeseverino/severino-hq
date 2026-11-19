@@ -9,13 +9,13 @@ from django.core.validators import MaxLengthValidator, MaxValueValidator, MinLen
 from django.utils.datastructures import MultiValueDict
 
 from .capabilities import CapabilitySpec
-from .command_fields import among_now, for_agents, is_upload, named_records, referred
+from .command_fields import ACCEPTS, among_now, for_agents, is_upload, named_records, referred
 from .command_targets import CommandTargetOption
 from .contracts import Effect
 from .describe import meanings
 from .forms import LinesField, ReadAt, UploadField
 from .integration_specs import IDEMPOTENCY_FIELD, capability_schema, command_schema
-from .json_schemas import fields as whole_fields, labeled_choices
+from .json_schemas import LOCAL, fields as whole_fields, labeled_choices
 from .labels import field_label
 from .references import keeping_held, leave_off_unoffered
 from .ui import ended
@@ -57,12 +57,16 @@ class PrimitiveListField(LinesField):
 
 
 def _one_type(schema: dict[str, Any]) -> dict[str, Any]:
-    """Flatten the common nullable JSON-Schema shape for native controls."""
+    """Flatten the common nullable JSON-Schema shape for native controls, and
+    a decimal, sent as a number or its text, to the number."""
 
     choices = schema.get("anyOf")
     if not isinstance(choices, list):
         return schema
     concrete = [item for item in choices if item.get("type") != "null"]
+    numbers = [item for item in concrete if item.get("type") == "number"]
+    if len(concrete) == 2 and len(numbers) == 1 and {item.get("type") for item in concrete} == {"number", "string"}:
+        concrete = numbers
     if len(concrete) != 1:
         return schema
     return {**schema, **concrete[0], "anyOf": choices}
@@ -141,9 +145,12 @@ def _record_choice(
     empty = "Choose one…" if options["required"] else "None"
     if not offered:
         empty = NOTHING_TO_CHOOSE
+    nullable = any(arm.get("type") == "null" for arm in effective.get("anyOf", ()))
     return forms.TypedChoiceField(
         choices=(("", empty), *grouped_choices(offered)),
         coerce=int if effective.get("type") == "integer" else str,
+        # None chooses no record where the field may name none.
+        empty_value=None if nullable else "",
         **options,
     )
 
@@ -169,7 +176,8 @@ def _field_for_schema(
     if offered is not None:
         return _record_choice(effective, offered, options)
     if is_upload(schema):
-        return UploadField(**options)
+        accepts = ",".join(schema.get(ACCEPTS, ()))
+        return UploadField(widget=forms.ClearableFileInput(attrs={"accept": accepts} if accepts else {}), **options)
 
     choices = labeled_choices(effective)
     if choices:
@@ -181,12 +189,26 @@ def _field_for_schema(
             forms.IntegerField(min_value=effective.get("minimum"), max_value=effective.get("maximum"), **options)
         )
     if kind == "number":
+        # A decimal's places are its step, so the control counts in cents.
+        step = effective.get("multipleOf")
         return _drawn_only(
-            forms.DecimalField(min_value=effective.get("minimum"), max_value=effective.get("maximum"), **options)
+            forms.DecimalField(
+                min_value=effective.get("minimum"),
+                max_value=effective.get("maximum"),
+                widget=forms.NumberInput(attrs={"step": str(step)} if step else {}),
+                **options,
+            )
         )
     if kind == "array":
         item_schema = effective.get("items", {})
         item_type = item_schema.get("type")
+        if offers := labeled_choices(item_schema):
+            return forms.TypedMultipleChoiceField(
+                choices=offers,
+                coerce=int if item_type == "integer" else str,
+                widget=forms.CheckboxSelectMultiple,
+                **options,
+            )
         if item_type in {"string", "integer", "number", "boolean"}:
             return PrimitiveListField(item_type=item_type, **options)
         return JSONText(**options)
@@ -196,6 +218,8 @@ def _field_for_schema(
         return forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), **options)
     if effective.get("format") == "date-time":
         return forms.DateTimeField(widget=forms.DateTimeInput(attrs={"type": "datetime-local"}), **options)
+    if effective.get("format") == "partial-time":
+        return forms.TimeField(widget=forms.TimeInput(attrs={"type": "time"}), **options)
 
     if effective.get("format") == "textarea":
         widget: forms.Widget = forms.Textarea(attrs={"rows": 4})
@@ -288,10 +312,13 @@ class CapabilityCommandForm(forms.Form):
     def confirmation_fields(self):
         return tuple(field for field in self.visible_fields() if field.name == "__confirm_effect")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, held_names: Mapping[str, str] | None = None, **kwargs):
+        """``held_names`` is what the record calls each reference it holds, by
+        field, so one whose thing has gone still shows by its name."""
+
         super().__init__(*args, **kwargs)
         for name in self.record_names:
-            self._hold(self.fields[name], self.initial.get(name))
+            self._hold(self.fields[name], self.initial.get(name), (held_names or {}).get(name, ""))
         leave_off_unoffered(
             self, [name for name in self.record_names if referred(self.payload_schema[name]) is not None]
         )
@@ -311,13 +338,13 @@ class CapabilityCommandForm(forms.Form):
         )
 
     @staticmethod
-    def _hold(field: forms.ChoiceField, held: Any) -> None:
+    def _hold(field: forms.ChoiceField, held: Any, named: str) -> None:
         """Offer what the record holds even when its source no longer lists it,
         so saving the form unchanged keeps it."""
 
         values = held if isinstance(held, (list, tuple)) else [held]
         kept = [str(value) for value in values if value not in (None, "")]
-        field.choices = keeping_held(field.choices, [(value, value) for value in kept])
+        field.choices = keeping_held(field.choices, [(value, named or value) for value in kept])
 
     @override
     def clean(self):
@@ -382,7 +409,18 @@ def _own_controls(
     # offering its branches (``json_schemas``), never this field.
     used = schema.get("properties", {})
     fields: dict[str, forms.Field] = {}
-    for name, field in properties.items():
+    definitions = schema.get("$defs", {})
+    for name, whole in properties.items():
+        # A value that may be none, of a named type (a time of day), is that type or null.
+        arms = [
+            {
+                key: said
+                for key, said in definitions.get(arm.get("$ref", "").removeprefix(LOCAL), arm).items()
+                if key not in {"title", "description"}
+            }
+            for arm in whole.get("anyOf", ())
+        ]
+        field = {**whole, "anyOf": arms} if arms else whole
         if name not in offered and _is_closed(field):
             fields |= _inside(name, field, schema.get("$defs", {}), required=name in required, nested=nested)
             continue
@@ -433,7 +471,7 @@ def command_form_class(
     offered = {
         name: (record_choices or {}).get(name)
         for name, field in properties.items()
-        if named_records(field) is not None or referred(field) is not None
+        if named_records(field) is not None or referred(field) is not None or name in (record_choices or {})
     }
     for name, answer in among_now(spec.command_type).items():
         if (listed := offered.get(name)) is not None:

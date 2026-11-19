@@ -15,10 +15,8 @@ from hq.platform.application import references
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.command_targets import record_options
-from hq.platform.application.domains import records_of
 from hq.platform.application.integration_specs import capability_fields, capability_schema
 from hq.platform.application.markup_testing import within
-from hq.platform.application.records import record_form
 from hq.platform.application.references import Referable, ReferenceField, Target
 from hq.platform.application.security import Principal, web_principal
 from hq.platform.application.stored_columns import _model_of
@@ -164,25 +162,20 @@ class GuardedReferenceTests(TestCase):
         self.assertEqual([option.value for option in read or ()], ["example.account:an-account"])
         self.assertEqual(withheld, ())
 
-    def picker_on_each_form(self, principal: Principal, initial: dict[str, str] | None = None) -> tuple[bool, bool]:
-        """Whether ``paid_from`` is on the command form and on the record's own form, for ``principal``."""
+    def picker(self, principal: Principal, initial: dict[str, str] | None = None) -> bool:
+        """Whether ``paid_from`` is on the expense form, for ``principal``."""
 
         spec = capability_registry()["expense.create"]
         command = command_form_class(spec, record_choices=record_options(self.schema, principal=principal))
-        record = record_form(records_of("expenses"))(initial=initial)
-        references.bind(record, principal=principal)
-        return "paid_from" in command(initial=initial).fields, "paid_from" in record.fields
+        return "paid_from" in command(initial=initial).fields
 
-    def test_a_reference_that_offers_nothing_is_left_off_both_forms(self):
+    def test_a_reference_that_offers_nothing_is_left_off(self):
         reader = Principal("a reader", "web", frozenset({"read", "example.read"}))
         stranger = Principal("a stranger", "web", frozenset({"read"}))
 
-        self.assertEqual(self.picker_on_each_form(reader), (True, True))
-        self.assertEqual(self.picker_on_each_form(stranger), (False, False))
+        self.assertEqual((self.picker(reader), self.picker(stranger)), (True, False))
 
     def test_a_reference_that_offers_nothing_stays_while_it_holds_a_value(self):
         stranger = Principal("a stranger", "web", frozenset({"read"}))
 
-        held = self.picker_on_each_form(stranger, initial={"paid_from": "example.account:an-account"})
-
-        self.assertEqual(held, (True, True))
+        self.assertTrue(self.picker(stranger, initial={"paid_from": "example.account:an-account"}))

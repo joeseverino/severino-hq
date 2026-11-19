@@ -175,10 +175,16 @@ def _columns(node: Any) -> set[str]:
     """The columns a rule's condition names, in its lookups and its expressions."""
 
     if isinstance(node, Q):
-        return set().union(*map(_columns, node.children))
-    if isinstance(node, tuple):
-        lookup, value = node
-        return {lookup.split(LOOKUP_SEP)[0]} | _columns(value)
+        # A child is a (lookup, value) pair, whose value may itself be a
+        # tuple (an ``__in`` lookup's), or a Q or expression of its own.
+        return set().union(
+            *(
+                {child[0].split(LOOKUP_SEP)[0]} | _columns(child[1]) if isinstance(child, tuple) else _columns(child)
+                for child in node.children
+            )
+        )
+    if isinstance(node, tuple | list):
+        return set().union(*map(_columns, node))
     if isinstance(node, F):
         return {node.name.split(LOOKUP_SEP)[0]}
     if isinstance(node, BaseExpression):

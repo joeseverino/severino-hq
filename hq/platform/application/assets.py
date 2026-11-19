@@ -6,6 +6,8 @@ from decimal import Decimal
 from functools import partial
 from typing import Annotated, Any
 
+from pydantic import Field
+
 from hq.domains.assets.models import ASSET_CATEGORY_CHOICES, PAYMENT_METHOD_CHOICES, Asset
 lazy from hq.domains.assets.specs import AssetRow
 
@@ -73,7 +75,7 @@ class AssetCommand:
     status: AssetStatus = Asset.Status.ACTIVE
     notes: Notes = ""
     related_projects: AssetProjects = ()
-    infrastructure: AssetInfrastructure = ""
+    infrastructure: Annotated[AssetInfrastructure, Field(title="This is")] = ""
 
 
 def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, Any]:

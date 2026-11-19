@@ -250,7 +250,7 @@ class AssetApplicationServiceTests(TestCase):
                     "warranty_date": "",
                     "status": "active",
                     "notes": "",
-                    "related_projects": [self.project.pk],
+                    "related_projects": [self.project.slug],
                 }
             ),
         )
@@ -396,7 +396,7 @@ class ContentApplicationServiceTests(TestCase):
                     "published_url": "",
                     "published_at": "",
                     "notes": "",
-                    "related_projects": [self.project.pk],
+                    "related_projects": [self.project.slug],
                     "related_assets": [],
                     "related_expenses": [],
                     "related_documentation": [],
@@ -458,7 +458,7 @@ class ExpenseApplicationServiceTests(TestCase):
                     "payment_method": "credit",
                     "business_purpose": "",
                     "notes": "",
-                    "related_project": self.project.pk,
+                    "related_project": self.project.slug,
                     "related_asset": "",
                     "related_content": "",
                     "related_documentation": "",

@@ -514,7 +514,7 @@ class PageTests(TestCase):
             reverse("calendar:entry_new"),
             form_keyed({"title": "Bad", "starts_on": "2026-10-17", "weekdays": ["1"], "repeat": "", "interval": 1}),
         )
-        self.assertContains(response, "Only a weekly entry names its days.")
+        self.assertContains(response, "Only a weekly entry names its days.", status_code=400)
 
     def test_a_day_of_history_opens_on_its_own(self):
         response = self.client.get(reverse("core:audit_list"), {"on": "2026-10-14"})

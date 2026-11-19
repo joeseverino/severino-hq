@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Annotated, Any
 
 from django.db.models import Sum
+from pydantic import Field
 
 from hq.domains.expenses.models import DEFAULT_CATEGORY, EXPENSE_CATEGORY_CHOICES, Expense
 lazy from hq.domains.expenses.specs import ExpenseRow
@@ -135,11 +136,11 @@ class ExpenseCommand:
     paid_from: PaidFrom = ""
     business_purpose: BusinessPurpose = ""
     notes: Notes = ""
-    related_project: ExpenseProject = None
-    related_asset: ExpenseAsset = None
-    related_content: ExpenseContent = None
-    related_documentation: ExpenseDoc = None
-    about: ExpenseAbout = ""
+    related_project: Annotated[ExpenseProject, Field(title="Project")] = None
+    related_asset: Annotated[ExpenseAsset, Field(title="Asset")] = None
+    related_content: Annotated[ExpenseContent, Field(title="Writeup or page")] = None
+    related_documentation: Annotated[ExpenseDoc, Field(title="Document")] = None
+    about: Annotated[ExpenseAbout, Field(title="Also for")] = ""
 
 
 def serialize_expense(expense: Expense) -> ExpenseRow:

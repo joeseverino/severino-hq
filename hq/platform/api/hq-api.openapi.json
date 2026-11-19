@@ -909,6 +909,7 @@
           "items": {
             "enum": [
               "id",
+              "label",
               "date",
               "vendor",
               "item",
@@ -5168,7 +5169,8 @@
           "infrastructure": {
             "$ref": "#/components/schemas/AssetInfrastructure",
             "default": "",
-            "maxLength": 300
+            "maxLength": 300,
+            "title": "This is"
           },
           "item_name": {
             "$ref": "#/components/schemas/AssetName",
@@ -5774,7 +5776,8 @@
               },
               "infrastructure": {
                 "$ref": "#/components/schemas/AssetInfrastructure",
-                "maxLength": 300
+                "maxLength": 300,
+                "title": "This is"
               },
               "item_name": {
                 "$ref": "#/components/schemas/AssetName",
@@ -6171,6 +6174,7 @@
                 ],
                 "default": null,
                 "description": "The time it ends.",
+                "title": "To",
                 "x-hq-rules": [
                   "An end time needs a start time.",
                   "It cannot end before it starts."
@@ -6179,13 +6183,15 @@
               "ends_on": {
                 "$ref": "#/components/schemas/CalendarEntryEndsOn",
                 "default": null,
+                "title": "Until day",
                 "x-hq-rules": [
                   "It cannot end before it starts."
                 ]
               },
               "interval": {
                 "$ref": "#/components/schemas/CalendarEntryInterval",
-                "default": 1
+                "default": 1,
+                "title": "Every"
               },
               "location": {
                 "$ref": "#/components/schemas/CalendarEntryLocation",
@@ -6204,6 +6210,7 @@
               "repeat_until": {
                 "$ref": "#/components/schemas/CalendarEntryRepeatUntil",
                 "default": null,
+                "title": "Stop repeating after",
                 "x-hq-rules": [
                   "Only a repeating entry has an end.",
                   "It cannot stop repeating before it starts."
@@ -6219,10 +6226,12 @@
                   }
                 ],
                 "default": null,
-                "description": "The time it starts; blank for all day."
+                "description": "The time it starts; blank for all day.",
+                "title": "From"
               },
               "starts_on": {
-                "$ref": "#/components/schemas/CalendarEntryStartsOn"
+                "$ref": "#/components/schemas/CalendarEntryStartsOn",
+                "title": "Day"
               },
               "title": {
                 "$ref": "#/components/schemas/CalendarEntryTitle",
@@ -6233,6 +6242,7 @@
               "weekdays": {
                 "$ref": "#/components/schemas/CalendarEntryWeekdays",
                 "default": [],
+                "title": "On",
                 "x-hq-rules": [
                   "Only a weekly entry names its days."
                 ]
@@ -6363,6 +6373,7 @@
                   }
                 ],
                 "description": "The time it ends.",
+                "title": "To",
                 "x-hq-rules": [
                   "An end time needs a start time.",
                   "It cannot end before it starts."
@@ -6370,12 +6381,14 @@
               },
               "ends_on": {
                 "$ref": "#/components/schemas/CalendarEntryEndsOn",
+                "title": "Until day",
                 "x-hq-rules": [
                   "It cannot end before it starts."
                 ]
               },
               "interval": {
-                "$ref": "#/components/schemas/CalendarEntryInterval"
+                "$ref": "#/components/schemas/CalendarEntryInterval",
+                "title": "Every"
               },
               "location": {
                 "$ref": "#/components/schemas/CalendarEntryLocation",
@@ -6390,6 +6403,7 @@
               },
               "repeat_until": {
                 "$ref": "#/components/schemas/CalendarEntryRepeatUntil",
+                "title": "Stop repeating after",
                 "x-hq-rules": [
                   "Only a repeating entry has an end.",
                   "It cannot stop repeating before it starts."
@@ -6404,10 +6418,12 @@
                     "type": "null"
                   }
                 ],
-                "description": "The time it starts; blank for all day."
+                "description": "The time it starts; blank for all day.",
+                "title": "From"
               },
               "starts_on": {
-                "$ref": "#/components/schemas/CalendarEntryStartsOn"
+                "$ref": "#/components/schemas/CalendarEntryStartsOn",
+                "title": "Day"
               },
               "title": {
                 "$ref": "#/components/schemas/CalendarEntryTitle",
@@ -6417,6 +6433,7 @@
               },
               "weekdays": {
                 "$ref": "#/components/schemas/CalendarEntryWeekdays",
+                "title": "On",
                 "x-hq-rules": [
                   "Only a weekly entry names its days."
                 ]
@@ -6439,11 +6456,27 @@
         "type": "object"
       },
       "CalendarEntryWeekdays": {
-        "description": "For one that repeats weekly, the days of the week it falls on, Monday as 0. Empty otherwise.",
+        "description": "For one that repeats weekly, the days of the week it falls on. Monday as 0. Empty otherwise.",
         "items": {
-          "maximum": 6,
-          "minimum": 0,
-          "type": "integer"
+          "enum": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "type": "integer",
+          "x-enumDescriptions": {
+            "0": "Mon",
+            "1": "Tue",
+            "2": "Wed",
+            "3": "Thu",
+            "4": "Fri",
+            "5": "Sat",
+            "6": "Sun"
+          }
         },
         "type": "array"
       },
@@ -7226,6 +7259,7 @@
       },
       "ClockTime": {
         "description": "A time of day, as the clock on the wall reads it.",
+        "format": "partial-time",
         "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9](?:\\.[0-9]{1,6})?)?$",
         "type": "string"
       },
@@ -9268,7 +9302,8 @@
               "topic": {
                 "$ref": "#/components/schemas/ContentTopic",
                 "default": "",
-                "maxLength": 300
+                "maxLength": 300,
+                "title": "Description"
               }
             },
             "required": [
@@ -9634,6 +9669,7 @@
       },
       "ContentTopic": {
         "description": "What it is about, in a few words. Empty when not recorded.",
+        "format": "textarea",
         "type": "string"
       },
       "ContentType": {
@@ -9774,7 +9810,8 @@
               },
               "topic": {
                 "$ref": "#/components/schemas/ContentTopic",
-                "maxLength": 300
+                "maxLength": 300,
+                "title": "Description"
               }
             },
             "type": "object"
@@ -10960,7 +10997,8 @@
               },
               "last_reviewed": {
                 "$ref": "#/components/schemas/LastReviewed",
-                "default": null
+                "default": null,
+                "title": "Last changed"
               },
               "notes": {
                 "$ref": "#/components/schemas/DocNotes",
@@ -11631,7 +11669,8 @@
                 "title": "GitHub path"
               },
               "last_reviewed": {
-                "$ref": "#/components/schemas/LastReviewed"
+                "$ref": "#/components/schemas/LastReviewed",
+                "title": "Last changed"
               },
               "notes": {
                 "$ref": "#/components/schemas/DocNotes",
@@ -12596,7 +12635,8 @@
               "about": {
                 "$ref": "#/components/schemas/ExpenseAbout",
                 "default": "",
-                "maxLength": 300
+                "maxLength": 300,
+                "title": "Also for"
               },
               "business_purpose": {
                 "$ref": "#/components/schemas/BusinessPurpose",
@@ -12681,19 +12721,23 @@
               },
               "related_asset": {
                 "$ref": "#/components/schemas/ExpenseAsset",
-                "default": null
+                "default": null,
+                "title": "Asset"
               },
               "related_content": {
                 "$ref": "#/components/schemas/ExpenseContent",
-                "default": null
+                "default": null,
+                "title": "Writeup or page"
               },
               "related_documentation": {
                 "$ref": "#/components/schemas/ExpenseDoc",
-                "default": null
+                "default": null,
+                "title": "Document"
               },
               "related_project": {
                 "$ref": "#/components/schemas/ExpenseProject",
-                "default": null
+                "default": null,
+                "title": "Project"
               },
               "total_cost": {
                 "$ref": "#/components/schemas/TotalCost",
@@ -12833,6 +12877,10 @@
           "item": {
             "$ref": "#/components/schemas/ExpenseItem"
           },
+          "label": {
+            "description": "What the expense is called wherever it is named: who was paid, and for what.",
+            "type": "string"
+          },
           "notes": {
             "$ref": "#/components/schemas/Notes"
           },
@@ -12866,6 +12914,7 @@
         },
         "required": [
           "id",
+          "label",
           "date",
           "vendor",
           "item",
@@ -12943,6 +12992,9 @@
           },
           "item": {
             "$ref": "#/components/schemas/ExpenseItem"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/label"
           },
           "notes": {
             "$ref": "#/components/schemas/Notes"
@@ -13028,7 +13080,8 @@
             "properties": {
               "about": {
                 "$ref": "#/components/schemas/ExpenseAbout",
-                "maxLength": 300
+                "maxLength": 300,
+                "title": "Also for"
               },
               "business_purpose": {
                 "$ref": "#/components/schemas/BusinessPurpose",
@@ -13106,16 +13159,20 @@
                 }
               },
               "related_asset": {
-                "$ref": "#/components/schemas/ExpenseAsset"
+                "$ref": "#/components/schemas/ExpenseAsset",
+                "title": "Asset"
               },
               "related_content": {
-                "$ref": "#/components/schemas/ExpenseContent"
+                "$ref": "#/components/schemas/ExpenseContent",
+                "title": "Writeup or page"
               },
               "related_documentation": {
-                "$ref": "#/components/schemas/ExpenseDoc"
+                "$ref": "#/components/schemas/ExpenseDoc",
+                "title": "Document"
               },
               "related_project": {
-                "$ref": "#/components/schemas/ExpenseProject"
+                "$ref": "#/components/schemas/ExpenseProject",
+                "title": "Project"
               },
               "total_cost": {
                 "$ref": "#/components/schemas/TotalCost",
@@ -14666,7 +14723,8 @@
           },
           "infrastructure": {
             "$ref": "#/components/schemas/AssetInfrastructure",
-            "maxLength": 300
+            "maxLength": 300,
+            "title": "This is"
           },
           "item_name": {
             "$ref": "#/components/schemas/AssetName",
@@ -15033,10 +15091,14 @@
               "key": {
                 "default": "",
                 "description": "The key the managed record is stored under; blank derives one.",
+                "maxLength": 180,
+                "pattern": "^$|^[-a-zA-Z0-9_]+$",
                 "type": "string"
               },
               "kind": {
                 "description": "The type of record to bring under HQ's management.",
+                "maxLength": 64,
+                "minLength": 1,
                 "title": "Type",
                 "type": "string"
               },
@@ -18166,6 +18228,8 @@
           "reason": {
             "default": "",
             "description": "Why it is done, kept with the operation it queues.",
+            "maxLength": 300,
+            "title": "Why",
             "type": "string"
           }
         },
@@ -18912,8 +18976,10 @@
               "keys": {
                 "description": "Every pin of that type, in order.",
                 "items": {
+                  "maxLength": 255,
                   "type": "string"
                 },
+                "title": "Pinned",
                 "type": "array"
               },
               "kind": {
@@ -18960,6 +19026,7 @@
             "properties": {
               "key": {
                 "description": "Which pin.",
+                "maxLength": 255,
                 "pattern": "\\S",
                 "type": "string"
               },
@@ -19009,6 +19076,7 @@
             "properties": {
               "key": {
                 "description": "The one to pin or unpin.",
+                "maxLength": 255,
                 "pattern": "\\S",
                 "type": "string"
               },
@@ -22024,10 +22092,12 @@
                 "format": "textarea"
               },
               "related_asset": {
-                "$ref": "#/components/schemas/ReceiptAsset"
+                "$ref": "#/components/schemas/ReceiptAsset",
+                "title": "Asset"
               },
               "related_expense": {
-                "$ref": "#/components/schemas/ReceiptExpense"
+                "$ref": "#/components/schemas/ReceiptExpense",
+                "title": "Expense"
               },
               "vendor": {
                 "description": "Who issued the receipt.",

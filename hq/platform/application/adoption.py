@@ -25,7 +25,7 @@ from hq.domains.control_plane.providers import PROVIDERS, record_spec, registry_
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS, connection_credential
 
 from .answer_fields import CallMessage
-from .command_fields import Describe, Names
+from .command_fields import Describe, Names, stored_in
 from .conditions import READY, stamped
 from .inventory import live_spec, record_identity, record_token, service_hostnames
 from .record_errors import PolicyError, RecordNotFound, Sentence
@@ -571,6 +571,8 @@ def adopt_service(
     }
 
 
+# The key and the type are the adopted record's own columns.
+@stored_in(ManagedResource)
 @dataclass(frozen=True, slots=True)
 class AdoptCommand:
     kind: Annotated[str, Field(title="Type"), Describe("The type of record to bring under HQ's management.")]

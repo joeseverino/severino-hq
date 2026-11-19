@@ -19,6 +19,7 @@ from hq.platform.application.calendar_entries import calendar_choices
 from hq.platform.application.capabilities import command_spec
 from hq.platform.application.card_items import ListRow
 from hq.platform.application.command_forms import command_form_class
+from hq.platform.application.command_targets import CommandTargetOption
 from hq.platform.application.connection_setup import docs_url
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot
 from hq.platform.application.derivations import every_revision
@@ -42,12 +43,23 @@ from hq.platform.application.web_writes import execute_posted
 from hq.platform.core.web_refusals import refused
 lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
 
-from .forms import DashboardLinksForm
-
 # A queue of this many or fewer is read on the dashboard itself, each card
 # with its button; a longer one is a count and a link to its page, beneath
 # the held requests, which are read there at any length.
 NEEDS_YOU_IN_PLACE = 3
+
+
+def _links_form(user):
+    """Which outward links the dashboard shows, a box to tick for each, as
+    the pin command takes them."""
+
+    choices = link_choices(user)
+    form_class = command_form_class(
+        command_spec(CHOOSE),
+        fields=("keys",),
+        record_choices={"keys": tuple(CommandTargetOption(choice["href"], choice["label"]) for choice in choices)},
+    )
+    return form_class(auto_id="links-%s", initial={"keys": [choice["href"] for choice in choices if choice["chosen"]]})
 
 
 class DashboardLinkChoiceView(View):
@@ -65,7 +77,7 @@ class DashboardLinkChoiceView(View):
             request,
             "core/dashboard_links.html",
             {
-                "links_form": DashboardLinksForm(link_choices(request.user)),
+                "links_form": _links_form(request.user),
                 **page_context(
                     "Dashboard links",
                     "Tick the links to show. With none ticked, all of them show.",
@@ -74,7 +86,7 @@ class DashboardLinkChoiceView(View):
         )
 
     def post(self, request):
-        result = execute_posted(request, CHOOSE, {"kind": DASHBOARD_LINK, "keys": request.POST.getlist("href")})
+        result = execute_posted(request, CHOOSE, {"kind": DASHBOARD_LINK, "keys": request.POST.getlist("keys")})
         refused(request, result)
         # One answer for both callers. A browser follows this and lands on the
         # dashboard; a fetch follows it too and reads the panel out of the page
@@ -113,7 +125,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         external_links, _ = outward_links(self.request.user)
         return {
             "external_links": external_links,
-            "links_form": DashboardLinksForm(link_choices(self.request.user)),
+            "links_form": _links_form(self.request.user),
         }
 
     PARTS: ClassVar[dict[str, Callable[..., Any]]] = {"calendar": _calendar, "links": _links}

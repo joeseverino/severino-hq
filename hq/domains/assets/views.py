@@ -16,7 +16,7 @@ from hq.platform.application.documentation import related_documents
 from hq.platform.application.expenses import cost_totals
 from hq.platform.application.labels import dotted_html
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.references import ReferencePickerMixin, reference_of, referenced_by_row
+from hq.platform.application.references import reference_of, referenced_by_row
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
@@ -141,12 +141,12 @@ class AssetDetailView(PageMixin, DetailView):
 FORM_PAGE = {"form_note": "Deductible estimate = cost × business use. Updated when you save."}
 
 
-class AssetCreateView(AssetPage, ReferencePickerMixin, RecordFormMixin, CreateView):
+class AssetCreateView(AssetPage, RecordFormMixin, CreateView):
     page_title = "New asset"
     extra_context = FORM_PAGE
 
 
-class AssetUpdateView(AssetPage, ReferencePickerMixin, RecordFormMixin, UpdateView):
+class AssetUpdateView(AssetPage, RecordFormMixin, UpdateView):
     page_title = "Edit asset"
     extra_context = FORM_PAGE
 

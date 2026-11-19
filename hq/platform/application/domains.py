@@ -29,7 +29,7 @@ from .plugins import (
     ordered_attention,
     source_cards,
 )
-from .record_declaration import Control, Records
+from .record_declaration import Records
 from .routes import reverse
 lazy from . import attention
 lazy from .security import Capability, Principal, could_hold
@@ -334,7 +334,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 ("create", "page", "Add a page"),
             ),
             # Its description is written in sentences.
-            controls=(("topic", Control.LINES),),
         ),
     ),
     DomainDescriptor(
@@ -427,7 +426,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             save="hq.platform.application.receipts:update_receipt",
             create=False,
             on_delete="hq.platform.application.receipts:file_cleanup",
-            form="hq.domains.receipts.forms:ReceiptFileForm",
             wording=(
                 ("update", "Change a receipt's details. The file itself does not change.", ""),
                 ("delete", "Delete one receipt and its file.", ""),

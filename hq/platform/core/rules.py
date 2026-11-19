@@ -14,6 +14,10 @@ from django.db import DEFAULT_DB_ALIAS, models
 from django.db.models.functions import Cast, Length, Trim
 from django.db.models.lookups import GreaterThan
 
+# The code a rule's refusal carries, so a refusal may say the rule's own
+# message: declared here, it holds nothing a caller sent.
+RULE = "rule"
+
 
 class Rule(models.CheckConstraint):  # noqa: PLW1641 - unhashable, as Django's CheckConstraint is, since both compare by value
     """A check constraint whose violation is reported beside ``field``.
@@ -32,6 +36,7 @@ class Rule(models.CheckConstraint):  # noqa: PLW1641 - unhashable, as Django's C
     def __init__(self, *, field: str = "", pattern: str = "", **kwargs: Any) -> None:
         if not kwargs.get("violation_error_message"):
             raise ValueError("A rule says what it requires in violation_error_message.")
+        kwargs.setdefault("violation_error_code", RULE)
         super().__init__(**kwargs)
         self.field = field
         self.pattern = pattern
@@ -49,6 +54,9 @@ class Rule(models.CheckConstraint):  # noqa: PLW1641 - unhashable, as Django's C
     @override
     def deconstruct(self):
         path, args, kwargs = super().deconstruct()
+        # Every rule's code, so no migration states it.
+        if kwargs.get("violation_error_code") == RULE:
+            del kwargs["violation_error_code"]
         if self.field:
             kwargs["field"] = self.field
         if self.pattern:

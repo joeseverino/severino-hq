@@ -225,8 +225,7 @@ carries the device permission stands as them. Only theirs, never anybody else's.
     {% include "partials/_empty_state.html" with message="None registered." %}
   {% endif %}
   {% if device_form %}
-    {% words "agent.device.set" "on" as device_verb %}
-    {% include "partials/_form.html" with form=device_form action=device_url next=request.get_full_path verb=device_verb %}
+    {% include "partials/_form.html" with form=device_form action=device_url fields="core/_command_fields.html" choices=device_choices choice_field="registered" %}
   {% endif %}
 {% endsection %}
 

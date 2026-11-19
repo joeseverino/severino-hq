@@ -7,25 +7,17 @@ and never listed here. Every door, the web's forms included
 through its capability, which ends in the model's own ``full_clean``.
 """
 
-from collections.abc import Callable, Mapping
-from dataclasses import fields
-from functools import cache
+from collections.abc import Callable
 from typing import Any
 
-from django import forms
-from django.core.exceptions import ImproperlyConfigured
-from django.db.models import Field
-from django.forms import ModelForm, modelform_factory
 from django.utils.text import capfirst
 
-from .command_fields import for_agents
 from .contracts import Effect
 from .deletion import DeleteCommand, RecordDeleted, delete_record
-from .describe import meanings
 from .domains import host_records, load, records_of
-from .integration_specs import TARGET_KINDS, CapabilitySpec, command_schema
+from .integration_specs import TARGET_KINDS, CapabilitySpec
 from .labels import adding, lower_first, one
-from .record_declaration import Control, Records
+from .record_declaration import Records
 from .security import Principal
 from .ui import ended
 
@@ -76,74 +68,6 @@ def records_for(model: type) -> Records:
         if load(records.model) is model:
             return records
     raise LookupError(f"No host domain declares records for {model.__name__}.")
-
-
-# Each control a record's form draws, where Django's own says less than the
-# browser offers: a date or time picker, a text box of a few lines, a list
-# tall enough to choose several from.
-_CONTROLS: dict[Control, Callable[[], forms.Widget]] = {
-    Control.DATE: lambda: forms.DateInput(attrs={"type": "date"}),
-    Control.TIME: lambda: forms.TimeInput(attrs={"type": "time"}),
-    Control.LINES: lambda: forms.Textarea(attrs={"rows": 4}),
-    Control.CHOOSE_SEVERAL: lambda: forms.SelectMultiple(attrs={"size": 6}),
-}
-# The control each kind of column takes unless its declaration names another.
-_BY_KIND = {
-    "DateField": Control.DATE,
-    "TimeField": Control.TIME,
-    "TextField": Control.LINES,
-    "ManyToManyField": Control.CHOOSE_SEVERAL,
-}
-
-
-def _controlled(named: Mapping[str, Control]) -> Callable[..., forms.Field | None]:
-    """The form field of a column, in the control ``named`` gives it or its
-    kind takes; one limited to choices keeps Django's list."""
-
-    def field(column: Field[Any, Any], **kwargs: Any) -> forms.Field | None:
-        control = named.get(column.name) or _BY_KIND.get(column.get_internal_type())
-        if control is not None and not column.choices:
-            kwargs.setdefault("widget", _CONTROLS[control]())
-        return column.formfield(**kwargs)
-
-    return field
-
-
-@cache
-def record_form(records: Records, command: type | None = None) -> type[ModelForm[Any]]:
-    """A plain record domain's form: the fields of its command (or of
-    ``command``, a page whose save runs another), each drawn from the model's
-    column of that name, on the declaration's ``form`` where it names one. A
-    command field the model has no column for is refused as the form is built
-    (Django's ``FieldError``), and so is a ``form`` that lists fields of its own."""
-
-    command = command or load(records.command)
-    base = load(records.form) if records.form else ModelForm
-    if {"fields", "exclude"} & set(vars(getattr(base, "Meta", object))):
-        raise ImproperlyConfigured(f"{base.__name__} lists fields; a record's form takes its command's.")
-    taken = [item.name for item in fields(command) if item.name not in for_agents(command)]
-    # A field's title is its label wherever it is drawn, the command's own page included.
-    titled = {name: said["title"] for name, said in command_schema(command)["properties"].items() if "title" in said}
-    return modelform_factory(
-        load(records.model),
-        form=base,
-        fields=taken,
-        labels=titled,
-        formfield_callback=_controlled(dict(records.controls)),
-    )
-
-
-def described[F: ModelForm[Any]](form: F, command: type) -> F:
-    """``form`` with the meaning ``command`` declares as each field's help, so
-    a record's form says what that command's own page says (``meanings``).
-    Help the form writes itself stays: it is for what only that form asks."""
-
-    own = {*(form._meta.help_texts or {})}
-    own |= {name for name, field in form.declared_fields.items() if field.help_text}
-    for name, meaning in meanings(command).items():
-        if name in form.fields and name not in own:
-            form.fields[name].help_text = meaning
-    return form
 
 
 def as_an_update_declares(schema: dict[str, Any], always_sent: frozenset[str] = frozenset()) -> dict[str, Any]:

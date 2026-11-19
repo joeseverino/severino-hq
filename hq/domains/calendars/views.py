@@ -24,13 +24,12 @@ from hq.platform.application.card_items import ListRow
 from hq.platform.application.entity_links import web_url
 from hq.platform.application.moments import stamp_day, when_day
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.references import ReferencePickerMixin, reference_of
+from hq.platform.application.references import reference_of
 from hq.platform.application.security import Capability, safe_next, web_principal
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.writes import CapabilityDeleteMixin, CapabilityFormMixin, CommandFormPage
 from hq.platform.core.web_refusals import refusal_response
 
-from .forms import EntryForm
 from .models import Entry
 
 # What makes a new event, its form and its command.
@@ -199,14 +198,39 @@ class EntryWrite:
 FORM_PAGE = {"form_fields": "calendars/_entry_fields.html"}
 
 
-class EntryFormPage(EntryWrite, CommandFormPage, EntryPage, ReferencePickerMixin, CapabilityFormMixin):
-    """An event's form, said as its command's page says it."""
+class EntryFormPage(EntryWrite, CommandFormPage, EntryPage, CapabilityFormMixin):
+    """An event's form, said as its command's page says it: a day, then the rest if it applies."""
 
     creates = CREATE
     updates = UPDATE
     listed_route = "calendar:month"
     extra_context = FORM_PAGE
-    form_class = EntryForm
+    field_order = (
+        "title",
+        "starts_on",
+        "ends_on",
+        "starts_at",
+        "ends_at",
+        "location",
+        "about",
+        "repeat",
+        "interval",
+        "weekdays",
+        "repeat_until",
+        "notes",
+    )
+
+    @override
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        # What the entry is and what to remember about it take the whole row.
+        # The days it runs read across as one row, and the times as the next.
+        for name in ("title", "notes"):
+            form.fields[name].wide = True
+        for name in ("starts_on", "starts_at"):
+            form.fields[name].starts_pair = True
+        form.fields["title"].widget.attrs.update(autofocus=True, placeholder="What is it?")
+        return form
 
 
 class EntryDetailView(RedirectView):

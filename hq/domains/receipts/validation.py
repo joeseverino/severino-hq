@@ -52,17 +52,6 @@ FILE_TYPE_LABELS = {
 }
 
 
-def is_new_upload(file: object) -> bool:
-    """Whether a receipt's file is one just uploaded, so checked and stored.
-
-    Every request.FILES entry is an UploadedFile. An edit without one cleans to
-    the stored FieldFile, which was held to these rules when it arrived and
-    carries no content type of its own.
-    """
-
-    return isinstance(file, UploadedFile)
-
-
 def validate_receipt_file(upload: UploadedFile) -> None:
     """Refuse a file the receipt rules do not admit, in the words every adapter shows."""
 

@@ -1,26 +1,28 @@
+from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 
-from ..business_use import MESSAGE
-from ..domains import records_of
-from ..records import record_form
+from ..plugin_testing import form_keyed
 
 
 class BusinessUseTests(TestCase):
-    """The forms show the model's rule; they do not hold a copy of it."""
+    """A record's form says its command's refusal of a share out of range
+    beside the field, holding no copy of the rule."""
 
-    FORMS = (record_form(records_of("assets")), record_form(records_of("expenses")))
+    PAGES = (
+        ("assets:create", {"item_name": "Example asset"}),
+        ("expenses:create", {"date": "2030-01-31", "vendor": "Example vendor", "item": "Example item"}),
+    )
 
-    def test_neither_form_restates_the_rule(self):
-        for form_class in self.FORMS:
-            with self.subTest(form=form_class.__name__):
-                self.assertNotIn("clean_business_use_percentage", vars(form_class))
+    def setUp(self):
+        user = get_user_model().objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
+        self.client.force_login(user)
 
     def test_a_percentage_out_of_range_is_refused_on_the_field(self):
-        for form_class in self.FORMS:
-            # -1 never reaches the model: the positive field's own form bound
-            # refuses it first.
-            for value, message in ((150, MESSAGE), (-1, "Ensure this value is greater than or equal to 0.")):
-                with self.subTest(form=form_class.__name__, value=value):
-                    form = form_class(data={"business_use_percentage": str(value)})
-                    form.is_valid()
-                    self.assertEqual(form.errors["business_use_percentage"], [message])
+        for route, filled in self.PAGES:
+            for value in (150, -1):
+                with self.subTest(route=route, value=value):
+                    page = self.client.post(
+                        reverse(route), form_keyed({**filled, "business_use_percentage": str(value)})
+                    )
+                    self.assertTrue(page.context["form"].errors["business_use_percentage"])

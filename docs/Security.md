@@ -213,7 +213,7 @@ is refused the audit log (`read_audit_log`) and the calendar
     page view, which HQ does not record. A PDF is a link to `receipts:file`,
     never framed, since `frame-ancestors 'none'` and `X-Frame-Options: DENY`
     refuse HQ framing its own responses.
-- Uploads are content-type-filtered (`hq/domains/receipts/forms.py`) and size-capped
+- Uploads are content-type-filtered (`hq/domains/receipts/validation.py`) and size-capped
   (15 MB by default).
 - Audit log on every create / update / delete (via signals), plus login,
   failed login, logout, upload, export, and import events, and refusals. An

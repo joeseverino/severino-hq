@@ -14,7 +14,12 @@ from pydantic_core import PydanticCustomError
 from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
-from hq.domains.receipts.validation import MAX_RECEIPT_BASE64_CHARS, validate_receipt_file
+from hq.domains.receipts.validation import (
+    ALLOWED_RECEIPT_CONTENT_TYPES,
+    MAX_RECEIPT_BASE64_CHARS,
+    MAX_RECEIPT_BYTES,
+    validate_receipt_file,
+)
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.receipts.specs import ReceiptRow
@@ -54,8 +59,8 @@ class ReceiptMetadataCommand:
     date: Annotated[Day | None, Describe("The date on the receipt.")] = None
     amount: Annotated[Decimal, Describe("The amount it shows.")] = Decimal("0.00")
     notes: Notes = ""
-    related_expense: ReceiptExpense = None
-    related_asset: ReceiptAsset = None
+    related_expense: Annotated[ReceiptExpense, Field(title="Expense")] = None
+    related_asset: Annotated[ReceiptAsset, Field(title="Asset")] = None
 
 
 class _Base64(Base64Encoder):
@@ -91,7 +96,11 @@ class ReceiptFile:
 @stored_in(Receipt)
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ReceiptUploadCommand(ReceiptMetadataCommand):
-    file: Annotated[ReceiptFile, Upload(), Describe("The receipt's file.")]
+    file: Annotated[
+        ReceiptFile,
+        Upload(accepts=tuple(ALLOWED_RECEIPT_CONTENT_TYPES)),
+        Describe(f"The receipt: a PDF or image, up to {MAX_RECEIPT_BYTES // (1024 * 1024)} MB."),
+    ]
 
 
 def _stored(current_id: int) -> dict[str, Any]:
