@@ -2,7 +2,6 @@
 
 from decimal import Decimal
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -11,11 +10,12 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.markup_testing import elements, links, select, text
+from hq.platform.core.testing import operator
 
 
 class _Signed(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("ledger-reader"))
+        operator(self.client)
 
 
 class ExpenseListTests(_Signed):

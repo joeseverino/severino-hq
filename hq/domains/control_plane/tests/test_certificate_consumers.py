@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from hq.platform.application.controller import ControllerReport, report_operation
 from hq.platform.application.infrastructure import resolved_spec
+from hq.platform.core.testing import declare
 
 from ..models import ManagedResource, OperationRequest, ProviderConnection, ProviderInventory
 from ..provider_adapters.declarations import TLSDeliveryTargetSpec
@@ -44,11 +45,7 @@ class DerivedConsumerTests(TestCase):
                 {"domain": "elsewhere.example.com", "answer": "10.0.0.44"},
             ],
         )
-        return ManagedResource.objects.create(
-            key="example-wildcard",
-            kind="tls.certificate",
-            spec=certificate_spec(),
-        )
+        return declare("example-wildcard", "tls.certificate", certificate_spec())
 
     def test_a_consumer_is_a_covered_name_served_at_the_target_or_a_written_one(self):
         """A covered name answering at the target is a consumer without being
@@ -85,11 +82,7 @@ class DerivedConsumerTests(TestCase):
                 {"domain": "status.example.com", "answer": "10.0.0.19"},
             ],
         )
-        certificate = ManagedResource.objects.create(
-            key="example-wildcard",
-            kind="tls.certificate",
-            spec=certificate_spec(),
-        )
+        certificate = declare("example-wildcard", "tls.certificate", certificate_spec())
 
         consumer = next(item for item in resolved_spec(certificate)["consumers"] if item["connection_ref"] == "edge")
 
@@ -109,16 +102,8 @@ class DerivedConsumerTests(TestCase):
             endpoint="10.0.0.19:7722",
             observed_at=timezone.now(),
         )
-        ManagedResource.objects.create(
-            key="pending-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "pending.example.com", "answer": "10.0.0.19"},
-        )
-        certificate = ManagedResource.objects.create(
-            key="example-wildcard",
-            kind="tls.certificate",
-            spec=certificate_spec(),
-        )
+        declare("pending-dns", "adguard.rewrite", {"domain": "pending.example.com", "answer": "10.0.0.19"})
+        certificate = declare("example-wildcard", "tls.certificate", certificate_spec())
 
         consumer = next(item for item in resolved_spec(certificate)["consumers"] if item["connection_ref"] == "edge")
 
@@ -134,11 +119,7 @@ class DeliveryTargetConfirmationTests(TestCase):
     """
 
     def _report(self, consumers):
-        certificate = ManagedResource.objects.create(
-            key="example-wildcard",
-            kind="tls.certificate",
-            spec=certificate_spec(),
-        )
+        certificate = declare("example-wildcard", "tls.certificate", certificate_spec())
         operation = OperationRequest.objects.create(
             resource=certificate,
             action=OperationRequest.Action.RECONCILE,

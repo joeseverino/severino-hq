@@ -5,7 +5,6 @@ row to it. Every procedure here is a synthetic ``example.*`` one."""
 import uuid
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -15,6 +14,7 @@ from hq.platform.core import seeds
 from hq.platform.core.example_estate.automation import CACHE_FLUSH, CORRELATION
 from hq.platform.core.example_estate.names import MACHINE
 from hq.platform.core.example_estate.testing import throwaway_media
+from hq.platform.core.testing import AGENT, operator
 
 RUN = f"automation.{CACHE_FLUSH}.run"
 # A capability no role grants.
@@ -159,13 +159,12 @@ class ApprovedRunPageTests(TestCase):
 
     def test_a_run_a_person_approved_links_the_approval_it_ran_under(self):
         from hq.domains.control_plane.models import ApprovalRequest
-        from hq.platform.application.security import Capability, Principal
         from hq.platform.application.tests.procedures import APPROVER, approved_run, run_payload
 
-        agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
+        agent = AGENT
         answer = approved_run(self, run_payload(), principal=agent, key="example-held")
         held = ApprovalRequest.objects.get(state=ApprovalRequest.State.APPROVED)
-        self.client.force_login(get_user_model().objects.create_superuser("example-owner-2", "o@example.test", "pw"))
+        operator(self.client)
 
         response = self.client.get(run_page(answer["operation"]["id"]))
 
@@ -207,7 +206,7 @@ class RunHereTests(TestCase):
         from hq.platform.application import roles
         from hq.platform.application.automation_runs import capability_name, operation_registry
 
-        viewer = get_user_model().objects.create_user("example-viewer")
+        viewer = operator()
         roles.assign(viewer, roles.Role.VIEWER)
         self.client.force_login(viewer)
 

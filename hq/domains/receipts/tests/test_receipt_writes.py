@@ -8,7 +8,6 @@ import tempfile
 from decimal import Decimal
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -24,6 +23,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from hq.platform.core.models import AuditLog, IdempotencyRecord
+from hq.platform.core.testing import operator
 
 GRANTED = frozenset(Capability) | OPERATOR_CAPABILITIES
 # Tokens granted everything, which a file still never arrives with.
@@ -61,7 +61,7 @@ def a_file(content_type: str = "application/pdf", content: str = ENCODED) -> dic
 
 class _PrivateMedia(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("op"))
+        operator(self.client, "op")
         media = tempfile.TemporaryDirectory()
         self.addCleanup(media.cleanup)
         patcher = mock.patch.object(Receipt._meta.get_field("file").storage, "location", media.name)
@@ -271,7 +271,7 @@ class FormRefusalTests(_ReceiptForms):
 
 class MatchViewTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("op"))
+        operator(self.client, "op")
         self.receipt = Receipt.objects.create(
             file="receipts/example.pdf", content_type="application/pdf", vendor="Example Host", notes="Kept"
         )

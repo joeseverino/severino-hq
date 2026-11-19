@@ -2,13 +2,12 @@
 
 from urllib.parse import parse_qs, urlsplit
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.markup_testing import elements, select, within
 from hq.platform.application.tests.host_only import host_only
+from hq.platform.core.testing import declare, operator
 
 
 def asks(url: str) -> dict[str, str]:
@@ -19,13 +18,8 @@ def asks(url: str) -> dict[str, str]:
 
 class TraceLinkTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(user)
-        ManagedResource.objects.create(
-            key="internal-name",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.test", "answer": "192.0.2.10"},
-        )
+        operator(self.client)
+        declare("internal-name", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"})
 
     def page(self, **params):
         with host_only():
@@ -65,13 +59,8 @@ class MapBarTests(TestCase):
     is held back lands on the view that holds nothing back."""
 
     def setUp(self):
-        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(user)
-        ManagedResource.objects.create(
-            key="internal-name",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.test", "answer": "192.0.2.10"},
-        )
+        operator(self.client)
+        declare("internal-name", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"})
 
     def bar(self, url=None, **params):
         """The view the bar's select has chosen, the number it says is shown

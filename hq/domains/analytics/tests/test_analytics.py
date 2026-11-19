@@ -8,7 +8,6 @@ them.
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -21,6 +20,7 @@ from hq.platform.application.markup_testing import hrefs, text
 from hq.platform.application.report_testing import bridged
 from hq.platform.application.resources import InvalidResourceInput, list_resource
 from hq.platform.application.security import AuthorizationError, Capability, Principal
+from hq.platform.core.testing import SignedInTestCase, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 SITE_TAG = "0" * 32
@@ -464,11 +464,7 @@ class WindowTests(TestCase):
         self.assertEqual(service.breakdown(RumDaily.Dimension.PATH), [])
 
 
-class OverviewPageTests(TestCase):
-    def setUp(self):
-        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(user)
-
+class OverviewPageTests(SignedInTestCase):
     def test_it_says_so_plainly_before_the_first_sweep(self):
         response = self.client.get("/analytics/")
 
@@ -505,8 +501,7 @@ class OverviewPageTests(TestCase):
 
 class ContentSectionTrafficTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(user)
+        operator(self.client)
         self.read = ContentItem.objects.create(
             title="Read",
             slug="read",

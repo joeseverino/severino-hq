@@ -2,7 +2,6 @@
 
 from datetime import UTC, datetime, timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -24,6 +23,7 @@ from hq.platform.application.tests import test_github_estate as estate
 from hq.platform.application.tests.test_github_estate import store
 from hq.platform.application.tests.test_github_posture import kept
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import MCP_READER, operator
 
 URL = "https://github.com/example/alpha"
 
@@ -76,7 +76,7 @@ class DependencyUpdatesTests(TestCase):
 
     def test_a_principal_without_project_writes_is_denied(self):
         store(access=kept())
-        reader = Principal("example-reader", "mcp", frozenset({Capability.READ}))
+        reader = MCP_READER
 
         result = switch("alpha", {"dependency_updates": True}, principal=reader)
 
@@ -108,7 +108,7 @@ class DependencyUpdatesTests(TestCase):
         self.assertEqual(result["error"]["code"], "invalid_input")
 
     def test_the_project_page_links_the_command(self):
-        self.client.force_login(get_user_model().objects.create_user("project-reader"))
+        operator(self.client)
 
         response = self.client.get(reverse("projects:detail", args=["alpha"]))
 
@@ -128,7 +128,7 @@ OPEN = {
 
 class UpdatesSurfaceTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("updates-reader"))
+        operator(self.client)
         self.project = Project.objects.create(
             name="Alpha", slug="alpha", repository_url=URL, dependency_updates=True, status=Project.Status.ACTIVE
         )
@@ -243,7 +243,7 @@ class LastRunSurfaceTests(TestCase):
     """The project page and record say when the last run was and how it ended."""
 
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("runs-reader"))
+        operator(self.client)
         self.project = Project.objects.create(name="Alpha", slug="alpha", repository_url=URL, dependency_updates=True)
         store()
         # A controller reports to this HQ, so a run asked for is one it takes.

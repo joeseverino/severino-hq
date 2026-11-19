@@ -4,7 +4,6 @@ import tempfile
 from decimal import Decimal
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
@@ -17,6 +16,7 @@ from hq.domains.receipts.validation import MAX_RECEIPT_BYTES, validate_receipt_f
 from hq.platform.application.markup_testing import elements, links, select, text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import InputError
+from hq.platform.core.testing import operator
 
 
 def _receipt(**fields):
@@ -31,7 +31,7 @@ def _edit_post(**overrides):
 
 class ReceiptLinkTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("receipt-reader"))
+        operator(self.client)
         self.expense = Expense.objects.create(
             date="2030-01-02", vendor="Example Host", item="Hosting", total_cost=Decimal("12.00")
         )
@@ -114,7 +114,7 @@ class ReceiptEditTests(TestCase):
     """An edit holds a file to the receipt file rules only when it brings a new one."""
 
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("receipt-editor"))
+        operator(self.client)
         media = tempfile.TemporaryDirectory()
         self.addCleanup(media.cleanup)
         storage = Receipt._meta.get_field("file").storage
@@ -143,7 +143,7 @@ class ReceiptPageFileTests(TestCase):
     image, a link to anything else, and what is wrong when there is none."""
 
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("receipt-viewer"))
+        operator(self.client)
         media = tempfile.TemporaryDirectory()
         self.addCleanup(media.cleanup)
         storage = Receipt._meta.get_field("file").storage

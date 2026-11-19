@@ -3,7 +3,6 @@ cuts HQ's own way to a machine says so before it is pressed."""
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -18,6 +17,7 @@ from hq.platform.application.controller import ControllerReport, report_operatio
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal
+from hq.platform.core.testing import declare, operator
 
 LIFECYCLE = (OperationRequest.Action.RESTART, OperationRequest.Action.START, OperationRequest.Action.STOP)
 HOST = "example-host"
@@ -41,10 +41,8 @@ def containers(*states: tuple[str, str, int]) -> None:
     ProviderInventory.objects.filter(pk=row.pk).update(updated_at=timezone.now() - timedelta(minutes=1))
 
 
-def declare(name: str) -> ManagedResource:
-    return ManagedResource.objects.create(
-        key=name, kind=CONTAINER_KIND, spec={"connection_ref": "example-portainer", "host": HOST, "name": name}
-    )
+def container(name: str) -> ManagedResource:
+    return declare(name, CONTAINER_KIND, {"connection_ref": "example-portainer", "host": HOST, "name": name})
 
 
 def asked() -> set[str]:
@@ -54,10 +52,8 @@ def asked() -> set[str]:
 class Estate(TestCase):
     def setUp(self):
         managing_everything()
-        ManagedResource.objects.create(
-            key=HOST, kind="machine", spec={"name": HOST, "role": "Docker host", "addresses": ["192.0.2.10"]}
-        )
-        self.client.force_login(get_user_model().objects.create_user(username="operator", password="x" * 20))
+        declare(HOST, "machine", {"name": HOST, "role": "Docker host", "addresses": ["192.0.2.10"]})
+        operator(self.client)
 
 
 class ReadBackTests(Estate):
@@ -66,7 +62,7 @@ class ReadBackTests(Estate):
         # A controller that arrived a moment ago, to take what is asked.
         cadence.note_controller()
         containers(("example-web", "running", 8080))
-        self.web = declare("example-web")
+        self.web = container("example-web")
 
     def press(self, action):
         with self.captureOnCommitCallbacks(execute=True):
@@ -141,8 +137,8 @@ class SelfDependencyTests(Estate):
         reader.endpoint = "http://192.0.2.10:9000"
         reader.reaches = [HOST, "example-edge"]
         reader.save(update_fields=["endpoint", "reaches"])
-        self.portainer = declare("example-portainer")
-        declare("example-web")
+        self.portainer = container("example-portainer")
+        container("example-web")
 
     def confirm(self, key):
         return self.client.get(reverse("control_plane:stop", kwargs={"key": key}))
@@ -178,9 +174,7 @@ class LoopbackSelfDependencyTests(Estate):
 
     def setUp(self):
         super().setUp()
-        ManagedResource.objects.create(
-            key="example-edge", kind="machine", spec={"name": "example-edge", "addresses": ["192.0.2.20"]}
-        )
+        declare("example-edge", "machine", {"name": "example-edge", "addresses": ["192.0.2.20"]})
         ProviderInventory.objects.create(
             kind=CONTAINER_KIND,
             records=[
@@ -194,11 +188,11 @@ class LoopbackSelfDependencyTests(Estate):
         reader.controller_id = HOST
         reader.reaches = [HOST, "example-edge"]
         reader.save(update_fields=["endpoint", "controller_id", "reaches"])
-        declare("example-portainer")
-        ManagedResource.objects.create(
-            key="example-agent",
-            kind=CONTAINER_KIND,
-            spec={"connection_ref": "example-portainer", "host": "example-edge", "name": "example-agent"},
+        container("example-portainer")
+        declare(
+            "example-agent",
+            CONTAINER_KIND,
+            {"connection_ref": "example-portainer", "host": "example-edge", "name": "example-agent"},
         )
 
     def test_stopping_the_container_on_the_controllers_machine_warns(self):
@@ -221,7 +215,7 @@ class ReportReadBackTests(Estate):
         # A controller that arrived a moment ago, to take what is asked.
         cadence.note_controller()
         containers(("example-web", "running", 8080))
-        self.web = declare("example-web")
+        self.web = container("example-web")
 
     def report(self, action, *, success=True):
         operation = OperationRequest.objects.create(

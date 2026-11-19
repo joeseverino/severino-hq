@@ -4,13 +4,13 @@ import re
 import threading
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.platform.application.markup_testing import text, with_class
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import SignedInTestCase, operator
 from hq_sdk.testing import plain
 
 from ..models import HEARTBEAT_GRACE, Job
@@ -72,7 +72,7 @@ class JobRunnerTests(TransactionTestCase):
     def test_a_job_is_recorded_against_a_person_or_nobody(self):
         from django.contrib.auth.models import AnonymousUser
 
-        person = get_user_model().objects.create_user("operator", password="unused-password")
+        person = operator()
 
         signed_in = self.wait(start("test.person", "Person", lambda progress: {}, requested_by=person))
         signed_out = self.wait(start("test.nobody", "Nobody", lambda progress: {}, requested_by=AnonymousUser()))
@@ -128,7 +128,7 @@ class JobRunnerTests(TransactionTestCase):
         self.assertEqual(self.wait(start("test.orphan", "Again", lambda progress: {})).state, Job.State.SUCCEEDED)
 
     def test_how_it_ended_is_audited_and_attributed(self):
-        user = get_user_model().objects.create_user("operator", password="x" * 14)
+        user = operator()
         job = self.wait(start("test.audited", "Audited", lambda p: {"rows": 3}, requested_by=user))
 
         entry = AuditLog.objects.filter(action=AuditLog.Action.DONE, object_id=str(job.pk)).first()
@@ -250,11 +250,7 @@ class ReapTests(TestCase):
         Job.objects.create(kind="test.blocked", label="Next")  # must not raise
 
 
-class JobStatusViewTests(TestCase):
-    def setUp(self):
-        self.user = get_user_model().objects.create_user("watcher", password="x" * 14)
-        self.client.force_login(self.user)
-
+class JobStatusViewTests(SignedInTestCase):
     def test_status_reports_what_a_watching_page_needs(self):
         job = Job.objects.create(
             kind="test.status",
@@ -359,7 +355,7 @@ class JobListOrderTests(TestCase):
     """What failed on its last run leads the list and is named above it."""
 
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client, "owner", email="owner@example.test")
         now = timezone.now()
 
         def ran(kind, label, state, hours_ago):
@@ -422,7 +418,7 @@ class JobNameTests(TestCase):
     nobody reading the list is shown."""
 
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client, "owner", email="owner@example.test")
 
     def test_a_declared_job_reads_by_its_declared_name_whatever_its_run_stored(self):
         from hq.platform.application.outbound_work import declared_work

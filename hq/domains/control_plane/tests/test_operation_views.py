@@ -1,11 +1,10 @@
 """A verb pressed on a record's page is its capability, run as the operator."""
 
-from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 
-from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource, OperationRequest
+from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, OperationRequest
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.approval_review import asked, preview
@@ -19,6 +18,7 @@ from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal, web_principal
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 
 CONTAINER = {"connection_ref": "example-portainer", "host": "example-host", "name": "example-web"}
 LIFECYCLE = (OperationRequest.Action.RESTART, OperationRequest.Action.START, OperationRequest.Action.STOP)
@@ -33,9 +33,8 @@ def agent(actor="example-agent", interface="mcp"):
 class LifecycleVerbTests(TestCase):
     def setUp(self):
         managing_everything()
-        self.container = ManagedResource.objects.create(key="example-web", kind=CONTAINER_KIND, spec=CONTAINER)
-        self.user = get_user_model().objects.create_user(username="operator", password="test-only-password")
-        self.client.force_login(self.user)
+        self.container = declare("example-web", CONTAINER_KIND, CONTAINER)
+        self.user = operator(self.client)
 
     def press(self, action, **data):
         return self.client.post(reverse(f"control_plane:{action}", kwargs={"key": "example-web"}), form_keyed(data))
@@ -78,10 +77,8 @@ class LifecycleVerbTests(TestCase):
 class RemovalVerbTests(TestCase):
     def setUp(self):
         managing_everything()
-        ManagedResource.objects.create(
-            key="example-dns", kind="adguard.rewrite", spec={"domain": "app.example.com", "answer": "192.0.2.10"}
-        )
-        self.client.force_login(get_user_model().objects.create_user(username="operator", password="x" * 20))
+        declare("example-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": "192.0.2.10"})
+        operator(self.client)
 
     def test_removal_is_queued_and_audited_under_the_operator(self):
         response = self.client.post(
@@ -112,8 +109,8 @@ class AgentStopTests(TestCase):
 
     def setUp(self):
         managing_everything()
-        ManagedResource.objects.create(key="example-web", kind=CONTAINER_KIND, spec=CONTAINER)
-        self.operator = web_principal(get_user_model().objects.create_user(username="operator", password="x" * 20))
+        declare("example-web", CONTAINER_KIND, CONTAINER)
+        self.operator = web_principal(operator())
 
     def stop(self, principal):
         return execute_capability(STOP, keyed({"reason": "Example."}), principal=principal, target="example-web")
@@ -163,8 +160,8 @@ class ConfirmedVerbTests(TestCase):
 
     def setUp(self):
         managing_everything()
-        ManagedResource.objects.create(key="example-web", kind=CONTAINER_KIND, spec=CONTAINER)
-        self.client.force_login(get_user_model().objects.create_user(username="operator", password="x" * 20))
+        declare("example-web", CONTAINER_KIND, CONTAINER)
+        operator(self.client)
 
     def test_a_verb_is_confirmed_on_a_page_of_its_own_exactly_when_its_capability_is_destructive(self):
         registry = capability_registry()

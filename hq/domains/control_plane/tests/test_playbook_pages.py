@@ -7,7 +7,6 @@ scan's read, which View diff opens, each drawn from what the estate stored."""
 import json
 from urllib.parse import urlsplit
 
-from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -18,6 +17,7 @@ from hq.platform.application.markup_testing import elements, select, text, with_
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 XHR = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"}
 
@@ -366,7 +366,7 @@ class PlaybooksPageTests(TestCase):
         from hq.platform.application.roles import Role, assign
 
         newest = self.newest()
-        viewer = get_user_model().objects.create_user(username="example-viewer", password=None)
+        viewer = operator()
         assign(viewer, Role.VIEWER)
         self.client.force_login(viewer)
         posts = _posts(self.page())

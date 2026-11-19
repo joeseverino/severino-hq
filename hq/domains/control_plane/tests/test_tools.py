@@ -3,21 +3,16 @@
 from datetime import UTC, datetime
 from unittest import mock
 
-from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core.testing import SignedInTestCase
 
 ADDRESS = "203.0.113.7"
 
 
-class ToolsRefreshTests(TestCase):
-    def setUp(self):
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
-
+class ToolsRefreshTests(SignedInTestCase):
     def test_a_get_never_asks_for_a_refresh(self):
         with mock.patch("hq.domains.control_plane.tool_views.execute_posted", return_value={"ok": True}) as execute:
             self.client.get(
@@ -61,12 +56,8 @@ def _sent(response, form):
     }
 
 
-class ToolsFormTests(TestCase):
+class ToolsFormTests(SignedInTestCase):
     """Each lookup is the shared form, asked by a GET whose fields are the query its link builds."""
-
-    def setUp(self):
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
 
     def _page(self, query, result):
         with mock.patch("hq.domains.control_plane.tool_views.execute_posted", return_value=result):
