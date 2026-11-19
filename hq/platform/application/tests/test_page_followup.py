@@ -9,13 +9,14 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
-from hq.platform.application.markup_testing import elements, hrefs, select, text, texts
+from hq.platform.application.markup_testing import elements, hrefs, select, text
 from hq.platform.core.testing import declare, operator
 
 from ..entity_links import entity_link
 from ..projection import projection_scope
 from ..public_registry import public_endpoints
 from ..relationships import relationships_for
+from ..resources import get_resource
 from ..security import Capability, Principal
 from ..topology_model import RELATIONS
 from ..zone_insights import services as services_card
@@ -60,7 +61,7 @@ class PublicEndpointTests(TestCase):
 
         self.assertEqual(found, (("2001:db8:0:1::/64", "Example ISP"),))
 
-    def test_the_machine_page_shows_the_prefix_once(self):
+    def test_the_machine_names_the_prefix_once(self):
         store(
             "tailscale.device",
             {
@@ -70,15 +71,14 @@ class PublicEndpointTests(TestCase):
                 "endpoints": ["203.0.113.7:41641", "[2001:db8:0:1::a1]:41641", "[2001:db8:0:1::b2]:41641"],
             },
         )
-        login(self.client)
 
         with mock.patch("hq.platform.application.reach.DOCUMENTATION", (ip_network("192.0.2.0/24"),)):
-            response = self.client.get(reverse("control_plane:machine", args=["example-laptop"]))
+            read = get_resource("machines", "example-laptop", principal=READER)
 
-        shown = texts(response, "code")
+        shown = [item["address"] for item in read["header_addresses"]]
         self.assertEqual(shown.count("2001:db8:0:1::/64"), 1)
         self.assertIn("203.0.113.7", shown)
-        self.assertNotContains(response, "2001:db8:0:1::a1")
+        self.assertNotIn("2001:db8:0:1::a1", str(read))
 
 
 class WhenTextFilterTests(TestCase):

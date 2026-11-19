@@ -10,7 +10,8 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.markup_testing import elements, links, select, text
-from hq.platform.core.testing import operator
+from hq.platform.application.resources import get_resource
+from hq.platform.core.testing import READER, operator
 
 
 class _Signed(TestCase):
@@ -124,10 +125,11 @@ class ExpenseListTests(_Signed):
             date="2030-01-02", vendor="Example Registrar", item="Domain", related_documentation=record
         )
 
-        response = self.client.get(expense.get_absolute_url())
+        read = get_resource("expenses", expense.pk, principal=READER)
 
-        (link,) = select(response, "title", "rb-example-renewal")
-        self.assertEqual(link.text.strip(), "Renew the example domain")
+        self.assertEqual(
+            (read["related_documentation"], read["document_title"]), ("rb-example-renewal", "Renew the example domain")
+        )
 
     def test_an_expense_with_no_receipt_offers_to_upload_one_for_it(self):
         expense = Expense.objects.create(date="2030-01-02", vendor="Example Host", item="Hosting")

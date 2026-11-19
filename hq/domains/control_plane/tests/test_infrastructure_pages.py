@@ -16,10 +16,12 @@ from hq.platform.application.finding_model import Finding
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.markup_testing import actions, hrefs, select, text
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.resource_refusals import INFRASTRUCTURE
+from hq.platform.application.resources import get_resource
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.consent import consented
 from hq.platform.application.topology_model import TopologyNode
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import READER, declare, operator
 
 from ..models import DashboardMachine, ManagedResource, OperationRequest, ProviderConnection
 from ..provider_adapters.cloudflare import _dns_record_readout
@@ -129,14 +131,11 @@ class InfrastructureWebTests(TestCase):
             },
         )
 
-        response = self.client.get(reverse("control_plane:detail", kwargs={"key": proxy.key}))
+        read = get_resource(INFRASTRUCTURE, proxy.key, principal=READER)
 
-        self.assertEqual(response.context["resource"]["provider_machine"]["name"], "example-host")
-        self.assertEqual(response.context["resource"]["origin_machine"]["name"], "app-server")
         # Two edges: the machine its provider runs on and the one it forwards to.
-        links = hrefs(response)
-        for name in ("example-host", "app-server"):
-            self.assertIn(reverse("control_plane:machine", kwargs={"name": name}), links)
+        for edge, name in (("provider_machine", "example-host"), ("origin_machine", "app-server")):
+            self.assertEqual(read[edge], {"name": name, "url": reverse("control_plane:machine", kwargs={"name": name})})
 
     def test_public_certificate_download_never_serves_private_key(self):
         self.resource.status = {"certificate_pem": "-----BEGIN PRIVATE KEY-----\nunsafe\n"}

@@ -33,6 +33,7 @@ from ..inventory_testing import store
 from ..machines import machine, machine_catalog
 from ..projection import projection_scope
 from ..public_registry import wanted_addresses
+from ..resources import get_resource
 from ..security import Capability, Principal
 from ..tailnet_presence import tailnet_presence
 from .glance_readings import HOST, reported_hour, reported_machine, reported_weather
@@ -580,10 +581,12 @@ class MachineRoleTests(TestCase):
         self.assertEqual(self.roles("example-unapproved"), [])
 
 
-def addresses(response):
-    return [
-        (item["label"], item["address"], item["holder"]) for item in response.context["machine"]["header_addresses"]
-    ]
+def addresses(name):
+    """What a machine's record says each of its addresses is, as its page's header draws them."""
+
+    with PUBLIC_RANGE:
+        read = get_resource("machines", name, principal=READ)
+    return [(item["label"], item["address"], item["holder"]) for item in read["header_addresses"]]
 
 
 class PublicAddressTests(TestCase):
@@ -616,19 +619,15 @@ class PublicAddressTests(TestCase):
             self.assertEqual(public_address("192.0.2.4"), "")
             self.assertEqual(public_address("10.0.0.20"), "")
 
-    def test_the_machine_page_names_the_holder(self):
+    def test_the_machine_names_the_holder(self):
         store(
             "registry.address",
             {"address": "203.0.113.7", "organization": "Example Hosting", "read_at": timezone.now().isoformat()},
         )
-        operator(self.client)
-
-        with PUBLIC_RANGE:
-            response = self.client.get(reverse("control_plane:machine", args=["example-vps"]))
 
         # A private address no other device shares is the provider's network, not a LAN.
         self.assertEqual(
-            addresses(response),
+            addresses("example-vps"),
             [("Tailnet", "100.64.0.10", ""), ("Public", "203.0.113.7", "Example Hosting")],
         )
 
@@ -657,26 +656,17 @@ class PublicAddressTests(TestCase):
             ),
             *extra,
         )
-        operator(self.client)
-
-    def header(self, name):
-        with PUBLIC_RANGE:
-            return self.client.get(reverse("control_plane:machine", args=[name]))
 
     def test_a_device_behind_a_shared_address_shows_its_lan_and_no_public_address(self):
         self.home()
-        response = self.header("example-phone")
 
-        self.assertEqual(addresses(response), [("Tailnet", "100.64.0.11", ""), ("LAN", "10.0.50.23", "")])
-        self.assertNotContains(response, "203.0.113.9")
+        self.assertEqual(addresses("example-phone"), [("Tailnet", "100.64.0.11", ""), ("LAN", "10.0.50.23", "")])
 
     def test_a_container_bridge_is_not_the_lan(self):
         self.home()
 
-        self.assertIn(("LAN", "10.0.50.40", ""), addresses(self.header("example-docker-host")))
-        self.assertNotIn(
-            "LAN", [label for label, _address, _holder in addresses(self.header("example-other-docker-host"))]
-        )
+        self.assertIn(("LAN", "10.0.50.40", ""), addresses("example-docker-host"))
+        self.assertNotIn("LAN", [label for label, _address, _holder in addresses("example-other-docker-host")])
 
     def test_an_address_inside_an_advertised_subnet_route_is_the_lan(self):
         self.home(
@@ -688,7 +678,7 @@ class PublicAddressTests(TestCase):
             )
         )
 
-        self.assertIn(("LAN", "10.0.60.5", ""), addresses(self.header("example-router")))
+        self.assertIn(("LAN", "10.0.60.5", ""), addresses("example-router"))
 
     def test_a_special_purpose_address_is_not_public(self):
         from ..reach import is_public
@@ -704,25 +694,22 @@ class PublicAddressTests(TestCase):
 class ContainerVisibilityTests(TestCase):
     def setUp(self):
         devices(device("example-host", addresses=["100.64.0.20"]))
-        operator(self.client)
 
-    def page(self):
-        return self.client.get(reverse("control_plane:machine", args=["example-host"]))
-
-    def listing(self):
-        return self.client.get(reverse("control_plane:machines"))
+    def read(self):
+        return get_resource("machines", "example-host", principal=READ)
 
     def test_no_connection_reads_containers_so_none_are_not_visible(self):
-        self.assertContains(self.listing(), "Not visible")
-        # The machine's own page draws no box for what it cannot see.
-        self.assertFalse(self.page().context["machine"]["containers"])
+        self.assertFalse(self.read()["containers_visible"])
+        self.assertFalse(self.read()["containers"])
+        operator(self.client)
+        self.assertContains(self.client.get(reverse("control_plane:machines")), "Not visible")
 
     def test_a_connected_container_reader_makes_none_a_reading(self):
         from ..services import CONTAINER_KIND
 
         store(CONTAINER_KIND)
 
-        self.assertNotContains(self.listing(), "Not visible")
+        self.assertTrue(self.read()["containers_visible"])
 
 
 class EstateQueryBudgetTests(TestCase):

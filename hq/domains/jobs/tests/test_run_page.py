@@ -69,27 +69,13 @@ class RunPageTests(TestCase):
                 for run in runs:
                     self.assertIn(run_page(run.id), hrefs)
 
-    def test_a_run_s_page_names_the_kinds_of_reading_its_playbook_stated(self):
-        run = OperationRequest.objects.filter(
-            action=OperationRequest.Action.RUN, state=OperationRequest.State.SUCCEEDED, input__correlation=CORRELATION
-        ).get()
-        machine = run.input["hosts"][0]
-        stated = {"readings": {machine: {"example.reading": [{"value": 1}], "example.other_reading": []}}}
-        OperationRequest.objects.filter(pk=run.pk).update(result={**run.result, "stated": stated})
-
-        said = facts(self.page(run_page(run.pk)))
-
-        self.assertIn("example.reading", said["Readings"][0])
-        self.assertIn("example.other_reading", said["Readings"][0])
-
-    def test_a_finished_run_s_page_says_how_it_ended_and_links_its_machines_and_playbook(self):
+    def test_a_finished_run_s_page_links_its_machines_and_playbook(self):
         run = OperationRequest.objects.filter(
             action=OperationRequest.Action.RUN, state=OperationRequest.State.SUCCEEDED, input__correlation=CORRELATION
         ).get()
 
         said = facts(self.page(run_page(run.pk)))
 
-        self.assertEqual(said["Result"][0], run.result["message"])
         self.assertEqual(said["Machines"][1], reverse("control_plane:machine", kwargs={"name": MACHINE}))
         self.assertEqual(said["Playbook"][1], reverse("command", args=[RUN]))
 

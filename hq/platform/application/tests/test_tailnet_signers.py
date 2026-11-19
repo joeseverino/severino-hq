@@ -1,11 +1,11 @@
 """Which devices can sign for tailnet lock, and the finding when a server can."""
 
 from django.test import TestCase
-from django.urls import reverse
 
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import READER, declare
 
 from ..inventory_testing import store
+from ..resources import get_resource
 
 PHONE_KEY = "tlpub:" + "a1" * 32
 SERVER_KEY = "tlpub:" + "b2" * 32
@@ -32,12 +32,10 @@ def tailnet(*, signers=(), enabled=True):
 
 
 class SignerTests(TestCase):
-    def test_the_machine_page_says_its_device_signs(self):
+    def test_the_machine_says_its_device_signs(self):
         tailnet(signers=(PHONE_KEY,))
-        operator(self.client)
 
-        signing = self.client.get(reverse("control_plane:machine", args=["example-phone"]))
-        other = self.client.get(reverse("control_plane:machine", args=["example-server"]))
-
-        self.assertContains(signing, "Signing device")
-        self.assertNotContains(other, "Signing device")
+        for name, signs in (("example-phone", True), ("example-server", False)):
+            with self.subTest(name):
+                presence = get_resource("machines", name, principal=READER)["presence"]
+                self.assertEqual(presence["signs_tailnet_lock"], signs)

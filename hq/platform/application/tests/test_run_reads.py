@@ -61,7 +61,7 @@ class ReadOneRunTests(RunReadTestCase):
         self.assertEqual(run["operation_id"], operation_id)
         self.assertEqual(run["playbook"], RESTART)
         self.assertEqual(run["capability"], f"automation.{RESTART}.run")
-        self.assertEqual(run["state"], "succeeded")
+        self.assertEqual((run["state"], run["headline"]), ("succeeded", "Restarted."))
         self.assertEqual(run["hosts"], [APP])
         self.assertEqual(run["correlation"], "example-investigation-7")
         queued = AuditLog.objects.get(object_id=operation_id, action=AuditLog.Action.CREATED)
@@ -97,7 +97,7 @@ class ReadOneRunTests(RunReadTestCase):
 
         run = get_resource(RUNS, operation_id, principal=MCP_READER)
 
-        self.assertEqual((run["state"], run["worker"]), ("running", WORKER))
+        self.assertEqual((run["state"], run["worker"], run["headline"]), ("running", WORKER, ""))
         self.assertIsNotNone(run["lease_until"])
 
     def test_a_scan_of_the_source_is_read_as_a_run_of_no_playbook(self):

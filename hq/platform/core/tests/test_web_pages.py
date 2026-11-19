@@ -22,9 +22,10 @@ from hq.platform.application.cadence_testing import controller_arrived
 from hq.platform.application.labels import DOT
 from hq.platform.application.markup_testing import elements, hrefs, select, text, with_class
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.resources import get_resource
 from hq.platform.application.tests.glance_readings import HOST, reported_machine
 from hq.platform.application.tests.host_only import host_only
-from hq.platform.core.testing import SignedInTestCase, declare
+from hq.platform.core.testing import READER, SignedInTestCase, declare
 from hq_sdk.testing import plain
 
 
@@ -244,10 +245,10 @@ class DashboardWorkflowTests(SignedInTestCase):
         DashboardMachine.objects.create(machine=machine)
 
         dashboard = self.client.get("/")
-        machine_page = self.client.get("/infrastructure/machines/example-host/")
+        load = get_resource("machines", "example-host", principal=READER)["load"]
 
         self.assertIn("9%", text(dashboard))
-        self.assertIn("9%", text(machine_page))
+        self.assertIn("9%", [metric["value"] for metric in load["metrics"]])
 
     def test_dashboard_refresh_is_one_explicit_controller_request(self):
         machine = declare("example-host", "machine", {"name": "example-host"})
