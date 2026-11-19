@@ -19,6 +19,7 @@ class WithheldTests(SimpleTestCase):
             "{{ on|timesince }}",
             "{{ on|timeuntil }}",
             '{% now "Y" %}',
+            "{{ n|pluralize }}",
             "{% load humanize %}{{ on|naturaltime }}",
         ):
             with self.subTest(source), self.assertRaises(TemplateSyntaxError):

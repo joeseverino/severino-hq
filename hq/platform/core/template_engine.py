@@ -24,9 +24,11 @@ lazy from django.conf import settings
 lazy from hq.platform.application.plugins import installed_plugin_apps
 lazy from hq.platform.core.hand_drawn import hand_drawn
 
-# What each builtin library loses, by the module Django names it with.
+# What each builtin library loses, by the module Django names it with: a
+# moment is written by ``when``, and a count by ``counted``, whose phrase
+# agrees its verb as ``pluralize`` cannot.
 WITHHELD = {
-    "django.template.defaultfilters": frozenset({"date", "time", "timesince", "timeuntil"}),
+    "django.template.defaultfilters": frozenset({"date", "time", "timesince", "timeuntil", "pluralize"}),
     "django.template.defaulttags": frozenset({"now"}),
 }
 

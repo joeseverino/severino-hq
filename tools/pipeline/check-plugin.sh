@@ -65,7 +65,7 @@ host_tool() {
 }
 ast_grep=$(host_tool ast-grep)
 typos=$(host_tool typos)
-"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^(cell-read-by-its-text|absent-text-read-from-the-text|page-read-by-what-it-says|attention-item-says-why|attention-why-restates-rating|threshold-says-what-clears-it|query-added-by-with-query)$' \
+"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^(cell-read-by-its-text|absent-text-read-from-the-text|page-read-by-what-it-says|attention-item-says-why|attention-why-restates-rating|threshold-says-what-clears-it|query-added-by-with-query|plural-said-by-counted)$' \
     --error=unused-suppression --report-style medium src
 "$typos" --config "$hq_root/_typos.toml" .
 

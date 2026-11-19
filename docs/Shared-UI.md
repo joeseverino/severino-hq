@@ -284,6 +284,15 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `stretched-shape` | A round shape or text inside a stretched drawing, which distorts it. | a dot as a zero-length line of class chart-dot, and a label in the unscaled svg.chart-labels layer |
 | `table` | A table drawn outside its region. | `{% table_region "Label" %}` around its `<table class="data-table">` |
 | `muted` | Muted words drawn by hand, where the muted tag draws them. | `{% muted %}`...`{% endmuted %}`, or `{% muted element="p" css="..." %}` for a paragraph |
+| `typed-mark` | A dot or an arrow typed as text, which a reader hears and a line may strand. | `{% dot %}` between two parts, a .dot-list for a run of parts, `{% arrow %}` after a link |
+| `figure-in-chip` | A figure inside a chip, which is a word. | the figure in a band of facts, a numeric column or a sentence |
+| `counted-fold` | A list folded at a count, which hides parts its line has room for. | `{% line_list %}`, which shows as many parts as the line holds |
+| `cut-count` | A count cut off from the words it counts. | `<h2>`Words `<span class="count">`N`</span>``</h2>`, or {{ n\|counted:"thing" }} |
+| `code-block` | A code block a keyboard cannot reach, though it scrolls in its own box. | `<pre tabindex="0">` |
+| `control-in-summary` | A control inside a summary, which is the control that opens its disclosure. | the link or button in the disclosure's body |
+| `nested-form` | A form opened inside a form, whose opening tag the parser drops, so the inner form's end closes the outer one. | one form, or the second after the first closes |
+| `open-comment` | A comment left open on its line, which Django prints on the page. | {# #} closed on its line, or `{% comment %}` for a longer note |
+| `page-title` | A page title that is empty, or names the site, which the layout appends after it. | `{% block title %}` naming the page alone |
 
 ## Each part's rules
 

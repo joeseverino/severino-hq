@@ -3,7 +3,6 @@
 import re
 from importlib import import_module
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
@@ -17,92 +16,8 @@ from hq.platform.core.middleware import LoginRequiredMiddleware
 from hq.platform.core.testing import person
 from hq_sdk.testing import plain
 
-from .apart import apart
 from .facts import scan
-from .source import template_files
 from .test_view_writes import routed_modules, shown
-
-
-@tag("source")
-class TemplateCommentTests(SimpleTestCase):
-    """Django's {# #} comment is single-line only.
-
-    A multi-line one is not a comment: it renders verbatim into the page. The
-    failure is invisible in review because it looks exactly like a comment.
-    The rule is ``interface_text.open_comment_lines``; ``InterfaceTextTests``
-    holds every template of HQ and of each installed extension to it.
-    """
-
-    def test_a_comment_closed_on_its_line_is_fine(self):
-        from hq.platform.core.interface_text import open_comment_lines
-
-        self.assertEqual(open_comment_lines("<p>{# one #} and {# two #}</p>\n"), [])
-
-    def test_a_comment_left_open_is_found_on_the_line_that_opens_it(self):
-        from hq.platform.core.interface_text import open_comment_lines
-
-        source = "<p>{# closed #} fine</p>\n<p>{# closed #} {# left\n   open #}</p>\n"
-
-        self.assertEqual(open_comment_lines(source), [2])
-
-    def test_a_template_root_is_read_whole(self):
-        from hq.platform.core.interface_text import unclosed_template_comments
-
-        with TemporaryDirectory() as root:
-            Path(root, "partials").mkdir()
-            Path(root, "page.html").write_text("<p>{# fine #}</p>\n", encoding="utf-8")
-            Path(root, "partials", "_row.html").write_text("<td>\n{# left\n   open #}</td>\n", encoding="utf-8")
-
-            self.assertEqual(unclosed_template_comments(root), ["partials/_row.html:2"])
-
-    def test_the_sdk_exports_the_same_walk(self):
-        from hq.platform.core import interface_text
-        from hq_sdk import testing
-
-        self.assertIs(testing.unclosed_template_comments, interface_text.unclosed_template_comments)
-
-
-@tag("source", "tree")
-@reads("**/templates/**")
-class PageTitleTests(SimpleTestCase):
-    """A page names itself; the site name is appended once, by the layout.
-
-    Left to each page, a title either omits the site name or hardcodes a string
-    ``SEVERINO_SITE_NAME`` is allowed to change. A title is not visible from
-    inside the page that has it, so neither shows up in review.
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        pattern = re.compile(r"\{%\s*block title\s*%\}(.*?)\{%\s*endblock", re.DOTALL)
-        found = ((name, pattern.search(path.read_text(encoding="utf-8"))) for name, path in template_files())
-        cls.titles = {name: match.group(1).strip() for name, match in found if match and name != "base.html"}
-
-    def test_no_page_appends_the_site_name_itself(self):
-        offenders = [
-            f"{name}: {leaf}" for name, leaf in self.titles.items() if "SITE_NAME" in leaf or "Severino HQ" in leaf
-        ]
-        self.assertEqual(
-            offenders,
-            [],
-            "base.html appends the site name: a page block names only itself",
-        )
-
-    def test_every_page_names_itself(self):
-        offenders = [name for name, leaf in self.titles.items() if not leaf]
-        self.assertEqual(
-            offenders,
-            [],
-            "an empty title block renders as the site name preceded by a separator",
-        )
-
-    def test_the_layout_is_what_appends_it(self):
-        base = Path(__file__).resolve().parents[4] / "templates" / "base.html"
-        self.assertIn(
-            "{% block title %}{% endblock %} · {{ SITE_NAME }}",
-            base.read_text(encoding="utf-8"),
-        )
 
 
 class CountedTests(SimpleTestCase):
@@ -129,50 +44,16 @@ class CountedTests(SimpleTestCase):
         self.assertEqual(plain(rendered), "1 thing needs you")
 
 
-@tag("tree")
-@reads("**/*.html", "**/*.py", "!**/tests/**", lists=("**",))
-class InterfaceTextTests(SimpleTestCase):
-    """What HQ and its extensions show people, read from source in one pass.
-
-    A gate reads it, here, its walk run apart. A running HQ never does: a
-    system check runs before every management command, at every container start.
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        from hq.platform.core import interface_text
-
-        super().setUpClass()
-        cls.reading = interface_text.read(run=apart)
-
-    def _places(self, found):
-        return [f"{path}:{line}" + (f": {why[0]}" if why else "") for path, line, *why in found]
-
-    def test_the_pass_read_the_source(self):
-        self.assertGreater(self.reading.files, 300, "The interface text pass read almost nothing")
-
-    def test_no_plural_built_by_hand(self):
-        """Use counted(n, one, many) or {{ n|counted:"one,many" }}."""
-        self.assertEqual(self._places(self.reading.hand_plurals), [])
-
-    def test_no_form_opened_inside_another(self):
-        """Close the outer form first, or point the control at a form with form="id"."""
-        self.assertEqual(self._places(self.reading.nested_forms), [])
-
-    def test_no_template_comment_is_left_open(self):
-        """A {# #} comment ends on its own line. Use {% comment %}…{% endcomment %} for more."""
-        self.assertEqual(self._places(self.reading.open_comments), [])
-
-    def test_every_counted_phrase_agrees(self):
-        """Give both forms: counted(n, "zone band", "zone bands")."""
-        self.assertEqual(self._places(self.reading.unagreeable_counts), [])
+class SystemCheckTests(SimpleTestCase):
+    """A system check runs before every management command, at every container
+    start, so none that runs by default reads source."""
 
     def test_no_system_check_that_runs_by_default_reads_source(self):
         import inspect
 
         from django.core.checks.registry import registry
 
-        reads_source = re.compile(r"\b(ast\.parse|rglob|os\.walk|read_text|interface_text)\b")
+        reads_source = re.compile(r"\b(ast\.parse|rglob|os\.walk|read_text)\b")
         checked = 0
         for check in registry.get_checks(include_deployment_checks=False):
             module = inspect.getmodule(check)

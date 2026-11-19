@@ -1,0 +1,21 @@
+# A plural guessed from a letter ("s" if n != 1 else "") agrees the noun and
+# forgets the verb ("1 need output"). counted takes the whole phrase in both
+# forms, and refuses one whose verb cannot agree. The plugin check runs this
+# rule over each extension too.
+id: plural-said-by-counted
+language: python
+severity: error
+message: A plural is guessed from a letter.
+note: Write counted(n, "one", "many"), or {{ n|counted:"one,many" }} in a template.
+ignores:
+  - "**/tests/**"
+  - "**/migrations/**"
+rule:
+  kind: conditional_expression
+  all:
+    - has:
+        kind: string
+        regex: ^['"]e?s['"]$
+    - has:
+        kind: string
+        regex: ^(''|"")$

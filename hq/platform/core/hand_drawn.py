@@ -20,6 +20,8 @@ from django.template.base import Lexer, TokenType, tag_re
 # A template comment, which no page receives, and a template tag or value.
 _COMMENT_TAG = re.compile(r"\{%-?\s*(end)?comment\b.*?%\}", re.DOTALL)
 _DJANGO = re.compile(r"\{%.*?%\}|\{\{.*?\}\}", re.DOTALL)
+# A `{#` its line never closes, which Django prints as text.
+OPEN_COMMENT = re.compile(r"\{#(?![^\n]*#\})")
 # An element's start tag, read where template tags are masked; an HTML
 # comment or an end tag, which bound a run of text too.
 _START = re.compile(r"<([a-zA-Z][\w-]*)\b[^<>]*>")
@@ -273,6 +275,19 @@ def _cut_counts(source: Source) -> Iterator[int]:
         if "counted" not in filters and ("length" in filters or re.search(r"(?:^|[._])count$", name)):
             yield match.start()
     yield from (match.start() for match in _COUNT_IN_PARENTHESES.finditer(text))
+
+
+def _nested_forms(source: Source) -> Iterator[int]:
+    """Each form opened while another is open."""
+
+    depth = 0
+    for match in re.finditer(r"<(/?)form\b", source.masked, re.IGNORECASE):
+        if match.group(1):
+            depth = max(depth - 1, 0)
+            continue
+        depth += 1
+        if depth > 1:
+            yield match.start()
 
 
 # The value tags that write a figure together with its own words, each joined
@@ -665,6 +680,34 @@ SHAPES = (
         ),
         refuses=('<summary>More <a href="{{ url }}">all</a></summary>',),
         keeps=("<summary>More</summary>",),
+    ),
+    Shape(
+        name="nested-form",
+        said="A form opened inside a form, whose opening tag the parser drops, so the inner form's end closes the outer one.",
+        instead="one form, or the second after the first closes",
+        find=_nested_forms,
+        refuses=('<form method="post"><form method="post"></form></form>',),
+        keeps=('<form method="post"></form><form method="post"></form>',),
+    ),
+    Shape(
+        name="open-comment",
+        said="A comment left open on its line, which Django prints on the page.",
+        instead="{# #} closed on its line, or {% comment %} for a longer note",
+        find=lambda source: (match.start() for match in OPEN_COMMENT.finditer(source.text)),
+        refuses=("{# A note\nthat runs on #}",),
+        keeps=("{# A note #}\n{% comment %}\nA longer note\n{% endcomment %}",),
+    ),
+    Shape(
+        name="page-title",
+        said="A page title that is empty, or names the site, which the layout appends after it.",
+        instead="{% block title %} naming the page alone",
+        find=matched(
+            r"\{%\s*block title\s*%\}(?:\s*\{%\s*endblock|(?:(?!\{%\s*endblock).)*?(?:SITE_NAME|Severino HQ))",
+            re.DOTALL,
+        ),
+        refuses=("{% block title %}{% endblock %}", "{% block title %}Machines · {{ SITE_NAME }}{% endblock %}"),
+        keeps=("{% block title %}Machines{% endblock %}",),
+        drawn_by={"base.html": "the layout, which appends the site name to each page's title"},
     ),
 )
 
