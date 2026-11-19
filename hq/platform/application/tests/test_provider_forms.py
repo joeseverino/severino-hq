@@ -10,7 +10,6 @@ is documentation whether or not it was meant to be.
 
 from dataclasses import replace
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -18,6 +17,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import text, with_class
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core.testing import declare, operator
 
 from ..provider_forms import spec_form_class
 
@@ -66,12 +66,7 @@ class GeneratedFieldTests(TestCase):
         # text, so one has to exist for the form to have a valid answer: the
         # same reason the page that offers this form is only reachable from a
         # domain.
-        ManagedResource.objects.create(
-            key="example-com",
-            kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": "cf-example"},
-            enabled=True,
-        )
+        declare("example-com", "cloudflare.zone", {"zone": "example.com", "connection_ref": "cf-example"}, enabled=True)
         form = spec_form_class("cloudflare.dns_record")(
             {
                 "zone": "example.com",
@@ -169,9 +164,8 @@ class IdentityFieldTests(TestCase):
         self.assertEqual(form.spec["domain"], "renamed.example.com")
 
     def test_the_edit_page_warns_that_the_old_name_stops_resolving(self):
-        user = get_user_model().objects.create_user(username="operator", password="test-only-password")
-        self.client.force_login(user)
-        ManagedResource.objects.create(key="app-dns", kind="adguard.rewrite", spec=REWRITE)
+        operator(self.client)
+        declare("app-dns", "adguard.rewrite", REWRITE)
 
         response = self.client.get(reverse("control_plane:edit", kwargs={"key": "app-dns"}))
 
@@ -185,8 +179,7 @@ class ResourceFormViewTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        self.user = get_user_model().objects.create_user(username="operator", password="test-only-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
 
     def test_declaring_a_resource_writes_desired_state(self):
         """Creating asks what HQ cannot know, and derives the rest.
@@ -254,7 +247,7 @@ class ResourceFormViewTests(TestCase):
         problem. A create never stops to demand a different value for a field
         that is not shown and does not matter.
         """
-        ManagedResource.objects.create(key="app-example-com-dns", kind="adguard.rewrite", spec=REWRITE)
+        declare("app-example-com-dns", "adguard.rewrite", REWRITE)
 
         self.client.post(
             reverse("control_plane:create"),
@@ -352,10 +345,10 @@ class ResourceFormViewTests(TestCase):
 
         from .test_certificates import SEAL_PUBLIC_KEY
 
-        ManagedResource.objects.create(
-            key="example-npm-target",
-            kind="tls.delivery_target",
-            spec={"kind": "npm", "connection_ref": "example-npm", "name": "example-proxy"},
+        declare(
+            "example-npm-target",
+            "tls.delivery_target",
+            {"kind": "npm", "connection_ref": "example-npm", "name": "example-proxy"},
         )
         # Pasted into the wrong boxes: no certificate and no key.
         material = {"fullchain": "not a certificate", "private_key": "not a key"}

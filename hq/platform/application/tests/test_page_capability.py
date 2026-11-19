@@ -2,7 +2,6 @@
 
 from uuid import uuid4
 
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
@@ -14,7 +13,7 @@ from hq.platform.application.security import Capability
 from hq.platform.core.audit import record_event
 from hq.platform.core.middleware import LoginRequiredMiddleware
 from hq.platform.core.models import AuditLog
-from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 from hq_sdk.testing import holding
 from hq_sdk.web import CapabilityRequiredMixin, capability_required
 
@@ -26,8 +25,7 @@ SECRET = "example-only-the-audit-log-holds-this"
 
 
 def _person(username: str, role: str):
-    with no_default_role():
-        user = get_user_model().objects.create_user(username)
+    user = person(username=username)
     if role:
         roles.assign(user, role)
     return user

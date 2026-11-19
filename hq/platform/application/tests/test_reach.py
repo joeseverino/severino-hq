@@ -4,7 +4,7 @@ from unittest import mock
 
 from django.test import SimpleTestCase, TestCase
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ..exposure import exposure_of_name
 from ..projection import projection_scope
@@ -89,10 +89,8 @@ class AccessListReachTests(TestCase):
     """Reach never names a wider audience than the proxy in front admits."""
 
     def setUp(self):
-        ManagedResource.objects.create(key="lab-1", kind="machine", spec={"name": "lab-1", "addresses": ["10.0.0.5"]})
-        ManagedResource.objects.create(
-            key="edge-1", kind="machine", spec={"name": "edge-1", "addresses": ["198.51.100.20"]}
-        )
+        declare("lab-1", "machine", {"name": "lab-1", "addresses": ["10.0.0.5"]})
+        declare("edge-1", "machine", {"name": "edge-1", "addresses": ["198.51.100.20"]})
         store(
             "adguard.rewrite", {"domain": "home.example.com", "answer": "10.0.0.5", "connection_ref": "example-adguard"}
         )

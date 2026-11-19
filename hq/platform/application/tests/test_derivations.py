@@ -32,6 +32,7 @@ from hq.platform.application.tests.test_code_identity import FIRST, PACKAGE, SEC
 from hq.platform.core import revisions
 from hq.platform.core.bench import seed
 from hq.platform.core.models import ActionItemRead, Revision, UpstreamReading
+from hq.platform.core.testing import operator
 
 READING = UpstreamReading._meta.db_table
 # A window the seeded estate has events in.
@@ -633,11 +634,9 @@ class ActionItemCountTests(TestCase):
         self.assertEqual(again.context["profile_action_count"], first.context["profile_action_count"] - 1)
 
     def test_another_person_holds_another_validator(self):
-        from django.contrib.auth import get_user_model
 
         etag = self.client.get(self.url).headers["ETag"]
-        other = get_user_model().objects.create_superuser("other", "other@example.com", "x")
-        self.client.force_login(other)
+        operator(self.client)
 
         again = self.client.get(self.url, headers={"if-none-match": etag})
 

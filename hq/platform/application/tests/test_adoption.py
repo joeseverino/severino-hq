@@ -1,6 +1,5 @@
 """Only a connection that manages adopts, and an operator's "not managed" sticks."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -8,6 +7,7 @@ from hq.domains.control_plane.models import ManagedResource, NotManaged, Provide
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 
 from ..adoption import AdoptCommand, adopt, unmanaged
 from ..adoption_testing import connection
@@ -77,8 +77,7 @@ class ObservingConnectionTests(TestCase):
 
     def test_the_domain_page_offers_no_manage_button(self):
         swept()
-        user = get_user_model().objects.create_user("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
 
@@ -114,11 +113,7 @@ class ManagingConnectionTests(TestCase):
     def test_a_record_naming_none_needs_every_connection_of_its_kind_to_manage(self):
         connection("cloudflare_dns", "example-dns")
         connection("cloudflare_dns", "example-other", manages=False)
-        ManagedResource.objects.create(
-            key="example-com",
-            kind=ZONE_KIND,
-            spec={"zone": "example.com", "connection_ref": "example-dns"},
-        )
+        declare("example-com", ZONE_KIND, {"zone": "example.com", "connection_ref": "example-dns"})
 
         swept()
 
@@ -147,8 +142,7 @@ class StopManagingSticksTests(TestCase):
     def setUp(self):
         connection("cloudflare_dns", "example-dns")
         swept()
-        self.user = get_user_model().objects.create_user("operator", password="x" * 20)
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
 
     def forget(self):
         key = ManagedResource.objects.get(kind=ZONE_KIND).key
@@ -296,10 +290,10 @@ class OperatorOwnedRouteTests(TestCase):
     def test_the_file_hq_writes_names_only_what_it_declares(self):
         from ..infrastructure import resolved_spec
 
-        declared = ManagedResource.objects.create(
-            key="app-example-com-caddy",
-            kind=self.KIND,
-            spec={"connection_ref": "example-edge", "domain": "app.example.com", "upstream": "app:8080"},
+        declared = declare(
+            "app-example-com-caddy",
+            self.KIND,
+            {"connection_ref": "example-edge", "domain": "app.example.com", "upstream": "app:8080"},
         )
         self.sweep()
 

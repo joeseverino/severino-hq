@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ...tone import Tone
 from ..service_world import declare_world, healthy
@@ -44,7 +44,7 @@ def on_estate(read: dict, *declared: tuple[str, str, dict], raises: tuple[Raised
         for kind, records in read.items():
             store(kind, *records)
         for key, kind, spec in declared:
-            ManagedResource.objects.create(key=key, kind=kind, spec=spec)
+            declare(key, kind, spec)
         return PUBLIC_RANGE
 
     return Example(given=given, raises=raises)
@@ -57,9 +57,7 @@ def declared(*rows: Callable[[], object], raises: tuple[str, ...] = ()) -> Examp
 def rewrite(key: str, domain: str, answer: str) -> Callable[[], object]:
     """An internal answer HQ declares, read healthy."""
 
-    return lambda: healthy(
-        ManagedResource.objects.create(key=key, kind="adguard.rewrite", spec={"domain": domain, "answer": answer})
-    )
+    return lambda: healthy(declare(key, "adguard.rewrite", {"domain": domain, "answer": answer}))
 
 
 CONSISTENT = on_estate({})

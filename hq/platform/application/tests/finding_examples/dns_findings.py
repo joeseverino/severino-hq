@@ -1,4 +1,4 @@
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from . import Example, Examples, Raised, connection
 
@@ -20,9 +20,7 @@ def served() -> None:
     """A resolver, and a name it rewrites to a service HQ declares."""
 
     adguard()
-    ManagedResource.objects.create(
-        key="idle-rewrite", kind="adguard.rewrite", spec={"domain": "idle.example.com", "answer": "100.64.0.10"}
-    )
+    declare("idle-rewrite", "adguard.rewrite", {"domain": "idle.example.com", "answer": "100.64.0.10"})
 
 
 def dns(ref: str = ADGUARD, **said) -> dict:

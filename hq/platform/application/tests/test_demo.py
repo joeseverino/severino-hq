@@ -3,7 +3,6 @@
 from datetime import date
 from decimal import Decimal
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -11,6 +10,7 @@ from hq.platform.application.markup_testing import with_class, within
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 from ..demo import amount, day, demo_scope, label, showing_demo
 
@@ -111,8 +111,7 @@ class SubstitutionTests(TestCase):
 
 class ToggleTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(self.user)
+        self.user = operator(self.client, "op")
 
     def test_it_is_off_until_it_is_turned_on_and_survives_the_page(self):
         self.assertFalse(self.client.get(reverse("dashboard")).wsgi_request.showing_demo)
@@ -220,8 +219,7 @@ class ToggleTests(TestCase):
         self.client.post(reverse("demo_mode"), form_keyed())
         self.client.post(reverse("logout"))
 
-        other = get_user_model().objects.create_user("other", password="x" * 20)
-        self.client.force_login(other)
+        operator(self.client, "other")
 
         self.assertFalse(self.client.get(reverse("dashboard")).wsgi_request.showing_demo)
 
@@ -232,7 +230,7 @@ class DoorTests(TestCase):
     def test_a_viewer_may_switch_it(self):
         from hq.platform.application import roles
 
-        viewer = get_user_model().objects.create_user("viewer", password="x" * 20)
+        viewer = operator(username="viewer")
         roles.assign(viewer, roles.Role.VIEWER)
         self.client.force_login(viewer)
 

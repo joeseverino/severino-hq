@@ -7,7 +7,6 @@ that separates them. Getting that wrong does not fail loudly: adoption silently
 keeps one record of nine, and a reconciliation edits whichever the provider
 happened to return first."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from pydantic import ValidationError
@@ -16,6 +15,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.cloudflare import DNS_RECORD_TYPES, DNS_RECORD_TYPES_BY_ID
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.testing import declare, operator
 
 from ..adoption import AdoptCommand, adopt, unmanaged, unmanaged_services
 from ..adoption_testing import managing_everything
@@ -326,12 +326,7 @@ class UnrepresentableRecordTests(TestCase):
 
     def setUp(self):
         managing_everything(*DNS_CONNECTIONS)
-        ManagedResource.objects.create(
-            key="example-com",
-            kind=ZONE_KIND,
-            spec={"zone": "example.com", "connection_ref": "cf-example"},
-            enabled=True,
-        )
+        declare("example-com", ZONE_KIND, {"zone": "example.com", "connection_ref": "cf-example"}, enabled=True)
         self.records = [
             record("example.com", "A", "203.0.113.1", rid="a1"),
             record("_sip._tcp.example.com", "SRV", "10 5 5060 sip.example.com", rid="s1"),
@@ -406,10 +401,10 @@ class AliasRecordPlacementTests(TestCase):
     """
 
     def _record(self, key, name, content):
-        ManagedResource.objects.create(
-            key=key,
-            kind=RECORD_KIND,
-            spec={
+        declare(
+            key,
+            RECORD_KIND,
+            {
                 "zone": "example.com",
                 "name": name,
                 "record_type": "CNAME",
@@ -446,8 +441,7 @@ class AliasRecordPlacementTests(TestCase):
         self.assertEqual(alias, "www.example.com")
 
     def test_it_appears_on_the_page_it_belongs_to(self):
-        user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "example.com"}))
 

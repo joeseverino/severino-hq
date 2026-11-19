@@ -3,7 +3,6 @@
 from datetime import date
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
@@ -11,6 +10,7 @@ from django.views.generic import CreateView, DeleteView, UpdateView
 
 from hq.domains.expenses.models import Expense
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core.testing import SignedInTestCase
 
 from ..domains import host_records, load
 from ..expenses import ExpenseCommand, save_expense
@@ -30,10 +30,7 @@ def _refuse_vendor(self):
     raise ValidationError({"vendor": "Refused by the model."})
 
 
-class OneRuleTests(TestCase):
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("operator", password="unused-test-pass"))
-
+class OneRuleTests(SignedInTestCase):
     def test_a_model_rule_refuses_the_web_and_the_command_alike(self):
         with mock.patch.object(Expense, "clean", _refuse_vendor):
             response = self.client.post(

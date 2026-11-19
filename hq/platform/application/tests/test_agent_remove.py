@@ -2,7 +2,6 @@
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -13,6 +12,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
+from hq.platform.core.testing import operator
 
 from ..capabilities import capability_registry, execute_capability
 from ..linked_accounts import bind_sign_in, sign_in_subject
@@ -51,7 +51,7 @@ def _rule(subject: str, capability: str = "project.create") -> CapabilityRule:
 
 class RemovalTests(TestCase):
     def setUp(self):
-        self.person = get_user_model().objects.create_user("op", password="x" * 20)
+        self.person = operator(username="op")
         self.key = "example-key"
         bind_sign_in(self.person, self.key)
         self.row = _seen(AGENT, person_key=self.key)
@@ -152,8 +152,7 @@ class WhoMayRemoveTests(TestCase):
 class RemoveControlTests(TestCase):
     def setUp(self):
         _seen(AGENT)
-        self.person = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(self.person)
+        self.person = operator(self.client, "op")
 
     def _post(self, data):
         return self.client.post(reverse("agent_block"), form_keyed(data))
@@ -193,7 +192,7 @@ class RemoveControlTests(TestCase):
 @API
 class SignInAfterRemovalTests(Doors, TestCase):
     def setUp(self):
-        self.person = get_user_model().objects.create_user(username="operator", password="test-only-password")
+        self.person = operator()
         bind_sign_in(self.person, sign_in_subject(ISSUER, PERSON))
         self.enterContext(a_tailnet((LAPTOP, LAPTOP_AT, LAPTOP_ID)))
 

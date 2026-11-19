@@ -4,7 +4,6 @@ field left out keeps what the record holds; a new record takes its defaults."""
 from datetime import date
 from decimal import Decimal
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
@@ -12,6 +11,7 @@ from hq.domains.assets.models import Asset
 from hq.domains.calendars.models import Entry
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.core.testing import SignedInTestCase, operator
 
 from ..action_links import command_url
 from ..assets import serialize_asset
@@ -166,11 +166,8 @@ class AnUpdateKeepsWhatItWasNotSentTests(TestCase):
         self.assertEqual(Project.objects.get(slug="example-new").status, Project.Status.IDEA)
 
 
-class TheWebFormsWriteEveryFieldTests(TestCase):
+class TheWebFormsWriteEveryFieldTests(SignedInTestCase):
     """A record's web form posts every field it shows, so a field left blank there is cleared."""
-
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("operator", password="unused-test-pass"))
 
     def test_an_asset_form_clears_a_blank_field_and_sets_the_rest(self):
         Asset.objects.create(item_name="Example box", slug="example-box", notes="Old.", business_use_percentage=40)
@@ -216,7 +213,7 @@ class TheCommandFormKeepsWhatIsLeftBlankTests(TestCase):
     update may be sent without is left out, so the record keeps it."""
 
     def test_an_asset_update_form_filled_with_only_its_cost_changes_only_its_cost(self):
-        self.client.force_login(get_user_model().objects.create_superuser("operator", password="unused-test-pass"))
+        operator(self.client)
         Asset.objects.create(item_name="Example box", slug="example-box", notes="Kept.", vendor="Example Supply")
 
         response = self.client.post(

@@ -1,6 +1,5 @@
 """The machine page with a realistic tailnet: reached-through, the facts panel, relations."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -9,13 +8,13 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import hrefs, text, texts
+from hq.platform.core.testing import READER, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import connection_readings
 from ..entity_links import entity_link
 from ..machines import machine, machine_catalog
 from ..relationships import relationships_for
-from ..security import Capability, Principal
 from ..tailnet import TAILNET_KIND
 
 CONTROLLER = "example-controller"
@@ -87,9 +86,6 @@ def estate():
     store(npm_kind(), reachable=False, connected=False, error="No connection.")
 
 
-READER = Principal("reader", "test", frozenset({Capability.READ}))
-
-
 class ReachedThroughTests(TestCase):
     def setUp(self):
         estate()
@@ -112,8 +108,7 @@ class ReachedThroughTests(TestCase):
         self.assertEqual(machine("example-host").reached_by, ("other-tailnet",))
 
     def test_the_list_page_and_header_name_the_connection(self):
-        user = get_user_model().objects.create_user("machine-op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         listing = self.client.get(reverse("control_plane:machines"))
         page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
@@ -179,8 +174,7 @@ class PanelTests(TestCase):
         )
 
     def test_the_page_renders_the_section_without_an_unrelated_not_readable_line(self):
-        user = get_user_model().objects.create_user("panel-op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
 

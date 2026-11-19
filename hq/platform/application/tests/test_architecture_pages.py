@@ -14,7 +14,7 @@ from hq.platform.application.routes import routed
 from hq.platform.application.security import operator_capabilities
 from hq.platform.application.tests.reads import reads
 from hq.platform.core.middleware import LoginRequiredMiddleware
-from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 from hq_sdk.testing import plain
 
 from .apart import apart
@@ -243,8 +243,7 @@ class PageReadCapabilityTests(TestCase):
         return True
 
     def test_a_person_who_holds_nothing_opens_no_page(self):
-        with no_default_role():
-            nobody = get_user_model().objects.create_user("nobody")
+        nobody = person(username="nobody")
         opened = [
             f"{each.path} {each.view.__module__}.{each.view.__qualname__}"
             for each in self._pages()

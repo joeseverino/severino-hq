@@ -8,19 +8,17 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
+from hq.platform.core.testing import MANAGER
 
 from ..derivation_testing import uncached
 from ..findings import estate_findings
 from ..projection import projection_scope
-from ..security import Capability, Principal
 from ..tailnet import unworn_tags
 from .test_paths import PUBLIC_RANGE, estate, store
 
-OPERATOR = Principal("operator", "test", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-
 
 def raised(rule):
-    return estate_findings(principal=OPERATOR, rule=rule)
+    return estate_findings(principal=MANAGER, rule=rule)
 
 
 @PUBLIC_RANGE
@@ -34,7 +32,7 @@ class ContradictionTests(TestCase):
 
         def queries(scope):
             with uncached(), CaptureQueriesContext(connection) as ran, scope:
-                estate_findings(principal=OPERATOR)
+                estate_findings(principal=MANAGER)
             return len(ran.captured_queries)
 
         self.assertEqual(queries(nullcontext()), queries(projection_scope()))

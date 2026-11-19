@@ -2,13 +2,13 @@
 
 from typing import Any
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule
 from hq.platform.application.markup_testing import select, text
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 from ..approval_review import asked, preview
 from ..approvals import AUDIT_LABEL, DECLARATIONS
@@ -81,8 +81,7 @@ class HeldRequestWordsTests(TestCase):
         self.assertEqual(event.message, str(asked(self.held)))
 
     def test_the_decision_card_says_it_in_words(self):
-        user = get_user_model().objects.create_user(username="reviewer", password="test-only-password")
-        self.client.force_login(user)
+        operator(self.client, "reviewer")
 
         entry = self.client.get(reverse("core:approval_entry", kwargs={"approval_id": self.held.id}), follow=True)
 
@@ -95,8 +94,7 @@ class HeldRequestWordsTests(TestCase):
         """The dashboard's card and the queue's row say what Approve decides
         (the survey's `cut decisions` holds it whole)."""
 
-        user = get_user_model().objects.create_superuser("reviewer", "reviewer@example.test", "x" * 20)
-        self.client.force_login(user)
+        operator(self.client, "reviewer", email="reviewer@example.test")
         (item,) = waiting_for_approval()
 
         for page in (reverse("dashboard"), reverse("action_items")):
@@ -105,8 +103,7 @@ class HeldRequestWordsTests(TestCase):
                 self.assertIn(" ".join(item.explanation.split()), details)
 
     def test_its_card_on_the_dashboard_opens_its_own_page(self):
-        user = get_user_model().objects.create_superuser("reviewer", "reviewer@example.test", "x" * 20)
-        self.client.force_login(user)
+        operator(self.client, "reviewer", email="reviewer@example.test")
 
         dashboard = self.client.get(reverse("dashboard"))
 

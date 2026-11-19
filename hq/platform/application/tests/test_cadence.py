@@ -12,14 +12,12 @@ from types import SimpleNamespace
 from unittest import mock
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import (
-    ManagedResource,
     OperationRequest,
     ProviderConnection,
     ProviderInventory,
@@ -27,6 +25,7 @@ from hq.domains.control_plane.models import (
 )
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 
 from .. import cadence, readings
 from ..cadence import (
@@ -169,11 +168,7 @@ class DoorbellTests(TestCase):
         self.settings_override, self.directory = markers()
         self.settings_override.enable()
         self.addCleanup(self.settings_override.disable)
-        self.resource = ManagedResource.objects.create(
-            key="a-rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.1"},
-        )
+        self.resource = declare("a-rewrite", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.1"})
 
     def test_queueing_work_rings_it(self):
         # Rung on commit, so the host is never told about an operation a
@@ -243,8 +238,7 @@ class ActivityTests(TestCase):
         self.settings_override, self.directory = markers()
         self.settings_override.enable()
         self.addCleanup(self.settings_override.disable)
-        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
 
     def test_opening_a_page_counts_as_using_hq(self):
         self.client.get(reverse("control_plane:services"))
@@ -557,11 +551,7 @@ class PassDueTests(TestCase):
         self.addCleanup(self.settings_override.disable)
         # Read a minute ago and idle: no sweep is due.
         swept(age_seconds=60)
-        self.resource = ManagedResource.objects.create(
-            key="a-rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "192.0.2.1"},
-        )
+        self.resource = declare("a-rewrite", "adguard.rewrite", {"domain": "app.example.com", "answer": "192.0.2.1"})
 
     def operation(self, **fields):
         return OperationRequest.objects.create(

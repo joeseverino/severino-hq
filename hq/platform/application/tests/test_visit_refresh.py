@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.core import signing
 from django.db import connection
 from django.test import Client, SimpleTestCase, TestCase, override_settings, tag
@@ -15,11 +14,12 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory, ReadRequest
+from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.providers import registry_label
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 
 from .. import cadence, visit_refresh
 from ..asks import REFRESHING, Standing, read_standing, watched
@@ -432,11 +432,7 @@ class SubjectTests(TestCase):
         self.assertEqual(visit_refresh.reads_of("service", "example.test"), Reads())
 
     def test_a_service_is_read_through_the_kinds_its_declarations_are(self):
-        ManagedResource.objects.create(
-            key="example-rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.test", "answer": "192.0.2.10"},
-        )
+        declare("example-rewrite", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"})
 
         self.assertEqual(visit_refresh.reads_of("service", "app.example.test").kinds, ("adguard.rewrite",))
 
@@ -521,7 +517,7 @@ class VisitRefreshViewTests(TestCase):
     def setUp(self):
         # A controller that arrived a moment ago.
         controller_arrived()
-        self.user = get_user_model().objects.create_user(username="someone", password="not-used-here")
+        self.user = operator()
         self.url = reverse("control_plane:visit")
         store(FAST, age=OLD)
 

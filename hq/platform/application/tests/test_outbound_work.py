@@ -19,7 +19,6 @@ from pathlib import Path
 from unittest import mock
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.test import (
@@ -51,6 +50,7 @@ from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import serving
+from hq.platform.core.testing import operator
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
 from hq_sdk.outbound import Failed, ask, run_now
 from hq_sdk.testing import OutboundInRequest, held_jobs, reaches_out
@@ -124,8 +124,7 @@ class ComposedExample(TestCase):
         reading.start()
         self.addCleanup(reading.stop)
 
-        self.user = get_user_model().objects.create_user("operator", password="x")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
         self.page = reverse("example_plugin:index")
         self.route = reverse("jobs:ask", args=[example.LOOKUP])
 
@@ -605,7 +604,7 @@ class HostWorkTests(TestCase):
                 ask("example.work")
             with self.assertRaises(ImproperlyConfigured):
                 capability_for(own())
-            self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+            operator(self.client)
             response = self.client.post(reverse("jobs:ask", args=["example.work"]), form_keyed({}))
         self.assertEqual(response.status_code, 404)
         self.assertFalse(Job.objects.exists())

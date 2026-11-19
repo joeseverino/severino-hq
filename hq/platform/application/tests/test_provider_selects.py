@@ -14,7 +14,6 @@ from typing import Annotated
 from unittest import mock
 
 from django import forms
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils.datastructures import MultiValueDict
@@ -24,6 +23,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import all_elements, select
+from hq.platform.core.testing import declare, operator
 
 from ..plugins import import_reference
 from ..provider_forms import spec_form_class
@@ -182,8 +182,8 @@ class EditPageTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        self.client.force_login(get_user_model().objects.create_user(username="operator", password="test-only"))
-        ManagedResource.objects.create(key="web-container", kind="portainer.container", spec=self.SPEC)
+        operator(self.client)
+        declare("web-container", "portainer.container", self.SPEC)
         self.url = reverse("control_plane:edit", kwargs={"key": "web-container"})
 
     def test_the_page_offers_the_held_portainer_and_machine_and_saves_them_unchanged(self):

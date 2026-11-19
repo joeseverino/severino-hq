@@ -3,7 +3,6 @@
 from datetime import datetime, timedelta
 from itertools import pairwise
 
-from django.contrib.auth import get_user_model
 from django.db import connection as database_connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -14,6 +13,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderConnection,
 from hq.domains.control_plane.topology_views import TopologyView
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.markup_testing import hrefs, links, select, text, texts, within
+from hq.platform.core.testing import NOBODY, READER, declare, operator
 from hq_sdk.testing import plain
 
 from ..action_links import topology_investigation_links, topology_url
@@ -24,18 +24,13 @@ from ..security import Capability
 from ..topology import derive_topology, topology as serialized_topology
 from ..topology_lenses import apply_lens, lens_for, topology_lenses
 from .host_only import host_only
-from .topology_principals import MANAGE, NONE, READ
+from .topology_principals import MANAGE
 
 
 class TopologyPageTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(self.user)
-        ManagedResource.objects.create(
-            key="internal-name",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.test", "answer": "192.0.2.10"},
-        )
+        self.user = operator(self.client)
+        declare("internal-name", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"})
 
     def test_page_is_progressively_enhanced_and_actions_remain_real_forms(self):
         from hq.platform.application.adoption_testing import managing_everything
@@ -128,10 +123,10 @@ class TopologyPageTests(TestCase):
             ("caa-issue", '0 issue "ca.example.net"'),
             ("caa-iodef", '0 iodef "mailto:a@example.com"'),
         ):
-            ManagedResource.objects.create(
-                key=key,
-                kind="cloudflare.dns_record",
-                spec={"zone": "example.com", "name": "example.com", "record_type": "CAA", "content": content},
+            declare(
+                key,
+                "cloudflare.dns_record",
+                {"zone": "example.com", "name": "example.com", "record_type": "CAA", "content": content},
             )
 
         response = self.page(lens="everything")
@@ -188,26 +183,19 @@ class TopologyPageTests(TestCase):
         carries both.
         """
 
-        ManagedResource.objects.create(
-            key="behind-name",
-            kind="adguard.rewrite",
-            spec={"domain": "behind.example.test", "answer": "192.0.2.11"},
+        declare(
+            "behind-name",
+            "adguard.rewrite",
+            {"domain": "behind.example.test", "answer": "192.0.2.11"},
             status={"domain": "behind.example.test"},
             last_observed_at=timezone.now() - timedelta(hours=3),
             generation=4,
             observed_generation=2,
         )
-        ManagedResource.objects.create(
-            key="disabled-name",
-            kind="adguard.rewrite",
-            spec={"domain": "off.example.test", "answer": "192.0.2.12"},
-            enabled=False,
+        declare(
+            "disabled-name", "adguard.rewrite", {"domain": "off.example.test", "answer": "192.0.2.12"}, enabled=False
         )
-        ManagedResource.objects.create(
-            key="example-authority",
-            kind="pki.authority",
-            spec={"name": "Example Root"},
-        )
+        declare("example-authority", "pki.authority", {"name": "Example Root"})
 
         response = self.body("resource:behind-name")
         disabled = self.body("resource:disabled-name")
@@ -334,7 +322,7 @@ class FocusedPageTests(TestCase):
 
     def project(self):
         with host_only():
-            return derive_topology(principal=READ)
+            return derive_topology(principal=READER)
 
 
 class ConnectionActionTests(TestCase):
@@ -350,7 +338,7 @@ class ConnectionActionTests(TestCase):
             **overrides,
         )
 
-    def project(self, spec, principal=READ):
+    def project(self, spec, principal=READER):
         with offering(spec, alone=True):
             return derive_topology(principal=principal)
 
@@ -432,7 +420,7 @@ class ConnectionActionTests(TestCase):
                 ),
             )
         )
-        ability = next(n for n in self.project(spec, READ).nodes if n.id == "ability:example.declared:example.rotate")
+        ability = next(n for n in self.project(spec, READER).nodes if n.id == "ability:example.declared:example.rotate")
 
         self.assertEqual([a.name for a in ability.actions], ["focus"])
 
@@ -448,13 +436,9 @@ class TopologyLensTests(TestCase):
     """A lens narrows the one projection; it never derives a second one."""
 
     def setUp(self):
-        ManagedResource.objects.create(
-            key="observed-zone",
-            kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": "example-cloudflare"},
-        )
-        self.unobserved = ManagedResource.objects.create(
-            key="lonely-record", kind="adguard.rewrite", spec={"domain": "app.example.test", "answer": "192.0.2.10"}
+        declare("observed-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "example-cloudflare"})
+        self.unobserved = declare(
+            "lonely-record", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"}
         )
         ProviderConnection.objects.create(
             controller_id="example-controller",
@@ -469,7 +453,7 @@ class TopologyLensTests(TestCase):
 
     def project(self):
         with host_only():
-            return derive_topology(principal=READ)
+            return derive_topology(principal=READER)
 
     def narrowed(self, name):
         lens = lens_for(name)
@@ -487,7 +471,7 @@ class TopologyLensTests(TestCase):
         self.assertNotIn("resource:observed-zone", selected)
 
     def test_a_lens_selects_resources_no_ability_governs(self):
-        ManagedResource.objects.create(key="unclaimed-kind", kind="example.unclaimed", spec={})
+        declare("unclaimed-kind", "example.unclaimed")
         selected = {n.id for n in self.narrowed("ungoverned-resources").nodes}
         self.assertIn("resource:unclaimed-kind", selected)
         self.assertNotIn("resource:observed-zone", selected)
@@ -495,13 +479,9 @@ class TopologyLensTests(TestCase):
     def test_a_lens_finds_what_a_sweep_skipped_while_confirming_siblings(self):
         """Health describes the last observation's content, never its age."""
         now = timezone.now()
-        fresh = ManagedResource.objects.create(
-            key="swept-record", kind="adguard.rewrite", spec={"domain": "fresh.example.test", "answer": "192.0.2.20"}
-        )
-        skipped = ManagedResource.objects.create(
-            key="skipped-record",
-            kind="adguard.rewrite",
-            spec={"domain": "skipped.example.test", "answer": "192.0.2.21"},
+        fresh = declare("swept-record", "adguard.rewrite", {"domain": "fresh.example.test", "answer": "192.0.2.20"})
+        skipped = declare(
+            "skipped-record", "adguard.rewrite", {"domain": "skipped.example.test", "answer": "192.0.2.21"}
         )
         ManagedResource.objects.filter(pk=fresh.pk).update(last_observed_at=now)
         ManagedResource.objects.filter(pk=skipped.pk).update(last_observed_at=now - timedelta(days=4))
@@ -530,8 +510,8 @@ class TopologyLensTests(TestCase):
 
     def test_serialization_names_the_applied_lens(self):
         with host_only():
-            applied = serialized_topology(principal=READ, lens="unobserved-resources")
-            whole = serialized_topology(principal=READ)
+            applied = serialized_topology(principal=READER, lens="unobserved-resources")
+            whole = serialized_topology(principal=READER)
         self.assertEqual(applied["lens"], "unobserved-resources")
         self.assertLess(applied["summary"]["nodes"], whole["summary"]["nodes"])
 
@@ -541,16 +521,16 @@ class TopologyLensTests(TestCase):
             uncached(),
         ):
             with CaptureQueriesContext(database_connection) as whole:
-                serialized_topology(principal=READ)
+                serialized_topology(principal=READER)
             with CaptureQueriesContext(database_connection) as narrowed:
-                serialized_topology(principal=READ, lens="unobserved-resources")
+                serialized_topology(principal=READER, lens="unobserved-resources")
         self.assertEqual(len(narrowed), len(whole))
 
     def test_discovery_offers_every_lens_and_withholds_them_without_read(self):
         with host_only():
-            offered = command_center("", principal=READ)["views"]
-            denied = command_center("", principal=NONE)["views"]
-            matched = command_center("ungoverned", principal=READ)["views"]
+            offered = command_center("", principal=READER)["views"]
+            denied = command_center("", principal=NOBODY)["views"]
+            matched = command_center("ungoverned", principal=READER)["views"]
         self.assertEqual([i.name for i in offered], [lens.name for lens in topology_lenses()])
         self.assertEqual(denied, ())
         self.assertEqual([i.name for i in matched], ["ungoverned-resources"])

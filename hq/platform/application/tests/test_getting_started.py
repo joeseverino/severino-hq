@@ -1,9 +1,9 @@
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from hq.domains.control_plane.models import DashboardMachine, ManagedResource, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import DashboardMachine, ProviderConnection, ProviderInventory
 from hq.platform.application.markup_testing import hrefs, text, with_class
+from hq.platform.core.testing import SignedInTestCase, declare, operator
 
 from .. import cadence
 from ..getting_started import remaining, steps
@@ -54,15 +54,15 @@ class GettingStartedTests(TestCase):
             probed=True,
             observed_at=timezone.now(),
         )
-        machine = ManagedResource.objects.create(key="app-host", kind="machine", spec={"name": "app-host"})
+        machine = declare("app-host", "machine", {"name": "app-host"})
         DashboardMachine.objects.create(machine=machine, position=0)
-        self.client.force_login(get_user_model().objects.create_user("started"))
+        operator(self.client, "started")
 
         self.assertEqual(self.left(), [])
         self.assertNotContains(self.client.get("/"), "Get started")
 
     def test_the_dashboard_lists_what_is_left(self):
-        self.client.force_login(get_user_model().objects.create_user("new"))
+        operator(self.client, "new")
 
         response = self.client.get("/")
 
@@ -72,7 +72,7 @@ class GettingStartedTests(TestCase):
 
 class GettingStartedRowTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("row"))
+        operator(self.client, "row")
 
     def test_a_done_step_stays_on_the_row_checked_while_others_are_left(self):
         cadence.note_controller()
@@ -85,11 +85,8 @@ class GettingStartedRowTests(TestCase):
         self.assertIn("https://github.com/example/hq/blob/main/docs/Install.md", hrefs(response))
 
 
-class ControllerTileTests(TestCase):
+class ControllerTileTests(SignedInTestCase):
     """The dashboard's controller reading never says "not set up" over readings."""
-
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("tile-reader"))
 
     def test_with_nothing_read_it_is_not_set_up(self):
         self.assertContains(self.client.get("/"), "Not configured")

@@ -7,10 +7,10 @@ answered through the capability runner as every adapter answers it.
 
 import json
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource
+from hq.platform.core.testing import declare, operator
 
 from ..adoption import ADOPT, ADOPT_SERVICE, unmanaged
 from ..adoption_testing import connection, managing_everything
@@ -45,9 +45,7 @@ class DeclarationRefusalTests(RefusalCase):
         managing_everything()
 
     def test_a_record_switched_off_is_refused_without_its_key(self):
-        ManagedResource.objects.create(
-            key=KEY, kind="adguard.rewrite", spec={"domain": "a.example.com", "answer": "192.0.2.1"}, enabled=False
-        )
+        declare(KEY, "adguard.rewrite", {"domain": "a.example.com", "answer": "192.0.2.1"}, enabled=False)
 
         error = self.refused("infrastructure.resource.reconcile", _operation(), target=KEY)
 
@@ -69,9 +67,7 @@ class DeclarationRefusalTests(RefusalCase):
         self.assertNotIn(POLICY_KEY, error["message"])
 
     def test_an_action_the_controller_does_not_take_is_said_in_hq_words(self):
-        ManagedResource.objects.create(
-            key=KEY, kind="adguard.rewrite", spec={"domain": "a.example.com", "answer": "192.0.2.1"}
-        )
+        declare(KEY, "adguard.rewrite", {"domain": "a.example.com", "answer": "192.0.2.1"})
 
         error = self.refused("infrastructure.resource.restart", _operation(), target=KEY)
 
@@ -159,7 +155,7 @@ class ApprovalRefusalTests(RefusalCase):
         self.assertTrue(answer["ok"], answer)
         held = ApprovalRequest.objects.get()
         ApprovalRequest.objects.filter(pk=held.pk).update(capability="example.gone")
-        user = get_user_model().objects.create_user(username="reviewer", password="test-only-password")
+        user = operator()
 
         error = self.refused(APPROVE, {"approval_id": str(held.pk)}, principal=web_principal(user))
 

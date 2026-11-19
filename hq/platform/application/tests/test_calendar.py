@@ -3,7 +3,6 @@
 from datetime import date, datetime, time, timedelta
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
@@ -14,6 +13,7 @@ from hq.platform.application.markup_testing import all_elements, hrefs, select, 
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import SignedInTestCase, operator
 
 from ..calendar import (
     CalendarEvent,
@@ -323,8 +323,8 @@ class WriteTests(TestCase):
         self.assertFalse(agent.permits(Capability.DELETE_CALENDAR))
 
     def test_choices_are_per_person_and_name_a_real_source(self):
-        user = get_user_model().objects.create_user("calendar-chooser")
-        other = get_user_model().objects.create_user("calendar-other")
+        user = operator(username="calendar-chooser")
+        other = operator(username="calendar-other")
         principal = web_principal(user)
 
         chosen = execute_capability(
@@ -403,10 +403,7 @@ class PlacementTests(SimpleTestCase):
         self.assertEqual([(item.group, item.order) for item in calendar], [("Example", 10)])
 
 
-class PageTests(TestCase):
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("calendar-page"))
-
+class PageTests(SignedInTestCase):
     def test_upcoming_spells_out_each_title_beside_its_day(self):
         _entry(title="Renew the example.com certificate before it lapses", starts_on=timezone.localdate())
 

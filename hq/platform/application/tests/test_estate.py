@@ -4,7 +4,6 @@ from datetime import timedelta
 from ipaddress import ip_network
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 from django.test import TestCase
 from django.urls import reverse
@@ -20,6 +19,7 @@ from hq.platform.application.markup_testing import elements, hrefs, text
 from hq.platform.application.security import cli_principal
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from .. import readings
@@ -66,10 +66,10 @@ def connection(ref, *, reachable=True, detail=""):
 
 
 def declared(key, kind, spec, *, status=None):
-    return ManagedResource.objects.create(
-        key=key,
-        kind=kind,
-        spec=spec,
+    return declare(
+        key,
+        kind,
+        spec,
         status=status or {},
         conditions=[{"type": "Ready", "status": True}],
         observed_generation=1,
@@ -120,9 +120,8 @@ class SearchFindsTheEstateTests(TestCase):
         self.assertEqual(found[:2], [("service", "app.example.com"), ("zone", "example.com")])
 
     def test_the_palette_puts_the_estate_above_records_and_audit(self):
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
-        ManagedResource.objects.create(key="example-host-spec", kind="machine", spec={"name": "example-host"})
+        operator(self.client)
+        declare("example-host-spec", "machine", {"name": "example-host"})
 
         response = self.client.get(reverse("search"), {"q": "example-host"}, headers={"X-Fragment": "palette"})
 
@@ -147,9 +146,8 @@ class SearchFindsTheEstateTests(TestCase):
 
 class AuditSearchTitleTests(TestCase):
     def test_an_audit_hit_is_titled_by_the_object_label_not_its_id(self):
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
-        resource = ManagedResource.objects.create(key="example-host", kind="machine", spec={})
+        operator(self.client)
+        resource = declare("example-host", "machine")
         record_event(action=AuditLog.Action.UPDATED, obj=resource, type_label="Managed resource")
         event = AuditLog.objects.filter(object_id=str(resource.pk), action=AuditLog.Action.UPDATED).latest("created_at")
 
@@ -177,7 +175,7 @@ class SearchSnippetTests(TestCase):
         return "".join(part for part, _hit in item["snippet"])
 
     def test_an_audit_snippet_names_no_object_id(self):
-        resource = ManagedResource.objects.create(key="example-host", kind="machine", spec={})
+        resource = declare("example-host", "machine")
         record_event(
             action=AuditLog.Action.CREATED,
             obj=resource,
@@ -209,7 +207,7 @@ class SearchSnippetTests(TestCase):
         self.assertEqual(item["url"], reverse("control_plane:service", args=["app.example.com"]))
 
     def test_a_machine_declaration_opens_the_machine(self):
-        ManagedResource.objects.create(key="example-host", kind="machine", spec={"name": "example-host"})
+        declare("example-host", "machine", {"name": "example-host"})
 
         (item,) = self.group("example-host", "infrastructure")
 
@@ -306,8 +304,7 @@ class EstateCardTests(TestCase):
         self.assertNotIn("status", card)
 
     def test_the_dashboard_shows_the_estate_card(self):
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         response = self.client.get(reverse("dashboard"))
 
@@ -468,7 +465,7 @@ class CertificateListTests(TestCase):
 class StaleGlanceTests(TestCase):
     def test_a_reading_older_than_its_cadence_is_shown_as_of_its_age_and_steps_aside(self):
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
-        machine_spec = ManagedResource.objects.create(key="example-host", kind="machine", spec={"name": "example-host"})
+        machine_spec = declare("example-host", "machine", {"name": "example-host"})
         from hq.domains.control_plane.models import DashboardMachine
 
         DashboardMachine.objects.create(machine=machine_spec, position=0)
@@ -548,8 +545,7 @@ class ActionItemTests(TestCase):
         )
 
     def test_the_action_items_page_links_each_subject(self):
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
         devices(device("example-host", update_available=True, client_version="1.102.3"))
 
         response = self.client.get(reverse("action_items"))
@@ -584,8 +580,7 @@ class MachineRoleTests(TestCase):
         self.assertEqual(self.roles("example-unapproved"), [])
 
     def test_the_serves_card_and_the_list_show_roles(self):
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         page = self.client.get(reverse("control_plane:machine", args=["example-exit"]))
         board = self.client.get(reverse("control_plane:machines"))
@@ -633,8 +628,7 @@ class PublicAddressTests(TestCase):
             "registry.address",
             {"address": "203.0.113.7", "organization": "Example Hosting", "read_at": timezone.now().isoformat()},
         )
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         with PUBLIC_RANGE:
             response = self.client.get(reverse("control_plane:machine", args=["example-vps"]))
@@ -670,8 +664,7 @@ class PublicAddressTests(TestCase):
             ),
             *extra,
         )
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
     def header(self, name):
         with PUBLIC_RANGE:
@@ -718,8 +711,7 @@ class PublicAddressTests(TestCase):
 class ContainerVisibilityTests(TestCase):
     def setUp(self):
         devices(device("example-host", addresses=["100.64.0.20"]))
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
     def page(self):
         return self.client.get(reverse("control_plane:machine", args=["example-host"]))
@@ -810,7 +802,7 @@ class ConnectionFigureTests(TestCase):
     def test_the_figure_counts_every_row_the_connections_page_lists(self):
         from ..connection_context import connections_context
 
-        ManagedResource.objects.create(key="example-box", kind="machine", spec={"name": "example-box"})
+        declare("example-box", "machine", {"name": "example-box"})
         ProviderConnection.objects.create(
             controller_id="example-controller",
             connection_ref="example-dns",

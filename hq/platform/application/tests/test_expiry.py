@@ -7,10 +7,10 @@ from pathlib import Path
 from django.test import SimpleTestCase, TestCase, tag
 from django.utils import timezone as dj_timezone
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
 from hq.platform.application.tests.reads import reads
+from hq.platform.core.testing import declare
 
 from ..expiry import days_until, renewal_opens_at, renewal_window
 from ..resource_context import resource_context
@@ -86,10 +86,10 @@ class DaysUntilSourceTests(SimpleTestCase):
 
 class OneAnswerTests(TestCase):
     def setUp(self):
-        self.resource = ManagedResource.objects.create(
-            key="example-wildcard",
-            kind=CERTIFICATE_KIND,
-            spec={"certificate_name": "example-wildcard", "domains": ["*.example.com"]},
+        self.resource = declare(
+            "example-wildcard",
+            CERTIFICATE_KIND,
+            {"certificate_name": "example-wildcard", "domains": ["*.example.com"]},
             status={"not_after": (dj_timezone.now() + timedelta(days=87, hours=12, minutes=30)).isoformat()},
         )
 

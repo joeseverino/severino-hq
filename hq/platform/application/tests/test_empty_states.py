@@ -11,6 +11,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters import DECLARATIONS
 from hq.platform.application.markup_testing import all_elements, elements, hrefs, text as page_text, texts, with_class
 from hq.platform.application.tests.reads import reads
+from hq.platform.core.testing import operator
 
 from ..connection_setup import setups
 from ..entity_links import connection_anchor
@@ -174,6 +175,5 @@ class SetupOrderTests(TestCase):
 
 
 def _operator():
-    from django.contrib.auth import get_user_model
 
-    return get_user_model().objects.create_superuser("example", "example@example.com", "example-password")
+    return operator()

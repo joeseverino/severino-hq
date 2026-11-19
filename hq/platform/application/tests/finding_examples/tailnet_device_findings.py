@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ...tone import Tone
 from . import Ago, Example, Examples, Raised
@@ -24,20 +24,20 @@ def devices(*records: dict, lock: dict | None = None, given=None, raises: tuple[
 
 
 def a_ready_laptop() -> None:
-    ManagedResource.objects.create(
-        key="example-laptop",
-        kind="machine",
-        spec={"name": "example-laptop", "addresses": ["100.64.0.5"]},
+    declare(
+        "example-laptop",
+        "machine",
+        {"name": "example-laptop", "addresses": ["100.64.0.5"]},
         conditions=[{"type": "Ready", "status": True}],
         observed_generation=1,
     )
 
 
 def a_declared_container() -> None:
-    ManagedResource.objects.create(
-        key="example-server-web",
-        kind="portainer.container",
-        spec={"connection_ref": "example-portainer", "host": "example-server", "name": "web"},
+    declare(
+        "example-server-web",
+        "portainer.container",
+        {"connection_ref": "example-portainer", "host": "example-server", "name": "web"},
     )
 
 

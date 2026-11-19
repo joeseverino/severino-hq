@@ -12,6 +12,7 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import NOBODY
 from hq.platform.mcp.capability_answer import agent_capabilities
 
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
@@ -99,7 +100,7 @@ class CapabilityTests(TestCase):
         result = execute_capability(
             "expense.update",
             {},
-            principal=Principal("nobody", "test", frozenset()),
+            principal=NOBODY,
             target="not-an-integer",
         )
 

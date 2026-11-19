@@ -12,6 +12,7 @@ from django.utils import timezone
 from hq.platform.application.markup_testing import Element, within
 from hq.platform.core.models import AuditLog, Avatar
 from hq.platform.core.oidc import SIGNED_IN_SESSION_KEY, HQOIDCAuthenticationBackend
+from hq.platform.core.testing import operator
 
 from .. import avatars
 from ..avatars import MAX_BYTES, SESSION_KEY, fetch_picture, picture_allowed, remember_avatar
@@ -99,7 +100,7 @@ class FetchPictureTests(SimpleTestCase):
 
 class RememberAvatarTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
+        self.user = operator(username="op")
 
     def _remember(self, url=PICTURE, *, fetched=("image/png", PNG), now=None):
         with mock.patch.object(avatars, "fetch_picture", return_value=fetched) as fetch:
@@ -161,7 +162,7 @@ class SignInTests(TestCase):
     """The backend's part: the session learns which picture, and nothing here stops a sign-in."""
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
+        self.user = operator(username="op")
         self.backend = HQOIDCAuthenticationBackend()
         self.backend.request = mock.Mock(session={})
         self.backend._userinfo = {"picture": PICTURE}
@@ -196,8 +197,8 @@ class SignInTests(TestCase):
 
 class AvatarViewTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.other = get_user_model().objects.create_user("other", password="x" * 20)
+        self.user = operator(username="op")
+        self.other = operator(username="other")
         Avatar.objects.create(user=self.user, content_type="image/png", image=PNG, digest="a" * 64, source=PICTURE)
         Avatar.objects.create(user=self.other, content_type="image/png", image=PNG, digest="b" * 64, source=PICTURE)
 
@@ -219,8 +220,7 @@ class AvatarViewTests(TestCase):
 
 class MenuTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(self.user)
+        self.user = operator(self.client, "op")
 
     def _menu(self) -> list[Element]:
         return within(self.client.get(reverse("connection")), "class", "user-menu")

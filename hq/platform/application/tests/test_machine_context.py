@@ -13,7 +13,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.analytics.models import AnalyticsSite, RumDaily
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ..machine_context import SECTIONS, sections_for
 from ..security import Capability, Principal
@@ -54,10 +54,6 @@ def measure(host, *, pageviews=100, visits=60, sample_interval=1):
     )
 
 
-def declare(key, kind, **spec):
-    return ManagedResource.objects.create(key=key, kind=kind, spec=spec, enabled=True)
-
-
 def by_id(machine):
     return {section.id: section for section in sections_for(machine, principal=OPERATOR)}
 
@@ -73,7 +69,7 @@ class NamesTests(TestCase):
     def test_what_supplies_a_name_is_read_rather_than_re_derived(self):
         """The claims come from the service catalog, so the two cannot disagree."""
 
-        declare("site-dns", "adguard.rewrite", domain="site.test", answer="10.9.9.9")
+        declare("site-dns", "adguard.rewrite", {"domain": "site.test", "answer": "10.9.9.9"})
 
         row = row_for(a_machine("site.test"), "site.test")
 
@@ -81,14 +77,14 @@ class NamesTests(TestCase):
         self.assertIn("site-dns", row[2].url)  # the DNS record column
 
     def test_a_part_says_where_it_leads_without_the_name_its_row_already_is(self):
-        declare("site-dns", "adguard.rewrite", domain="site.test", answer="10.9.9.9")
+        declare("site-dns", "adguard.rewrite", {"domain": "site.test", "answer": "10.9.9.9"})
 
         row = row_for(a_machine("site.test"), "site.test")
 
         self.assertEqual(row[2].text, "10.9.9.9")
 
     def test_a_part_with_an_open_problem_says_its_worst_in_its_tone(self):
-        declare("site-dns", "adguard.rewrite", domain="site.test", answer="10.9.9.9")
+        declare("site-dns", "adguard.rewrite", {"domain": "site.test", "answer": "10.9.9.9"})
         worst = {"label": "10.9.9.9 does not answer", "status": "serious"}
 
         def about(url, _principal):
@@ -104,7 +100,7 @@ class NamesTests(TestCase):
     def test_columns_follow_the_facet_registry_by_id(self):
         from unittest import mock
 
-        declare("site-dns", "adguard.rewrite", domain="site.test", answer="10.9.9.9")
+        declare("site-dns", "adguard.rewrite", {"domain": "site.test", "answer": "10.9.9.9"})
         relabeled = (
             ("runtime", "Runtime"),
             ("dns", "Resolver"),
@@ -178,8 +174,8 @@ class IdentityTests(TestCase):
     """One machine is declared twice, and the page says so rather than hiding it."""
 
     def test_both_declarations_of_one_machine_are_named(self):
-        declare("box", "machine", name="box")
-        declare("box-2", "tailscale.device", name="box")
+        declare("box", "machine", {"name": "box"})
+        declare("box-2", "tailscale.device", {"name": "box"})
 
         rows = by_id(a_machine(name="box", declaration="box", device="box-2"))["identity"].records
 
@@ -189,8 +185,8 @@ class IdentityTests(TestCase):
     def test_a_suffixed_key_says_why_it_is_suffixed(self):
         """The question this band exists to stop anyone asking twice."""
 
-        declare("box", "machine", name="box")
-        declare("box-2", "tailscale.device", name="box")
+        declare("box", "machine", {"name": "box"})
+        declare("box-2", "tailscale.device", {"name": "box"})
 
         rows = by_id(a_machine(name="box", declaration="box", device="box-2"))["identity"].records
 
@@ -201,7 +197,7 @@ class IdentityTests(TestCase):
         self.assertNotIn("identity", by_id(a_machine(name="box")))
 
     def test_a_machine_declared_once_is_its_own_page_and_grows_no_band(self):
-        declare("box", "machine", name="box")
+        declare("box", "machine", {"name": "box"})
 
         self.assertNotIn("identity", by_id(a_machine(name="box", declaration="box")))
 

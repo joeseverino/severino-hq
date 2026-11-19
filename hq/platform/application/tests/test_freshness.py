@@ -3,7 +3,6 @@
 from dataclasses import replace
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -11,6 +10,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import elements, links, select, text
+from hq.platform.core.testing import operator
 
 from ..entity_links import entity_link
 from ..freshness import (
@@ -207,8 +207,7 @@ class CarriedConnectionTests(TestCase):
 
 class OldestReadingTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(user)
+        operator(self.client)
         now = timezone.now()
         for ref, age in (("example-fresh", 1), ("example-old", 300)):
             ProviderConnection.objects.create(

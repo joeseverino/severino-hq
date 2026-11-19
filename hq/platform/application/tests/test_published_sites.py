@@ -2,18 +2,17 @@
 
 from django.test import TestCase
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
+from hq.platform.core.testing import declare
 
 from ..published_sites import public_sites
 
 
 def record(name, record_type="A", content="203.0.113.10", *, enabled=True, **spec):
-    return ManagedResource.objects.create(
-        key=f"record-{name}-{record_type}".lower(),
-        kind="cloudflare.dns_record",
-        enabled=enabled,
-        spec={
+    return declare(
+        f"record-{name}-{record_type}".lower(),
+        "cloudflare.dns_record",
+        {
             "zone": "example.com",
             "name": name,
             "record_type": record_type,
@@ -21,6 +20,7 @@ def record(name, record_type="A", content="203.0.113.10", *, enabled=True, **spe
             "connection_ref": "example-dns",
             **spec,
         },
+        enabled=enabled,
     )
 
 
@@ -47,11 +47,7 @@ class PublicSiteTests(TestCase):
         record("*.example.com")
         record("_dmarc.example.com", "CNAME", "dmarc.example.net")
         record("off.example.com", enabled=False)
-        ManagedResource.objects.create(
-            key="example-zone",
-            kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": "example-dns"},
-        )
+        declare("example-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
 
         self.assertEqual(public_sites(), ())
 

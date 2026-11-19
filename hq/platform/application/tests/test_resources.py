@@ -6,9 +6,9 @@ from unittest import mock
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
 from hq.platform.application.contracts import Closed
+from hq.platform.core.testing import NOBODY, OPERATOR, READER, declare
 
 from ..command_center import command_center
 from ..integration_specs import ListRead
@@ -23,11 +23,7 @@ from ..resources import (
     get_resource,
     list_resource,
 )
-from ..security import AuthorizationError, Capability, Principal
-
-READ = Principal("reader", "test", frozenset({Capability.READ}))
-NONE = Principal("nobody", "test", frozenset())
-OPERATOR = Principal("operator", "test", frozenset(Capability))
+from ..security import AuthorizationError, Capability
 
 
 class ResourceExecutionTests(TestCase):
@@ -35,13 +31,13 @@ class ResourceExecutionTests(TestCase):
         project = Project.objects.create(name="Resource registry")
 
         (spec,) = describe_resources(name="projects")["resources"]
-        listed = list_resource("projects", {"query": "registry", "limit": 10}, principal=READ)
+        listed = list_resource("projects", {"query": "registry", "limit": 10}, principal=READER)
 
         self.assertEqual(spec["operations"]["get"]["identifier"], "slug")
         self.assertFalse(spec["operations"]["list"]["query_schema"]["additionalProperties"])
         self.assertEqual(listed["items"][0]["slug"], project.slug)
         self.assertEqual(
-            get_resource("projects", project.slug, principal=READ)["slug"],
+            get_resource("projects", project.slug, principal=READER)["slug"],
             project.slug,
         )
 
@@ -73,7 +69,7 @@ class ResourceExecutionTests(TestCase):
         self.assertEqual(outcome["resources"][0].url, "")
 
     def test_command_center_omits_things_the_principal_cannot_use(self):
-        outcome = command_center("", principal=NONE)
+        outcome = command_center("", principal=NOBODY)
 
         self.assertEqual(
             outcome,
@@ -90,15 +86,15 @@ class ResourceExecutionTests(TestCase):
     def test_infrastructure_kinds_filter_before_the_shared_page_bound(self):
         # Rows of other kinds come first, so a bound taken before the filter
         # would leave nothing to filter.
-        ManagedResource.objects.create(key="zone", kind="cloudflare.zone", spec={})
-        ManagedResource.objects.create(key="other-zone", kind="cloudflare.zone", spec={})
-        ManagedResource.objects.create(key="device", kind="tailscale.device", spec={})
-        ManagedResource.objects.create(key="policy", kind="tailscale.policy", spec={})
+        declare("zone", "cloudflare.zone")
+        declare("other-zone", "cloudflare.zone")
+        declare("device", "tailscale.device")
+        declare("policy", "tailscale.policy")
 
         listed = list_resource(
             "infrastructure",
             {"kinds": "tailscale.device,tailscale.policy", "limit": 2},
-            principal=READ,
+            principal=READER,
         )
 
         self.assertEqual({item["key"] for item in listed["items"]}, {"device", "policy"})
@@ -106,21 +102,21 @@ class ResourceExecutionTests(TestCase):
     def test_infrastructure_kinds_filter_rejects_a_kind_it_does_not_list(self):
         for value in ("not a kind", "tailscale.device,not.a.kind", "tailscale.device,"):
             with self.subTest(value=value), self.assertRaises(InvalidResourceInput):
-                list_resource("infrastructure", {"kinds": value}, principal=READ)
+                list_resource("infrastructure", {"kinds": value}, principal=READER)
 
     def test_every_operation_authorizes_before_reading(self):
         with self.assertRaises(AuthorizationError):
-            list_resource("projects", {}, principal=NONE)
+            list_resource("projects", {}, principal=NOBODY)
 
     def test_fields_keep_only_the_named_keys_of_a_record_and_of_each_item(self):
         project = Project.objects.create(name="Selected fields")
         Project.objects.create(name="Selected sibling")
 
-        whole = get_resource("projects", project.slug, principal=READ)
-        detail = get_resource("projects", project.slug, principal=READ, fields=["slug", "name"])
-        listed = list_resource("projects", {"query": "selected"}, principal=READ, fields=("slug",))
+        whole = get_resource("projects", project.slug, principal=READER)
+        detail = get_resource("projects", project.slug, principal=READER, fields=["slug", "name"])
+        listed = list_resource("projects", {"query": "selected"}, principal=READER, fields=("slug",))
 
-        unselected = list_resource("projects", {"query": "selected"}, principal=READ)
+        unselected = list_resource("projects", {"query": "selected"}, principal=READER)
         self.assertEqual(detail, {"slug": whole["slug"], "name": whole["name"]})
         self.assertEqual(listed["count"], 2)
         self.assertEqual({**listed, "items": unselected["items"]}, unselected)
@@ -130,16 +126,16 @@ class ResourceExecutionTests(TestCase):
         project = Project.objects.create(name="Whole record")
 
         self.assertEqual(
-            get_resource("projects", project.slug, principal=READ, fields=None),
-            get_resource("projects", project.slug, principal=READ),
+            get_resource("projects", project.slug, principal=READER, fields=None),
+            get_resource("projects", project.slug, principal=READER),
         )
 
     def test_a_field_no_record_carries_is_refused_with_the_keys_there_are(self):
         project = Project.objects.create(name="Refused field")
 
         for read in (
-            lambda fields: get_resource("projects", project.slug, principal=READ, fields=fields),
-            lambda fields: list_resource("projects", {}, principal=READ, fields=fields),
+            lambda fields: get_resource("projects", project.slug, principal=READER, fields=fields),
+            lambda fields: list_resource("projects", {}, principal=READER, fields=fields),
         ):
             with self.subTest(read=read), self.assertRaises(InvalidResourceInput) as refused:
                 read(["slug", "slgu"])
@@ -152,8 +148,8 @@ class ResourceExecutionTests(TestCase):
         project = Project.objects.create(name="Unread")
 
         for read in (
-            lambda: get_resource("projects", project.slug, principal=NONE, fields=["no-such-key"]),
-            lambda: list_resource("projects", {}, principal=NONE, fields=["no-such-key"]),
+            lambda: get_resource("projects", project.slug, principal=NOBODY, fields=["no-such-key"]),
+            lambda: list_resource("projects", {}, principal=NOBODY, fields=["no-such-key"]),
         ):
             with self.subTest(read=read), self.assertRaises(AuthorizationError):
                 read()
@@ -182,9 +178,9 @@ class ResourceExecutionTests(TestCase):
             controller_id="controller",
         )
 
-        whole = get_resource("readings", "github.repository", principal=READ)
+        whole = get_resource("readings", "github.repository", principal=READER)
         selected = get_resource(
-            "readings", "github.repository", principal=READ, fields=["observed_at", "items.waiting"]
+            "readings", "github.repository", principal=READER, fields=["observed_at", "items.waiting"]
         )
 
         self.assertEqual(
@@ -233,7 +229,7 @@ class FieldMaskTests(TestCase):
         self.addCleanup(patcher.stop)
 
     def get(self, *fields):
-        return get_resource("example.nested", "example", principal=READ, fields=list(fields))
+        return get_resource("example.nested", "example", principal=READER, fields=list(fields))
 
     def refusal(self, *fields):
         with self.assertRaises(InvalidResourceInput) as refused:
@@ -275,7 +271,7 @@ class FieldMaskTests(TestCase):
                 self.assertIn("fields[0]", self.refusal(path))
 
     def test_on_a_list_a_path_is_read_in_each_item(self):
-        listed = list_resource("example.nested", {}, principal=READ, fields=["name", "items.name"])
+        listed = list_resource("example.nested", {}, principal=READER, fields=["name", "items.name"])
 
         self.assertEqual(listed["count"], 2)
         self.assertEqual(
@@ -381,7 +377,7 @@ class TailnetDeviceKeyTests(TestCase):
     def test_it_does_not_collide_with_the_machine_of_the_same_name(self):
         from hq.platform.application.infrastructure import suggest_key
 
-        ManagedResource.objects.create(key="box", kind="machine", spec={"name": "box"})
+        declare("box", "machine", {"name": "box"})
 
         # No suffix: the collision is gone, so nothing has to be invented.
         self.assertEqual(suggest_key("tailscale.device", {"name": "box"}), "box-tailnet")

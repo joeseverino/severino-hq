@@ -2,7 +2,6 @@
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.db import DatabaseError
 from django.test import TestCase
 from django.urls import reverse
@@ -10,6 +9,7 @@ from django.urls import reverse
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentAccess, AuditLog
+from hq.platform.core.testing import operator
 
 from ..agent_access import SET_AGENT_ACCESS, AgentAccessCommand, agents_paused, set_agents_paused
 from ..capabilities import execute_capability
@@ -36,7 +36,7 @@ class StateTests(TestCase):
 
 class WhoMayPullItTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
+        self.user = operator(username="op")
 
     def test_no_credential_can_change_it(self):
         granted = frozenset(Capability)
@@ -74,8 +74,7 @@ class WhoMayPullItTests(TestCase):
 
 class SwitchTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(self.user)
+        self.user = operator(self.client, "op")
 
     def _set(self, paused: str):
         return self.client.post(reverse("agent_access"), form_keyed({"paused": paused}))

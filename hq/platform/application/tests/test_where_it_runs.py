@@ -2,8 +2,8 @@
 
 from django.test import TestCase
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.docs_index.models import DocumentationRecord
+from hq.platform.core.testing import declare
 
 from ..entity_links import EntityLink
 from ..projection import projection_scope
@@ -33,7 +33,7 @@ class WhereItRunsTests(TestCase):
 
 class NamedLinksTests(TestCase):
     def setUp(self):
-        ManagedResource.objects.create(key="example-box", kind="machine", spec={"name": "example-box"})
+        declare("example-box", "machine", {"name": "example-box"})
         DocumentationRecord.objects.create(doc_id="deploy-the-example", title="Deploy the example")
 
     def test_a_machine_and_a_document_a_note_names_are_links(self):

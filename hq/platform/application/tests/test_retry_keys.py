@@ -6,9 +6,10 @@ repeat carrying the same key returns the first result. A ``read`` takes none.
 
 from django.test import TestCase
 
-from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest, ReadRequest
+from hq.domains.control_plane.models import CapabilityRule, OperationRequest, ReadRequest
 from hq.domains.projects.models import Project
 from hq.platform.core.models import IdempotencyRecord
+from hq.platform.core.testing import declare
 
 from ..adoption_testing import managing_everything
 from ..capabilities import describe_capabilities, execute_capability
@@ -113,9 +114,7 @@ class ReconcileTests(TestCase):
     def test_a_key_used_for_another_record_is_a_conflict(self):
         managing_everything()
         for key, address in (("example-rewrite", "192.0.2.10"), ("example-other", "192.0.2.11")):
-            ManagedResource.objects.create(
-                key=key, kind="adguard.rewrite", spec={"domain": f"{key}.example.com", "answer": address}
-            )
+            declare(key, "adguard.rewrite", {"domain": f"{key}.example.com", "answer": address})
 
         def ask(target):
             return execute_capability(

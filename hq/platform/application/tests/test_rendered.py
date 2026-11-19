@@ -28,6 +28,7 @@ from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.core import example_estate, revisions
 from hq.platform.core.example_estate import names, records
 from hq.platform.core.example_estate.testing import throwaway_media
+from hq.platform.core.testing import SignedInTestCase
 
 from ..routes import routed
 from .addresses import address
@@ -180,20 +181,15 @@ def _onward(links, seen: set[str]):
         yield parts.path
 
 
-class RenderedPageTests(TestCase):
+class RenderedPageTests(SignedInTestCase):
     # The failure is the list of what the pages got wrong, said whole.
     maxDiff = None
 
     @classmethod
     def setUpTestData(cls):
-        cls.user = get_user_model().objects.create_superuser(
-            "rendered-pages", "rendered@example.test", "unused-password"
-        )
+        super().setUpTestData()
         with throwaway_media():
             example_estate.seed()
-
-    def setUp(self):
-        self.client.force_login(self.user)
 
     def crawl(self, refused: list[str]):
         routes = set(_page_routes())

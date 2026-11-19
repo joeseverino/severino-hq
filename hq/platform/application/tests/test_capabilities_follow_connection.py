@@ -5,6 +5,7 @@ from django.test import TestCase
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.testing import declare, operator
 
 from ..adoption_testing import connection
 from ..resource_capabilities import resource_capabilities
@@ -20,11 +21,8 @@ def _gap(kind: str):
 
 class CapabilitiesFollowTheConnectionTests(TestCase):
     def _rewrite(self):
-        return ManagedResource.objects.create(
-            key="app-rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-            enabled=True,
+        return declare(
+            "app-rewrite", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.10"}, enabled=True
         )
 
     def test_an_observing_connection_offers_nothing_it_cannot_do(self):
@@ -57,10 +55,10 @@ class EveryWritePathFollowsTheConnectionTests(TestCase):
         from ..security import cli_principal
 
         self.principal = cli_principal()
-        self.resource = ManagedResource.objects.create(
-            key="app-rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.10"},
+        self.resource = declare(
+            "app-rewrite",
+            "adguard.rewrite",
+            {"domain": "app.example.com", "answer": "10.0.0.10"},
             enabled=True,
             generation=2,
             observed_generation=1,
@@ -176,17 +174,13 @@ class EveryKindsChangesFollowItsConnectionTests(TestCase):
                 self.assertIsNone(resource_capabilities(resource, running=(), removal_pending=False).write_gap)
 
     def test_a_records_page_links_the_step_that_lets_it_change(self):
-        from django.contrib.auth import get_user_model
         from django.urls import reverse
 
         connection("adguard", manages=False)
-        resource = ManagedResource.objects.create(
-            key="app-rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-            enabled=True,
+        resource = declare(
+            "app-rewrite", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.10"}, enabled=True
         )
-        self.client.force_login(get_user_model().objects.create_superuser("op"))
+        operator(self.client)
 
         page = self.client.get(resource.get_absolute_url()).content.decode()
 

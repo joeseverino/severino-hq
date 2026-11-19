@@ -1,5 +1,5 @@
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL
+from hq.platform.core.testing import declare
 
 from ...report_testing import report_connections
 from . import Example, Examples, Raised, connection, stored
@@ -51,9 +51,7 @@ def certificate(*consumers: dict, title: str = "", presses=(RECONCILE,), reading
 
     return Example(
         readings=readings or {},
-        given=lambda: ManagedResource.objects.create(
-            key="a-certificate", kind="tls.certificate", spec={}, status={"unreachable_consumers": list(consumers)}
-        ),
+        given=lambda: declare("a-certificate", "tls.certificate", status={"unreachable_consumers": list(consumers)}),
         raises=(Raised(title=title, presses=presses),) if title else (),
     )
 

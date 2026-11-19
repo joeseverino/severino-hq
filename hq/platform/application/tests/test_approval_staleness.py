@@ -10,6 +10,7 @@ from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, Man
 from hq.domains.projects.models import Project
 from hq.platform.application.contracts import Closed
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare
 
 from ..approval_review import preview
 from ..approvals import AUDIT_LABEL, ApprovalError, ApproveCommand, approve
@@ -46,9 +47,7 @@ class DeclarationStalenessTests(TestCase):
 
         managing_everything()
         # As the controller's last reconcile reported it, enabled flag and all.
-        self.resource = ManagedResource.objects.create(
-            key="photos", kind=REWRITE, spec=dict(RECORD), status={**RECORD, "enabled": True}
-        )
+        self.resource = declare("photos", REWRITE, dict(RECORD), status={**RECORD, "enabled": True})
 
     def removal(self) -> ApprovalRequest:
         return held_for("infrastructure.resource.remove", reconcile_payload(), "photos")
@@ -142,7 +141,7 @@ class SettledThroughTheRunnerTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        ManagedResource.objects.create(key="photos", kind=REWRITE, spec=dict(RECORD))
+        declare("photos", REWRITE, dict(RECORD))
         self.held = held_for("infrastructure.resource.remove", reconcile_payload(), "photos")
 
     def posted(self, decision: str) -> dict:

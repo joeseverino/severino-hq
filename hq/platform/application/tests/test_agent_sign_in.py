@@ -6,11 +6,11 @@ which, on the token each door already verified.
 """
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.platform.application.tokens import token_principal
 from hq.platform.core.models import AgentIdentity
+from hq.platform.core.testing import operator
 
 from ..agent_registry import observe
 from ..linked_accounts import bind_sign_in, sign_in_subject
@@ -28,7 +28,7 @@ def _signs_in() -> str:
 class SignInTests(TestCase):
     def setUp(self):
         # The person the delegated token names has signed in to HQ.
-        self.person = person = get_user_model().objects.create_user("example-person")
+        self.person = person = operator()
         bind_sign_in(person, sign_in_subject(settings.OIDC_ISSUER, DELEGATED["sub"]))
 
     def test_a_client_credentials_token_signs_in_as_itself(self):

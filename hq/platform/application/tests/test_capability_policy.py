@@ -2,7 +2,6 @@
 
 from dataclasses import replace
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -12,6 +11,7 @@ from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AgentIdentity, AuditLog
+from hq.platform.core.testing import operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from hq_sdk.testing import plain
 
@@ -52,7 +52,7 @@ def required_fields(registered):
 
 class PolicyTestCase(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
+        self.user = operator(username="op")
         self.operator = web_principal(self.user)
 
     def rule(self, subject, capability, rule):

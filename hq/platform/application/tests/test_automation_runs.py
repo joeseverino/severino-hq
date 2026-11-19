@@ -6,12 +6,12 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest
 from hq.platform.application.markup_testing import links, text
 from hq.platform.core.models import AgentIdentity
+from hq.platform.core.testing import AGENT, MCP_READER, operator
 
 from ..automation_runs import CANCEL
 from ..capabilities import capability_registry, run_capability
@@ -22,8 +22,6 @@ from .procedures import APP, DB, EDGE, RESTART, RESTART_KEY, RESTART_RUN, REVISI
 
 # A person's own click in the browser, which is their consent.
 OPERATOR = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 KIND = "automation.operation"
 LOGS = "example.service_logs"
 
@@ -113,7 +111,7 @@ class QueuedRunTests(RunTestCase):
     def test_a_read_procedure_runs_under_a_read_grant(self):
         self.supply(manifest(id=LOGS, effect="read", retry="safe"))
 
-        answer = run_capability(f"automation.{LOGS}.run", run_payload(), principal=READER).answer
+        answer = run_capability(f"automation.{LOGS}.run", run_payload(), principal=MCP_READER).answer
 
         self.assertTrue(answer["ok"], answer)
         self.assertEqual(OperationRequest.objects.get().input["operation"], LOGS)
@@ -143,7 +141,7 @@ class AgentAskedRunTests(RunTestCase):
         AgentIdentity.objects.create(
             client_id=AGENT.actor, interfaces=["mcp"], granted=["read", "manage_infrastructure"]
         )
-        self.user = get_user_model().objects.create_user("example-operator", password="x" * 20)
+        self.user = operator(username="example-operator")
 
     def assert_held(self, name):
         answer = self.ask(run_payload(), principal=AGENT, name=name)
@@ -223,7 +221,7 @@ class DoorbellTests(RunTestCase):
 
 class RefusedRunTests(RunTestCase):
     def test_a_read_grant_cannot_run_a_change(self):
-        self.refused(run_payload(), "forbidden", principal=READER)
+        self.refused(run_payload(), "forbidden", principal=MCP_READER)
 
         self.assertFalse(OperationRequest.objects.exists())
 
@@ -357,7 +355,7 @@ class HeldRunPageTests(RunTestCase):
         super().setUp()
         self.supply(manifest(), manifest(id=LOGS))
         self.first = self.ask(run_payload(APP, DB))["operation"]
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client)
         machines = patch(
             "hq.platform.application.machines.machine_catalog", side_effect=lambda **_: self.supply.machines
         )

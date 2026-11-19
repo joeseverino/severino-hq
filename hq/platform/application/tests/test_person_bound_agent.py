@@ -6,12 +6,12 @@ them whatever Pocket ID granted it, and the catalog never offers them to it.
 """
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import ActionItemRead, Appearance, AuditLog
+from hq.platform.core.testing import operator
 
 from ..action_items import RESTORE, SET_ASIDE
 from ..appearance import SET_THEME
@@ -48,7 +48,7 @@ def _run(name, payload, principal):
 
 class PersonBoundAgentTests(TestCase):
     def setUp(self):
-        self.person = get_user_model().objects.create_user("example-person")
+        self.person = operator(username="example-person")
         bind_sign_in(self.person, sign_in_subject(settings.OIDC_ISSUER, PERSON))
 
     def test_it_keeps_its_persons_own_settings_pins_and_set_asides(self):
@@ -113,7 +113,7 @@ class PersonBoundAgentTests(TestCase):
         CapabilityRule.objects.create(
             subject=agent_subject(_signed_in()), capability=PIN, rule=CapabilityRule.Rule.APPROVE
         )
-        approver = get_user_model().objects.create_user("example-approver")
+        approver = operator(username="example-approver")
 
         held = _run(PIN, {"kind": SERVICE, "key": ONE}, _signed_in())
         self.assertEqual(held.get("status"), "awaiting_approval", held)

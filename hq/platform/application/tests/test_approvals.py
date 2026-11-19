@@ -8,7 +8,6 @@ import json
 from dataclasses import replace
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.test import TestCase
 from django.urls import reverse
@@ -19,6 +18,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import text
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 
 from ..approval_review import compare, preview
 from ..approvals import (
@@ -100,7 +100,7 @@ def reconcile_payload(key: str = "once") -> dict:
 
 
 def an_operator(username: str = "operator") -> Principal:
-    user = get_user_model().objects.create_user(username=username, password="test-only-password")
+    user = operator(username=username)
     return web_principal(user)
 
 
@@ -294,11 +294,7 @@ class HeldRequestTests(TestCase):
         is asked about everything stops reading what they are asked.
         """
 
-        ManagedResource.objects.create(
-            key="example-rewrite",
-            kind=UNGATED_KIND,
-            spec={"domain": "example.test", "answer": "192.0.2.10"},
-        )
+        declare("example-rewrite", UNGATED_KIND, {"domain": "example.test", "answer": "192.0.2.10"})
 
         result = execute_capability(
             "infrastructure.resource.update",
@@ -554,10 +550,10 @@ class ControllerTests(TestCase):
 
     def test_automatic_convergence_of_a_gated_kind_is_still_scheduled(self):
         gated_device = replace(PROVIDERS["tailscale.device"], requires_approval=True)
-        ManagedResource.objects.create(
-            key="example-device",
-            kind="tailscale.device",
-            spec={"name": "example-device", "key_expiry_disabled": True},
+        declare(
+            "example-device",
+            "tailscale.device",
+            {"name": "example-device", "key_expiry_disabled": True},
             generation=2,
             observed_generation=1,
         )
@@ -691,8 +687,7 @@ class SurfaceTests(TestCase):
 
         managing_everything()
         declare_policy()
-        self.user = get_user_model().objects.create_user(username="reviewer", password="test-only-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client, "reviewer")
         answer = execute_capability(
             "infrastructure.resource.update",
             keyed(update_payload(policy_document("group:elsewhere"))),

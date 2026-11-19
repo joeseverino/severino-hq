@@ -4,6 +4,7 @@ indexed query. Every manifest here is a synthetic ``example.*`` one."""
 from django.test import TestCase
 
 from hq.domains.control_plane.models import OperationHost, OperationRequest
+from hq.platform.core.testing import MCP_READER
 
 from ..capabilities import run_capability
 from ..machines import Machine
@@ -11,7 +12,6 @@ from ..security import Capability, Principal
 from .procedures import APP, DB, RESTART_RUN, Supply, manifest, run_payload
 
 OPERATOR = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 
 
 class RunHostTests(TestCase):
@@ -46,7 +46,7 @@ class RunHostTests(TestCase):
 
     def test_a_refused_run_writes_no_rows(self):
         cases = {
-            "denied": {"payload": run_payload(APP), "principal": READER},
+            "denied": {"payload": run_payload(APP), "principal": MCP_READER},
             "invalid": {"payload": run_payload(APP, playbook="site.yml")},
             "unknown machine": {"payload": run_payload("unknown.example.com")},
         }

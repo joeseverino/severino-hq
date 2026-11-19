@@ -10,13 +10,13 @@ import importlib
 from unittest.mock import patch
 
 from django.apps import apps
-from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TransactionTestCase, modify_settings
 from django.urls import clear_url_caches, reverse
 
 from hq.config import urls
 from hq.platform.application.tests.writers import keyed
+from hq.platform.core.testing import operator
 
 from .. import domains
 from ..capabilities import execute_capability
@@ -70,7 +70,7 @@ class NewDomainDeclarationTests(TransactionTestCase):
         with connection.schema_editor() as editor:
             editor.create_model(self.model)
         self.addCleanup(self._drop)
-        self.user = get_user_model().objects.create_user("operator")
+        self.user = operator()
 
     def _drop(self):
         with connection.schema_editor() as editor:

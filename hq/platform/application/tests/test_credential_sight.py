@@ -2,7 +2,6 @@
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -19,6 +18,7 @@ from hq.domains.control_plane.provider_adapters.contracts import (
 )
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import text
+from hq.platform.core.testing import operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import _controller_contract
@@ -373,8 +373,7 @@ class RefusalEndToEndTests(TestCase):
 
 class CredentialSightPageTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(user)
+        operator(self.client)
         now = timezone.now()
         for ref, provider in (
             ("example-ssh", "ssh"),

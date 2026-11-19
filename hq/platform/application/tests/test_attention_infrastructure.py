@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ..attention import infrastructure
 from ..findings import estate_findings, finding_key
@@ -52,11 +53,8 @@ class InfrastructureQueueTests(TestCase):
         self.assertEqual(keys_about("missing"), {"finding:never-observed:resource:missing"})
 
     def test_a_resource_of_a_kind_never_read_is_said_once_about_the_kind(self):
-        ManagedResource.objects.create(
-            key="unread",
-            kind="adguard.rewrite",
-            spec={"domain": "unread.example.com", "answer": "192.0.2.2"},
-            observed_generation=1,
+        declare(
+            "unread", "adguard.rewrite", {"domain": "unread.example.com", "answer": "192.0.2.2"}, observed_generation=1
         )
 
         rules = {finding.rule for finding in estate_findings(principal=cli_principal())}

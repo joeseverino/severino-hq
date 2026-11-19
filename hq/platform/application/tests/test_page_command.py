@@ -1,7 +1,6 @@
 """A command's control is derived from the command: its words, its address,
 how it is pressed, whether it looks destructive, and who is offered it."""
 
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
@@ -13,7 +12,7 @@ from hq.platform.application.capabilities import capability_words
 from hq.platform.application.lookup import LOOK_UP_NAME
 from hq.platform.application.pages import PageAction, PageDialog
 from hq.platform.application.resource_capabilities import REMOVAL_CAPABILITY, UPDATE_CAPABILITY
-from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 
 RECONCILE = "infrastructure.resource.reconcile"
 # The reconcile's mode for a record that only reports on itself.
@@ -21,8 +20,7 @@ READS_AGAIN = "reads_again"
 
 
 def _person(username: str, role: str):
-    with no_default_role():
-        user = get_user_model().objects.create_user(username)
+    user = person(username=username)
     if role:
         roles.assign(user, role)
     return user

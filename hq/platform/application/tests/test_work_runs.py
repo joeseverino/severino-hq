@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import OperationRequest
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job, JobState
+from hq.platform.core.testing import AGENT, operator
 from hq.platform.core.tests.estate_sizes import at_both_sizes
 
 from ..capabilities import run_capability
@@ -35,7 +36,6 @@ from ..work_runs import (
 )
 from .procedures import APP, APPROVER, DB, EDGE, RESTART, RESTART_RUN, Supply, approved_run, manifest, run_payload
 
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 LOGS = "example.service_logs"
 WORKER = "example-worker"
 CLAIMS = (("automation.operation", "run"),)
@@ -110,7 +110,6 @@ class OneListTests(WorkRunsTestCase):
         self.assertEqual((row.started, row.finished), (run.claimed_at, run.completed_at))
 
     def test_who_started_each_job_and_asked_each_run_is_read_at_once(self):
-        from django.contrib.auth import get_user_model
 
         from hq.domains.jobs.runner import AUDIT_TYPE, run as run_job
         from hq.platform.core.models import AuditLog
@@ -118,7 +117,7 @@ class OneListTests(WorkRunsTestCase):
         from ..history import asked_by, who_did
 
         asked = self.run_of(APP)
-        person = get_user_model().objects.create_user("example-person", password="x" * 14)
+        person = operator()
         job = run_job("example.work", "Example work", lambda progress: {}, requested_by=person)
 
         with CaptureQueriesContext(connection) as sent:

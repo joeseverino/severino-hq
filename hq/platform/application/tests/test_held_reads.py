@@ -2,10 +2,10 @@
 carried, under that caller's read grant: where it stands, the work an
 approved call queued, and what the call answered once that work ended."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import OperationRequest
+from hq.platform.core.testing import operator
 
 from ..approvals import ApproveCommand, RejectCommand, approve, reject
 from ..capabilities import run_capability
@@ -32,7 +32,7 @@ class HeldReadTests(TestCase):
         answer = run_capability(RESTART_RUN, run_payload(), principal=AGENT, idempotency_key="example-run").answer
         self.assertEqual(answer.get("status"), "awaiting_approval", answer)
         self.held_id = answer["approval"]["id"]
-        self.person = web_principal(get_user_model().objects.create_user(username="example-owner"))
+        self.person = web_principal(operator())
 
     def read(self, principal=AGENT):
         return get_resource(HELD, self.held_id, principal=principal)

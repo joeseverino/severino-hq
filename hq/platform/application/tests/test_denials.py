@@ -3,13 +3,13 @@
 from datetime import timedelta
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.platform.core.audit import stamped
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 from ..capabilities import capability_registry, execute_capability
 from ..denials import LABEL, record_denial
@@ -99,8 +99,7 @@ class ApiDoorTests(TestCase):
 
 class WhoColumnTests(TestCase):
     def test_a_machine_actor_is_named_in_the_list_not_called_system(self):
-        user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client, "op")
         record_denial(interface="mcp", reason="agents_paused", actor="example-agent")
 
         page = self.client.get(reverse("core:audit_list")).content.decode()
@@ -108,7 +107,7 @@ class WhoColumnTests(TestCase):
         self.assertIn("example-agent", page)
 
     def test_the_label_prefers_a_person_then_an_agent_then_an_address(self):
-        user = get_user_model().objects.create_user("op", password="x" * 20)
+        user = operator(username="op")
         cases = (
             (AuditLog(user=user, metadata={"actor": "example-agent"}), "op"),
             (AuditLog(metadata={"actor": "example-agent"}), "example-agent"),

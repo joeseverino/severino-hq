@@ -1,11 +1,11 @@
-from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.urls import reverse
+
+from hq.platform.core.testing import SignedInTestCase
 
 from ..plugin_testing import form_keyed
 
 
-class BusinessUseTests(TestCase):
+class BusinessUseTests(SignedInTestCase):
     """A record's form says its command's refusal of a share out of range
     beside the field, holding no copy of the rule."""
 
@@ -13,10 +13,6 @@ class BusinessUseTests(TestCase):
         ("assets:create", {"item_name": "Example asset"}),
         ("expenses:create", {"date": "2030-01-31", "vendor": "Example vendor", "item": "Example item"}),
     )
-
-    def setUp(self):
-        user = get_user_model().objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
-        self.client.force_login(user)
 
     def test_a_percentage_out_of_range_is_refused_on_the_field(self):
         for route, filled in self.PAGES:

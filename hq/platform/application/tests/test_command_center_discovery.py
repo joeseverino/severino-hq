@@ -3,20 +3,18 @@ make, and its commands in the order an operator looks for them."""
 
 from django.test import SimpleTestCase
 
+from hq.platform.core.testing import OPERATOR, READER
+
 from ..command_center import command_center
 from ..findings import finding_rules
 from ..integrations import integration_graph
-from ..security import Capability, Principal
 from .host_only import host_only
-
-READ = Principal("reader", "test", frozenset({Capability.READ}))
-OPERATOR = Principal("operator", "test", frozenset(Capability))
 
 
 class CheckDiscoveryTests(SimpleTestCase):
     def test_a_reader_is_offered_every_check_linked_to_its_findings(self):
         with host_only():
-            checks = command_center("", principal=READ)["checks"]
+            checks = command_center("", principal=READER)["checks"]
 
         self.assertEqual([item.name for item in checks], [rule.name for rule in finding_rules()])
         for item in checks:
@@ -25,7 +23,7 @@ class CheckDiscoveryTests(SimpleTestCase):
     def test_a_query_narrows_the_checks_to_the_rule_it_names(self):
         rule = finding_rules()[0]
         with host_only():
-            checks = command_center(rule.title, principal=READ)["checks"]
+            checks = command_center(rule.title, principal=READER)["checks"]
 
         self.assertEqual(checks[0].name, rule.name)
 

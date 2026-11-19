@@ -6,12 +6,12 @@ them all in one grant.
 """
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.tokens import token_principal
 from hq.platform.core.models import AgentIdentity
+from hq.platform.core.testing import operator
 
 from ..agent_registry import observe
 from ..linked_accounts import bind_sign_in, sign_in_subject
@@ -27,7 +27,7 @@ def _delegated(scope: str) -> dict[str, str]:
 
 class IdentityScopeTests(TestCase):
     def setUp(self):
-        self.person = get_user_model().objects.create_user("example-person", password="x" * 20)
+        self.person = operator()
         bind_sign_in(self.person, sign_in_subject(settings.OIDC_ISSUER, PERSON))
 
     def test_a_token_granting_only_identity_scopes_is_refused(self):

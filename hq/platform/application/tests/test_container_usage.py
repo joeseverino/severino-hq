@@ -3,13 +3,13 @@ CPU as a share of one core across two sweeps, on its page and its record."""
 
 from datetime import UTC, datetime, timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
 from hq.platform.application.markup_testing import select
+from hq.platform.core.testing import declare, operator
 from hq_sdk.testing import plain
 
 from ..container_reads import get_container
@@ -105,9 +105,7 @@ def running():
 class UsageShownTests(TestCase):
     def setUp(self):
         ProviderInventory.objects.create(kind=CONTAINER_KIND, records=[running()], observed_at=timezone.now())
-        self.resource = ManagedResource.objects.create(
-            key="web-container", kind=CONTAINER_KIND, spec={"host": "example-box", "name": "web"}
-        )
+        self.resource = declare("web-container", CONTAINER_KIND, {"host": "example-box", "name": "web"})
 
     def test_the_record_says_what_it_uses_beside_its_limits(self):
         sweep(runtime(cpu=0))
@@ -127,8 +125,7 @@ class UsageShownTests(TestCase):
         self.assertIsNone(get_container("example-box:web")["usage"])
 
     def test_its_page_shows_memory_against_its_limit_and_cpu_once_measured(self):
-        user = get_user_model().objects.create_superuser("operator", "operator@example.com", "pw")
-        self.client.force_login(user)
+        operator(self.client)
         sweep(runtime(cpu=0))
 
         page = self.client.get(self.resource.get_absolute_url())

@@ -3,9 +3,10 @@
 from django.test import TestCase
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare
 
 from ..inventory import confirm_observed
 from ..record_errors import RecordNotFound
@@ -27,10 +28,8 @@ class DriftIsSaidOutLoudTests(TestCase):
     """
 
     def setUp(self):
-        self.resource = ManagedResource.objects.create(
-            key="a-device",
-            kind="tailscale.device",
-            spec={"connection_ref": "", "name": "a-box", "key_expiry_disabled": False},
+        self.resource = declare(
+            "a-device", "tailscale.device", {"connection_ref": "", "name": "a-box", "key_expiry_disabled": False}
         )
         self.resource.conditions = [
             {
@@ -105,10 +104,10 @@ class UnobservableFieldTests(TestCase):
 
     def setUp(self):
         self.principal = cli_principal()
-        self.resource = ManagedResource.objects.create(
-            key="secured-proxy",
-            kind="npm.proxy_host",
-            spec={**PROVIDERS["npm.proxy_host"].from_record(A_PROXY), "certificate_resource": "example-wildcard"},
+        self.resource = declare(
+            "secured-proxy",
+            "npm.proxy_host",
+            {**PROVIDERS["npm.proxy_host"].from_record(A_PROXY), "certificate_resource": "example-wildcard"},
         )
 
     def sweep(self, record=None):
@@ -193,11 +192,7 @@ class UnobservableFieldTests(TestCase):
                 spec = provider.from_record(provider.sample_record)
                 spec[field] = assertions[annotation]
                 with self.subTest(kind=kind, field=field):
-                    resource = ManagedResource.objects.create(
-                        key=f"unconfirmed-{kind.replace('.', '-')}-{field}",
-                        kind=kind,
-                        spec=spec,
-                    )
+                    resource = declare(f"unconfirmed-{kind.replace('.', '-')}-{field}", kind, spec)
                     bridged("inventory", a_sweep(**{kind: [provider.sample_record]}))
                     resource.refresh_from_db()
                     self.assertEqual(
@@ -217,7 +212,7 @@ class UnobservableFieldTests(TestCase):
         for kind, provider in _adoptable():
             with self.subTest(kind=kind):
                 spec = provider.from_record(provider.sample_record)
-                resource = ManagedResource.objects.create(key=f"sample-{kind.replace('.', '-')}", kind=kind, spec=spec)
+                resource = declare(f"sample-{kind.replace('.', '-')}", kind, spec)
                 bridged("inventory", a_sweep(**{kind: [provider.sample_record]}))
                 resource.refresh_from_db()
                 self.assertIsNotNone(
@@ -342,10 +337,8 @@ class AcceptObservedTests(TestCase):
     def setUp(self):
         from ..inventory_testing import store
 
-        self.resource = ManagedResource.objects.create(
-            key="a-device",
-            kind="tailscale.device",
-            spec={"connection_ref": "", "name": "a-box", "key_expiry_disabled": False},
+        self.resource = declare(
+            "a-device", "tailscale.device", {"connection_ref": "", "name": "a-box", "key_expiry_disabled": False}
         )
         # The provider says the key never expires: it was changed there.
         store("tailscale.device", {"name": "a-box", "key_expires": "", "tags": []})

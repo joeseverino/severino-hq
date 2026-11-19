@@ -11,6 +11,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.core.testing import operator
+
 from .. import problems, roles
 from ..connection_catalog import connection_catalog
 from ..connections import ConnectionInstance, ConnectionSpec
@@ -48,7 +50,7 @@ class ReaderTestCase(TestCase):
     def setUp(self):
         # A machine, so the estate card is drawn at all.
         store("tailscale.device", {"name": "example-host", "online": True})
-        user = get_user_model().objects.create_user("example-viewer")
+        user = operator()
         roles.assign(user, roles.Role.VIEWER)
         self.user = get_user_model().objects.get(pk=user.pk)
         self.viewer = web_principal(self.user)

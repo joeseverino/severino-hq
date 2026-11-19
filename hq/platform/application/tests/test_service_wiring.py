@@ -2,10 +2,10 @@
 
 from django.test import TestCase
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_spec import SERVICE_FACETS
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.testing import declare
 
 from ..findings import estate_findings
 from ..security import cli_principal
@@ -25,10 +25,10 @@ class WiringFaultTests(TestCase):
 
     def test_a_served_name_with_no_covering_certificate_is_a_fault(self):
         healthy(
-            ManagedResource.objects.create(
-                key="app-proxy",
-                kind="npm.proxy_host",
-                spec={
+            declare(
+                "app-proxy",
+                "npm.proxy_host",
+                {
                     "domain_names": ["app.example.test"],
                     "forward_scheme": "http",
                     "forward_host": "10.0.0.10",
@@ -44,13 +44,7 @@ class WiringFaultTests(TestCase):
 
     def test_two_declarations_of_the_same_kind_contradict_each_other(self):
         for key in ("dns-a", "dns-b"):
-            healthy(
-                ManagedResource.objects.create(
-                    key=key,
-                    kind="adguard.rewrite",
-                    spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-                )
-            )
+            healthy(declare(key, "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.10"}))
 
         service = find_service("app.example.com")
 
@@ -59,18 +53,12 @@ class WiringFaultTests(TestCase):
 
     def test_two_declarations_of_different_kinds_on_one_facet_are_not_a_fault(self):
         """An internal answer and a public one are both DNS and legitimately differ."""
+        healthy(declare("internal", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.10"}))
         healthy(
-            ManagedResource.objects.create(
-                key="internal",
-                kind="adguard.rewrite",
-                spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-            )
-        )
-        healthy(
-            ManagedResource.objects.create(
-                key="public",
-                kind="cloudflare.dns_record",
-                spec={
+            declare(
+                "public",
+                "cloudflare.dns_record",
+                {
                     "zone": "example.com",
                     "name": "app.example.com",
                     # A name rather than an address: the addresses reserved for
@@ -89,7 +77,7 @@ class WiringFaultTests(TestCase):
             spec = {"zone": "example.com", "name": "app.example.com", "record_type": record_type, "content": content}
             if kind == "adguard.rewrite":
                 spec = {"domain": "app.example.com", "answer": content}
-            healthy(ManagedResource.objects.create(key=f"rec-{index}", kind=kind, spec=spec))
+            healthy(declare(f"rec-{index}", kind, spec))
         return [fault for fault in find_service("app.example.com").faults if "are set up" in fault]
 
     def test_an_a_and_an_aaaa_record_on_one_name_do_not_compete(self):
@@ -106,15 +94,10 @@ class WiringFaultTests(TestCase):
 
     def test_a_txt_record_is_policy_and_never_becomes_a_service(self):
         healthy(
-            ManagedResource.objects.create(
-                key="spf",
-                kind="cloudflare.dns_record",
-                spec={
-                    "zone": "example.com",
-                    "name": "example.com",
-                    "record_type": "TXT",
-                    "content": "v=spf1 -all",
-                },
+            declare(
+                "spf",
+                "cloudflare.dns_record",
+                {"zone": "example.com", "name": "example.com", "record_type": "TXT", "content": "v=spf1 -all"},
             )
         )
 
@@ -125,11 +108,7 @@ class WiringFaultTests(TestCase):
         Both are ``attention``, and a shared label would send an operator
         looking for a missing declaration on a name that has all three of them.
         """
-        ManagedResource.objects.create(
-            key="app-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-        )
+        declare("app-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.10"})
 
         service = find_service("app.example.com")
 
@@ -139,11 +118,7 @@ class WiringFaultTests(TestCase):
 
     def test_a_degraded_resource_outranks_a_wiring_gap(self):
         """Something that was working and is not is not the same as never wired."""
-        resource = ManagedResource.objects.create(
-            key="app-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-        )
+        resource = declare("app-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.10"})
         resource.conditions = [{"type": "Degraded", "status": True, "reason": "", "message": "No answer."}]
         resource.save(update_fields=["conditions"])
 
@@ -156,11 +131,7 @@ class WiringFaultTests(TestCase):
         number of things needing attention wrong, in the one place that number is
         supposed to be trustworthy.
         """
-        resource = ManagedResource.objects.create(
-            key="app-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-        )
+        resource = declare("app-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.10"})
         resource.conditions = [{"type": "Degraded", "status": True, "reason": "", "message": "No answer."}]
         resource.save(update_fields=["conditions"])
 
@@ -189,13 +160,7 @@ class ProviderFacetContractTests(TestCase):
 
         PROVIDERS[invented.kind] = invented
         try:
-            healthy(
-                ManagedResource.objects.create(
-                    key="invented",
-                    kind=invented.kind,
-                    spec={"domain": "new.example.com", "answer": "10.0.0.10"},
-                )
-            )
+            healthy(declare("invented", invented.kind, {"domain": "new.example.com", "answer": "10.0.0.10"}))
             hostnames = [service.hostname for service in service_catalog()]
         finally:
             del PROVIDERS[invented.kind]
@@ -215,13 +180,7 @@ class ProviderFacetContractTests(TestCase):
         }
         catalog_order = [facet for facet, _ in SERVICE_FACETS if facet in supplyable]
 
-        healthy(
-            ManagedResource.objects.create(
-                key="app-dns",
-                kind="adguard.rewrite",
-                spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-            )
-        )
+        healthy(declare("app-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.10"}))
 
         self.assertEqual(
             [facet.id for facet in find_service("app.example.com").facets],

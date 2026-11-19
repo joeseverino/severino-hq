@@ -10,9 +10,10 @@ from unittest import mock
 from django.test import TestCase
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.permissions import Cloudflare
 from hq.domains.control_plane.reading_parts import clean_refused_parts, parts_of
+from hq.platform.core.testing import declare
 
 from ..credential_sight import PARTIAL, credential_sight
 from ..facts import unreadable_labels
@@ -57,10 +58,8 @@ def refused_on_every_zone():
 class PartlyRefusedReadingTests(TestCase):
     def setUp(self):
         for zone in ("example.com", "example.net"):
-            ManagedResource.objects.create(
-                key=f"{zone.replace('.', '-')}-zone",
-                kind="cloudflare.zone",
-                spec={"zone": zone, "connection_ref": "example-api"},
+            declare(
+                f"{zone.replace('.', '-')}-zone", "cloudflare.zone", {"zone": zone, "connection_ref": "example-api"}
             )
         ProviderInventory.objects.create(
             kind="cloudflare.dns_record",

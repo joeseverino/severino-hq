@@ -5,7 +5,6 @@ from datetime import timedelta
 from ipaddress import ip_network
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.db import connection as database_connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
@@ -19,6 +18,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderConnection,
 from hq.domains.control_plane.observations.public_registry import ADDRESS_KIND, DOMAIN_KIND
 from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.application.markup_testing import select, text
+from hq.platform.core.testing import READER, declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 from hq_sdk.testing import plain
 
@@ -35,7 +35,6 @@ from ..zone_insights import certificates, registration
 from ..zones import ZONE_KIND, find_zone
 from .host_only import host_only
 
-READ = Principal("reader", "test", frozenset({Capability.READ}))
 CLOUDFLARE = "example-cloudflare"
 SOON = (timezone.now() + timedelta(days=40)).isoformat()
 LATER = (timezone.now() + timedelta(days=80)).isoformat()
@@ -58,16 +57,10 @@ def proxied(name, record_type, content, zone="example.com", *, on=True):
 
 
 def declare_record(key, name, record_type, content, zone="example.com"):
-    return ManagedResource.objects.create(
-        key=key,
-        kind="cloudflare.dns_record",
-        spec={
-            "zone": zone,
-            "name": name,
-            "record_type": record_type,
-            "content": content,
-            "connection_ref": CLOUDFLARE,
-        },
+    return declare(
+        key,
+        "cloudflare.dns_record",
+        {"zone": zone, "name": name, "record_type": record_type, "content": content, "connection_ref": CLOUDFLARE},
     )
 
 
@@ -123,11 +116,7 @@ TUNNEL = {
 def estate():
     """A zone with two edge certificates, a Pages project, an Access app and a tunnel."""
 
-    ManagedResource.objects.create(
-        key="example-com",
-        kind=ZONE_KIND,
-        spec={"zone": "example.com", "connection_ref": CLOUDFLARE},
-    )
+    declare("example-com", ZONE_KIND, {"zone": "example.com", "connection_ref": CLOUDFLARE})
     store(ZONE_KIND, {"zone": "example.com", "connection_ref": CLOUDFLARE})
     # Proxied: an edge certificate serves a name only through a proxied record.
     store(
@@ -192,7 +181,7 @@ class DomainCardTests(TestCase):
             self.assertIn(authority_name(code), card.detail)
 
     def relationships(self):
-        return relationships_for("zone:example.com", principal=READ)
+        return relationships_for("zone:example.com", principal=READER)
 
     def services_card(self):
         return next(i for i in self.zone.insights if i.label == "Services")
@@ -227,8 +216,7 @@ class DomainCardTests(TestCase):
         self.assertTrue(self.services_card().note.startswith("2 "))
         self.assertNotIn("Access application", [insight.label for insight in find_zone("example.com").insights])
 
-        user = get_user_model().objects.create_user("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
 
         self.assertContains(response, 'data-entity="Access application"', count=2)
@@ -259,8 +247,7 @@ class DomainCardTests(TestCase):
         self.assertIn("Access application", self.relationships().unreadable)
 
     def test_the_page_renders_the_cards(self):
-        user = get_user_model().objects.create_user("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
 
@@ -320,8 +307,7 @@ class RegistrationFallbackTests(TestCase):
                 "read_at": timezone.now().isoformat(),
             },
         )
-        user = get_user_model().objects.create_user("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
 
@@ -380,8 +366,7 @@ class ServiceColumnTests(TestCase):
             ADDRESS_KIND,
             {"address": "203.0.113.7", "organization": "Example Hosting", "read_at": timezone.now().isoformat()},
         )
-        self.user = get_user_model().objects.create_user("operator", password="x" * 20)
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
 
     def services(self):
         return {service.hostname: service for service in service_catalog()}
@@ -476,11 +461,7 @@ class ServiceColumnTests(TestCase):
 class TopologyEstateTests(TestCase):
     def setUp(self):
         estate()
-        ManagedResource.objects.create(
-            key="example-host",
-            kind="machine",
-            spec={"name": "example-host", "addresses": ["100.64.0.53"]},
-        )
+        declare("example-host", "machine", {"name": "example-host", "addresses": ["100.64.0.53"]})
         store("tailscale.dns", {"record": "dns", "nameservers": ["100.64.0.53"]})
         for ref, provider in ((CLOUDFLARE, "cloudflare_api"), ("example-tailnet", "tailscale")):
             ProviderConnection.objects.create(
@@ -497,7 +478,7 @@ class TopologyEstateTests(TestCase):
 
     def project(self):
         with offering(self.finance, alone=True):
-            topology = derive_topology(principal=READ)
+            topology = derive_topology(principal=READER)
         return (
             {node.id: node for node in topology.nodes},
             {(edge.source, edge.target, edge.label): edge for edge in topology.edges},
@@ -552,8 +533,7 @@ class TopologyEstateTests(TestCase):
         self.assertEqual(edge.status, "attention")
 
     def test_the_page_draws_estate_lanes(self):
-        user = get_user_model().objects.create_user("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
         with offering(self.finance, alone=True):
             response = self.client.get(reverse("control_plane:topology"), {"lens": "everything"})
 
@@ -565,11 +545,7 @@ class TopologyEstateTests(TestCase):
 
 class ZoneFactsTests(TestCase):
     def test_a_registration_does_not_drop_another_resources_facts(self):
-        ManagedResource.objects.create(
-            key="example-com",
-            kind=ZONE_KIND,
-            spec={"zone": "example.com", "connection_ref": CLOUDFLARE},
-        )
+        declare("example-com", ZONE_KIND, {"zone": "example.com", "connection_ref": CLOUDFLARE})
         store(
             ZONE_KIND,
             {
@@ -578,14 +554,14 @@ class ZoneFactsTests(TestCase):
                 "registration": {"expires_at": LATER, "auto_renew": True},
             },
         )
-        ManagedResource.objects.create(
-            key="example-certificate",
-            kind="tls.certificate",
-            spec={"domains": ["example.com"]},
+        declare(
+            "example-certificate",
+            "tls.certificate",
+            {"domains": ["example.com"]},
             status={"unreachable_consumers": [{"domain": "app.example.com"}]},
         )
         with host_only():
-            nodes = {node.id: node for node in derive_topology(principal=READ).nodes}
+            nodes = {node.id: node for node in derive_topology(principal=READER).nodes}
 
         self.assertIn(("unreachable", "app.example.com"), nodes["resource:example-certificate"].facts)
         self.assertIn(("domain", "example.com"), nodes["resource:example-com"].facts)
@@ -623,8 +599,7 @@ class QueryCostTests(TestCase):
 
     def setUp(self):
         estate()
-        user = get_user_model().objects.create_user("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
         ProviderConnection.objects.create(
             controller_id="example-controller",
             connection_ref=CLOUDFLARE,
@@ -662,7 +637,7 @@ class QueryCostTests(TestCase):
     def test_the_topology(self):
         with host_only():
             self.assert_flat(
-                lambda: derive_topology(principal=READ),
+                lambda: derive_topology(principal=READER),
                 rows=lambda topology: distinct(r"\bresource:n\d+\b")(" ".join(node.id for node in topology.nodes)),
             )
 

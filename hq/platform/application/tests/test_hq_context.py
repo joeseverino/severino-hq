@@ -4,7 +4,6 @@ import importlib
 from datetime import UTC, timedelta
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -14,6 +13,7 @@ from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_
 from hq.domains.jobs.models import Job
 from hq.platform.application.markup_testing import all_elements, links, select, text
 from hq.platform.application.security import cli_principal
+from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..container_words import UP_TO_DATE, UPDATE_AVAILABLE
@@ -104,9 +104,7 @@ def tailnet(**fields) -> None:
 
 
 def estate(*, containers: int = 0, timers: int = 1, deployed: str = HEAD) -> None:
-    ManagedResource.objects.create(
-        key="example-box", kind="machine", spec={"name": "example-box", "addresses": ["192.0.2.44"]}
-    )
+    declare("example-box", "machine", {"name": "example-box", "addresses": ["192.0.2.44"]})
     store(
         "portainer.container",
         running("app", IMAGE, "0123456789ab"),
@@ -348,7 +346,7 @@ class ProblemTests(TestCase):
 @SITE
 class PageTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("owner", password="unused-password"))
+        operator(self.client)
         first, second = own("192.0.2.44")
         first.start()
         second.start()

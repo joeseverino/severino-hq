@@ -1,22 +1,20 @@
 """AdGuard readings joined into the graph: devices, services and findings."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.adguard import CLIENT_KIND, DNS_KIND, QUERY_KIND
+from hq.platform.core.testing import READER, declare, operator
 from hq_sdk.testing import plain
 
 from ..facts import Subject, inventory_about
 from ..relationships import relationships_for
-from ..security import Capability, Principal
 from ..tailnet import TAILNET_KIND
 from ..topology import derive_topology
 
-READ = Principal("reader", "test", frozenset({Capability.READ}))
 CONTROLLER = "example-controller"
 ADGUARD = "example-adguard"
 
@@ -46,7 +44,7 @@ def connection(ref, provider):
 
 
 def machine(name, address):
-    ManagedResource.objects.create(key=name, kind="machine", spec={"name": name, "addresses": [address]})
+    declare(name, "machine", {"name": name, "addresses": [address]})
 
 
 def summary(domain, queries, **extra):
@@ -66,11 +64,7 @@ class AdGuardJoinTests(TestCase):
         machine("lab-1", "100.64.0.10")
         machine("laptop-1", "100.64.0.2")
         for name in ("app", "idle"):
-            ManagedResource.objects.create(
-                key=f"{name}-rewrite",
-                kind="adguard.rewrite",
-                spec={"domain": f"{name}.example.com", "answer": "100.64.0.10"},
-            )
+            declare(f"{name}-rewrite", "adguard.rewrite", {"domain": f"{name}.example.com", "answer": "100.64.0.10"})
         store(
             "adguard.rewrite",
             {"connection_ref": ADGUARD, "domain": "app.example.com", "answer": "100.64.0.10"},
@@ -111,7 +105,7 @@ class AdGuardJoinTests(TestCase):
         self.assertEqual({record["domain"] for _s, record in joined}, {"app.example.com", "idle.example.com"})
 
     def test_a_machine_shows_its_dns_client_identity(self):
-        found = relationships_for("machine:laptop-1", principal=READ)
+        found = relationships_for("machine:laptop-1", principal=READER)
 
         relation = OBSERVATIONS[CLIENT_KIND].relation_to(by_address=True)
         self.assertEqual(found.labels(relation), ("laptop",))
@@ -120,27 +114,26 @@ class AdGuardJoinTests(TestCase):
 
     def test_a_declared_tailnet_device_shows_its_dns_client_identity(self):
         store(TAILNET_KIND, {"name": "laptop-1", "addresses": ["100.64.0.2"], "online": True})
-        ManagedResource.objects.create(key="laptop-device", kind=TAILNET_KIND, spec={"name": "laptop-1"})
+        declare("laptop-device", TAILNET_KIND, {"name": "laptop-1"})
 
-        found = relationships_for("resource:laptop-device", principal=READ)
+        found = relationships_for("resource:laptop-device", principal=READER)
 
         self.assertIn(OBSERVATIONS[CLIENT_KIND].relation_to(by_address=True), found.phrases())
 
     def test_a_service_shows_that_it_is_used_and_by_whom(self):
-        found = relationships_for("service:app.example.com", principal=READ)
+        found = relationships_for("service:app.example.com", principal=READER)
 
         self.assertEqual(
             found.labels(OBSERVATIONS[QUERY_KIND].relation), ("12 lookups from 1 device in 24 hours: laptop",)
         )
 
     def test_the_query_aggregate_never_joins_a_device(self):
-        found = relationships_for("machine:laptop-1", principal=READ)
+        found = relationships_for("machine:laptop-1", principal=READER)
 
         self.assertNotIn(OBSERVATIONS[QUERY_KIND].relation, found.phrases())
 
     def test_the_service_page_renders_the_usage(self):
-        user = get_user_model().objects.create_user("dns-op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         page = self.client.get(reverse("control_plane:service", kwargs={"hostname": "app.example.com"}))
 
@@ -148,7 +141,7 @@ class AdGuardJoinTests(TestCase):
 
     def test_a_reading_of_another_connection_says_nothing_about_this_one(self):
         connection("other-adguard", "adguard")
-        topology = derive_topology(principal=READ)
+        topology = derive_topology(principal=READER)
         other = next(
             node for node in topology.nodes if node.kind == "connection" and node.connection_ref == "other-adguard"
         )

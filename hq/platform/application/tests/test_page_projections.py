@@ -7,7 +7,6 @@ the API, MCP, CLI or SDK cannot return fails here.
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -16,6 +15,7 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.domains.control_plane.permissions import Tailscale
 from hq.platform.application.markup_testing import select, text
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core.testing import NOBODY, READER, operator
 
 from ..connection_context import ConnectionsContext, connections_context
 from ..field_masks import WHOLE_RECORD
@@ -24,7 +24,7 @@ from ..resources import (
     get_resource,
     list_resource,
 )
-from ..security import AuthorizationError, Capability, Principal, cli_principal
+from ..security import AuthorizationError, cli_principal
 from ..tailnet_context import TailnetContext
 
 NOW = timezone.now()
@@ -128,7 +128,7 @@ def without_request(payload):
 class TailnetProjectionTests(TestCase):
     def setUp(self):
         populate()
-        self.client.force_login(get_user_model().objects.create_user("operator", password="pw", is_staff=True))
+        operator(self.client)
 
     def test_the_page_and_the_read_are_one_projection(self):
         response = self.client.get(reverse("control_plane:tailnet"))
@@ -181,7 +181,7 @@ class TailnetProjectionTests(TestCase):
         self.assertContains(response, "Tailnet policy not read yet.")
 
     def test_a_principal_without_read_is_refused(self):
-        nobody = Principal("nobody", "test", frozenset())
+        nobody = NOBODY
 
         with self.assertRaises(AuthorizationError):
             list_resource("tailnet", principal=nobody)
@@ -191,7 +191,7 @@ class TailnetProjectionTests(TestCase):
 class ConnectionProjectionTests(TestCase):
     def setUp(self):
         populate()
-        self.client.force_login(get_user_model().objects.create_user("operator", password="pw", is_staff=True))
+        operator(self.client)
 
     def test_the_page_and_the_read_are_one_projection(self):
         response = self.client.get(reverse("control_plane:connections"))
@@ -294,7 +294,7 @@ class ConnectionProjectionTests(TestCase):
         self.assertContains(self.client.get(reverse("control_plane:connections")), "Read asked")
 
     def test_a_reader_sees_no_read_now(self):
-        reader = Principal("reader", "test", frozenset({Capability.READ}))
+        reader = READER
 
         found = connections_context(principal=reader)
 

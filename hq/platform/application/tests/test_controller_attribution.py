@@ -5,11 +5,10 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from ..findings import derive_findings
-from ..security import Capability, Principal
-from ..topology_model import Topology, TopologyEdge, TopologyNode
+from hq.platform.core.testing import MANAGER
 
-MANAGE = Principal("operator", "test", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
+from ..findings import derive_findings
+from ..topology_model import Topology, TopologyEdge, TopologyNode
 
 
 def _stale(node_id: str, kind: str) -> TopologyNode:
@@ -37,7 +36,7 @@ class ControllerAttributionTests(TestCase):
             ),
         )
 
-        (claim,) = derive_findings(topology, principal=MANAGE)
+        (claim,) = derive_findings(topology, principal=MANAGER)
 
         self.assertEqual(claim.rule, "controller-sweep-stale")
         self.assertEqual(claim.subject, "controller:one")
@@ -59,7 +58,7 @@ class ControllerAttributionTests(TestCase):
             ),
         )
 
-        raised = derive_findings(topology, principal=MANAGE)
+        raised = derive_findings(topology, principal=MANAGER)
 
         self.assertEqual([item.rule for item in raised], ["kind-never-swept"] * 2)
 
@@ -83,7 +82,7 @@ class ControllerAttributionTests(TestCase):
             ),
         )
 
-        raised = derive_findings(topology, principal=MANAGE)
+        raised = derive_findings(topology, principal=MANAGER)
 
         # One kind alone is no shared failure, so the controller is not named.
         self.assertEqual([item.rule for item in raised], ["kind-never-swept"])

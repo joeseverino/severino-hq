@@ -9,19 +9,18 @@ offline CA, a phone. It carries what the machine is for and the addresses that
 reach it, and it puts the machine on the board by itself.
 """
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import strip_tags
 
 from hq.domains.control_plane.models import (
-    ManagedResource,
     ProviderConnection,
     ProviderInventory,
 )
 from hq.platform.application.markup_testing import all_elements, text
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core.testing import declare, operator
 from hq_sdk.testing import plain
 
 from ..capabilities import capability_words
@@ -147,8 +146,7 @@ class TieTests(TestCase):
 
 class MachinePageTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
         a_connection(
             "a-portainer",
             "portainer",
@@ -197,16 +195,11 @@ class DeclaredMachineTests(TestCase):
     """
 
     def setUp(self):
-        from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(
-            key="a-laptop",
-            kind="machine",
-            spec={
-                "name": "a-laptop",
-                "role": "Primary admin device",
-                "addresses": ["10.0.0.5", "100.64.0.5"],
-            },
+        declare(
+            "a-laptop",
+            "machine",
+            {"name": "a-laptop", "role": "Primary admin device", "addresses": ["10.0.0.5", "100.64.0.5"]},
         )
 
     def machine(self):
@@ -416,11 +409,10 @@ class TailnetPresenceTests(TestCase):
                 self.assertEqual(found.presence.online, online)
 
     def test_a_machine_with_no_tailnet_record_has_no_presence(self):
-        from hq.domains.control_plane.models import ManagedResource
 
         from ..machines import machine
 
-        ManagedResource.objects.create(key="a-printer", kind="machine", spec={"name": "a-printer"})
+        declare("a-printer", "machine", {"name": "a-printer"})
 
         self.assertIsNone(machine("a-printer").presence)
 
@@ -435,16 +427,12 @@ class OneMachineManyNamesTests(TestCase):
     def setUp(self):
         from django.utils import timezone
 
-        from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+        from hq.domains.control_plane.models import ProviderInventory
 
-        ManagedResource.objects.create(
-            key="a-laptop",
-            kind="machine",
-            spec={
-                "name": "a-laptop",
-                "role": "Primary admin device",
-                "addresses": ["10.0.0.5", "100.64.0.5"],
-            },
+        declare(
+            "a-laptop",
+            "machine",
+            {"name": "a-laptop", "role": "Primary admin device", "addresses": ["10.0.0.5", "100.64.0.5"]},
         )
         ProviderInventory.objects.create(
             kind="tailscale.device",
@@ -489,17 +477,8 @@ class WhoeverSweptTests(TestCase):
     """
 
     def setUp(self):
-        from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(
-            key="a-docker-host",
-            kind="machine",
-            spec={
-                "name": "a-docker-host",
-                "role": "Docker host",
-                "addresses": ["10.0.0.9"],
-            },
-        )
+        declare("a-docker-host", "machine", {"name": "a-docker-host", "role": "Docker host", "addresses": ["10.0.0.9"]})
         containers(
             {
                 "name": "a-service",
@@ -522,11 +501,10 @@ class WhoeverSweptTests(TestCase):
         self.assertNotIn("a-laptop-that-swept", names)
 
     def test_another_name_finds_the_machine_and_its_page_redirects_there(self):
-        from django.contrib.auth import get_user_model
         from django.urls import reverse
 
         self.assertEqual(machine("a-laptop-that-swept").name, "a-docker-host")
-        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
+        operator(self.client, "op")
 
         response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-laptop-that-swept"}))
 
@@ -537,20 +515,16 @@ class WhoeverSweptTests(TestCase):
         )
 
     def test_the_key_it_was_declared_under_finds_it_too(self):
-        from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(key="a-laptop", kind="machine", spec={"name": "A Laptop"})
+        declare("a-laptop", "machine", {"name": "A Laptop"})
 
         self.assertEqual(machine("a-laptop").name, "A Laptop")
 
     def test_a_declared_machine_nothing_opens_is_not_said_to_be_hearsay(self):
-        from django.contrib.auth import get_user_model
         from django.urls import reverse
 
-        from hq.domains.control_plane.models import ManagedResource
-
-        ManagedResource.objects.create(key="a-laptop", kind="machine", spec={"name": "a-laptop"})
-        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
+        declare("a-laptop", "machine", {"name": "a-laptop"})
+        operator(self.client, "op")
 
         response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-laptop"}))
 
@@ -566,15 +540,9 @@ class ReadingThisOnTheMachineTests(TestCase):
     """
 
     def setUp(self):
-        from hq.domains.control_plane.models import ManagedResource
 
-        self.user = get_user_model().objects.create_user(username="an-operator", password="not-used-here")
-        self.client.force_login(self.user)
-        ManagedResource.objects.create(
-            key="a-laptop",
-            kind="machine",
-            spec={"name": "a-laptop", "role": "", "addresses": ["100.64.0.5"]},
-        )
+        self.user = operator(self.client)
+        declare("a-laptop", "machine", {"name": "a-laptop", "role": "", "addresses": ["100.64.0.5"]})
 
     def page(self, address):
         return self.client.get(
@@ -612,14 +580,7 @@ class ObservedAddressAnnotationTests(TestCase):
     """
 
     def setUp(self):
-        ManagedResource.objects.create(
-            key="a-box",
-            kind="machine",
-            spec={
-                "name": "a-box",
-                "addresses": ["192.0.2.50", "100.101.102.103"],
-            },
-        )
+        declare("a-box", "machine", {"name": "a-box", "addresses": ["192.0.2.50", "100.101.102.103"]})
         ProviderInventory.objects.create(
             kind="tailscale.device",
             observed_at=timezone.now(),
@@ -696,11 +657,8 @@ class IdentifierIsFixedTests(TestCase):
     """
 
     def setUp(self):
-        self.resource = ManagedResource.objects.create(
-            key="a-box", kind="machine", spec={"name": "a-box", "addresses": []}
-        )
-        user = get_user_model().objects.create_user(username="op", password="pw", is_staff=True, is_superuser=True)
-        self.client.force_login(user)
+        self.resource = declare("a-box", "machine", {"name": "a-box", "addresses": []})
+        operator(self.client, "op")
 
     def test_the_form_does_not_ask_for_it(self):
         from hq.platform.application.provider_forms import ResourceIdentityForm
@@ -728,8 +686,7 @@ class OneStateTests(TestCase):
     """An offline device reads as offline; the connection is named elsewhere."""
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="state-operator", password="not-a-real-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
         a_connection("example-tailnet", "tailscale")
 
     def device(self, *, online, tags=("tag:server",)):
@@ -803,8 +760,7 @@ class DeclareFromWhatHQKnowsTests(TestCase):
     """ "Add this machine to HQ" opens a form holding the name and addresses HQ has."""
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="declare-operator", password="not-a-real-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
         ProviderInventory.objects.update_or_create(
             kind="tailscale.device",
             defaults={
@@ -856,11 +812,7 @@ class DeclareFromWhatHQKnowsTests(TestCase):
         self.assertEqual(form.initial["addresses"], ["100.64.0.7", "192.0.2.7"])
 
     def test_a_device_declaration_offers_machine_details_instead(self):
-        ManagedResource.objects.create(
-            key="example-host-tailnet",
-            kind="tailscale.device",
-            spec={"name": "example-host"},
-        )
+        declare("example-host-tailnet", "tailscale.device", {"name": "example-host"})
 
         response = self.page()
         labels = [action.label for action in response.context["page"].actions]

@@ -10,13 +10,13 @@ from django.test import TestCase
 
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
+from hq.platform.core.testing import operator
 
 
 class ServiceFavoriteTests(TestCase):
     def setUp(self):
-        from django.contrib.auth import get_user_model
 
-        self.user = get_user_model().objects.create_user(username="an-operator", password="not-used-here")
+        self.user = operator(username="an-operator")
 
     def order(self):
         from hq.platform.application.pins import SERVICE, ordered
@@ -107,10 +107,8 @@ class PinCapabilityTests(TestCase):
     """A pin is the person's own: kept through the chokepoint, audited, and refused to any token."""
 
     def setUp(self):
-        from django.contrib.auth import get_user_model
 
-        self.user = get_user_model().objects.create_user(username="an-operator", password="not-used-here")
-        self.client.force_login(self.user)
+        self.user = operator(self.client, "an-operator")
 
     def test_each_page_pins_through_the_chokepoint_and_is_audited(self):
         from django.urls import reverse

@@ -5,12 +5,12 @@ from datetime import timedelta
 from pathlib import Path
 from unittest import skipUnless
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.platform.application.markup_testing import hrefs, select
+from hq.platform.core.testing import SignedInTestCase
 
 from ..attention import raised
 from ..finding_steps import Do, Run
@@ -46,10 +46,7 @@ class PostureTests(TestCase):
         self.assertEqual(item.observed_at, read)
 
 
-class PostureViewTests(TestCase):
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("owner", password="unused-password"))
-
+class PostureViewTests(SignedInTestCase):
     def test_the_page_leads_with_what_is_not_met(self):
         store(private=True, access=kept(token="write"), variables=["HQ_IMAGE"])
 

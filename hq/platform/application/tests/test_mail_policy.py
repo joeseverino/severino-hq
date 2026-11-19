@@ -7,13 +7,13 @@ must never do is publish something other than what the operator chose.
 
 from types import SimpleNamespace
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.markup_testing import select, with_class
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core.testing import declare, operator
 
 from ..mail_policy import (
     SPF_LOOKUP_LIMIT,
@@ -187,11 +187,10 @@ class MailPageTests(TestCase):
             ("spf", "example.com", '"v=spf1 include:example.net -all"', None),
             ("dmarc", "_dmarc.example.com", '"v=DMARC1; p=none; rua=mailto:box@example.com; fo=1"', None),
         ):
-            ManagedResource.objects.create(
-                key=key,
-                kind="cloudflare.dns_record",
-                enabled=True,
-                spec={
+            declare(
+                key,
+                "cloudflare.dns_record",
+                {
                     "zone": "example.com",
                     "name": name,
                     "record_type": "MX" if priority else "TXT",
@@ -200,15 +199,10 @@ class MailPageTests(TestCase):
                     "proxied": False,
                     "ttl": 1,
                 },
+                enabled=True,
             )
-        ManagedResource.objects.create(
-            key="zone",
-            kind="cloudflare.zone",
-            enabled=True,
-            spec={"zone": "example.com", "connection_ref": "cf"},
-        )
-        self.user = get_user_model().objects.create_user("op", password="x" * 12)
-        self.client.force_login(self.user)
+        declare("zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "cf"}, enabled=True)
+        self.user = operator(self.client)
         self.url = reverse("zones:mail", kwargs={"zone": "example.com"})
 
     def test_the_page_reads_the_policy_in_english(self):

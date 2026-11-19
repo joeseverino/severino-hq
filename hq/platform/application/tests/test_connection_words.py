@@ -2,7 +2,6 @@
 
 from types import SimpleNamespace
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -11,6 +10,7 @@ from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.zone_views import _pin_action
 from hq.platform.application.markup_testing import text
+from hq.platform.core.testing import operator
 
 from ..action_links import _CONNECTION_ROUTES
 from ..connection_lifecycle import Lifecycle
@@ -57,7 +57,7 @@ class NameTests(TestCase):
 
     def test_the_connections_page_heads_a_row_by_its_service(self):
         connect("example-portainer", "portainer")
-        self.client.force_login(get_user_model().objects.create_superuser("connection-reader"))
+        operator(self.client)
 
         page = text(self.client.get(reverse("control_plane:connections")))
 

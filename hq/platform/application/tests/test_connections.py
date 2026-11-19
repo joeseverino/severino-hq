@@ -8,7 +8,6 @@ being given a credential rather than by anything here being edited.
 
 from collections import Counter
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -19,6 +18,7 @@ from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import all_elements, hrefs, text
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core.testing import SignedInTestCase, declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..connection_catalog import AUTHORITY_LABELS, CONTROLLER_CONNECTIONS, connection_catalog
@@ -223,8 +223,7 @@ class DerivationTests(TestCase):
 
 class ConnectionPageTests(SentinelMixin, TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
 
     def test_the_page_lists_what_the_controller_reported(self):
         sweep(A_PORTAINER, A_DNS_TOKEN)
@@ -435,21 +434,12 @@ class SeedTests(TestCase):
     """
 
     def setUp(self):
-        from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(
-            key="a-docker-host",
-            kind="machine",
-            spec={
-                "name": "a-docker-host",
-                "role": "",
-                "addresses": ["10.0.0.9"],
-            },
-        )
-        ManagedResource.objects.create(
-            key="probe-route",
-            kind="caddy.route",
-            spec={"connection_ref": "an-edge", "domain": "probe.invalid", "upstream": "a-docker-host:8099"},
+        declare("a-docker-host", "machine", {"name": "a-docker-host", "role": "", "addresses": ["10.0.0.9"]})
+        declare(
+            "probe-route",
+            "caddy.route",
+            {"connection_ref": "an-edge", "domain": "probe.invalid", "upstream": "a-docker-host:8099"},
         )
 
     def test_a_proxy_points_at_what_already_serves_the_name(self):
@@ -532,12 +522,8 @@ class SeedTests(TestCase):
         self.assertEqual(seeded["zone"], "dev.example.com")
 
 
-class AdoptionSafetyTests(TestCase):
+class AdoptionSafetyTests(SignedInTestCase):
     """HQ offers to watch any container it finds serving a name."""
-
-    def setUp(self):
-        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(self.user)
 
     @staticmethod
     def watch(response):
@@ -623,17 +609,11 @@ class AdoptionSafetyTests(TestCase):
         it asserts nothing about the container's definition.
         """
 
-        from hq.domains.control_plane.models import ManagedResource
-
         self._service_page(portainer_managed=False)
-        ManagedResource.objects.create(
-            key="a-docker-host-probe",
-            kind="portainer.container",
-            spec={
-                "connection_ref": "a-portainer",
-                "host": "a-docker-host",
-                "name": "probe",
-            },
+        declare(
+            "a-docker-host-probe",
+            "portainer.container",
+            {"connection_ref": "a-portainer", "host": "a-docker-host", "name": "probe"},
         )
 
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "probe.invalid"}))
@@ -657,16 +637,12 @@ class AdoptionSafetyTests(TestCase):
         )
 
 
-class ControllerColumnTests(TestCase):
+class ControllerColumnTests(SignedInTestCase):
     """Whose controller reported a connection is worth saying once there are two.
 
     With one controller, printing it under every row repeats one machine's name
     and says nothing.
     """
-
-    def setUp(self):
-        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(self.user)
 
     def test_one_controller_is_not_named_on_every_row(self):
         sweep(A_PORTAINER, A_DNS_TOKEN, controller_id="a-controller")
@@ -741,8 +717,7 @@ class OutwardLinkChoiceTests(TestCase):
     """
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
         sweep(A_PORTAINER, A_DNS_TOKEN)
 
     def test_nothing_chosen_shows_everything(self):
@@ -852,18 +827,13 @@ class DependsOnceTests(TestCase):
     """A declaration that is the same thing as a target is listed once, by name."""
 
     def setUp(self):
-        from hq.domains.control_plane.models import ManagedResource
 
         for name in ("example.com", "example.net"):
-            ManagedResource.objects.create(
-                key=name.replace(".", "-"),
-                kind="cloudflare.zone",
-                spec={"zone": name, "connection_ref": "cloudflare-dns"},
-            )
-        ManagedResource.objects.create(
-            key="www-record",
-            kind="cloudflare.dns_record",
-            spec={
+            declare(name.replace(".", "-"), "cloudflare.zone", {"zone": name, "connection_ref": "cloudflare-dns"})
+        declare(
+            "www-record",
+            "cloudflare.dns_record",
+            {
                 "zone": "example.com",
                 "name": "www.example.com",
                 "record_type": "CNAME",
@@ -894,8 +864,7 @@ class DependsOnceTests(TestCase):
         self.assertEqual([link.label for link in instance.dependencies], ["www-record"])
 
     def test_the_page_shows_the_zone_key_nowhere(self):
-        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(user)
+        operator(self.client)
 
         response = self.client.get(reverse("control_plane:connections"))
 

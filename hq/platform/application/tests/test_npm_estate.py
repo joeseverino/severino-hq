@@ -9,10 +9,10 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.permissions import NginxProxyManager
 from hq.platform.application.markup_testing import text
+from hq.platform.core.testing import READER, declare
 
 from ..derived_reads import get_reading, serialize_path
 from ..findings import findings
@@ -21,9 +21,7 @@ from ..inventory_testing import store
 from ..paths import path_to
 from ..projection import projection_scope
 from ..relationships import relationships_for
-from ..security import Capability, Principal
 
-READER = Principal("reader", "test", frozenset({Capability.READ}))
 NPM = "example-npm"
 PUBLIC_RANGE = mock.patch("hq.platform.application.reach.DOCUMENTATION", (ip_network("192.0.2.0/24"),))
 
@@ -45,14 +43,12 @@ def certificate(expires_on, *serves):
 
 
 def estate():
-    ManagedResource.objects.create(key="lab-1", kind="machine", spec={"name": "lab-1", "addresses": ["100.64.0.10"]})
-    ManagedResource.objects.create(
-        key="edge-1", kind="machine", spec={"name": "edge-1", "addresses": ["198.51.100.20"]}
-    )
-    ManagedResource.objects.create(
-        key="app-proxy",
-        kind="npm.proxy_host",
-        spec={
+    declare("lab-1", "machine", {"name": "lab-1", "addresses": ["100.64.0.10"]})
+    declare("edge-1", "machine", {"name": "edge-1", "addresses": ["198.51.100.20"]})
+    declare(
+        "app-proxy",
+        "npm.proxy_host",
+        {
             "domain_names": ["app.example.com"],
             "forward_scheme": "http",
             "forward_host": "127.0.0.1",

@@ -6,14 +6,14 @@ from collections import Counter
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
+from hq.platform.core.testing import READER
+
 from ..finding_model import Finding
 from ..findings import finding_facts, findings
 from ..inventory_testing import store
-from ..security import Capability, Principal
 from .test_container_standard import KEPT, runtime
 from .test_containers import running
 
-READER = Principal("reader", "test", frozenset({Capability.READ}))
 ADVISORY, UPDATE, UNPINNED = "container-image-advisory", "container-image-update", "container-image-unpinned"
 HARDENING = "container-hardening"
 

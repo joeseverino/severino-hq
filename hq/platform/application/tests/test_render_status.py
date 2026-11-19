@@ -8,7 +8,6 @@ from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.host import (
     RENDER_REASONS,
@@ -17,6 +16,7 @@ from hq.domains.control_plane.observations.host import (
     STATUS_WORD,
 )
 from hq.platform.application.markup_testing import all_elements
+from hq.platform.core.testing import declare
 
 from .. import render_status_findings as rules
 from ..findings import estate_findings
@@ -148,11 +148,7 @@ class OneDeclarationTests(SimpleTestCase):
 
 class SubjectTests(TestCase):
     def test_a_controller_that_is_a_machine_carries_it_on_the_machine(self):
-        ManagedResource.objects.create(
-            key="example-controller",
-            kind="machine",
-            spec={"name": "example-controller", "addresses": ["192.0.2.10"]},
-        )
+        declare("example-controller", "machine", {"name": "example-controller", "addresses": ["192.0.2.10"]})
         tailnet_connection()
         sweep(unread("missing"))
 

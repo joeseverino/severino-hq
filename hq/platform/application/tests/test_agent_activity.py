@@ -17,7 +17,7 @@ from hq.platform.application.linked_accounts import bind_sign_in
 from hq.platform.application.markup_testing import all_elements
 from hq.platform.application.security import AuthorizationError, agent_principal
 from hq.platform.core.models import AgentIdentity, AuditLog
-from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 
 AGENT = "example-agent"
 OTHER = "example-other"
@@ -30,8 +30,7 @@ def _seen(client_id: str, granted=("read",), person=None) -> None:
 def _person(username: str, role: str = ""):
     """A person signed in as ``username``'s key, holding ``role`` (none when blank)."""
 
-    with no_default_role():
-        user = get_user_model().objects.create_user(username)
+    user = person(username=username)
     bind_sign_in(user, username)
     if role:
         roles.assign(user, role)

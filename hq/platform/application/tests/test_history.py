@@ -2,15 +2,15 @@
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.application.markup_testing import text
 from hq.platform.core import append_only
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..conditions import held_since, stamped
@@ -156,10 +156,9 @@ class HistoryTests(TestCase):
         self.assertEqual(closest.source, "Container")
 
     def test_a_drift_says_when_it_was_first_seen_and_what_happened_near_then(self):
-        resource = ManagedResource.objects.create(
-            key="example-record",
-            kind="cloudflare.dns_record",
-            spec={},
+        resource = declare(
+            "example-record",
+            "cloudflare.dns_record",
             conditions=stamped(
                 [],
                 [{"type": "Drifted", "status": True, "message": "differs"}],
@@ -192,7 +191,7 @@ class AuditHistoryPageTests(TestCase):
 
     def setUp(self):
         self.now = timezone.now()
-        self.client.force_login(get_user_model().objects.create_user("example-operator", password="x" * 20))
+        operator(self.client)
         # The page is read from an empty log, so the sign-in that made the
         # reader is cleared as a flush would, with the guard lifted.
         with append_only.lifted():
@@ -358,7 +357,7 @@ class AuditHistoryPageTests(TestCase):
 
 class NoSecondHistoryTests(TestCase):
     def test_the_audit_log_is_the_only_timeline(self):
-        self.client.force_login(get_user_model().objects.create_user("example-operator", password="x" * 20))
+        operator(self.client)
 
         self.assertEqual(self.client.get("/infrastructure/timeline/").status_code, 404)
         with self.assertRaises(NoReverseMatch):

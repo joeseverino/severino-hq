@@ -1,13 +1,13 @@
 from dataclasses import replace
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.application.markup_testing import elements, text
+from hq.platform.core.testing import SignedInTestCase, declare
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 from hq_sdk.testing import plain
 
@@ -59,6 +59,14 @@ def running(name, image, host="example-box"):
         "network_mode": "bridge",
         "portainer_managed": False,
     }
+
+
+def container(name="web", **spec):
+    return declare(
+        f"example-box-{name}",
+        "portainer.container",
+        {"connection_ref": "example-portainer", "host": "example-box", "name": name, **spec},
+    )
 
 
 def estate(*, advisories=(), app_tags=("v1.2.0", "v1.3.0")):
@@ -370,10 +378,7 @@ def _needs(response) -> list[str]:
     return [group["standing"].label for need in response.context["need_sections"] for group in need["groups"]]
 
 
-class PageTests(TestCase):
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("owner", password="unused-password"))
-
+class PageTests(SignedInTestCase):
     def test_the_page_leads_with_what_needs_you(self):
         estate(advisories=[HIGH])
 
@@ -448,11 +453,7 @@ class PageTests(TestCase):
 
     def test_a_declared_container_links_to_its_own_page_and_shows_its_standing(self):
         estate()
-        ManagedResource.objects.create(
-            key="example-box-kuma",
-            kind="portainer.container",
-            spec={"connection_ref": "example-portainer", "host": "example-box", "name": "kuma"},
-        )
+        container("kuma")
 
         listing = self.client.get(reverse("control_plane:containers"))
         detail = self.client.get(reverse("control_plane:detail", args=["example-box-kuma"]))
@@ -513,12 +514,9 @@ class PageTests(TestCase):
         self.assertContains(response, "No containers yet")
 
 
-class QueryBudgetTests(TestCase):
+class QueryBudgetTests(SignedInTestCase):
     """The page's cost is its readings, never its rows: every container's
     standing shares one read of each reading."""
-
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("owner", password="unused-password"))
 
     def arrange(self, count):
         estate()

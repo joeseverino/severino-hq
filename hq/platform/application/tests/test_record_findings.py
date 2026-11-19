@@ -7,13 +7,13 @@ from unittest import mock
 from django.test import TestCase
 
 from hq.domains.calendars.models import Entry
+from hq.platform.core.testing import READER
 
 from ..attention import readable_by
 from ..dashboard import work_queue
 from ..findings import findings
 from ..security import Capability, Principal
 
-READ = Principal("reader", "test", frozenset({Capability.READ}))
 CONTACTS = Principal("contacts", "test", frozenset({Capability.READ, Capability.MANAGE_CONTACTS}))
 CALENDAR = Principal("calendar", "test", frozenset({Capability.READ, Capability.READ_CALENDAR}))
 # Two messages nobody has read, as the last read of the contact form's store left them.
@@ -39,7 +39,7 @@ class RecordFindingTests(TestCase):
     def test_a_reader_who_may_not_read_a_section_is_not_told_its_backlog(self):
         Entry.objects.create(title="Check", starts_on=date(2026, 3, 1), about="asset:gone")
         with UNREAD:
-            told = [*titles(READ), *queued(READ)]
+            told = [*titles(READER), *queued(READER)]
 
         self.assertNotIn(UNREAD_TITLE, told)
         self.assertNotIn("Check links to gone, which HQ does not have", told)

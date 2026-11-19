@@ -4,12 +4,12 @@ tag, so it reads the same everywhere and a change to it is made once."""
 import re
 
 from django import forms
-from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.markup_testing import elements, select, texts, with_class
 from hq.platform.application.tests.reads import reads
+from hq.platform.core.testing import render
 
 from .source import template_files
 
@@ -25,10 +25,6 @@ def _written_by_hand(pattern: str, partial: str) -> list[str]:
     """Every template but ``partial`` that writes ``pattern``."""
 
     return [name for name, text in _templates() if name != partial and re.search(pattern, text)]
-
-
-def _render(source: str, **context) -> str:
-    return Template(source).render(Context(context))
 
 
 class _Refused(forms.Form):
@@ -70,7 +66,7 @@ class SectionHeadTests(SimpleTestCase):
             (f'{{% section "Projects" fold=True %}}<p>Body</p>{{% aside %}}{aside}{{% endsection %}}', "span"),
         ):
             with self.subTest(box=box):
-                html = _render(source)
+                html = render(source)
                 (head,) = with_class(html, "section-head")
                 beside = [
                     el
@@ -83,12 +79,12 @@ class SectionHeadTests(SimpleTestCase):
                 self.assertIn(aside, elements(html, "a")[0].ancestors)
 
     def test_with_nothing_beside_the_heading_the_head_draws_no_aside(self):
-        html = _render('{% section "Load" %}<p>Body</p>{% aside %} {% endsection %}')
+        html = render('{% section "Load" %}<p>Body</p>{% aside %} {% endsection %}')
 
         self.assertEqual(with_class(html, "section-aside"), [])
 
     def test_a_lede_is_grouped_with_its_heading(self):
-        html = _render('{% section "Load" lede=lede %}<p>Body</p>{% endsection %}', lede="Read a minute ago")
+        html = render('{% section "Load" lede=lede %}<p>Body</p>{% endsection %}', lede="Read a minute ago")
 
         (group,) = elements(html, "hgroup")
         (line,) = with_class(html, "section-lede")
@@ -96,14 +92,14 @@ class SectionHeadTests(SimpleTestCase):
         self.assertEqual(line.words, "Read a minute ago")
 
     def test_an_empty_lede_leaves_the_heading_alone(self):
-        html = _render('{% section "Load" lede=lede %}<p>Body</p>{% endsection %}', lede="")
+        html = render('{% section "Load" lede=lede %}<p>Body</p>{% endsection %}', lede="")
 
         self.assertEqual(elements(html, "hgroup"), [])
 
 
 class CardTests(SimpleTestCase):
     def test_a_card_frames_what_it_holds_under_its_heading(self):
-        html = _render(
+        html = render(
             '{% card css="example-card" heading="example-heading" %}'
             '<span id="example-heading">Hosts</span><p>{{ n }} up</p>{% endcard %}',
             n=3,
@@ -118,13 +114,13 @@ class CardTests(SimpleTestCase):
         self.assertEqual(line.words, "3 up")
 
     def test_a_card_is_the_element_it_is_asked_to_be(self):
-        html = _render('{% card element="details" %}<summary>More</summary>{% endcard %}')
+        html = render('{% card element="details" %}<summary>More</summary>{% endcard %}')
 
         (card,) = with_class(html, "card")
         self.assertEqual(card.tag, "details")
 
     def test_a_data_option_is_its_attribute_bare_when_true_and_absent_when_empty(self):
-        html = _render(
+        html = render(
             "{% card data_fragment=True data_state=state data_paused=paused data_ask_status=url %}A{% endcard %}",
             state="pending",
             paused=False,
@@ -138,7 +134,7 @@ class CardTests(SimpleTestCase):
         self.assertNotIn("data-ask-status", card.attrs)
 
     def test_what_a_page_gives_it_is_escaped(self):
-        html = _render("{% card data_state=state label=state %}{{ state }}{% endcard %}", state='"><b>x</b>')
+        html = render("{% card data_state=state label=state %}{{ state }}{% endcard %}", state='"><b>x</b>')
 
         (card,) = with_class(html, "card")
         self.assertEqual(elements(html, "b"), [])
@@ -149,7 +145,7 @@ class OutsideLinkTests(SimpleTestCase):
     PARTIAL = "partials/_outside_link.html"
 
     def test_markup_links_out_the_way_a_name_does(self):
-        html = _render(
+        html = render(
             '{% outside_link url=url css="chip" tone="good" tip="Success" %}<b>deploy</b>{% endoutside_link %}'
             "{% entity url|outside label=name %}",
             url="https://example.com/run",
@@ -165,25 +161,25 @@ class OutsideLinkTests(SimpleTestCase):
         self.assertEqual(name.attrs["title"], "Opens example.com")
 
     def test_markup_whose_address_is_not_a_web_page_is_drawn_unlinked(self):
-        html = _render("{% outside_link url=url %}<b>deploy</b>{% endoutside_link %}", url="javascript:alert(1)")
+        html = render("{% outside_link url=url %}<b>deploy</b>{% endoutside_link %}", url="javascript:alert(1)")
 
         self.assertEqual(elements(html, "a"), [])
         self.assertEqual(texts(html, "b"), ["deploy"])
 
     def test_a_count_of_nothing_is_still_shown(self):
-        html = _render("{% entity url|outside label=n %}", url="https://example.com/followers", n=0)
+        html = render("{% entity url|outside label=n %}", url="https://example.com/followers", n=0)
 
         self.assertEqual(texts(html, "a"), ["0"])
 
     def test_a_dialog_s_trigger_keeps_its_dialog(self):
-        html = _render('{% outside_link url="https://example.com/about" modal="about" %}About{% endoutside_link %}')
+        html = render('{% outside_link url="https://example.com/about" modal="about" %}About{% endoutside_link %}')
 
         (link,) = elements(html, "a")
         self.assertEqual(link.attrs["data-modal-open"], "about")
         self.assertEqual(link.attrs["aria-controls"], "modal-about")
 
     def test_a_page_outside_hq_opens_in_a_new_tab_without_a_way_back(self):
-        html = _render("{% entity url|outside label=name %}", url="https://example.com/a", name="example-repo")
+        html = render("{% entity url|outside label=name %}", url="https://example.com/a", name="example-repo")
 
         (link,) = elements(html, "a")
         self.assertEqual(link.attrs["href"], "https://example.com/a")
@@ -195,7 +191,7 @@ class OutsideLinkTests(SimpleTestCase):
     def test_an_address_that_is_not_a_web_page_is_not_a_link(self):
         for url in ("javascript:alert(1)", "/commit/abc", "", None):
             with self.subTest(url=url):
-                html = _render("{% entity url|outside label=name %}", url=url, name="abc")
+                html = render("{% entity url|outside label=name %}", url=url, name="abc")
 
                 self.assertEqual(elements(html, "a"), [])
                 self.assertIn("abc", html)
@@ -210,7 +206,7 @@ class RecordLinkTests(SimpleTestCase):
         self.project = Project(name="Example app", slug="example-app")
 
     def test_a_record_is_named_by_its_own_page(self):
-        html = _render("{% entity row|record label=row.name %}", row=self.project)
+        html = render("{% entity row|record label=row.name %}", row=self.project)
 
         (link,) = elements(html, "a")
         self.assertEqual(link.attrs["href"], self.project.get_absolute_url())
@@ -218,25 +214,25 @@ class RecordLinkTests(SimpleTestCase):
         self.assertEqual(link.words, "Example app")
 
     def test_a_section_of_the_page_is_its_anchor(self):
-        html = _render('{% entity row|record:"updates" label="2 open updates" %}', row=self.project)
+        html = render('{% entity row|record:"updates" label="2 open updates" %}', row=self.project)
 
         (link,) = elements(html, "a")
         self.assertEqual(link.attrs["href"], f"{self.project.get_absolute_url()}#updates")
 
     def test_no_record_draws_the_missing_mark(self):
-        html = _render("{% entity row|record %}", row=None)
+        html = render("{% entity row|record %}", row=None)
 
         self.assertEqual(elements(html, "a"), [])
-        self.assertEqual(html, _render("{% empty_value %}"))
+        self.assertEqual(html, render("{% empty_value %}"))
 
     def test_a_thing_with_no_page_of_its_own_is_refused(self):
         with self.assertRaises(AttributeError):
-            _render("{% entity row|record %}", row={"name": "example"})
+            render("{% entity row|record %}", row={"name": "example"})
 
 
 class FactPanelTests(SimpleTestCase):
     def test_a_fact_leads_to_its_page_marked_as_its_part_of_a_region(self):
-        html = _render(
+        html = render(
             '{% facts layout="band" %}{% fact "Connection" icon="network" url="/example/" modal="example" '
             'tone="attention" data_fragment_part="example" %}Loopback{% detail %}<small>TLS 1.3</small>'
             "{% endfact %}{% endfacts %}"
@@ -251,7 +247,7 @@ class FactPanelTests(SimpleTestCase):
         self.assertEqual(link.words, "Loopback")
 
     def test_a_fact_with_a_panel_opens_it_in_place_by_its_id(self):
-        html = _render(
+        html = render(
             '{% facts layout="band" %}{% fact "Weather" icon="cloud" id="example-weather" data_refreshing=refreshing %}'
             '71°{% heading %}<strong>Weather</strong>{% panel %}<p>Mostly cloudy</p>{% foot %}<a href="/s/">Settings</a>'
             "{% endfact %}{% endfacts %}",

@@ -4,7 +4,6 @@ from datetime import timedelta
 from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -13,6 +12,7 @@ from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import ActionItemRead, AuditLog
+from hq.platform.core.testing import operator
 from hq_sdk.testing import plain
 
 from ..action_items import (
@@ -89,8 +89,8 @@ class IdentityTests(TestCase):
 
 class AsideStateTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.someone = get_user_model().objects.create_user("other", password="x" * 20)
+        self.user = operator(username="op")
+        self.someone = operator(username="other")
 
     def test_read_items_leave_the_count_for_that_person_only(self):
         set_aside(self.user, [ITEM["key"]], aside=True, current=[ITEM, OTHER])
@@ -184,8 +184,7 @@ class AsideStateTests(TestCase):
 
 class PageTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(self.user)
+        self.user = operator(self.client, "op")
         # The page and the header's count both read the queue through it.
         patcher = mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, OTHER])
         patcher.start()
@@ -392,7 +391,7 @@ class ActivityActorTests(TestCase):
 
 class GlanceSettingsLinkTests(TestCase):
     def test_following_the_settings_link_opens_the_settings(self):
-        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
+        operator(self.client, "op")
 
         response = self.client.get(reverse("dashboard_glance_settings"))
 
@@ -416,8 +415,7 @@ class AsideCapabilityTests(TestCase):
     """Setting aside is the person's own: through the chokepoint, audited, and refused to any token."""
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(self.user)
+        self.user = operator(self.client, "op")
         patcher = mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, OTHER])
         patcher.start()
         self.addCleanup(patcher.stop)

@@ -11,6 +11,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.markup_testing import elements, links, with_class
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.testing import SignedInTestCase, declare, operator
 from hq_sdk.testing import plain
 
 from ..capabilities import execute_capability
@@ -159,11 +160,7 @@ class RemoveEmptyGroupsCapabilityTests(TestCase):
         self.assertEqual(ManagedResource.objects.get(key=POLICY_KEY).spec["document"], before)
 
     def test_an_unknown_or_other_kind_of_key_is_not_found(self):
-        ManagedResource.objects.create(
-            key="example-rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "a.example.com", "answer": "192.0.2.1"},
-        )
+        declare("example-rewrite", "adguard.rewrite", {"domain": "a.example.com", "answer": "192.0.2.1"})
         for key in ("missing", "example-rewrite"):
             with self.subTest(key=key), self.assertRaises(RecordNotFound):
                 request_empty_groups_removal(None, consented=consented(cli_principal()), current_key=key)
@@ -238,11 +235,9 @@ class ProductionFindingsTests(TestCase):
 
 class FindingsPageTests(TestCase):
     def test_the_page_says_what_to_do_by_hand(self):
-        from django.contrib.auth import get_user_model
         from django.urls import reverse
 
-        user = get_user_model().objects.create_user("fix-op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
         tailnet_connection()
         policy(settings={"devicesApprovalOn": False})
 
@@ -294,14 +289,12 @@ class KeepTheLiveVersionPageTests(TestCase):
     """The way to keep a live change is reachable, preselected and plainly worded."""
 
     def setUp(self):
-        from django.contrib.auth import get_user_model
 
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
         declare_policy(document())
-        user = get_user_model().objects.create_user("keep-op", password="x" * 20, is_staff=True, is_superuser=True)
-        self.client.force_login(user)
+        operator(self.client)
 
     def drift(self):
         policy = ManagedResource.objects.get(key=POLICY_KEY)
@@ -353,13 +346,8 @@ class KeepTheLiveVersionPageTests(TestCase):
         self.assertNotContains(response, "Keep the live version")
 
 
-class CleanPageTests(TestCase):
+class CleanPageTests(SignedInTestCase):
     """A findings page with none says how far that goes."""
-
-    def setUp(self):
-        from django.contrib.auth import get_user_model
-
-        self.client.force_login(get_user_model().objects.create_user("operator"))
 
     def page(self, seen_at):
         from unittest import mock
@@ -383,7 +371,7 @@ class CleanPageTests(TestCase):
     def test_no_problems_says_what_was_checked_and_when(self):
         from django.utils import timezone
 
-        ManagedResource.objects.create(key="example-box", kind="machine", spec={"name": "example-box"})
+        declare("example-box", "machine", {"name": "example-box"})
 
         response = self.page(timezone.now())
 

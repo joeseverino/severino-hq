@@ -5,13 +5,10 @@ from unittest import mock
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 
 from ..connection_reach import connection_reach
-
-
-def declare(name, *addresses):
-    ManagedResource.objects.create(key=name, kind="machine", spec={"name": name, "addresses": list(addresses)})
+from .test_hq_self import machine_at
 
 
 def answer(*pairs):
@@ -30,8 +27,8 @@ OWN = mock.patch("hq.platform.application.hq_self.host_addresses", return_value=
 class ConnectionReachTests(TestCase):
     def setUp(self):
         self.enterContext(OWN)
-        declare("example-host", "100.64.0.9")
-        declare("example-other", "100.64.0.10")
+        machine_at("example-host", "100.64.0.9")
+        machine_at("example-other", "100.64.0.10")
         answer(("hq.example.com", "100.64.0.9"), ("nas.example.com", "100.64.0.10"))
 
     def test_a_connection_to_the_machine_hq_runs_on_is_reached_locally(self):

@@ -12,6 +12,7 @@ from django.test import TestCase, override_settings
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import PROVIDERS, describe_providers
 from hq.platform.application.tests.consent import another_command_writing, consented
+from hq.platform.core.testing import declare
 
 from ..adoption import ADOPT, ADOPT_SERVICE
 from ..capabilities import NEEDS_APPROVAL, capability_registry, execute_capability
@@ -60,9 +61,9 @@ def record(key: str, kind: str) -> ManagedResourceCommand:
     return ManagedResourceCommand(key=key, kind=kind, spec=dict(PROVIDERS[kind].sample_record or {}))
 
 
-def declare(kind: str) -> ManagedResource:
+def declared(kind: str) -> ManagedResource:
     key = fresh_key()
-    ManagedResource.objects.create(key=key, kind=kind, spec=record(key, kind).spec)
+    declare(key, kind, record(key, kind).spec)
     return ManagedResource.objects.get(key=key)
 
 
@@ -120,7 +121,7 @@ class HoldTests(TestCase):
         for kind in public_kinds():
             for name, spec, fields in reaching_a_record():
                 with self.subTest(kind=kind, capability=name):
-                    resource = declare(kind)
+                    resource = declared(kind)
                     target = resource.key if spec.target_kind is not None else None
                     key = resource.key if target else fresh_key()
                     payload = record_payload(key, kind) if "spec" in fields else least_payload(spec, fields)

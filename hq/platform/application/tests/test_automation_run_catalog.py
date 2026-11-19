@@ -4,11 +4,11 @@ worked, and how a failed one is recovered."""
 
 from django.test import TestCase
 
+from hq.platform.core.testing import AGENT
+
 from ..capabilities import describe_capabilities
-from ..security import Capability, Principal
 from .procedures import RESTART_RUN, Supply, manifest
 
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 LOGS = "example.service_logs"
 
 

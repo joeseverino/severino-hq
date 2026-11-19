@@ -11,9 +11,9 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.testing import MANAGER, READER, declare, operator
 
 from .. import findings, roles
 from ..attention import readable_by
@@ -25,12 +25,9 @@ from ..finding_model import Finding
 from ..inventory_testing import store
 from ..plugin_testing import offering
 from ..projection import projection_scope
-from ..security import Capability, Principal, cli_principal, web_principal
+from ..security import Capability, cli_principal, web_principal
 from ..topology import derive_topology
 from ..topology_model import RELATIONS, Topology, TopologyNode
-
-READ = Principal("reader", "test", frozenset({Capability.READ}))
-MANAGE = Principal("operator", "test", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 
 
 def gated_family(credential_model: str):
@@ -71,10 +68,8 @@ class TheSeededEstateTests(TestCase):
     def setUp(self):
         store("tailscale.device", {"name": "example-host", "online": True})
         # A declared kind nothing has read, and one read long ago.
-        ManagedResource.objects.create(
-            key="example-rewrite", kind="adguard.rewrite", spec={"domain": "a.example.test", "answer": "192.0.2.10"}
-        )
-        user = get_user_model().objects.create_user("example-viewer")
+        declare("example-rewrite", "adguard.rewrite", {"domain": "a.example.test", "answer": "192.0.2.10"})
+        user = operator()
         roles.assign(user, roles.Role.VIEWER)
         self.viewer = web_principal(get_user_model().objects.get(pk=user.pk))
 
@@ -165,11 +160,11 @@ class EveryScopeTests(TestCase):
             edges=(),
         )
 
-        (claim,) = findings.derive_findings(topology, principal=MANAGE)
+        (claim,) = findings.derive_findings(topology, principal=MANAGER)
 
         self.assertEqual(claim.rule, "kind-never-swept")
-        self.assertTrue(MANAGE.permits(*claim.read_capabilities))
-        self.assertFalse(READ.permits(*claim.read_capabilities))
+        self.assertTrue(MANAGER.permits(*claim.read_capabilities))
+        self.assertFalse(READER.permits(*claim.read_capabilities))
 
 
 def naming(name: str, capability: Capability, *names: str, controller: str = "example-controller") -> ConnectionSpec:
@@ -219,7 +214,7 @@ class AMachineAGatedFamilyNamesTests(TestCase):
 
     def setUp(self):
         store("tailscale.device", {"name": "example-host", "online": True})
-        user = get_user_model().objects.create_user("example-viewer")
+        user = operator()
         roles.assign(user, roles.Role.VIEWER)
         self.viewer = web_principal(get_user_model().objects.get(pk=user.pk))
 

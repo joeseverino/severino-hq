@@ -6,6 +6,7 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import OperationRequest
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import AGENT, MCP_READER
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..record_errors import RecordNotFound
@@ -13,8 +14,6 @@ from ..resources import get_resource, list_resource
 from ..security import AuthorizationError, Capability, Principal
 from .procedures import APP, DB, RESTART, Supply, approved_run, manifest, run_payload
 
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 # A grant that reads the calendar and nothing of the estate.
 UNREAD = Principal("example-calendar", "mcp", frozenset({Capability.READ_CALENDAR}))
 WORKER = "example-worker"
@@ -57,7 +56,7 @@ class ReadOneRunTests(RunReadTestCase):
         task = {"host": APP, "task": "Restart the service", "outcome": "changed", "message": "Restarted."}
         self.finish(operation_id, task)
 
-        run = get_resource(RUNS, operation_id, principal=READER)
+        run = get_resource(RUNS, operation_id, principal=MCP_READER)
 
         self.assertEqual(run["operation_id"], operation_id)
         self.assertEqual(run["playbook"], RESTART)
@@ -84,7 +83,7 @@ class ReadOneRunTests(RunReadTestCase):
             }
         )
 
-        run = get_resource(RUNS, operation_id, principal=READER)
+        run = get_resource(RUNS, operation_id, principal=MCP_READER)
 
         self.assertEqual(run["events"], [{"host": APP, "task": "Restart", "outcome": "ok", "message": ""}])
         self.assertNotIn("example-secret", str(run))
@@ -94,7 +93,7 @@ class ReadOneRunTests(RunReadTestCase):
         operation_id = self.asked(APP)
         claim_next_operation(WORKER, capabilities=(("automation.operation", "run"),))
 
-        run = get_resource(RUNS, operation_id, principal=READER)
+        run = get_resource(RUNS, operation_id, principal=MCP_READER)
 
         self.assertEqual((run["state"], run["worker"]), ("running", WORKER))
         self.assertIsNotNone(run["lease_until"])
@@ -108,7 +107,7 @@ class ReadOneRunTests(RunReadTestCase):
         )
         for missing in ("00000000-0000-4000-8000-000000000000", "not-an-id", str(scan.pk)):
             with self.subTest(missing=missing), self.assertRaises(RecordNotFound):
-                get_resource(RUNS, missing, principal=READER)
+                get_resource(RUNS, missing, principal=MCP_READER)
 
     def test_a_reader_without_the_read_grant_is_refused(self):
         operation_id = self.asked(APP)
@@ -121,7 +120,7 @@ class ReadOneRunTests(RunReadTestCase):
 
 class ListRunsTests(RunReadTestCase):
     def ids(self, query):
-        return [item["operation_id"] for item in list_resource(RUNS, query, principal=READER)["items"]]
+        return [item["operation_id"] for item in list_resource(RUNS, query, principal=MCP_READER)["items"]]
 
     def test_runs_are_listed_by_playbook_machine_correlation_and_state(self):
         first = self.asked(APP, correlation="example-first", key="example-first")
@@ -141,8 +140,8 @@ class ListRunsTests(RunReadTestCase):
         self.finish(first)
         second = self.asked(APP, key="example-second")
 
-        page = list_resource(RUNS, {"limit": 1}, principal=READER)
-        after = list_resource(RUNS, {"limit": 1, "cursor": page["next"]["cursor"]}, principal=READER)
+        page = list_resource(RUNS, {"limit": 1}, principal=MCP_READER)
+        after = list_resource(RUNS, {"limit": 1, "cursor": page["next"]["cursor"]}, principal=MCP_READER)
 
         self.assertEqual([item["operation_id"] for item in page["items"] + after["items"]], [second, first])
         self.assertIsNone(after["next"])
@@ -157,5 +156,5 @@ class ListRunsTests(RunReadTestCase):
             {"correlation": "a b"},
         ):
             with self.subTest(query=query), self.assertRaises(InvalidResourceInput) as refused:
-                list_resource(RUNS, query, principal=READER)
+                list_resource(RUNS, query, principal=MCP_READER)
             self.assertEqual(refused.exception.details["errors"][0]["loc"][0], next(iter(query)))

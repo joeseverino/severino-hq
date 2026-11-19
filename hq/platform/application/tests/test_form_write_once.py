@@ -14,7 +14,6 @@ from typing import Any, ClassVar
 from unittest import mock
 
 from django import forms
-from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -31,6 +30,7 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import with_class
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 from .. import capabilities, writes
 from ..capabilities import Ran, command_spec
@@ -92,8 +92,7 @@ def without_the_grant(capability: str) -> Principal:
 
 class SignedIn(TestCase):
     def setUp(self):
-        self.person = get_user_model().objects.create_user("operator", password="unused-test-pass")
-        self.client.force_login(self.person)
+        self.person = operator(self.client)
 
 
 class Site:

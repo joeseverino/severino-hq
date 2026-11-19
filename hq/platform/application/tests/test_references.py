@@ -4,7 +4,6 @@ from datetime import date
 from decimal import Decimal
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import connection, models
 from django.test import TestCase
@@ -14,10 +13,11 @@ from django.utils import timezone
 
 from hq.domains.assets.models import Asset
 from hq.domains.calendars.models import Entry
-from hq.domains.control_plane.models import ManagedResource, ProviderConnection
+from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import all_elements, elements, hrefs, links, select, text, texts
+from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from .. import references
@@ -296,8 +296,7 @@ class GuardedKindTests(TestCase):
 
 class PickerTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_superuser("operator", "operator@example.com", "a-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client, email="operator@example.com")
 
     def test_an_event_form_offers_what_hq_has_pages_for_grouped_by_what_each_is(self):
         a_machine()
@@ -412,10 +411,10 @@ class ChoicesTests(TestCase):
         self.assertEqual(len(names), 3)
 
     def test_a_certificate_is_offered_under_its_own_kind(self):
-        ManagedResource.objects.create(
-            key="a-certificate",
-            kind="tls.certificate",
-            spec={"certificate_name": "example", "domains": ["example.com"], "install_on": ["a-target"]},
+        declare(
+            "a-certificate",
+            "tls.certificate",
+            {"certificate_name": "example", "domains": ["example.com"], "install_on": ["a-target"]},
         )
 
         offered = self.offered()
@@ -581,8 +580,7 @@ class DanglingTests(TestCase):
 
 class PageTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_superuser("operator", "operator@example.com", "a-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client, email="operator@example.com")
         a_machine()
         self.asset = Asset.objects.create(
             item_name="A server", slug="a-server", infrastructure="machine:lab-1", infrastructure_name="lab-1"

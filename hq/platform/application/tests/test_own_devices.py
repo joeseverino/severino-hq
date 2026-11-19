@@ -1,13 +1,13 @@
 """A person registers a client as their own device, for themselves only, and nothing else does."""
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog, OwnDevice
+from hq.platform.core.testing import operator
 
 from ..capabilities import CAPABILITY_AUDIT_TYPE, execute_capability
 from ..linked_accounts import bind_sign_in, sign_in_subject
@@ -18,7 +18,7 @@ PHONE = "example-phone"
 
 
 def _person(name: str, subject: str):
-    user = get_user_model().objects.create_user(name, password="x" * 20)
+    user = operator(username=name)
     bind_sign_in(user, sign_in_subject(settings.OIDC_ISSUER, subject))
     return user
 
@@ -59,7 +59,7 @@ class RegistrationTests(TestCase):
         self.assertEqual({event.actor_label for event in events}, {self.person.get_username()})
 
     def test_a_person_with_no_provider_sign_in_registers_nothing(self):
-        unbound = get_user_model().objects.create_user("local", password="x" * 20)
+        unbound = operator()
 
         result = self._set(state=True, user=unbound)
 

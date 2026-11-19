@@ -3,7 +3,6 @@
 from datetime import timedelta
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -12,6 +11,7 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import ObservationRecord, ObservationSpec, registry
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.testing import operator
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
 
 PERIMETER = "host.perimeter"
@@ -117,8 +117,7 @@ class QueryCountTests(TestCase):
         )
 
     def test_the_machine_page_does_not_scale_with_records(self):
-        user = get_user_model().objects.create_user("facts-op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         def page(_count):
             response = self.client.get(reverse("control_plane:machine", kwargs={"name": "host-1"}))

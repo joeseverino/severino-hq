@@ -9,7 +9,7 @@ from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.models import OperationRequest
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.derivation_testing import uncached
@@ -17,6 +17,7 @@ from hq.platform.application.markup_testing import all_elements, elements, links
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.attribution import operation_context
+from hq.platform.core.testing import declare
 
 from ..cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
 from ..card_items import Timeline, TimelineItem
@@ -744,11 +745,7 @@ class ProjectionScopeTests(TestCase):
 
 class OperationProjectionTests(TestCase):
     def test_failed_operation_separates_guidance_and_affected_evidence(self):
-        resource = ManagedResource.objects.create(
-            key="certificate",
-            kind="tls.certificate",
-            spec={},
-        )
+        resource = declare("certificate", "tls.certificate")
         with operation_context(interface="controller", actor="example-controller", operation="example.ask"):
             OperationRequest.objects.create(
                 resource=resource,

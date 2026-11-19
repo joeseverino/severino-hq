@@ -7,6 +7,7 @@ from django.test import SimpleTestCase, TestCase, tag
 from hq.domains.control_plane.models import REFERENCE_COLUMNS, ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.testing import declare
 
 from .. import reference_findings as rules
 from .test_tailnet_posture import raised
@@ -16,17 +17,11 @@ ZONE, RECORD, TARGET = "cloudflare.zone", "cloudflare.dns_record", "tls.delivery
 
 def record(key: str, zone: str, **spec) -> ManagedResource:
     name = f"app.{normalized_hostname(zone)}"
-    return ManagedResource.objects.create(
-        key=key,
-        kind=RECORD,
-        spec={"zone": zone, "name": name, "record_type": "A", "content": "192.0.2.10", **spec},
-    )
+    return declare(key, RECORD, {"zone": zone, "name": name, "record_type": "A", "content": "192.0.2.10", **spec})
 
 
 def target(key: str, ref: str) -> ManagedResource:
-    return ManagedResource.objects.create(
-        key=key, kind=TARGET, spec={"kind": "caddy", "connection_ref": ref, "name": key}
-    )
+    return declare(key, TARGET, {"kind": "caddy", "connection_ref": ref, "name": key})
 
 
 class DerivedColumnTests(TestCase):
@@ -46,7 +41,7 @@ class DerivedColumnTests(TestCase):
 
     def test_a_spec_with_no_link_derives_none(self):
         for key, spec in (("empty", {}), ("null", {"zone": None, "connection_ref": None})):
-            made = ManagedResource.objects.create(key=key, kind="machine", spec=spec)
+            made = declare(key, "machine", spec)
             made.refresh_from_db()
             self.assertEqual((made.zone, made.connection_ref), ("", ""))
 

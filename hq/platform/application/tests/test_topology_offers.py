@@ -13,6 +13,7 @@ from hq.platform.application.markup_testing import actions, hrefs
 from hq.platform.application.tests.reads import reads
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
+from hq.platform.core.testing import declare
 
 ROOT = Path(__file__).resolve().parents[4]
 # The edit and removal routes, which a control reaches only through the
@@ -146,9 +147,7 @@ class SourcedRecordTests(TestCase):
         from hq.platform.application.resource_capabilities import offered_changes
 
         named = self._procedure()
-        dropped = ManagedResource.objects.create(
-            key="automation-example-retired", kind=named.kind, spec={**named.spec, "operation": "example.retired"}
-        )
+        dropped = declare("automation-example-retired", named.kind, {**named.spec, "operation": "example.retired"})
         self.assertTrue(offered_changes([dropped])[dropped.key].removes)
 
 

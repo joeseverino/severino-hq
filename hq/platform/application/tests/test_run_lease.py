@@ -14,13 +14,12 @@ from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, Op
 from hq.domains.control_plane.tests import bridge_client
 from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import AGENT, declare
 
 from ..capabilities import run_capability
 from ..controller import ControllerReport, claim_next_operation, report_operation
-from ..security import Capability, Principal
 from .procedures import APP, DB, RESTART_KEY, RESTART_RUN, Supply, approved_run, manifest, run_payload
 
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 WORKER = "example-worker"
 RUNS = (("automation.operation", "run"),)
 PAUSED = "hq.platform.application.agent_access.paused_interfaces"
@@ -193,9 +192,7 @@ class ClaimTests(LeasedRunTestCase):
     def test_a_claim_of_other_work_carries_no_run_input(self):
         from ..resource_operations import enqueue
 
-        rewrite = ManagedResource.objects.create(
-            key="example-dns", kind="adguard.rewrite", spec={"domain": "app.example.com", "answer": "192.0.2.10"}
-        )
+        rewrite = declare("example-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": "192.0.2.10"})
         enqueue(OperationRequest.Action.RECONCILE, lambda: (rewrite, {"input": {"generation": 1}}))
 
         answer = claim_next_operation(WORKER, capabilities=(("adguard.rewrite", "reconcile"),))

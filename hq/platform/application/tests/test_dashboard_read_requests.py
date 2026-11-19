@@ -1,6 +1,5 @@
 """The dashboard's ask for a fresh reading: a read request for each panel, naming it."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -8,11 +7,11 @@ from django.utils import timezone
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
-    ManagedResource,
     ProviderConnection,
 )
 from hq.platform.core.audit import audit_operation
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 
 from ..glance import DashboardRefreshCommand, request_dashboard_refresh
 from ..security import cli_principal
@@ -23,8 +22,8 @@ READ_REQUEST = "Read request"
 
 class DashboardAskTests(TestCase):
     def setUp(self):
-        self.machine = ManagedResource.objects.create(
-            key="app-server", kind="machine", spec={"name": "app", "addresses": ["192.0.2.10"]}, status={"kept": True}
+        self.machine = declare(
+            "app-server", "machine", {"name": "app", "addresses": ["192.0.2.10"]}, status={"kept": True}
         )
         ProviderConnection.objects.create(
             connection_ref="app-ssh",
@@ -53,7 +52,7 @@ class DashboardAskTests(TestCase):
         self.assertNotIn(f"machine-{self.machine.pk}", said)
 
     def test_the_log_leaves_it_out_until_read_requests_are_shown(self):
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "x" * 14))
+        operator(self.client)
         asked = {row.pk for row in self.ask()}
         # An ask the dashboard filed under its own name before, as older rows are.
         older = AuditLog.objects.create(

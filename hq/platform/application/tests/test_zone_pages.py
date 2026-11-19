@@ -1,6 +1,5 @@
 """The zone and DNS resource pages: what they show, what they cost, and the verbs they offer."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -9,6 +8,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import elements, hrefs, text, texts
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..adoption_testing import managing_everything
@@ -19,16 +19,10 @@ from .zone_records import DNS_CONNECTIONS, RECORD_KIND, ZONE_KIND, record, sweep
 class ZonePageTests(TestCase):
     def setUp(self):
         sweep()
-        user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client, "op")
 
     def test_the_index_goes_straight_to_a_managed_domain(self):
-        ManagedResource.objects.create(
-            key="example-com",
-            kind=ZONE_KIND,
-            spec={"zone": "example.com", "connection_ref": "cf-example"},
-            enabled=True,
-        )
+        declare("example-com", ZONE_KIND, {"zone": "example.com", "connection_ref": "cf-example"}, enabled=True)
         response = self.client.get(reverse("zones:index"))
         self.assertRedirects(response, reverse("zones:detail", kwargs={"zone": "example.com"}))
 
@@ -119,7 +113,7 @@ class DomainPageCostTests(TestCase):
         return response
 
     def test_the_page_does_not_cost_more_per_record(self):
-        self.client.force_login(get_user_model().objects.create_user("operator", password="x" * 20))
+        operator(self.client)
 
         assert_cost_does_not_grow(
             self, sizes=(5, 60), arrange=self.arrange, draw=self.draw, rows=distinct(r"\bh\d+\.example\.com")
@@ -140,10 +134,10 @@ class PublicDnsOffTests(TestCase):
             defaults={"spec": {"zone": "example.com", "connection_ref": "cf-example"}, "enabled": True},
         )
         # A record HQ manages, so its row carries the controls that change it.
-        ManagedResource.objects.create(
-            key="example-com-app",
-            kind=RECORD_KIND,
-            spec={
+        declare(
+            "example-com-app",
+            RECORD_KIND,
+            {
                 "zone": "example.com",
                 "name": "app.example.com",
                 "record_type": "A",
@@ -153,7 +147,7 @@ class PublicDnsOffTests(TestCase):
             },
             enabled=True,
         )
-        self.client.force_login(get_user_model().objects.create_user("operator", password="x" * 20))
+        operator(self.client)
 
     def changes_offered(self):
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
@@ -187,11 +181,10 @@ class ResourceDetailIsProviderDeclaredTests(TestCase):
     """
 
     def setUp(self):
-        user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client, "op")
 
     def _detail(self, key, kind, spec, status=None):
-        ManagedResource.objects.create(key=key, kind=kind, spec=spec, status=status or {}, enabled=True)
+        declare(key, kind, spec, status=status or {}, enabled=True)
         return self.client.get(reverse("control_plane:detail", kwargs={"key": key}))
 
     def test_a_provider_added_later_still_describes_itself(self):
@@ -253,12 +246,11 @@ class ResourcePageLifecycleTests(TestCase):
     """
 
     def setUp(self):
-        user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(user)
-        self.proxy = ManagedResource.objects.create(
-            key="private-proxy",
-            kind="npm.proxy_host",
-            spec={
+        operator(self.client, "op")
+        self.proxy = declare(
+            "private-proxy",
+            "npm.proxy_host",
+            {
                 "domain_names": ["private.example.com"],
                 "forward_scheme": "http",
                 "forward_host": "10.0.0.5",
@@ -311,10 +303,10 @@ class ResourcePageLifecycleTests(TestCase):
         self.assertContains(response, "Other settings")
 
     def test_an_unset_optional_is_not_shown_as_none(self):
-        ManagedResource.objects.create(
-            key="a-cname",
-            kind=RECORD_KIND,
-            spec={
+        declare(
+            "a-cname",
+            RECORD_KIND,
+            {
                 "zone": "example.com",
                 "name": "public.example.com",
                 "record_type": "CNAME",
@@ -382,12 +374,11 @@ class NewVerbReadinessTests(TestCase):
         from ..resource_operations import ACTION_CAPABILITY
 
         managing_everything()
-        user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(user)
-        ManagedResource.objects.create(
-            key="a-rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.1"},
+        operator(self.client, "op")
+        declare(
+            "a-rewrite",
+            "adguard.rewrite",
+            {"domain": "app.example.com", "answer": "10.0.0.1"},
             enabled=True,
             generation=1,
         )
@@ -414,14 +405,9 @@ class PendingRemovalTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(user)
-        self.resource = ManagedResource.objects.create(
-            key="going",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.1"},
-            enabled=True,
-            generation=1,
+        operator(self.client, "op")
+        self.resource = declare(
+            "going", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.1"}, enabled=True, generation=1
         )
 
     def _page(self):
@@ -474,12 +460,11 @@ class ResourceListReadabilityTests(TestCase):
     """
 
     def setUp(self):
-        user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(user)
-        ManagedResource.objects.create(
-            key="example-com-caa",
-            kind=RECORD_KIND,
-            spec={
+        operator(self.client, "op")
+        declare(
+            "example-com-caa",
+            RECORD_KIND,
+            {
                 "zone": "example.com",
                 "name": "example.com",
                 "record_type": "CAA",
@@ -490,10 +475,10 @@ class ResourceListReadabilityTests(TestCase):
             enabled=True,
             generation=1,
         )
-        ManagedResource.objects.create(
-            key="example-com",
-            kind=ZONE_KIND,
-            spec={"zone": "example.com", "connection_ref": "cf-example"},
+        declare(
+            "example-com",
+            ZONE_KIND,
+            {"zone": "example.com", "connection_ref": "cf-example"},
             enabled=True,
             generation=1,
         )
@@ -535,12 +520,11 @@ class LabelAndDensityTests(TestCase):
         self.assertEqual(dns[RECORD_KIND], "public DNS record")
 
     def test_a_long_value_does_not_take_three_lines_in_a_list(self):
-        user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(user)
-        ManagedResource.objects.create(
-            key="dmarc",
-            kind=RECORD_KIND,
-            spec={
+        operator(self.client, "op")
+        declare(
+            "dmarc",
+            RECORD_KIND,
+            {
                 "zone": "example.com",
                 "name": "_dmarc.example.com",
                 "record_type": "TXT",

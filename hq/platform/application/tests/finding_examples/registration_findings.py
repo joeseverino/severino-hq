@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ...tone import Tone
 from . import AT, Example, Examples, Raised
@@ -9,9 +9,7 @@ ZONE = "cloudflare.zone"
 
 
 def a_declared_zone() -> None:
-    ManagedResource.objects.create(
-        key="example-zone", kind=ZONE, spec={"zone": "example.com", "connection_ref": "example-dns"}
-    )
+    declare("example-zone", ZONE, {"zone": "example.com", "connection_ref": "example-dns"})
 
 
 def registered(days: int, *, auto_renew: bool = False, raises: tuple[Raised | str, ...] = ()) -> Example:

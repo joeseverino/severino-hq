@@ -2,7 +2,7 @@ from unittest import mock
 
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ...exposure import OPEN, PRIVATE
 from ...tone import Tone
@@ -28,10 +28,10 @@ def box(*, reach=None, runtimes=(), declared: dict | None = None, raises=(), **s
         if runtimes:
             inventory("portainer.runtime", list(runtimes))
         for name, spec in (declared or {}).items():
-            ManagedResource.objects.create(
-                key=f"example-box-{name}",
-                kind="portainer.container",
-                spec={"connection_ref": "example-portainer", "host": "example-box", "name": name, **spec},
+            declare(
+                f"example-box-{name}",
+                "portainer.container",
+                {"connection_ref": "example-portainer", "host": "example-box", "name": name, **spec},
             )
         return exposed(reach) if isinstance(reach, str) else reach
 

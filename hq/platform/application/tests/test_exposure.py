@@ -3,6 +3,7 @@
 from django.test import TestCase
 
 from hq.platform.application.markup_testing import select, text, with_class, within
+from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..exposure import GATED, OPEN, PRIVATE, UNKNOWN, UNROUTED, exposure_of_name, status_at
@@ -117,11 +118,9 @@ class ServiceReachTests(TestCase):
     """Who reaches each name, on the pages that already list the names."""
 
     def setUp(self):
-        from django.contrib.auth import get_user_model
 
         estate()
-        self.user = get_user_model().objects.create_user("example-operator", password="x")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
 
     def page(self):
         from django.urls import reverse
@@ -148,8 +147,6 @@ class ServiceReachTests(TestCase):
         """Each reach a name can have, said by the page's header, its path and
         the services list in the words ``reach`` declares for it."""
 
-        from hq.domains.control_plane.models import ManagedResource
-
         from ..reach import LOCAL_NETWORK, PUBLIC, TAILNET_ONLY
 
         rewrites = (
@@ -159,11 +156,11 @@ class ServiceReachTests(TestCase):
         store("adguard.rewrite", *rewrites)
         # Declared, so the services list holds a row for each.
         for spec in rewrites:
-            ManagedResource.objects.create(key=spec["domain"].split(".")[0], kind="adguard.rewrite", spec=spec)
-        ManagedResource.objects.create(
-            key="shop",
-            kind="npm.proxy_host",
-            spec={
+            declare(spec["domain"].split(".")[0], "adguard.rewrite", spec)
+        declare(
+            "shop",
+            "npm.proxy_host",
+            {
                 "domain_names": ["shop.example.com"],
                 "forward_scheme": "http",
                 "forward_host": "198.51.100.20",
@@ -192,12 +189,11 @@ class ServiceReachTests(TestCase):
                     self.assertIn(reach.label.lower(), said.lower())
 
     def test_an_open_name_behind_a_declared_proxy_offers_its_access_list(self):
-        from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(
-            key="example-shop-proxy",
-            kind="npm.proxy_host",
-            spec={
+        declare(
+            "example-shop-proxy",
+            "npm.proxy_host",
+            {
                 "domain_names": ["shop.example.com"],
                 "forward_scheme": "http",
                 "forward_host": "198.51.100.20",

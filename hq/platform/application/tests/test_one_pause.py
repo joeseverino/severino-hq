@@ -16,17 +16,16 @@ from django.test import TestCase, override_settings
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.core.models import AgentAccess
+from hq.platform.core.testing import AGENT
 
 from ..approvals import ApprovalError, ApproveCommand, approve
 from ..capabilities import execute_capability
 from ..controller import claim_next_operation
-from ..security import Capability, Principal
 from .test_approvals import GATED_KIND, POLICY_KEY, an_operator, declare_policy, reconcile_payload
 
 HELPER = "hq.platform.application.agent_access.paused_interfaces"
 PAUSED = frozenset({"mcp", "api"})
 RUNNING = frozenset()
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 
 
 def _mcp_allowed() -> bool:

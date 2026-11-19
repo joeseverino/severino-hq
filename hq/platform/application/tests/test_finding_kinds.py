@@ -4,10 +4,10 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core.testing import MANAGER, declare, operator
 
 from ..findings import estate_findings
 from ..report_testing import bridged
-from .finding_principals import MANAGE
 from .host_only import host_only
 
 
@@ -61,11 +61,7 @@ class UnrecognizedContainerTests(TestCase):
         from ..adoption_testing import connection
 
         connection("portainer", "a-portainer")
-        ManagedResource.objects.create(
-            key="a-docker-host",
-            kind="machine",
-            spec={"name": "a-docker-host", "addresses": ["10.0.0.9"]},
-        )
+        declare("a-docker-host", "machine", {"name": "a-docker-host", "addresses": ["10.0.0.9"]})
         bridged(
             "inventory",
             {
@@ -78,7 +74,7 @@ class UnrecognizedContainerTests(TestCase):
 
     def found(self):
         with host_only():
-            return [f for f in estate_findings(principal=MANAGE) if f.rule == "unrecognized-container"]
+            return [f for f in estate_findings(principal=MANAGER) if f.rule == "unrecognized-container"]
 
     def test_the_remedy_adopts_exactly_that_record(self):
         from django.urls import reverse
@@ -101,12 +97,9 @@ class UnrecognizedContainerTests(TestCase):
         )
 
     def test_adopting_it_from_the_page_clears_the_finding(self):
-        from django.contrib.auth import get_user_model
 
         (finding,) = self.found()
-        self.client.force_login(
-            get_user_model().objects.create_user(username="operator", password="test-only-password")
-        )
+        operator(self.client)
 
         self.client.post(finding.presses[0].url, form_keyed())
 

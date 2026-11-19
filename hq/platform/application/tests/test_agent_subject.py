@@ -18,6 +18,7 @@ from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import select
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentIdentity
+from hq.platform.core.testing import operator
 from hq.platform.mcp import tasks
 
 from .. import agent_admission, agent_registry, roles
@@ -44,9 +45,9 @@ def _signed_in(subject: str):
 
 class OneSubjectPerAgentAndPersonTests(TestCase):
     def setUp(self):
-        users = get_user_model()
-        self.anna = users.objects.create_user("anna", password="x" * 20)
-        self.ben = users.objects.create_user("ben", password="x" * 20)
+        get_user_model()
+        self.anna = operator(username="anna")
+        self.ben = operator(username="ben")
         for user, subject in ((self.anna, ANNA), (self.ben, BEN)):
             roles.assign(user, roles.Role.OPERATOR)
             bind_sign_in(user, sign_in_subject(settings.OIDC_ISSUER, subject))

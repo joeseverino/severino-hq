@@ -4,21 +4,19 @@ from datetime import timedelta
 from ipaddress import ip_network
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import capfirst
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
+from hq.platform.core.testing import NOBODY, READER, declare, operator
 
 from ..paths import hq_path, path_to, why_unread
 from ..projection import projection_scope
 from ..resources import get_resource
-from ..security import Capability, Principal
 from ..tone import Tone
 
-READ = Principal("reader", "test", frozenset({Capability.READ}))
 CLOUDFLARE = "example-cloudflare"
 # 198.51.100.0/24 stands for a public address here; 192.0.2.0/24 stays parked.
 PUBLIC_RANGE = mock.patch("hq.platform.application.reach.DOCUMENTATION", (ip_network("192.0.2.0/24"),))
@@ -54,10 +52,10 @@ def record(name, record_type, content, *, proxied=True, zone="example.com"):
 def declare_certificate(key="example-wildcard", *, matches=True):
     """A certificate HQ installed for app.example.com, as its status records it."""
 
-    return ManagedResource.objects.create(
-        key=key,
-        kind="tls.certificate",
-        spec={"certificate_name": "example", "domains": ["*.example.com"]},
+    return declare(
+        key,
+        "tls.certificate",
+        {"certificate_name": "example", "domains": ["*.example.com"]},
         status={
             "issuer": "Example CA",
             "not_after": EXPIRES,
@@ -78,7 +76,7 @@ def estate():
     """A proxied name, a tailnet name, a Pages site and a redirecting apex."""
 
     for key, addresses in (("edge-1", ["198.51.100.20"]), ("lab-1", ["100.64.0.10"])):
-        ManagedResource.objects.create(key=key, kind="machine", spec={"name": key, "addresses": addresses})
+        declare(key, "machine", {"name": key, "addresses": addresses})
     store(
         "cloudflare.dns_record",
         record("shop.example.com", "A", "198.51.100.20"),
@@ -283,10 +281,10 @@ class PathTests(TestCase):
 
         declare_certificate("example-wildcard")
         declare_certificate("example-other")
-        ManagedResource.objects.create(
-            key="app-proxy",
-            kind="npm.proxy_host",
-            spec={
+        declare(
+            "app-proxy",
+            "npm.proxy_host",
+            {
                 "domain_names": ["app.example.com"],
                 "forward_scheme": "http",
                 "forward_host": "127.0.0.1",
@@ -304,10 +302,10 @@ class PathTests(TestCase):
         from ..services import certificate_use, certificates_serving, find_service
 
         declare_certificate()
-        ManagedResource.objects.create(
-            key="status-record",
-            kind="cloudflare.dns_record",
-            spec={**record("status.example.com", "CNAME", "example-status.pages.example.net", proxied=False)},
+        declare(
+            "status-record",
+            "cloudflare.dns_record",
+            {**record("status.example.com", "CNAME", "example-status.pages.example.net", proxied=False)},
         )
 
         with projection_scope():
@@ -353,11 +351,7 @@ class PathTests(TestCase):
 
     def test_a_declaration_stands_in_for_a_kind_nothing_reads_and_says_so(self):
         ProviderInventory.objects.filter(kind="adguard.rewrite").delete()
-        ManagedResource.objects.create(
-            key="app-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "100.64.0.10"},
-        )
+        declare("app-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": "100.64.0.10"})
 
         path = self.walk("app.example.com")
 
@@ -378,7 +372,7 @@ class PathTests(TestCase):
         from ..record_errors import RecordNotFound
 
         with self.assertRaises(RecordNotFound):
-            get_resource("service.paths", "not a host", principal=READ)
+            get_resource("service.paths", "not a host", principal=READER)
 
     def test_why_unread_names_the_error(self):
         store("caddy.route", reachable=False, error="Connection refused.")
@@ -395,7 +389,7 @@ class ReadTests(TestCase):
         estate()
 
     def test_the_api_returns_the_path_the_page_walks(self):
-        found = get_resource("service.paths", "app.example.com", principal=READ)
+        found = get_resource("service.paths", "app.example.com", principal=READER)
 
         route = found["routes"][0]
         self.assertEqual(route["via"], "Internal DNS")
@@ -407,7 +401,7 @@ class ReadTests(TestCase):
         from ..security import AuthorizationError
 
         with self.assertRaises((AuthorizationError, ResourceError)):
-            get_resource("service.paths", "app.example.com", principal=Principal("nobody", "test", frozenset()))
+            get_resource("service.paths", "app.example.com", principal=NOBODY)
 
 
 @PUBLIC_RANGE
@@ -425,8 +419,7 @@ class HqPathTests(TestCase):
         self.assertEqual([hop.step for hop in hops][:3], ["dns", "network", "machine"])
 
     def test_the_connections_page_renders_hq_path(self):
-        user = get_user_model().objects.create_user("operator", password="pw", is_staff=True)
-        self.client.force_login(user)
+        operator(self.client)
 
         response = self.client.get(reverse("control_plane:connections"))
 
@@ -441,22 +434,13 @@ class ListedServiceTests(TestCase):
 
     def setUp(self):
         estate()
-        ManagedResource.objects.create(
-            key="example-com-zone",
-            kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": CLOUDFLARE},
-        )
-        ManagedResource.objects.create(
-            key="example-net-zone",
-            kind="cloudflare.zone",
-            spec={"zone": "example.net", "connection_ref": CLOUDFLARE},
-        )
+        declare("example-com-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": CLOUDFLARE})
+        declare("example-net-zone", "cloudflare.zone", {"zone": "example.net", "connection_ref": CLOUDFLARE})
         store(
             "cloudflare.access_app",
             {"connection_ref": CLOUDFLARE, "id": "a1", "name": "Admin", "domain": "admin.example.com"},
         )
-        user = get_user_model().objects.create_user("operator", password="pw", is_staff=True)
-        self.client.force_login(user)
+        operator(self.client)
 
     def listed(self):
         from ..service_list import listed_services
@@ -489,7 +473,7 @@ class ListedServiceTests(TestCase):
         from ..topology import derive_topology
 
         with projection_scope():
-            edges = derive_topology(principal=READ).edges
+            edges = derive_topology(principal=READER).edges
         self.assertIn(
             ("service:example.net", "service:example.com", "redirects_to"),
             {(edge.source, edge.target, edge.kind) for edge in edges},
@@ -510,8 +494,7 @@ class ServicePageTests(TestCase):
 
     def setUp(self):
         estate()
-        user = get_user_model().objects.create_user("operator", password="pw", is_staff=True)
-        self.client.force_login(user)
+        operator(self.client)
 
     def page(self, hostname):
         return self.client.get(reverse("control_plane:service", args=[hostname])).content.decode()
@@ -540,7 +523,7 @@ class ServicePageTests(TestCase):
         """The address is the step's value; the machine's tailnet device says
         nothing of its home-network link, so no state is read from it."""
 
-        ManagedResource.objects.create(key="home-1", kind="machine", spec={"name": "home-1", "addresses": ["10.0.0.5"]})
+        declare("home-1", "machine", {"name": "home-1", "addresses": ["10.0.0.5"]})
         store(
             "adguard.rewrite",
             {"domain": "app.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
@@ -559,10 +542,10 @@ class ServicePageTests(TestCase):
     def test_a_name_served_elsewhere_is_not_offered_a_certificate(self):
         """Nothing HQ could add would be what the hosted page serves it with."""
 
-        ManagedResource.objects.create(
-            key="status-record",
-            kind="cloudflare.dns_record",
-            spec={**record("status.example.com", "CNAME", "example-status.pages.example.net", proxied=False)},
+        declare(
+            "status-record",
+            "cloudflare.dns_record",
+            {**record("status.example.com", "CNAME", "example-status.pages.example.net", proxied=False)},
         )
 
         response = self.client.get(reverse("control_plane:service", args=["status.example.com"]))
@@ -585,19 +568,14 @@ class ObservedNameTests(TestCase):
 
     def setUp(self):
         estate()
-        ManagedResource.objects.create(
-            key="example-com-zone",
-            kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": CLOUDFLARE},
-        )
+        declare("example-com-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": CLOUDFLARE})
         store(
             "cloudflare.access_app",
             {"connection_ref": CLOUDFLARE, "id": "a1", "name": "Admin", "domain": "admin.example.com"},
         )
         # No connection reads internal DNS.
         ProviderInventory.objects.filter(kind="adguard.rewrite").delete()
-        user = get_user_model().objects.create_user("operator", password="pw", is_staff=True)
-        self.client.force_login(user)
+        operator(self.client)
 
     def walk(self, hostname):
         with projection_scope():
@@ -666,8 +644,7 @@ class HqHealthTests(TestCase):
 
     def setUp(self):
         estate()
-        user = get_user_model().objects.create_user("operator", password="pw", is_staff=True)
-        self.client.force_login(user)
+        operator(self.client)
 
     def summary(self):
         response = self.client.get(reverse("control_plane:service", args=["hq.example.com"]))
@@ -721,11 +698,7 @@ class RoutedNamesTests(TestCase):
         from ..paths import routed_names
 
         estate()
-        ManagedResource.objects.create(
-            key="declared-rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "declared.example.com", "answer": "100.64.0.10"},
-        )
+        declare("declared-rewrite", "adguard.rewrite", {"domain": "declared.example.com", "answer": "100.64.0.10"})
 
         with projection_scope():
             names = routed_names()

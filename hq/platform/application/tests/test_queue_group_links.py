@@ -3,11 +3,11 @@ for a domain that declares the page (``PluginIntegration.attention_url``)."""
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import elements, links
+from hq.platform.core.testing import SignedInTestCase
 
 from ..action_items import by_source
 
@@ -38,11 +38,7 @@ class GroupTests(TestCase):
         self.assertEqual(groups, {"hq.approvals": approval_queue(), "example": ""})
 
 
-class PageTests(TestCase):
-    def setUp(self):
-        user = get_user_model().objects.create_superuser("op", password="x" * 20)
-        self.client.force_login(user)
-
+class PageTests(SignedInTestCase):
     def page(self, *items):
         with (
             mock.patch("hq.platform.application.dashboard.work_queue", return_value=list(items)),

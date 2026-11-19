@@ -11,11 +11,11 @@ is held without a case of its own. A type whose own config declares
 from collections.abc import Iterator, Mapping
 from typing import Any
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from pydantic import TypeAdapter, ValidationError
 
 from hq.domains.control_plane.models import CapabilityRule
+from hq.platform.core.testing import operator
 
 from ..capabilities import capability_registry, execute_capability, validate_command
 from ..capability_policy import SET_POLICY
@@ -145,7 +145,7 @@ class ClosedCommandTests(SimpleTestCase):
 
 class RetiredNestedFieldTests(TestCase):
     def test_a_retired_field_inside_a_policy_cell_is_refused_by_its_path(self):
-        person = get_user_model().objects.create_user("example-operator")
+        person = operator()
         cell = {"subject": "example-agent", "capability": "project.create", "rule": "allow", "scope": "all"}
 
         result = execute_capability(SET_POLICY, keyed({"rules": [cell]}), principal=web_principal(person))

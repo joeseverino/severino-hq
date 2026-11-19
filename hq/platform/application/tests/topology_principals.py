@@ -1,8 +1,7 @@
-"""The principals a topology test reads as."""
+"""The manager a topology test reads as, who may also renew a certificate."""
 
 from ..security import Capability, Principal
 
-READ = Principal("reader", "test", frozenset({Capability.READ}))
 MANAGE = Principal(
     "operator",
     "test",
@@ -14,4 +13,3 @@ MANAGE = Principal(
         }
     ),
 )
-NONE = Principal("nobody", "test", frozenset())

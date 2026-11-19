@@ -14,6 +14,7 @@ from hq.platform.application.security import cli_principal, mcp_principal, web_p
 from hq.platform.core.attribution import bound, operation_context
 from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare
 
 KEY = "example-rewrite"
 REWRITE = {"domain": "app.example.com", "answer": "192.0.2.10"}
@@ -203,7 +204,7 @@ class ChainTests(TestCase):
         self.assertEqual({row.cause for row in work}, {str(approval.pk)})
 
     def test_rows_written_before_rows_named_their_record_are_still_in_its_story(self):
-        resource = ManagedResource.objects.create(key=KEY, kind="adguard.rewrite", spec=dict(REWRITE))
+        resource = declare(KEY, "adguard.rewrite", dict(REWRITE))
         with operation_context(interface="cli", actor="example-operator", operation="example.older"):
             older = AuditLog.objects.create(
                 action=AuditLog.Action.UPDATED,

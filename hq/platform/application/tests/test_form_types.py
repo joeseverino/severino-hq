@@ -7,11 +7,12 @@ payload is held to the JSON types its schema publishes.
 from dataclasses import dataclass
 from typing import Annotated
 
-from django.contrib.auth import get_user_model
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
 from pydantic import Field
+
+from hq.platform.core.testing import operator
 
 from ..capabilities import CapabilitySpec, execute_capability
 from ..integration_testing import commands_registered
@@ -43,7 +44,7 @@ class FormTypeTests(TestCase):
             PlanCommand,
             self.handler,
         )
-        self.person = get_user_model().objects.create_superuser("operator", password="unused-test-pass")
+        self.person = operator()
 
     def handler(self, command, **_bound):
         self.ran.append(command)

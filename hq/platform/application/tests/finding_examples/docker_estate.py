@@ -1,4 +1,4 @@
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from . import Example, Examples, Raised, connection
 
@@ -10,7 +10,7 @@ def lab() -> None:
     """lab-1, whose containers example-portainer reads, and which HQ manages through it."""
 
     connection("example-portainer", "portainer", manages=True)
-    ManagedResource.objects.create(key="lab-1", kind="machine", spec={"name": "lab-1", "addresses": ["192.0.2.10"]})
+    declare("lab-1", "machine", {"name": "lab-1", "addresses": ["192.0.2.10"]})
 
 
 def container(name: str, stack: str = "") -> dict:

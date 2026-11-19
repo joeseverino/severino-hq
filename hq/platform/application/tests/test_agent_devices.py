@@ -16,7 +16,6 @@ from pathlib import Path
 
 from asgiref.sync import async_to_sync
 from django.apps import apps
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -26,6 +25,7 @@ from hq.domains.projects.models import Project
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentIdentity, AuditLog, OwnDevice
+from hq.platform.core.testing import operator
 
 from ..capabilities import execute_capability
 from ..linked_accounts import bind_sign_in, sign_in_subject
@@ -199,7 +199,7 @@ class PlacementTests(TestCase):
 @API
 class ApprovalAtTheDoorsTests(Doors, TestCase):
     def setUp(self):
-        self.person = get_user_model().objects.create_user(username="operator", password="test-only-password")
+        self.person = operator()
         bind_sign_in(self.person, sign_in_subject(ISSUER, PERSON))
         self.enterContext(a_tailnet((LAPTOP, LAPTOP_AT, LAPTOP_ID), (DESKTOP, DESKTOP_AT, DESKTOP_ID)))
 
@@ -361,9 +361,9 @@ class ApprovalAtTheDoorsTests(Doors, TestCase):
 @API
 class WhoMayApproveTests(Doors, TestCase):
     def setUp(self):
-        self.person = get_user_model().objects.create_user(username="operator", password="test-only-password")
+        self.person = operator()
         bind_sign_in(self.person, sign_in_subject(ISSUER, PERSON))
-        self.other = get_user_model().objects.create_user(username="someone-else", password="test-only-password")
+        self.other = operator(username="someone-else")
         self.enterContext(a_tailnet((LAPTOP, LAPTOP_AT, LAPTOP_ID)))
 
     def _key(self, *, person=True):
@@ -418,7 +418,7 @@ class WhoMayApproveTests(Doors, TestCase):
 @API
 class HeldByABlockedDeviceTests(TestCase):
     def setUp(self):
-        self.person = get_user_model().objects.create_user(username="operator", password="test-only-password")
+        self.person = operator()
         identity = AgentIdentity.objects.create(client_id=CLIENT, interfaces=["mcp"], granted=["read"])
         for node_id, blocked in ((LAPTOP_ID, True), (DESKTOP_ID, False)):
             AgentDevice().objects.create(

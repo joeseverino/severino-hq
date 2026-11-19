@@ -8,6 +8,7 @@ from django.urls import reverse
 
 from hq.platform.application import fragments
 from hq.platform.application.markup_testing import elements, select
+from hq.platform.core.testing import SignedInTestCase, operator
 
 PART = {"X-Fragment": "calendar"}
 
@@ -34,11 +35,7 @@ class RequestedPartTests(TestCase):
         self.assertEqual(fragments.template_names(RequestFactory().get("/"), ["a.html"]), ["a.html"])
 
 
-class PagePartTests(TestCase):
-    def setUp(self):
-        self.user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(self.user)
-
+class PagePartTests(SignedInTestCase):
     def test_a_page_answers_its_named_part_alone(self):
         url = reverse("calendar:month")
         page = self.client.get(url)
@@ -90,8 +87,7 @@ class PagePartTests(TestCase):
 
 class UnchangedPartTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
         self.url = reverse("dashboard_glance")
 
     def test_a_poll_that_finds_nothing_written_is_answered_304(self):
@@ -120,7 +116,7 @@ class UnchangedPartTests(TestCase):
 
     def test_any_write_ends_it(self):
         validator = self.client.get(self.url)["ETag"]
-        get_user_model().objects.create_user("another", password="y" * 20)
+        operator(username="another")
 
         again = self.client.get(self.url, headers={"If-None-Match": validator})
 
@@ -129,7 +125,7 @@ class UnchangedPartTests(TestCase):
 
     def test_it_vouches_for_one_reader_only(self):
         validator = self.client.get(self.url)["ETag"]
-        self.client.force_login(get_user_model().objects.create_superuser("second", password="z" * 20))
+        operator(self.client, "second")
         mine, theirs = (RequestFactory().get(self.url) for _ in range(2))
         mine.user, theirs.user = self.user, get_user_model().objects.get(username="second")
 

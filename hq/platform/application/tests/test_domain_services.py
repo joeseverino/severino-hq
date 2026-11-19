@@ -3,7 +3,6 @@
 from datetime import UTC, date, datetime
 
 from asgiref.sync import async_to_sync
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
@@ -14,6 +13,7 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
 from hq.domains.projects.models import Project
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 from hq.platform.mcp.identity import set_principal
 from hq.platform.mcp.server import mcp
 
@@ -150,7 +150,7 @@ class ProjectApplicationServiceTests(TestCase):
 
 class AdapterParityTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="joe", password="test-password")
+        self.user = operator(username="joe")
 
     def test_web_and_mcp_create_projects_through_the_same_service(self):
         self.client.force_login(self.user)
@@ -232,8 +232,7 @@ class AssetApplicationServiceTests(TestCase):
         self.assertFalse(Asset.objects.filter(slug="invalid").exists())
 
     def test_web_and_mcp_create_assets_through_the_same_service(self):
-        user = get_user_model().objects.create_user(username="asset-operator", password="test-password")
-        self.client.force_login(user)
+        operator(self.client)
         response = self.client.post(
             reverse("assets:create"),
             form_keyed(
@@ -333,8 +332,7 @@ class DocumentationSyncTests(TestCase):
         self.assertEqual(result["documentation"]["notes"], "")
 
     def test_web_documentation_create_uses_application_service(self):
-        user = get_user_model().objects.create_user(username="docs-operator")
-        self.client.force_login(user)
+        operator(self.client)
         response = self.client.post(
             reverse("docs_index:create"),
             form_keyed(
@@ -381,8 +379,7 @@ class ContentApplicationServiceTests(TestCase):
         self.assertFalse(ContentItem.objects.filter(slug="invalid").exists())
 
     def test_web_and_mcp_share_the_content_service_and_audit(self):
-        user = get_user_model().objects.create_user(username="content-operator")
-        self.client.force_login(user)
+        operator(self.client)
         response = self.client.post(
             reverse("content:create"),
             form_keyed(
@@ -443,8 +440,7 @@ class ExpenseApplicationServiceTests(TestCase):
         self.assertEqual(Expense.objects.count(), 0)
 
     def test_web_and_mcp_share_the_expense_service_and_audit(self):
-        user = get_user_model().objects.create_user(username="expense-operator")
-        self.client.force_login(user)
+        operator(self.client)
         response = self.client.post(
             reverse("expenses:create"),
             form_keyed(

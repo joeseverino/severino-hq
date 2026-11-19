@@ -8,6 +8,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.core.testing import declare
 
 from ..findings import findings
 from ..paths import path_to
@@ -35,7 +36,7 @@ def store(kind, *records):
 
 
 def machine(name, address):
-    ManagedResource.objects.create(key=name, kind="machine", spec={"name": name, "addresses": [address]})
+    declare(name, "machine", {"name": name, "addresses": [address]})
 
 
 # 198.51.100.0/24 stands for a public address here; 192.0.2.0/24 stays parked.

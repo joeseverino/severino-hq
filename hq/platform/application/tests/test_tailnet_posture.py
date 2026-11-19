@@ -2,13 +2,13 @@
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderConnection
+from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import texts
+from hq.platform.core.testing import declare, operator
 
 from ..findings import findings
 from ..inventory_testing import store
@@ -159,8 +159,7 @@ class PortNameTests(TestCase):
             groups=[{"name": "group:admins", "members": ["someone@example.com"]}],
             grants=[{"src": ["group:admins"], "dst": ["tag:server"], "ip": ["tcp:7722"]}],
         )
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         response = self.client.get(reverse("control_plane:tailnet"))
 
@@ -260,9 +259,7 @@ class GrantReachesOnlyLoopbackTests(TestCase):
         import json
 
         tailnet_connection()
-        ManagedResource.objects.create(
-            key="example-host", kind="machine", spec={"name": "example-host", "addresses": ["100.64.0.5"]}
-        )
+        declare("example-host", "machine", {"name": "example-host", "addresses": ["100.64.0.5"]})
         store(TAILNET_KIND, {"name": "example-host", "addresses": ["100.64.0.5"]})
         written = {**self.GRANT, "srcPosture": ["posture:latest"]}
         policy(

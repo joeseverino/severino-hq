@@ -10,10 +10,10 @@ import json
 from dataclasses import replace
 from types import SimpleNamespace
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.platform.core.testing import declare, operator
 
 from ..approvals import ApproveCommand, approve
 from ..capabilities import execute_capability
@@ -40,7 +40,7 @@ def policy_document(who: str = "group:example") -> str:
 
 
 def an_operator() -> Principal:
-    return web_principal(get_user_model().objects.create_user(username="operator", password="test-only-password"))
+    return web_principal(operator())
 
 
 def amended() -> ManagedResourceCommand:
@@ -52,7 +52,7 @@ class ConsentTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        ManagedResource.objects.create(key=POLICY_KEY, kind=GATED_KIND, spec={"document": policy_document()})
+        declare(POLICY_KEY, GATED_KIND, {"document": policy_document()})
 
     def policy(self) -> str:
         return ManagedResource.objects.get(key=POLICY_KEY).spec["document"]
@@ -232,7 +232,7 @@ class TokenTests(TestCase):
             seal, _unseal = sealer(Consented, Consent)
             return seal(Consent(TOKEN, approved=True))
 
-        ManagedResource.objects.create(key=POLICY_KEY, kind=GATED_KIND, spec={"document": policy_document()})
+        declare(POLICY_KEY, GATED_KIND, {"document": policy_document()})
         stand_ins = {
             "duck-typed": lambda: SimpleNamespace(principal=TOKEN, approved=True, require=lambda kind: None),
             "bare": lambda: object.__new__(Consented),

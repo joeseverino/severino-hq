@@ -12,6 +12,7 @@ from django.conf import settings
 from django.test import SimpleTestCase, TestCase, tag
 
 from hq.platform.application.tests.reads import reads
+from hq.platform.core.testing import operator
 
 from ..plugin_testing import form_keyed
 from ..web_writes import RETRY_KEY_FIELD
@@ -64,9 +65,8 @@ class WriteFormTests(SimpleTestCase):
 
 class RedrawnFormTests(TestCase):
     def test_a_form_drawn_again_after_its_write_draws_a_fresh_key(self):
-        from django.contrib.auth import get_user_model
 
-        self.client.force_login(get_user_model().objects.create_superuser("operator", "operator@example.com", "x" * 20))
+        operator(self.client)
         posted = form_keyed({"name": "Example", "slug": "example-redrawn"})
 
         first = self.client.post("/commands/project.create/", posted, follow=True)
