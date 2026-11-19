@@ -10,7 +10,7 @@ from hq.platform.application.assets import PaymentMethod
 from hq.platform.application.business_use import BusinessUseShare
 from hq.platform.application.describe import Describe
 from hq.platform.application.integration_specs import ListRead, ResourceSpec
-from hq.platform.application.record_fields import Notes
+from hq.platform.application.record_fields import Notes, RecordId
 from hq.platform.application.resources import BoundedQuery, one_of
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
@@ -52,6 +52,21 @@ class ExpenseRow(TypedDict):
     updated_at: UpdatedAt
 
 
+class ExpenseRecord(ExpenseRow):
+    """One expense with the words and names its related records are said by."""
+
+    category_label: Annotated[str, Describe("Its category, in words.")]
+    payment_method_label: Annotated[str, Describe("How it was paid for, in words; empty when not recorded.")]
+    project_name: Annotated[str, Describe("The related project's name; empty for none.")]
+    asset_name: Annotated[str, Describe("The related asset's name; empty for none.")]
+    content_title: Annotated[str, Describe("The related writeup's or page's title; empty for none.")]
+    document_title: Annotated[
+        str, Describe("The related doc's title; empty for none, or for one too sensitive to share.")
+    ]
+    paid_from_name: Annotated[str, Describe("The paying account's name as it was saved; empty when not recorded.")]
+    about_name: Annotated[str, Describe("The name of what it was for, as it was saved; empty for none.")]
+
+
 def resources() -> tuple[ResourceSpec, ...]:
     return (
         ResourceSpec(
@@ -60,6 +75,10 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Expense records with stable relationship identifiers.",
             Capability.READ,
             listing=ListRead(expenses.list_expenses, ExpenseQuery, ExpenseRow),
+            detail_handler=expenses.get_expense,
+            identifier="id",
+            identifier_type=RecordId,
+            pass_principal=True,
             search=SearchDefinition(
                 "expenses",
                 Expense,
@@ -68,5 +87,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 label="Expenses",
             ),
             web_route="expenses:list",
+            record_type=ExpenseRecord,
         ),
     )

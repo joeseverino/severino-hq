@@ -901,6 +901,51 @@
         },
         "style": "form"
       },
+      "ExpenseRecordFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "id",
+              "label",
+              "date",
+              "vendor",
+              "item",
+              "category",
+              "total_cost",
+              "business_use_percentage",
+              "estimated_deductible_amount",
+              "payment_method",
+              "business_purpose",
+              "notes",
+              "related_project",
+              "related_asset",
+              "related_content",
+              "related_documentation",
+              "paid_from",
+              "about",
+              "updated_at",
+              "category_label",
+              "payment_method_label",
+              "project_name",
+              "asset_name",
+              "content_title",
+              "document_title",
+              "paid_from_name",
+              "about_name",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "ExpenseRowPageFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -13104,6 +13149,236 @@
           "resource": "projects"
         }
       },
+      "ExpenseRecord": {
+        "additionalProperties": false,
+        "description": "One expense with the words and names its related records are said by.",
+        "properties": {
+          "about": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/about"
+          },
+          "about_name": {
+            "description": "The name of what it was for, as it was saved; empty for none.",
+            "type": "string"
+          },
+          "asset_name": {
+            "description": "The related asset's name; empty for none.",
+            "type": "string"
+          },
+          "business_purpose": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/business_purpose"
+          },
+          "business_use_percentage": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/business_use_percentage"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/category"
+          },
+          "category_label": {
+            "description": "Its category, in words.",
+            "type": "string"
+          },
+          "content_title": {
+            "description": "The related writeup's or page's title; empty for none.",
+            "type": "string"
+          },
+          "date": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/date"
+          },
+          "document_title": {
+            "description": "The related doc's title; empty for none, or for one too sensitive to share.",
+            "type": "string"
+          },
+          "estimated_deductible_amount": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/estimated_deductible_amount"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/id"
+          },
+          "item": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/item"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/label"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/notes"
+          },
+          "paid_from": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/paid_from"
+          },
+          "paid_from_name": {
+            "description": "The paying account's name as it was saved; empty when not recorded.",
+            "type": "string"
+          },
+          "payment_method": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/payment_method"
+          },
+          "payment_method_label": {
+            "description": "How it was paid for, in words; empty when not recorded.",
+            "type": "string"
+          },
+          "project_name": {
+            "description": "The related project's name; empty for none.",
+            "type": "string"
+          },
+          "related_asset": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/related_asset"
+          },
+          "related_content": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/related_content"
+          },
+          "related_documentation": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/related_documentation"
+          },
+          "related_project": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/related_project"
+          },
+          "total_cost": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/total_cost"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/updated_at"
+          },
+          "vendor": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/vendor"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "date",
+          "vendor",
+          "item",
+          "category",
+          "total_cost",
+          "business_use_percentage",
+          "estimated_deductible_amount",
+          "payment_method",
+          "business_purpose",
+          "notes",
+          "related_project",
+          "related_asset",
+          "related_content",
+          "related_documentation",
+          "paid_from",
+          "about",
+          "updated_at",
+          "category_label",
+          "payment_method_label",
+          "project_name",
+          "asset_name",
+          "content_title",
+          "document_title",
+          "paid_from_name",
+          "about_name"
+        ],
+        "type": "object"
+      },
+      "ExpenseRecordPartial": {
+        "additionalProperties": false,
+        "description": "One expense with the words and names its related records are said by.",
+        "properties": {
+          "about": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/about"
+          },
+          "about_name": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/about_name"
+          },
+          "asset_name": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/asset_name"
+          },
+          "business_purpose": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/business_purpose"
+          },
+          "business_use_percentage": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/business_use_percentage"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/category"
+          },
+          "category_label": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/category_label"
+          },
+          "content_title": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/content_title"
+          },
+          "date": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/date"
+          },
+          "document_title": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/document_title"
+          },
+          "estimated_deductible_amount": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/estimated_deductible_amount"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/id"
+          },
+          "item": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/item"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/label"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/notes"
+          },
+          "paid_from": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/paid_from"
+          },
+          "paid_from_name": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/paid_from_name"
+          },
+          "payment_method": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/payment_method"
+          },
+          "payment_method_label": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/payment_method_label"
+          },
+          "project_name": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/project_name"
+          },
+          "related_asset": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/related_asset"
+          },
+          "related_content": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/related_content"
+          },
+          "related_documentation": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/related_documentation"
+          },
+          "related_project": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/related_project"
+          },
+          "total_cost": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/total_cost"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/updated_at"
+          },
+          "vendor": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/vendor"
+          }
+        },
+        "type": "object"
+      },
+      "ExpenseRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ExpenseRecordPartial"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ExpenseRow": {
         "additionalProperties": false,
         "description": "One expense; each related record by its slug or id, or null.",
@@ -13293,7 +13568,7 @@
             "$ref": "#/components/schemas/Created"
           },
           "expense": {
-            "$ref": "#/components/schemas/ExpenseRow"
+            "$ref": "#/components/schemas/ExpenseRecord"
           },
           "message": {
             "$ref": "#/components/schemas/CallMessage"
@@ -36529,6 +36804,26 @@
               }
             },
             "links": {
+              "expenseDeleteV2": {
+                "operationId": "expenseDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/id}"
+                }
+              },
+              "expenseUpdateV2": {
+                "operationId": "expenseUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/id}"
+                }
+              },
+              "getExpensesV2": {
+                "operationId": "getExpensesV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/id"
+                }
+              },
               "listExpensesV2": {
                 "operationId": "listExpensesV2",
                 "parameters": {
@@ -36577,6 +36872,90 @@
         "tags": [
           "hq.expenses"
         ],
+        "x-hq-resource": "expenses"
+      }
+    },
+    "/api/v2/resources/expenses/{identifier}/": {
+      "get": {
+        "description": "One of the records Expenses lists, found by its `id`.",
+        "operationId": "getExpensesV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/ExpenseRecordFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpenseRecordSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "expenseDeleteV2": {
+                "operationId": "expenseDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/id}"
+                }
+              },
+              "expenseUpdateV2": {
+                "operationId": "expenseUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/id}"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Expenses: one by id",
+        "tags": [
+          "hq.expenses"
+        ],
+        "x-hq-identifier": "id",
         "x-hq-resource": "expenses"
       }
     },

@@ -15,7 +15,7 @@ from hq.domains.docs_index.models import SAFE_SENSITIVITIES, DocumentationRecord
 
 from .security import Capability, Principal
 
-__all__ = ["SAFE_SENSITIVITIES", "readable_records", "reads_whole", "safe_doc_ids", "safe_records"]
+__all__ = ["SAFE_SENSITIVITIES", "readable_records", "reads_whole", "safe_doc_ids", "safe_records", "shared_doc"]
 
 
 def safe_doc_ids(documentation: QuerySet[DocumentationRecord]) -> list[str]:
@@ -42,3 +42,11 @@ def readable_records(principal: Principal | None) -> QuerySet[DocumentationRecor
     """Every documentation record ``principal`` may read."""
 
     return DocumentationRecord.objects.all() if reads_whole(principal) else safe_records()
+
+
+def shared_doc(record: DocumentationRecord | None, principal: Principal | None) -> DocumentationRecord | None:
+    """``record``, the doc another record links to, when ``principal`` may read it; else None."""
+
+    if record is None or not (record.is_safe_for_ai_export or reads_whole(principal)):
+        return None
+    return record

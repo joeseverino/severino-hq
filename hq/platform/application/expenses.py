@@ -2,13 +2,14 @@
 
 from dataclasses import dataclass
 from decimal import Decimal
+from functools import partial
 from typing import Annotated, Any
 
 from django.db.models import Sum
 from pydantic import Field
 
 from hq.domains.expenses.models import DEFAULT_CATEGORY, EXPENSE_CATEGORY_CHOICES, Expense
-lazy from hq.domains.expenses.specs import ExpenseRow
+lazy from hq.domains.expenses.specs import ExpenseRecord, ExpenseRow
 
 from .assets import PaymentMethod
 from .business_use import BusinessUseShare
@@ -16,8 +17,11 @@ from .card_items import Kpi
 from .command_fields import Day, Describe, Names, Refers
 from .money import money
 from .projection import listing
+from .record_errors import RecordNotFound
 from .record_fields import Notes, TotalCost, one_of
 from .record_saves import Held, Link, linked_saver, row
+from .security import Principal
+from .sensitivity import shared_doc
 from .url_query import with_query
 
 # An expense's fields as its command writes them and its row reads them back, each said once.
@@ -143,25 +147,58 @@ class ExpenseCommand:
     about: Annotated[ExpenseAbout, Field(title="Also for")] = ""
 
 
-def serialize_expense(expense: Expense) -> ExpenseRow:
-    return row(expense, ExpenseRow)
+# What an expense's row reads of the records it is linked to.
+_LINKED = ("related_project", "related_asset", "related_content", "related_documentation")
 
 
-def list_expenses(*, year: int | None = None, category: str | None = None, limit: int = 50) -> dict[str, Any]:
-    """List expense records with stable, sensitivity-safe relationships."""
-    rows = Expense.objects.select_related(
-        "related_project", "related_asset", "related_content", "related_documentation"
-    )
+def serialize_expense(expense: Expense, *, principal: Principal | None = None) -> ExpenseRow:
+    """``expense`` as ``principal`` may read it; None is an AI-facing surface's reader."""
+
+    document = shared_doc(expense.related_documentation, principal)
+    return row(expense, ExpenseRow, related_documentation=document.doc_id if document else None)
+
+
+def list_expenses(
+    *, year: int | None = None, category: str | None = None, limit: int = 50, principal: Principal | None = None
+) -> dict[str, Any]:
+    """List expense records with stable relationships, each doc as ``principal`` may read it."""
+    rows = Expense.objects.select_related(*_LINKED)
     if year is not None:
         rows = rows.filter(date__year=year)
     if category:
         rows = rows.filter(category=category)
-    return listing(rows, serialize_expense, order=("-date", "-id"), limit=limit)
+    return listing(rows, partial(serialize_expense, principal=principal), order=("-date", "-id"), limit=limit)
+
+
+def expense_record(expense: Expense, *, principal: Principal | None = None) -> ExpenseRecord:
+    """``expense`` whole, with the names its related records are said by."""
+
+    document = shared_doc(expense.related_documentation, principal)
+    return {
+        **serialize_expense(expense, principal=principal),
+        "category_label": expense.get_category_display(),
+        "payment_method_label": expense.get_payment_method_display() if expense.payment_method else "",
+        "project_name": expense.related_project.name if expense.related_project else "",
+        "asset_name": expense.related_asset.item_name if expense.related_asset else "",
+        "content_title": expense.related_content.title if expense.related_content else "",
+        "document_title": document.title if document else "",
+        "paid_from_name": expense.paid_from_name,
+        "about_name": expense.about_name,
+    }
+
+
+def get_expense(identifier: int, *, principal: Principal | None = None) -> ExpenseRecord:
+    """One expense by its id."""
+
+    expense = Expense.objects.select_related(*_LINKED).filter(pk=identifier).first()
+    if expense is None:
+        raise RecordNotFound("No expense has that id.")
+    return expense_record(expense, principal=principal)
 
 
 save_expense = linked_saver(
     "expenses",
-    serialize_expense,
+    expense_record,
     refusals=Held("That expense was not found.", "That expense changed after it was read."),
     links={
         "related_project": Link("slug", "A related project was not found."),

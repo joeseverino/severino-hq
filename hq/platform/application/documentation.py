@@ -43,10 +43,10 @@ SYNC = "documentation.sync"
 PROJECT_NOTE_PREFIX = "project-"
 
 
-def document_link(record: DocumentationRecord, *, label: str = "") -> EntityLink:
+def document_link(doc_id: str, title: str) -> EntityLink:
     """A document by its title, its id on hover."""
 
-    return replace(entity_link("document", record.doc_id, label=label or record.title), title=record.doc_id)
+    return replace(entity_link("document", doc_id, label=title), title=doc_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +98,11 @@ def related_documents(
     groups = [
         Mentions(plural(str(label)), found)
         for value, label in DocumentationRecord.DocType.choices
-        if (found := tuple(Mention(document_link(record)) for record in rest if record.doc_type == value))
+        if (
+            found := tuple(
+                Mention(document_link(record.doc_id, record.title)) for record in rest if record.doc_type == value
+            )
+        )
     ]
     return RelatedDocuments(
         groups=tuple(groups),
@@ -107,7 +111,7 @@ def related_documents(
             for project in sorted(projects.values(), key=lambda project: project.name.lower())
             if project.slug not in said
         ),
-        sources=tuple(document_link(record, label=record.obsidian_path) for record in own),
+        sources=tuple(document_link(record.doc_id, record.obsidian_path) for record in own),
     )
 
 
@@ -320,7 +324,6 @@ class DocumentationItem(DocumentationRow):
     """One documentation pointer with the records it is linked to."""
 
     relationships: DocumentationLinks
-
 
 
 # What a doc too sensitive to share leaves blank: where it lives and its notes.

@@ -5,20 +5,20 @@
   {% fact "Cost" %}{{ expense.total_cost|money }}{% endfact %}
   {% fact "Business use" %}{{ expense.business_use_percentage|measured:"%" }}{% endfact %}
   {% fact "Deductible (est.)" %}{{ expense.estimated_deductible_amount|money }}{% endfact %}
-  {% if expense.payment_method %}{% fact "Payment method" value=expense.get_payment_method_display %}{% endif %}
+  {% if expense.payment_method %}{% fact "Payment method" value=expense.payment_method_label %}{% endif %}
   {% if account %}{% fact "Paid from" %}{% entity account %}{% endfact %}{% endif %}
   {% if expense.business_purpose %}{% fact "Business purpose" value=expense.business_purpose %}{% endif %}
-  {% if expense.related_project %}{% fact "Project" %}{% entity "project"|entity_of:expense.related_project.slug label=expense.related_project.name %}{% endfact %}{% endif %}
-  {% if expense.related_asset %}{% fact "Asset" %}{% entity "asset"|entity_of:expense.related_asset.slug label=expense.related_asset.item_name %}{% endfact %}{% endif %}
-  {% if expense.related_content %}{% fact "Writeup or page" %}{% entity "writeup"|entity_of:expense.related_content.slug label=expense.related_content.title %}{% endfact %}{% endif %}
+  {% if links.project %}{% fact "Project" %}{% entity links.project %}{% endfact %}{% endif %}
+  {% if links.asset %}{% fact "Asset" %}{% entity links.asset %}{% endfact %}{% endif %}
+  {% if links.writeup %}{% fact "Writeup or page" %}{% entity links.writeup %}{% endfact %}{% endif %}
   {% if document %}{% fact "Document" %}{% entity document %}{% endfact %}{% endif %}
   {% if about %}{% fact "For" %}<span class="prose">{{ about.kind_label|breakable }} {% entity about %}</span>{% endfact %}{% endif %}
 {% endfacts %}{% endcard %}
 
 {% if expense.notes %}{% section "Notes" %}<p>{{ expense.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 
-{% if not expense.receipts.all %}
-  {% url 'receipts:create' as upload_url %}{% with_query upload_url related_expense=expense.pk as upload_url %}
+{% if not receipted %}
+  {% url 'receipts:create' as upload_url %}{% with_query upload_url related_expense=expense.id as upload_url %}
   {% section "Receipts" remedy_label="Upload one" remedy_url=upload_url %}{% empty %}No receipts.{% endsection %}
 {% endif %}
 {% include "partials/_related.html" with groups=related %}

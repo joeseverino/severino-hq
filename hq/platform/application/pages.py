@@ -523,6 +523,8 @@ class RecordPageMixin(PageMixin):
     # The ``ResourceSpec`` whose read of one draws the page, by its name.
     resource = ""
     context_object_name = ""
+    # The route's name for the identifier, where it is not the identifier's own (``pk``).
+    url_kwarg = ""
     record: dict[str, Any]
     # The model whose stored row the records of other kinds about this one
     # are asked by, and the relations they read (``stored``).
@@ -538,7 +540,7 @@ class RecordPageMixin(PageMixin):
         return str(resource_registry()[self.resource].identifier)
 
     def get(self, request: Any, *args: Any, **kwargs: Any) -> Any:
-        asked = kwargs[self.identifier]
+        asked = kwargs[self.url_kwarg or self.identifier]
         try:
             self.record = get_resource(self.resource, asked, principal=web_principal(request.user), strict=False)
         except RecordNotFound as exc:
