@@ -10,7 +10,6 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.markup_testing import actions, hrefs
-from hq.platform.application.tests.reads import reads
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.testing import declare
@@ -152,7 +151,6 @@ class SourcedRecordTests(TestCase):
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "templates/**/*.html", "!**/tests/**")
 class OfferedLinksTests(SimpleTestCase):
     def test_no_file_links_a_declarations_edit_or_removal_by_its_route(self):
         files = [*ROOT.joinpath("hq").rglob("*.py"), *ROOT.joinpath("templates").rglob("*.html")]

@@ -6,7 +6,6 @@ loads is read, an extension's too.
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
 from hq.platform.core.tests.separators import loose_dots
 
@@ -54,7 +53,6 @@ class SeparatorRuleTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**")
 class TemplateSeparatorTests(SimpleTestCase):
     def test_every_held_mark_follows_its_part(self):
         found = loose_dots({name: path.read_text(encoding="utf-8") for name, path in template_files()})

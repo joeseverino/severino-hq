@@ -46,7 +46,6 @@ from hq.platform.application.outbound_work import OutboundWork, capability_for, 
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.plugins import PluginIntegration, clear_plugin_composition_cache
 from hq.platform.application.security import Principal, cli_principal, internal_principal
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import serving
@@ -629,7 +628,6 @@ class StartForHostTests(TransactionTestCase):
 
 
 @tag("source", "tree")
-@reads("deploy/systemd/**")
 class ShippedUnitTests(TestCase):
     """The shipped units and the declarations name the same work: a timer
     starts it on a schedule, or a failed unit starts it through OnFailure."""

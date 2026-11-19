@@ -17,7 +17,6 @@ from django.test import SimpleTestCase, tag
 
 from hq.platform.application import plugin_validation as validation
 from hq.platform.application.plugin_validation import _closes_by_hand, sentence_closes
-from hq.platform.application.tests.reads import reads
 
 from .apart import apart
 
@@ -26,7 +25,6 @@ COVERED = ("hq/platform/application", "hq/domains")
 
 
 @tag("source", "tree")
-@reads("**/*.py", "!**/tests/**/*.py")
 class SentenceEndTests(SimpleTestCase):
     def test_a_page_sentence_closes_on_a_value_through_ended(self):
         """Write ``ended(f"... {value}")``: a value that ends in its own period keeps only that one."""

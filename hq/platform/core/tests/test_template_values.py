@@ -24,7 +24,6 @@ from django.utils.html import format_html
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.markup_testing import elements, select
 from hq.platform.application.tests.facts import scan
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
 from hq.platform.core.hand_drawn import HOLDING, WORDED_FIGURES
 from hq.platform.core.templatetags.value_tags import breakable, entity, readable, when
@@ -647,7 +646,6 @@ class HoldingFilterTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**")
 class TemplateValueTests(SimpleTestCase):
     def setUp(self):
         self.sources = template_sources()
@@ -881,7 +879,6 @@ class UnheldBuilderTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "hq_sdk/**/*.py", "!**/tests/**/*.py", lists=("hq/**", "hq_sdk/**"))
 class BuilderValueTests(SimpleTestCase):
     def test_every_value_a_builder_prints_as_text_holds_its_names(self):
         root = Path(settings.BASE_DIR)

@@ -5,8 +5,6 @@ from pathlib import Path
 
 lazy from django.template.autoreload import get_template_directories
 
-from hq.platform.application.tests.reads import listing
-
 # Installed or generated trees inside a checkout. With hidden directories
 # (.git, a virtualenv under any name) they are not this project's source.
 NOT_SOURCE = {
@@ -23,7 +21,6 @@ NOT_SOURCE = {
 }
 
 
-@listing
 def source_files(root: Path, pattern: str) -> list[Path]:
     """This checkout's own files matching ``pattern``.
 

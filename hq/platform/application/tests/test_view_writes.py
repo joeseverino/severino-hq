@@ -14,7 +14,6 @@ from django.conf import settings
 from django.test import SimpleTestCase, tag
 from django.urls import get_resolver
 
-from hq.platform.application.tests.reads import reads
 from hq.platform.core.test_runner import plugin_test_modules
 
 from ..routes import routed
@@ -254,7 +253,6 @@ def _planted(root: Path, files: dict[str, str]) -> None:
 
 
 @tag("source", "tree")
-@reads("**/*.py", "!**/tests/**/test_*.py")
 class ViewWriteTests(SimpleTestCase):
     def test_no_view_writes_outside_the_runner(self):
         modules = routed_modules(ROOT)

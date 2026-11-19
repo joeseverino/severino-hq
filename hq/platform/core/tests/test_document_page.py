@@ -6,7 +6,6 @@ import re
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
 from hq.platform.core.stylesheets import STATIC
 
@@ -23,7 +22,6 @@ FILLS = re.compile(r"max-width\s*:\s*none|(?<![-\w])padding\s*:\s*0\s*;|100dvh\s
 
 
 @tag("source", "tree")
-@reads("**/templates/**", "static/css/**")
 class DocumentPageTests(SimpleTestCase):
     def test_only_the_document_page_empties_the_footer(self):
         found = sorted(

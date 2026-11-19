@@ -16,7 +16,6 @@ from hq.platform.application.markup_testing import all_elements, elements, links
 from hq.platform.application.plugin_testing import table_problems
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
-from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 from hq.platform.core.testing import SignedInTestCase
 
@@ -34,7 +33,6 @@ def _template_roots() -> list[Path]:
 
 
 @tag("source", "tree")
-@reads("**/templates/**", "static/css/**", "static/js/**")
 class TableContractTests(SimpleTestCase):
     maxDiff = None
 

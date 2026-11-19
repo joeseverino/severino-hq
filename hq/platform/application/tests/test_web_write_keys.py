@@ -11,7 +11,6 @@ from pathlib import Path
 from django.conf import settings
 from django.test import SimpleTestCase, TestCase, tag
 
-from hq.platform.application.tests.reads import reads
 from hq.platform.core.testing import operator
 
 from ..plugin_testing import form_keyed
@@ -38,7 +37,6 @@ def unkeyed_forms(source: str) -> list[str]:
 
 
 @tag("source", "tree")
-@reads("**/templates/**")
 class WriteFormTests(SimpleTestCase):
     def test_every_form_that_posts_draws_its_retry_key(self):
         templates = [path for root in TEMPLATE_ROOTS for path in source_files(root, "*.html")]

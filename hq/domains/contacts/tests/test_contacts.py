@@ -26,7 +26,6 @@ from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.consent import consented
 from hq.platform.application.tests.facts import ROOT, STRING, scan, strings
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import operator
@@ -434,7 +433,6 @@ class NoCredentialTests(TestCase):
 
 
 @tag("source", "tree")
-@reads("hq/domains/contacts/*.py", "hq/platform/application/contact_submissions.py")
 class NoCredentialSourceTests(SimpleTestCase):
     """The contacts code, read for a token setting."""
 

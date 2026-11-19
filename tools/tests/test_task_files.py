@@ -4,7 +4,6 @@ from pathlib import PurePosixPath
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.task import names
 from tests.mise_tasks import ROOT
 
@@ -31,7 +30,6 @@ def file_tasks(listing: list[str]) -> dict[str, str]:
 
 
 @tag("source", "tree")
-@reads("mise-tasks/**")
 class TaskFileModeTests(SimpleTestCase):
     def test_every_file_task_is_executable(self) -> None:
         tasks = file_tasks(names("ls-files", "--format=%(objectmode) %(path)", "--", TASKS, root=ROOT))

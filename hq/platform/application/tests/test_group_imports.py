@@ -21,7 +21,6 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.facts import Import, imports, package_of
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import source_files
 from hq.platform.application.tests.test_mise_config import context_admits
 from hq.platform.application.tests.tree import image_excludes
@@ -205,20 +204,6 @@ def image_loads(by_module: dict[Path, list[Import]]) -> dict[Path, set[str]]:
 
 
 @tag("source", "tree")
-@reads(
-    "**/*.py",
-    "*.toml",
-    "Dockerfile",
-    "Dockerfile.dockerignore",
-    "controller/go.mod",
-    "hq_runner/build-constraints.txt",
-    "mise-tasks/**",
-    "mise.lock",
-    "tools/pipeline/check-plugin.sh",
-    "tools/pipeline/toolchain.env",
-    "uv.lock",
-    lists=("**",),
-)
 class GroupImportTests(SimpleTestCase):
     imports: dict[Path, list[Import]]
 
@@ -319,7 +304,6 @@ class GroupImportTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads()
 class LoadedImportTests(SimpleTestCase):
     def test_an_import_that_waits_or_may_fail_is_not_loaded_with_its_module(self):
         source = (

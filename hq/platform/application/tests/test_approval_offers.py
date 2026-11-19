@@ -22,7 +22,6 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.roles import Role, assign
 from hq.platform.application.security import mcp_principal, web_principal
 
-from .reads import reads
 from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_payload
 from .writers import keyed
 
@@ -142,9 +141,6 @@ class DecisionOfferTests(TestCase):
 
 
 @tag("source", "tree")
-@reads(
-    "hq/**/*.py", "demo/**/*.py", "templates/**/*.html", "!**/tests/**/*.py", lists=("hq/**", "demo/**", "templates/**")
-)
 class DecisionLinkSourceTests(SimpleTestCase):
     def test_only_the_rule_makes_a_decision_s_address(self):
         """A decision's button is made only by ``approvals.offers``, which

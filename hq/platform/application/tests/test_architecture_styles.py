@@ -6,7 +6,6 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
 from hq.platform.core.table_cells import ROLE_CLASSES
 from hq.platform.core.template_contract import class_words
@@ -554,12 +553,6 @@ def defined_classes() -> set[str]:
 
 
 @tag("source", "tree")
-@reads(
-    "**/templates/**",
-    "static/css/**/*.css",
-    "hq/platform/core/browser_audit.js",
-    lists=("hq/platform/core/tests/browser/probes/*.py",),
-)
 class TemplateClassStyleTests(SimpleTestCase):
     """Every class a template names is one the stylesheet defines.
 
@@ -608,7 +601,6 @@ class TemplateClassStyleTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**", "hq/**/*.py", "!**/tests/**/*.py")
 class HandRolledClassTests(SimpleTestCase):
     """A class is one part's own, declared on its ``Part``: a template writes
     only the public classes, as an extension does, and a part's partial writes

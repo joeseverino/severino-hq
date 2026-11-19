@@ -6,7 +6,6 @@ import re
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.markup_testing import elements, texts
-from hq.platform.application.tests.reads import reads
 from hq.platform.core.testing import render
 
 from .source import template_files
@@ -117,7 +116,6 @@ class RecordLinkTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**")
 class SharedMarkupTemplateTests(SimpleTestCase):
     """No template writes by hand what a shared partial or tag draws."""
 

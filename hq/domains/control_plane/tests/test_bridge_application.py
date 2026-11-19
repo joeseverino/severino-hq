@@ -14,7 +14,6 @@ from jsonschema import Draft202012Validator
 from hq.domains.control_plane import bridge_application
 from hq.domains.control_plane.bridge_actions import ACTIONS, Action
 from hq.domains.control_plane.bridge_contract import contract, max_body_bytes, operations
-from hq.platform.application.tests.reads import reads
 
 from . import bridge_client
 
@@ -391,7 +390,6 @@ class ReachabilityTests(TestCase):
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "!**/tests/**/*.py")
 class ListenerSourceTests(SimpleTestCase):
     """Which listener is handed the bridge, read from the launcher source."""
 

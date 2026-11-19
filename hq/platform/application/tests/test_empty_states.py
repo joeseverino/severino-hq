@@ -9,7 +9,6 @@ from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters import DECLARATIONS
 from hq.platform.application.markup_testing import all_elements
-from hq.platform.application.tests.reads import reads
 from hq.platform.core.testing import operator
 
 from ..connection_setup import setups
@@ -54,7 +53,6 @@ class OneEmptyStateTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**")
 class EmptyStateTemplateTests(SimpleTestCase):
     """Templates draw an empty state only through the partial."""
 

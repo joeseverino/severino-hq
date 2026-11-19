@@ -16,7 +16,6 @@ from hq.domains.assets.models import Asset
 from hq.domains.calendars.models import Entry
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
-from hq.platform.application.tests.reads import reads
 
 from .. import approvals
 from ..capabilities import capability_registry, execute_capability
@@ -119,7 +118,6 @@ def _subclasses(cls: type) -> set[type]:
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "!**/tests/**/*.py")
 class RefusalTextTests(SimpleTestCase):
     """A capability answers with a refusal's text, so every refusal is built from a sentence HQ wrote."""
 

@@ -6,8 +6,6 @@ from pathlib import Path
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
-
 from .source import source_files, template_files
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -34,7 +32,6 @@ PAGE_SCRIPTS = {"js/topology.js": "data-topology"}
 
 
 @tag("source", "tree")
-@reads("**/*.html", "static/js/**")
 class ScriptLoadingTests(SimpleTestCase):
     def test_every_script_is_deferred_but_the_one_answering_before_the_first_frame(self):
         blocking = [
@@ -94,7 +91,6 @@ class ScriptLoadingTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**")
 class TemplateSourceTests(SimpleTestCase):
     def test_application_templates_do_not_bypass_csp(self):
         violations = []

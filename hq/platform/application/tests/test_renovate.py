@@ -7,23 +7,11 @@ from pathlib import PurePosixPath
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.test_pipeline import ROOT, WORKFLOWS, every_step
 
 
 @tag("source", "tree")
 # Each file a custom manager's pattern matches, which a pattern can match anywhere an add puts one.
-@reads(
-    ".github/renovate.json",
-    ".github/workflows/renovate.yml",
-    "deploy/renovate/config.json",
-    "hk.pkl",
-    "mise.toml",
-    "static/vendor/scalar/UPSTREAM",
-    "tools/pipeline/toolchain.env",
-    "deploy/renovate/image",
-    lists=("**",),
-)
 class RenovateTests(SimpleTestCase):
     def test_every_command_the_configuration_runs_is_one_the_workflow_allows(self):
         """Renovate skips a post-upgrade command its runner does not allow, and the

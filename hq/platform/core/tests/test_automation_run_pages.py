@@ -10,7 +10,6 @@ from django.urls import reverse
 
 from hq.platform.application.automation_runs import access_words
 from hq.platform.application.markup_testing import links, select, text, texts, with_class, within
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import source_files, template_files
 from hq.platform.application.tests.tree import ROOT
 from hq.platform.core import seeds
@@ -289,7 +288,6 @@ class ProcedurePageTests(TestCase):
 
 
 @tag("source", "tree")
-@reads("**/*.py", "!**/tests/**/*.py", "**/templates/**")
 class NoProcedureNamedTests(SimpleTestCase):
     """The host draws a procedure from the adopted catalog alone: no template
     and no module outside the example estate and the tests names one."""

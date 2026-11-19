@@ -14,8 +14,6 @@ from unittest import mock
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
-
 ROOT = Path(__file__).resolve().parents[4]
 
 
@@ -101,7 +99,6 @@ def unreadable_config(image: str) -> tuple[int, list[str]]:
 
 
 @tag("source")
-@reads("**/Dockerfile*", "mise.toml", lists=("**",))
 class MiseConfigTravelsTests(SimpleTestCase):
     """A stage that installs from mise.toml carries go.mod beside it, and its build context admits it."""
 
@@ -183,7 +180,6 @@ def expand(source: str, args: dict[str, set[str]]) -> set[str]:
 
 
 @tag("source")
-@reads(".github/**/*.yml", "**/Dockerfile*", lists=("**",))
 class BuildContextTests(SimpleTestCase):
     """A path an image copies from its context is one its .dockerignore admits, whatever value a workflow gives its ARG."""
 

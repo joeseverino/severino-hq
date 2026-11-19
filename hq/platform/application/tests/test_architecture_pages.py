@@ -11,7 +11,6 @@ from django.test import RequestFactory, SimpleTestCase, TestCase, tag
 
 from hq.platform.application.routes import routed
 from hq.platform.application.security import operator_capabilities
-from hq.platform.application.tests.reads import reads
 from hq.platform.core.middleware import LoginRequiredMiddleware
 from hq.platform.core.testing import person
 from hq_sdk.testing import plain
@@ -66,7 +65,6 @@ class SystemCheckTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/*.py", "!**/tests/**/test_*.py", "tools/lint/ast-grep/rules/page-trail-declared.yml")
 class PageTrailTests(SimpleTestCase):
     """A view says its trail with ``page_trail`` and ``trail_label``, not a ``get_page_trail`` that restates them.
 

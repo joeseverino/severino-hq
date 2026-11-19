@@ -9,7 +9,6 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.task import names, trusted_mise
 from tools.gate.tests.base import fixture_git
 
@@ -48,7 +47,6 @@ def repository(root: Path) -> Path:
 
 
 @tag("source", "tree")
-@reads("controller/go.mod", "mise-tasks/**", "mise.lock", "mise.toml", "tools/pipeline/toolchain.env", lists=("**",))
 class EveryFileHasALegTests(SimpleTestCase):
     def test_every_tracked_file_is_read_by_a_leg(self):
         """A path no leg names would run every leg on each change to it: it is placed in the sources of

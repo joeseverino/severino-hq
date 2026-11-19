@@ -6,13 +6,10 @@ from pathlib import Path
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
-
 from .source import template_files
 
 
 @tag("source", "tree")
-@reads("**/*.py", "!**/test*.py", "**/templates/**")
 class OnePrimitiveTests(SimpleTestCase):
     """Questions asked in many places are answered by one function."""
 
@@ -108,7 +105,6 @@ class OnePrimitiveTests(SimpleTestCase):
         self.assertEqual(found, [])
 
 
-@reads("hq/**/*.py", "!**/tests/**/*.py")
 class RouteOwnerTests(SimpleTestCase):
     """Routes are resolved in one place, so the answer can be remembered."""
 
@@ -150,7 +146,6 @@ class RouteOwnerTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**")
 class FragmentPrimitiveTests(SimpleTestCase):
     """Reads are one component: `static/js/fragment.js` and the part it asks for.
 

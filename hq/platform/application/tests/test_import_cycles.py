@@ -12,8 +12,6 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
-
 from .facts import ROOT, Import, imports, module_name, package_of
 
 PACKAGES = ("hq", "hq_sdk")
@@ -56,7 +54,6 @@ def cycle_in(graph: dict[str, set[str]]) -> list[str]:
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "hq_sdk/**/*.py", lists=("hq/**", "hq_sdk/**"))
 class ImportCycleTests(SimpleTestCase):
     def test_no_module_imports_itself_back_while_it_runs(self):
         cycle = cycle_in(import_graph())
