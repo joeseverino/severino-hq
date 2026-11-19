@@ -150,15 +150,14 @@ class InvalidCapabilityQuery(QueryRefusal):
     """A narrowing input the capability catalog cannot be read by; ``reason`` says which."""
 
 
-def _narrowed(name: str, resource: str) -> list[CapabilitySpec]:
-    """The capabilities under the dotted ``name`` and about ``resource``, refusing what names nothing.
+def _reachable(principal: Principal, *, name: str = "", resource: str = "") -> list[CapabilitySpec]:
+    """What ``principal``'s interface could ever hold under the dotted ``name`` and about ``resource``.
 
-    ``name`` is a whole capability name or a prefix of whole segments
-    (``infrastructure`` holds ``infrastructure.resource.reconcile``), so a filter never
-    matches half a word.
+    ``name`` is a whole capability name or a prefix of whole segments (``infrastructure`` holds
+    ``infrastructure.resource.reconcile``), so a filter never matches half a word; one that names nothing is refused.
     """
 
-    graph = integration_graph()
+    graph, name, resource = integration_graph(), name.strip(), resource.strip()
     if name and not DOTTED_NAME.match(name):
         raise InvalidCapabilityQuery("capabilities: name is a dotted capability name or a prefix of one.")
     if resource and resource not in graph.resources:
@@ -168,6 +167,7 @@ def _narrowed(name: str, resource: str) -> list[CapabilitySpec]:
         for spec in graph.capabilities.values()
         if (not name or spec.name == name or spec.name.startswith(f"{name}."))
         and (not resource or spec.subject_resource == resource)
+        and could_ever_hold(principal, spec.required_capabilities)
     ]
 
 
@@ -184,23 +184,33 @@ class CapabilityCatalog(TypedDict):
     capabilities: Annotated[list[CapabilityDescription], Describe("Each command asked for that you can run from here.")]
 
 
-def describe_capabilities(*, principal: Principal, name: str = "", resource: str = "") -> CapabilityCatalog:
-    """Return stable JSON Schemas and operational effects for every capability
-    ``principal``'s interface could ever hold, or those under a dotted ``name``
-    and about a ``resource``, each saying whether ``principal`` is ``permitted`` it.
+def capability_index(*, principal: Principal) -> list[tuple[CapabilitySummary, bool]]:
+    """Each capability ``principal``'s interface could ever hold, as an index names it, and whether it is permitted."""
 
-    A capability its interface never holds is left out, whatever the grant: a
-    token is not shown a command only a person can run.
+    return [(_summarized(spec), spec.permitted_to(principal)) for spec in _reachable(principal)]
+
+
+def _summarized(spec: CapabilitySpec) -> CapabilitySummary:
+    return {
+        "name": spec.name,
+        "label": spec.title,
+        "summary": spec.summary,
+        "effect": spec.effect,
+        "resource": spec.subject_resource,
+    }
+
+
+def describe_capabilities(*, principal: Principal, name: str = "", resource: str = "") -> CapabilityCatalog:
+    """Every capability ``principal``'s interface could ever hold, or those under a dotted ``name`` and about a
+    ``resource``, with its JSON Schema and effects and whether ``principal`` is ``permitted`` it; a token is never
+    shown a command only a person can run, whatever its grant.
     """
 
     described: list[CapabilityDescription] = [
         {
-            "name": spec.name,
-            "label": spec.title,
+            **_summarized(spec),
             "verb": spec.words(),
             "variants": dict(spec.variants),
-            "summary": spec.summary,
-            "effect": spec.effect,
             "required_capabilities": [
                 capability.value if isinstance(capability, Capability) else capability
                 for capability in spec.required_capabilities
@@ -211,12 +221,10 @@ def describe_capabilities(*, principal: Principal, name: str = "", resource: str
             "target_query": dict(spec.target_query),
             "execution_notes": list(spec.execution_notes),
             "target_initial_fields": list(spec.target_initial_fields),
-            "resource": spec.subject_resource,
             "input_schema": capability_schema(spec),
             "permitted": spec.permitted_to(principal),
         }
-        for spec in _narrowed(name.strip(), resource.strip())
-        if could_ever_hold(principal, spec.required_capabilities)
+        for spec in _reachable(principal, name=name, resource=resource)
     ]
     return {"schema_version": CAPABILITIES_SCHEMA_VERSION, "capabilities": described}
 

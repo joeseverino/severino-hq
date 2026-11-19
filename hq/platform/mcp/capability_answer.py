@@ -14,6 +14,7 @@ from hq.platform.application.answer_fields import Pinned, SchemaVersion
 from hq.platform.application.capabilities import (
     CapabilityDescription,
     CapabilitySummary,
+    capability_index,
     describe_capabilities,
 )
 from hq.platform.application.describe import Describe
@@ -81,21 +82,14 @@ def shared_definitions(entries: list[CapabilityDescription]) -> tuple[list[Capab
 def agent_capabilities(
     *, principal: Principal, name: str = "", resource: str = ""
 ) -> CapabilityIndex | CapabilityDetail:
-    """The index with no narrowing, else the entries ``name`` and ``resource`` narrow to, in full."""
+    """The index with no narrowing, built from no schema, else the entries ``name`` and ``resource`` narrow to, in full."""
 
-    entries = describe_capabilities(principal=principal, name=name, resource=resource)["capabilities"]
-    if not (name.strip() or resource.strip()):
-        index: list[CapabilityIndexEntry] = [
-            {
-                "name": entry["name"],
-                "label": entry["label"],
-                "summary": entry["summary"],
-                "effect": entry["effect"],
-                "resource": entry["resource"],
-                "refused": not entry["permitted"],
-            }
-            for entry in entries
-        ]
-        return {"schema_version": AGENT_CAPABILITIES_SCHEMA_VERSION, "capabilities": index}
-    full, definitions = shared_definitions(entries)
-    return {"schema_version": AGENT_CAPABILITIES_SCHEMA_VERSION, "capabilities": full, "$defs": definitions}
+    if name.strip() or resource.strip():
+        full, definitions = shared_definitions(
+            describe_capabilities(principal=principal, name=name, resource=resource)["capabilities"]
+        )
+        return {"schema_version": AGENT_CAPABILITIES_SCHEMA_VERSION, "capabilities": full, "$defs": definitions}
+    index: list[CapabilityIndexEntry] = [
+        {**summary, "refused": not permitted} for summary, permitted in capability_index(principal=principal)
+    ]
+    return {"schema_version": AGENT_CAPABILITIES_SCHEMA_VERSION, "capabilities": index}

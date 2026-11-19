@@ -2,11 +2,13 @@
 it, and a narrowed answer holds each schema definition once."""
 
 import json
+from unittest import mock
 
 from asgiref.sync import async_to_sync
 from django.test import TestCase
 from mcp import Client
 
+from hq.platform.application import capabilities
 from hq.platform.application.capabilities import describe_capabilities
 from hq.platform.application.security import Principal, operator_capabilities
 
@@ -59,9 +61,12 @@ class CapabilityAnswerTests(TestCase):
         self.assertFalse(answer.is_error, answer.structured_content)
         return json.loads(answer.content[0].text)
 
-    def test_with_no_narrowing_it_names_every_capability_without_a_schema(self):
+    def test_with_no_narrowing_it_names_every_capability_without_building_a_schema(self):
         everything = describe_capabilities(principal=READER)["capabilities"]
-        index = self._answered()
+        with mock.patch.object(capabilities, "capability_schema", wraps=capabilities.capability_schema) as built:
+            index = self._answered()
+            narrowed = self._answered(name="project")["capabilities"]
+        self.assertEqual([call.args[0].name for call in built.call_args_list], [entry["name"] for entry in narrowed])
 
         self.assertEqual([entry["name"] for entry in index["capabilities"]], [entry["name"] for entry in everything])
         self.assertFalse(any(entry.get("refused") for entry in index["capabilities"]))
