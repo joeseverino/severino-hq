@@ -1873,6 +1873,42 @@
         },
         "style": "form"
       },
+      "ReceiptRecordFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "id",
+              "original_filename",
+              "content_type",
+              "size_bytes",
+              "vendor",
+              "date",
+              "amount",
+              "notes",
+              "related_expense",
+              "related_asset",
+              "uploaded_at",
+              "updated_at",
+              "label",
+              "file",
+              "file_type_label",
+              "expense_label",
+              "expense_date",
+              "asset_name",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "ReceiptRowPageFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -23226,6 +23262,183 @@
           "resource": "expenses"
         }
       },
+      "ReceiptRecord": {
+        "additionalProperties": false,
+        "description": "One receipt with what it is called, whether HQ holds its file, and the names of what it proves.",
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/amount"
+          },
+          "asset_name": {
+            "description": "The name of the asset it is for; empty for none.",
+            "type": "string"
+          },
+          "content_type": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/content_type"
+          },
+          "date": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/date"
+          },
+          "expense_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "That expense's day, an ISO 8601 date; null for none."
+          },
+          "expense_label": {
+            "description": "What the expense it proves is called; empty for none.",
+            "type": "string"
+          },
+          "file": {
+            "description": "Whether HQ holds its file: `stored`, `missing` when HQ's storage no longer has it, or `none` for no file.",
+            "enum": [
+              "stored",
+              "missing",
+              "none"
+            ],
+            "type": "string"
+          },
+          "file_type_label": {
+            "description": "The file's type in words; empty for one HQ does not accept.",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/id"
+          },
+          "label": {
+            "description": "What the receipt is called wherever it is named: who it is from, else its file.",
+            "type": "string"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/notes"
+          },
+          "original_filename": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/original_filename"
+          },
+          "related_asset": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/related_asset"
+          },
+          "related_expense": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/related_expense"
+          },
+          "size_bytes": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/size_bytes"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/updated_at"
+          },
+          "uploaded_at": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/uploaded_at"
+          },
+          "vendor": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/vendor"
+          }
+        },
+        "required": [
+          "id",
+          "original_filename",
+          "content_type",
+          "size_bytes",
+          "vendor",
+          "date",
+          "amount",
+          "notes",
+          "related_expense",
+          "related_asset",
+          "uploaded_at",
+          "updated_at",
+          "label",
+          "file",
+          "file_type_label",
+          "expense_label",
+          "expense_date",
+          "asset_name"
+        ],
+        "type": "object"
+      },
+      "ReceiptRecordPartial": {
+        "additionalProperties": false,
+        "description": "One receipt with what it is called, whether HQ holds its file, and the names of what it proves.",
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/amount"
+          },
+          "asset_name": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/asset_name"
+          },
+          "content_type": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/content_type"
+          },
+          "date": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/date"
+          },
+          "expense_date": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/expense_date"
+          },
+          "expense_label": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/expense_label"
+          },
+          "file": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/file"
+          },
+          "file_type_label": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/file_type_label"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/id"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/label"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/notes"
+          },
+          "original_filename": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/original_filename"
+          },
+          "related_asset": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/related_asset"
+          },
+          "related_expense": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/related_expense"
+          },
+          "size_bytes": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/size_bytes"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/updated_at"
+          },
+          "uploaded_at": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/uploaded_at"
+          },
+          "vendor": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/vendor"
+          }
+        },
+        "type": "object"
+      },
+      "ReceiptRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReceiptRecordPartial"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ReceiptRow": {
         "additionalProperties": false,
         "description": "One receipt's metadata; never its file, path or address.",
@@ -38232,6 +38445,12 @@
               }
             },
             "links": {
+              "getReceiptsV2": {
+                "operationId": "getReceiptsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/id"
+                }
+              },
               "listReceiptsV2": {
                 "operationId": "listReceiptsV2",
                 "parameters": {
@@ -38239,6 +38458,20 @@
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
                   "query.unmatched_only": "$request.query.unmatched_only"
+                }
+              },
+              "receiptDeleteV2": {
+                "operationId": "receiptDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/id}"
+                }
+              },
+              "receiptUpdateV2": {
+                "operationId": "receiptUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/id}"
                 }
               }
             }
@@ -38279,6 +38512,90 @@
         "tags": [
           "hq.receipts"
         ],
+        "x-hq-resource": "receipts"
+      }
+    },
+    "/api/v2/resources/receipts/{identifier}/": {
+      "get": {
+        "description": "One of the records Receipts lists, found by its `id`.",
+        "operationId": "getReceiptsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/ReceiptRecordFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptRecordSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "receiptDeleteV2": {
+                "operationId": "receiptDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/id}"
+                }
+              },
+              "receiptUpdateV2": {
+                "operationId": "receiptUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/id}"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Receipts: one by id",
+        "tags": [
+          "hq.receipts"
+        ],
+        "x-hq-identifier": "id",
         "x-hq-resource": "receipts"
       }
     },

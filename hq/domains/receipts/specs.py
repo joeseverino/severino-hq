@@ -1,6 +1,6 @@
 """The receipts' file commands and resource, declared on its domain in application/domains.py."""
 
-from typing import Annotated, TypedDict
+from typing import Annotated, Literal, TypedDict
 
 from pydantic import Field
 
@@ -11,7 +11,7 @@ from hq.platform.application.describe import Describe, listed
 from hq.platform.application.domains import records_of
 from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from hq.platform.application.labels import adding
-from hq.platform.application.record_fields import Notes
+from hq.platform.application.record_fields import Notes, RecordId
 from hq.platform.application.records import KEPT
 from hq.platform.application.resources import BoundedQuery
 from hq.platform.application.search_contracts import SearchDefinition
@@ -86,6 +86,22 @@ class ReceiptRow(TypedDict):
     updated_at: UpdatedAt
 
 
+class ReceiptRecord(ReceiptRow):
+    """One receipt with what it is called, whether HQ holds its file, and the names of what it proves."""
+
+    label: Annotated[str, Describe("What the receipt is called wherever it is named: who it is from, else its file.")]
+    file: Annotated[
+        Literal["stored", "missing", "none"],
+        Describe(
+            "Whether HQ holds its file: `stored`, `missing` when HQ's storage no longer has it, or `none` for no file."
+        ),
+    ]
+    file_type_label: Annotated[str, Describe("The file's type in words; empty for one HQ does not accept.")]
+    expense_label: Annotated[str, Describe("What the expense it proves is called; empty for none.")]
+    expense_date: Annotated[str | None, Describe("That expense's day, an ISO 8601 date; null for none.")]
+    asset_name: Annotated[str, Describe("The name of the asset it is for; empty for none.")]
+
+
 def resources() -> tuple[ResourceSpec, ...]:
     return (
         ResourceSpec(
@@ -94,6 +110,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Receipt metadata without file contents, storage paths, or URLs.",
             Capability.READ,
             listing=ListRead(receipts.list_receipts, ReceiptQuery, ReceiptRow),
+            detail_handler=receipts.get_receipt,
+            identifier="id",
+            identifier_type=RecordId,
             search=SearchDefinition(
                 "receipts",
                 Receipt,
@@ -102,5 +121,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                 label="Receipts",
             ),
             web_route="receipts:list",
+            record_type=ReceiptRecord,
         ),
     )
