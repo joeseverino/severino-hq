@@ -7,69 +7,32 @@ longer reports has no current reading at all, and a credential the service
 refused is refused whatever a probe found. ``standing`` holds that order.
 """
 
-from dataclasses import dataclass
-from enum import StrEnum
-
 from .references import Kind
-from .tone import Tone
+from .tone import Tone, TonedChoices
 
 
-class Lifecycle(StrEnum):
-    CONFIGURED = "configured"
-    UNPROBED = "unprobed"
-    REACHABLE = "reachable"
-    READY = "ready"
-    UNREACHABLE = "unreachable"
-    UNAUTHORIZED = "unauthorized"
-    STALE = "stale"
-    REVOKED = "revoked"
+class Lifecycle(TonedChoices):
+    """Each state with its tone and the one word the State column shows:
+    working is good, out of date is to be noticed, a failure is serious, and a
+    connection never tested is neither. A person has to act on any state drawn
+    above neutral (``Tone.acted_on``)."""
+
+    CONFIGURED = "configured", Tone.NEUTRAL, "Added"
+    UNPROBED = "unprobed", Tone.NEUTRAL, "Not tested"
+    REACHABLE = "reachable", Tone.GOOD, "Working"
+    READY = "ready", Tone.GOOD, "Working"
+    UNREACHABLE = "unreachable", Tone.SERIOUS, "Not answering"
+    UNAUTHORIZED = "unauthorized", Tone.SERIOUS, "Permission missing"
+    STALE = "stale", Tone.ATTENTION, "Out of date"
+    REVOKED = "revoked", Tone.SERIOUS, "Credential refused"
     # Its controller's report came with no connections, and the row is what
     # HQ kept of it.
-    UNREPORTED = "unreported"
+    UNREPORTED = "unreported", Tone.SERIOUS, "No longer reported"
 
-    @property
-    def label(self) -> str:
-        """The one word the State column shows."""
-
-        return _SAID[self].label
-
-    @property
-    def needs_attention(self) -> bool:
-        return _SAID[self].attention
-
-    @property
-    def tone(self) -> str:
-        """The tone its word is drawn in."""
-
-        return _SAID[self].tone
-
-
-@dataclass(frozen=True, slots=True)
-class _Said:
-    label: str
-    # Whether a person has to act: stale evidence, missing access, a failed
-    # probe, a refused credential, a connection gone from its report.
-    attention: bool = False
-    # Working is good, out of date is to be noticed, a failure is serious,
-    # and a connection never tested is neither.
-    tone: str = Tone.NEUTRAL
-
-
-_SAID = {
-    Lifecycle.CONFIGURED: _Said("Added"),
-    Lifecycle.UNPROBED: _Said("Not tested"),
-    Lifecycle.REACHABLE: _Said("Working", tone=Tone.GOOD),
-    Lifecycle.READY: _Said("Working", tone=Tone.GOOD),
-    Lifecycle.UNREACHABLE: _Said("Not answering", attention=True, tone=Tone.SERIOUS),
-    Lifecycle.UNAUTHORIZED: _Said("Permission missing", attention=True, tone=Tone.SERIOUS),
-    Lifecycle.STALE: _Said("Out of date", attention=True, tone=Tone.ATTENTION),
-    Lifecycle.REVOKED: _Said("Credential refused", attention=True, tone=Tone.SERIOUS),
-    Lifecycle.UNREPORTED: _Said("No longer reported", attention=True, tone=Tone.SERIOUS),
-}
 
 # The states in which the connection works.
 WORKING = frozenset({Lifecycle.READY, Lifecycle.REACHABLE})
-ATTENTION = frozenset(state for state in Lifecycle if state.needs_attention)
+ATTENTION = frozenset(state for state in Lifecycle if state.tone.acted_on)
 
 # The unreported state as other records carry it, with the values they already
 # stored: the fact a topology node holds when it was reported (its value the

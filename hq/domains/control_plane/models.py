@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from hq.domains.jobs.models import JobState
 from hq.platform.application.labels import dotted
+from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.core.lapses import Lapse
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
@@ -796,12 +797,13 @@ class CapabilityRule(models.Model):
     No row means the default.
     """
 
-    class Rule(models.TextChoices):
-        """Each rule as the policy page and its audit rows call it, beside "Default"."""
+    class Rule(TonedChoices):
+        """Each rule as the policy page and its audit rows call it, beside
+        "Default", which is neutral, and the tone its setting is drawn in."""
 
-        ALLOW = "allow", "On"
-        APPROVE = "approve", "Ask me first"
-        DENY = "deny", "Off"
+        ALLOW = "allow", Tone.GOOD, "On"
+        APPROVE = "approve", Tone.ATTENTION, "Ask me first"
+        DENY = "deny", Tone.SERIOUS, "Off"
 
     # An agent subject (``security.agent_subject``): a client id of up to 160 and its person's key.
     subject = models.CharField(max_length=255)

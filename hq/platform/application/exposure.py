@@ -17,34 +17,32 @@ from .facts import Subject, readings
 from .path_model import Route
 from .projection import read_once
 from .reach import LOCAL_NETWORK, PUBLIC, UNKNOWN as UNKNOWN_REACH, Reach, narrowed, network_of, reach_of
-from .tone import Tone
+from .tone import Tone, TonedChoices
 lazy from . import paths
 lazy from .paths import path_to, routed_names
 
-OPEN, GATED, PRIVATE, UNKNOWN, UNROUTED = "open", "gated", "private", "unknown", "unrouted"
-# Worst first: the order a page lists them and the index a ranking compares.
-# Unknown ranks next to open, because for all HQ knows it is open.
-LEVELS = (OPEN, UNKNOWN, GATED, PRIVATE, UNROUTED)
-# A private route names no audience here: it says its ``Reach``, the one
-# wording of who is inside, so a page's header and its path never disagree.
-LABELS = {
-    OPEN: "Open to the internet",
-    GATED: "Open to the internet, behind a login",
-    UNKNOWN: "Not known who can reach it",
-    UNROUTED: "Not reachable",
-}
+
+class Level(TonedChoices):
+    """How open a thing is, worst first: the order a page lists them and the
+    index a ranking compares. Unknown ranks next to open, because for all HQ
+    knows it is open.
+
+    Internet-facing is drawn plainly, since a public site is meant to be; only
+    what HQ could not read is a warning, and exposure raises urgency where it
+    matters, on the finding. A private route says its ``Reach``, the one
+    wording of who is inside, so a page's header and its path never disagree.
+    """
+
+    OPEN = "open", Tone.NEUTRAL, "Open to the internet"
+    UNKNOWN = "unknown", Tone.ATTENTION, "Not known who can reach it"
+    GATED = "gated", Tone.NEUTRAL, "Open to the internet, behind a login"
+    PRIVATE = "private", Tone.NEUTRAL, "Private"
+    UNROUTED = "unrouted", Tone.NEUTRAL, "Not reachable"
+
+
+OPEN, UNKNOWN, GATED, PRIVATE, UNROUTED = LEVELS = tuple(Level)
 # A few words each, for a table column; the sentence says the rest.
 SHORT = {OPEN: "Internet", GATED: "Internet, behind a login", UNKNOWN: "Unknown", UNROUTED: "Not reachable"}
-# The tone a page draws a level in. Internet-facing is stated plainly, since a
-# public site is meant to be; only what HQ could not read is a warning, and
-# exposure raises urgency where it matters, on the finding.
-TONES = {
-    OPEN: Tone.NEUTRAL,
-    UNKNOWN: Tone.ATTENTION,
-    GATED: Tone.NEUTRAL,
-    PRIVATE: Tone.NEUTRAL,
-    UNROUTED: Tone.NEUTRAL,
-}
 # What a serious problem becomes at each exposure. Unknown keeps it serious.
 _SERIOUS_AT = {
     OPEN: Tone.SERIOUS,
@@ -76,7 +74,7 @@ class RouteExposure:
 
     @property
     def label(self) -> str:
-        return self.reach.label if self.level == PRIVATE else LABELS[self.level]
+        return self.reach.label if self.level == PRIVATE else Level(self.level).label
 
     @property
     def short(self) -> str:
@@ -107,11 +105,11 @@ class Exposure:
     @property
     def label(self) -> str:
         worst = self.worst
-        return worst.label if worst is not None else LABELS[self.level]
+        return worst.label if worst is not None else Level(self.level).label
 
     @property
     def tone(self) -> str:
-        return TONES[self.level]
+        return Level(self.level).tone
 
     @property
     def short(self) -> str:

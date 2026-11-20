@@ -17,7 +17,7 @@ from hq_sdk.testing import plain
 
 from ..approvals import APPROVE, DELETING_FLAGS, ApproveCommand, approve
 from ..capabilities import capability_registry, command_spec, execute_capability, validate_command
-from ..capability_policy import RULE_LABELS, Rule, decide, field_name, matrix, set_rule
+from ..capability_policy import Rule, decide, field_name, matrix, set_rule
 from ..certificates import UPLOAD
 from ..default_hold import needs_approval
 from ..doors import interface_label
@@ -308,7 +308,7 @@ class SettingTests(PolicyTestCase):
             .order_by("id")
             .values_list("object_repr", "message")
         )
-        before, after = "Default", RULE_LABELS[Rule.APPROVE]
+        before, after = "Default", Rule.APPROVE.label
         self.assertEqual(len(rows), 2)
         for (title, message), (old, new) in zip(rows, ((before, after), (after, before)), strict=True):
             self.assertIn(spec("project.delete").title, title)
@@ -320,9 +320,9 @@ class SettingTests(PolicyTestCase):
 
         title, message = AuditLog.objects.values_list("object_repr", "message").get(object_type="Capability policy")
         said = f"{title} {message}"
-        self.assertEqual(said.count(RULE_LABELS[Rule.APPROVE]), 1, said)
-        named = {label for label in (*RULE_LABELS.values(), *CapabilityRule.Rule.labels) if label in said}
-        self.assertEqual(named, {RULE_LABELS[Rule.APPROVE]}, said)
+        self.assertEqual(said.count(Rule.APPROVE.label), 1, said)
+        named = {label for label in CapabilityRule.Rule.labels if label in said}
+        self.assertEqual(named, {Rule.APPROVE.label}, said)
 
     def test_setting_what_already_holds_changes_and_records_nothing(self):
         self.set()
@@ -477,9 +477,9 @@ class PageTests(PolicyTestCase):
         rows = {row.name: row for group in groups for row in group.rows}
         choices = {label for row in rows.values() for cell in row.cells for _value, label in cell.options}
 
-        self.assertEqual(rows["project.delete"].default, RULE_LABELS[Rule.APPROVE])
-        self.assertEqual(rows["project.create"].default, RULE_LABELS[Rule.ALLOW])
-        named = f"{RULE_LABELS[Rule.APPROVE]} for "
+        self.assertEqual(rows["project.delete"].default, Rule.APPROVE.label)
+        self.assertEqual(rows["project.create"].default, Rule.ALLOW.label)
+        named = f"{Rule.APPROVE.label} for "
         self.assertTrue(rows["infrastructure.resource.update"].default.startswith(named))
         self.assertLessEqual({row.default for row in rows.values() if not row.default.startswith(named)}, choices)
 

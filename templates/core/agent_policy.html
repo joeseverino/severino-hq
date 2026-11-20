@@ -179,7 +179,7 @@ approved, and a block stops that device alone.
                 </div>
                 {% endif %}{% endwith %}
               </th>
-              <td>{% list %}<li>{% status device.label tone=device.tone %}</li>{% if device.waits_for %}<li>{% muted %}For {{ device.waits_for|breakable }}{% endmuted %}</li>{% endif %}{% endlist %}</td>
+              <td>{% list %}<li>{% status device.standing %}</li>{% if device.waits_for %}<li>{% muted %}For {{ device.waits_for|breakable }}{% endmuted %}</li>{% endif %}{% endlist %}</td>
               <td>{{ device.first_seen|when:"ago" }}</td>
               <td>{{ device.last_seen|when:"ago" }}</td>
               <td data-sort="{{ device.calls }}">{% list %}<li>{{ device.calls|counted:"call" }}</li>{% if device.refused %}<li>{% status device.refused|measured:"refused" tone="attention" pill=False %}</li>{% endif %}{% endlist %}</td>

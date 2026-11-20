@@ -311,7 +311,7 @@ class ConnectionsContext:
     def attention_states(self) -> tuple[tuple[int, str], ...]:
         """(count, state) for each state that needs a person, in the rows' own words."""
 
-        counts = Counter(row.state_label.lower() for row in self.rows if row.lifecycle.needs_attention)
+        counts = Counter(row.state_label.lower() for row in self.rows if row.lifecycle.tone.acted_on)
         return tuple((count, label) for label, count in counts.items())
 
     @property
@@ -455,7 +455,7 @@ def _rows(
                 )
             )
         # Within its group, a connection that needs a person comes first.
-        rows.extend(sorted(found, key=lambda row: not row.lifecycle.needs_attention))
+        rows.extend(sorted(found, key=lambda row: not row.lifecycle.tone.acted_on))
     # Under what each is used for, in the order the first of each appears: the
     # sort is stable, so the controller's connections still lead.
     order = {name: place for place, name in enumerate(dict.fromkeys(row.used_for for row in rows))}

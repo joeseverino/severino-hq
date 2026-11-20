@@ -285,8 +285,9 @@ class ResourceState(Toned):
     PENDING = "pending", Tone.ATTENTION
     DRIFTED = "drifted", Tone.SERIOUS
     DEGRADED = "degraded", Tone.SERIOUS
-    # A deploy on its way to production is not a fault (delivery_progress).
-    DEPLOYING = "deploying", Tone.NEUTRAL
+    # A deploy on its way to production (delivery_progress) is never a fault,
+    # but one may be held for a reviewer, which waits on a person.
+    DEPLOYING = "deploying", Tone.ATTENTION
     UNKNOWN = "unknown", Tone.NEUTRAL
 
 
@@ -296,10 +297,10 @@ class RecordState(Toned):
     says, beside the tone its label and detail are drawn in."""
 
     OFF = "off", Tone.NEUTRAL
-    DRIFTED = "drifted", Tone.SERIOUS
-    DEPLOYING = "deploying", Tone.ATTENTION
-    DEGRADED = "degraded", Tone.SERIOUS
-    PENDING = "pending", Tone.ATTENTION
+    DRIFTED = ResourceState.DRIFTED
+    DEPLOYING = ResourceState.DEPLOYING
+    DEGRADED = ResourceState.DEGRADED
+    PENDING = ResourceState.PENDING
     UNSEEN = "unseen", Tone.NEUTRAL
     WORKING = "working", Tone.GOOD
     RECORDED = "recorded", Tone.NEUTRAL

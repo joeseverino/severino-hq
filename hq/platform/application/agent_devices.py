@@ -8,7 +8,6 @@ other. With a tailnet, a call it cannot place is refused.
 import contextlib
 import logging
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Annotated, Literal, TypedDict
 
 from django.db import DatabaseError, IntegrityError, transaction
@@ -22,6 +21,7 @@ from .command_fields import Describe
 from .record_errors import RecordNotFound
 from .refusal_codes import Code
 from .security import AGENT_SURFACES, AuthorizationError, Principal, person
+from .tone import Tone, TonedChoices
 lazy from .agent_registry import TOUCH_INTERVAL
 lazy from .hq_self import site_url
 lazy from .routes import reverse
@@ -102,16 +102,17 @@ def observe(identity: AgentIdentity, person, device: tailnet.Device) -> None:
         row.save(update_fields=[*changed, "last_seen"])
 
 
-class DeviceStanding(StrEnum):
-    """What a device's record says of an agent's call from it."""
+class DeviceStanding(TonedChoices):
+    """What a device's record says of an agent's call from it, in the words
+    and tone its row on the Agents page draws it in."""
 
     # Not placed on a device, in a deployment with no tailnet: the client's own rules alone apply.
-    UNPLACED = "unplaced"
-    APPROVED = "approved"
-    AWAITING = "awaiting"
+    UNPLACED = "unplaced", Tone.NEUTRAL, "Not placed"
+    APPROVED = "approved", Tone.GOOD, "Approved"
+    AWAITING = "awaiting", Tone.ATTENTION, "Needs approval"
     # Refused at admission: the tailnet could not place the call (``Placement.refused``).
-    UNPLACEABLE = "unplaceable"
-    BLOCKED = "blocked"
+    UNPLACEABLE = "unplaceable", Tone.ATTENTION, "Refused"
+    BLOCKED = "blocked", Tone.SERIOUS, "Blocked"
 
 
 def standing(principal: Principal) -> DeviceStanding:
