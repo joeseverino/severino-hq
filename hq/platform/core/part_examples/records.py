@@ -1,6 +1,7 @@
 """The examples of the parts that draw records: lists, readings, calendars and changes."""
 
 lazy from collections.abc import Callable
+lazy from dataclasses import asdict
 lazy from datetime import UTC, date, datetime, timedelta
 
 lazy from django.core.paginator import Paginator
@@ -9,7 +10,7 @@ lazy from django.urls import reverse
 
 from hq.platform.core.part_examples import DRAWN_AT, NARROW, runs
 from hq.platform.core.template_parts import Example
-lazy from hq.platform.application.action_links import read_link
+lazy from hq.platform.application.action_links import command_action, read_link
 lazy from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 lazy from hq.platform.application.card_items import Insight, ListRow, Timeline, TimelineItem
 lazy from hq.platform.application.dashboard import finding_rows
@@ -193,13 +194,6 @@ PROBLEMS = Example(
 
 
 PROBLEMS_STATES = {
-    # A thing's problems inside one of its sections: the queue's rows,
-    # one line each, then the section's own table.
-    "dense": Example(
-        '{% section "Example containers" %}{% include "partials/_problems.html#rest" with rest=rest %}'
-        "<p>The section's own content.</p>{% endsection %}",
-        lambda: {"rest": _problems("example-web-05 runs an image by tag alone", "example-worker-06 restarts often")},
-    ),
     # Several of one family: one row saying what kind and how many, opening to them.
     "family": Example(
         '{% section "Example containers 2" %}{% include "partials/_problems.html#rest" with rest=rest %}{% endsection %}',
@@ -777,56 +771,28 @@ def _opened_problems():
 
 
 def _glance():
-    """The dashboard's short queue: a held request whose meaning outruns its
-    line, with the decisions its reader may take, then two failing runs, each
-    with the page it opens and its check."""
+    """The dashboard's short queue: a held request whose meaning outruns its line, then two failing runs."""
 
-    held_id = "00000000-0000-4000-8000-000000000001"
-    held = Finding(
-        rule="approval",
-        subject=held_id,
-        severity=Tone.ATTENTION,
-        title="example-agent wants to carry out the playbook \u201cUpgrade packages\u201d",
-        explanation="Asked with: machines set to example-host-01, security only set to yes, effect set to "
-        "Changes a live system, and 2 more fields.",
-        held=True,
-    )
-    failing = tuple(
-        Finding(
-            rule="example",
-            subject=name,
-            severity=Tone.SERIOUS,
-            title=f"{name} is failing on main",
-            explanation="Failing job: test",
-            primary=opens("Open run", f"https://github.example/{name}/actions/runs/1"),
-            check=read_link("verify", CHECK_AGAIN, "/findings/"),
-        )
-        for name in ("example-app", "example-site")
-    )
-    asked, *runs = finding_rows("example", "Example", (held, *failing))
-    decisions = [
-        {
-            "name": word,
-            "label": word.capitalize(),
-            "effect": "write",
-            "url": reverse("control_plane:approval_decide", args=(held_id, word)),
-            "method": "POST",
-            "capability": f"approval.{word}",
-            "target": held_id,
-            "reason": "",
-            "recommended": word == "approve",
-        }
-        for word in ("approve", "reject")
+    held = "00000000-0000-4000-8000-000000000001"
+    said = "Asked with: machines set to example-host-01, security only set to yes, and 2 more fields."
+    asked = Finding("approval", held, "example-agent wants to run a playbook", Tone.ATTENTION, said, held=True)
+    run, check = opens("Open run", "https://github.example/runs/1"), read_link("verify", CHECK_AGAIN, "/findings/")
+    failing = [
+        Finding("example", n, f"{n} is failing", Tone.SERIOUS, "Failing job: test", primary=run, check=check)
+        for n in ("example-app", "example-site")
     ]
-    return [{**asked, "actions": decisions}, *runs]
+    first, *runs = finding_rows("example", "Example", (asked, *failing))
+    decide = (
+        command_action(w, f"approval.{w}", reverse("control_plane:approval_decide", args=(held, w)), method="POST")
+        for w in ("approve", "reject")
+    )
+    items = [{**first, "actions": [*map(asdict, decide)]}, *runs]
+    return {"items": items, "grouped": True, "triage": True, "glance": True}
 
 
 WORK_QUEUE_STATES = {
     # The dashboard's form, each row's meaning on its title's line.
-    "glance": Example(
-        '{% include "partials/_work_queue.html" %}',
-        lambda: {"items": _glance(), "grouped": True, "triage": True, "glance": True},
-    ),
+    "glance": Example('{% include "partials/_work_queue.html" %}', _glance),
     # Rows opened as the queue page draws them: what each opens onto starts
     # where its title does, commands in one column, a lone step close.
     "opened": Example(

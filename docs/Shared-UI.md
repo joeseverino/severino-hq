@@ -1079,9 +1079,8 @@ as every table does. It reads, in order:
   word kept for a screen reader), then what it means (`row-gist`), quiet. The title states what is
   wrong and links to the thing it is about. It is what a reader presses, so it leads; a domain's
   heading, a family's name and their counts read below it. What it means is one line cut at its
-  end, on the title's line where both fit and on its own where not, and opening the row releases
-  it in place, so every row holding one offers its toggle. A held request's meaning says what is
-  asked; its buttons decide on the whole of it, one press of the toggle or its title away;
+  end, on the title's line where both fit, released in place by the row's toggle; a held
+  request's says what is asked, the whole change its buttons decide one press away;
 - quiet under it, once out of date, how old the reading it is drawn from is
   (`Insight(observed_at=...)`). An out-of-date reading never asserts a live condition: its owner
   says what was read, in the past tense, as a notice. These are words under the title, not a
