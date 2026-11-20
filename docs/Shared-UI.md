@@ -454,10 +454,11 @@ that is markup. A zero and a linked count stand alike. A fact is drawn as a figu
 with its mark before it, its value large under it, its detail under that. What a figure counts may
 follow it in a `<small>` ("9 containers"), in the label's voice. A link in a value is the value's
 ink, underlined only under the pointer and the focus, its fact tinted, so only a toned fact's value
-is colored. Given `{% heading %}`, `{% panel %}` and `{% foot %}` parts and an `id`, its value is
-the button that opens the panel in place, as a menu does, and each `data_*` option is its
-attribute, so a fragment region in the band holds facts refreshed in place as its own
-(`core/_dashboard_glance.html`).
+is colored. A fact whose one target is its value's link is that link whole, its label and detail
+pressed as its value is; one holding another target keeps each its own. Given `{% heading %}`,
+`{% panel %}` and `{% foot %}` parts and an `id`, its value is the button that opens the panel
+in place, as a menu does, and each `data_*` option is its attribute, so a fragment region in the
+band holds facts refreshed in place as its own (`core/_dashboard_glance.html`).
 
 A fact's detail is running words. Its lines are the ones its markup declares: a `<small>` each,
 or a `detail=` given as a list. What a fact holds past its lines (its record list, a disclosure
@@ -547,7 +548,7 @@ pair and leaves that pair's row a gap.
 A line (`layout="inline"`) is a card's summary, the counts across a domain or the whole of HQ:
 each fact one phrase, its bold value then its words ("3 rules") then its detail, a fixed gap
 apart, wrapping fact by fact, so a wide card holds them on one line. Under the card's head it
-takes a rule above. A fact with an address is a link whole.
+takes a rule above.
 
 **A frame is filled.** A list of facts lays its pairs across its frame. A card of only a pair or
 two shares a row with the sections beside it, so its values never end a third of the way across
@@ -960,11 +961,6 @@ stays in the problems' place above the page. The status at the top counts them b
 urgent · 1 needs attention") and links to the first, and a figure in the summary band takes the
 tone of its part's problems.
 
-Problems drawn inside a section of a page about something else (a machine's containers, a
-container's checks, the request's path) are the queue row's dense form (`dense`): what it means
-comes first in the line beneath, so the row is its title, its marks and its buttons, and the
-section's own content stays what it is about.
-
 ### partials/_reading_age.html
 
 **A reading says how old it is.** Wherever a page shows what was read, its age is this part, over
@@ -1080,24 +1076,25 @@ as every table does. It reads, in order:
 
 - its first line (`row-line`): the title and, only when it is urgent, the word "Urgent" after it
   in its tone (the words are `decisions.URGENCY`; a row that needs attention carries no mark, its
-  word kept for a screen reader). The title states what is wrong and links to the thing it is
-  about. It is what a reader presses, so it leads; a domain's heading, a family's name and their
-  counts read below it;
-- one line of what it means;
-- quiet under it, since when, where its owner knows (`Insight(since=...)`), and never a guess, and
-  how old the reading it is drawn from is (`Insight(observed_at=...)`). An out-of-date reading
-  never asserts a live condition: its owner says what was read, in the past tense, as a notice.
-  These are words under the title, not a column: most rows have neither;
+  word kept for a screen reader), then what it means (`row-gist`), quiet. The title states what is
+  wrong and links to the thing it is about. It is what a reader presses, so it leads; a domain's
+  heading, a family's name and their counts read below it. What it means is one line cut at its
+  end, on the title's line where both fit, released in place by the row's toggle; a held
+  request's says what is asked, the whole change its buttons decide one press away;
+- quiet under it, once out of date, how old the reading it is drawn from is
+  (`Insight(observed_at=...)`). An out-of-date reading never asserts a live condition: its owner
+  says what was read, in the past tense, as a notice. These are words under the title, not a
+  column: most rows have none. Since when (`Insight(since=...)`) is said in the origin panel, never
+  on the row;
 - buttons: the owner's actions, the first step that can be taken now when the owner offered none,
   and the check that reads again. At most one is primary. Where the reader sorts their own queue,
   Dismiss or Restore is the last of them (`row_actions put_away=`).
 
-Closed, a row is those one or two lines. Everything taller is the row's `row-below`, opened by its
-toggle into the line beneath, from the title's edge to the table's. A row toggles only where
-opening it shows something more, and with no script every row shows all of it. The line beneath
-holds, in order:
+Closed, a row is one line where its words fit. Everything taller is the row's `row-below`, opened
+by its toggle into the line beneath, from the title's edge to the table's. A row toggles only where
+opening it shows something more, or releases a cut meaning, and with no script every row shows all
+of it. The line beneath holds, in order:
 
-- what it means in full;
 - what was read that shows it (`Insight(facts=...)`), each label once with its values beside it;
 - what to do, where a command or an instruction is a step, one standing alone and several
   numbered. A command is `{% command text=... %}`;
@@ -1125,8 +1122,8 @@ filter being by rule.
 A queue of three or fewer is read on the dashboard, under the greeting, as the queue's own rows
 (`glance`), under no heading of their own. A longer one is a count and a link to its page, except
 the held requests, which are read there first at any length. There a row is its title, what it
-means, its age and its buttons, holding nothing beneath; its title opens the row on the page that
-shows the rest, steps included, or a held request's own page.
+means and its buttons, holding nothing beneath; its title opens the row on the page that shows the
+rest, steps included, or a held request's own page.
 
 **An item is open until its owner stops raising it.** Nobody closes one by looking at it. What a
 reader can do with one they are not acting on is dismiss it. It leaves their queue and their
@@ -1573,8 +1570,8 @@ its column wrapping inside its one box. A status, a figure, a date or a control 
 column is as wide as it is.
 
 An identifier the row is read by, in a row of many columns (a container's image), is
-`code.cell-whole`, and what a row's buttons decide (a queue row's detail) is a `cell-whole` the
-clamp never holds. A value told in several parts marks each `cell-part`.
+`code.cell-whole`, which the clamp never holds. A value told in several parts marks each
+`cell-part`.
 
 What each part of a cell is decides how it wraps, and the region marks it (`data-cell`,
 `table_tags.mark_cells`). The stylesheet keys its cuts, holds and wraps on that mark, never on a

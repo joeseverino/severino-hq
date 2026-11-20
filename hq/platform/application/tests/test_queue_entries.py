@@ -1,8 +1,8 @@
-"""The queue's row in its two forms, and a family folded under its name.
+"""The queue's row, and a family folded under its name.
 
-A thing's problems drawn inside one of its sections are the row's dense form:
-each one line, its meaning in the line beneath; several of one family are one
-row that opens to them (``partials/_work_queue.html``).
+A row's meaning stands on its first line, wherever the queue is drawn;
+several of one family are one row that opens to them
+(``partials/_work_queue.html``).
 """
 
 from django.template import Context, Template
@@ -49,8 +49,8 @@ def _rows(page: list[Element]) -> list[Element]:
     return [element for element in page if "data-attention-item" in element.attrs]
 
 
-def _below(element: Element) -> bool:
-    return any("row-below" in ancestor.classes for ancestor in element.ancestors)
+def _on_first_line(element: Element) -> bool:
+    return any("row-line" in ancestor.classes for ancestor in element.ancestors)
 
 
 class FamiliesTests(SimpleTestCase):
@@ -102,7 +102,7 @@ class FamiliesTests(SimpleTestCase):
         self.assertEqual(group["entries"], families(items))
 
 
-class DenseRowTests(SimpleTestCase):
+class RowTests(SimpleTestCase):
     REST = '{% include "partials/_problems.html#rest" with rest=rest %}'
 
     def test_a_sections_problems_fold_a_family_into_one_row(self):
@@ -114,25 +114,20 @@ class DenseRowTests(SimpleTestCase):
         self.assertEqual(len(folded), 2)
         self.assertEqual(len(_rows(page)), 3)
 
-    def test_a_dense_rows_meaning_waits_in_the_line_beneath(self):
-        page = _drawn(self.REST, rest=[_item("a")])
-
-        details = [element for element in page if "data-attention-detail" in element.attrs]
-        self.assertTrue(details)
-        self.assertTrue(all(_below(detail) for detail in details))
-
     def test_a_pages_problems_below_the_urgent_ones_are_under_a_heading(self):
         page = _drawn('{% include "partials/_problems.html" with problems=problems %}', problems=[_item("a")])
 
         headings = [element.words for element in page if element.tag in {"h2", "h3"}]
         self.assertTrue(any("Open problems" in words for words in headings))
 
-    def test_the_whole_queue_keeps_its_meaning_on_the_row(self):
-        page = _drawn('{% include "partials/_work_queue.html" with items=items %}', items=[_item("a")])
+    def test_a_rows_meaning_stands_on_its_first_line_wherever_the_queue_is_drawn(self):
+        for source in (self.REST, '{% include "partials/_work_queue.html" with items=rest %}'):
+            with self.subTest(source=source):
+                page = _drawn(source, rest=[_item("a")])
 
-        details = [element for element in page if "data-attention-detail" in element.attrs]
-        self.assertTrue(details)
-        self.assertFalse(any(_below(detail) for detail in details))
+                details = [element for element in page if "data-attention-detail" in element.attrs]
+                self.assertTrue(details)
+                self.assertTrue(all(_on_first_line(detail) for detail in details))
 
 
 class FindingWordsTests(SimpleTestCase):

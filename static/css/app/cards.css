@@ -106,8 +106,6 @@
 /* The reason it cannot be done from here, and what can be pressed, in a row's
    opened line and on an insight card. */
 .attention-reason { margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
-.attention-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
-.attention-actions form { margin: 0; }
 /* The pages that help look into it: quiet links, the topology's as icons. */
 .attention-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: var(--space-3) 0 0; font-size: var(--text-xs); }
 /* What raised an item, opened from its urgency: a small modal over the page,

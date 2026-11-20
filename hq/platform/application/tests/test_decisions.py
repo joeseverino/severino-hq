@@ -158,7 +158,7 @@ class DecisionTests(SimpleTestCase):
         links = tuple(read_link(f"open-{n}", f"Open page {n}", f"/example/{n}/") for n in range(3))
         html = card(self.item(actions=links))
 
-        # The meaning is the row's own, under its title; nothing beneath repeats it.
+        # The meaning is the row's own, on its title's line; nothing beneath repeats it.
         (meaning,) = select(html, "data-attention-detail")
         self.assertIn("What it means for the reader.", meaning.words)
         self.assertEqual(with_class(html, "row-below"), [])
@@ -184,11 +184,9 @@ class DecisionTests(SimpleTestCase):
         )
         self.assertEqual((advice["actions"], advice["advice"]), ([], "Count this run as a hard session."))
 
-    def test_a_card_says_since_when_only_when_its_owner_knows(self):
-        self.assertNotIn("Since", text(card(self.item())))
+    def test_a_row_leaves_since_when_to_its_origin_panel(self):
         known = card(self.item(since="2026-10-03T09:29:15+00:00"))
-        self.assertIn("Since", text(known))
-        self.assertEqual(len(elements(known, "time")), 1)
+        self.assertNotIn("Since", text(known))
 
     def test_a_dismissed_card_is_its_title(self):
         fix = example_command("fix", "Restore the example", "remote_write", "/example/fix/", recommended=True)

@@ -320,8 +320,8 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 /* Dots set in rows (past four, surfaces.css) cannot wrap, so they keep their own width, which fits the narrowest cell, and take the line under the value where that is all the room left. */
 .facts-band .fact-figure > .figure-dots:has(> :nth-child(5)) { flex: none; contain: none; }
 .facts-band .fact:is(.tone-good, .tone-attention, .tone-serious) :is(.band-icon .icon, .fact-value, .fact-value a:not(.figure-dot)) { color: var(--tone-ink); }
-/* A linked fact tints under the pointer and the focus on its value, the tint reaching into the gap as a shadow, so nothing moves. */
-.facts-band > .fact:has(> .fact-value a:is(:hover, :focus-visible)) { border-radius: var(--radius-sm); background: var(--surface-2); outline: var(--space-3) solid var(--surface-2); }
+/* A linked fact, in a band or a line, tints under the pointer and the focus on its value, the tint reaching into the gap as a shadow, so nothing moves. */
+:is(.facts-band, .facts-inline) > .fact:has(> .fact-value a:is(:hover, :focus-visible)) { border-radius: var(--radius-sm); background: var(--surface-2); outline: var(--space-3) solid var(--surface-2); }
 /* Under the value, running words: its lines are the ones its markup declares, small print (`<small>`, a `detail=` given as lines), read by their color. A flex or grid box would make each run of words between two elements a row of its own. */
 .facts-band .fact-detail { min-width: 0; margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
 .facts-band .fact-detail > small { display: block; font-size: inherit; }
@@ -369,20 +369,20 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 }
 .fact:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }
 .fact:is(.tone-good, .tone-attention, .tone-serious) .fact-value { color: var(--tone-ink); }
+/* A fact whose one target is its value's link is that link whole, its label and detail pressed as its value is; one holding another target (a link in its detail, a drawing's dots, a panel's button) keeps each its own, so none covers another. */
+.fact:has(> .fact-value > a:only-child, > .fact-figure > :first-child > a:only-child):not(:has(> dd:not(.fact-value) :is(a, button, [tabindex], [data-tip]), > .fact-figure > :not(:first-child) :is(a, button, [tabindex], [data-tip]))) { position: relative; & > .fact-value a::after { content: ""; position: absolute; inset: 0; } }
 
-/* A line of facts (`{% facts layout="inline" %}`): a card's summary, each fact one phrase, its value bold then its words ("3 rules"), a fixed gap apart, wrapping fact by fact. Under the card's head it takes a rule above. A fact with an address is a link whole: its value's link reaches over the fact, every line of which is a target tall. */
+/* A line of facts (`{% facts layout="inline" %}`): a card's summary, each fact one phrase, its value bold then its words ("3 rules"), a fixed gap apart, wrapping fact by fact. Under the card's head it takes a rule above. A fact with an address is a link whole, every line of which is a target tall. */
 .facts-inline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-10); margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--target-min); }
 .facts-inline:not(:first-child) { padding-block-start: var(--space-6); border-block-start: 1px solid var(--line-2); }
 /* A fact too long for its line wraps part by part, its detail under its words rather than a column beside them. */
-.facts-inline > .fact { position: relative; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 .3em; min-width: 0; }
+.facts-inline > .fact { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 .3em; min-width: 0; }
 .facts-inline dt { display: contents; }
 .facts-inline .band-icon { order: 0; align-self: center; width: auto; height: auto; background: none; font-size: var(--text-md); }
 .facts-inline .fact-value { order: 1; margin: 0; color: var(--ink); font-weight: 650; font-variant-numeric: tabular-nums; }
 .facts-inline .fact-value a { color: inherit; text-decoration: none; }
 .facts-inline .fact-label { order: 2; min-width: 0; }
 .facts-inline .fact-detail { order: 3; margin: 0; }
-/* A linked fact is one target, a tile that tints under the pointer and the focus as a linked fact's in a band does, with no underline. The tint reaches past its words as a shadow, so nothing moves. */
-.facts-inline .fact:has(.fact-value a:is(:hover, :focus-visible)) { border-radius: var(--radius-sm); background: var(--surface-2); outline: var(--space-3) solid var(--surface-2); }
 .facts-inline .fact:has(.fact-value a:is(:hover, :focus-visible)) :is(.fact-value, .fact-label) { color: var(--ink); }
 
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }

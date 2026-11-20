@@ -528,9 +528,8 @@ PAST_THE_CLAMP = (
 
 
 # Text in a box that is never cut, by any box up to and including that one
-# (`CUTS`), marked or not: what a card's own buttons decide (approving on half
-# of what a change does is not deciding it), or a name in a sentence. `runs`
-# narrows which text in the box counts.
+# (`CUTS`), marked or not: a name in a sentence. `runs` narrows which text in
+# the box counts.
 CUT_DECISIONS = (
     "([boxes, runs, unseen]) => {"
     + DESCRIBE
@@ -1007,10 +1006,6 @@ CHECKS = {
         ),
     ),
     "past the clamp": Check(PAST_THE_CLAMP, reader_sees="a line drawn past the last line its box shows"),
-    "cut decisions": Check(
-        (CUT_DECISIONS, [SELECTORS["decision_detail"], "*", SELECTORS["unseen"]]),
-        reader_sees="what a card's buttons decide, cut off",
-    ),
     "cut code in text": Check(
         (CUT_DECISIONS, [SELECTORS["running_text"], SELECTORS["code"], SELECTORS["unseen"]]),
         reader_sees="a name in a sentence cut off",

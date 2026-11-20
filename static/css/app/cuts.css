@@ -76,14 +76,17 @@
 /* What a row's status says in a word, after its mark, and light. */
 .menu-item-note { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* What a row means (`row-gist`) follows its title on the first line, quiet, and takes a line of its own where the two do not fit. With script it is one line, cut at its end, which opening the row releases in place, so every row holding one offers its toggle, as a clamp does; with none it wraps whole. Its line is contained, so it asks its column for no width and the column takes the room the controls leave, never widening the table past them. */
+.data-table .row-line > .row-gist { flex: 1 1 var(--row-words); min-inline-size: 0; font-weight: 400; overflow-wrap: anywhere; }
+@media (scripting: enabled) { .data-table > tbody > tr:not(.is-expanded) .row-gist { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; contain: inline-size; } }
 /* A long value in a table's cell (`cell-clamp`, table_cells) wraps and, in
    a narrow box, is held to its third line, with its mark; its row offers its
    toggle there (tables.css), and opening it releases the clamp in place. A
    wide box holds it whole, so its row owes no toggle for it. Only words are
    held: each part of words in it (`data-cell`) is clamped on its own, so a
    mark or a toggle beside them stays whole, and a cell of no such part is
-   clamped whole. A part the row is read by (`cell-whole`: what its buttons
-   decide) is never held. WebKit lays a value's boxes out past the clamp, so
+   clamped whole. An identifier the row is read by (`cell-whole`) is never
+   held. WebKit lays a value's boxes out past the clamp, so
    the box holds three lines too. A column's copy on the open line is whole,
    so nothing there is clamped. */
 @container table-region (width < 36rem) {

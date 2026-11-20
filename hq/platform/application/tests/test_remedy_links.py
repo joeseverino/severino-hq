@@ -239,12 +239,7 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
         boxes = 0
         for page in self.pages():
             drawn = all_elements(self.client.get(page))
-            held = {
-                id(box)
-                for box in drawn
-                if "attention-actions" in box.classes
-                or ("row-actions" in box.classes and "data-blank" not in box.attrs)
-            }
+            held = {id(box) for box in drawn if "row-actions" in box.classes and "data-blank" not in box.attrs}
             boxes += len(held)
             filled = {id(ancestor) for element in drawn if "btn" in element.classes for ancestor in element.ancestors}
             with self.subTest(page=page):

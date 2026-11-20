@@ -317,7 +317,7 @@ class Asked:
     before: str
     target: str
     after: str
-    # Whether it says the whole change, which is then not said again.
+    # Whether it says the whole change (one value moved, a record that goes), never said again.
     whole: bool = False
 
     def __str__(self) -> str:
@@ -350,7 +350,7 @@ def asked(held: ApprovalRequest, shown: ChangePreview | None = None) -> Asked:
         f"wants to {before}",
         _named(held) if TARGET in phrase else "",
         after,
-        whole=moved is not None,
+        whole=moved is not None or (spec is not None and spec.effect is Effect.DESTRUCTIVE),
     )
 
 
