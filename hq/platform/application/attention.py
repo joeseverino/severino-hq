@@ -189,15 +189,10 @@ def _asked_change(shown) -> str:
         (
             f"{lower_first(row.label)} from {row.before} to {row.after or 'empty'}"
             if row.before
-            else f"{lower_first(row.label)} set to {row.after or 'empty'}"
+            else f"{lower_first(row.label)} set to {row.after}"
         )
         for row in shown.changes[:3]
     ]
-    if not moves:
-        return ended(shown.label)
     more = len(shown.changes) - len(moves)
-    return (
-        f"{shown.label}: {', '.join(moves)}"
-        + (f", and {counted(more, 'more field', 'more fields')}" if more > 0 else "")
-        + "."
-    )
+    rest = f", and {counted(more, 'more field', 'more fields')}" if more > 0 else ""
+    return f"{shown.label}: {', '.join(moves)}{rest}." if moves else ""

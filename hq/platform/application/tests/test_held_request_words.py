@@ -123,7 +123,7 @@ class HeldSentenceTests(TestCase):
             requested_actor="example-agent",
         )
 
-    def test_a_change_of_one_value_is_said_as_that_change(self):
+    def test_a_sentence_that_says_the_whole_change_is_whole(self):
         before = {"spec": {"answer": "192.0.2.1", "domain": "example.test"}}
         moved = self.held(
             "infrastructure.resource.update", {"spec": {"answer": "192.0.2.2", "domain": "example.test"}}, before
@@ -139,6 +139,10 @@ class HeldSentenceTests(TestCase):
         # Two values are left to the table beneath it.
         self.assertFalse(asked(both).whole)
         self.assertNotIn("192.0.2.2", str(asked(both)))
+        # A delete's sentence names what goes, so its fields are not listed after it.
+        for spec in (spec for spec in capability_registry() if spec.effect == "destructive"):
+            with self.subTest(capability=spec.name):
+                self.assertTrue(asked(self.held(spec.name, {}, {"notes": "example"})).whole)
 
     def test_a_record_is_named_as_a_person_knows_it_not_by_its_key(self):
         before = {"spec": {"answer": "192.0.2.1", "domain": "app.example.test"}}
