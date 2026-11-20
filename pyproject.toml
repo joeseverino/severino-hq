@@ -86,7 +86,26 @@ DEP004 = [
 # than `hq`: import-linter skips a forbidden module that contains the source.
 # Every package of the code is a root, so a path through the SDK is in the graph.
 [tool.importlinter]
-root_packages = ["hq", "hq_sdk", "hq_runner"]
+root_packages = ["hq", "hq_sdk", "hq_runner", "tools", "tests", "demo"]
+
+[[tool.importlinter.contracts]]
+name = "Nothing outside tools/ imports it: it is development and CI code the image does not ship"
+type = "forbidden"
+source_modules = ["hq", "hq_sdk", "hq_runner", "tests", "demo"]
+forbidden_modules = ["tools"]
+# dev:look is development code like the turn it runs in: it composes the set a
+# base can load, runs perf in its share, and holds the heavy turn.
+ignore_imports = [
+  "hq.platform.core.tests.look -> tools.**",
+  "hq.platform.core.tests.look_shares -> tools.**",
+]
+
+[[tool.importlinter.contracts]]
+name = "The MCP services reach no model: they read and write through an application service or projection"
+type = "forbidden"
+source_modules = ["hq.platform.mcp.services"]
+forbidden_modules = ["hq.**.models"]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "The automation worker imports nothing of HQ or its SDK: it ships in an image of its own"
@@ -312,12 +331,17 @@ check-typed-exception = true
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "urllib.request".msg = "urllib carries every header across a redirect, to any origin and to http://; read over HTTP with hq.platform.application.http_read."
+"unittest.mock".msg = "Production code never patches: reach the code through a setting, an argument or a public name it reads. A stand-in only tests and demos use lives in a testing.py or *_testing.py module."
 
 [tool.ruff.lint.per-file-ignores]
 # OperationRequest distinguishes unknown legacy attribution (NULL) from a machine's known empty person key.
 "hq/domains/control_plane/models.py" = ["DJ001"]
-# A synthetic extension standing in for a separate package, outside the host's product code.
-"tests/fixtures/example_hq_plugin/registry.py" = ["TID251"]
+# Test code and the test-support modules tests and demos stand in with, which
+# the bans on production code leave alone: a test patches, and one fixture
+# stands in for an extension that reads over urllib.
+"**/test_*.py" = ["TID251"]
+"**/testing.py" = ["TID251"]
+"**/*_testing.py" = ["TID251"]
 # vulture's whitelist is attribute reads that do nothing, which vulture counts as uses.
 "tools/lint/vulture-whitelist.py" = ["B018"]
 # Django's declarative class bodies: Meta options, form fields and migration operations are lists by contract.
@@ -331,7 +355,7 @@ check-typed-exception = true
 # does, runs the repository's own commands by name, and its assert is a check
 # the suite runs, never under -O.
 "**/tests/**" = [
-    "RUF012",
+    "RUF012", "TID251",
     "S101", "S104", "S105", "S106", "S107", "S108", "S110", "S112", "S301", "S311", "S603", "S607", "S608",
 ]
 # Development and CI code runs the toolchain mise puts on PATH (git, uv, mise,

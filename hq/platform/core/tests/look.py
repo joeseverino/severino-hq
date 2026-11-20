@@ -107,11 +107,9 @@ lazy from hq.platform.core.tests import look_reach
 lazy from hq.platform.core.tests.browser import catalog
 
 # A composed look's base composes the set its commit can load, picked there.
-# ast-grep-ignore: tools-imported-only-by-tools
 lazy from tools.dev import extension_set
 
 # dev:look runs perf in its share, and perf declares what it draws.
-# ast-grep-ignore: tools-imported-only-by-tools
 lazy from tools.perf.report import tokens as perf_tokens
 
 # Each run's shots go to a folder of their own under here, named for when the
