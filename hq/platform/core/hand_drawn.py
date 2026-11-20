@@ -598,7 +598,7 @@ SHAPES = (
         instead='{{ n|counted:"thing" }}, the figure and its words as one, or {% fact "Label" value=n %}',
         find=matched(
             r"<strong>(?![^<]*\|counted\b)\{\{\s*(?:(?:[\w.]*[._])?(?:count|counts|total)\b[\w.]*|[\w.]*[a-z][^\Wsu]s"
-            r"|[\w.]+\|length)(?:\|\w+(?::\S+)?)*\s*\}\}</strong>\s*[a-z]"
+            r"|[\w.]+\|length)(?:\|\w+(?::[^\s|]+)?)*\s*\}\}</strong>\s*[a-z]"
         ),
         refuses=("<p><strong>{{ rules|length }}</strong> grants</p>",),
         keeps=("<strong>{{ row.address }}</strong> answers",),
