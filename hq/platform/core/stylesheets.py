@@ -6,6 +6,7 @@ head at once, where an `@import` is found only once its parent arrives.
 Anything that reads the stylesheet reads it through here.
 """
 
+import re
 from pathlib import Path
 
 STATIC = Path(__file__).resolve().parents[3] / "static"
@@ -48,3 +49,14 @@ def stylesheet() -> str:
     """The whole stylesheet's source, its sheets in cascade order."""
 
     return "\n".join(path.read_text(encoding="utf-8") for path in sheet_paths())
+
+
+# Each face's file, as `{% static %}` names it. A face is shown only if it is
+# ready for the first paint (`font-display: optional`, which lint:css holds), so
+# the head preloads each beside the stylesheet, where it usually is ready.
+# lint:css holds every url() to its quotes, the form read here.
+FACES: tuple[str, ...] = tuple(
+    (path.parent / source).resolve().relative_to(STATIC).as_posix()
+    for path in sheet_paths()
+    for source in re.findall(r'@font-face\s*\{[^}]*\burl\("([^"]+)"\)', path.read_text(encoding="utf-8"))
+)

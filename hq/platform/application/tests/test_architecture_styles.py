@@ -185,27 +185,6 @@ class StyleContractTests(SimpleTestCase):
     def _stylesheet() -> str:
         return stylesheet()
 
-    def test_every_face_is_preloaded_beside_the_stylesheet(self):
-        """A face is shown only if it is ready for the first paint (lint:css
-        holds each @font-face to `font-display: optional`), so its file is
-        preloaded beside the stylesheet, where it usually is ready."""
-
-        root = Path(__file__).resolve().parents[4]
-        head = (root / "templates" / "scripts" / "head.html").read_text(encoding="utf-8")
-        faces = [
-            (sheet, face)
-            for sheet in sheet_paths()
-            for face in re.findall(r"@font-face\s*\{([^}]*)\}", sheet.read_text(encoding="utf-8"))
-        ]
-        self.assertTrue(faces)
-        for sheet, face in faces:
-            source = re.search(r'url\("([^"]+)"\)', face)
-            # The face's address as `{% static %}` names it: relative to the sheet that asks for it.
-            asset = (sheet.parent / source.group(1)).resolve().relative_to(STATIC).as_posix() if source else ""
-            with self.subTest(face=asset or face[:60]):
-                self.assertIsNotNone(source)
-                self.assertIn(f'{{% static \'{asset}\' %}}" as="font"', head)
-
     def test_a_blur_has_something_to_show_through(self):
         """A backdrop filter costs a layer redrawn on every scroll; behind an
         opaque background it shows nothing, so a rule that blurs must also let

@@ -282,9 +282,11 @@ export default {
     "function-disallowed-list": [`/^(${colorFunctions})$/i`],
     "declaration-property-value-disallowed-list": disallowedValues(everySheet),
     // A face that arrives late and is swapped in moves every line it sets, so
-    // each is shown only if it is ready for the first paint. Its file is
-    // preloaded beside the stylesheet so it usually is (StyleContractTests).
+    // each is shown only if it is ready for the first paint. The head preloads
+    // its file beside the stylesheet so it usually is, reading each quoted
+    // url() a @font-face names (`stylesheets.FACES`).
     "at-rule-property-required-list": { "font-face": ["font-display"] },
+    "function-url-quotes": "always",
     "declaration-property-value-allowed-list": allowedValues(radiusSteps),
     "property-disallowed-list": disallowedProperties(frameProperties),
     "rule-selector-property-disallowed-list": [
