@@ -21,15 +21,15 @@ from hq.platform.application.capabilities import command_spec
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.contact_submissions import (
     DELETE,
-    MOST_SHOWN,
     REVIEW,
     change_gap,
     find_submission,
-    list_contact_submissions,
 )
+from hq.platform.application.entity_links import page_url
 from hq.platform.application.labels import dotted
 from hq.platform.application.moments import moment, when
-from hq.platform.application.pages import PageAction, RecordPageMixin, page_context, runs_here
+from hq.platform.application.pages import PageAction, RecordListMixin, RecordPageMixin, page_context, runs_here
+from hq.platform.application.references import Kind
 from hq.platform.application.security import Capability, safe_next
 from hq.platform.application.ui import counted
 from hq.platform.application.url_query import with_query
@@ -100,41 +100,49 @@ def _offered(submission: dict, marks: list[str]) -> tuple[PageAction, ...]:
     return tuple(action for action in offered if action is not None)
 
 
-def contact_list(request):
-    selected_status = request.GET.get("status", "").strip()
-    if selected_status not in SubmissionStatus.values:
-        selected_status = ""
-    q = request.GET.get("q", "").strip()
-    current = inbox.current()
-    submissions = list_contact_submissions(status=selected_status, query=q, limit=MOST_SHOWN)["items"]
-    # Everything first, then each status; a value of None is the list with no
-    # status asked, and the one current is the one the page shows.
-    status_tabs = [
-        {"value": value, "label": label, "count": count, "current": (value or "") == selected_status}
-        for value, label, count in (
-            (None, "All", sum(current.counts.values())),
-            *((value, label, current.counts.get(value, 0)) for value, label in SubmissionStatus.choices),
-        )
-    ]
+class ContactListView(RecordListMixin, TemplateView):
+    """Every message, under its status's tab and the search."""
 
-    return render(
-        request,
-        "contacts/contact_list.html",
-        {
+    resource = "contact.submissions"
+    context_object_name = "submissions"
+    required_capability = Capability.MANAGE_CONTACTS
+    template_name = "contacts/contact_list.html"
+    page_title = "Messages"
+    page_lede = "From the site's contact form."
+    page_reads = ("cloudflare.contact_submission",)
+
+    @cached_property
+    def selected_status(self) -> str:
+        status = self.request.GET.get("status", "").strip()
+        return status if status in SubmissionStatus.values else ""
+
+    @override
+    def list_query(self):
+        return {"status": self.selected_status or None, "query": self.request.GET.get("q", "").strip()}
+
+    @override
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        current = inbox.current()
+        selected_status = self.selected_status
+        # Everything first, then each status; a value of None is the list with no
+        # status asked, and the one current is the one the page shows.
+        status_tabs = [
+            {"value": value, "label": label, "count": count, "current": (value or "") == selected_status}
+            for value, label, count in (
+                (None, "All", sum(current.counts.values())),
+                *((value, label, current.counts.get(value, 0)) for value, label in SubmissionStatus.choices),
+            )
+        ]
+        for each in self.records:
+            each.update(state=submission_state(each), unread=each.get("status") == "unread", actions=_row_actions(each))
+        return {
+            **context,
             "not_read": current.state == inbox.NOT_READ,
-            "submissions": [
-                {
-                    **each,
-                    "state": submission_state(each),
-                    "unread": each.get("status") == "unread",
-                    "actions": _row_actions(each),
-                }
-                for each in submissions
-            ],
             "status_tabs": status_tabs,
             "selected_status": selected_status,
             "status_kept": {"status": selected_status},
-            "q": q,
+            "q": self.list_query()["query"],
             # The search cleared, on the tab it was asked on.
             "search_cleared": with_query(
                 reverse("contacts:list"), {"status": selected_status} if selected_status else None
@@ -146,12 +154,7 @@ def contact_list(request):
             "observed_at": current.observed_at,
             "waiting_note": _waiting_note(current),
             "gap": change_gap(current),
-            **page_context("Messages", "From the site's contact form.", reads=contact_list.page_reads),
-        },
-    )
-
-
-contact_list.page_reads = ("cloudflare.contact_submission",)  # type: ignore[attr-defined]
+        }
 
 
 class ContactDetailView(RecordPageMixin, TemplateView):
@@ -248,7 +251,7 @@ def contact_delete(request, pk: int):
     if request.method == "POST":
         result = execute_posted(request, DELETE, {"confirm": str(pk)}, target=pk)
         if refused(request, result):
-            return redirect("contacts:detail", pk=pk)
+            return redirect(page_url(Kind.MESSAGE, str(pk)))
         return redirect("contacts:list")
 
     return render(
@@ -258,7 +261,7 @@ def contact_delete(request, pk: int):
             "submission": submission,
             "confirm": {
                 "action": PageAction.command(DELETE, pk, confirms=True),
-                "cancel_url": reverse("contacts:detail", args=[pk]),
+                "cancel_url": page_url(Kind.MESSAGE, str(pk)),
                 "gap": change_gap(),
             },
             **page_context(
@@ -266,7 +269,7 @@ def contact_delete(request, pk: int):
                 dotted(_sent(submission), f"{submission.get('name', '')} ({submission.get('email', '')})"),
                 trail=(
                     ("Messages", reverse("contacts:list")),
-                    (f"Message #{pk}", reverse("contacts:detail", args=[pk])),
+                    (f"Message #{pk}", page_url(Kind.MESSAGE, str(pk))),
                 ),
             ),
         },

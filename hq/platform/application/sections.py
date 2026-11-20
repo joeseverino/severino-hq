@@ -6,12 +6,11 @@ from it, so changing what "needs output" means is one edit rather than a hunt
 for every place that counted it.
 """
 
-from decimal import Decimal
 from typing import Any
 lazy from datetime import timedelta
 
 from django.conf import settings
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Q
 
 from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import Expense
@@ -19,6 +18,7 @@ from hq.domains.projects.models import Project
 from hq.platform.application.routes import reverse
 
 from .derivations import passed, today as local_today
+from .expenses import cost_totals
 from .money import money
 from .projection import read_once
 from .ui import counted
@@ -30,7 +30,6 @@ lazy from .moments import moment
 # dashboard renders host and extension cards through one loop and a new section
 # needs no template change to appear.
 Card = dict[str, Any]
-ZERO_MONEY = Decimal("0.00")
 
 
 def _card(*, id: str, label: str, value: str, url: str, detail: str = "") -> tuple[Card, ...]:
@@ -165,17 +164,8 @@ def fiscal_year_start(today=None):
 
 def _expenses_reading() -> dict[str, Any]:
     today = local_today()
-    totals = Expense.objects.filter(date__range=(fiscal_year_start(today), today)).aggregate(
-        total=Sum("total_cost"),
-        deductible=Sum("estimated_deductible_amount"),
-        count=Count("id"),
-    )
-    return {
-        "count": totals["count"] or 0,
-        "total": totals["total"] or ZERO_MONEY,
-        "deductible": totals["deductible"] or ZERO_MONEY,
-        "year": today.year,
-    }
+    totals = cost_totals(Expense.objects.filter(date__range=(fiscal_year_start(today), today)))
+    return {"count": totals.count, "total": totals.total, "deductible": totals.deductible, "year": today.year}
 
 
 def expenses_reading() -> dict[str, Any]:

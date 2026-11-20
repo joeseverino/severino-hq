@@ -40,7 +40,10 @@ class RecordPageTests(TestCase):
                 response = self.client.get(reverse(route.name))
                 listed = list_resource(view.resource, principal=principal, fields=list(view.fields) or None)
                 self.assertTrue(listed["items"])
-                self.assertEqual(response.context[view.context_object_name], listed["items"])
+                # A row may carry what only the page draws (its actions), beside every field the read answers.
+                drawn = response.context[view.context_object_name]
+                kept = [{key: row[key] for key in item} for row, item in zip(drawn, listed["items"], strict=True)]
+                self.assertEqual(kept, listed["items"])
 
     def test_a_whole_list_is_read_page_after_page(self):
         principal = web_principal(self.owner)

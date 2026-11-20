@@ -118,29 +118,28 @@ class HealthDetailTests(SimpleTestCase):
 
 
 class ActivityTests(TestCase):
+    def shown(self, service):
+        return {event.pk for line in by_id(service)["activity"].history for event in line.events}
+
     def test_changes_to_the_resources_behind_the_name_are_shown(self):
         service = a_service()
-        AuditLog.objects.create(
-            action="update",
-            object_type="ManagedResource",
-            object_id="probe-dns",
-            object_repr="probe-dns",
+        change = AuditLog.objects.create(
+            action="updated", object_type="ManagedResource", metadata={"subject": "probe-dns"}
         )
 
-        self.assertIn("activity", by_id(service))
+        self.assertIn(change.pk, self.shown(service))
 
     def test_changes_to_something_else_are_not(self):
-        """This answers what changed here, not what changed."""
+        """This answers what changed here, not what changed: a row of another
+        type whose id spells the same key is another record's."""
 
         service = a_service()
-        AuditLog.objects.create(
-            action="update",
-            object_type="ManagedResource",
-            object_id="unrelated",
-            object_repr="unrelated",
+        others = (
+            AuditLog.objects.create(action="updated", object_type="ManagedResource", metadata={"subject": "unrelated"}),
+            AuditLog.objects.create(action="updated", object_type="projects.Project", object_id="probe-dns"),
         )
 
-        self.assertNotIn("activity", by_id(service))
+        self.assertFalse(self.shown(service) & {row.pk for row in others})
 
 
 class PageTests(SignedInTestCase):
@@ -167,7 +166,6 @@ class PageTests(SignedInTestCase):
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "probe.example.com"}))
 
         self.assertNotContains(response, "Delivery")
-        self.assertNotContains(response, "Recent changes")
 
     def test_the_registry_is_the_only_list_of_sections(self):
         """A band appears because a resolver produced it, so adding one is a

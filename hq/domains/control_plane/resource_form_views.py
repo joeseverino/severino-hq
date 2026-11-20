@@ -11,7 +11,7 @@ from hq.platform.application.adoption import ADOPT, ADOPT_SERVICE
 from hq.platform.application.asks import APPLIES_SHORTLY
 from hq.platform.application.card_items import ListRow
 from hq.platform.application.certificates import UPLOAD
-from hq.platform.application.entity_links import kind_label
+from hq.platform.application.entity_links import kind_label, page_url
 from hq.platform.application.glance import DASHBOARD_MACHINE, dashboard_machine_selected
 from hq.platform.application.infrastructure import resolved_spec, suggest_key
 from hq.platform.application.labels import SAVE_CHANGES, adding, lower_first
@@ -23,6 +23,7 @@ from hq.platform.application.provider_forms import (
     ResourceIdentityForm,
     spec_form_class,
 )
+from hq.platform.application.references import Kind
 from hq.platform.application.resource_capabilities import CREATE_CAPABILITY
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next
@@ -34,7 +35,6 @@ from hq.platform.core.web_refusals import refused
 
 from .forms import MachineIdentityForm
 from .models import ManagedResource, OperationRequest
-from .names import normalized_hostname
 from .provider_adapters.declarations import MACHINE_KIND
 from .provider_spec import NameContext
 from .providers import (
@@ -294,7 +294,7 @@ def _after_save(request, kind: str, resource, saved: str) -> str:
         origin = _cancel_url(request, kind, None)
         if origin != reverse("control_plane:list"):
             return origin
-    return reverse("control_plane:detail", kwargs={"key": saved})
+    return page_url(Kind.RESOURCE, saved)
 
 
 def _return_to(request) -> str:
@@ -322,15 +322,15 @@ def _cancel_url(request, kind: str, resource) -> str:
     if returning:
         return returning
     if resource:
-        return reverse("control_plane:detail", kwargs={"key": resource.key})
+        return page_url(Kind.RESOURCE, resource.key)
     if PROVIDERS[kind].created_from == "zone":
         zone = request.GET.get("zone", "").strip()
         if zone:
-            return reverse("zones:detail", kwargs={"zone": zone})
+            return page_url(Kind.ZONE, zone)
         return reverse("zones:index")
-    hostname = normalized_hostname(request.GET.get("hostname", ""))
-    if hostname:
-        return reverse("control_plane:service", kwargs={"hostname": hostname})
+    service = page_url(Kind.SERVICE, request.GET.get("hostname", "").strip())
+    if service:
+        return service
     return reverse("control_plane:list")
 
 
@@ -435,7 +435,7 @@ class AdoptView(View):
         result = execute_posted(request, ADOPT_SERVICE, {"hostname": hostname})
         if refused(request, result):
             return redirect("control_plane:services")
-        return redirect("control_plane:service", hostname=result["hostname"])
+        return redirect(page_url(Kind.SERVICE, result["hostname"]))
 
 
 class CertificateUploadView(View):
@@ -472,7 +472,7 @@ class CertificateUploadView(View):
         if form.is_valid():
             stored = execute_posted(request, UPLOAD, dict(form.cleaned_data), target=resource.key)
             if not refused(request, stored, form=form):
-                return redirect("control_plane:detail", key=resource.key)
+                return redirect(page_url(Kind.RESOURCE, resource.key))
         return render(
             request,
             self.template_name,

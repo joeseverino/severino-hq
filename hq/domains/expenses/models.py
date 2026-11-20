@@ -4,13 +4,13 @@ from decimal import Decimal
 from typing import override
 
 from django.db import models
-lazy from django.urls import reverse
 
 from hq.domains.assets.models import PAYMENT_METHOD_CHOICES
 from hq.platform.application import business_use
 from hq.platform.application.labels import dotted
-from hq.platform.application.references import Referable, ReferenceField
+from hq.platform.application.references import Kind, Referable, ReferenceField
 from hq.platform.core.models import TimestampedModel
+lazy from hq.platform.application.entity_links import page_url
 lazy from hq.platform.application.moments import when_day
 lazy from hq.platform.application.money import money
 
@@ -133,4 +133,4 @@ class Expense(TimestampedModel):
         return dotted(when_day(self.date), money(self.total_cost))
 
     def get_absolute_url(self):
-        return reverse("expenses:detail", args=[self.pk])
+        return page_url(Kind.EXPENSE, str(self.pk))

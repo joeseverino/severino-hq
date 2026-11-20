@@ -386,15 +386,17 @@ def list_resource(
     return {**page, "items": items}
 
 
-def every_item(name: str, *, principal: Principal, fields: Fields | None = None) -> list[dict[str, Any]]:
-    """Every item of a resource's list, read page after page through
-    ``list_resource`` at its largest page: what a web page drawing the whole
-    list shows."""
+def every_item(
+    name: str, *, principal: Principal, fields: Fields | None = None, query: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
+    """Every item of a resource's list that ``query``'s filters keep, read
+    page after page through ``list_resource`` at its largest page: what a web
+    page drawing the whole list shows."""
 
     spec = _resource(name)
-    query: dict[str, Any] = (
-        {"limit": MAX_PAGE_SIZE} if spec.listing and "limit" in spec.listing.query.model_fields else {}
-    )
+    query = {**(query or {})}
+    if spec.listing and "limit" in spec.listing.query.model_fields:
+        query["limit"] = MAX_PAGE_SIZE
     items: list[dict[str, Any]] = []
     while True:
         page = list_resource(name, query, principal=principal, strict=False, fields=fields)

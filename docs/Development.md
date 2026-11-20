@@ -491,9 +491,9 @@ the Lint job runs it, it reads the whole tree.
 
 A change to a stylesheet under `static/css/app/` or a template selects
 `fast:look`, which runs in the heavy turn beside the tests and holds the
-component catalog entries the change reaches to every layout check, in
-WebKit at 320 and 1280 pixels, through `mise run dev:look --rule
-every_layout_check_holds`. A template reaches each entry whose page draws it;
+component catalog entries the change reaches to every check the catalog's
+sweeps hold, in WebKit at 320 and 1280 pixels, through `mise run dev:look
+--rule survey`, once with script and once with `--no-script`. A template reaches each entry whose page draws it;
 a sheet reaches each entry whose markup holds a class or data attribute named
 by a rule a changed line lies in (`hq/platform/core/tests/look_reach.py`), and
 every entry when such a rule names neither (an element, `:root`, a token).

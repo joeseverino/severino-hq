@@ -229,6 +229,7 @@ _SAID = "() => [...document.querySelectorAll('main > ul:first-child > li')].map(
 
 # Where the keyboard is: which posting button, by where it posts and what it says.
 _FOCUS = "() => [document.activeElement.getAttribute('formaction'), document.activeElement.value]"
+_REACHED = "(b) => { b.scrollIntoView({block: 'center', behavior: 'instant'}); b.focus({preventScroll: true}); return scrollY; }"
 
 
 def _posted(request):
@@ -397,11 +398,12 @@ class FragmentBrowserTests(BrowserGate):
         return super().respond(route)
 
     def reach(self, row, title):
-        """Opens the rows, marks the page, and puts the keyboard on ``row``'s button."""
+        """Opens the rows, marks the page, and puts the keyboard on ``row``'s button scrolled
+        into view, as whether focus() scrolls is each engine's own; answers where the page is."""
 
         self.page.goto(f"{ORIGIN}/probe-rows/", wait_until="load")
         self.page.evaluate("() => { window.kept = true; }")
-        self.button(row, title).focus()
+        return self.button(row, title).evaluate(_REACHED)
 
     def press(self, row, title):
         self.reach(row, title)
@@ -434,9 +436,7 @@ class FragmentBrowserTests(BrowserGate):
         self.assertEqual(self.page.evaluate(_FOCUS), ["/probe-rows/B/", "down"])
 
     def test_a_deleted_row_hands_the_keyboard_to_the_row_after_it(self):
-        self.page.set_viewport_size({"width": 1360, "height": 600})
-        self.reach("B", "Delete")
-        at = self.page.evaluate("() => window.scrollY")
+        at = self.reach("B", "Delete")
         self.page.keyboard.press("Enter")
         self.rows_are("AC")
 

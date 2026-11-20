@@ -13,7 +13,7 @@ from django.views.generic import (
 from hq.platform.application import related
 from hq.platform.application.documentation import document_link
 from hq.platform.application.entity_links import entity_link
-from hq.platform.application.expenses import costs_by_category
+from hq.platform.application.expenses import category_figures, cost_totals
 from hq.platform.application.labels import dotted
 from hq.platform.application.moments import stamp_day, when_day
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
@@ -70,11 +70,9 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
     @override
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["totals"], ctx["by_category"] = costs_by_category(
-            self.object_list,
-            query=self.request.GET,
-            choices=EXPENSE_CATEGORY_CHOICES,
-            narrowed=bool(ctx["table"]["active_count"]),
+        ctx["totals"] = cost_totals(self.object_list, narrowed=bool(ctx["table"]["active_count"]))
+        ctx["by_category"] = category_figures(
+            self.object_list, query=self.request.GET, choices=EXPENSE_CATEGORY_CHOICES
         )
         return ctx
 

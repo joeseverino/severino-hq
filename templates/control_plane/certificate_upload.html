@@ -21,8 +21,7 @@
     key, so it cannot accept a private key. A release of HQ's host makes it.
   {% endnotice %}
 {% else %}
-  {% url 'control_plane:detail' resource.key as cancel_url %}
-  {% include "partials/_form.html" with form=form verb="Upload" cancel_url=cancel_url %}
+  {% include "partials/_form.html" with form=form verb="Upload" cancel_url=resource.get_absolute_url %}
 
   {% muted element="p" %}
     HQ checks that the certificate and key match and have not expired. The key

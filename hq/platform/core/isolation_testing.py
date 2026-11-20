@@ -15,7 +15,7 @@ from unittest import mock
 from django.conf import settings
 
 from hq.config.sandbox import MARKERS
-lazy from hq.platform.application import agent_limits, automation_adoption, derivations, process_caches
+lazy from hq.platform.application import agent_limits, automation_adoption, derivations, plugins, process_caches
 
 if TYPE_CHECKING:
     from hq.platform.application.agent_limits import Limits
@@ -206,6 +206,8 @@ class CompositionIsolation:
 
     def startTest(self, test):
         automation_adoption.forget()
+        # Admitting forgets every question, so it happens here, never mid-test.
+        plugins.composition()
         derivations.forget()
         if type(test) is not self._class:
             # The first of its class: what the set holds is what its setup left.

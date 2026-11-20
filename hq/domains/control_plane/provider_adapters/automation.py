@@ -26,6 +26,8 @@ lazy from hq.platform.application.automation_runs import (
     resource_key,
     timeout_words,
 )
+lazy from hq.platform.application.entity_links import page_url
+lazy from hq.platform.application.references import Kind
 lazy from hq.platform.application.routes import reverse
 
 from ..provider_spec import ProviderModel, ProviderSpec, locked
@@ -111,7 +113,7 @@ def _home(resource: Any) -> str:
 
     operation = _named(resource)
     page = command_url(capability_name(operation)) if operation else ""
-    return page or reverse("control_plane:detail", kwargs={"key": resource.key})
+    return page or page_url(Kind.RESOURCE, resource.key)
 
 
 OPERATION = ProviderSpec(

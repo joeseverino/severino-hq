@@ -18,7 +18,7 @@ from .certificates import UPLOAD, UploadCertificateCommand, store_certificate
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
 from .labels import adding
-from .managed_records import ManagedResourceItem, ManagedResourceRecord, ManagedResourceRow
+from .managed_records import ManagedResourceListed, ManagedResourceRecord, ManagedResourceRow
 from .policy_fixes import request_empty_groups_removal
 from .records import EDIT, KEPT
 from .resource_capabilities import MACHINE_DETAILS
@@ -335,9 +335,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Everything HQ manages: what HQ expects and what is live.",
             Capability.READ,
             listing=ListRead(
-                infrastructure.list_managed_resources,
+                resource_context.list_managed_resources,
                 InfrastructureResourceQuery,
-                ManagedResourceItem,
+                ManagedResourceListed,
                 fields=FIELDS,
             ),
             detail_handler=resource_context.get_managed_resource,

@@ -8,13 +8,14 @@ from typing import override
 
 from django.db import models
 from django.db.models import Q
-from django.urls import reverse
 
 from hq.platform.application.labels import dotted
+from hq.platform.application.references import Kind
 from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.application.ui import ended
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule
+lazy from hq.platform.application.entity_links import page_url
 
 
 class DocStatus(TonedChoices):
@@ -137,7 +138,7 @@ class DocumentationRecord(TimestampedModel):
         return dotted(self.doc_id, self.title)
 
     def get_absolute_url(self) -> str:
-        return reverse("docs_index:detail", args=[self.doc_id])
+        return page_url(Kind.DOCUMENT, self.doc_id)
 
     @property
     def state(self) -> DocStatus:

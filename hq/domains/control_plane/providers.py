@@ -8,8 +8,9 @@ from functools import lru_cache
 from typing import Any
 
 from hq.platform.application.record_errors import Sentence
-from hq.platform.application.routes import reverse
 lazy from hq.platform.application.default_hold import needs_approval
+lazy from hq.platform.application.entity_links import page_url
+lazy from hq.platform.application.references import Kind
 
 from .attribution import unattributed_kinds
 from .connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
@@ -89,7 +90,7 @@ def resource_home(resource: Any) -> str:
     provider = PROVIDERS.get(resource.kind)
     if provider is not None and provider.home is not None:
         return provider.home(resource)
-    return reverse("control_plane:detail", kwargs={"key": resource.key})
+    return page_url(Kind.RESOURCE, resource.key)
 
 
 def spec_withheld(kind: str) -> bool:

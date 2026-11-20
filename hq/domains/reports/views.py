@@ -2,10 +2,9 @@
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Any, override
 
-from django.db.models import Count, Sum
+from django.db.models import Count
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.urls import reverse
 from django.utils import timezone
@@ -17,6 +16,7 @@ from hq.domains.expenses.models import EXPENSE_CATEGORY_CHOICES, Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.card_items import Kpi, ListRow
 from hq.platform.application.entity_links import entity_link
+from hq.platform.application.expenses import cost_totals, costs_by_category
 from hq.platform.application.money import money
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import years_of
@@ -41,25 +41,25 @@ def status_counts(model, list_url: str) -> list[dict]:
     ]
 
 
-def by_category(rows, choices, list_url: str, query: Mapping[str, Any] | None = None) -> list[dict]:
-    """Aggregate rows keyed by ``category``, named as the forms name them and
-    linked to the list filtered to that category."""
+def by_category(categories, choices, list_url: str, query: Mapping[str, Any] | None = None) -> list[dict]:
+    """Each category's totals (``costs_by_category``), named as the forms name
+    it and linked to the list filtered to it."""
 
     labels = dict(choices)
     return [
         {
-            **row,
-            "label": labels.get(row["category"], row["category"]),
-            "url": with_query(list_url, {"category": row["category"], **(query or {})}),
+            "label": labels.get(category, category),
+            "url": with_query(list_url, {"category": category, **(query or {})}),
+            "totals": totals,
         }
-        for row in rows
+        for category, totals in categories
     ]
 
 
 EXPENSE_CATEGORIES = (
     TableColumn("Category", cell=lambda row: Cell(row["label"], row["url"])),
-    TableColumn("Total", kind="numeric", css="key-col", cell=lambda row: Cell(money(row["total"]))),
-    TableColumn("Deductible (est.)", kind="numeric", cell=lambda row: Cell(money(row["deductible"]))),
+    TableColumn("Total", kind="numeric", css="key-col", cell=lambda row: Cell(money(row["totals"].total))),
+    TableColumn("Deductible (est.)", kind="numeric", cell=lambda row: Cell(money(row["totals"].deductible))),
 )
 
 
@@ -78,31 +78,20 @@ class ReportsView(PageMixin, TemplateView):
         expenses = Expense.objects.filter(date__year=year)
         assets = Asset.objects.filter(purchase_date__year=year)
 
-        zero = Decimal("0.00")
-        expense_summary = expenses.aggregate(
-            n=Count("id"),
-            total=Sum("total_cost"),
-            deductible=Sum("estimated_deductible_amount"),
-        )
-        asset_summary = assets.aggregate(n=Count("id"), total=Sum("total_cost"))
-
-        expenses_count = expense_summary["n"] or 0
+        spent = cost_totals(expenses)
+        bought = cost_totals(assets)
         expenses_url = with_query(reverse("expenses:list"), {"year": year})
 
         ctx.update(
             figures=(
                 Kpi(
                     f"Expenses {year}",
-                    money(expense_summary["total"] or zero),
-                    counted(expenses_count, "expense"),
-                    detail_url=expenses_url if expenses_count else "",
+                    money(spent.total),
+                    counted(spent.count, "expense"),
+                    detail_url=expenses_url if spent.count else "",
                 ),
-                Kpi(f"Deductible (est.) {year}", money(expense_summary["deductible"] or zero)),
-                Kpi(
-                    f"Assets purchased {year}",
-                    asset_summary["n"] or 0,
-                    f"{money(asset_summary['total'] or zero)} total",
-                ),
+                Kpi(f"Deductible (est.) {year}", money(spent.deductible)),
+                Kpi(f"Assets purchased {year}", bought.count, f"{money(bought.total)} total"),
             ),
             year=year,
             available_years=sorted(
@@ -113,9 +102,7 @@ class ReportsView(PageMixin, TemplateView):
                 "Expenses by category",
                 EXPENSE_CATEGORIES,
                 by_category(
-                    expenses.values("category")
-                    .annotate(total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount"))
-                    .order_by("-total"),
+                    costs_by_category(expenses),
                     EXPENSE_CATEGORY_CHOICES,
                     reverse("expenses:list"),
                     {"year": year},
@@ -134,13 +121,11 @@ class ReportsView(PageMixin, TemplateView):
                 ListRow(
                     title=row["label"],
                     url=row["url"],
-                    detail=counted(row["n"], "asset"),
-                    meta=money(row["total"]) if row["total"] else "",
+                    detail=counted(row["totals"].count, "asset"),
+                    meta=money(row["totals"].total) if row["totals"].total else "",
                 )
                 for row in by_category(
-                    Asset.objects.values("category")
-                    .annotate(n=Count("id"), total=Sum("total_cost"))
-                    .order_by("-total", "category"),
+                    costs_by_category(Asset.objects.all()),
                     ASSET_CATEGORY_CHOICES,
                     reverse("assets:list"),
                 )

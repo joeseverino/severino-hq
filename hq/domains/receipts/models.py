@@ -4,10 +4,11 @@ from decimal import Decimal
 from typing import override
 
 from django.db import models
-from django.urls import reverse
 
 from hq.platform.application.labels import dotted
+from hq.platform.application.references import Kind
 from hq.platform.core.models import TimestampedModel
+lazy from hq.platform.application.entity_links import page_url
 
 from .storage import PrivateReceiptStorage, receipt_upload_path
 lazy from .validation import FILE_TYPE_LABELS
@@ -75,4 +76,4 @@ class Receipt(TimestampedModel):
         return FILE_TYPE_LABELS.get((self.content_type or "").strip().lower(), "")
 
     def get_absolute_url(self) -> str:
-        return reverse("receipts:detail", args=[self.pk])
+        return page_url(Kind.RECEIPT, str(self.pk))

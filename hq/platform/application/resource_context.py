@@ -21,13 +21,15 @@ from hq.domains.control_plane.providers import PROVIDERS, controller_capability_
 
 from .asks import APPLIES_SHORTLY
 from .display_words import as_members
-from .entity_links import entity_link, record_name
+from .entity_links import entity_link, kind_label, record_name
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .freshness import behind
 from .infrastructure import (
     RecordState,
     ResourceState,
     controller_contract,
+    declared_machines,
+    delivery_targets,
     resolved_spec,
     resource_health,
     serialize_resource,
@@ -41,11 +43,11 @@ lazy from .approvals import pending
 lazy from .conditions import DEGRADED, DRIFTED, held_since
 lazy from .connections import connection_readings
 lazy from .facts import kinds_read
-lazy from .managed_records import ManagedResourceRecord
-lazy from .projection import read_once
+lazy from .managed_records import ManagedResourceListed, ManagedResourceRecord
+lazy from .projection import keyset_page, read_once
 lazy from .security import internal_principal
 lazy from .services import certificate_use
-lazy from .whereabouts import machine_link
+lazy from .whereabouts import machine_link, whereabouts
 
 
 def origin_machine(resource, machines=None, at=None, targets=None):
@@ -286,12 +288,54 @@ def _consumers(resource) -> tuple[dict[str, Any] | None, tuple[dict[str, Any], .
     return resolved, consumers, ""
 
 
+def listed(resource: ManagedResource, machines=None, at=None, targets=None) -> ManagedResourceListed:
+    """``resource`` as its list's row says it, and its page's record begins:
+    whole, and where it stands, sends traffic and what it holds. A list
+    passes in what ``origin_machine`` reads for every row."""
+
+    item = serialize_resource(resource)
+    standing = record_status(resource, health=item["health"])
+    origin = origin_machine(resource, machines, at, targets)
+    name = page_name(resource)
+    return {
+        **item,
+        "url": resource.get_absolute_url(),
+        "name": name,
+        "summary": record_summary(resource, name),
+        "standing": {
+            "state": str(standing.state),
+            "tone": str(standing.state.tone),
+            "label": standing.label,
+            "detail": standing.detail,
+            "since": standing.since.isoformat() if standing.since else None,
+            "read_at": standing.read_at.isoformat() if standing.read_at else None,
+        },
+        "origin_machine": {"name": origin.name, "url": origin.url} if origin is not None else None,
+    }
+
+
+def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: str | None = None) -> dict[str, Any]:
+    """List canonical public infrastructure state without provider credentials, by kind then key.
+
+    Each filter sent narrows the list, so both keep the records of ``kind`` when it is among ``kinds``.
+    """
+    resources = ManagedResource.objects.all()
+    if kind:
+        resources = resources.filter(kind=kind)
+    if kinds:
+        resources = resources.filter(kind__in=kinds.split(","))
+    page = keyset_page(resources, ("kind", "key"), limit)
+    # Read once for the whole page: asked per row, where each forwards is a
+    # query budget that grows with the estate.
+    machines, targets = declared_machines(), delivery_targets()
+    at = whereabouts(machines)
+    return {**page, "items": [listed(resource, machines, at, targets) for resource in page["items"]]}
+
+
 @dataclass(frozen=True, slots=True)
 class ResourceContext:
     resource: ManagedResource
     capabilities: ResourceCapabilities
-    health: dict[str, str]
-    origin_machine: Any
     provider_machine: dict[str, Any] | None
     service_links: tuple[tuple[str, str], ...]
     readout_rows: tuple[tuple[str, str, str], ...]
@@ -306,21 +350,10 @@ class ResourceContext:
     def record(self) -> ManagedResourceRecord:
         """The record whole with what HQ derives from it, as the API, MCP and its page read it."""
 
-        resource, origin, provider, expiry = self.resource, self.origin_machine, self.provider_machine, self.expiry
-        standing = record_status(resource, health=self.health)
+        resource, provider, expiry = self.resource, self.provider_machine, self.expiry
         resolved = self.resolved_spec if resource.kind == CERTIFICATE_KIND else None
         return {
-            **serialize_resource(resource),
-            "url": resource.get_absolute_url(),
-            "name": page_name(resource),
-            "standing": {
-                "state": str(standing.state),
-                "tone": str(standing.state.tone),
-                "label": standing.label,
-                "detail": standing.detail,
-                "since": standing.since.isoformat() if standing.since else None,
-                "read_at": standing.read_at.isoformat() if standing.read_at else None,
-            },
+            **listed(resource),
             "actions": {
                 verb: {"enabled": allowed.enabled, "reason": allowed.reason, "automatic": allowed.automatic}
                 for verb, allowed in self.capabilities.actions.items()
@@ -330,7 +363,6 @@ class ResourceContext:
                 "reason": self.capabilities.removal_reason,
                 "pending": self.capabilities.removal_pending,
             },
-            "origin_machine": {"name": origin.name, "url": origin.url} if origin is not None else None,
             "provider_machine": {"name": provider["name"], "url": provider["url"]} if provider else None,
             "services": [{"hostname": hostname, "url": url} for hostname, url in self.service_links],
             "readout": [
@@ -421,8 +453,6 @@ def resource_context(resource: ManagedResource) -> ResourceContext:
     return ResourceContext(
         resource=resource,
         capabilities=capabilities_of(resource),
-        health=resource_health(resource),
-        origin_machine=origin_machine(resource),
         provider_machine=provider_machine(resource),
         service_links=service_links(resource),
         readout_rows=readout_rows(resource),
@@ -527,34 +557,34 @@ class RecordList:
 def _grouped(rows: list[Any]) -> tuple[RecordGroup, ...]:
     found: dict[str, list[Any]] = {}
     for row in rows:
-        found.setdefault(row.kind, []).append(row)
+        found.setdefault(row["kind"], []).append(row)
     groups = []
     for kind, members in found.items():
         # A working record is the only one with nothing to look at.
-        unsettled = [row for row in members if row.record_status.tone is not Tone.GOOD]
-        settled = [row for row in members if row.record_status.tone is Tone.GOOD]
-        groups.append(RecordGroup(kind, members[0].kind_label, tuple(unsettled + settled), len(unsettled)))
+        unsettled = [row for row in members if row["standing"]["tone"] != Tone.GOOD]
+        settled = [row for row in members if row["standing"]["tone"] == Tone.GOOD]
+        groups.append(RecordGroup(kind, kind_label(kind), tuple(unsettled + settled), len(unsettled)))
     # A type with something to look at leads; the rest by name.
     return tuple(sorted(groups, key=lambda group: (not group.unsettled, group.label.casefold())))
 
 
-def record_list(resources, *, query: str = "", kind: str = "") -> RecordList:
-    """``resources`` (each carrying the list row's ``record_status``,
-    ``shown_name`` and ``summary``) under their types, kept by the filter:
-    words in a row's own text, and one type."""
+def record_list(rows: list[ManagedResourceListed], *, query: str = "", kind: str = "") -> RecordList:
+    """The list's ``rows`` under their types, kept by the filter: words in a
+    row's own text, and one type."""
 
-    rows = list(resources)
     types = _grouped(rows)
     wanted = query.strip().casefold()
     kind = kind if any(group.kind == kind for group in types) else ""
     kept = [
         row
         for row in rows
-        if (not kind or row.kind == kind)
+        if (not kind or row["kind"] == kind)
         and (
             not wanted
             or wanted
-            in " ".join((row.key, row.shown_name, row.summary, row.kind_label, row.record_status.label)).casefold()
+            in " ".join(
+                (row["key"], row["name"], row["summary"], kind_label(row["kind"]), row["standing"]["label"])
+            ).casefold()
         )
     ]
     return RecordList(_grouped(kept), types, query.strip(), kind)

@@ -33,7 +33,7 @@ from .command_fields import Choices, Describe, stored_in
 from .conditions import DEGRADED, DRIFTED, READY, holding
 from .integration_specs import Kept, command_adapter, keeps
 from .labels import lower_first
-from .projection import keyset_page, read_once
+from .projection import read_once
 from .record_errors import PolicyError
 from .record_saves import Held, as_sent, found, held, row, written
 from .security import Principal
@@ -115,20 +115,6 @@ class ManagedResourceCommand:
         declared: dict[str, Any] = handler(schema)
         handler.resolve_ref_schema(declared)["anyOf"] = handler(_declarations().core_schema)["anyOf"]
         return declared
-
-
-def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: str | None = None) -> dict[str, Any]:
-    """List canonical public infrastructure state without provider credentials, by kind then key.
-
-    Each filter sent narrows the list, so both keep the records of ``kind`` when it is among ``kinds``.
-    """
-    resources = ManagedResource.objects.all()
-    if kind:
-        resources = resources.filter(kind=kind)
-    if kinds:
-        resources = resources.filter(kind__in=kinds.split(","))
-    page = keyset_page(resources, ("kind", "key"), limit)
-    return {**page, "items": [serialize_resource(resource) for resource in page["items"]]}
 
 
 def declared_resources() -> tuple[ManagedResource, ...]:

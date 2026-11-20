@@ -10,7 +10,6 @@ for D1.
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
-from django.core.exceptions import ValidationError
 from django.db import transaction
 from pydantic import Field
 
@@ -40,8 +39,6 @@ from .ui import ended
 lazy from .asks import APPLIES_SHORTLY
 lazy from .capabilities import Consented, consent
 
-# The inbox page reads its whole list at once, so a page may hold more than an API page.
-MOST_SHOWN = 500
 REVIEW = "contact.submission.review"
 DELETE = "contact.submission.delete"
 
@@ -66,28 +63,16 @@ class ContactReviewCommand:
     admin_notes: AdminNotes = ""
 
 
-def _status(value: str) -> str:
-    """A list's status filter, or "" for every status."""
-
-    value = value.strip()
-    if value and value not in SubmissionStatus.values:
-        raise ValidationError({"status": ValidationError("Unknown contact status.", code="invalid_choice")})
-    return value
-
-
-def _matches(row: dict[str, Any], status: str, wanted: str) -> bool:
+def _matches(row: dict[str, Any], status: str | None, wanted: str) -> bool:
     if status and row.get("status") != status:
         return False
     return not wanted or any(wanted in str(row.get(name) or "").casefold() for name in ("name", "email", "message"))
 
 
 def list_contact_submissions(*, status: str | None = None, query: str = "", limit: int = 100) -> dict[str, Any]:
-    status = _status(status or "")
-    if limit < 1 or limit > MOST_SHOWN:
-        raise ValueError(f"limit must be between 1 and {MOST_SHOWN}")
     wanted = query.strip().casefold()
     matches = [row for row in inbox.current().rows if _matches(row, status, wanted)]
-    items, paged = window(matches, limit, maximum=MOST_SHOWN)
+    items, paged = window(matches, limit)
     return {**paged, "items": list(items)}
 
 

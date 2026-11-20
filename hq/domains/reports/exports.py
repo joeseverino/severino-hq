@@ -9,7 +9,7 @@ from io import StringIO
 from operator import attrgetter
 from typing import Any
 
-from django.db.models import Prefetch, QuerySet, Sum
+from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 
 from hq.domains.assets.models import Asset
@@ -17,6 +17,7 @@ from hq.domains.content.models import ContentItem
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.expenses import cost_totals, costs_by_category
 from hq.platform.application.labels import dotted
 from hq.platform.application.money import money
 from hq.platform.application.ui import MISSING, measured
@@ -293,27 +294,23 @@ def _year_totals(expenses, assets) -> dict[str, Any]:
     """How many expenses and assets the year holds, what they cost and what
     of that is estimated deductible."""
 
+    spent, bought = cost_totals(expenses), cost_totals(assets)
     return {
-        "expenses_count": expenses.count(),
-        "expenses_total": _money(expenses.aggregate(s=Sum("total_cost"))["s"]),
-        "expenses_deductible_total": _money(expenses.aggregate(s=Sum("estimated_deductible_amount"))["s"]),
-        "assets_count": assets.count(),
-        "assets_total": _money(assets.aggregate(s=Sum("total_cost"))["s"]),
-        "assets_deductible_total": _money(assets.aggregate(s=Sum("estimated_deductible_amount"))["s"]),
+        "expenses_count": spent.count,
+        "expenses_total": _money(spent.total),
+        "expenses_deductible_total": _money(spent.deductible),
+        "assets_count": bought.count,
+        "assets_total": _money(bought.total),
+        "assets_deductible_total": _money(bought.deductible),
     }
 
 
 def _expenses_by_category(expenses) -> list[dict[str, Any]]:
     """Each category's cost and deductible part, the costliest first."""
 
-    rows = (
-        expenses.values("category")
-        .annotate(total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount"))
-        .order_by("-total")
-    )
     return [
-        {"category": row["category"], "total": _money(row["total"]), "deductible": _money(row["deductible"])}
-        for row in rows
+        {"category": category, "total": _money(totals.total), "deductible": _money(totals.deductible)}
+        for category, totals in costs_by_category(expenses)
     ]
 
 

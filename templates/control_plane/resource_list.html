@@ -23,15 +23,15 @@ offers every type.
       {% for resource in group.rows %}
         <tr>
           <td>
-            <strong>{% entity "resource"|entity_of:resource.key label=resource.shown_name %}</strong>
+            <strong>{% entity "resource"|entity_of:resource.key label=resource.name %}</strong>
             {% list %}{% if resource.summary %}<li>{% muted css="cell-data" %}{{ resource.summary|breakable }}{% endmuted %}</li>{% endif %}
             {% comment %}
             Whose address a proxy forwards to, when HQ knows the machine.
             {% endcomment %}
-            {% if resource.origin_machine %}<li>{% muted %}on {% entity resource.origin_machine.link %}{% endmuted %}</li>{% endif %}{% endlist %}
+            {% if resource.origin_machine %}<li>{% muted %}on {% entity "machine"|entity_of:resource.origin_machine.name %}{% endmuted %}</li>{% endif %}{% endlist %}
           </td>
           <td>
-            {% with status=resource.record_status %}
+            {% with status=resource.standing %}
               {% list %}<li>{% status status.label tone=status.tone title=status.detail %}</li>{% if status.since %}<li>{% muted %}{{ status.since|when:"ago" }}{% endmuted %}</li>{% endif %}{% endlist %}
             {% endwith %}
           </td>
