@@ -4,4 +4,4 @@
 # fetches is unverified. It goes once PyYAML ships a cp315 wheel, which a
 # source test names (test_group_imports.py). Renovate compiles it again.
 setuptools
-Cython>=3.0
+Cython==3.3.1
