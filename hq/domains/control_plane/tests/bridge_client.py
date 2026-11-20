@@ -15,6 +15,7 @@ from urllib.parse import urlencode
 from asgiref.sync import async_to_sync
 
 from hq.domains.control_plane.bridge_application import application
+from hq.domains.control_plane.bridge_contract import contract, departs
 
 UNIX_LISTENER = ("/run/example/bridge.sock", None)
 
@@ -71,7 +72,8 @@ def request(
 
 
 def call(action: str, payload: Any = None, **query: Any) -> Any:
-    """Run one action and return its answer, failing on a refusal.
+    """Run one action and return its answer, failing on a refusal or an answer
+    off the contract the Go controller's client is generated from.
 
     Keyword names are the contract's with underscores for hyphens.
     """
@@ -83,4 +85,9 @@ def call(action: str, payload: Any = None, **query: Any) -> Any:
     )
     if answer.status != 200:
         raise AssertionError(f"bridge {action} answered {answer.status}: {answer.body.decode()}")
-    return answer.json()
+    answered = answer.json()
+    schema = contract()["paths"][f"/{action}"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
+    problem = departs(schema["$ref"].rsplit("/", 1)[-1], answered)
+    if problem is not None:
+        raise AssertionError(problem)
+    return answered

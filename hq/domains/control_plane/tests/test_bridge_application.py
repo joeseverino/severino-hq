@@ -71,7 +71,9 @@ class RefusalTests(TestCase):
                 )
 
     def test_a_lease_inside_the_range_and_the_contracts_default(self):
-        with patch("hq.domains.control_plane.bridge_actions.claim_next_operation", return_value={"ok": True}) as claim:
+        with patch(
+            "hq.domains.control_plane.bridge_actions.claim_next_operation", return_value={"ok": True, "operation": None}
+        ) as claim:
             bridge_client.call("claim", controller_id="x", lease_seconds="45", capability=["a:b", "c:d"])
             bridge_client.call("claim", controller_id="x")
         self.assertEqual(
