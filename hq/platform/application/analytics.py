@@ -391,22 +391,20 @@ def measured_path_count(*, days: int = DEFAULT_WINDOW_DAYS) -> int:
 
 
 def attach_traffic(items, *, days: int = CONTENT_TRAFFIC_DAYS):
-    """Give each content item what its published URL earned, in one query.
+    """Give each content list item what its published URL earned, in one query.
 
-    Annotates in place, so a list the table engine already paginated and
-    sorted keeps both. ``pageviews`` is None where nothing was measured, so a
+    Sets each item's ``pageviews`` in place, so a page of a list read keeps
+    its rows and their order. It is None where nothing was measured, so a
     template tells nobody looking from a real zero, nobody visiting.
     """
 
     items = list(items)
     if not items:
         return items
-    locations = {location_of(item.published_url) for item in items}
-    traffic = _traffic_for_locations(locations, days=days)
+    traffic = _traffic_for_locations({location_of(item["published_url"]) for item in items}, days=days)
     for item in items:
-        measured = traffic.get(location_of(item.published_url))
-        item.pageviews = measured["pageviews"] if measured else None
-        item.visits = measured["visits"] if measured else None
+        measured = traffic.get(location_of(item["published_url"]))
+        item["pageviews"] = measured["pageviews"] if measured else None
     return items
 
 

@@ -17,7 +17,7 @@ from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.domains import records_of
 from hq.platform.application.markup_testing import Element, all_elements, hrefs, select, text, with_class, within
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.projects import DEPENDENCY_UPDATES, get_project, list_projects
+from hq.platform.application.projects import DEPENDENCY_UPDATES, get_project
 from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.tests import test_github_estate as estate
 from hq.platform.application.tests.test_github_estate import store
@@ -173,7 +173,7 @@ class UpdatesSurfaceTests(TestCase):
         self.assertIn("1 open update", text(response))
         # The alert count is a figure, so its state is its ink, never a chip.
         self.assertIn("2 open alerts", [figure.words for figure in with_class(response, "tone-attention")])
-        self.assertEqual({project.slug for project in filtered.context["object_list"]}, {"alpha"})
+        self.assertEqual({project["slug"] for project in filtered.context["object_list"]}, {"alpha"})
 
     def test_the_record_carries_the_update_state_when_it_names_a_repository(self):
         store(**OPEN)
@@ -199,15 +199,6 @@ class UpdatesSurfaceTests(TestCase):
         self.assertEqual(get_project("beta")["updates"]["open_pulls"], None)
         self.assertEqual(get_project("alpha")["updates"]["unmatched_alerts"], None)
         self.assertEqual(get_project("alpha")["updates"]["open_pulls"], 1)
-
-    def test_the_list_resource_filters_on_updates(self):
-        store()
-        Project.objects.create(name="Beta", slug="beta", repository_url="https://github.com/example/beta")
-
-        on = list_projects(updates=True)["items"]
-        off = list_projects(updates=False)["items"]
-
-        self.assertEqual(([item["slug"] for item in on], [item["slug"] for item in off]), (["alpha"], ["beta"]))
 
 
 def ran(outcome: str, *, hours_ago: int = 2) -> datetime:

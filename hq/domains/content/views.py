@@ -1,12 +1,10 @@
 from typing import override
 
-from django.db.models import Count
 from django.urls import reverse_lazy
 from django.utils.functional import cached_property
 from django.views.generic import (
     CreateView,
     DeleteView,
-    ListView,
     TemplateView,
     UpdateView,
 )
@@ -16,27 +14,25 @@ from hq.platform.application.analytics import CONTENT_TRAFFIC_DAYS, attach_traff
 from hq.platform.application.content import published_on
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.labels import adding, dotted_html
+from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
-from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
+from hq.platform.application.tables import TableColumn
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.status_tags import status_pill
 
 from .models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
 
 
-class _ContentSectionView(PageMixin, TableListMixin, ListView):
+class _ContentSectionView(ListPageMixin, TemplateView):
     """One half of the registry, as a table.
 
     The registry is cut once, in ``content.models``. A section states which half
-    it is and its heading; every other part of the table contract (search scope,
-    sorts, toggles, paging) is shared, so the two cannot drift apart.
+    it is and its heading; the rest of the table is the content list's own, read
+    within the section's types, so the two cannot drift apart.
     """
 
-    model = ContentItem
+    resource = "content"
     template_name = "content/content_list.html"
-    context_object_name = "items"
-    paginate_by = 25
-    table_search_scope = "content"
     content_types: frozenset[str] = frozenset()
     heading = ""
     # What the head's button and the empty list call a new item here, and
@@ -45,10 +41,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     new_variant = "writeup_or_page"
     new_type = ""
     table_empty = "No writeups or pages yet."
-    table_filters = (TableFilter("status", "Status", "status", ContentItem.Status.choices),)
     table_selectable = True
-    table_toggles = (TableToggle("no_docs", "No source document"),)
-    table_default_sort = "-updated_at"
     table_search_placeholder = "Search titles, topics, tags, and notes…"
 
     @override
@@ -76,6 +69,14 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     def types_held(self) -> frozenset[str]:
         return frozenset(content_type for content_type, _url in self._held)
 
+    @override
+    def scope(self):
+        # Only the types this half holds: one it is defined to exclude would
+        # give back an empty table, which reads as "nothing published" rather
+        # than as "wrong section". A section all of one type shows neither the
+        # Type column nor its filter.
+        return {"content_type": tuple(sorted(self.types_held or self.content_types))}
+
     @cached_property
     def table_columns(self) -> tuple[TableColumn, ...]:
         typed = (TableColumn("Type", "content_type", drop=6),) if len(self.types_held) > 1 else ()
@@ -85,43 +86,24 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
             TableColumn("Status", "status", css="key-col"),
             TableColumn("Description", drop=1),
             TableColumn(f"Views ({CONTENT_TRAFFIC_DAYS} days)", kind="numeric", drop=5),
-            TableColumn("Published", "published_at", "Oldest published", "Recently published", drop=3),
-            TableColumn("Updated", "updated_at", "Least recently updated", "Recently updated", drop=2),
+            TableColumn("Published", "published_at", drop=3),
+            TableColumn("Updated", "updated_at", drop=2),
             TableColumn("Live page", css="actions-col", drop=4),
         )
 
     @override
-    def get_table_filters(self):
-        # Only the types this half holds: one it is defined to exclude would
-        # give back an empty table, which reads as "nothing published" rather
-        # than as "wrong section". A section all of one type shows neither the
-        # Type column nor its filter.
-        if len(self.types_held) < 2:
-            return self.table_filters
-        return (
-            *self.table_filters,
-            TableFilter(
-                "content_type",
-                "Type",
-                "content_type",
-                [(value, label) for value, label in ContentItem.Type.choices if value in self.types_held],
-            ),
-        )
-
-    @override
-    def get_queryset(self):
-        qs = ContentItem.objects.filter(content_type__in=self.content_types)
-        if self.request.GET.get("no_docs"):
-            qs = qs.annotate(doc_count=Count("related_documentation")).filter(doc_count=0)
-        return self.apply_table_query(qs)
+    def row(self, item):
+        return {
+            **item,
+            "state": ContentItem.Status(item["status"]),
+            "type_label": ContentItem.Type(item["content_type"]).label,
+        }
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Traffic for the rows on this page only. Joined after pagination, so
-        # the reading is one query whatever the page size, and the table engine
-        # keeps ownership of which rows and in what order.
-        attach_traffic(context["items"])
+        # Traffic for the rows on this page only, in one query whatever its size.
+        attach_traffic(context["object_list"])
         context.update(
             # Where the section is published, said once when it is all one site.
             site=published_on(url for _type, url in self._held),

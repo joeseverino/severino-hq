@@ -16,6 +16,7 @@ from typing import Annotated, Any, cast
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Case, Value, When
 
 from hq.domains.content.content_sync import ContentSyncError, sync_content_index
 from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
@@ -184,16 +185,14 @@ def _updates(project: Project) -> dict[str, Any]:
     }
 
 
-def list_projects(
-    *,
-    status: str | None = None,
-    updates: bool | None = None,
-    limit: int = 50,
-) -> dict[str, Any]:
-    rows = Project.objects.all() if updates is None else Project.objects.filter(dependency_updates=updates)
+def list_projects(*, limit: int = 50) -> dict[str, Any]:
+    # Archived projects rank last, which every declared sort orders by first.
+    rows = Project.objects.annotate(
+        archive_rank=Case(When(status=Project.Status.ARCHIVED, then=Value(1)), default=Value(0))
+    )
     # Every item reads the same stored GitHub reading.
     with projection_scope():
-        return listing(rows, serialize_project, status=status, limit=limit)
+        return listing(rows, serialize_project, limit=limit)
 
 
 def get_project(slug: str) -> dict[str, Any]:

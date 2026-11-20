@@ -37648,23 +37648,71 @@
         "operationId": "listContentV2",
         "parameters": [
           {
-            "description": "Only the records in this status; absent, every status.",
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
+            "description": "Only the records whose status is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
             "name": "status",
             "required": false,
             "schema": {
-              "enum": [
-                "draft",
-                "published",
-                "archived"
-              ],
+              "maxLength": 2000,
+              "pattern": "^(?:draft|published|archived)(?:,(?:draft|published|archived))*$",
+              "title": "Status",
               "type": "string"
             },
             "style": "form"
           },
           {
-            "$ref": "#/components/parameters/SearchText"
+            "description": "Only the records whose type is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "content_type",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:article|video|lab_writeup|guide|review|portfolio_page|service_page|case_study|page)(?:,(?:article|video|lab_writeup|guide|review|portfolio_page|service_page|case_study|page))*$",
+              "title": "Type",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the writeups and pages no document names.",
+            "explode": true,
+            "in": "query",
+            "name": "no_docs",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "No source document",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else recently updated.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "-updated_at",
+                "updated_at",
+                "title",
+                "-title",
+                "content_type",
+                "-content_type",
+                "status",
+                "-status",
+                "-published_at",
+                "published_at"
+              ],
+              "type": "string"
+            },
+            "style": "form"
           },
           {
             "$ref": "#/components/parameters/PageLimit"
@@ -37715,10 +37763,13 @@
               "listContentV2": {
                 "operationId": "listContentV2",
                 "parameters": {
+                  "query.content_type": "$request.query.content_type",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.no_docs": "$request.query.no_docs",
                   "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort",
                   "query.status": "$request.query.status"
                 }
               }
@@ -39527,35 +39578,108 @@
         "operationId": "listProjectsV2",
         "parameters": [
           {
-            "description": "Only the records in this status; absent, every status.",
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
+            "description": "Only the records whose status is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
             "name": "status",
             "required": false,
             "schema": {
-              "enum": [
-                "idea",
-                "active",
-                "paused",
-                "completed",
-                "published",
-                "archived"
-              ],
+              "maxLength": 2000,
+              "pattern": "^(?:idea|active|paused|completed|published|archived)(?:,(?:idea|active|paused|completed|published|archived))*$",
+              "title": "Status",
               "type": "string"
             },
             "style": "form"
           },
           {
-            "$ref": "#/components/parameters/SearchText"
-          },
-          {
-            "description": "True for the projects HQ's dependency update run covers, false for the rest; absent, both.",
+            "description": "Only the records whose category is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
-            "name": "updates",
+            "name": "category",
             "required": false,
             "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:wordpress_security|cloudflare|dns_email_security|homelab|vps|tailscale|adguard|networking|tls_certificates|automation|cybersecurity_labs|other)(?:,(?:wordpress_security|cloudflare|dns_email_security|homelab|vps|tailscale|adguard|networking|tls_certificates|automation|cybersecurity_labs|other))*$",
+              "title": "Category",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the active projects still missing a writeup or a document.",
+            "explode": true,
+            "in": "query",
+            "name": "needs_output",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Active, nothing written yet",
               "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the projects no writeup or page names.",
+            "explode": true,
+            "in": "query",
+            "name": "no_content",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "No writeup",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the projects no document names.",
+            "explode": true,
+            "in": "query",
+            "name": "no_docs",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "No documents",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the projects HQ's dependency update run covers.",
+            "explode": true,
+            "in": "query",
+            "name": "updates_on",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Updates on",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else recently edited.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "-updated_at",
+                "updated_at",
+                "name",
+                "-name",
+                "status",
+                "-status",
+                "category",
+                "-category",
+                "technologies_used",
+                "-technologies_used"
+              ],
+              "type": "string"
             },
             "style": "form"
           },
@@ -39594,12 +39718,17 @@
               "listProjectsV2": {
                 "operationId": "listProjectsV2",
                 "parameters": {
+                  "query.category": "$request.query.category",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.needs_output": "$request.query.needs_output",
+                  "query.no_content": "$request.query.no_content",
+                  "query.no_docs": "$request.query.no_docs",
                   "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort",
                   "query.status": "$request.query.status",
-                  "query.updates": "$request.query.updates"
+                  "query.updates_on": "$request.query.updates_on"
                 }
               },
               "projectDeleteV2": {

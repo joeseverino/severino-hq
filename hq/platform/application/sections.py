@@ -10,12 +10,12 @@ from typing import Any
 lazy from datetime import timedelta
 
 from django.conf import settings
-from django.db.models import Count, Q
 
 from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.routes import reverse
+lazy from hq.domains.projects.specs import NEEDS_OUTPUT, UPDATES_ON
 
 from .derivations import passed, today as local_today
 from .expenses import cost_totals
@@ -53,25 +53,12 @@ def active_projects():
     return Project.objects.filter(status=Project.Status.ACTIVE)
 
 
-def projects_needing_output():
-    """Active work still missing a writeup or a doc: each project is owed both."""
-
-    return (
-        active_projects()
-        .annotate(
-            content_count=Count("content_items", distinct=True),
-            doc_count=Count("documentation_records", distinct=True),
-        )
-        .filter(Q(content_count=0) | Q(doc_count=0))
-    )
-
-
 def projects_reading() -> dict[str, int]:
     return read_once(
         "sections.projects",
         lambda: {
             "active": active_projects().count(),
-            "needing_output": projects_needing_output().count(),
+            "needing_output": Project.objects.filter(NEEDS_OUTPUT.keeps).count(),
         },
     )
 
@@ -81,7 +68,7 @@ def updates_reading() -> dict[str, int]:
     alerts none of them answers."""
 
     def load() -> dict[str, int]:
-        opted = list(Project.objects.updates_on().exclude(repository_url="").only("repository_url"))
+        opted = list(Project.objects.filter(UPDATES_ON.keeps).exclude(repository_url="").only("repository_url"))
         read = [repo for project in opted if (repo := repository_for(project.repository_url)) is not None]
         return {
             "projects": len(opted),

@@ -2,8 +2,10 @@
 
 from typing import Annotated, NotRequired, TypedDict
 
-from pydantic import Field, create_model
+from django.db.models import Exists, OuterRef, Q
 
+from hq.domains.content.models import ContentItem
+from hq.domains.docs_index.models import DocumentationRecord
 from hq.platform.application import dependency_updates, projects, registry_import
 from hq.platform.application.answer_fields import (
     LinkedContent,
@@ -16,13 +18,20 @@ from hq.platform.application.answer_fields import (
 from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe
 from hq.platform.application.domains import records_of
-from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
+from hq.platform.application.integration_specs import (
+    CapabilitySpec,
+    ListFilter,
+    ListRead,
+    ListSort,
+    ListToggle,
+    ResourceSpec,
+)
 from hq.platform.application.record_fields import Notes, PublishedUrl
-from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, SearchText, one_of
+from hq.platform.application.resources import BoundedQuery, SearchText
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
 
-from .models import Project
+from .models import PROJECT_CATEGORY_CHOICES, Project
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:
@@ -85,17 +94,92 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
     )
 
 
-ProjectQuery = create_model(
-    "ProjectQuery",
-    __base__=BoundedQuery,
-    status=(one_of(Project.Status.values) | None, Field(default=None, description=STATUS_FILTER)),
-    query=(SearchText, None),
-    updates=(
-        bool | None,
-        Field(
-            default=None,
-            description="True for the projects HQ's dependency update run covers, false for the rest; absent, both.",
-        ),
+class ProjectQuery(BoundedQuery):
+    query: SearchText = None
+
+
+def _without(relation: str) -> Q:
+    """The projects no record of ``relation`` names."""
+
+    through = getattr(Project, relation).through
+    return Q(~Exists(through.objects.filter(project=OuterRef("pk"))))
+
+
+def _written(*kept: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Four projects, each written about differently, split into ``kept`` and the rest."""
+
+    _bare, half, whole, idle = (
+        Project.objects.create(name=name, slug=name.lower(), status=status)
+        for name, status in (
+            ("Bare", Project.Status.ACTIVE),
+            ("Half", Project.Status.ACTIVE),
+            ("Whole", Project.Status.ACTIVE),
+            ("Idle", Project.Status.PAUSED),
+        )
+    )
+    ContentItem.objects.create(title="Example writeup", slug="example-writeup").related_projects.add(half, whole)
+    DocumentationRecord.objects.create(doc_id="rb-example", title="Example runbook").related_projects.add(whole, idle)
+    return kept, tuple({"bare", "half", "whole", "idle"} - {*kept})
+
+
+def _updating() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """A project the update run covers, kept, and one it does not, left out."""
+
+    Project.objects.create(name="Updated", slug="updated", dependency_updates=True)
+    Project.objects.create(name="Left", slug="left")
+    return ("updated",), ("left",)
+
+
+def _archived_last() -> tuple[str, str]:
+    """An archived project edited after an active one still comes after it."""
+
+    Project.objects.create(name="ZZZ active", slug="zzz-active", status=Project.Status.ACTIVE)
+    Project.objects.create(name="AAA archived", slug="aaa-archived", status=Project.Status.ARCHIVED)
+    return "zzz-active", "aaa-archived"
+
+
+NO_CONTENT = ListToggle(
+    "no_content",
+    "No writeup",
+    "True for only the projects no writeup or page names.",
+    _without("content_items"),
+    lambda: _written("bare", "idle"),
+)
+NO_DOCS = ListToggle(
+    "no_docs",
+    "No documents",
+    "True for only the projects no document names.",
+    _without("documentation_records"),
+    lambda: _written("bare", "half"),
+)
+NEEDS_OUTPUT = ListToggle(
+    "needs_output",
+    "Active, nothing written yet",
+    "True for only the active projects still missing a writeup or a document.",
+    Q(status=Project.Status.ACTIVE) & (NO_CONTENT.keeps | NO_DOCS.keeps),
+    lambda: _written("bare", "half"),
+)
+UPDATES_ON = ListToggle(
+    "updates_on",
+    "Updates on",
+    "True for only the projects HQ's dependency update run covers.",
+    Q(dependency_updates=True),
+    _updating,
+)
+
+# Each order the list is read in, the first where none is asked. Archived
+# projects come last in every one, ranked so by ``list_projects``.
+SORTS = (
+    ListSort("-updated_at", "Recently edited", ("archive_rank", "-updated_at"), _archived_last),
+    *(
+        ListSort(sort.name, sort.label, ("archive_rank", *sort.ordering))
+        for sort in (
+            ListSort("updated_at", "Least recently edited"),
+            *ListSort.both("name", "Name"),
+            *ListSort.both("status", "Status"),
+            *ListSort.both("category", "Category"),
+            *ListSort.both("technologies_used", "Technology"),
+        )
     ),
 )
 
@@ -171,7 +255,17 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Projects",
             "Projects and their safe cross-domain relationships.",
             Capability.READ,
-            listing=ListRead(projects.list_projects, ProjectQuery, ProjectRow),
+            listing=ListRead(
+                projects.list_projects,
+                ProjectQuery,
+                ProjectRow,
+                sorts=SORTS,
+                filters=(
+                    ListFilter("status", "Status", Project.Status.choices),
+                    ListFilter("category", "Category", PROJECT_CATEGORY_CHOICES),
+                ),
+                toggles=(NEEDS_OUTPUT, NO_CONTENT, NO_DOCS, UPDATES_ON),
+            ),
             detail_handler=projects.get_project,
             identifier="slug",
             search=SearchDefinition(
