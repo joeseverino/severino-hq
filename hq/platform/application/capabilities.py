@@ -29,6 +29,7 @@ from .idempotency import (
     KEY_SHAPE,
     IdempotencyConflict,
     InvalidIdempotencyKey,
+    answered,
     execute_once,
     request_fingerprint,
     validate_key,
@@ -261,6 +262,12 @@ class Performed(TypedDict):
     """A capability that ran, as its runner answers: ``ok``, beside what its command answers."""
 
     ok: Literal[True]
+
+
+def first_answer(principal: Principal, key: str) -> dict[str, Any] | None:
+    """What ``principal``'s call under retry ``key`` was answered when it ran, or None while it has none."""
+
+    return answered(actor=agent_subject(principal), key=key)
 
 
 class Ran(NamedTuple):

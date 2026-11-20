@@ -22,12 +22,11 @@ from django.http import HttpRequest
 lazy from django.forms import BaseForm
 
 from . import capabilities
-from .capabilities import Ran, as_documented, run_capability
+from .capabilities import Ran, as_documented, first_answer, run_capability
 from .forms import file_as_sent
-from .idempotency import KEY, answered
 from .integration_specs import command_schema
 from .json_schemas import fields as whole_fields
-from .security import agent_subject, web_principal
+from .security import web_principal
 lazy from .records import records_for
 
 # The hidden field the key travels in: a name no command declares, like the
@@ -112,9 +111,9 @@ def posted_answer(request: HttpRequest) -> dict[str, Any] | None:
     """
 
     sent = request.POST.get(RETRY_KEY_FIELD) or None
-    if sent is None or not KEY.fullmatch(sent):
+    if sent is None:
         return None
-    answer = answered(actor=agent_subject(web_principal(request.user)), key=sent)
+    answer = first_answer(web_principal(request.user), sent)
     if answer is not None:
         _call_key(request)
     return answer

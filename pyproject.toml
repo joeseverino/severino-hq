@@ -200,6 +200,16 @@ forbidden_modules = ["hq.platform.api", "hq.platform.mcp"]
 # The application's tests drive a call through the doors end to end.
 ignore_imports = ["hq.platform.application.tests.** -> hq.**"]
 
+# A low-level piece with one home lives in a module of its own, which only
+# that home imports: a second caller cannot be written.
+
+[[tool.importlinter.contracts]]
+name = "A retry key is kept by the capability runner alone: no door runs a call once or fingerprints it itself, so one key cannot act twice by two doors"
+type = "protected"
+protected_modules = ["hq.platform.application.idempotency"]
+allowed_importers = ["hq.platform.application.capabilities"]
+broken_contract_guidance = "Hand the key to run_capability(..., idempotency_key=...); a form's first answer is capabilities.first_answer."
+
 # audit:dead: a read in a test does not keep a name alive, unless a
 # test-support module (testing.py, *_testing.py) defines it. A function a
 # decorator hands to a caller outside HQ is called: a signal receiver, a system
