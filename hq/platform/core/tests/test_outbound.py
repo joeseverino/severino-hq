@@ -9,7 +9,8 @@ import httpx2
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from hq.platform.core import outbound
-from hq.platform.core.outbound import OutboundInRequest, allowed, off_request, serving
+from hq.platform.core.outbound import OutboundInRequest, off_request, serving
+from hq.platform.core.outbound_allowed import allowed
 
 
 def reach_a_network():
