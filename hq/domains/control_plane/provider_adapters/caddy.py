@@ -158,7 +158,7 @@ DEFINITION = ProviderSpec(
     origin=_origin,
     served_certificate=served_certificate,
     identity=_identity,
-    from_record=lambda record: {
+    _from_record=lambda record: {
         "connection_ref": str(record.get("connection_ref", "") or ""),
         "domain": str(record.get("domain", "") or ""),
         "upstream": str(record.get("upstream", "") or ""),

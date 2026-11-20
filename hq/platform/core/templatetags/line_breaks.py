@@ -195,14 +195,11 @@ def button_words(value):
 
 
 def breakable(value, mark=""):
-    """``value`` as tokens, one per word: escaped, with a line-break opportunity
-    where an address or a path may wrap, and none inside a hyphenated part.
+    """``value`` as tokens, one per word: escaped, with a line-break opportunity where an address or a path may wrap.
 
-    The one way a template writes an identifier (``<code>{{ x|breakable }}</code>``,
-    or bare as a link's text). ``mark`` is the punctuation the sentence puts
-    after the value (``{{ x|breakable:"." }}``), or given a list's ``forloop``,
-    the comma between its items. A mark of ``DOT_MARK`` is the dot ``{% dot %}``
-    draws between the value and the next part of its line.
+    The one way a template writes an identifier. ``mark`` is the punctuation
+    after it, a list's ``forloop`` for its comma, or ``DOT_MARK`` for the dot
+    ``{% dot %}`` draws.
     """
 
     mark = mark_text(mark)
@@ -358,14 +355,11 @@ _TRAILING_MARK = re.compile(r"[.,;:!?)\]]+")
 
 
 def code_spans(value):
-    """``value``, prose written as Markdown, as ``breakable`` draws it, with each
-    code span (a name between backticks) drawn as code.
+    """``value``, prose written as Markdown, as ``breakable`` draws it, with each code span drawn as code.
 
-    For a description HQ shows as another program wrote it, as the MCP server
-    lists its tools. Each piece is escaped before it is drawn, so the only markup
-    in the result is the ``<code>`` added here, and a backtick without its pair
-    stays a backtick. The rest of Markdown is shown as written: one card is no
-    reason for a Markdown parser.
+    Each piece is escaped first, so the only markup is the ``<code>`` added
+    here; the rest of Markdown is shown as written, since one card is no reason
+    for a Markdown parser.
     """
 
     value = admitted(value)

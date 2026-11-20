@@ -4,7 +4,6 @@ HQ runs on: there the verbs name the unit, elsewhere they say why not."""
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -19,6 +18,7 @@ from hq.platform.application.resource_capabilities import LIFECYCLE_VERBS, resou
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.writers import keyed
+from hq.platform.core.testing import declare, operator
 
 HQ_MACHINE, HQ_ADDRESS = "example-host", "192.0.2.10"
 OTHER_MACHINE = "example-edge"
@@ -39,7 +39,7 @@ class UnitLifecycleTests(TestCase):
     def setUp(self):
         managing_everything()
         for name, address in ((HQ_MACHINE, HQ_ADDRESS), (OTHER_MACHINE, "192.0.2.20")):
-            ManagedResource.objects.create(key=name, kind="machine", spec={"name": name, "addresses": [address]})
+            declare(name, "machine", {"name": name, "addresses": [address]})
         ProviderInventory.objects.create(
             kind=CONTAINER_KIND,
             records=[
@@ -67,10 +67,8 @@ class UnitLifecycleTests(TestCase):
             (SUPERVISED_THERE, OTHER_MACHINE),
             (UNSUPERVISED, OTHER_MACHINE),
         ):
-            ManagedResource.objects.create(
-                key=name, kind=CONTAINER_KIND, spec={"connection_ref": "example-portainer", "host": host, "name": name}
-            )
-        self.client.force_login(get_user_model().objects.create_user(username="operator", password="x" * 20))
+            declare(name, CONTAINER_KIND, {"connection_ref": "example-portainer", "host": host, "name": name})
+        operator(self.client)
         placed = runs_hq_at(HQ_ADDRESS)
         placed.start()
         self.addCleanup(placed.stop)

@@ -5,6 +5,7 @@ is public, and a fixture is documentation whether or not it was meant to be.
 """
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 APP_HOST = {
     "name": "app-host",
@@ -21,19 +22,14 @@ def declare_world(*, containers: bool = False):
     exercise: nothing here has ever been swept.
     """
 
-    ManagedResource.objects.create(key="app-host", kind="machine", spec=APP_HOST)
+    declare("app-host", "machine", APP_HOST)
     if not containers:
         return
     for name, port in (("web", 8000), ("cache", 6379)):
-        ManagedResource.objects.create(
-            key=f"app-host-{name}",
-            kind="portainer.container",
-            spec={
-                "connection_ref": "a-portainer",
-                "host": "app-host",
-                "name": name,
-                "serves_ports": [port],
-            },
+        declare(
+            f"app-host-{name}",
+            "portainer.container",
+            {"connection_ref": "a-portainer", "host": "app-host", "name": name, "serves_ports": [port]},
         )
 
 

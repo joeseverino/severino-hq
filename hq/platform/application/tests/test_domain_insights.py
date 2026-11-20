@@ -6,6 +6,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ..zones import find_zone
 from .zone_records import APEX, record, sweep
@@ -27,14 +28,10 @@ class ZoneInsightTests(TestCase):
         kind="tls.certificate",
         not_after="2099-01-01T00:00:00+00:00",
     ):
-        return ManagedResource.objects.create(
-            key=key,
-            kind=kind,
-            spec={
-                "certificate_name": key,
-                "domains": list(domains),
-                "install_on": ["edge"],
-            },
+        return declare(
+            key,
+            kind,
+            {"certificate_name": key, "domains": list(domains), "install_on": ["edge"]},
             status={"not_after": not_after},
             enabled=True,
         )
@@ -207,10 +204,10 @@ class ServicesInsightTests(TestCase):
     def setUp(self):
         sweep()
         for index in range(3):
-            ManagedResource.objects.create(
-                key=f"host-{index}",
-                kind="adguard.rewrite",
-                spec={"domain": f"h{index}.example.com", "answer": "10.0.0.1"},
+            declare(
+                f"host-{index}",
+                "adguard.rewrite",
+                {"domain": f"h{index}.example.com", "answer": "10.0.0.1"},
                 enabled=True,
             )
 
@@ -227,12 +224,7 @@ class ServicesInsightTests(TestCase):
         self.assertEqual(card.url, reverse("control_plane:services"))
 
     def test_services_in_another_domain_are_not_counted(self):
-        ManagedResource.objects.create(
-            key="elsewhere",
-            kind="adguard.rewrite",
-            spec={"domain": "app.other.example", "answer": "10.0.0.2"},
-            enabled=True,
-        )
+        declare("elsewhere", "adguard.rewrite", {"domain": "app.other.example", "answer": "10.0.0.2"}, enabled=True)
 
         self.assertEqual(len(self._card().rows), 3)
 
@@ -247,11 +239,7 @@ class RecordedResponsibilityTests(TestCase):
     def test_a_domain_is_recorded_rather_than_unobserved(self):
         from hq.platform.application.infrastructure import resource_health
 
-        resource = ManagedResource.objects.create(
-            key="a-domain",
-            kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": "a-dns-account"},
-        )
+        resource = declare("a-domain", "cloudflare.zone", {"zone": "example.com", "connection_ref": "a-dns-account"})
 
         health = resource_health(resource)
         self.assertEqual(health["state"], "declared")
@@ -260,11 +248,7 @@ class RecordedResponsibilityTests(TestCase):
     def test_it_does_not_reach_the_attention_queue(self):
         from hq.platform.application.attention import infrastructure
 
-        ManagedResource.objects.create(
-            key="a-domain",
-            kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": "a-dns-account"},
-        )
+        declare("a-domain", "cloudflare.zone", {"zone": "example.com", "connection_ref": "a-dns-account"})
 
         self.assertEqual(infrastructure(), ())
 

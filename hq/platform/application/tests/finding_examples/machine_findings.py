@@ -1,4 +1,4 @@
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ...tone import Tone
 from . import Example, Examples, Raised, ago
@@ -10,9 +10,7 @@ RECORD = {"zone": "example.com", "name": "app.example.com", "record_type": "A", 
 def serving() -> None:
     """A declared record that points app.example.com at example-host."""
 
-    ManagedResource.objects.create(
-        key="app-record", kind="cloudflare.dns_record", spec=RECORD, conditions=[{"type": "Ready", "status": True}]
-    )
+    declare("app-record", "cloudflare.dns_record", RECORD, conditions=[{"type": "Ready", "status": True}])
 
 
 def away(*, tags: tuple[str, ...] = ("tag:server",), raises: tuple[Raised, ...] = (), **age: float) -> Example:

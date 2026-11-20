@@ -6,12 +6,12 @@ from django.test import TestCase
 
 from hq.platform.application.capabilities import describe_capabilities
 from hq.platform.application.security import Capability, Principal
+from hq.platform.core.testing import MCP_READER
 
 from ..identity import set_principal
 from ..server import mcp
 from .registry import KIND, example_kind, served, with_kind
 
-READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 HOLDER = Principal("example-holder", "mcp", frozenset({Capability.READ, "example_read"}))
 
 
@@ -21,7 +21,7 @@ def call(tool: str):
 
 class CatalogsSayPermittedTests(TestCase):
     def setUp(self):
-        self.enterContext(set_principal(READER))
+        self.enterContext(set_principal(MCP_READER))
 
     def test_each_entry_is_permitted_exactly_when_the_reader_holds_what_it_requires(self):
         for tool, key in (
@@ -33,7 +33,7 @@ class CatalogsSayPermittedTests(TestCase):
                 entries = call(tool)[key]
                 # The capability index names no permission; the catalog it indexes does.
                 described = (
-                    describe_capabilities(principal=READER)["capabilities"] if key == "capabilities" else entries
+                    describe_capabilities(principal=MCP_READER)["capabilities"] if key == "capabilities" else entries
                 )
                 required = {entry["name"]: set(entry["required_capabilities"]) for entry in described}
 
@@ -48,7 +48,7 @@ class CatalogsSayPermittedTests(TestCase):
     def test_a_kind_a_test_serves_is_in_the_catalog_permitted_as_its_list_answers(self):
         """The catalog and the list read the one registry a test serves."""
 
-        for principal, permitted in ((HOLDER, True), (READER, False)):
+        for principal, permitted in ((HOLDER, True), (MCP_READER, False)):
             with self.subTest(principal.actor), set_principal(principal), served(with_kind(example_kind())) as server:
                 catalog = async_to_sync(server.tools["describe_resources"].call)({})
                 entries = {entry["name"]: entry["permitted"] for entry in catalog["resources"]}

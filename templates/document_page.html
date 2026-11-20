@@ -9,9 +9,7 @@ fills only `{% block document %}`.
 {% endcomment %}
 {% block title %}{{ page.title }}{% endblock %}
 {% block content %}
-{% comment %}
-<!-- ast-grep-ignore: hand-drawn-heading --> the title of a page that is one document, spoken alone
-{% endcomment %}<h1 class="visually-hidden">{{ page.title|breakable }}</h1>
+<h1 class="visually-hidden">{{ page.title|breakable }}</h1>
 <div data-document-page>{% block document %}{% endblock %}</div>
 {% endblock %}
 {% block site_footer %}{% endblock %}

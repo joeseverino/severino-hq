@@ -3,8 +3,9 @@
 from django.test import TestCase
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.models import OperationRequest
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND
+from hq.platform.core.testing import declare
 
 from ..controller import schedule_automatic_operations
 
@@ -18,15 +19,10 @@ class DeliveryScheduleTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        self.resource = ManagedResource.objects.create(
-            key="delivery",
-            kind=KIND,
-            spec={
-                "repository": "example/host",
-                "workflow": COMPOSE_WORKFLOW,
-                "branch": "main",
-                "production": CURRENT,
-            },
+        self.resource = declare(
+            "delivery",
+            KIND,
+            {"repository": "example/host", "workflow": COMPOSE_WORKFLOW, "branch": "main", "production": CURRENT},
             generation=1,
             observed_generation=1,
             conditions=drifted(

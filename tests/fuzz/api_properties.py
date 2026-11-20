@@ -9,6 +9,7 @@ and a request without a good token refused.
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated
 from unittest.mock import Mock, patch
 
 import schemathesis
@@ -27,6 +28,7 @@ from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.application.capabilities import CapabilitySpec
+from hq.platform.application.command_fields import Describe
 from hq.platform.application.domains import load, records_of
 from hq.platform.application.integration_specs import STALE_WRITE_KEYWORD
 from hq.platform.application.integration_testing import override_integration_graph
@@ -276,7 +278,7 @@ class APIPropertyTests(APIProperties):
 
         @dataclass(frozen=True, slots=True)
         class ExampleCommand:
-            value: int = 0
+            value: Annotated[str, Describe("Anything to set.")] = ""
 
         handler = Mock(return_value={"ok": True, "value": "example"})
         spec = CapabilitySpec(

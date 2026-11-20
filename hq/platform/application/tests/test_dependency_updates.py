@@ -10,6 +10,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.projects.models import Project
+from hq.platform.core.testing import MCP_READER
 
 from .. import dependency_updates
 from ..capabilities import execute_capability
@@ -122,7 +123,7 @@ class RunNowTests(TestCase):
         return execute_capability(dependency_updates.RUN_NOW, payload, principal=principal or cli_principal())
 
     def test_a_principal_without_project_writes_is_denied(self):
-        reader = Principal("example-reader", "mcp", frozenset({Capability.READ}))
+        reader = MCP_READER
 
         self.assertEqual(self.run_now({}, principal=reader)["error"]["code"], "forbidden")
         self.assertIsNone(dependency_updates.asked_at())

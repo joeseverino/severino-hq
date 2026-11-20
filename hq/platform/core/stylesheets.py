@@ -10,24 +10,30 @@ from pathlib import Path
 
 STATIC = Path(__file__).resolve().parents[3] / "static"
 DIRECTORY = "css/app"
+# The cascade order of the sheets it names; one it leaves out is linked after them.
+ORDER = (
+    "tokens",
+    "base",
+    "cuts",
+    "page",
+    "figures",
+    "tables",
+    "cards",
+    "layout",
+    "forms",
+    "routes",
+    "cadence",
+    "connection",
+    "pages",
+    "watching",
+    "surfaces",
+)
+# Every sheet in the directory, so none is left unlinked.
 SHEETS: tuple[str, ...] = tuple(
     f"{DIRECTORY}/{name}.css"
-    for name in (
-        "tokens",
-        "base",
-        "cuts",
-        "page",
-        "figures",
-        "tables",
-        "cards",
-        "layout",
-        "forms",
-        "routes",
-        "cadence",
-        "connection",
-        "pages",
-        "watching",
-        "surfaces",
+    for name in sorted(
+        (path.stem for path in (STATIC / DIRECTORY).glob("*.css")),
+        key=lambda name: (ORDER.index(name) if name in ORDER else len(ORDER), name),
     )
 )
 

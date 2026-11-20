@@ -16,12 +16,12 @@ from hq.platform.application.finding_steps import Press
 from hq.platform.application.findings import RULES
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.links import example_command
+from hq.platform.core.testing import MCP_READER
 
 from ..identity import set_principal
 from ..server import mcp
 from .registry import KIND, example_kind, served, with_kind
 
-READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 NOBODY = Principal("example-nobody", "mcp", frozenset())
 PAUSED = "hq.platform.application.agent_access.paused_interfaces"
 
@@ -43,7 +43,7 @@ class PromptTests(TestCase):
             listed = await client.list_prompts()
             return listed, {prompt.name: await client.get_prompt(prompt.name) for prompt in listed.prompts}
 
-        listed, answered = _session(READER, steps)
+        listed, answered = _session(MCP_READER, steps)
 
         self.assertEqual({prompt.name for prompt in listed.prompts}, {"needs-me", "status-brief", "held-requests"})
         for name, result in answered.items():
@@ -80,7 +80,7 @@ class PromptTests(TestCase):
             return await client.get_prompt("status-brief")
 
         with mock.patch("hq.platform.application.findings.estate_findings", return_value=(raised,)):
-            result = _session(READER, steps)
+            result = _session(MCP_READER, steps)
 
         _ask, _, said = result.messages[0].content.text.partition("\n")
         (problem,) = json.loads(said)["problems"]["findings"]
@@ -113,7 +113,7 @@ class PromptTests(TestCase):
             return raised.exception.error.data
 
         with mock.patch(PAUSED, return_value=frozenset({"mcp"})):
-            self.assertEqual(_session(READER, steps), {"code": "agents_paused"})
+            self.assertEqual(_session(MCP_READER, steps), {"code": "agents_paused"})
 
 
 class ResourceTests(TestCase):
@@ -122,7 +122,7 @@ class ResourceTests(TestCase):
             listed = await client.list_resources()
             return listed, {str(item.uri): await client.read_resource(str(item.uri)) for item in listed.resources}
 
-        listed, read = _session(READER, steps)
+        listed, read = _session(MCP_READER, steps)
 
         self.assertEqual(
             {str(item.uri) for item in listed.resources}, {"hq://action_items", "hq://approvals", "hq://hq"}
@@ -176,7 +176,7 @@ class ResourceTests(TestCase):
             return templates, raised.exception.error.data
 
         with served(with_kind(example_kind(seen))) as server:
-            templates, refused = _session(READER, steps, server)
+            templates, refused = _session(MCP_READER, steps, server)
 
         self.assertNotIn(KIND, {item.name for item in templates.resource_templates})
         self.assertEqual(refused, {"code": "forbidden"})
@@ -192,7 +192,7 @@ class ResourceTests(TestCase):
                     codes[uri] = error.error.code
             return codes
 
-        codes = _session(READER, steps)
+        codes = _session(MCP_READER, steps)
 
         self.assertEqual(
             set(codes), {"hq://example.missing", "hq://example.missing/one", "https://example.com/hq", "hq://hq?x=1"}

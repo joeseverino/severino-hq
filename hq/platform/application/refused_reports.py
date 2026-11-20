@@ -1,17 +1,9 @@
 """Controller calls the bridge refused, kept until the same call is accepted.
 
-A refusal runs nothing of the action, so a controller whose reports HQ will
-not take looks like a quiet one: its readings only age. This is the record
-that they stopped landing, and why, which ``report-refused`` says and a rule
-over an aged reading names as its cause.
-
-Security: written only by the bridge application, from a refusal it already
-answered (docs/Architecture.md#the-controller). A row holds the action's name,
-the controller its query named once the query was held to the contract, and
-the refusal's detail, which never repeats a value: struck again of secrets
-here and cut to the problem's length. Never the payload. One row per action and
-controller, replaced in place, so a controller refused every pass writes no
-history. Best effort: the controller is answered whether or not this is kept.
+A refused controller looks like a quiet one, its readings only aging, so this
+is the record that its reports stopped landing, and why. Written only by the
+bridge from a refusal it already answered; a row holds the refusal's detail
+struck of secrets, never the payload, and is replaced in place.
 """
 
 import logging

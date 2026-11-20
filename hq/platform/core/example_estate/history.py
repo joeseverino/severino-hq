@@ -1,11 +1,7 @@
-"""The months behind the estate: each record, and the audit event that says
-it was made, dated to when it was really made and by whom.
+"""The months behind the estate: each record, and the audit event that says it was made, dated to when and by whom.
 
-The seed writes every record in one moment, so without this the audit log
-would read as a single run by the system. Each event's author is the operator
-for what they keep by hand and declare, in the browser, the agent for the
-runbooks it mirrors from the vault, over MCP (``doors``). The scheduler's runs
-record their own endings (``work.jobs``), as every job does.
+The seed writes every record in one moment, so without this the audit log would
+read as a single run by the system.
 """
 
 from collections.abc import Iterator

@@ -3,13 +3,12 @@
 from unittest.mock import patch
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from hq.platform.application.linked_accounts import SIGN_IN, sign_in_subject
 from hq.platform.core.oidc import HQOIDCAuthenticationBackend
+from hq.platform.core.testing import operator
 
-User = get_user_model()
 ISSUER = "https://id.example.test"
 
 
@@ -27,7 +26,7 @@ def _signed_in(claims):
 )
 class FirstBindTests(TestCase):
     def setUp(self):
-        self.admin = User.objects.create_superuser(username="joe", email="joe@example.com")
+        self.admin = operator(username="joe", email="joe@example.com")
 
     def test_a_matching_username_takes_no_account(self):
         user = _signed_in({"sub": "subject-1", "preferred_username": "joe", "groups": ["admins"]})

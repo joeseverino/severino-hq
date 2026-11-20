@@ -1,11 +1,6 @@
-"""Certificates a reading reports, near or past expiry.
+"""Certificates a reading reports, near or past expiry, about the connection that read each.
 
-Every reading with the certificate facet that states an expiry counts, whichever
-provider holds it, and so does a certificate a proxy serves a name with, which
-may be loaded from a file on the proxy's host and read nowhere else. Each is
-about the connection that read it, where the certificate lives
-(``topology_estate.readers_of``); the names it serves are evidence. Days left
-come from ``application.expiry``.
+A certificate a proxy serves counts too, since it may be read nowhere else.
 """
 
 from collections.abc import Callable, Hashable, Iterable, Iterator
@@ -24,6 +19,7 @@ from .facts import Joined, inventory_records
 from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingRemedy, FindingRule, opens
 from .labels import lower_first
 from .moments import expiry_words, moment
+from .references import Kind
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import ended
@@ -266,7 +262,7 @@ def _renewals(estate: FindingEstate) -> Iterator[tuple[TopologyNode, Expiry]]:
 
     nodes = {node.id: node for node in estate.nodes()}
     for expiry in managed_certificates():
-        if (node := nodes.get(f"resource:{expiry.resource_key}")) is not None:
+        if (node := nodes.get(Kind.RESOURCE.of(expiry.resource_key))) is not None:
             yield node, expiry
 
 

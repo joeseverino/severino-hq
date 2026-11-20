@@ -1,66 +1,33 @@
-"""Every integer a caller sends the API declares its ceiling: one past it is
-refused as invalid where the document says so, never carried to the
-database, whose integer it would overflow. A record's id is
-``record_fields.RecordId``, bounded by the most one may be, on every door."""
+"""Every integer a caller sends names its ceiling: a type that holds one
+naming none does not build its schema, and one past it is refused as invalid,
+never carried to the database, whose integer it would overflow. A record's id
+is ``record_fields.RecordId``, bounded by the most one may be, on every door."""
 
-from collections.abc import Iterator, Mapping
-from typing import Any
+from dataclasses import dataclass
 
 from django.test import SimpleTestCase, TestCase
 
 from hq.domains.docs_index.models import DocumentationRecord
 
-from ..openapi import document
 from .doors import MCP, OPERATOR, SHELL, Caller, at_the_door, each_door
 
-BOUNDS = frozenset({"maximum", "exclusiveMaximum", "enum", "const"})
 # One past the most a record's id may be.
 PAST = 2**63
 WRITER = Caller("example-writer", "read write_documentation write_expenses read_audit_log")
 DOC = {"doc_id": "example-doc", "title": "Example"}
 
 
-def _resolved(root: Mapping[str, Any], reference: str) -> Any:
-    found: Any = root
-    for part in reference.removeprefix("#/").split("/"):
-        found = found[part]
-    return found
+@dataclass(frozen=True)
+class ExampleCount:
+    counts: list[int]
 
 
-def _unbounded(root: Mapping[str, Any], node: Any, where: str, seen: frozenset[str] = frozenset()) -> Iterator[str]:
-    """Where under ``node`` an integer declares no ceiling, its references followed once each."""
+class UnboundedTests(SimpleTestCase):
+    def test_a_sent_type_holding_an_integer_with_no_ceiling_does_not_build(self):
+        from hq.platform.application.json_schemas import sent_schema
 
-    if isinstance(node, list):
-        for index, item in enumerate(node):
-            yield from _unbounded(root, item, f"{where}[{index}]", seen)
-        return
-    if not isinstance(node, dict):
-        return
-    if reference := node.get("$ref"):
-        # A use may bound the type it refers to beside the reference.
-        if reference not in seen and not BOUNDS & node.keys():
-            yield from _unbounded(root, _resolved(root, reference), f"{where}->{reference}", seen | {reference})
-        return
-    kinds = node.get("type")
-    if (kinds == "integer" or (isinstance(kinds, list) and "integer" in kinds)) and not BOUNDS & node.keys():
-        yield where
-    for key, value in node.items():
-        if key not in {"examples", "example", "default"}:
-            yield from _unbounded(root, value, f"{where}.{key}", seen)
-
-
-class BoundedIntegerTests(SimpleTestCase):
-    def test_every_integer_a_request_carries_declares_its_ceiling(self):
-        root = document()
-        found = []
-        for path, methods in root["paths"].items():
-            for method, operation in methods.items():
-                if not isinstance(operation, dict):
-                    continue
-                sent = {"parameters": operation.get("parameters", ()), "body": operation.get("requestBody", {})}
-                found.extend(_unbounded(root, sent, f"{method.upper()} {path}"))
-
-        self.assertEqual(found, [])
+        with self.assertRaisesRegex(TypeError, "#/properties/counts/items"):
+            sent_schema(ExampleCount)
 
 
 class PastTheCeilingTests(TestCase):

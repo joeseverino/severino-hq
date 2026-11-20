@@ -7,11 +7,11 @@ from django.db import connection, transaction
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
 from hq.platform.application.search import apply_search, global_search, search_ids, search_records
 from hq.platform.application.security import MCP_INTERFACE, AuthorizationError, agent_principal, cli_principal
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare
 
 from ..backends import _fts_query, search_backend, snippet_parts
 from ..models import SearchDocument
@@ -209,10 +209,10 @@ class SingleStatementSearchTests(TestCase):
                 description="ledger " * (index % 4) + "archive notes",
                 technologies_used="example sqlite" if index % 2 else "example",
             )
-            ManagedResource.objects.create(
-                key=f"example-ledger-{index}",
-                kind="example.device",
-                spec={"name": f"Ledger node {index}", "note": "archive " * (index % 3)},
+            declare(
+                f"example-ledger-{index}",
+                "example.device",
+                {"name": f"Ledger node {index}", "note": "archive " * (index % 3)},
             )
             AuditLog.objects.create(action="login", object_type="user", message=f"ledger archive {index % 3}")
 
@@ -417,11 +417,7 @@ class GlobalSearchTests(TestCase):
         self.assertIn("vault", matched)
 
     def test_infrastructure_kind_finds_real_local_records_without_provider_io(self):
-        resource = ManagedResource.objects.create(
-            key="example-tailnet-node",
-            kind="tailscale.device",
-            spec={"name": "Example node"},
-        )
+        resource = declare("example-tailnet-node", "tailscale.device", {"name": "Example node"})
 
         outcome = global_search("tailscale", principal=OPERATOR)
 
@@ -437,10 +433,10 @@ class GlobalSearchTests(TestCase):
         JSONField would put ``{'key_expiry_disabled': False}`` there, and the
         punctuation carrying the meaning is what the tokenizer discards, so
         the key and its value would be indexed as unrelated words."""
-        ManagedResource.objects.create(
-            key="example-node",
-            kind="example.device",
-            spec={"hostname": "alpha", "key_expiry_disabled": False, "tags": []},
+        declare(
+            "example-node",
+            "example.device",
+            {"hostname": "alpha", "key_expiry_disabled": False, "tags": []},
             conditions=[{"type": "Ready", "status": "True"}],
         )
 
@@ -455,10 +451,8 @@ class GlobalSearchTests(TestCase):
     def test_a_multi_line_value_is_indexed_on_one_line(self):
         """A snippet window is a fixed number of characters around the match.
         Spent on escaped newlines, it shows whitespace instead of context."""
-        ManagedResource.objects.create(
-            key="example-policy",
-            kind="example.policy",
-            spec={"document": '{\r\n  "grants": [\r\n    {"dst": ["*"]}\r\n  ]\r\n}'},
+        declare(
+            "example-policy", "example.policy", {"document": '{\r\n  "grants": [\r\n    {"dst": ["*"]}\r\n  ]\r\n}'}
         )
 
         body = SearchDocument.objects.get(scope="infrastructure", object_id="example-policy").body

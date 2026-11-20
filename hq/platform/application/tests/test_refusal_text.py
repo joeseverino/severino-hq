@@ -10,6 +10,7 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.testing import declare
 from hq.platform.mcp import services
 from hq.platform.mcp.identity import set_principal
 
@@ -26,12 +27,7 @@ def switched_off() -> ManagedResource:
     """A record HQ holds switched off, which refuses to be applied."""
 
     managing_everything()
-    return ManagedResource.objects.create(
-        key="app-dns",
-        kind="adguard.rewrite",
-        spec={"domain": "app.example.com", "answer": "192.0.2.10"},
-        enabled=False,
-    )
+    return declare("app-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": "192.0.2.10"}, enabled=False)
 
 
 def refusal_of(resource: ManagedResource) -> str:

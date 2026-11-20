@@ -2,7 +2,6 @@
 on its ResourceSpec, the whole record a detail read or ``fields`` away."""
 
 from typing import TypedDict
-from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase
@@ -11,7 +10,8 @@ from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
 from ..integration_specs import ListRead
-from ..integrations import integration_graph
+from ..integrations import held_graph
+from ..plugin_testing import offering
 from ..resources import (
     EmptyQuery,
     ResourceSpec,
@@ -75,11 +75,10 @@ class ListFieldTests(TestCase):
         self.assertEqual({key for item in page["items"] for key in item}, {"name", "containers"})
 
     def test_the_catalog_names_each_kinds_list_fields(self):
-        described = {entry["name"]: entry for entry in describe_resources()["resources"]}
-
         for name, spec in _declaring().items():
             with self.subTest(name=name):
-                self.assertEqual(described[name]["operations"]["list"]["fields"], list(spec.listing.fields))
+                (described,) = describe_resources(name=name)["resources"]
+                self.assertEqual(described["operations"]["list"]["fields"], list(spec.listing.fields))
 
 
 class _ExampleRecord(TypedDict):
@@ -97,7 +96,7 @@ class ListFieldRegistrationTests(SimpleTestCase):
             invalid = ResourceSpec("example.records", "Records", "Example records.", "example.read", listing)
             with (
                 self.subTest(fields=fields),
-                mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(invalid,)),
+                offering(resources=(invalid,)),
                 self.assertRaisesRegex(ImproperlyConfigured, "fields"),
             ):
-                integration_graph()
+                held_graph()

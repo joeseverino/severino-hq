@@ -1,33 +1,15 @@
-"""The one way HQ turns a Python type into the JSON Schema it publishes.
+"""The one way HQ turns a Python type into the JSON Schema it publishes, so every schema says a thing the same way.
 
-Every schema HQ hands a client (the API document, the capability and resource
-catalogs, the MCP tools, the control plane's specs) comes from here, so all of
-them say a thing the same way. A schema carries only the titles a declaration
-gives, and a named alias is declared by its name: the title Pydantic would
-derive from a field's name or a class's is only that name, and every reader
-labels a field from its name through ``labels.field_label`` instead, while an
-alias that names a bare composition (``type TotalCost = Annotated[Decimal,
-...]``, a number or a string) is titled from its name by that same labeler, so
-a viewer offering its branches says what it is rather than the name it is
-filed under. A branch of a choice that names a definition is titled the same
-way beside its ``$ref``, which the viewer reads over the definition's own, so
-its selector says "Asset saved" for ``AssetSaved``. A TypedDict's keys are all of its keys, as
-the strict API reads them; an object open to any key says so by saying
-nothing, JSON Schema's default.
-
-A fragment many declarations share is a named type alias (``type Notes =
-Annotated[str, Describe(...)]``): Pydantic writes it once, as the definition
-named for the alias, and each use as a ``$ref`` to it beside what that use
-adds (its ``default``). A bound (a length, a range) is never a use's own:
-Pydantic writes one given at a use into the alias's definition, so it goes in
-the alias, and a field that needs another bound is an alias of its own.
-``fields`` reads a schema's fields whole again.
+A schema carries only the titles a declaration gives, and readers label a field
+through ``labels.field_label``. A fragment many declarations share is a named
+type alias, defined once; a bound goes in the alias, since Pydantic writes one
+given at a use into the alias's definition.
 """
 
 import copy
 import functools
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from datetime import datetime
 from types import get_original_bases
 from typing import Annotated, Any, TypedDict, is_typeddict, override
@@ -174,6 +156,45 @@ class PublishedSchema(GenerateJsonSchema):
         if "patternProperties" in value:
             value.setdefault("additionalProperties", False)
         return value
+
+
+class SentSchema(PublishedSchema):
+    """The same, for what a caller sends, which never builds with an integer
+    that names no ceiling: one past the database's integer would reach it
+    unrefused. A record's id is ``record_fields.RecordId``."""
+
+    @override
+    def generate(self, schema: core_schema.CoreSchema, mode: JsonSchemaMode = "validation") -> JsonSchemaValue:
+        # Read once written whole, since an annotation may write its bound
+        # after the integer it wraps.
+        value = super().generate(schema, mode)
+        if unbounded := next(_unbounded(value), None):
+            raise TypeError(
+                f"The integer at {unbounded} a caller sends declares no ceiling: give it one, "
+                "Annotated[int, Field(le=...)], or RecordId for an id."
+            )
+        return value
+
+
+# What holds an integer to a ceiling, beside its type or the reference to it.
+_BOUNDS = frozenset({"maximum", "exclusiveMaximum", "enum", "const"})
+
+
+def _unbounded(node: Any, where: str = "#") -> Iterator[str]:
+    """Where under ``node`` an integer names no ceiling."""
+
+    if isinstance(node, list):
+        for index, item in enumerate(node):
+            yield from _unbounded(item, f"{where}/{index}")
+        return
+    if not isinstance(node, dict) or _BOUNDS & node.keys():
+        return
+    kinds = node.get("type")
+    if kinds == "integer" or (isinstance(kinds, list) and "integer" in kinds):
+        yield where
+    for key, item in node.items():
+        if key not in {"examples", "example", "default"}:
+            yield from _unbounded(item, f"{where}/{key}")
 
 
 class AnswerSchema(PublishedSchema):
@@ -359,6 +380,12 @@ def json_schema(
 
     adapter = kind if isinstance(kind, TypeAdapter) else TypeAdapter(kind)
     return adapter.json_schema(mode=mode, ref_template=ref_template, schema_generator=generator)
+
+
+def sent_schema(kind: Any) -> dict[str, Any]:
+    """The schema of ``kind``, something a caller sends: a command, a query, a tool's arguments, an identifier."""
+
+    return json_schema(kind, generator=SentSchema)
 
 
 def json_schemas(

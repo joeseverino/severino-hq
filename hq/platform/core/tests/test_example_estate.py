@@ -47,7 +47,7 @@ class ExampleEstateTests(TestCase):
         self.assertTrue(published.filter(content_type__in=PAGE_TYPES).exists())
         for item in published:
             with self.subTest(item=item.slug):
-                self.assertGreater(analytics.item_traffic(item)["pageviews"], 0)
+                self.assertGreater(analytics.item_traffic(item.published_url)["pageviews"], 0)
 
     def test_each_breakdown_of_a_day_s_views_adds_up_to_them(self):
         # A visit always has a country, a device, a browser and a system; a
@@ -365,7 +365,7 @@ class WalkedStatesTests(TestCase):
         page = self.walked(reverse("assets:detail", kwargs={"slug": SWITCH_ASSET}))
 
         self.assertEqual(page.context["related"], ())
-        self.assertFalse(page.context["asset"].notes)
+        self.assertFalse(page.context["asset"]["notes"])
 
     def test_each_reports_reading_has_rows(self):
         page = self.walked(reverse("reports:dashboard"))

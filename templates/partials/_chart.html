@@ -52,9 +52,7 @@ one frame draws both.
         it, so it stays 11px however far the drawing has been scaled to fit.
         The table below says every label too.
         {% endcomment %}
-        {% comment %}
-        <!-- ast-grep-ignore: hand-drawn-icon --> a chart part's own drawing
-        {% endcomment %}<svg class="chart-labels" aria-hidden="true">
+        <svg class="chart-labels" aria-hidden="true">
           {% for tick in chart.axis_y %}<text class="chart-axis chart-tick" x="{{ chart.gutter }}%" y="{{ tick.at }}%">{{ tick.label }}</text>{% endfor %}
           {% if not chart.stacked %}{% for mark in chart.axis_marks %}<text class="chart-axis chart-mark-label" x="{{ mark.at }}%" y="{{ chart.mark_row }}%">{{ mark.label }}</text>{% endfor %}{% endif %}
           <g class="chart-cats">{% for category in chart.axis_x %}<text class="chart-axis chart-category" x="{{ category.at }}%" y="100%">{{ category.label }}</text>{% endfor %}</g>

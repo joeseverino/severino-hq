@@ -1,11 +1,8 @@
 """Findings about a machine that waits on a restart, or has one scheduled.
 
-An update that waits on a restart runs the code it replaced until the machine
-restarts, and the restart takes down everything on the machine while it
-happens, so this says both before either surprises anyone. It reads the
-``host.reboot`` reading's one row for the controller's machine and the
-``host.edge_reboot`` reading's for each edge (docs/Derived-Facts.md says how
-they are taken).
+A waiting update runs the old code until a restart, and the restart takes down
+everything on the machine, so this says both before either surprises anyone
+(docs/Derived-Facts.md says how they are read).
 """
 
 from dataclasses import dataclass, replace

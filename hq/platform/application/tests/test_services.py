@@ -3,13 +3,13 @@
 Every hostname here is under ``example.com`` or ``example.test``. This repository
 is public, and a fixture is documentation whether or not it was meant to be."""
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import within
+from hq.platform.core.testing import declare, operator
 
 from .. import estate, security
 from ..services import alias_target, find_service, service_catalog, service_reading
@@ -23,18 +23,12 @@ class ServiceCompositionTests(TestCase):
         declare_world()
 
     def _wire(self, hostname="app.example.com", *, certificate=True):
+        healthy(declare("app-dns", "adguard.rewrite", {"domain": hostname, "answer": "10.0.0.10"}))
         healthy(
-            ManagedResource.objects.create(
-                key="app-dns",
-                kind="adguard.rewrite",
-                spec={"domain": hostname, "answer": "10.0.0.10"},
-            )
-        )
-        healthy(
-            ManagedResource.objects.create(
-                key="app-proxy",
-                kind="npm.proxy_host",
-                spec={
+            declare(
+                "app-proxy",
+                "npm.proxy_host",
+                {
                     "domain_names": [hostname],
                     "forward_scheme": "http",
                     "forward_host": "10.0.0.10",
@@ -44,10 +38,10 @@ class ServiceCompositionTests(TestCase):
         )
         if certificate:
             healthy(
-                ManagedResource.objects.create(
-                    key="wildcard",
-                    kind="tls.certificate",
-                    spec={
+                declare(
+                    "wildcard",
+                    "tls.certificate",
+                    {
                         "certificate_name": "wildcard",
                         "domains": ["example.com", "*.example.com"],
                         "install_on": ["a-proxy"],
@@ -88,10 +82,10 @@ class ServiceCompositionTests(TestCase):
     def test_a_wildcard_never_invents_a_service_of_its_own(self):
         """Covering is not declaring, or the board would list ``*.example.com``."""
         healthy(
-            ManagedResource.objects.create(
-                key="wildcard",
-                kind="tls.certificate",
-                spec={
+            declare(
+                "wildcard",
+                "tls.certificate",
+                {
                     "certificate_name": "wildcard",
                     "domains": ["example.com", "*.example.com"],
                     "install_on": ["a-proxy"],
@@ -103,18 +97,12 @@ class ServiceCompositionTests(TestCase):
         self.assertEqual(service_catalog(), ())
 
     def test_names_that_differ_only_in_case_or_a_trailing_dot_are_one_service(self):
+        healthy(declare("app-dns", "adguard.rewrite", {"domain": "App.Example.com.", "answer": "10.0.0.10"}))
         healthy(
-            ManagedResource.objects.create(
-                key="app-dns",
-                kind="adguard.rewrite",
-                spec={"domain": "App.Example.com.", "answer": "10.0.0.10"},
-            )
-        )
-        healthy(
-            ManagedResource.objects.create(
-                key="app-proxy",
-                kind="npm.proxy_host",
-                spec={
+            declare(
+                "app-proxy",
+                "npm.proxy_host",
+                {
                     "domain_names": ["app.example.com"],
                     "forward_scheme": "http",
                     "forward_host": "10.0.0.10",
@@ -191,10 +179,10 @@ class SurfacesAgreeTests(TestCase):
             )
         )
         healthy(
-            ManagedResource.objects.create(
-                key="app-proxy",
-                kind="npm.proxy_host",
-                spec={
+            declare(
+                "app-proxy",
+                "npm.proxy_host",
+                {
                     "domain_names": ["app.example.com"],
                     "forward_scheme": "http",
                     "forward_host": "10.0.0.10",
@@ -210,13 +198,7 @@ class SurfacesAgreeTests(TestCase):
         self.assertIn("app.example.com", boards.get("app-host", set()))
 
     def test_a_name_with_only_a_record_is_filed_where_the_record_points(self):
-        healthy(
-            ManagedResource.objects.create(
-                key="app-rewrite",
-                kind="adguard.rewrite",
-                spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-            )
-        )
+        healthy(declare("app-rewrite", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.10"}))
 
         service = find_service("app.example.com")
         boards = self._boards()
@@ -234,10 +216,10 @@ class ServiceResolutionTests(TestCase):
         and this page at once over one missing target.
         """
         healthy(
-            ManagedResource.objects.create(
-                key="wildcard",
-                kind="tls.certificate",
-                spec={
+            declare(
+                "wildcard",
+                "tls.certificate",
+                {
                     "certificate_name": "wildcard",
                     "domains": ["*.example.com"],
                     "install_on": ["a-target-that-is-gone"],
@@ -246,10 +228,10 @@ class ServiceResolutionTests(TestCase):
             )
         )
         healthy(
-            ManagedResource.objects.create(
-                key="app-proxy",
-                kind="npm.proxy_host",
-                spec={
+            declare(
+                "app-proxy",
+                "npm.proxy_host",
+                {
                     "domain_names": ["app.example.com"],
                     "forward_scheme": "http",
                     "forward_host": "10.0.0.10",
@@ -265,20 +247,8 @@ class ServiceResolutionTests(TestCase):
         self.assertEqual([fault for fault in service.faults if "certificate" in fault.lower()], [])
 
     def test_a_project_publishing_to_a_name_is_an_annotation_not_a_requirement(self):
-        healthy(
-            ManagedResource.objects.create(
-                key="app-dns",
-                kind="adguard.rewrite",
-                spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-            )
-        )
-        healthy(
-            ManagedResource.objects.create(
-                key="tool-dns",
-                kind="adguard.rewrite",
-                spec={"domain": "tool.example.com", "answer": "10.0.0.10"},
-            )
-        )
+        healthy(declare("app-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.10"}))
+        healthy(declare("tool-dns", "adguard.rewrite", {"domain": "tool.example.com", "answer": "10.0.0.10"}))
         Project.objects.create(name="The app", slug="the-app", public_url="https://app.example.com/")
 
         catalog = {service.hostname: service for service in service_catalog()}
@@ -293,10 +263,10 @@ class ServiceSurfaceTests(TestCase):
 
     def setUp(self):
         healthy(
-            ManagedResource.objects.create(
-                key="app-proxy",
-                kind="npm.proxy_host",
-                spec={
+            declare(
+                "app-proxy",
+                "npm.proxy_host",
+                {
                     "domain_names": ["app.example.com"],
                     "forward_scheme": "http",
                     "forward_host": "10.0.0.10",
@@ -313,16 +283,14 @@ class ServiceSurfaceTests(TestCase):
         self.assertEqual(card["url"], reverse("control_plane:services"))
 
     def test_the_services_table_sorts_once_it_holds_two_rows(self):
-        self.client.force_login(get_user_model().objects.create_user("op", password="x"))
+        operator(self.client, "op")
 
         def sorted_headings():
             html = self.client.get(reverse("control_plane:services")).content.decode()
             return [heading for heading in within(html, "class", "table-scroll") if "aria-sort" in heading.attrs]
 
         self.assertEqual(sorted_headings(), [])
-        ManagedResource.objects.create(
-            key="docs-dns", kind="adguard.rewrite", spec={"domain": "docs.example.com", "answer": "10.0.0.10"}
-        )
+        declare("docs-dns", "adguard.rewrite", {"domain": "docs.example.com", "answer": "10.0.0.10"})
         self.assertNotEqual(sorted_headings(), [])
 
     def test_no_estate_means_no_card(self):
@@ -336,11 +304,10 @@ class AliasNavigationTests(TestCase):
     """A second name for a service is not a service with nothing behind it."""
 
     def setUp(self):
-        ManagedResource.objects.create(
-            key="site",
-            kind="cloudflare.dns_record",
-            enabled=True,
-            spec={
+        declare(
+            "site",
+            "cloudflare.dns_record",
+            {
                 "zone": "example.com",
                 "name": "example.com",
                 "record_type": "CNAME",
@@ -348,12 +315,12 @@ class AliasNavigationTests(TestCase):
                 "proxied": True,
                 "ttl": 1,
             },
-        )
-        ManagedResource.objects.create(
-            key="www",
-            kind="cloudflare.dns_record",
             enabled=True,
-            spec={
+        )
+        declare(
+            "www",
+            "cloudflare.dns_record",
+            {
                 "zone": "example.com",
                 "name": "www.example.com",
                 "record_type": "CNAME",
@@ -361,6 +328,7 @@ class AliasNavigationTests(TestCase):
                 "proxied": True,
                 "ttl": 1,
             },
+            enabled=True,
         )
 
     def test_an_alias_names_the_service_it_stands_for_and_a_real_service_is_none(self):
@@ -381,8 +349,7 @@ class AliasNavigationTests(TestCase):
     def test_the_alias_page_goes_to_the_service_rather_than_reporting_nothing(self):
         """It reported "Nothing declared" for a name whose record is healthy."""
 
-        user = get_user_model().objects.create_user("op", password="x")
-        self.client.force_login(user)
+        operator(self.client, "op")
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "www.example.com"}))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
@@ -464,11 +431,11 @@ class ServiceFaultRowTests(SimpleTestCase):
     """A service's faults on its own page are the finding they raise on the queue."""
 
     def test_its_faults_are_one_row_in_the_findings_words(self):
-        from ..services import Service
+        from ..services import fault_rows
 
         faults = ("No certificate covers it.", "The proxy points at a host HQ does not know.")
 
-        rows = Service(hostname="www.example.com", facets=(), faults=faults).fault_rows
+        rows = fault_rows("www.example.com", faults)
 
         # As the queue's finding of them is titled (``contradiction_findings``).
         self.assertEqual(

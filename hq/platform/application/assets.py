@@ -18,6 +18,7 @@ from .projection import addressable, listing
 from .record_fields import Notes, Slug, TotalCost, one_of
 from .record_links import linked
 from .record_saves import Held, Link, linked_saver, row, saved_type
+from .references import Kind
 from .security import Principal
 from .upserts import upsert_by_slug
 lazy from . import zones
@@ -79,7 +80,12 @@ class AssetCommand:
 
 
 def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, Any]:
-    return linked(row(asset, AssetRow), asset, relationships=relationships, projects=asset.related_projects)
+    return linked(
+        row(asset, AssetRow, url=entity_link(Kind.ASSET, asset.slug).url),
+        asset,
+        relationships=relationships,
+        projects=asset.related_projects,
+    )
 
 
 def list_assets(*, status: str | None = None, query: str | None = None, limit: int = 50) -> dict[str, Any]:

@@ -11,18 +11,19 @@ from functools import cache
 from http import HTTPStatus
 from itertools import product
 
-from hq.platform.application.refusal_status import LATER_CODES, REFUSAL_STATUS, call_doors
+from hq.platform.application.refusal_codes import LATER_CODES, Code
+from hq.platform.application.refusal_status import call_doors
 
 from . import views
 from .fragments import OpenAPIError, pascal
 
 
-def codes_by_status(codes: Iterable[str]) -> dict[int, list[str]]:
-    """Each status ``codes`` answer at, with the codes answered there, by REFUSAL_STATUS."""
+def codes_by_status(codes: Iterable[Code]) -> dict[int, list[Code]]:
+    """Each status ``codes`` answer at, with the codes answered there."""
 
-    statuses: dict[int, list[str]] = {}
+    statuses: dict[int, list[Code]] = {}
     for code in sorted(codes):
-        statuses.setdefault(REFUSAL_STATUS[code], []).append(code)
+        statuses.setdefault(code.status, []).append(code)
     return dict(sorted(statuses.items()))
 
 
@@ -38,10 +39,10 @@ class CallKind:
     """
 
     words: tuple[tuple[str, str], ...]
-    codes: frozenset[str]
+    codes: frozenset[Code]
     general: bool = False
 
-    def at(self, status: int) -> frozenset[str]:
+    def at(self, status: int) -> frozenset[Code]:
         return frozenset(codes_by_status(self.codes).get(status, ()))
 
 
@@ -72,15 +73,11 @@ def call_kinds() -> tuple[CallKind, ...]:
     return (*calls, resource, CallKind((("subject", "AnyCall"),), views.execute_codes(None), general=True))
 
 
-def refusal_name(status: int, codes: list[str]) -> str:
+def refusal_name(status: int, codes: list[Code]) -> str:
     """The component name for refusing at ``status`` with ``codes``, from them alone.
 
-    The set every endpoint answers there is named for the status; one code at
-    a status no endpoint answers, for that code; any other set, for the kind
-    of call that answers exactly it: the words the kinds answering it share,
-    then the status. Two operations answering the same codes so share one
-    response, and no order of routes moves a name. A set no kind answers fails
-    the build here, and a name two sets reach fails it in ``refusal``.
+    So two operations answering the same codes share one response, and no order
+    of routes moves a name. A set no kind answers fails the build here.
     """
 
     phrase = pascal(HTTPStatus(status).phrase)
@@ -99,7 +96,7 @@ def refusal_name(status: int, codes: list[str]) -> str:
     return "".join(said) + phrase
 
 
-def _kind_words(status: int, answered: frozenset[str]) -> list[str]:
+def _kind_words(status: int, answered: frozenset[Code]) -> list[str]:
     """The words every kind answering ``status`` with exactly ``answered`` shares, in ``_AXES`` order."""
 
     kinds = [kind for kind in call_kinds() if kind.at(status) == answered]

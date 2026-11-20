@@ -8,7 +8,6 @@ them.
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -21,6 +20,7 @@ from hq.platform.application.markup_testing import hrefs, text
 from hq.platform.application.report_testing import bridged
 from hq.platform.application.resources import InvalidResourceInput, list_resource
 from hq.platform.application.security import AuthorizationError, Capability, Principal
+from hq.platform.core.testing import SignedInTestCase, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 SITE_TAG = "0" * 32
@@ -351,7 +351,7 @@ class JoinTests(TestCase):
 
         (writeup,) = service.attach_traffic([self.writeup])
         self.assertEqual(writeup.pageviews, 412)
-        self.assertTrue(service.item_traffic(self.writeup)["measured"])
+        self.assertTrue(service.item_traffic(self.writeup.published_url)["measured"])
 
     def test_the_same_path_on_another_host_is_not_credited(self):
         path = "/portfolio/a-writeup/"
@@ -371,7 +371,7 @@ class JoinTests(TestCase):
         )
 
         self.assertEqual(service.attach_traffic([self.writeup])[0].pageviews, 412)
-        self.assertEqual(service.item_traffic(self.writeup)["pageviews"], 412)
+        self.assertEqual(service.item_traffic(self.writeup.published_url)["pageviews"], 412)
 
     def test_each_item_gets_its_own_path_and_the_unmeasured_read_as_unknown(self):
         """A path nobody measured is no figure, which a template tells from a real zero."""
@@ -390,7 +390,7 @@ class JoinTests(TestCase):
 
         items = service.attach_traffic([self.writeup, self.page, unread])
         self.assertEqual([item.pageviews for item in items], [412, 96, None])
-        self.assertFalse(service.item_traffic(unread)["measured"])
+        self.assertFalse(service.item_traffic(unread.published_url)["measured"])
 
     def test_a_trailing_slash_is_not_tidied_away(self):
         """The site serves one form and redirects the other."""
@@ -464,11 +464,7 @@ class WindowTests(TestCase):
         self.assertEqual(service.breakdown(RumDaily.Dimension.PATH), [])
 
 
-class OverviewPageTests(TestCase):
-    def setUp(self):
-        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(user)
-
+class OverviewPageTests(SignedInTestCase):
     def test_it_says_so_plainly_before_the_first_sweep(self):
         response = self.client.get("/analytics/")
 
@@ -505,8 +501,7 @@ class OverviewPageTests(TestCase):
 
 class ContentSectionTrafficTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(user)
+        operator(self.client)
         self.read = ContentItem.objects.create(
             title="Read",
             slug="read",

@@ -20,7 +20,7 @@ def run_evidence(evidence, layout: Literal["below", "facts"] = "below") -> dict:
 slotted(
     Part(
         name="run_evidence",
-        about="What a run of automation shows for itself, from a `work_runs.RunEvidence`.",
+        about="What a run of automation shows for itself, from a `work_runs.RunEvidence` or a run's record.",
         rules="""
         What a run of automation shows for itself is `{% run_evidence evidence %}` inside a row of a
         table region. That is its machines, its correlation id, its lease while a worker holds it, and

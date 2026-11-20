@@ -16,12 +16,13 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from django.test import SimpleTestCase, TestCase, override_settings
 
-from hq.domains.control_plane.models import ApprovalRequest, CertificateMaterial, ManagedResource, SealedSecret
+from hq.domains.control_plane.models import ApprovalRequest, CertificateMaterial, SealedSecret
 from hq.platform.application.markup_testing import all_elements
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core import secrets
 from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare
 from hq.platform.core.tests.test_seal import SUITE, ciphertext, private_key, public_bytes
 
 from ..capabilities import execute_capability
@@ -113,13 +114,10 @@ class InspectionTests(TestCase):
 @override_settings(SEVERINO_SEAL_PUBLIC_KEY=SEAL_PUBLIC_KEY)
 class StorageTests(TestCase):
     def setUp(self):
-        self.resource = ManagedResource.objects.create(
-            key="newhost-cert",
-            kind="tls.uploaded_certificate",
-            spec={
-                "certificate_name": "newhost.example.test",
-                "install_on": ["example-npm"],
-            },
+        self.resource = declare(
+            "newhost-cert",
+            "tls.uploaded_certificate",
+            {"certificate_name": "newhost.example.test", "install_on": ["example-npm"]},
         )
         self.fullchain, self.private_key = a_certificate()
 
@@ -234,10 +232,8 @@ class FailClosedTests(TestCase):
     """No key to seal to means no storage, not quiet plaintext."""
 
     def test_no_seal_key_refuses_the_upload(self):
-        resource = ManagedResource.objects.create(
-            key="newhost-cert",
-            kind="tls.uploaded_certificate",
-            spec={"certificate_name": "n", "install_on": ["example-npm"]},
+        resource = declare(
+            "newhost-cert", "tls.uploaded_certificate", {"certificate_name": "n", "install_on": ["example-npm"]}
         )
         fullchain, private_key = a_certificate()
 
@@ -271,13 +267,10 @@ class CoverageTests(TestCase):
     """
 
     def setUp(self):
-        self.resource = ManagedResource.objects.create(
-            key="example-wildcard",
-            kind="tls.uploaded_certificate",
-            spec={
-                "certificate_name": "example-wildcard",
-                "install_on": ["a-proxy"],
-            },
+        self.resource = declare(
+            "example-wildcard",
+            "tls.uploaded_certificate",
+            {"certificate_name": "example-wildcard", "install_on": ["a-proxy"]},
         )
 
     def upload(self, name="grafana.example"):
@@ -394,10 +387,10 @@ class UploadCapabilityTests(TestCase):
     """Who may hand HQ a private key: an operator in the browser or at the host, and nobody else."""
 
     def setUp(self):
-        self.resource = ManagedResource.objects.create(
-            key="newhost-cert",
-            kind="tls.uploaded_certificate",
-            spec={"certificate_name": "newhost.example.test", "install_on": ["example-npm"]},
+        self.resource = declare(
+            "newhost-cert",
+            "tls.uploaded_certificate",
+            {"certificate_name": "newhost.example.test", "install_on": ["example-npm"]},
         )
         self.fullchain, self.private_key = a_certificate()
 
@@ -449,9 +442,7 @@ class UploadCapabilityTests(TestCase):
         self.assertFalse(CertificateMaterial.objects.exists())
 
     def test_only_an_uploaded_certificate_record_holds_material(self):
-        ManagedResource.objects.create(
-            key="app-dns", kind="adguard.rewrite", spec={"domain": "app.example.com", "answer": "192.0.2.10"}
-        )
+        declare("app-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": "192.0.2.10"})
 
         missing = self.upload(cli_principal(), target="no-such-record")
         elsewhere = self.upload(cli_principal(), target="app-dns")

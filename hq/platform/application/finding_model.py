@@ -33,14 +33,9 @@ if TYPE_CHECKING:
 class FindingRemedy:
     """An existing capability, named: never a new way to change anything.
 
-    Said in the capability's words, or one of its declared ``variant``s.
-    ``intent`` is this remedy's own words for what the press does here, where
-    the command's name would not say it ("Mark it as running only
-    sometimes" through the command that changes a record): declared once,
-    here, and read by every surface that offers the remedy. Its effect is
-    the command's, and it is reached where the command is (``reach``),
-    unless ``url`` and ``method`` name a route that runs it on something
-    other than its target, such as a container's adoption by its token.
+    ``intent`` is this remedy's words for the press where the command's name
+    would not say it, read by every surface that offers it. ``url`` and
+    ``method`` name a route that runs it on something other than its target.
     """
 
     capability: str

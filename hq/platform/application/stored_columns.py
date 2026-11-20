@@ -1,16 +1,8 @@
 """The rules a model's column holds a value to, laid on the command field that writes it.
 
-A record's model refuses a value in its ``full_clean``, which a save reaches
-only after the capability runner has authorized, consented and perhaps held
-the call for a person. Each rule the column declares that pydantic has a
-constraint for is laid on the command's field of that name as well
-(``integration_specs.command_adapter``), so a malformed value is refused as the
-command is validated, at every door, and the schema says the rule. The column
-stays the one declaration of it.
-
-A ``Rule`` between a row's columns (an end after its start) has no constraint
-a schema can state, so its message is said beside the field it is reported
-beside, read from the rule itself (``row_rules``).
+So a malformed value is refused as the command is validated, at every door,
+before authorization, consent or a hold, and the schema says the rule. The
+column stays the one declaration of it.
 """
 
 from collections.abc import Iterable
@@ -196,13 +188,8 @@ def stored_rules(command_type: type) -> tuple[tuple[str, Any], ...]:
     """Each field of a command that a model stores, with what the model's
     column of that name holds it to, as a marker pydantic reads.
 
-    ``held`` lays each on its field, so the command refuses what
-    the model's ``full_clean`` would before anything else is done with it, at
-    every door, and its schema says so, with the pattern of each ``Rule``
-    about that column alone. The model is a record domain's, or the
-    one a command names with ``stored_in``. A rule pydantic has no constraint
-    for (a URL's or an address's validator, a unique column) stays the
-    model's alone.
+    A rule pydantic has no constraint for (a URL's validator, a unique column)
+    stays the model's alone.
     """
 
     model = _model_of(command_type)

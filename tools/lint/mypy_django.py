@@ -1,12 +1,8 @@
 """django-stubs' mypy plugin, with its cache keyed on the dependencies it adds.
 
-The plugin makes a module that imports ``django.apps`` depend on every models
-module, and a models module on each module its relations reach. Its
-``report_config_data``, which mypy compares to decide whether a module's cache
-still holds, covers ``INSTALLED_APPS`` but not those dependencies, so a warm
-cache keeps one on a models module that is gone and reports it missing where a
-cold run passes. This adds the dependencies themselves to that data. It can go
-once django-stubs' own ``report_config_data`` covers the models modules.
+The plugin's ``report_config_data`` does not cover the models modules it makes
+others depend on, so a warm cache reports a gone one missing. It can go once
+django-stubs' own covers them.
 """
 
 from __future__ import annotations

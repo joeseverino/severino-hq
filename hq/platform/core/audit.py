@@ -13,7 +13,6 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from functools import cache
 from logging import getLogger
 from typing import Any, Literal, overload
 from uuid import UUID
@@ -30,10 +29,9 @@ lazy from django.utils import timezone
 from hq.platform.application import request_context
 from hq.platform.application.payload_words import changed_words
 lazy from hq.platform.application.request_identity import signed_in
-lazy from hq.platform.application.security import person_of
 
 from . import speculation
-from .attribution import OperationContext, bound, operation_context
+from .attribution import OperationContext, bound
 from .audit_words import REDACTED, changes_said
 from .facets import Facet, Timing, as_metadata as facet_metadata
 from .models import AuditLog
@@ -200,7 +198,7 @@ class Unattributed(RuntimeError):
     """An audit row written with nothing bound to say who acted: a door that did not bind."""
 
 
-def _bound(doing: str) -> OperationContext:
+def attributed(doing: str) -> OperationContext:
     context = bound()
     if context is None:
         raise Unattributed(
@@ -208,49 +206,6 @@ def _bound(doing: str) -> OperationContext:
             "(hq.platform.core.attribution); work outside a door binds its own with audit_operation."
         )
     return context
-
-
-@contextmanager
-def audit_operation(
-    *,
-    operation: str,
-    principal: object | None = None,
-    operation_id: str = "",
-    cause: str = "",
-    rebinds: bool = False,
-) -> Iterator[None]:
-    """Attribute an operation to the principal that made it: the one way a
-    host service or a plugin binds a principal's interface and actor.
-
-    Without a principal the operation is the bound caller's, and with nobody
-    bound it is refused, so no operation is written down as nobody's.
-    ``cause`` and ``rebinds`` are ``operation_context``'s, ``rebinds`` for the
-    host's approvals alone: the SDK's ``audit_operation`` takes neither.
-    """
-
-    # A plugin hands whatever principal it holds, or none.
-    outer = _bound(f"The operation {operation!r} began") if principal is None else bound()
-    with operation_context(
-        interface=getattr(principal, "interface", None) or (outer.interface if outer else ""),
-        actor=getattr(principal, "actor", None) or (outer.actor if outer else ""),
-        operation=operation,
-        operation_id=operation_id,
-        device=getattr(principal, "device", None) or "",
-        cause=cause,
-        approved_by=getattr(principal, "approved_by", None) or "",
-        person=_acted_for(principal),
-        rebinds=rebinds,
-    ):
-        yield
-
-
-def _acted_for(principal: object | None) -> Callable[[], AbstractBaseUser | None] | None:
-    """How to find the account a token's principal acts for, which no session
-    names (``security.person_of``), looked up once, by the first row that asks."""
-
-    if not getattr(principal, "person_key", ""):
-        return None
-    return cache(lambda: person_of(principal))
 
 
 @contextmanager
@@ -339,15 +294,11 @@ def register_audit(
 ) -> None:
     """Register a model so create/update/delete events land in the audit log.
 
-    `redact` names fields whose values never reach the log, though the change
-    is still reported (a token rotated is worth logging). `redact_for` names
-    more for one instance, where it depends on the row (a declaration of a
-    withheld kind). `connection` returns the connection_ref an instance's work
-    goes through; `observation` names fields that only record HQ looking.
-    `subject` returns the key of the record an instance's rows are about, so
-    one query on the row's `subject` reads that record's whole story.
-    `required` fails the save with its row, for a model whose change must not
-    commit unrecorded (a person's access or an agent's standing).
+    `redact` names fields whose values never reach the log, `redact_for` more
+    for one instance. `connection` gives an instance's connection_ref,
+    `observation` the fields that only record HQ looking, `subject` the record
+    a row is about. `required` fails the save with its row, for a change that
+    must not commit unrecorded.
     """
 
     if model in _AUDITED_MODELS:
@@ -514,7 +465,7 @@ def record_event(
     speculation.refuse("it does something the audit log records")
     # Raised before the best-effort write below, so a path that reaches here
     # unbound fails where it runs rather than leaving a row nobody wrote.
-    context = _bound(f"A {action} row was recorded")
+    context = attributed(f"A {action} row was recorded")
     # The request is what a context variable holds, never its lazy user:
     # asgiref compares a variable's values when it restores a context
     # (``asgiref.sync._restore_context``), and comparing the lazy user would

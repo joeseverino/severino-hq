@@ -66,13 +66,9 @@ class ChangeGroup:
 class ChangePreview:
     """The comparison a decision is taken on.
 
-    ``rows`` is the semantic reading: a document is parsed and compared value
-    by value, so an access policy shows the three grants that moved rather than
-    two walls of text that differ somewhere. ``lines`` is the honest fallback for content
-    that will not parse: a policy document with comments in it, for instance,
-    where a unified diff is the most that can truthfully be said. A comparison
-    of many records of one kind (a catalog's playbooks) holds each in
-    ``groups``, beside the ``rows`` of what belongs to none.
+    ``rows`` compares a parsed document value by value; ``lines`` is the
+    unified diff for content that will not parse; ``groups`` holds each record
+    of a comparison of many.
     """
 
     label: str

@@ -31,7 +31,7 @@ class AuthorityFirstTests(TestCase):
 
     def call(self, spec, *, target):
         reader = Principal("example-reader", "cli", frozenset({Capability.READ}))
-        with commands_registered({spec.name: spec}):
+        with commands_registered(spec):
             return execute_capability(spec.name, {}, principal=reader, target=target)
 
     def test_a_caller_without_the_grant_is_refused_it_whatever_target_it_sent(self):

@@ -34,6 +34,7 @@ from .record_errors import RecordConflict, RecordNotFound
 from .record_fields import Notes, PublishedUrl, Slug, one_of
 from .record_links import linked
 from .record_saves import Held, held, linked_saver, row, saved_type
+from .refusal_codes import Code
 from .refusal_status import RefusalEnvelope, refusal_of, refuse
 from .security import Principal
 from .standards import Standing
@@ -48,6 +49,7 @@ lazy from .github_posture import STANDARD, posture_of
 lazy from .moments import moment
 lazy from .plugins import installed_plugins
 lazy from .record_answers import DependencyUpdatesSet
+lazy from .references import Kind
 
 # A project's fields as its command writes them and its row reads them back, each said once.
 type ProjectName = Annotated[str, Describe("What the project is called.")]
@@ -101,15 +103,15 @@ def projects_by_repository() -> dict[str, Project]:
     return read_once("projects.by_repository", load)
 
 
-def hq_sections(project: Project) -> tuple[tuple[str, str], ...]:
-    """The sections of HQ built from this project's repository: ``(name, url)``.
+def hq_sections(repository_url: str) -> tuple[tuple[str, str], ...]:
+    """The sections of HQ built from the project repository at ``repository_url``: ``(name, url)``.
 
     An installed extension names the repository it is built from, and a
     project names its repository, so the two meet without either naming the
     other. The link opens the extension's first page in the nav.
     """
 
-    repository = repository_key(project.repository_url)
+    repository = repository_key(repository_url)
     if not repository:
         return ()
     found = []
@@ -156,7 +158,7 @@ class ProjectCommand:
 
 
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
-    fields = row(project, ProjectRow, technologies=project.tech_list)
+    fields = row(project, ProjectRow, url=entity_link(Kind.PROJECT, project.slug).url, technologies=project.tech_list)
     if repository_key(project.repository_url):
         fields["updates"] = _updates(project)
     return linked(fields, project, relationships=relationships, assets=project.assets)
@@ -435,7 +437,7 @@ def set_dependency_updates(
     project = held(Project, _PROJECT, {"slug": current_slug}, expected_updated_at)
     refused = _updates_refusal(project, enabling=command.dependency_updates)
     if refused:
-        return refuse("precondition", refused)
+        return refuse(Code.PRECONDITION, refused)
     if project.dependency_updates != command.dependency_updates:
         project.dependency_updates = command.dependency_updates
         project.full_clean()

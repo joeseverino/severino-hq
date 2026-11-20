@@ -2,7 +2,6 @@
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.db import DatabaseError
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -11,6 +10,7 @@ from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentIdentity, AuditLog
+from hq.platform.core.testing import operator
 
 from ..agent_access import AGENT_BLOCKED, AGENTS_PAUSED, SET_AGENT_BLOCK, blocked, refusal
 from ..capabilities import CAPABILITY_AUDIT_TYPE, execute_capability
@@ -43,7 +43,7 @@ def _blocked(client: str) -> bool:
 class RefusalTests(TestCase):
     def setUp(self):
         _seen(AGENT, OTHER)
-        self.person = get_user_model().objects.create_user("op", password="x" * 20)
+        self.person = operator(username="op")
         answer = execute_capability(
             SET_AGENT_BLOCK, keyed({"blocked": True}), principal=web_principal(self.person), target=AGENT
         )
@@ -119,7 +119,7 @@ class MachineApiTests(TestCase):
 class WhoMayBlockTests(TestCase):
     def setUp(self):
         _seen(AGENT)
-        self.person = get_user_model().objects.create_user("op", password="x" * 20)
+        self.person = operator(username="op")
 
     def test_no_credential_blocks_or_frees_a_client(self):
         granted = frozenset(Capability)
@@ -149,8 +149,7 @@ class WhoMayBlockTests(TestCase):
 class BlockControlTests(TestCase):
     def setUp(self):
         _seen(AGENT)
-        self.person = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(self.person)
+        self.person = operator(self.client, "op")
 
     def _set(self, state: str, client_id: str = AGENT):
         return self.client.post(reverse("agent_block"), form_keyed({"client_id": client_id, "blocked": state}))

@@ -5,7 +5,6 @@ from django.conf import settings
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
 
 # A frame a script clones, named in its selector: template[data-x] or
@@ -39,7 +38,6 @@ def _part(name):
 
 
 @tag("source", "tree")
-@reads("static/js/**/*.js", "demo/demo.js", "templates/**", "hq/**", "demo/**")
 class ScriptFrameTests(SimpleTestCase):
     def test_every_frame_a_script_clones_is_drawn_by_the_server(self):
         """A script adds markup only by cloning a <template> the server drew,

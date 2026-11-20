@@ -1,12 +1,11 @@
 """The compose change HQ writes for a container's unmet checks, and the help on
 every container action item: a button, the exact config, or a stated reason."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.markup_testing import select, text
+from hq.platform.core.testing import operator
 
 from ..attention import infrastructure
 from ..containers import containers
@@ -15,17 +14,9 @@ from ..exposure import OPEN, PRIVATE
 from ..findings import finding_key, rule_of
 from ..pages import command_reach
 from .test_container_standard import KEPT, runtime
-from .test_containers import HIGH, estate, exposed, inventory
+from .test_containers import HIGH, container, estate, exposed, inventory
 
 SOCKET = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
-
-
-def declare(name="web", **spec):
-    ManagedResource.objects.create(
-        key=f"example-box-{name}",
-        kind="portainer.container",
-        spec={"connection_ref": "example-portainer", "host": "example-box", "name": name, **spec},
-    )
 
 
 class HardeningTests(TestCase):
@@ -211,18 +202,18 @@ class HardeningTests(TestCase):
         self.assertIsNone(found.socket_link)
 
     def test_a_declared_socket_holder_is_given_nothing(self):
-        declare("web", holds_docker_socket=True)
+        container("web", holds_docker_socket=True)
 
         self.assertFalse(self.hardening(**{**KEPT, "mounts": [SOCKET]}).any)
 
 
 class PageTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client, "owner", email="owner@example.test")
 
     def test_the_container_page_shows_the_block_for_its_compose_file(self):
         estate()
-        declare("web")
+        container("web")
         inventory("portainer.runtime", [runtime("web", stack="web", **{**KEPT, "user": "", "mounts": [SOCKET]})])
         inventory(
             "portainer.compose_project",
@@ -245,7 +236,7 @@ class PageTests(TestCase):
 
     def test_a_container_meeting_every_check_has_no_block(self):
         estate()
-        declare("web")
+        container("web")
         inventory("portainer.runtime", [runtime("web", **KEPT)])
 
         page = self.client.get(reverse("control_plane:detail", args=["example-box-web"]))
@@ -273,7 +264,7 @@ class FindingHelpTests(TestCase):
 
     def test_the_socket_item_offers_to_mark_a_watched_container_and_to_adopt_one_unwatched(self):
         estate()
-        declare("web")
+        container("web")
         inventory(
             "portainer.runtime",
             [
@@ -291,9 +282,9 @@ class FindingHelpTests(TestCase):
         self.assertIn("/adopt/record/portainer.container/", adopt.url)
 
     def test_the_socket_button_opens_the_update_of_its_own_declaration(self):
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client, "owner", email="owner@example.test")
         estate()
-        declare("web")
+        container("web")
         inventory("portainer.runtime", [runtime("web", **{**KEPT, "mounts": [SOCKET]})])
         (mark,) = self.remedies(self.items()["container-hardening", "web"])
 
@@ -306,7 +297,7 @@ class FindingHelpTests(TestCase):
         """The detector's own read link stands beside the machine's own."""
 
         estate()
-        declare("web")
+        container("web")
         inventory("portainer.runtime", [runtime("web", **{**KEPT, "privileged": True})])
 
         item = self.items()["container-hardening", "web"]
@@ -316,7 +307,7 @@ class FindingHelpTests(TestCase):
 
     def test_an_advisory_says_which_upgrade_clears_it_and_why_it_cannot_run_yet(self):
         estate(advisories=[HIGH])
-        declare("app")
+        container("app")
 
         item = self.items()["container-image-advisory", "app"]
 
@@ -327,7 +318,7 @@ class FindingHelpTests(TestCase):
 
     def test_a_watched_update_leads_with_its_upgrade_plan(self):
         estate()
-        declare("kuma")
+        container("kuma")
 
         item = self.items()["container-image-update", "kuma"]
 

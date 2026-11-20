@@ -1,11 +1,8 @@
 """The migration operation that moves stored rows to a capability's new name.
 
-A standing rule left under an old name matches nothing, so its call would run
-at the default: a deny or an approve would quietly loosen. A pending approval
-under an old name could no longer be approved, and its fingerprint covers the
-name, so it is computed again. A settled approval is history and keeps the
-name it was decided under. The host's renames and each extension's run
-through this one operation (``hq_sdk.migrations``).
+A rule left under an old name matches nothing, so a deny would quietly loosen;
+a pending approval is moved and its fingerprint recomputed; a settled one keeps
+its name as history.
 """
 
 from collections.abc import Callable, Mapping

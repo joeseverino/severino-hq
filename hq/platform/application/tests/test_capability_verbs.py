@@ -4,7 +4,7 @@ starting with that word, so "Edit" opens what the audit log calls "Edit an asset
 
 from django.test import SimpleTestCase
 
-from ..capabilities import capability_registry
+from ..capabilities import capability_registry, command_spec
 
 # Each capability whose button leaves the label's words, and why that reads right.
 EXEMPT = {
@@ -24,17 +24,15 @@ EXEMPT = {
 
 class CapabilityVerbTests(SimpleTestCase):
     def test_a_capability_is_named_starting_with_its_button_s_word(self):
-        registry = capability_registry()
-        for name, spec in registry.items():
-            if not spec.verb or name in EXEMPT:
+        for spec in capability_registry():
+            if not spec.verb or spec.name in EXEMPT:
                 continue
-            with self.subTest(capability=name):
+            with self.subTest(capability=spec.name):
                 self.assertTrue(spec.title.startswith(spec.verb), f"{spec.title!r} does not start with {spec.verb!r}")
 
     def test_every_exemption_is_a_capability_with_a_button_word_of_its_own(self):
-        registry = capability_registry()
         for name in EXEMPT:
             with self.subTest(capability=name):
-                self.assertIn(name, registry)
-                self.assertTrue(registry[name].verb)
-                self.assertFalse(registry[name].title.startswith(registry[name].verb), "no longer needs its exemption")
+                spec = command_spec(name)
+                self.assertTrue(spec.verb)
+                self.assertFalse(spec.title.startswith(spec.verb), "no longer needs its exemption")

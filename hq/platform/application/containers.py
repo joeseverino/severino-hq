@@ -656,6 +656,8 @@ def on_machine(machine: Any) -> dict[str, Any]:
     standings = {item.running.name: item.standing for item in here}
     unused = unused_images(machine)
     return {
+        "shown_containers": machine.on_show,
+        "folded_containers": machine.folded,
         "standings": standings,
         "uptimes": {item.running.name: item.uptime for item in here},
         "container_counts": tally(here),

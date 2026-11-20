@@ -6,9 +6,11 @@ from pydantic import Field, create_model
 
 from hq.platform.application import content
 from hq.platform.application.answer_fields import (
+    AddedAt,
     LinkedAssets,
     LinkedDocs,
     LinkedProjects,
+    PageUrl,
     RecordedExpenses,
     RecordSlug,
     UpdatedAt,
@@ -34,6 +36,7 @@ class ContentRow(TypedDict):
     """One writeup, video or page, published or not."""
 
     slug: RecordSlug
+    url: PageUrl
     title: content.ContentTitle
     content_type: content.ContentType
     status: content.ContentStatus
@@ -42,6 +45,7 @@ class ContentRow(TypedDict):
     published_url: PublishedUrl
     published_at: PublishedAt
     notes: Notes
+    created_at: AddedAt
     updated_at: UpdatedAt
 
 

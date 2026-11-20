@@ -1,12 +1,7 @@
 """Findings about each machine's own standing on the tailnet.
 
-Facts with no symptom until somebody needs them. A node key runs out on a date
-decided months earlier, and the machine, still running, stops being reachable.
-A route advertised but never approved is reported by the machine for as long
-as it runs and handed to nobody, so it can be configured, documented, believed
-and dead. The rules are gathered: each reads what the tailnet says of a device
-about the machine it belongs to, under the name its machine page uses
-(``reading_facts.placed``), and ``add`` makes sure that machine's node stands.
+Facts with no symptom until somebody needs them: a node key that runs out on a
+date set months earlier, a route advertised but never approved.
 """
 
 from collections.abc import Callable

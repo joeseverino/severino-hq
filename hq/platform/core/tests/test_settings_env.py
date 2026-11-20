@@ -18,7 +18,6 @@ from unittest import mock
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.facts import TOP, Found, grouped, imports, package_of, scan
-from hq.platform.application.tests.reads import reads
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -372,7 +371,6 @@ def drift(read: set[str], listed: set[str]) -> dict[str, set[str]]:
 
 
 @tag("source", "tree")
-@reads("docs/Deployment.md", "hq/**/*.py", "hq_sdk/**/*.py", "!**/tests/**/*.py", lists=("hq/**", "hq_sdk/**"))
 class ConfigurationTableTests(SimpleTestCase):
     """Every variable HQ reads is in docs/Deployment.md's table, and nothing else is."""
 

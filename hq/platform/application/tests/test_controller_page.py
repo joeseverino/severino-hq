@@ -4,14 +4,14 @@ from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory, ReadRequest
+from hq.domains.control_plane.models import OperationRequest, ProviderInventory, ReadRequest
 from hq.platform.application.markup_testing import select, texts
 from hq.platform.core.templatetags.value_tags import dot
+from hq.platform.core.testing import declare, operator
 
 from ..cadence import WorkerStanding
 from ..cadence_testing import controller_arrived
@@ -55,7 +55,7 @@ class ControllerPageTests(TestCase):
     def test_a_controller_never_seen_is_given_its_start_steps_and_one_that_ran_is_not(self):
         from hq.platform.application import cadence
 
-        self.client.force_login(get_user_model().objects.create_superuser("controller-reader"))
+        operator(self.client, "controller-reader")
         with override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq"):
             never = self.client.get(reverse("control_plane:controller"))
             cadence.note_controller()
@@ -101,7 +101,7 @@ class ControllerPageTests(TestCase):
         self.assertIsNone(stale.next_sweep_at)
 
     def test_work_and_reads_waiting_for_it_are_listed_and_finished_work_is_not(self):
-        resource = ManagedResource.objects.create(key="example-dns", kind="adguard.rewrite", spec={})
+        resource = declare("example-dns", "adguard.rewrite")
         asked = {
             "resource": resource,
             "action": "reconcile",
@@ -127,8 +127,7 @@ class ControllerPageTests(TestCase):
     def test_the_page_shows_a_controller_that_has_gone_quiet(self):
         controller_arrived(ago=timedelta(hours=26))
         store("adguard.rewrite", age=timedelta(hours=26))
-        user = get_user_model().objects.create_user(username="someone", password="not-used-here")
-        self.client.force_login(user)
+        operator(self.client, "someone")
 
         response = self.client.get(reverse("control_plane:controller"))
 
@@ -143,8 +142,7 @@ class ControllerPageTests(TestCase):
 
     def test_the_page_needs_a_session_and_the_dashboard_links_to_it(self):
         self.assertEqual(self.client.get(reverse("control_plane:controller")).status_code, 302)
-        user = get_user_model().objects.create_user(username="someone", password="not-used-here")
-        self.client.force_login(user)
+        operator(self.client, "someone")
 
         self.assertContains(self.client.get("/"), f'href="{reverse("control_plane:controller")}"')
 

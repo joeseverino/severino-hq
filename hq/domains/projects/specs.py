@@ -5,12 +5,19 @@ from typing import Annotated, NotRequired, TypedDict
 from pydantic import Field, create_model
 
 from hq.platform.application import dependency_updates, projects, registry_import
-from hq.platform.application.answer_fields import LinkedContent, LinkedDocs, LinkedExpenses, RecordSlug, UpdatedAt
+from hq.platform.application.answer_fields import (
+    LinkedContent,
+    LinkedDocs,
+    LinkedExpenses,
+    PageUrl,
+    RecordSlug,
+    UpdatedAt,
+)
 from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe
 from hq.platform.application.domains import records_of
 from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
-from hq.platform.application.record_fields import PublishedUrl
+from hq.platform.application.record_fields import Notes, PublishedUrl
 from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
@@ -122,6 +129,7 @@ class ProjectRow(TypedDict):
     """One project; `updates` only where its repository is on GitHub."""
 
     slug: RecordSlug
+    url: PageUrl
     name: projects.ProjectName
     category: projects.ProjectCategory
     status: projects.ProjectStatus
@@ -134,6 +142,9 @@ class ProjectRow(TypedDict):
         Describe("When its repository was last pushed to, an ISO 8601 date-time; null until HQ has read it."),
     ]
     dependency_updates: projects.DependencyUpdates
+    deployment_notes: projects.DeploymentNotes
+    security_notes: projects.SecurityNotes
+    notes: Notes
     updated_at: UpdatedAt
     updates: NotRequired[Updates]
 

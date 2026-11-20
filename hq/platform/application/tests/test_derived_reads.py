@@ -12,6 +12,7 @@ from django.test import TestCase, override_settings
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
+from hq.platform.core.testing import READER, declare
 from hq.platform.core.tests.estate_sizes import (
     assert_cost_does_not_grow,
     assert_subject_cost_does_not_grow,
@@ -22,10 +23,9 @@ from hq.platform.mcp.identity import set_principal
 from hq_sdk import resources as sdk_resources
 
 from ..resources import describe_resources, get_resource, list_resource
-from ..security import AuthorizationError, Capability, Principal, mcp_principal
+from ..security import AuthorizationError, Principal, mcp_principal
 from .test_relationships import estate
 
-READER = Principal("reader", "test", frozenset({Capability.READ}))
 NOBODY = Principal("nobody", "test", frozenset({"write_projects"}))
 
 # Every derived read, and one identifier its detail answers to after ``estate``.
@@ -343,9 +343,9 @@ class ServedMachineReadTests(TestCase):
 
         from ..hq_self import serving
         from ..projection import projection_scope
-        from .test_hq_self import SITE, declare, own
+        from .test_hq_self import SITE, machine_at, own
 
-        declare("example-host", "192.0.2.44")
+        machine_at("example-host", "192.0.2.44")
         request = SimpleNamespace(scope={"server": ("192.0.2.44", 443)})
         with SITE, own():
             unseeded = list_resource("machines", {}, principal=READER)
@@ -362,18 +362,12 @@ class OneDomainListTests(TestCase):
     """The API, the estate count and the domains page list the same domains."""
 
     def setUp(self):
-        ManagedResource.objects.create(
-            key="example-com",
-            kind="cloudflare.zone",
-            enabled=True,
-            spec={"zone": "example.com", "connection_ref": "cf"},
-        )
+        declare("example-com", "cloudflare.zone", {"zone": "example.com", "connection_ref": "cf"}, enabled=True)
         # A record in a zone nothing declares or sweeps.
-        ManagedResource.objects.create(
-            key="www-example-org",
-            kind="cloudflare.dns_record",
-            enabled=True,
-            spec={
+        declare(
+            "www-example-org",
+            "cloudflare.dns_record",
+            {
                 "zone": "example.org",
                 "name": "www.example.org",
                 "record_type": "A",
@@ -381,6 +375,7 @@ class OneDomainListTests(TestCase):
                 "proxied": False,
                 "ttl": 1,
             },
+            enabled=True,
         )
 
     def test_a_zone_known_only_by_its_records_is_listed_everywhere(self):

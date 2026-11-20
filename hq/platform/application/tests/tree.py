@@ -1,6 +1,6 @@
 """Which tests of a checkout carry which tags, and which of them walk a tree or run a program the image lacks, read from their source.
 
-``mise run fast`` runs the tests it finds tagged ``tree``. The guard in
+``mise run fast`` leaves out the tests tagged ``tree``, which CI's ``lint:source`` runs. The guard in
 test_unshipped_tag.py holds a test that runs git or a tool mise pins to the
 ``source`` tag. Each walk runs apart (apart.py), so the trees it parses leave
 with its process.
@@ -77,37 +77,6 @@ def tags(decorators: list[ast.expr]) -> set[str]:
         ):
             found.update(arg.value for arg in decorator.args if isinstance(arg, ast.Constant))
     return found
-
-
-# What a ``reads`` decorator declares (reads.py): the globs it opens and those it lists.
-Declared = tuple[tuple[str, ...], tuple[str, ...]]
-# Each test tagged tree, with what its class declares it reads, if anything.
-TreeTests = list[tuple[str, Declared | None]]
-# A ``reads`` whose globs are not all literals, which fast cannot read.
-UNREAD = "unread"
-
-
-def declared(decorators: list[ast.expr]) -> Declared | str | None:
-    """What a ``@reads(...)`` among ``decorators`` declares, UNREAD where a glob is no literal, or None."""
-
-    for decorator in decorators:
-        if not (isinstance(decorator, ast.Call) and getattr(decorator.func, "id", "") == "reads"):
-            continue
-        listed = [keyword.value for keyword in decorator.keywords if keyword.arg == "lists"]
-        if len(listed) != len(decorator.keywords) or not all(
-            isinstance(each, (ast.Tuple, ast.List)) for each in listed
-        ):
-            return UNREAD
-        opened, lists = literals(decorator.args), literals([n for each in listed for n in each.elts])  # type: ignore[attr-defined]
-        return UNREAD if opened is None or lists is None else (opened, lists)
-    return None
-
-
-def literals(nodes: list[ast.expr]) -> tuple[str, ...] | None:
-    """The strings ``nodes`` spell, or None where one is no string literal."""
-
-    found = tuple(node.value for node in nodes if isinstance(node, ast.Constant) and isinstance(node.value, str))
-    return found if len(found) == len(nodes) else None
 
 
 class Module:
@@ -254,36 +223,6 @@ class Reach:
             if isinstance(found, tuple) and isinstance(found[1], ast.ClassDef):
                 held |= self.class_tags(found[0], found[1])
         return held
-
-
-def _labels(walks: Reach, tag: str) -> Iterator[tuple[str, Declared | None]]:
-    """Each label of a test carrying ``tag`` (its class's, when every test of the class does), with what its class's ``@reads`` declares, or None without one fast can read."""
-
-    for dotted in test_modules(walks.root):
-        by_class: dict[str, list[tuple[str, bool]]] = {}
-        classes: dict[str, ast.ClassDef] = {}
-        for cls, method, held, own in walks.methods(dotted):
-            classes[f"{dotted}.{cls.name}"] = cls
-            by_class.setdefault(f"{dotted}.{cls.name}", []).append((method.name, tag in held | own))
-        for label, methods in by_class.items():
-            # A class's own: a subclass that sets itself up anew would leave the watch its base's holds.
-            found = declared(classes[label].decorator_list)
-            declaration = None if found == UNREAD else found
-            if all(carries for _, carries in methods):
-                yield label, declaration  # type: ignore[misc]
-            else:
-                yield from ((f"{label}.{name}", declaration) for name, carries in methods if carries)  # type: ignore[misc]
-
-
-def tree_tests(root: Path) -> TreeTests:
-    """Each test tagged ``tree``, labeled as ``_labels`` labels it, with what its class's ``@reads`` declares
-    (reads.py): None runs it on every change."""
-
-    return [(label, found and (tuple(found[0]), tuple(found[1]))) for label, found in apart(_tree_tests, root)]
-
-
-def _tree_tests(root: str) -> TreeTests:
-    return list(_labels(Reach(Path(root)), "tree"))
 
 
 def test_modules(root: Path, packages: tuple[str, ...] = SUITE) -> list[str]:

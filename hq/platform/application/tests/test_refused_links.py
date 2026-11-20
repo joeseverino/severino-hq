@@ -20,12 +20,11 @@ from hq.platform.application.connections import ConnectionAbility, ConnectionIns
 from hq.platform.application.effects import Effect
 from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed, offering
-from hq.platform.application.plugins import clear_plugin_composition_cache
 from hq.platform.application.tests.links import example_command
 from hq.platform.application.workflow_contracts import ActionLink
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from hq_sdk.testing import held_jobs
-from tests.fixtures.example_hq_plugin import outbound as example
+from tests.fixtures.example_hq_plugin import outbound as example, plugin as example_plugin
 
 from ..entity_links import connection_anchor
 from .test_outbound_work import SCRIPT, ComposedExample
@@ -90,10 +89,12 @@ class ConnectionsPage(ComposedExample):
             return self.client.get(reverse("control_plane:connections"))
 
     def close_the_registry(self):
-        patch = mock.patch.object(example, "work", _closed_registry)
+        integration = example_plugin.integration
+        patch = mock.patch.object(
+            example_plugin, "integration", lambda: replace(integration(), outbound=_closed_registry)
+        )
         patch.start()
         self.addCleanup(patch.stop)
-        clear_plugin_composition_cache()
 
 
 class ARefusedCommandIsDrawnUnusableTests(ConnectionsPage):

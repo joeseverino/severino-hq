@@ -15,6 +15,7 @@ from hq.domains.projects.models import Project
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.models import UpstreamReading
+from hq.platform.core.testing import declare
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from .. import readings
@@ -68,11 +69,7 @@ def populate(size: int = 8) -> None:
     )
     _store("tailscale.dns", [{"record": "dns", "nameservers": ["100.64.0.1"]}])
     for zone in ("example.com", "example.net"):
-        ManagedResource.objects.create(
-            key=zone.replace(".", "-"),
-            kind="cloudflare.zone",
-            spec={"zone": zone, "connection_ref": "example-dns"},
-        )
+        declare(zone.replace(".", "-"), "cloudflare.zone", {"zone": zone, "connection_ref": "example-dns"})
     _store(
         "cloudflare.zone",
         [
@@ -105,15 +102,15 @@ def populate(size: int = 8) -> None:
         [{"host": f"example-host-{index}", "name": f"app-{index}", "ports": [8000 + index]} for index in range(size)],
     )
     for index in range(size):
-        ManagedResource.objects.create(
-            key=f"example-host-{index}",
-            kind="machine",
-            spec={"name": f"example-host-{index}", "addresses": [f"100.64.0.{index + 1}"]},
+        declare(
+            f"example-host-{index}",
+            "machine",
+            {"name": f"example-host-{index}", "addresses": [f"100.64.0.{index + 1}"]},
         )
-        ManagedResource.objects.create(
-            key=f"record-{index}",
-            kind="cloudflare.dns_record",
-            spec={
+        declare(
+            f"record-{index}",
+            "cloudflare.dns_record",
+            {
                 "zone": "example.com",
                 "name": f"app{index}.example.com",
                 "record_type": "A",
@@ -133,10 +130,10 @@ def populate(size: int = 8) -> None:
             probed=True,
             observed_at=now,
         )
-    ManagedResource.objects.create(
-        key="example-cert",
-        kind="tls.certificate",
-        spec={"certificate_name": "example-cert", "domains": ["app0.example.com"]},
+    declare(
+        "example-cert",
+        "tls.certificate",
+        {"certificate_name": "example-cert", "domains": ["app0.example.com"]},
         status={"not_after": (now + timedelta(days=20)).isoformat()},
     )
     for ref, provider in (("example-dns", "cloudflare_api"), ("example-tailnet", "tailscale")):

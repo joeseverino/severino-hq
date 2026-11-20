@@ -6,7 +6,6 @@ from hq.platform.application.tables import (
     TableColumn,
     TableFilter,
     TableListMixin,
-    TableQuery,
     TableSort,
     TableToggle,
 )
@@ -17,7 +16,6 @@ __all__ = [
     "TableColumn",
     "TableFilter",
     "TableListMixin",
-    "TableQuery",
     "TableSort",
     "TableToggle",
 ]

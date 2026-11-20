@@ -21,19 +21,9 @@ from typing import Any
 
 from hq.platform.core.tests.task import Usage, changed_paths, usage
 from tests.mise_tasks import HEAVY_LOCK, locks, mise_tasks
-from tools.gate import chain, turn as gate_turn
+from tools.gate import chain, ran, turn as gate_turn
 from tools.gate.chain import SENT, fast_base, record_pass
-from tools.gate.selection import (
-    group_tasks,
-    group_tests,
-    listed_change,
-    python_files,
-    selection,
-    source_first,
-    walk_for_tree,
-    whole_suite,
-    with_tree,
-)
+from tools.gate.selection import python_files, selection, source_first, whole_suite
 from tools.gate.turn import ONE, in_share, weighed
 from tools.gate.verdict import Gate, Step, run
 
@@ -54,30 +44,8 @@ TURN_BOUND = "30m"
 # it, or as the base had it once deleted.
 SHELL = "lint:shell"
 SHELL_SOURCES = Path(__file__).resolve().parent / "shell-sources.sh"
-# What extensions render through. A change here reaches their pages, which no
-# host test imports, so with an extension set named their suites run too.
-SHARED_UI = (
-    "templates/",
-    "static/",
-    "hq_sdk/",
-    "hq/platform/application/tables.py",
-    "hq/platform/application/pages.py",
-    "hq/platform/application/ui.py",
-    "hq/platform/application/moments.py",
-)
-# Said when such a change finds no extension set to run.
-SKIPPED = (
-    "shared UI changed, but mise.local.toml names no extension set, so the extensions' suites were skipped:"
-    " `mise run setup:extensions <checkout>...` names one"
-)
-
-
 # Said when a quick gate failed, which ends the run before any test.
 QUICK_FAILED = "[fast] a quick gate failed, so no test and no gate in the heavy turn started"
-
-
-def touches_shared_ui(paths: list[str]) -> bool:
-    return any(path.startswith(SHARED_UI) or "/templatetags/" in path for path in paths)
 
 
 def quick_gates() -> tuple[str, ...]:
@@ -290,18 +258,12 @@ def stage_tokens(tasks: tuple[str, ...], source: list[str], labels: list[str], p
 def run_command(
     tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str, paths: list[str], base: str
 ) -> list[str]:
-    """The run of the tests beside the gates that run in the heavy turn
-    (``tasks``), each that reads a file at a time on ``paths``, with ``base``
-    named to them, in one run of mise, in one share of the turn sized by
-    ``stage_tokens``. The share tells each task under it that it holds the
-    turn, as mise hands a lock down, so each gate that takes the lock itself
-    and the tests' task go ahead at once and side by side, never queued on the
-    share their own run holds. A test both selected and tagged tree runs once,
-    since Django's runner drops a repeated test.
+    """The run of the tests beside the heavy turn's gates (``tasks``), in one
+    run of mise in one share of the turn sized by ``stage_tokens``.
 
-    A task's own output setting outranks the config's but not ``--output``, so
-    the summary is the environment's: the tests' task prints as it runs, beside
-    each gate's line as it ends."""
+    The share tells each task under it that it holds the turn, as mise hands a
+    lock down, so the gates and the tests go ahead side by side.
+    """
 
     gates = [word for task in tasks for word in (*handed(task, paths), ":::")]
     tests = [TESTS, "--parallel", parallel, *labels]
@@ -356,17 +318,6 @@ def step(label: str, cmd: list[str]) -> Step:
     return run(label, cmd)
 
 
-def extension_suites(parallel: str) -> list[Step]:
-    """The extensions' suites, composed, when the shared UI changed: run with a set named, else said skipped."""
-
-    if not os.environ.get("HQ_LOCAL_PLUGINS"):
-        print(f"[fast] {SKIPPED}", flush=True)
-        return []
-    # test:composed hands what follows to manage.py test.
-    command = ["mise", "run", "test:composed", "--", "--installed-plugins", "--parallel", parallel]
-    return [step("extension suites, composed (shared UI changed)", command)]
-
-
 def judge(gate: Gate, steps: list[Step], base: str, *, whole: bool, fixed: list[str]) -> int:
     """Close the run on ``steps``, naming the files its fixes rewrote: a pass records its tree."""
 
@@ -406,31 +357,25 @@ def main(asked: Usage) -> int:
             print(QUICK_FAILED, flush=True)
             steps = [*first, step("patch integrity", ["git", "diff", "--check", base])]
             return judge(gate, steps, base, whole=False, fixed=fixed)
-    walking = walk_for_tree() if changed or deleted else None
     files = python_files()
-    labels, total, (reached, touched) = selection(changed, deleted, files)
+    labels, total = selection(changed, deleted, files, base)
     counts = f"{len(changed)} changed, {len(deleted)} deleted, {len(labels)}/{total} test modules"
     print(f"[fast] base {base[:9]}, {why}: {counts}")
+    print(f"[fast] {ran.said()}")
     every_test = len(labels) == total > 0
     if gate and not every_test and whole_asked:
         print("[fast] asked for: the whole suite and every quick gate run, so a pass records this tree")
         labels, every_test = whole_suite(files), True
 
-    paths = [*changed, *deleted]
-    labels = with_tree(labels, paths, listed_change(base, deleted) if paths else [], walking)
     if gate is None:
         print("\n".join(labels))
         return 0
 
-    whole = (*quick_gates(), *group_tests().values())
-    tasks = whole if every_test else (*selected, *group_tasks(files, reached, touched))
-    whole_run = every_test and set(tasks) == set(whole)
+    tasks = quick_gates() if every_test else selected
     rest = tuple(task for task in tasks if task not in early)
     steps = [*first, *gates_and_tests(rest, labels, files, parallel, handing, base)]
-    if touches_shared_ui([*changed, *deleted]):
-        steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
-    return judge(gate, steps, base, whole=whole_run, fixed=fixed)
+    return judge(gate, steps, base, whole=every_test, fixed=fixed)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,6 @@ rule the page gate serves by, so what is offered and what is served agree.
 import os
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, modify_settings, override_settings
 from django.urls import clear_url_caches, include, path, resolve, reverse, set_script_prefix
 
@@ -15,11 +14,10 @@ from hq.config.urls import urlpatterns as root_urlpatterns
 from hq.platform.application import request_context, roles, routes
 from hq.platform.application.domains import domain_navigation
 from hq.platform.application.pages import Page, PageAction, authorizes_itself, page_refusal
-from hq.platform.application.plugins import clear_plugin_composition_cache
 from hq.platform.application.routes import routed
 from hq.platform.application.security import web_principal
 from hq.platform.core.context_processors import nav
-from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 
 from .addresses import address
 
@@ -29,8 +27,7 @@ urlpatterns = [*root_urlpatterns, path("examples/notes/", include(f"{EXAMPLE}.ur
 
 
 def _person(username: str, role: str):
-    with no_default_role():
-        user = get_user_model().objects.create_user(username)
+    user = person(username=username)
     if role:
         roles.assign(user, role)
     return user
@@ -66,9 +63,7 @@ class OfferedAsServedTests(TestCase):
             },
         )
         composed.start()
-        self.addCleanup(clear_plugin_composition_cache)
         self.addCleanup(composed.stop)
-        clear_plugin_composition_cache()
         self.people = [_person(role or "nobody", role) for role in (*roles.Role.values, "")]
 
     def test_each_nav_item_is_offered_exactly_when_its_page_opens(self):

@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.testing import READER, declare
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import ConnectionInstance, ConnectionLink, ConnectionSpec
@@ -20,15 +21,13 @@ from ..security import Capability
 from ..topology import TOPOLOGY_SCHEMA_VERSION, derive_topology, serialize_topology, topology as serialized_topology
 from .host_only import host_only
 from .sentinel import RESOURCE as SENTINEL_RESOURCE, SentinelMixin, plant_credentials
-from .topology_principals import MANAGE, READ
+from .topology_principals import MANAGE
 
 
 class DerivedTopologyTests(SentinelMixin, TestCase):
     def setUp(self):
-        self.resource = ManagedResource.objects.create(
-            key="example-zone",
-            kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": "example-cloudflare"},
+        self.resource = declare(
+            "example-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "example-cloudflare"}
         )
         ProviderConnection.objects.create(
             controller_id="example-controller",
@@ -41,7 +40,7 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
             observed_at=timezone.now(),
         )
 
-    def project(self, principal=READ):
+    def project(self, principal=READER):
         with host_only():
             return derive_topology(principal=principal)
 
@@ -89,7 +88,7 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
         )
 
         with offering(second, alone=True):
-            topology = derive_topology(principal=READ)
+            topology = derive_topology(principal=READER)
 
         controller = next(node for node in topology.nodes if node.kind == "controller")
         self.assertEqual(
@@ -98,11 +97,7 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
         )
 
     def test_declared_ability_remains_visible_without_a_live_connection(self):
-        resource = ManagedResource.objects.create(
-            key="example-tailnet-device",
-            kind="tailscale.device",
-            spec={"hostname": "example-device"},
-        )
+        resource = declare("example-tailnet-device", "tailscale.device", {"hostname": "example-device"})
 
         topology = self.project()
         nodes = {node.id for node in topology.nodes}
@@ -138,7 +133,7 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
             ),
         )
         with offering(spec, alone=True):
-            topology = derive_topology(principal=READ)
+            topology = derive_topology(principal=READER)
 
         self.assertNotIn(
             (
@@ -170,11 +165,7 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        resource = ManagedResource.objects.create(
-            key="internal-name",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.test", "answer": "192.0.2.10"},
-        )
+        resource = declare("internal-name", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"})
 
         node = next(node for node in self.project(MANAGE).nodes if node.id == f"resource:{resource.key}")
 
@@ -183,11 +174,8 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
         self.assertEqual(reconcile.capability, "infrastructure.resource.reconcile")
 
     def test_disabled_resource_is_named_honestly_and_cannot_reconcile(self):
-        resource = ManagedResource.objects.create(
-            key="paused-record",
-            kind="adguard.rewrite",
-            spec={"domain": "paused.example.test", "answer": "192.0.2.11"},
-            enabled=False,
+        resource = declare(
+            "paused-record", "adguard.rewrite", {"domain": "paused.example.test", "answer": "192.0.2.11"}, enabled=False
         )
 
         node = next(node for node in self.project(MANAGE).nodes if node.id == f"resource:{resource.key}")
@@ -212,16 +200,16 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
     def test_query_count_does_not_grow_with_resource_count(self):
         def arrange(count):
             for index in range(ManagedResource.objects.filter(key__startswith="example-zone-").count(), count):
-                ManagedResource.objects.create(
-                    key=f"example-zone-{index}",
-                    kind="cloudflare.zone",
-                    spec={"zone": f"{index}.example.com", "connection_ref": "example-cloudflare"},
+                declare(
+                    f"example-zone-{index}",
+                    "cloudflare.zone",
+                    {"zone": f"{index}.example.com", "connection_ref": "example-cloudflare"},
                 )
 
         def zones(topology):
             return sum(node.id.startswith("resource:example-zone-") for node in topology.nodes)
 
-        for principal in (READ, MANAGE):
+        for principal in (READER, MANAGE):
             with self.subTest(principal=principal.actor), host_only():
                 ManagedResource.objects.filter(key__startswith="example-zone-").delete()
                 assert_cost_does_not_grow(
@@ -271,7 +259,7 @@ class MeasuredNodeTests(TestCase):
 
     def _nodes(self, *hosts):
         with offering(self._spec(*hosts), alone=True):
-            return {n.label: n for n in derive_topology(principal=READ).nodes}
+            return {n.label: n for n in derive_topology(principal=READER).nodes}
 
     def test_a_target_named_like_a_measured_host_carries_its_traffic_and_lends_it_to_no_other(self):
         self._measure("measured.example.com", pageviews=412, visits=300)
@@ -294,9 +282,9 @@ class MeasuredNodeTests(TestCase):
         # Why this can live in the shared projection rather than in one adapter:
         # a deployment measuring nothing pays nothing for the seam.
         with offering(self._spec("not-a-hostname"), alone=True):
-            derive_topology(principal=READ)
+            derive_topology(principal=READER)
             with CaptureQueriesContext(database_connection) as queries:
-                derive_topology(principal=READ)
+                derive_topology(principal=READER)
 
         self.assertEqual([q for q in queries.captured_queries if "analytics_rumdaily" in q["sql"]], [])
 
@@ -304,8 +292,8 @@ class MeasuredNodeTests(TestCase):
         self._measure("measured.example.com")
 
         with offering(self._spec("measured.example.com"), alone=True):
-            measured = next(n for n in derive_topology(principal=READ).nodes if n.label == "measured.example.com")
-            payload = serialized_topology(principal=READ, focus=measured.id, depth=1)
+            measured = next(n for n in derive_topology(principal=READER).nodes if n.label == "measured.example.com")
+            payload = serialized_topology(principal=READER, focus=measured.id, depth=1)
 
         node = next(n for n in payload["nodes"] if n["label"] == "measured.example.com")
         self.assertEqual(node["pageviews"], 412)
@@ -317,21 +305,13 @@ class OneNodePerMachineTests(TestCase):
     def setUp(self):
         from hq.domains.control_plane.models import ProviderInventory
 
-        ManagedResource.objects.create(
-            key="a-docker-host",
-            kind="machine",
-            spec={"name": "a-docker-host", "addresses": ["10.0.0.9", "100.64.0.9"]},
+        declare("a-docker-host", "machine", {"name": "a-docker-host", "addresses": ["10.0.0.9", "100.64.0.9"]})
+        declare(
+            "a-service",
+            "portainer.container",
+            {"connection_ref": "a-portainer", "host": "a-docker-host", "name": "a-service"},
         )
-        ManagedResource.objects.create(
-            key="a-service",
-            kind="portainer.container",
-            spec={"connection_ref": "a-portainer", "host": "a-docker-host", "name": "a-service"},
-        )
-        ManagedResource.objects.create(
-            key="a-docker-host-tailnet",
-            kind="tailscale.device",
-            spec={"name": "a-docker-host"},
-        )
+        declare("a-docker-host-tailnet", "tailscale.device", {"name": "a-docker-host"})
         ProviderInventory.objects.create(
             kind="tailscale.device",
             observed_at=timezone.now(),
@@ -358,7 +338,7 @@ class OneNodePerMachineTests(TestCase):
             ),
         )
         with offering(spec, alone=True):
-            topology = derive_topology(principal=READ)
+            topology = derive_topology(principal=READER)
         return (
             {node.id: node for node in topology.nodes},
             {(edge.source, edge.target, edge.kind) for edge in topology.edges},
@@ -400,11 +380,7 @@ class AnUnrecognizedContainerIsCarriedByItsMachineTests(TestCase):
 
     def setUp(self):
 
-        ManagedResource.objects.create(
-            key="a-docker-host",
-            kind="machine",
-            spec={"name": "a-docker-host", "addresses": ["10.0.0.9"]},
-        )
+        declare("a-docker-host", "machine", {"name": "a-docker-host", "addresses": ["10.0.0.9"]})
         bridged(
             "inventory",
             {
@@ -423,11 +399,11 @@ class AnUnrecognizedContainerIsCarriedByItsMachineTests(TestCase):
             },
         )
         with host_only():
-            self.nodes = {node.id: node for node in derive_topology(principal=READ).nodes}
+            self.nodes = {node.id: node for node in derive_topology(principal=READER).nodes}
 
     def test_it_is_raised_about_its_machine_and_a_declared_one_is_not(self):
         with host_only():
-            raised = estate_findings(principal=READ, rule="unrecognized-container")
+            raised = estate_findings(principal=READER, rule="unrecognized-container")
 
         self.assertEqual(
             [(finding.subject, finding.part) for finding in raised], [("machine:a-docker-host", "a-stray")]
@@ -439,7 +415,7 @@ class AnUnrecognizedContainerIsCarriedByItsMachineTests(TestCase):
 
 class HolderEdgeTests(TestCase):
     """Every kind mirroring a provider's records is joined to the connection
-    holding its live record, by declaring ``from_record`` and nothing else."""
+    holding its live record, by declaring ``_from_record`` and nothing else."""
 
     CONNECTION = "connection:infrastructure.controllers:example-controller:example-holder"
 
@@ -450,7 +426,7 @@ class HolderEdgeTests(TestCase):
         ProviderInventory.objects.all().delete()
         ProviderConnection.objects.all().delete()
         provider = PROVIDERS[kind]
-        ManagedResource.objects.create(key="example-declared", kind=kind, spec=declared)
+        declare("example-declared", kind, declared)
         ProviderInventory.objects.create(kind=kind, observed_at=timezone.now(), records=[record])
         ProviderConnection.objects.create(
             controller_id="example-controller",
@@ -462,29 +438,25 @@ class HolderEdgeTests(TestCase):
             observed_at=timezone.now(),
         )
         with host_only():
-            topology = derive_topology(principal=READ)
+            topology = derive_topology(principal=READER)
         return {(edge.source, edge.target, edge.kind) for edge in topology.edges}
 
     def mirrored(self):
-        return [
-            (kind, provider)
-            for kind, provider in PROVIDERS.items()
-            if provider.from_record is not None and provider.sample_record
-        ]
+        return [(kind, provider) for kind, provider in PROVIDERS.items() if provider.sweeps and provider.sample_record]
 
     def test_every_mirrored_kind_is_used_by_the_connection_holding_its_record(self):
         self.assertTrue(self.mirrored())
         for kind, provider in self.mirrored():
             with self.subTest(kind=kind):
                 record = {**provider.sample_record, "connection_ref": "example-holder"}
-                edges = self._edges(kind, declared=provider.from_record(record), record=record)
+                edges = self._edges(kind, declared=provider.record_spec(record), record=record)
 
                 self.assertIn((self.CONNECTION, "resource:example-declared", "used_by"), edges)
 
     def test_a_record_naming_no_connection_is_held_by_its_providers_connections(self):
         kind, provider = next((kind, provider) for kind, provider in self.mirrored() if provider.connection_providers)
         record = dict(provider.sample_record)
-        edges = self._edges(kind, declared=provider.from_record(record), record=record)
+        edges = self._edges(kind, declared=provider.record_spec(record), record=record)
 
         self.assertIn((self.CONNECTION, "resource:example-declared", "used_by"), edges)
 
@@ -492,11 +464,11 @@ class HolderEdgeTests(TestCase):
         kind, provider = self.mirrored()[0]
         record = {**provider.sample_record, "connection_ref": "example-holder"}
         # The declaration also names the connection it uses, and that connection is failing.
-        declared = {**provider.from_record(record), "connection_ref": "example-holder"}
+        declared = {**provider.record_spec(record), "connection_ref": "example-holder"}
         self._edges(kind, declared=declared, record=record)
         ProviderConnection.objects.update(reachable=False)
         with host_only():
-            topology = derive_topology(principal=READ)
+            topology = derive_topology(principal=READER)
 
         statuses = {
             edge.status
@@ -508,6 +480,6 @@ class HolderEdgeTests(TestCase):
     def test_a_record_naming_another_connection_draws_no_edge_from_this_one(self):
         kind, provider = self.mirrored()[0]
         record = {**provider.sample_record, "connection_ref": "example-elsewhere"}
-        edges = self._edges(kind, declared=provider.from_record(record), record=record)
+        edges = self._edges(kind, declared=provider.record_spec(record), record=record)
 
         self.assertNotIn((self.CONNECTION, "resource:example-declared", "used_by"), edges)

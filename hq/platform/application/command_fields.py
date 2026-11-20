@@ -1,15 +1,8 @@
 """What a command's field says about itself beyond its type.
 
-A field carries these markers in its ``Annotated`` type, and each writes
-itself into the field's JSON Schema through pydantic's
-``__get_pydantic_json_schema__``, the one shape every adapter reads: the
-command page shows a description as the field's help and offers a
-record-naming field's records, a reference's things, or a field's declared
-choices, to choose from, and the machine contract publishes each. Inside a
-named type alias (``type Notes = Annotated[str, Describe(...)]``) a marker is
-written once, in the alias's definition, however many commands use it. They
-are plain values rather than pydantic's ``Field``, so a module that declares
-a command loads no validation library at startup.
+Each marker writes itself into the field's JSON Schema, the one shape every
+adapter reads. They are plain values rather than pydantic's ``Field``, so a
+module that declares a command loads no validation library at startup.
 """
 
 import re
@@ -113,13 +106,11 @@ class Choices:
 @dataclass(frozen=True, slots=True, init=False)
 class Refers:
     """A field whose value is a ``kind:identity`` reference of the kind
-    ``model``'s ``ReferenceField`` called ``field`` holds:
-    ``about: Annotated[str, Refers(Note, "about"), Describe("What it is about.")]``.
+    ``model``'s ``ReferenceField`` called ``field`` holds.
 
-    The form offers what the record's own form offers, read from that one
-    column's declaration, so the two cannot disagree. ``Names`` cannot say
-    it: a reference spans several kinds, each offered only to a viewer who
-    may name it.
+    The form offers what that column offers, so the two cannot disagree.
+    Example: ``about: Annotated[str, Refers(Note, "about"), Describe("What it
+    is about.")]``.
     """
 
     model: str

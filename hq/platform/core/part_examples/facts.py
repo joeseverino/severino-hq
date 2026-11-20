@@ -235,6 +235,18 @@ FACTS_STATES = {
         "{% endfacts %}{% endcard %}",
         {"lines": ("Example issuer", "24 example days left")},
     ),
+    # A card's summary line, as the dashboard's counts across HQ draw it: a
+    # zero, a linked count, a toned count, one with its detail, enough to wrap
+    # at a phone's width.
+    "inline": Example(
+        '{% card element="div" %}{% facts layout="inline" label="Example summary" %}'
+        '{% fact "Example rules" value=0 %}'
+        '{% fact "Example devices waiting" value=1 url="/example/?waiting=1" tone="serious" %}'
+        '{% fact "Example open updates" value=2 url="/example/updates/" detail="2 example alerts with no fix open" %}'
+        '{% fact "Example drafts" value=1 url="/example/drafts/" detail="22 published" %}'
+        '{% fact "Example expenses" value="$1,204.50" url="/example/expenses/" detail="All deductible est." %}'
+        "{% endfacts %}{% endcard %}"
+    ),
     # A few short pairs, one of them a long address that wraps in its own
     # value's track as the pairs go across the page.
     "list": Example(

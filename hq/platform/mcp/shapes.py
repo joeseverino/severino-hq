@@ -288,9 +288,14 @@ def tool[F: Handler](
     tools/list is narrowed by, and ``budget`` what its answer may cost. A read
     the API serves too names its query model as ``arguments``, which validates
     its arguments in place of its signature and calls the handler with them
-    field by field."""
+    field by field. The handler's docstring is the description a model reads
+    to choose the tool, so a tool without a title or one does not load."""
 
     def declare(handler: F) -> F:
+        if not title.strip() or not (handler.__doc__ or "").strip():
+            raise ValueError(f"MCP tool {handler.__name__!r} needs a title and a docstring: a client shows both.")
+        if any(each.title == title and other.__qualname__ != handler.__qualname__ for other, each in _DECLARED.items()):
+            raise ValueError(f"MCP tool {handler.__name__!r} takes the title {title!r} another tool has.")
         _DECLARED[handler] = Declared(title, requires, budget, arguments)
         return handler
 

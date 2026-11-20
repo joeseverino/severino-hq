@@ -1,11 +1,7 @@
 """When a live record has lapsed, declared once on its model.
 
-A record that waits on something outside it (a job's thread, a worker's
-lease, a person's decision) lapses once that has gone quiet too long, whether
-or not a sweep has marked it yet. A page filters by the lapse in SQL and a
-service asks it of one row in Python, so both read it from the one ``Lapse``
-the model declares: a specification, as Evans names the pattern, that
-both selects rows and tests one.
+A page filters by the lapse in SQL and a service asks it of one row, both from
+the one ``Lapse``: a specification, as Evans names the pattern.
 """
 
 import operator

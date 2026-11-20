@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils.html import strip_tags
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare, operator
 
 from ..services import find_service
 from .service_world import declare_world, healthy
@@ -16,10 +17,10 @@ class OriginResolutionTests(TestCase):
 
     def _proxy(self, forward_host="10.0.0.10", forward_port=8000):
         healthy(
-            ManagedResource.objects.create(
-                key="app-proxy",
-                kind="npm.proxy_host",
-                spec={
+            declare(
+                "app-proxy",
+                "npm.proxy_host",
+                {
                     "domain_names": ["app.example.com"],
                     "forward_scheme": "http",
                     "forward_host": forward_host,
@@ -53,13 +54,7 @@ class OriginResolutionTests(TestCase):
         self.assertIn("matches no known machine", " ".join(service.faults))
 
     def _rewrite(self, answer="10.0.0.10"):
-        healthy(
-            ManagedResource.objects.create(
-                key="app-rewrite",
-                kind="adguard.rewrite",
-                spec={"domain": "app.example.com", "answer": answer},
-            )
-        )
+        healthy(declare("app-rewrite", "adguard.rewrite", {"domain": "app.example.com", "answer": answer}))
 
     def test_a_record_with_no_ingress_names_where_the_name_is_sent(self):
         """A rewrite pointing at a machine is a statement of where it is served.
@@ -96,11 +91,9 @@ class OriginProvenanceTests(TestCase):
         declare_world(containers=True)
 
     def _page(self, hostname="app.example.com"):
-        from django.contrib.auth import get_user_model
         from django.urls import reverse
 
-        user = get_user_model().objects.create_user(username="op", password="pw", is_staff=True, is_superuser=True)
-        self.client.force_login(user)
+        operator(self.client)
         return self.client.get(reverse("control_plane:service", kwargs={"hostname": hostname}))
 
     def test_a_name_with_only_a_record_is_not_told_an_ingress_forwards_it(self):
@@ -111,13 +104,7 @@ class OriginProvenanceTests(TestCase):
         contradicting itself in two adjacent elements.
         """
 
-        healthy(
-            ManagedResource.objects.create(
-                key="app-rewrite",
-                kind="adguard.rewrite",
-                spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-            )
-        )
+        healthy(declare("app-rewrite", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.10"}))
 
         response = self._page()
 
@@ -127,10 +114,10 @@ class OriginProvenanceTests(TestCase):
 
     def test_a_proxied_name_still_says_its_ingress_forwards(self):
         healthy(
-            ManagedResource.objects.create(
-                key="app-proxy",
-                kind="npm.proxy_host",
-                spec={
+            declare(
+                "app-proxy",
+                "npm.proxy_host",
+                {
                     "domain_names": ["app.example.com"],
                     "forward_scheme": "http",
                     "forward_host": "10.0.0.10",

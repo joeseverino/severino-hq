@@ -12,6 +12,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 
 from .integration_specs import ResourceSpec
 from .record_errors import HostRefusal, RecordNotFound, Sentence
+from .refusal_codes import Code
 from .refusal_status import next_call
 
 # The resources that hold each type of managed record (``PROVIDERS``, by its
@@ -33,11 +34,11 @@ class ResourceError(ValueError):
 
 
 class UnknownResource(HostRefusal, ResourceError):
-    code = "unknown_resource"
+    code = Code.UNKNOWN_RESOURCE
 
 
 class UnsupportedResourceOperation(HostRefusal, ResourceError):
-    code = "unsupported_operation"
+    code = Code.UNSUPPORTED_OPERATION
 
 
 # What a missed identifier adds to its refusal's sentence.

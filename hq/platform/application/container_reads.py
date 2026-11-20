@@ -14,10 +14,10 @@ from .projection import projection_scope, window
 from .record_errors import RecordNotFound
 from .resources import BoundedQuery
 from .security import Capability
+lazy from .container_records import ContainerRecord, ContainerRow, RepositoryPart, UpgradeRecord, UpgradeRow, UsagePart
 lazy from .containers import containers
 lazy from .derived_reads import serialize_measurement
 lazy from .record_saves import row
-lazy from .resource_records import ContainerRecord, ContainerRow, RepositoryPart, UpgradeRecord, UpgradeRow, UsagePart
 lazy from .upgrades import plans
 
 

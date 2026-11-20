@@ -111,7 +111,7 @@ and those that hold across parts in [Design](Design.md).
 | `cell_line` | `text` |  |  | Its words, which make it one tag with no end. |
 | `cell_line` | `url` |  |  | The page its words link to. |
 | `data_table` | `table`, first and unnamed | required |  | A `DataTable`: its columns and its rows. |
-| `entity` | `link`, first and unnamed | required |  | The thing's link, as the link builder answered for it. |
+| `entity` | `link`, first and unnamed | required |  | The thing's link, as the link builder answered for it or a record's read writes it. |
 | `entity` | `code` | `False` |  | Its name drawn as code. |
 | `entity` | `label` |  |  | The words it is named by, in place of its own. |
 | `entity` | `mark` |  |  | The punctuation after the name, held to it, or a list's `forloop`. |
@@ -131,7 +131,7 @@ and those that hold across parts in [Design](Design.md).
 | `fact` | `data_*` | | | Each a `data-` attribute. |
 | `facts` | `items` |  |  | Figures (`Kpi`) to draw as its facts, which makes it one tag with no end. |
 | `facts` | `label` |  |  | What the whole is, for a reader, when nothing on the page heads it. |
-| `facts` | `layout` | `"list"` | `list`, `band` | A list, each label beside its value; a band, the few facts that sum up a page, each a cell. |
+| `facts` | `layout` | `"list"` | `list`, `band`, `inline` | A list, each label beside its value; a band, the few facts that sum up a page, each a cell; a line (`inline`), a card's summary, each fact its value then its words. |
 | `facts` | `size` | `"regular"` | `small`, `regular`, `large`, `lead` | How large a band sets its values: small figures read across, status facts, the headline figures a page is read for, or headline figures led by the first. |
 | `facts` | `data_*` | | | Each a `data-` attribute. |
 | `filter_bar` | `action` |  |  | The page it asks, when that is another. |
@@ -261,28 +261,41 @@ Classes: `actions-col`, `allocation`, `cell-data`, `cell-part`, `cell-whole`, `c
 
 Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
 
-| Rule | Drawn by hand | Write instead |
+| Shape | Drawn by hand | Write instead |
 | --- | --- | --- |
-| `hand-drawn-change-table` | A before-and-after table drawn by hand, where the change table part draws it. | Build an approval_review.ChangePreview and write `{% change_table preview %}`. |
-| `hand-drawn-empty-said-quietly` | An empty line drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`. |
-| `hand-drawn-filter-bar` | A search field or select drawn by hand, where the filter bar and select parts draw it. | Write `{% filter_bar search="..." query=q filtered=... clear=... %}``{% choices %}``{% select ... %}``{% summary %}`count`{% endfilter_bar %}`. |
-| `hand-drawn-fold` | A fold drawn by hand, where the section part draws it. | Write `{% section "Heading" fold=True %}`body`{% endsection %}`. |
-| `hand-drawn-form` | A form that writes drawn by hand, where the form part draws it. | Write `{% include "partials/_form.html" %}`, or `{% include "partials/_page_action.html" with action=... %}` of a PageAction.command for a single verb. |
-| `hand-drawn-heading` | A heading drawn by hand, where the section part or the page frame draws it. | Write the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it (it heads itself a level down); the page's own title is the frame's, from page. |
-| `hand-drawn-icon` | An icon drawn by hand, where the icon part draws it. | Write `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img". |
-| `hand-drawn-line-break` | A line broken by hand with `<br>`, where the cell line or the stack list part draws the lines. | Write `{% cell_line %}`first line`{% detail %}`quiet second line`{% endcell_line %}`, or `{% list %}``<li>`...`</li>``<li>`...`</li>``{% endlist %}` for lines read down. |
-| `hand-drawn-list` | A list drawn by hand, where the list part draws it. | Write `{% list kind="down\|dots\|prose\|chips\|codes\|labeled" %}``<li>`...`</li>``{% endlist %}`; numbered=True on prose for items read in order. |
-| `hand-drawn-missing-value` | A missing value's mark drawn by an if, where the value's own tag or filter draws it. | Write {{ x\|or_empty }} for a plain value, {{ x\|money }} (or measured, seconds, bytes, when) alone for a figure or a moment, and `{% present x %}`...`{% endpresent %}` for a value shown in markup. |
-| `hand-drawn-query` | A query added to an address by hand, where the with_query tag adds and encodes it. | Write `{% with_query url name=value as named_url %}` and link named_url, or `{% with_query url name=value %}` where the address stands. |
-| `hand-drawn-record-link` | A link to a record's page drawn by hand, where the entity tag names the record by the page its model declares. | Write `{% entity row\|record label=row.name %}`, or row\|record:"section" for a part of its page. |
-| `hand-drawn-row-actions` | A row's actions drawn by hand, where the row actions part draws them. | Write `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell. |
-| `hand-drawn-row-group` | A group of rows headed by hand, where the row group tag heads it. | Write `{% row_group label count %}`. |
-| `hand-drawn-run-state` | How work stands is drawn by hand, where the ask or the status part draws it. | Draw the work as an Ask (`partials/_ask.html`), or its state with `{% status run.word tone=run.tone data_ask_label=True %}` from job\|job_run. |
-| `hand-drawn-section` | A `<section>` element drawn by hand, where the section part draws it. | Write `{% section "Heading" %}`body`{% endsection %}`, or a `<div>` for one that only groups a layout. |
-| `hand-drawn-split-count` | A count split from its words, where the counted filter writes them as one. | Write {{ n\|counted:"thing" }}, the figure and its words as one, or `{% fact "Label" value=n %}`. |
-| `hand-drawn-split-figure` | A figure apart from its word, where a value filter writes them as one. | Write {{ n\|counted:"thing" }} for a count, or {{ x\|measured:"mi" }} for a unit or a word the count leaves alone ("more"), the figure and its word as one value. |
-| `hand-drawn-stretched-shape` | A round shape or text inside a stretched drawing, which distorts it. | Draw a dot as a zero-length line of class chart-dot, and a label in the unscaled svg.chart-labels layer. |
-| `hand-drawn-table` | A table drawn outside its region. | Write `{% table_region "Label" %}` around its `<table class="data-table">`. |
+| `fold` | A fold drawn by hand, where the section part draws it. | `{% section "Heading" fold=True %}`body`{% endsection %}` |
+| `heading` | A heading drawn by hand, where the section part or the page frame draws it. | the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it; the title is the frame's |
+| `line-break` | A line broken by hand with `<br>`, where the cell line or the stack list part draws the lines. | `{% cell_line %}`first line`{% detail %}`second line`{% endcell_line %}`, or `{% list %}` for lines read down |
+| `section` | A `<section>` element drawn by hand, where the section part draws it. | `{% section "Heading" %}`body`{% endsection %}`, or a `<div>` for one that only groups a layout |
+| `icon` | An icon drawn by hand, where the icon part draws it. | `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img" |
+| `form` | A form that writes drawn by hand, where the form part draws it. | `{% include "partials/_form.html" %}`, or `partials/_page_action.html` of a PageAction.command |
+| `filter-bar` | A search field or select drawn by hand, where the filter bar and select parts draw it. | `{% filter_bar search="..." %}``{% choices %}``{% select ... %}``{% endfilter_bar %}` |
+| `row-group` | A group of rows headed by hand, where the row group tag heads it. | `{% row_group label count %}` |
+| `list` | A list drawn by hand, where the list part draws it. | `{% list kind="down\|dots\|prose\|chips\|codes\|labeled" %}``<li>`...`</li>``{% endlist %}` |
+| `record-link` | A link to a record's page drawn by hand, where the entity tag names the record by its model's page. | `{% entity row\|record label=row.name %}`, or row\|record:"section" for a part of its page |
+| `row-actions` | A row's actions drawn by hand, where the row actions part draws them. | `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell |
+| `run-state` | How work stands is drawn by hand, where the ask or the status part draws it. | an Ask (`partials/_ask.html`), or `{% status run.word tone=run.tone data_ask_label=True %}` |
+| `change-table` | A before-and-after table drawn by hand, where the change table part draws it. | `{% change_table preview %}` of an approval_review.ChangePreview |
+| `empty-said-quietly` | An empty line drawn by hand, where the empty state part draws it. | `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}` |
+| `missing-value` | A missing value's mark drawn by an if, where the value's own tag or filter draws it. | {{ x\|or_empty }}, a value filter alone for a figure or a moment, or `{% present x %}` |
+| `query` | A query added to an address by hand, where the with_query tag adds and encodes it. | `{% with_query url name=value as named_url %}`, or `{% with_query url name=value %}` where it stands |
+| `split-count` | A count split from its words, where the counted filter writes them as one. | {{ n\|counted:"thing" }}, the figure and its words as one, or `{% fact "Label" value=n %}` |
+| `split-figure` | A figure apart from its word, where a value filter writes them as one. | {{ n\|counted:"thing" }} for a count, or {{ x\|measured:"mi" }} for a unit, the figure and its word as one |
+| `stretched-shape` | A round shape or text inside a stretched drawing, which distorts it. | a dot as a zero-length line of class chart-dot, and a label in the unscaled svg.chart-labels layer |
+| `table` | A table drawn outside its region. | `{% table_region "Label" %}` around its `<table class="data-table">` |
+| `muted` | Muted words drawn by hand, where the muted tag draws them. | `{% muted %}`...`{% endmuted %}`, or `{% muted element="p" css="..." %}` for a paragraph |
+| `typed-mark` | A dot or an arrow typed as text, which a reader hears and a line may strand. | `{% dot %}` between two parts, a .dot-list for a run of parts, `{% arrow %}` after a link |
+| `figure-in-chip` | A figure inside a chip, which is a word. | the figure in a band of facts, a numeric column or a sentence |
+| `counted-fold` | A list folded at a count, which hides parts its line has room for. | `{% line_list %}`, which shows as many parts as the line holds |
+| `cut-count` | A count cut off from the words it counts. | `<h2>`Words `<span class="count">`N`</span>``</h2>`, or {{ n\|counted:"thing" }} |
+| `code-block` | A code block a keyboard cannot reach, though it scrolls in its own box. | `<pre tabindex="0">` |
+| `control-in-summary` | A control inside a summary, which is the control that opens its disclosure. | the link or button in the disclosure's body |
+| `nested-form` | A form opened inside a form, whose opening tag the parser drops, so the inner form's end closes the outer one. | one form, or the second after the first closes |
+| `open-comment` | A comment left open on its line, which Django prints on the page. | {# #} closed on its line, or `{% comment %}` for a longer note |
+| `page-title` | A page title that is empty, or names the site, which the layout appends after it. | `{% block title %}` naming the page alone |
+| `dollar-amount` | A dollar sign before a value, which writes a negative amount as "$-5.00". | {{ amount\|money }} |
+| `stranded-mark` | A mark written after a held value, which has no room left on its line, so the mark starts the next alone. | the mark through the hold: \|breakable:".", \|breakable:forloop for a list's commas, `{% entity link mark="," %}`; a run of code chips takes no commas |
+| `command-url` | A command's address built by hand, which encodes its target as the form does not read it. | the link command_url builds (action_links) |
 
 ## Each part's rules
 
@@ -355,7 +368,7 @@ A fact in a cell with a quiet line under it (a name over its kind, a change over
 cell_line %}`. Its words alone are `{% cell_line text=... url=... %}`. Markup is its block, its
 second line after `{% detail %}`: `{% cell_line %}{% entity link %}{% detail %}Docker host{%
 endcell_line %}`. The part draws that line on its own, so no page writes a break or styles a line
-of its own. No template writes a `<br>`: `hand-drawn-line-break` refuses one, in an extension too.
+of its own. No template writes a `<br>`: the `line-break` shape refuses one, in an extension too.
 
 ### change_table (host only)
 
@@ -370,7 +383,7 @@ row (its name and its summary, its fields folded under it), and names the ones t
 line under the table. A record a held request's warning names has its rows marked for attention
 (`data-attention` on the `tr`), and the card does not say the warning again. The rows keep the
 change's own order. An empty preview draws nothing. An approval card and an audit event draw it
-(*Gate:* `hand-drawn-change-table`).
+(*Gate:* the `change-table` shape of `hand_drawn.SHAPES`).
 
 ### check_ladder (host only)
 
@@ -451,7 +464,7 @@ or a `detail=` given as a list. What a fact holds past its lines (its record lis
 of what runs now) follows them in the detail, so a page's summary cards are a band of facts too,
 never a grid of its own. A fact drawn by hand (a page's own band) writes the part's classes, which
 no page may, and a figure set bold apart from the words that count it is refused by the
-`hand-drawn-split-count` rule.
+`split-count` shape of `hand_drawn.SHAPES`.
 
 **A figure may be drawn as well as said.** `Kpi` (and `{% fact %}`) takes one `drawing`, or none,
 drawn beside its value or under its detail:
@@ -531,6 +544,11 @@ page and in a dialog takes each one's spacing. A pair whose value is a list of n
 list, or a `codes` list of two or more) takes a row of its own, so it never wraps beside another
 pair and leaves that pair's row a gap.
 
+A line (`layout="inline"`) is a card's summary, the counts across a domain or the whole of HQ:
+each fact one phrase, its bold value then its words ("3 rules") then its detail, a fixed gap
+apart, wrapping fact by fact, so a wide card holds them on one line. Under the card's head it
+takes a rule above. A fact with an address is a link whole.
+
 **A frame is filled.** A list of facts lays its pairs across its frame. A card of only a pair or
 two shares a row with the sections beside it, so its values never end a third of the way across
 the page. A record page's facts are a `{% card %}` that opens its `{% layout %}`, beside its
@@ -571,7 +589,7 @@ the sentence. A list's table toolbar is the same bar, its count its pager's. A s
 holds is the bar's `keep=`, the query's other fields as the view hands them, each sent again while
 it has a value. The search takes the line's room; every other control is as wide as what it says,
 a select its longest option. A control the script shows only once it has something to act on is
-drawn `hidden` in the bar and stays so. *Gate:* the `hand-drawn-filter-bar` rule refuses
+drawn `hidden` in the bar and stays so. *Gate:* the `filter-bar` shape refuses
 `.filter-bar`, a search field and a select written by hand, outside the parts that draw them.
 `test_filter_tags.FilterBarUseTests` reads every `{% filter_bar %}` in the templates. It refuses a
 count written in the summary and a narrowing bar with no count.
@@ -638,7 +656,7 @@ for, each whole, and the row opens only when one is cut. A list folded at a fixe
 ### list
 
 Each item is an `<li>` and nothing stands between them. A list with no class, or a kind's class
-written by hand, is refused by `hand-drawn-list`. A list with no item draws nothing, so a page
+written by hand, is refused by the `list` shape. A list with no item draws nothing, so a page
 writes each `<li>` under its own test.
 
 A plain list read down (a row's notes, a record's statuses, a section's records) is `{% list %}`.
@@ -833,7 +851,7 @@ the way back, never the template, and a record's form page is the frame with not
 connection can't make the change passes `gap`; the closing row draws the verb unusable and what it
 needs beside it. A form a script or test finds names its `data-` attributes as `hooks`. A form
 answered in another region's place gives that region's id as `in_place`. *Catalog:*
-`form/write-gap`. *Gate:* `lint:ast-grep` (`hand-drawn-form.yml`), which holds every form that
+`form/write-gap`. *Gate:* the `form` shape of `hand_drawn.SHAPES`, which holds every form that
 writes to the form part, and `test_form_page.py`, which holds every routed create and edit view to
 the frame and the card to it alone.
 
@@ -1056,7 +1074,7 @@ buttons share one edge. The queue page, the findings page, the dashboard's short
 problems, the checks a subject does not meet, the steps a request contradicts and a domain's own
 attention list all use one projection (`hq/platform/application/decisions.py`). They draw it as
 one table (its rows `partials/_queue_rows.html`). A page never draws a list of its own (the
-`hand-drawn-findings` rule). A row is a table row as any other: its words in the cell that names
+`list` shape of `hand_drawn.SHAPES`). A row is a table row as any other: its words in the cell that names
 it, what it offers in `{% row_actions %}`, so it stands at the table's own density and gives way
 as every table does. It reads, in order:
 
@@ -1160,7 +1178,7 @@ A row reads from its first line: the toggle stands there, so every cell is set a
 page sets its table's cells otherwise. What can be done to a row's record ends the row as
 `{% row_actions actions %}`, under a heading of kind `control`. Each is a `PageAction` drawn as a
 compact control with its middle on the first line's. A page never draws a button in a cell
-(*Gate:* the `hand-drawn-row-actions` rule). A row's controls stand side by side on one line,
+(*Gate:* the `row-actions` shape). A row's controls stand side by side on one line,
 which their column asks for, and the words beside them wrap first; in a narrow box they take the
 row's last line. Every row's controls end on one edge, and each draws its edge of its own but the
 last, which is quiet only when it sets the row aside (`put_away`, a button). A cell of the row's
@@ -1531,9 +1549,9 @@ the row at the table's width. The face that stands in for it while closed is `.r
 **A table is laid out before any script runs.** Nothing is measured to lay a table out:
 `tables.js` only sorts, selects and opens rows, and loads deferred (*Gate:*
 `test_the_table_script_lays_nothing_out`). No table is drawn by hand, an extension's included:
-ast-grep's `hand-drawn-table` refuses a table outside its region, in the host and through the
-plugin check in every extension, and the host's suite reads every installed extension's templates
-for a heading, a region or a drop rank written by hand. *Gates:* `hand-drawn-table`,
+the `table` shape of `hand_drawn.SHAPES` refuses a table outside its region as any template of
+the host or an extension loads, and the host's suite reads every installed extension's templates
+for a heading, a region or a drop rank written by hand. *Gates:* the `table` shape,
 `test_every_table_is_declared_through_the_tags`.
 
 A long value in a cell (a line past `table_cells.LONG`) wraps, and in a narrow box is held to its

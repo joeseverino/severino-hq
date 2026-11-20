@@ -1,8 +1,8 @@
 """Every list page, filled with the longest values its model can hold.
 
-The dense estate is written by hand, so it holds only the values someone
-thought of; a list nobody wrote rows for lays out on whatever the sparse estate
-gives it. Here every view in the URLconf that draws its rows through
+The crowded estate is written by hand, so it holds only the values someone
+thought of; a list nobody wrote rows for lays out on whatever the example
+estate gives it. Here every view in the URLconf that draws its rows through
 ``TableListMixin`` gets a page, and its model's rows are derived from the
 model's own fields: text at its ``max_length`` in words that must wrap with an
 identifier and a digest among them, a paragraph for free text, an address as
@@ -39,6 +39,7 @@ from hq.platform.application.references import ReferenceField
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableListMixin
 from hq.platform.core import seeds
+from hq.platform.core.tests.browser.estate import owner_client
 from hq.platform.core.tests.test_browser_fixtures import render_pages
 
 # Words a record really says, run to the field's length so a column must wrap them.
@@ -381,16 +382,12 @@ def derived_pages():
     return {f"derived/{name.replace(':', '/')}": (lambda name=name: reverse(name), ExitStack) for name in list_views()}
 
 
-def render_derived_pages(user):
-    return render_pages(user, derived_pages())
-
-
 class DerivedEstateTests(TestCase):
     def test_every_list_page_shows_the_rows_derived_for_it(self):
         """A list a derived row cannot be shown on would be measured empty."""
 
-        with seeds.built("derived") as owner:
-            pages = render_derived_pages(owner)
+        with owner_client("derived") as client:
+            pages = render_pages(client, derived_pages())
         for name, html in pages.items():
             with self.subTest(page=name):
                 cells = [cell.words for cell in elements(html, "td")]

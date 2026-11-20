@@ -8,12 +8,13 @@ import marshal
 import os
 import pickle
 import re
+import sys
 import time
 import weakref
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass, fields, is_dataclass, replace
-from functools import cache, lru_cache, partial
+from functools import lru_cache, partial
 from importlib import import_module
 from types import CodeType
 from typing import TYPE_CHECKING, Any, get_args, get_origin
@@ -27,13 +28,10 @@ from .derivations import derivation, forget, holds_until, present
 from .lists import split_list
 from .tone import Tone
 from .ui import DomainOverview
-lazy from . import finding_model, finding_steps, freshness
+lazy from . import finding_model, finding_steps
 lazy from .action_items import item_key
-lazy from .automation_runs import clear_operation_registry_cache
 lazy from .domains import NAVIGATION_GROUPS
 lazy from .findings import finding_key
-lazy from .integrations import clear_integration_graph_cache
-lazy from .outbound_work import clear_outbound_work_cache
 lazy from .plugin_admission import enforce_plugin_admission
 lazy from .security import host_capabilities
 
@@ -43,7 +41,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("severino.composition")
 
-PLUGIN_API_VERSION = 20
+PLUGIN_API_VERSION = 21
 
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -213,7 +211,7 @@ class PluginManifest:
     The extension's import builds it, so one ``DeclarationRefused`` there names
     every field ``MANIFEST_CHECKS`` refuses. What needs the running host (its
     own capabilities, the rest of the installed set) is checked at boot, in
-    ``_installed_plugins``.
+    ``_admitted``.
     """
 
     id: str
@@ -362,8 +360,7 @@ def _validate_composition(plugins: tuple[PluginManifest, ...]) -> None:
             raise ImproperlyConfigured(f"Plugin URL prefixes overlap: {prefix!r} and {nested!r}.")
 
 
-@cache
-def _installed_plugins() -> tuple[PluginManifest, ...]:
+def _admitted() -> tuple[PluginManifest, ...]:
     plugins = []
     ids = set()
     for reference in _references():
@@ -380,23 +377,53 @@ def _installed_plugins() -> tuple[PluginManifest, ...]:
     return installed
 
 
-def installed_plugins() -> tuple[PluginManifest, ...]:
-    """The admitted manifest set for this immutable process composition."""
+def _named(reference: str) -> tuple[object, object]:
+    """The module ``reference`` names and its attribute, None before it is imported."""
 
-    return _installed_plugins()
+    name, _, attribute = reference.partition(":")
+    module = sys.modules.get(name)
+    return module, getattr(module, attribute, None)
 
 
-def clear_plugin_composition_cache() -> None:
-    """Forget plugin identity and every graph derived from that identity."""
+def _read_from() -> tuple[object, ...]:
+    """What the composition is read from: its references, and each module and
+    object they name, a manifest's integration provider included."""
 
-    _installed_plugins.cache_clear()
-    freshness.forget_extension_cadences()
+    references = _references()
+    named = tuple(_named(reference) for reference in references)
+    providers = (manifest.integration_provider for _, manifest in named if isinstance(manifest, PluginManifest))
+    return (references, *named, *map(_named, providers))
+
+
+@dataclass(frozen=True, eq=False)
+class Composition:
+    """The admitted set and what it was read from: what is derived from the set
+    is cached by it, so a change of its inputs is a new key, never a stale answer."""
+
+    read_from: tuple[object, ...]
+    plugins: tuple[PluginManifest, ...]
+
+
+_COMPOSED: list[Composition] = []
+
+
+def composition() -> Composition:
+    """The composition as its inputs stand now, admitted again once one changes."""
+
+    if _COMPOSED and _COMPOSED[0].read_from == _read_from():
+        return _COMPOSED[0]
+    plugins = _admitted()
+    # Read after admitting, which imports what the references name.
+    _COMPOSED[:] = [Composition(_read_from(), plugins)]
     # A question asked of the composition that was is not asked of this one.
     forget()
+    return _COMPOSED[0]
 
-    clear_integration_graph_cache()
-    clear_outbound_work_cache()
-    clear_operation_registry_cache()
+
+def installed_plugins() -> tuple[PluginManifest, ...]:
+    """The admitted manifest set for this process's composition."""
+
+    return composition().plugins
 
 
 def installed_plugin_apps() -> list[str]:
@@ -849,13 +876,9 @@ def gather_attention(
 ) -> tuple[dict[str, Any], ...]:
     """Collect, validate, attribute and order attention items from any sources.
 
-    ``sources`` is ``(id, label, provider, read_capabilities)`` per
-    contributor, the last gating the item that stands in for a source that
-    could not be read (``source_attention``), so the host's own
-    sections and installed extensions are gathered by one implementation that
-    cannot drift on what "urgent" means. Each entry carries its source, so a
-    surface can say where an item came from; the order is the status
-    vocabulary's (``ordered_attention``), so every surface agrees on urgency.
+    One implementation for the host's sections and every extension, so no
+    surface drifts on what "urgent" means. ``sources`` is ``(id, label,
+    provider, read_capabilities)`` per contributor.
     """
 
     gathered: list[dict[str, Any]] = []

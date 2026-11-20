@@ -323,7 +323,7 @@ func decodeTailnet[T any](raw json.RawMessage, what string) (T, error) {
 // tailnetRefused classifies one refused tailnet request. The token was just
 // exchanged, so 403, and 404 on some endpoints, is a missing scope; 401 is the
 // token refused.
-func tailnetRefused(what, scope string, code int) error {
+func tailnetRefused(what string, scope runtime.TailscaleScope, code int) error {
 	switch code {
 	case 403, 404:
 		return &ProviderError{
@@ -344,7 +344,7 @@ func tailnetRefused(what, scope string, code int) error {
 
 // tailnetGet reads one endpoint of the client's tailnet into its response
 // type. A refusal names the scope the read needs.
-func tailnetGet[T any](ctx context.Context, c tailnetClient, path, what, scope string) (T, error) {
+func tailnetGet[T any](ctx context.Context, c tailnetClient, path, what string, scope runtime.TailscaleScope) (T, error) {
 	raw, err := c.call(ctx, "GET", tailnet(path), map[string]string{"Accept": "application/json"}, nil)
 	if code := httpStatus(err); code != 0 {
 		var zero T
@@ -358,7 +358,7 @@ func tailnetGet[T any](ctx context.Context, c tailnetClient, path, what, scope s
 }
 
 // tailnetRead is tailnetGet through the default tailscale connection.
-func tailnetRead[T any](ctx context.Context, r *Registry, path, what, scope string) (T, error) {
+func tailnetRead[T any](ctx context.Context, r *Registry, path, what string, scope runtime.TailscaleScope) (T, error) {
 	client, err := r.tailnetClient(ctx, "")
 	if err != nil {
 		var zero T
@@ -370,7 +370,7 @@ func tailnetRead[T any](ctx context.Context, r *Registry, path, what, scope stri
 func (c tailnetClient) tailnetAPIDevices(ctx context.Context) ([]tsapi.Device, error) {
 	answer, err := tailnetGet[struct {
 		Devices []tsapi.Device `json:"devices"`
-	}](ctx, c, "devices?fields=all", "the tailnet device list", "devices:core:read")
+	}](ctx, c, "devices?fields=all", "the tailnet device list", runtime.TailscaleScopeDevicesCoreRead)
 	if err != nil {
 		return nil, err
 	}
@@ -722,7 +722,7 @@ func (r *Registry) tailscaleApproveRoutes(ctx context.Context, spec TailnetDevic
 	routesPath := tailnetDevicePath(identifier, "routes")
 	raw, err := client.call(ctx, "GET", routesPath, nil, nil)
 	if err != nil {
-		return Result{}, tailnetWriteFailed("the route read for "+name, "devices:routes:read", err)
+		return Result{}, tailnetWriteFailed("the route read for "+name, string(runtime.TailscaleScopeDevicesRoutesRead), err)
 	}
 	current, err := decodeTailnet[tsapi.DeviceRoutes](raw, "the routes of "+name)
 	if err != nil {
@@ -764,7 +764,7 @@ func (r *Registry) tailscaleApproveRoutes(ctx context.Context, spec TailnetDevic
 }
 
 func (r *Registry) tailscaleDNS(ctx context.Context) ([]any, error) {
-	found, err := tailnetRead[tailnetDNSConfiguration](ctx, r, "dns/configuration", "the DNS configuration", "dns:read")
+	found, err := tailnetRead[tailnetDNSConfiguration](ctx, r, "dns/configuration", "the DNS configuration", runtime.TailscaleScopeDNSRead)
 	if err != nil {
 		return nil, err
 	}
@@ -783,7 +783,7 @@ func (r *Registry) tailscaleDNS(ctx context.Context) ([]any, error) {
 }
 
 func (r *Registry) tailscaleSettings(ctx context.Context) ([]any, error) {
-	found, err := tailnetRead[tailnetSettings](ctx, r, "settings", "the settings", "feature_settings:read")
+	found, err := tailnetRead[tailnetSettings](ctx, r, "settings", "the settings", runtime.TailscaleScopeFeatureSettingsRead)
 	if err != nil {
 		return nil, err
 	}
@@ -812,7 +812,7 @@ func (r *Registry) tailscaleSettings(ctx context.Context) ([]any, error) {
 func (r *Registry) tailscaleUsers(ctx context.Context) ([]any, error) {
 	found, err := tailnetRead[struct {
 		Users []tsapi.User `json:"users"`
-	}](ctx, r, "users", "the users", "users:read")
+	}](ctx, r, "users", "the users", runtime.TailscaleScopeUsersRead)
 	if err != nil {
 		return nil, err
 	}

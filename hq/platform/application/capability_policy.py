@@ -1,12 +1,8 @@
-"""Whether a credential's call runs, waits for approval, or is refused.
+"""Whether a credential's call runs, waits for approval, or is refused (docs/Security.md#what-hq-enforces).
 
-How the identity provider's grant, the default and the rules combine is
-docs/Security.md#what-hq-enforces. For an agent, anything destructive (a
-deletion, a stop) waits for a person by default: a caller that may have read
-untrusted text is the one whose deletes and stops most deserve a second look.
-A call its handler holds for a person every time (a procedure that changes a
-machine) waits whatever the agent's rule, and no rule may allow it. Operators
-are never subject to policy.
+An agent's destructive call waits for a person by default, since a caller that
+may have read untrusted text most deserves a second look. Operators are never
+subject to policy.
 """
 
 from dataclasses import dataclass
@@ -304,7 +300,7 @@ def matrix(current: dict[tuple[str, str], str] | None = None) -> tuple[tuple[Col
     grants = {column.subject: column.identity.granted for column in cols}
     current = rules() if current is None else current
     grouped: dict[str, list] = {}
-    for spec in capabilities.capability_registry().values():
+    for spec in capabilities.capability_registry():
         if agents_may_hold(spec):
             grouped.setdefault(_subject_label(_subject(spec)), []).append(spec)
     groups = []
@@ -423,11 +419,10 @@ def apply_changes(command: PolicyCommand, *, principal: Principal) -> PolicyAppl
     """
 
     user = person(principal)
-    registry = capabilities.capability_registry()
     current = rules()
     changed, problems = 0, []
     for cell in command.rules:
-        spec = registry.get(cell.capability)
+        spec = capabilities.capability_spec(cell.capability)
         if spec is None:
             problems.append(f"{cell.capability} is no longer something HQ can do.")
             continue

@@ -15,7 +15,6 @@ from unittest import mock
 
 import jwt
 from asgiref.sync import async_to_sync
-from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase, override_settings
 
 from hq.platform.api.tests.tokens import _token
@@ -23,6 +22,7 @@ from hq.platform.application import agent_limits, agent_registry, linked_account
 from hq.platform.application.agent_access import AGENTS_PAUSED
 from hq.platform.application.security import Capability, Principal
 from hq.platform.core.outside_requests import connections_of_its_own
+from hq.platform.core.testing import operator
 
 from ..security import MCPBoundary, TailnetGate
 from ..server import mcp
@@ -247,7 +247,7 @@ class ListenStreamTests(TransactionTestCase):
         self.assertNotIn(LIST_CHANGED, [message.get("method") for message in other])
 
     def test_a_role_change_reaches_only_the_streams_of_that_persons_agents(self):
-        person = get_user_model().objects.create_user("example-person")
+        person = operator()
         linked_accounts.bind_sign_in(person, SIGNED_IN.person_key)
         roles.assign(person, roles.Role.VIEWER)
 
@@ -351,7 +351,7 @@ class ListenStreamTests(TransactionTestCase):
                     listening(application, OTHER, _listen(3)) as other,
                 ):
                     refused, opened = await second.message(), await other.message()
-                    held = agent_limits.LIMITS.listening(AGENT.actor)
+                    held = agent_limits.limits().listening(AGENT.actor)
             return refused, opened, held
 
         refused, opened, held = _run(steps)
@@ -360,4 +360,4 @@ class ListenStreamTests(TransactionTestCase):
         self.assertGreater(refused["error"]["data"]["retry_after"], 0)
         self.assertEqual(opened["method"], ACKNOWLEDGED)
         self.assertEqual(held, 1, "the refused stream holds none of its agent's streams")
-        self.assertEqual(agent_limits.LIMITS.held(), 0, "a closed stream gives its slot back")
+        self.assertEqual(agent_limits.limits().held(), 0, "a closed stream gives its slot back")

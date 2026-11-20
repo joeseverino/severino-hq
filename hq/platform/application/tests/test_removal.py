@@ -16,6 +16,7 @@ from hq.platform.application.markup_testing import elements
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import declare
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..record_errors import PolicyError
@@ -86,14 +87,10 @@ class RemovalRequestTests(TestCase):
         destroying anything.
         """
 
-        ManagedResource.objects.create(
-            key="a-certificate",
-            kind="tls.certificate",
-            spec={
-                "certificate_name": "example",
-                "domains": ["example.com"],
-                "install_on": ["a-target"],
-            },
+        declare(
+            "a-certificate",
+            "tls.certificate",
+            {"certificate_name": "example", "domains": ["example.com"], "install_on": ["a-target"]},
         )
 
         with self.assertRaises(PolicyError):

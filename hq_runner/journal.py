@@ -1,12 +1,8 @@
 """What the worker has done with its current claim, kept on disk across a crash.
 
-A claim is named before it is sent (HQ's claim ``attempt``), so a claim whose
-answer was lost is retried under the same name and answered the same run. The
-journal then says whether that run was started: one that was may have changed
-machines, so it is reported as unknown and never run again, and one whose
-report was written but not delivered is sent again as written. Each change is
-written to a new file and renamed into place, so a crash leaves the old state
-or the new one whole.
+A claim whose answer was lost is retried under the same name. A run that
+started may have changed machines, so it is reported as unknown and never run
+again. Each change is renamed into place, so a crash leaves a whole state.
 """
 
 import json

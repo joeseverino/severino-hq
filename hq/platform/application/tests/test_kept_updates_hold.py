@@ -33,7 +33,7 @@ ALWAYS_SENT: dict[str, Any] = {
 
 
 def _kept_specs():
-    return [(spec, kept) for spec in capability_registry().values() if (kept := kept_by(spec)) is not None]
+    return [(spec, kept) for spec in capability_registry() if (kept := kept_by(spec)) is not None]
 
 
 def _targets(spec) -> list[Any]:

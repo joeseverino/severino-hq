@@ -6,13 +6,13 @@ assert the hop says so: a check that can only come back proven is decoration.
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.application.markup_testing import elements
+from hq.platform.core.testing import READER, declare, operator
 from hq.platform.core.tests.forwarding import arrived
 from hq_sdk.testing import plain
 
@@ -38,20 +38,11 @@ PROXY = "172.18.0.2"
 def an_estate():
     """HQ behind a proxy host on its machine, named by an internal rewrite."""
 
-    ManagedResource.objects.create(
-        key="hq-host",
-        kind="machine",
-        spec={"name": "hq-host", "addresses": [HQ_LAN, HQ_TAILNET]},
-    )
-    ManagedResource.objects.create(
-        key="hq-proxy",
-        kind="npm.proxy_host",
-        spec={
-            "domain_names": [HQ],
-            "forward_scheme": "http",
-            "forward_host": HQ_LAN,
-            "forward_port": 8000,
-        },
+    declare("hq-host", "machine", {"name": "hq-host", "addresses": [HQ_LAN, HQ_TAILNET]})
+    declare(
+        "hq-proxy",
+        "npm.proxy_host",
+        {"domain_names": [HQ], "forward_scheme": "http", "forward_host": HQ_LAN, "forward_port": 8000},
     )
     now = timezone.now()
     ProviderInventory.objects.create(
@@ -298,9 +289,8 @@ class ReadParityTests(TestCase):
     def test_the_resource_is_the_page_projection_for_the_same_request(self):
         from .. import request_context
         from ..resources import list_resource
-        from ..security import Capability, Principal
 
-        reader = Principal("reader", "test", frozenset({Capability.READ}))
+        reader = READER
         request = a_request(**NPM_HEADERS)
         with request_context.bind(request):
             served = list_resource("request.path", {}, principal=reader)
@@ -314,9 +304,8 @@ class ReadParityTests(TestCase):
     def test_each_layer_is_sent_once_on_the_hop_it_was_decided_at(self):
         from .. import request_context
         from ..resources import list_resource
-        from ..security import Capability, Principal
 
-        reader = Principal("reader", "test", frozenset({Capability.READ}))
+        reader = READER
         request = a_request(**NPM_HEADERS)
         with request_context.bind(request):
             served = list_resource("request.path", {}, principal=reader)
@@ -346,17 +335,15 @@ class ReadParityTests(TestCase):
 
     def test_without_a_request_the_read_says_why_it_is_empty(self):
         from ..resources import list_resource
-        from ..security import Capability, Principal
 
-        reader = Principal("reader", "test", frozenset({Capability.READ}))
+        reader = READER
         served = list_resource("request.path", {}, principal=reader)
 
         self.assertEqual(served["count"], 0)
         self.assertTrue(served["unread"][0].startswith("not read: request, because"))
 
     def test_the_page_renders_every_hop_and_every_layer(self):
-        user = get_user_model().objects.create_user("someone", password="not-used-here")
-        self.client.force_login(user)
+        operator(self.client, "someone")
 
         response = self.client.get(
             reverse("connection"),
@@ -390,7 +377,7 @@ class TokenIdentityTests(TestCase):
             {**record, "node_id": LAPTOP_ID} if record["name"] == "a-laptop" else record for record in reading.records
         ]
         reading.save()
-        self.operator = get_user_model().objects.create_user("example-operator")
+        self.operator = operator(username="example-operator")
 
     def device(self, **state):
         from hq.platform.core.models import AgentDevice, AgentIdentity

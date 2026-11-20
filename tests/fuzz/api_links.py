@@ -147,8 +147,8 @@ def _writes() -> dict[str, tuple[str, ...]]:
     """The commands on a local record that check for a stale write, with what each needs."""
 
     return {
-        name: tuple(spec.required_capabilities)
-        for name, spec in capability_registry().items()
+        spec.name: tuple(spec.required_capabilities)
+        for spec in capability_registry()
         if spec.subject_resource in LOCAL_RECORDS and takes_stale_write_token(spec.handler)
     }
 

@@ -390,20 +390,21 @@ ROOT_URLCONF = "hq.config.urls"
 TEMPLATE_CACHE = env_bool("DJANGO_TEMPLATE_CACHE", default=not DEBUG)
 
 _TEMPLATE_LOADERS = [
-    "django.template.loaders.filesystem.Loader",
-    "django.template.loaders.app_directories.Loader",
+    "hq.platform.core.template_engine.FilesystemLoader",
+    "hq.platform.core.template_engine.AppDirectoriesLoader",
 ]
 
 TEMPLATES = [
     {
         # Django's, without the filters and tag that write a moment in a
-        # template's own words: a page shows one through ``when``.
+        # template's own words: a page shows one through ``when``. Its loaders
+        # refuse a shape a shared part draws, written by hand.
         "BACKEND": "hq.platform.core.template_engine.Templates",
         # The alias Django's own backend would have, which code asks engines for.
         "NAME": "django",
         "DIRS": [BASE_DIR / "templates"],
         # Loaders are listed explicitly, so APP_DIRS must be off: Django refuses
-        # a configuration that sets both, since app_directories.Loader above is
+        # a configuration that sets both, since AppDirectoriesLoader above is
         # what APP_DIRS is shorthand for.
         "APP_DIRS": False,
         "OPTIONS": {
@@ -881,9 +882,12 @@ LOGGING = {
         "json": {"()": "hq.platform.core.logging.JsonFormatter"},
     },
     "handlers": {
+        # The level is the handler's as well as the root's, so a logger that
+        # keeps a level of its own below it still prints nothing quieter.
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "json",
+            "level": SEVERINO_LOG_LEVEL,
         },
     },
     "root": {"handlers": ["console"], "level": SEVERINO_LOG_LEVEL},

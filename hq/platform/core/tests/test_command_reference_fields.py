@@ -3,7 +3,6 @@
 from unittest import mock
 
 from django.apps import apps
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
@@ -12,7 +11,7 @@ from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.projects.models import Project
 from hq.platform.application import references
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import capability_registry, command_spec
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.command_targets import record_options
 from hq.platform.application.integration_specs import capability_fields, capability_schema
@@ -22,10 +21,9 @@ from hq.platform.application.security import Principal, web_principal
 from hq.platform.application.stored_columns import _model_of
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
+from hq.platform.core.testing import SignedInTestCase
 
 from .command_shapes import field_schema
-
-User = get_user_model()
 
 
 def stored_references() -> dict[tuple[str, str], tuple[type, str]]:
@@ -33,10 +31,10 @@ def stored_references() -> dict[tuple[str, str], tuple[type, str]]:
     model stores in a type:identity column."""
 
     found = {}
-    for name, spec in capability_registry().items():
+    for spec in capability_registry():
         if (model := _model_of(spec.command_type)) is not None:
             columns = {column.name for column in model._meta.get_fields() if isinstance(column, ReferenceField)}
-            found |= {(name, column): (model, column) for column in columns & set(capability_fields(spec))}
+            found |= {(spec.name, column): (model, column) for column in columns & set(capability_fields(spec))}
     return found
 
 
@@ -67,18 +65,18 @@ def reference_fields() -> dict[tuple[str, str], tuple[type, str]]:
     machine contract says holds a reference (``x-hq-reference``)."""
 
     found = {}
-    for name, spec in capability_registry().items():
+    for spec in capability_registry():
         schema = capability_schema(spec)
         for field in schema.get("properties", {}):
             if isinstance(reference := field_schema(schema, field).get("x-hq-reference"), dict):
-                found[name, field] = (apps.get_model(reference["model"]), reference["field"])
+                found[spec.name, field] = (apps.get_model(reference["model"]), reference["field"])
     return found
 
 
-class ReferenceFieldTests(TestCase):
+class ReferenceFieldTests(SignedInTestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("operator", "operator@example.com", "a-password")
+        super().setUpTestData()
         ProviderConnection.objects.create(
             connection_ref="a-portainer",
             controller_id="a-controller",
@@ -91,9 +89,6 @@ class ReferenceFieldTests(TestCase):
         )
         Project.objects.create(name="An Example Project", slug="an-example")
         Asset.objects.create(item_name="A router", slug="a-router")
-
-    def setUp(self):
-        self.client.force_login(self.user)
 
     def test_every_type_identity_field_says_which_column_it_fills(self):
         stored = stored_references()
@@ -150,7 +145,7 @@ class GuardedReferenceTests(TestCase):
         patched = mock.patch.object(references, "targets", lambda: {"example.account": guarded})
         patched.start()
         self.addCleanup(patched.stop)
-        self.schema = capability_schema(capability_registry()["expense.create"])
+        self.schema = capability_schema(command_spec("expense.create"))
 
     def test_a_kind_is_offered_only_to_who_may_name_it(self):
         reader = Principal("a reader", "web", frozenset({"read", "example.read"}))
@@ -165,7 +160,7 @@ class GuardedReferenceTests(TestCase):
     def picker(self, principal: Principal, initial: dict[str, str] | None = None) -> bool:
         """Whether ``paid_from`` is on the expense form, for ``principal``."""
 
-        spec = capability_registry()["expense.create"]
+        spec = command_spec("expense.create")
         command = command_form_class(spec, record_choices=record_options(self.schema, principal=principal))
         return "paid_from" in command(initial=initial).fields
 

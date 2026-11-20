@@ -1,13 +1,13 @@
 """A connection that does not answer: its cause is stored at the source and its
 fix follows the cause."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import select, within
+from hq.platform.core.testing import operator
 
 from ..credential_mint import address_fields
 from ..findings import findings
@@ -95,8 +95,7 @@ class FixFollowsCauseTests(TestCase):
 
     def test_the_page_leads_with_the_cause_specific_fix(self):
         report(detail=SIGN_IN, failure="address")
-        user = get_user_model().objects.create_user("operator", password="pw", is_staff=True)
-        self.client.force_login(user)
+        operator(self.client)
 
         response = self.client.get(reverse("control_plane:findings"))
 
@@ -128,8 +127,7 @@ class FindingCardTests(TestCase):
 
     def setUp(self):
         report(detail=SIGN_IN, failure="address")
-        user = get_user_model().objects.create_user("operator", password="pw", is_staff=True)
-        self.client.force_login(user)
+        operator(self.client)
 
     def card(self):
         """The first card's words, and what it holds in page order, the

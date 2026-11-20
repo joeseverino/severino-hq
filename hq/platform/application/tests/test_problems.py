@@ -3,7 +3,6 @@
 from datetime import timedelta
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -13,6 +12,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.github import KIND as DELIVERY
 from hq.platform.application.markup_testing import select, text
+from hq.platform.core.testing import operator
 
 from .. import first_seen, freshness
 from ..attention import infrastructure
@@ -73,7 +73,7 @@ class ProblemsAboutTests(TestCase):
         self.assertEqual(elsewhere, ())
 
     def test_the_records_own_page_shows_the_queues_card(self):
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client, "owner", email="owner@example.test")
 
         with host_only():
             page = self.client.get(self.url)
@@ -91,7 +91,7 @@ class ProblemsAboutTests(TestCase):
     def test_a_page_with_nothing_open_draws_nothing(self):
         self.resource.conditions = [{"type": "Ready", "status": True}]
         self.resource.save()
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client, "owner", email="owner@example.test")
 
         with host_only():
             page = self.client.get(self.url)
@@ -109,7 +109,7 @@ class ProblemsAboutTests(TestCase):
 
     def test_the_queue_can_be_asked_for_one_things_problems(self):
         broken("other")
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client, "owner", email="owner@example.test")
 
         with host_only():
             page = self.client.get(reverse("action_items"), {"about": self.url})

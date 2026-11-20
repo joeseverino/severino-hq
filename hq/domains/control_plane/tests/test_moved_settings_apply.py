@@ -25,6 +25,7 @@ from hq.platform.application.infrastructure import ManagedResourceCommand, save_
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.consent import consented
 from hq.platform.application.tests.test_certificates import SEAL_PUBLIC_KEY, a_certificate
+from hq.platform.core.testing import declare
 
 from ..models import ManagedResource, OperationRequest, ProviderInventory
 from .certificate_cases import certificate_spec, declare_targets
@@ -111,10 +112,10 @@ class EveryWriterIsAppliedTests(_Estate):
         self.assert_applied("example-proxy")
 
     def test_a_certificate_upload(self):
-        ManagedResource.objects.create(
-            key="example-uploaded",
-            kind="tls.uploaded_certificate",
-            spec={"certificate_name": "example-uploaded", "install_on": ["example-npm"]},
+        declare(
+            "example-uploaded",
+            "tls.uploaded_certificate",
+            {"certificate_name": "example-uploaded", "install_on": ["example-npm"]},
         )
         self.settle()
         fullchain, private_key = a_certificate("app.example.com")

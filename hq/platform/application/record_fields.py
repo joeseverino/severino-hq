@@ -21,7 +21,8 @@ from .command_fields import Day, Describe
 # invalid before it reaches the database. The one plain alias here: a call's
 # target is one, and a door copies the target's schema whole, so each schema
 # says the bounds where it stands rather than by a reference.
-RecordId = Annotated[int, Field(ge=1, le=BigIntegerField.MAX_BIGINT)]
+MOST_INTEGER = BigIntegerField.MAX_BIGINT
+RecordId = Annotated[int, Field(ge=1, le=MOST_INTEGER)]
 type Notes = Annotated[str, Describe("Anything else worth keeping.")]
 type Slug = Annotated[str, Describe("Its address in HQ; blank derives one from the name.")]
 type TotalCost = Annotated[Decimal, Describe("What it cost in all.")]

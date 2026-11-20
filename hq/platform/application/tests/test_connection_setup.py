@@ -7,6 +7,7 @@ from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.credential_reads import observer_permissions
 from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.application.markup_testing import hrefs, text
+from hq.platform.core.testing import SignedInTestCase
 
 from ..connection_setup import setups
 from .host_only import host_only
@@ -67,12 +68,7 @@ class ReferenceTests(TestCase):
         self.assertEqual(by_provider["ssh"].item, "an item of any type")
 
 
-class PageTests(TestCase):
-    def setUp(self):
-        from django.contrib.auth import get_user_model
-
-        self.client.force_login(get_user_model().objects.create_superuser("setup-reader"))
-
+class PageTests(SignedInTestCase):
     def test_a_fresh_install_walks_through_connecting_each_provider(self):
         with override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq"):
             response = self.client.get(reverse("control_plane:connections"))

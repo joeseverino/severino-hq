@@ -17,7 +17,7 @@ from .projection import MAX_PAGE_SIZE, page_size, projection_scope
 from .resources import TopQuery, resource_search_capabilities
 from .security import Capability, Principal
 lazy from . import derived_reads
-lazy from .resource_records import Match
+lazy from .search_records import Match
 
 MAX_SEARCH_RESULTS = 5000
 

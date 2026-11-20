@@ -1,15 +1,9 @@
-"""Each request's id, and spans for a trace viewer on a developer's machine.
+"""Each request's id, and spans for a trace viewer on a developer's machine (docs/Development.md, "Tracing").
 
-The id is HQ's own: minted here for every request a door serves, carried on
-every log line and as the operation id of every audit row the request writes,
-and never taken from the caller. While ``OTEL_EXPORTER_OTLP_ENDPOINT`` names
-a collector (docs/Development.md, "Tracing"), the id is also the W3C trace id
-of the request's trace, and ``span`` opens a span in it at each chokepoint.
-Unset, as in every image, which installs no SDK, ``span`` is a null context
-and nothing of OpenTelemetry is loaded.
-
-Spans are telemetry, which a viewer drops or expires; they carry no actor's
-name, and no audit row depends on one.
+The id is HQ's own, minted for every request and never taken from the caller.
+Unset, as in every image, ``span`` is a null context and nothing of
+OpenTelemetry loads. Spans carry no actor's name, and no audit row depends on
+one.
 """
 
 import os

@@ -254,8 +254,8 @@ declares the files it reads once, as the `sources` of the task its job runs:
 in `mise-tasks/test.toml` and `browser` in `mise-tasks/browser`. CI's **Legs**
 job runs `tools/pipeline/legs.py`, which asks mise's `--affected` which of
 those tasks the change touches. A changed path that no leg's sources name runs
-every leg, and `test_legs` fails on any tracked file in that state, so a new
-top-level path is placed in the sources of each leg that reads it. Scan,
+every leg, and the job's summary lists it, so a new top-level path is placed in
+the sources of each leg that reads it. Scan,
 Build, Build verify and Composition run on every pull request.
 
 To see what a change would run, against the base it merges into:
@@ -336,7 +336,7 @@ On an 8 GB Apple silicon machine:
 | `mise run test <label>` | a few seconds |
 | `mise run lint:prose` | about six seconds; under a second on one file |
 | `mise run lint` | about a minute |
-| `mise run fast` | one to two minutes |
+| `mise run fast` | under a minute |
 
 `mise run fast [BASE]` maps the changed files against a base. One asked for
 (`BASE`, `$CHECK_BASE`) is read as its merge base with HEAD. With none, the
@@ -355,7 +355,7 @@ what it finds runs its fix mode (`--fix` in its usage: `lint:ruff` with
 Ruff's fixes and format, `lint:css` with Stylelint's, `lint:js` with
 ESLint's, `lint:mise-format` with `mise fmt`, `lint:ast-grep` with each
 rule's `fix:`, `lint:controller` with gofmt, `go fix` and `go generate`, and
-each `lint:drift-*` gate with its file's writer), and the run names the files
+each quick `lint:drift-*` gate with its file's writer), and the run names the files
 they rewrote. The run then judges the tree the fixes left, and its verdict
 line ends by naming the files they rewrote, which the checkout holds
 uncommitted: a commit of them is the tree the run judged, the one a landing
@@ -366,13 +366,53 @@ check.
 
 The tests it selects are:
 
-- the test modules that load a changed file: through the imports a module
-  runs as it loads (at its top level or in a class body, never in a function,
-  a `lazy` import or one under `TYPE_CHECKING`), as grimp, import-linter's
-  graph, reads them, all the way; and through any import, those in functions
-  and lazy ones too, directly or through one module between, since further
-  out those close a cycle through the shared layers that reaches most of the
-  suite;
+- the test modules that ran a function body the change reaches, as the
+  record of what each test ran says. `mise run fast:map` makes it: the suite
+  fast runs, under coverage.py's C tracer, each class's lines kept under its
+  module's name (a dynamic context), in coverage's own database, kept under
+  the common git directory for every worktree and named by the tree it
+  measured (`tools/gate/ran.py`). It takes about three minutes; run it after
+  a landing, or when fast's line says many files changed since its tree. A
+  change reaches the bodies it edits, and the bodies and the top-level
+  definitions (a function's defaults and decorators, a class's body, a
+  constant, an import) that refer to a definition it edits as its module
+  loads, all the way through those definitions. A method's signature is part
+  of its body; a method added to a class reaches the bodies of its other
+  methods; a type a function's signature names reaches the function only
+  when a decorator of this tree takes it, since only something that reads
+  the signature sees it. A body reaches no further
+  than the tests that ran it, since a test that runs what calls it runs it
+  too, except to what calls it as a module loads (`COUNTS = (unread(),)`)
+  and, for a body a cache keeps (`functools.cache`) or one the record says
+  ran as the suite started, before any test (a registry's assembly), to all
+  that refers to it. The edit is read from the changed modules' text at the base and at the
+  record's tree, so what a test runs that its record predates is a change
+  too, and a comment or the module's docstring changes nothing. The
+  references are read from the source: a name an import binds, an attribute
+  read off an imported module (`inbox.recent`), a name the module defines,
+  and in a module under a `tests` directory a dotted string (a mock target).
+  A module used as a value (`mock.patch.object(inbox, ...)`) refers to every
+  name in it. This is pytest-testmon's model. A body in a module the record
+  does not hold (a test, a helper under `tests`, a module new since), and a
+  test module the record does not hold or that holds a test tagged `source`
+  (which reads files, and which the record's run leaves out), take the reach
+  read from the source
+  alone, a body reaching every definition that refers to it, as every body
+  does when there is no record;
+- the test modules that load a changed module, where a name cannot carry
+  the change: a statement that binds nothing
+  changed or was reached, a decorator of this tree takes a reached
+  definition (it may register it), nothing else refers to a reached
+  definition (Django, a registry or a string reaches it), a module was
+  deleted, a migration changed its app's models, or a task definition
+  changed. These walk the imports a module runs as it loads (at its top
+  level or in a class body, never in a function, a `lazy` import or one
+  under `TYPE_CHECKING`), as grimp, import-linter's graph, reads them, all
+  the way. They also walk any import, those in functions and lazy ones too,
+  directly or through one module between, since further out those close a
+  cycle through the shared layers that reaches most of the suite. A test
+  module and a URL module never take this walk: the runner runs the one, and
+  the routes reach through the other;
 - every test that names a route whose view the change reaches, by its name
   (`reverse("control_plane:detail")`) or by a path it answers
   (`"/infrastructure/topology/"`, an f-string's field filling a converter),
@@ -381,7 +421,8 @@ The tests it selects are:
   A route is read from each URL module's `path()` calls, its prefix from the
   call that mounts its module (`Mount("infrastructure/", "<module>")`,
   `include()`) or from `ROOT_URLCONF`. A view is reached when the change
-  imports into its module, when its module imports a module that names a
+  reaches its definition by name, when its module is walked as it loads,
+  when its module imports a module that names a
   changed file, or, for the module that names the file itself, when the view
   (or a class it derives from) is the definition that names it. A template
   reaches through every template that includes or extends it, and a tag
@@ -402,30 +443,15 @@ The tests it selects are:
   whole path, and a test alone by a directory of two parts or more above it.
   A test that reads a workflow through a helper naming the workflows'
   directory is one;
-- every test tagged `tree` the change reaches. Such a test finds its files (a
-  module, a template, a doc) by walking this checkout, or loads what a fresh
-  process starts with (the startup budgets), which no import or name shows
-  (a test that patches the `ROOT` of the code it drives walks a fixture and
-  carries none). One whose
-  class declares what it reads, `@reads("hq/**/*.py", "!**/tests/**/*.py", lists=("**",))`
-  (`hq/platform/application/tests/reads.py`, where a `!` glob takes the files
-  a walk drops before reading out of those it opens), runs when the change edits, adds
-  or deletes a file it opens, or adds or deletes one it lists or stats; any other runs
-  on every change. The declaration holds the class as it runs, as Bazel's
-  sandbox holds a test to its declared inputs: an open, a listing, a stat or a program
-  that reaches past it fails the test, naming each path, so a declaration that
-  falls short fails in CI's whole run rather than going unselected. A program
-  is held by what its own tool says it reads of the paths it is handed
-  (ast-grep's `--inspect entity`, Vale's `ls-config`, the pathspecs of a
-  git listing, in `hq/platform/application/tests/program_reads.py`), and one
-  read nowhere there keeps its test running on every change;
-- the extensions' suites, composed, when `mise.local.toml` names a set and the
-  change reaches what extensions render through (`templates/`, `static/`,
-  `hq_sdk/`, the shared table, page, UI and moment modules, template tags).
+A test tagged `tree` finds its files by walking this checkout, or loads what a
+fresh process starts with (the startup budgets), so whatever the change, it
+reads the whole tree: fast's runs leave it out (`--exclude-tag tree`), and
+CI's `lint:source` runs it. So does the composed suite with the extensions,
+which is `mise run check --release`'s.
 
 A run runs its selection however wide it is. `--whole` runs the whole suite
-with every quick gate instead, whatever changed: the landing asks for it, and
-its pass records the tree.
+(the tests tagged `tree` aside) with every quick gate instead, whatever
+changed, and its pass records the tree.
 
 Before the tests it runs each quick gate the change affects, as mise's
 `--affected` reads it from the base: a quick gate is a task tagged
@@ -442,34 +468,37 @@ shell gate also runs when a path the change touched is one
 `tools/gate/shell-sources.sh` names (a deleted one as the base had it), which
 no glob can say. `mise run --tag fast --affected --affected-base <ref>
 --affected-json` names each gate it would pick and why, running none. A lint gate that reaches the network, or whose check
-fast makes another way, is left untagged.
+fast makes another way, is left untagged, and so is one whose input is the
+whole tree whatever changed: the `lint:drift-*` gates a Django command
+writes, `lint:deploycheck`, `lint:deptry`, `lint:imports`,
+`lint:sdk-breaking`, `lint:structural` and `test:migrations`. CI's Lint and
+Test jobs and `mise run check` run them. `lint:mypy` stays, since mypy's
+cache rechecks only a changed module and those whose imports' interfaces
+changed.
 
 A gate whose linter reads one file at a time (`lint:ruff`, `lint:ast-grep`,
 `lint:spelling`, `lint:prose`) runs through hk, as `hk.pkl` declares it, and
 fast hands it the files the change touched: its step reads those its glob
 matches, and its `-whole` step reads the whole tree when one of them is a file
 that step names (the tool's config, the pins). Run alone, with no files, as
-the Lint job runs it, it reads the whole tree. A gate that answers a question
-about the whole (the import contracts, the types, the derived files) keeps
-its whole input, and one whose run never reads a test module leaves the tests
-out of its sources, so an edit inside a test selects none of them.
+the Lint job runs it, it reads the whole tree.
 
 A change to a stylesheet under `static/css/app/` or a template selects
 `fast:look`, which runs in the heavy turn beside the tests and holds the
 component catalog entries the change reaches to every layout check, in
-WebKit at 320 and 1280 pixels: `mise run dev:look --rule
-every_layout_check_holds catalog:<path>` for each such file. A template
-reaches each entry whose page draws it; a sheet reaches each entry whose
-markup holds a class or data attribute named by a rule a changed line lies in
-(`hq/platform/core/tests/look_reach.py`), and every entry when such a rule names
-neither (an element, `:root`, a token). A file that reaches no entry is
-named in the look's output, never skipped unsaid. A Python-only change
-selects no look, and the whole catalog stays CI's Browser job.
+WebKit at 320 and 1280 pixels, through `mise run dev:look --rule
+every_layout_check_holds`. A template reaches each entry whose page draws it;
+a sheet reaches each entry whose markup holds a class or data attribute named
+by a rule a changed line lies in (`hq/platform/core/tests/look_reach.py`), and
+every entry when such a rule names neither (an element, `:root`, a token).
+`tools/gate/look_entries.py` names each file's reach in the look's output,
+and leaves out a file that reaches every entry: that look is the whole
+catalog, CI's Browser job, as is any look of a Python-only change.
 
-A test module that a `test:*` task runs by its label in a dependency group's
-environment (`uv run --group fuzz`), which the tests' environment lacks, is
-never a label. When the selection above would reach it, its task runs as a
-gate beside the tests instead, read from the task's own `run`.
+The generated API cases (`test:api-properties`) stay CI's Test job and
+`mise run check`'s: every change Django loads reaches every operation, and
+Schemathesis sends each operation's boundary and refusal cases whatever the
+example budget.
 
 fast runs in two stages, each one `mise run`. The quick gates run first, side
 by side, before the tests are selected, and the tests start only once every
@@ -574,8 +603,7 @@ outside the modules run through `apart`:
   reports ok.
 - A walk that stays Python runs through `apart(walk, *args)`
   (`hq/platform/application/tests/apart.py`), in a process that exits; the
-  walk takes and answers JSON. `interface_text.read(run=apart)` is one, since
-  the image runs it and ships no ast-grep.
+  walk takes and answers JSON. `django_printers` is one.
 
 Each is a walk to `tree.is_walk`, an ast-grep command line included, so the
 test carries the `tree` tag.
@@ -620,7 +648,8 @@ suppressed problem leaves its count right. A count that rose is a new problem:
 
 Each `lint:drift-*` gate checks one against its source without writing. Its
 failure names the command that rewrites that file alone, in seconds; `fast`
-runs the ones a change reaches. A rebase conflict in one is settled by
+runs those tagged `fast` a change reaches, and `mise run fix` writes them all.
+A rebase conflict in one is settled by
 `mise run fix`, never by hand.
 
 ### The extension set
@@ -1059,9 +1088,11 @@ settles, never on a longer timer.
 
 #### The two estates
 
-The stress estate (`build_estate()` in
-`hq/platform/core/tests/test_browser_fixtures.py`) breaks things on purpose:
-long names, many rows, every state at once, on the pages it was built for.
+The crowded estate is the example estate with crowding laid on top
+(`crowd()` in `hq/platform/core/tests/crowding.py`): long names, many rows,
+held requests and long histories, added in the test tree so the demo never
+loads them. Its pages are `PAGES` in
+`hq/platform/core/tests/test_browser_fixtures.py`.
 
 Every list page is also filled from its own model
 (`hq/platform/core/tests/test_browser_derived_fixtures.py`). Each view drawn
@@ -1089,7 +1120,7 @@ moved. A finding names its check and the first width it was found at.
 `WIDE_TABLES` is read from the stylesheet: the narrowest window where a
 table's region, on the page and in a card, has passed the breakpoint its wide
 rules need. So the columns that keep their line are measured with the least
-room; the stress estate is held there too.
+room; the crowded estate is held there too.
 
 The example estate's values have the shapes and lengths real providers give
 (both tailnet addresses and a MagicDNS name per device, long image tags, a

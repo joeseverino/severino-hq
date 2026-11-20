@@ -78,7 +78,7 @@ from .finding_model import (
 from .finding_steps import Do, Press, Run, WrittenCheck, WrittenReason, WrittenSteps
 from .first_seen import recorded
 from .integration_validation import required_capability_names
-from .integrations import IntegrationGraph, held_graph, integration_graph
+from .integrations import held_graph
 from .projection import MAX_PAGE_SIZE, QUERY, projection_scope
 from .security import Principal
 from .tone import Tone
@@ -91,7 +91,7 @@ from .topology_model import (
 from .ui import ended
 from .url_query import with_query
 from .workflows import WrittenAction, claim_identity
-lazy from . import cadence
+lazy from . import cadence, capabilities
 lazy from .automation_runs import playbook_remedies
 lazy from .domains import resources_of
 lazy from .estate import estate_reading
@@ -300,10 +300,10 @@ def _declared_at(detect: Callable[..., Any]) -> tuple[Path, int]:
     )
 
 
-def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -> tuple[bool, Effect | None]:
+def _permitted(capability: str, principal: Principal) -> tuple[bool, Effect | None]:
     """Whether this principal may run it, and what the registry says it does."""
 
-    spec = graph.capabilities.get(capability)
+    spec = capabilities.capability_spec(capability)
     if spec is not None:
         return spec.permitted_to(principal), spec.effect
     # A rule naming a capability the registry does not hold is a contract error
@@ -328,10 +328,9 @@ def _presses(finding: Finding, principal: Principal, subject: TopologyNode | Non
     without anyone editing a rule.
     """
 
-    graph = integration_graph()
     pressed: dict[tuple[str, str], Press] = {}
     for remedy in (*finding.remedies, *_playbooks(finding, subject)):
-        allowed, effect = _permitted(remedy.capability, principal, graph)
+        allowed, effect = _permitted(remedy.capability, principal)
         if not allowed or effect is None or effect is Effect.DESTRUCTIVE:
             continue
         action = next(
@@ -802,11 +801,8 @@ def narrowed_findings(*, principal: Principal, **narrowing: object) -> NarrowedF
     """The findings ``narrowing`` keeps and the summary of them, for every door
     that answers a read of the open problems.
 
-    ``narrowing`` is judged by ``FindingsQuery`` once the caller may read.
-    ``severity`` is a floor (``attention`` also returns ``serious``) and
-    ``limit`` bounds how many are returned, most severe first. The summary
-    still counts every finding, and says how many came back and whether the
-    limit held some back.
+    The summary still counts every finding, and says whether ``limit`` held
+    some back.
     """
 
     query = FindingsQuery.model_validate(narrowing).model_dump()

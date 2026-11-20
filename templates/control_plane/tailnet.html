@@ -54,10 +54,7 @@
           <tr>
             <td><code>{{ row.tag.name|breakable }}</code></td>
             <td>{% muted %}owned by{% endmuted %} {{ row.tag.owners|join:", "|breakable }}</td>
-            <td>{% comment %}
-            a tag no device wears is said in words once the devices are read, and is the mark until then
-            <!-- ast-grep-ignore: hand-drawn-missing-value -->
-            {% endcomment %}{% for link in row.devices %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% empty %}{% if row.unworn %}{% muted %}no device has this tag{% endmuted %}{% else %}{% empty_value %}{% endif %}{% endfor %}</td>
+            <td>{% for link in row.devices %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% empty %}{% if row.unworn %}{% muted %}no device has this tag{% endmuted %}{% else %}{% empty_value %}{% endif %}{% endfor %}</td>
           </tr>
         {% endfor %}
       </tbody>

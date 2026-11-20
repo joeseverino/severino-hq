@@ -3,7 +3,6 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -23,6 +22,7 @@ from hq.platform.application.resource_operations import (
 )
 from hq.platform.application.security import MCP_INTERFACE, agent_principal, cli_principal
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.testing import declare, operator
 
 from ..models import ManagedResource, OperationRequest
 from ..providers import PROVIDERS
@@ -51,8 +51,7 @@ class OperationPolicyTests(TestCase):
         they have been sending `next` all along while the view returned to the
         resource record regardless."""
 
-        user = get_user_model().objects.create_superuser("op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client, "op")
 
         response = self.client.post(
             reverse("control_plane:reconcile", kwargs={"key": self.resource.key}),
@@ -68,8 +67,7 @@ class OperationPolicyTests(TestCase):
     def test_a_destination_off_this_host_is_refused(self):
         """`next` is operator input, so it goes through the shared check."""
 
-        user = get_user_model().objects.create_superuser("op2", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client, "op2")
 
         response = self.client.post(
             reverse("control_plane:reconcile", kwargs={"key": self.resource.key}),
@@ -312,16 +310,8 @@ class QueueHeadTests(TestCase):
     def setUp(self):
         self.claim = claim_next_operation
         declare_targets()
-        self.certificate = ManagedResource.objects.create(
-            key="example-wildcard",
-            kind="tls.certificate",
-            spec=certificate_spec(),
-        )
-        self.rewrite = ManagedResource.objects.create(
-            key="hq-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "hq.example.com", "answer": "10.0.0.10"},
-        )
+        self.certificate = declare("example-wildcard", "tls.certificate", certificate_spec())
+        self.rewrite = declare("hq-dns", "adguard.rewrite", {"domain": "hq.example.com", "answer": "10.0.0.10"})
 
     def queue(self, resource, key):
         return OperationRequest.objects.create(

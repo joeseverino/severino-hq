@@ -1,12 +1,7 @@
 """Findings about what each container runs, each with the help HQ derived.
 
-One per image version on its machine, naming every container that runs it,
-for a known advisory, for a newer release (an update is a chore to schedule,
-not a fire) and for being run by tag alone; and one per container for the
-serious checks of the standard it fails, offering its compose change
-(``application.container_hardening``) or, for the Docker socket, the
-declaration that holding it is the container's job. An image's are read once
-for the three rules about it; a container's are the container standard's
+One per image version on its machine for an advisory, a newer release or a bare
+tag, and one per container for the hardening standard it fails
 (``HARDENING_STANDARD``).
 """
 
@@ -39,6 +34,7 @@ from .finding_steps import Do, Run
 from .images import version
 from .lists import split_list
 from .projection import read_once
+from .references import Kind
 from .standard_findings import Help, Measured, Per, Standard
 from .standards import Check
 from .tone import Tone
@@ -311,7 +307,7 @@ def _on_machines(estate: FindingEstate) -> Iterator[Measured]:
 
     machines = {node.id for node in estate.nodes() if node.kind == "machine"}
     for item in containers():
-        if (node := f"machine:{item.machine.name}") in machines:
+        if (node := Kind.MACHINE.of(item.machine.name)) in machines:
             yield Measured(
                 measurement=item.posture,
                 name=f"{item.running.name} on {item.machine.name}",

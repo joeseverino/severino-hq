@@ -8,6 +8,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.core.testing import declare
 
 from ..projection import projection_scope
 from ..service_context import part_rows
@@ -17,10 +18,10 @@ from ..services import find_service
 def in_place(key: str, kind: str, spec: dict) -> ManagedResource:
     """A record HQ set and the last reading found as set."""
 
-    return ManagedResource.objects.create(
-        key=key,
-        kind=kind,
-        spec=spec,
+    return declare(
+        key,
+        kind,
+        spec,
         generation=1,
         observed_generation=1,
         last_observed_at=timezone.now(),
@@ -51,9 +52,7 @@ class ServiceHealthTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        ManagedResource.objects.create(
-            key="lab-1", kind="machine", spec={"name": "lab-1", "addresses": ["198.51.100.10"]}
-        )
+        declare("lab-1", "machine", {"name": "lab-1", "addresses": ["198.51.100.10"]})
         in_place("app-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": "198.51.100.10"})
 
     def proxy(self, port: int = 8080) -> None:

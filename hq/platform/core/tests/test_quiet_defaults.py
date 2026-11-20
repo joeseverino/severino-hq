@@ -4,7 +4,6 @@ the rules drawn."""
 
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -23,6 +22,7 @@ from hq.platform.application.capability_policy import (
 from hq.platform.application.contracts import Effect
 from hq.platform.application.markup_testing import all_elements, elements, hrefs, select, text, within
 from hq.platform.core.models import AgentIdentity, AuditLog
+from hq.platform.core.testing import operator
 
 # The name the page's placeholder asks for the every-rule part by, written out:
 # the test holds what a fetch asks for, whatever the view calls it.
@@ -52,7 +52,7 @@ GROUPS = (
 
 class AgentRulesTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client, "owner", email="owner@example.test")
 
     def page(self, groups=GROUPS, *, part="", **params):
         headers = {"HTTP_X_FRAGMENT": part} if part else {}
@@ -122,8 +122,7 @@ class FoldedSaveTests(TestCase):
     """A rule not drawn is not posted, and a rule not posted is left as it holds."""
 
     def setUp(self):
-        self.owner = get_user_model().objects.create_superuser("owner", "owner@example.test", "pw")
-        self.client.force_login(self.owner)
+        self.owner = operator(self.client, "owner", email="owner@example.test")
         AgentIdentity.objects.create(client_id="example-agent", granted=["read", "write_projects", "delete_projects"])
         self.changed = field_name("example-agent", "project.delete")
         CapabilityRule.objects.create(
@@ -158,7 +157,7 @@ class FoldedSaveTests(TestCase):
 
 class AuditLogReadRequestTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client, "owner", email="owner@example.test")
         asked = history.read_request_type()
         AuditLog.objects.create(action=AuditLog.Action.CREATED, object_type=asked, object_repr="example-dns")
         AuditLog.objects.create(action=AuditLog.Action.DELETED, object_type=asked, object_repr="example-dns")

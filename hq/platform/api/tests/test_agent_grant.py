@@ -7,11 +7,11 @@ within its person's role where a person signed it in, and nothing else.
 
 import json
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from hq.platform.application import tokens
 from hq.platform.application.security import HELD_ONLY_AT, AuthorizationError, Capability, could_hold, web_principal
+from hq.platform.core.testing import AGENT, operator
 
 from ..testing import ContractClient
 from .tokens import ISSUER, RESOURCE, _serving, _token
@@ -78,7 +78,7 @@ class OneGrantTests(TestCase):
         self.assertTrue(Project.objects.filter(slug="allowed").exists())
 
     def test_a_person_signed_in_holds_their_role(self):
-        user = get_user_model().objects.create_user(username="operator", password="test-only-password")
+        user = operator()
         person = web_principal(user)
 
         self.assertTrue(person.permits("write_projects", "delete_projects", Capability.MANAGE_INFRASTRUCTURE))
@@ -158,7 +158,7 @@ def _own_phone(user=None):
     from hq.platform.core.models import OwnDevice
 
     if user is None:
-        user = get_user_model().objects.create_user(username="example-owner", password="test-only-password")
+        user = operator()
         bind_sign_in(user, sign_in_subject(settings.OIDC_ISSUER, PERSON))
     OwnDevice.objects.create(user=user, client_id="example-phone")
     return user
@@ -238,7 +238,7 @@ class DeviceActsAsItsPersonTests(TestCase):
 
         managing_everything()
         declare_policy()
-        self.user = get_user_model().objects.create_user(username="operator", password="test-only-password")
+        self.user = operator()
         bind_sign_in(self.user, sign_in_subject(ISSUER, PERSON))
         _own_phone(self.user)
 
@@ -265,10 +265,9 @@ class DeviceActsAsItsPersonTests(TestCase):
         from hq.domains.control_plane.models import ApprovalRequest
         from hq.platform.application.approvals import ApproveCommand, approve
         from hq.platform.application.capabilities import execute_capability
-        from hq.platform.application.security import Principal
         from hq.platform.application.tests.test_approvals import POLICY_KEY, reconcile_payload
 
-        agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
+        agent = AGENT
         asked = execute_capability(
             "infrastructure.resource.reconcile", reconcile_payload("asked"), principal=agent, target=POLICY_KEY
         )

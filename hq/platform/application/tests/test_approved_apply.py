@@ -7,8 +7,9 @@ since the approval as the copy the change replaced.
 
 from django.test import TestCase
 
-from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
+from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.testing import declare
 
 from ..approvals import ApproveCommand, RejectCommand, approve, reject
 from ..capabilities import execute_capability
@@ -127,11 +128,7 @@ class ApprovedChangeAppliesTests(TestCase):
         self.assertEqual(self.resource.spec["document"], policy_document())
 
     def test_a_kind_the_controller_converges_is_applied_at_once(self):
-        ManagedResource.objects.create(
-            key="example-rewrite",
-            kind=UNGATED_KIND,
-            spec={"domain": "example.test", "answer": "192.0.2.10"},
-        )
+        declare("example-rewrite", UNGATED_KIND, {"domain": "example.test", "answer": "192.0.2.10"})
 
         save_managed_resource(
             ManagedResourceCommand(

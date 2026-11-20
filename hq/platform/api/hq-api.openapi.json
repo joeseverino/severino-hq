@@ -171,6 +171,7 @@
           "items": {
             "enum": [
               "slug",
+              "url",
               "item_name",
               "vendor",
               "category",
@@ -209,6 +210,7 @@
           "items": {
             "enum": [
               "slug",
+              "url",
               "item_name",
               "vendor",
               "category",
@@ -460,6 +462,7 @@
           "items": {
             "enum": [
               "id",
+              "url",
               "connection_ref",
               "account_id",
               "database_id",
@@ -574,6 +577,7 @@
           "items": {
             "enum": [
               "slug",
+              "url",
               "title",
               "content_type",
               "status",
@@ -582,6 +586,7 @@
               "published_url",
               "published_at",
               "notes",
+              "created_at",
               "updated_at",
               "relationships",
               "relationships.projects",
@@ -607,6 +612,7 @@
           "items": {
             "enum": [
               "slug",
+              "url",
               "title",
               "content_type",
               "status",
@@ -615,6 +621,7 @@
               "published_url",
               "published_at",
               "notes",
+              "created_at",
               "updated_at",
               "*"
             ],
@@ -720,6 +727,7 @@
               "published_at",
               "notes",
               "updated_at",
+              "url",
               "relationships",
               "relationships.projects",
               "relationships.assets",
@@ -786,6 +794,8 @@
               "registration.source",
               "registration.auto_renew",
               "connection_ref",
+              "observed_only",
+              "adoption",
               "reachable",
               "observed_at",
               "records",
@@ -796,6 +806,17 @@
               "records.ttl",
               "records.declaration",
               "records.observed_only",
+              "records.manageable",
+              "records.secondary",
+              "records.service",
+              "records.health",
+              "records.health.state",
+              "records.health.label",
+              "records.health.reason",
+              "records.health.message",
+              "records.edits",
+              "records.removes",
+              "records.summary",
               "insights",
               "insights.label",
               "insights.value",
@@ -803,6 +824,25 @@
               "insights.url",
               "insights.concern",
               "insights.notice",
+              "insights.rows",
+              "insights.rows.title",
+              "insights.rows.detail",
+              "insights.rows.url",
+              "insights.rows.status",
+              "insights.rows.badge",
+              "insights.links",
+              "insights.links.label",
+              "insights.links.links",
+              "insights.links.links.label",
+              "insights.links.links.url",
+              "insights.links.links.external",
+              "insights.links.links.kind",
+              "insights.links.links.kind_label",
+              "insights.links.links.title",
+              "insights.links.links.detail",
+              "insights.links.links.identity",
+              "insights.note",
+              "insights.note_title",
               "*"
             ],
             "type": "string"
@@ -899,7 +939,7 @@
         },
         "style": "form"
       },
-      "ExpenseRowPageFields": {
+      "ExpenseRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -927,6 +967,13 @@
               "paid_from",
               "about",
               "updated_at",
+              "url",
+              "category_label",
+              "payment_method_label",
+              "project_name",
+              "asset_name",
+              "content_title",
+              "document_title",
               "*"
             ],
             "type": "string"
@@ -1150,16 +1197,20 @@
               "name",
               "url",
               "state",
+              "tone",
               "role",
               "roles",
               "roles.id",
               "roles.label",
+              "roles.detail",
               "addresses",
               "hostnames",
               "runs_hq",
               "node",
               "declaration",
               "aliases",
+              "address",
+              "tailnet_device",
               "header_addresses",
               "header_addresses.label",
               "header_addresses.address",
@@ -1179,6 +1230,13 @@
               "containers.published",
               "containers.watcher",
               "containers.observed_at",
+              "running",
+              "load",
+              "load.metrics",
+              "load.metrics.label",
+              "load.metrics.value",
+              "load.metrics.detail",
+              "load.observed_at",
               "presence",
               "presence.online",
               "presence.last_seen",
@@ -1198,6 +1256,26 @@
               "presence.exit_node_approved",
               "presence.ssh_enabled",
               "presence.blocks_incoming",
+              "presence.external",
+              "presence.lock_error",
+              "presence.signs_tailnet_lock",
+              "presence.unapproved_routes",
+              "presence.observer",
+              "presence.reached_hq",
+              "presence.reached_hq.last_seen",
+              "presence.reached_hq.how",
+              "presence.peering",
+              "presence.peering.last_handshake",
+              "presence.peering.active",
+              "presence.peering.path",
+              "presence.peering.direct_endpoint",
+              "presence.peering.relay",
+              "presence.peering.rx_bytes",
+              "presence.peering.tx_bytes",
+              "presence.peering.public_key",
+              "presence.openings",
+              "presence.openings.port",
+              "presence.openings.open_to",
               "presence.observed_at",
               "*"
             ],
@@ -1258,31 +1336,74 @@
         "schema": {
           "items": {
             "enum": [
-              "resource",
-              "resource.key",
-              "resource.kind",
-              "resource.enabled",
-              "resource.in_sync",
-              "resource.health",
-              "resource.health.state",
-              "resource.health.label",
-              "resource.health.reason",
-              "resource.health.message",
-              "resource.public_effect",
-              "resource.last_observed_at",
-              "resource.id",
-              "resource.spec",
-              "resource.status",
-              "resource.conditions",
-              "resource.conditions.type",
-              "resource.conditions.status",
-              "resource.conditions.reason",
-              "resource.conditions.message",
-              "resource.conditions.since",
-              "resource.generation",
-              "resource.observed_generation",
-              "resource.updated_at",
-              "derived",
+              "key",
+              "kind",
+              "enabled",
+              "in_sync",
+              "health",
+              "health.state",
+              "health.label",
+              "health.reason",
+              "health.message",
+              "public_effect",
+              "last_observed_at",
+              "id",
+              "spec",
+              "status",
+              "conditions",
+              "conditions.type",
+              "conditions.status",
+              "conditions.reason",
+              "conditions.message",
+              "conditions.since",
+              "generation",
+              "observed_generation",
+              "updated_at",
+              "url",
+              "name",
+              "standing",
+              "standing.state",
+              "standing.tone",
+              "standing.label",
+              "standing.detail",
+              "standing.since",
+              "standing.read_at",
+              "actions",
+              "removal",
+              "removal.mode",
+              "removal.reason",
+              "removal.pending",
+              "origin_machine",
+              "origin_machine.name",
+              "origin_machine.url",
+              "provider_machine",
+              "provider_machine.name",
+              "provider_machine.url",
+              "services",
+              "services.hostname",
+              "services.url",
+              "readout",
+              "readout.label",
+              "readout.desired",
+              "readout.observed",
+              "expiry",
+              "expiry.not_after",
+              "expiry.days_left",
+              "expiry.renewal_at",
+              "awaiting_approval",
+              "certificate",
+              "certificate.certificate_name",
+              "certificate.renewal_window_days",
+              "certificate.domains",
+              "consumers",
+              "consumers.name",
+              "consumers.kind",
+              "consumers.domains",
+              "consumers.connection_ref",
+              "consumers.url",
+              "resolution_error",
+              "used_by",
+              "unused_names",
               "operations",
               "operations.id",
               "operations.action",
@@ -1603,6 +1724,7 @@
           "items": {
             "enum": [
               "slug",
+              "url",
               "name",
               "category",
               "status",
@@ -1612,6 +1734,9 @@
               "public_url",
               "last_push_at",
               "dependency_updates",
+              "deployment_notes",
+              "security_notes",
+              "notes",
               "updated_at",
               "updates",
               "updates.open_pulls",
@@ -1645,6 +1770,7 @@
           "items": {
             "enum": [
               "slug",
+              "url",
               "name",
               "category",
               "status",
@@ -1654,6 +1780,9 @@
               "public_url",
               "last_push_at",
               "dependency_updates",
+              "deployment_notes",
+              "security_notes",
+              "notes",
               "updated_at",
               "updates",
               "updates.open_pulls",
@@ -1737,6 +1866,43 @@
               "refusal",
               "remedy",
               "items",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
+      "ReceiptRecordFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "id",
+              "original_filename",
+              "content_type",
+              "size_bytes",
+              "vendor",
+              "date",
+              "amount",
+              "notes",
+              "related_expense",
+              "related_asset",
+              "uploaded_at",
+              "updated_at",
+              "url",
+              "label",
+              "file",
+              "file_type_label",
+              "expense_label",
+              "expense_date",
+              "asset_name",
               "*"
             ],
             "type": "string"
@@ -1836,10 +2002,13 @@
           "items": {
             "enum": [
               "operation_id",
+              "url",
+              "title",
               "playbook",
               "capability",
               "state",
               "state_label",
+              "tone",
               "headline",
               "hosts",
               "by",
@@ -1850,6 +2019,9 @@
               "finished_at",
               "duration_seconds",
               "stated",
+              "reason",
+              "effect",
+              "attempts",
               "worker",
               "lease_until",
               "events",
@@ -1857,6 +2029,13 @@
               "events.task",
               "events.outcome",
               "events.message",
+              "events.tone",
+              "expected",
+              "affected",
+              "affected.consumer",
+              "affected.domain",
+              "affected.fingerprint_sha256",
+              "matched",
               "*"
             ],
             "type": "string"
@@ -1876,10 +2055,13 @@
           "items": {
             "enum": [
               "operation_id",
+              "url",
+              "title",
               "playbook",
               "capability",
               "state",
               "state_label",
+              "tone",
               "headline",
               "hosts",
               "by",
@@ -1961,6 +2143,11 @@
               "origin.address",
               "origin.host",
               "origin.container",
+              "origin.routed",
+              "origin.parked",
+              "origin.external",
+              "origin.known",
+              "origin.headline",
               "project",
               "faults",
               "mark",
@@ -1988,23 +2175,29 @@
         "schema": {
           "items": {
             "enum": [
-              "service",
-              "service.hostname",
-              "service.status",
-              "service.status_label",
-              "service.origin",
-              "service.origin.address",
-              "service.origin.host",
-              "service.origin.container",
-              "service.project",
-              "service.faults",
-              "service.mark",
-              "service.facets",
-              "service.facets.id",
-              "service.facets.label",
-              "service.facets.present",
-              "service.facets.state",
-              "service.facets.resources",
+              "hostname",
+              "status",
+              "status_label",
+              "origin",
+              "origin.address",
+              "origin.host",
+              "origin.container",
+              "origin.routed",
+              "origin.parked",
+              "origin.external",
+              "origin.known",
+              "origin.headline",
+              "project",
+              "faults",
+              "mark",
+              "facets",
+              "facets.id",
+              "facets.label",
+              "facets.present",
+              "facets.state",
+              "facets.resources",
+              "url",
+              "listing",
               "path",
               "path.hostname",
               "path.line",
@@ -2103,6 +2296,50 @@
               "path.routes.hops.layers.boundary",
               "path.routes.hops.layers.mechanism",
               "path.routes.hops.layers.rules",
+              "summary",
+              "summary.label",
+              "summary.value",
+              "summary.link",
+              "summary.link.label",
+              "summary.link.url",
+              "summary.link.external",
+              "summary.link.kind",
+              "summary.link.kind_label",
+              "summary.link.title",
+              "summary.link.detail",
+              "summary.link.identity",
+              "summary.detail",
+              "summary.tone",
+              "summary.icon",
+              "exposure",
+              "exposure.level",
+              "exposure.label",
+              "exposure.tone",
+              "exposure.reach",
+              "exposure.reach.id",
+              "exposure.reach.label",
+              "exposure.reach.detail",
+              "exposure.reach.tailnet_only",
+              "exposure.path_gates",
+              "aliases",
+              "alias_records",
+              "alias_records.alias",
+              "alias_records.link",
+              "alias_records.link.label",
+              "alias_records.link.url",
+              "alias_records.link.external",
+              "alias_records.link.kind",
+              "alias_records.link.kind_label",
+              "alias_records.link.title",
+              "alias_records.link.detail",
+              "alias_records.link.identity",
+              "alias_records.kind",
+              "alias_records.health",
+              "alias_records.health.state",
+              "alias_records.health.label",
+              "alias_records.health.reason",
+              "alias_records.health.message",
+              "provider_answers",
               "*"
             ],
             "type": "string"
@@ -3063,21 +3300,6 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/MachineRecordSuccess"
-            }
-          }
-        },
-        "description": "Success.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        }
-      },
-      "ManagedResourceRecordSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ManagedResourceRecordSuccess"
             }
           }
         },
@@ -4550,6 +4772,44 @@
         },
         "type": "object"
       },
+      "ActionPart": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic": {
+            "description": "Whether the controller does it on its own, unasked.",
+            "type": "boolean"
+          },
+          "enabled": {
+            "description": "Whether it may be asked for now.",
+            "type": "boolean"
+          },
+          "reason": {
+            "description": "Why it may not, as a sentence; empty when it may.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "reason",
+          "automatic"
+        ],
+        "type": "object"
+      },
+      "ActionPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic": {
+            "$ref": "#/components/schemas/ActionPart/properties/automatic"
+          },
+          "enabled": {
+            "$ref": "#/components/schemas/ActionPart/properties/enabled"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ActionPart/properties/reason"
+          }
+        },
+        "type": "object"
+      },
       "AdGuardRewriteSpec": {
         "additionalProperties": false,
         "description": "A name AdGuard answers on your network with an address of HQ's choosing.",
@@ -4574,6 +4834,11 @@
           "answer"
         ],
         "type": "object"
+      },
+      "AddedAt": {
+        "description": "When it was added to HQ, an ISO 8601 date-time.",
+        "format": "date-time",
+        "type": "string"
       },
       "AddressLookedUp": {
         "additionalProperties": false,
@@ -4828,6 +5093,50 @@
         "minimum": 1,
         "type": "integer"
       },
+      "AliasRecordPart": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "description": "The other name the record is for.",
+            "type": "string"
+          },
+          "health": {
+            "$ref": "#/components/schemas/HealthPart"
+          },
+          "kind": {
+            "description": "The record's type, such as `cloudflare.dns_record`.",
+            "type": "string"
+          },
+          "link": {
+            "$ref": "#/components/schemas/EntityLink"
+          }
+        },
+        "required": [
+          "alias",
+          "link",
+          "kind",
+          "health"
+        ],
+        "type": "object"
+      },
+      "AliasRecordPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "alias": {
+            "$ref": "#/components/schemas/AliasRecordPart/properties/alias"
+          },
+          "health": {
+            "$ref": "#/components/schemas/HealthPartPartial"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AliasRecordPart/properties/kind"
+          },
+          "link": {
+            "$ref": "#/components/schemas/EntityLinkPartial"
+          }
+        },
+        "type": "object"
+      },
       "Allocation": {
         "additionalProperties": false,
         "description": "Who an address was allocated to, as the registry that allocated it says; empty when it could not be read.",
@@ -5054,6 +5363,37 @@
           "ok",
           "data"
         ],
+        "type": "object"
+      },
+      "ArrivalPart": {
+        "additionalProperties": false,
+        "properties": {
+          "how": {
+            "description": "How that request came, such as `directly over the tailnet`.",
+            "type": "string"
+          },
+          "last_seen": {
+            "description": "When a request last came to HQ from it, an ISO 8601 date-time.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "last_seen",
+          "how"
+        ],
+        "type": "object"
+      },
+      "ArrivalPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "how": {
+            "$ref": "#/components/schemas/ArrivalPart/properties/how"
+          },
+          "last_seen": {
+            "$ref": "#/components/schemas/ArrivalPart/properties/last_seen"
+          }
+        },
         "type": "object"
       },
       "AsRead": {
@@ -5432,6 +5772,9 @@
           "updated_at": {
             "$ref": "#/components/schemas/AssetRow/properties/updated_at"
           },
+          "url": {
+            "$ref": "#/components/schemas/AssetRow/properties/url"
+          },
           "vendor": {
             "$ref": "#/components/schemas/AssetRow/properties/vendor"
           },
@@ -5441,6 +5784,7 @@
         },
         "required": [
           "slug",
+          "url",
           "item_name",
           "vendor",
           "category",
@@ -5504,6 +5848,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/AssetRowPartial/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/AssetRowPartial/properties/url"
           },
           "vendor": {
             "$ref": "#/components/schemas/AssetRowPartial/properties/vendor"
@@ -5574,6 +5921,9 @@
           "updated_at": {
             "$ref": "#/components/schemas/UpdatedAt"
           },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          },
           "vendor": {
             "$ref": "#/components/schemas/AssetVendor"
           },
@@ -5583,6 +5933,7 @@
         },
         "required": [
           "slug",
+          "url",
           "item_name",
           "vendor",
           "category",
@@ -5672,6 +6023,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/UpdatedAt"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
           },
           "vendor": {
             "$ref": "#/components/schemas/AssetVendor"
@@ -5895,6 +6249,52 @@
       "AttemptCount": {
         "description": "How many times a controller has tried it.",
         "type": "integer"
+      },
+      "AudiencePart": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "description": "What said so, in a sentence.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Who may open a connection, by id, such as `tailnet` or `internet`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "That audience in words; empty when unknown.",
+            "type": "string"
+          },
+          "tailnet_only": {
+            "description": "Whether only devices on the tailnet may connect.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "detail",
+          "tailnet_only"
+        ],
+        "type": "object"
+      },
+      "AudiencePartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/AudiencePart/properties/detail"
+          },
+          "id": {
+            "$ref": "#/components/schemas/AudiencePart/properties/id"
+          },
+          "label": {
+            "$ref": "#/components/schemas/AudiencePart/properties/label"
+          },
+          "tailnet_only": {
+            "$ref": "#/components/schemas/AudiencePart/properties/tailnet_only"
+          }
+        },
+        "type": "object"
       },
       "AutomationRunCancelRequest": {
         "additionalProperties": false,
@@ -6897,6 +7297,49 @@
         "required": [
           "name"
         ],
+        "type": "object"
+      },
+      "CertificatePart": {
+        "additionalProperties": false,
+        "description": "A certificate as the controller resolves its declaration.",
+        "properties": {
+          "certificate_name": {
+            "description": "The name the certificate is filed under.",
+            "type": "string"
+          },
+          "domains": {
+            "description": "The names it is issued for.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "renewal_window_days": {
+            "description": "How many days before it expires it renews.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "certificate_name",
+          "renewal_window_days",
+          "domains"
+        ],
+        "type": "object"
+      },
+      "CertificatePartPartial": {
+        "additionalProperties": false,
+        "description": "A certificate as the controller resolves its declaration.",
+        "properties": {
+          "certificate_name": {
+            "$ref": "#/components/schemas/CertificatePart/properties/certificate_name"
+          },
+          "domains": {
+            "$ref": "#/components/schemas/CertificatePart/properties/domains"
+          },
+          "renewal_window_days": {
+            "$ref": "#/components/schemas/CertificatePart/properties/renewal_window_days"
+          }
+        },
         "type": "object"
       },
       "CertificatePartial": {
@@ -8432,6 +8875,63 @@
         },
         "type": "object"
       },
+      "ConsumerPart": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_ref": {
+            "description": "The connection that installs it there, by ref; empty for none.",
+            "type": "string"
+          },
+          "domains": {
+            "description": "The names checked there: those last read, else those it is told to check.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "description": "What kind of place it is.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Where the certificate is installed, by the name its declaration gives it.",
+            "type": "string"
+          },
+          "url": {
+            "description": "The page in HQ of the record that delivers it there; empty for none.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "domains",
+          "connection_ref",
+          "url"
+        ],
+        "type": "object"
+      },
+      "ConsumerPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_ref": {
+            "$ref": "#/components/schemas/ConsumerPart/properties/connection_ref"
+          },
+          "domains": {
+            "$ref": "#/components/schemas/ConsumerPart/properties/domains"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ConsumerPart/properties/kind"
+          },
+          "name": {
+            "$ref": "#/components/schemas/ConsumerPart/properties/name"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ConsumerPart/properties/url"
+          }
+        },
+        "type": "object"
+      },
       "ContactDeleted": {
         "additionalProperties": false,
         "description": "A message the contact inbox was asked to delete.",
@@ -8715,6 +9215,9 @@
             ],
             "description": "When the table last changed it, an ISO 8601 date-time; null when the table says nothing."
           },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          },
           "user_agent": {
             "description": "The visitor's browser's whole user agent string.",
             "type": "string"
@@ -8722,6 +9225,7 @@
         },
         "required": [
           "id",
+          "url",
           "pending",
           "message_preview"
         ],
@@ -8823,6 +9327,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/ContactSubmissionRow/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
           },
           "user_agent": {
             "$ref": "#/components/schemas/ContactSubmissionRow/properties/user_agent"
@@ -9393,6 +9900,9 @@
           "content_type": {
             "$ref": "#/components/schemas/ContentRow/properties/content_type"
           },
+          "created_at": {
+            "$ref": "#/components/schemas/ContentRow/properties/created_at"
+          },
           "notes": {
             "$ref": "#/components/schemas/ContentRow/properties/notes"
           },
@@ -9422,10 +9932,14 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/ContentRow/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ContentRow/properties/url"
           }
         },
         "required": [
           "slug",
+          "url",
           "title",
           "content_type",
           "status",
@@ -9434,6 +9948,7 @@
           "published_url",
           "published_at",
           "notes",
+          "created_at",
           "updated_at",
           "relationships"
         ],
@@ -9445,6 +9960,9 @@
         "properties": {
           "content_type": {
             "$ref": "#/components/schemas/ContentRowPartial/properties/content_type"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/ContentRowPartial/properties/created_at"
           },
           "notes": {
             "$ref": "#/components/schemas/ContentRowPartial/properties/notes"
@@ -9475,6 +9993,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/ContentRowPartial/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ContentRowPartial/properties/url"
           }
         },
         "type": "object"
@@ -9502,6 +10023,9 @@
         "properties": {
           "content_type": {
             "$ref": "#/components/schemas/ContentType"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/AddedAt"
           },
           "notes": {
             "$ref": "#/components/schemas/Notes"
@@ -9533,10 +10057,14 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/UpdatedAt"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
           "slug",
+          "url",
           "title",
           "content_type",
           "status",
@@ -9545,6 +10073,7 @@
           "published_url",
           "published_at",
           "notes",
+          "created_at",
           "updated_at"
         ],
         "type": "object"
@@ -9586,6 +10115,9 @@
           "content_type": {
             "$ref": "#/components/schemas/ContentType"
           },
+          "created_at": {
+            "$ref": "#/components/schemas/AddedAt"
+          },
           "notes": {
             "$ref": "#/components/schemas/Notes"
           },
@@ -9612,6 +10144,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/UpdatedAt"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -10750,6 +11285,26 @@
             "description": "The key of HQ's record of it; empty for none.",
             "type": "string"
           },
+          "edits": {
+            "description": "Whether HQ's record of it offers an edit.",
+            "type": "boolean"
+          },
+          "health": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HealthPart",
+                "title": "Health part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The health of HQ's record of it; null for none."
+          },
+          "manageable": {
+            "description": "Whether HQ can declare a record of its type; false for one HQ only lists.",
+            "type": "boolean"
+          },
           "name": {
             "description": "The name in the zone the record is for.",
             "type": "string"
@@ -10764,6 +11319,22 @@
           },
           "record_type": {
             "description": "The record's type, such as `A`, `CNAME` or `TXT`.",
+            "type": "string"
+          },
+          "removes": {
+            "description": "Whether HQ's record of it offers its removal.",
+            "type": "boolean"
+          },
+          "secondary": {
+            "description": "Whether it states policy or proves ownership, such as a TXT or CAA record, over routing.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "The hostname of the service it declares; empty for a type that declares none.",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Its value in a line, where another record shares its name and type; empty where none does.",
             "type": "string"
           },
           "ttl": {
@@ -10782,7 +11353,14 @@
           "proxied",
           "ttl",
           "declaration",
-          "observed_only"
+          "observed_only",
+          "manageable",
+          "secondary",
+          "service",
+          "health",
+          "edits",
+          "removes",
+          "summary"
         ],
         "type": "object"
       },
@@ -10791,6 +11369,24 @@
         "properties": {
           "declaration": {
             "$ref": "#/components/schemas/DnsRecordPart/properties/declaration"
+          },
+          "edits": {
+            "$ref": "#/components/schemas/DnsRecordPart/properties/edits"
+          },
+          "health": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HealthPartPartial",
+                "title": "Health part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The health of HQ's record of it; null for none."
+          },
+          "manageable": {
+            "$ref": "#/components/schemas/DnsRecordPart/properties/manageable"
           },
           "name": {
             "$ref": "#/components/schemas/DnsRecordPart/properties/name"
@@ -10803,6 +11399,18 @@
           },
           "record_type": {
             "$ref": "#/components/schemas/DnsRecordPart/properties/record_type"
+          },
+          "removes": {
+            "$ref": "#/components/schemas/DnsRecordPart/properties/removes"
+          },
+          "secondary": {
+            "$ref": "#/components/schemas/DnsRecordPart/properties/secondary"
+          },
+          "service": {
+            "$ref": "#/components/schemas/DnsRecordPart/properties/service"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/DnsRecordPart/properties/summary"
           },
           "ttl": {
             "$ref": "#/components/schemas/DnsRecordPart/properties/ttl"
@@ -11179,6 +11787,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/DocumentationRow/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -11196,6 +11807,7 @@
           "published_at",
           "notes",
           "updated_at",
+          "url",
           "relationships"
         ],
         "type": "object"
@@ -11248,6 +11860,9 @@
           },
           "updated_at": {
             "$ref": "#/components/schemas/DocumentationRowPartial/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -11777,6 +12392,10 @@
         "additionalProperties": false,
         "description": "One domain with its records, its connection and what HQ makes of it.",
         "properties": {
+          "adoption": {
+            "description": "The handle `infrastructure.zone.adopt` takes to manage the domain as it was read; empty when HQ manages it or cannot.",
+            "type": "string"
+          },
           "connection_ref": {
             "description": "The connection that reads the domain's DNS records; empty for none.",
             "type": "string"
@@ -11807,6 +12426,10 @@
               }
             ]
           },
+          "observed_only": {
+            "description": "Whether HQ keeps no record of it and reads it through a connection that cannot change it.",
+            "type": "boolean"
+          },
           "reachable": {
             "description": "Whether that connection answered its last read.",
             "type": "boolean"
@@ -11836,6 +12459,8 @@
           "services",
           "registration",
           "connection_ref",
+          "observed_only",
+          "adoption",
           "reachable",
           "observed_at",
           "records",
@@ -11847,6 +12472,9 @@
         "additionalProperties": false,
         "description": "One domain with its records, its connection and what HQ makes of it.",
         "properties": {
+          "adoption": {
+            "$ref": "#/components/schemas/DomainRecord/properties/adoption"
+          },
           "connection_ref": {
             "$ref": "#/components/schemas/DomainRecord/properties/connection_ref"
           },
@@ -11875,6 +12503,9 @@
                 "type": "null"
               }
             ]
+          },
+          "observed_only": {
+            "$ref": "#/components/schemas/DomainRecord/properties/observed_only"
           },
           "reachable": {
             "$ref": "#/components/schemas/DomainRecord/properties/reachable"
@@ -11949,8 +12580,7 @@
             "type": "array"
           },
           "url": {
-            "description": "The domain's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -12024,7 +12654,7 @@
             "type": "array"
           },
           "url": {
-            "$ref": "#/components/schemas/DomainRow/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -12848,6 +13478,257 @@
           "resource": "projects"
         }
       },
+      "ExpenseRecord": {
+        "additionalProperties": false,
+        "description": "One expense with the words and names its related records are said by.",
+        "properties": {
+          "about": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/about"
+          },
+          "asset_name": {
+            "description": "The related asset's name; empty for none.",
+            "type": "string"
+          },
+          "business_purpose": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/business_purpose"
+          },
+          "business_use_percentage": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/business_use_percentage"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/category"
+          },
+          "category_label": {
+            "description": "Its category, in words.",
+            "type": "string"
+          },
+          "content_title": {
+            "description": "The related writeup's or page's title; empty for none.",
+            "type": "string"
+          },
+          "date": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/date"
+          },
+          "document_title": {
+            "description": "The related doc's title; empty for none, or for one too sensitive to share.",
+            "type": "string"
+          },
+          "estimated_deductible_amount": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/estimated_deductible_amount"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/id"
+          },
+          "item": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/item"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/label"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/notes"
+          },
+          "paid_from": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/paid_from"
+          },
+          "payment_method": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/payment_method"
+          },
+          "payment_method_label": {
+            "description": "How it was paid for, in words; empty when not recorded.",
+            "type": "string"
+          },
+          "project_name": {
+            "description": "The related project's name; empty for none.",
+            "type": "string"
+          },
+          "related_asset": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/related_asset"
+          },
+          "related_content": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/related_content"
+          },
+          "related_documentation": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/related_documentation"
+          },
+          "related_project": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/related_project"
+          },
+          "total_cost": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/total_cost"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          },
+          "vendor": {
+            "$ref": "#/components/schemas/ExpenseRow/properties/vendor"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "date",
+          "vendor",
+          "item",
+          "category",
+          "total_cost",
+          "business_use_percentage",
+          "estimated_deductible_amount",
+          "payment_method",
+          "business_purpose",
+          "notes",
+          "related_project",
+          "related_asset",
+          "related_content",
+          "related_documentation",
+          "paid_from",
+          "about",
+          "updated_at",
+          "url",
+          "category_label",
+          "payment_method_label",
+          "project_name",
+          "asset_name",
+          "content_title",
+          "document_title"
+        ],
+        "type": "object"
+      },
+      "ExpenseRecordPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ExpenseRecordPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ExpenseRecordPartial": {
+        "additionalProperties": false,
+        "description": "One expense with the words and names its related records are said by.",
+        "properties": {
+          "about": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/about"
+          },
+          "asset_name": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/asset_name"
+          },
+          "business_purpose": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/business_purpose"
+          },
+          "business_use_percentage": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/business_use_percentage"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/category"
+          },
+          "category_label": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/category_label"
+          },
+          "content_title": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/content_title"
+          },
+          "date": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/date"
+          },
+          "document_title": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/document_title"
+          },
+          "estimated_deductible_amount": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/estimated_deductible_amount"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/id"
+          },
+          "item": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/item"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/label"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/notes"
+          },
+          "paid_from": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/paid_from"
+          },
+          "payment_method": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/payment_method"
+          },
+          "payment_method_label": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/payment_method_label"
+          },
+          "project_name": {
+            "$ref": "#/components/schemas/ExpenseRecord/properties/project_name"
+          },
+          "related_asset": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/related_asset"
+          },
+          "related_content": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/related_content"
+          },
+          "related_documentation": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/related_documentation"
+          },
+          "related_project": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/related_project"
+          },
+          "total_cost": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/total_cost"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          },
+          "vendor": {
+            "$ref": "#/components/schemas/ExpenseRowPartial/properties/vendor"
+          }
+        },
+        "type": "object"
+      },
+      "ExpenseRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ExpenseRecordPartial"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ExpenseRow": {
         "additionalProperties": false,
         "description": "One expense; each related record by its slug or id, or null.",
@@ -12935,36 +13816,6 @@
         ],
         "type": "object"
       },
-      "ExpenseRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "$ref": "#/components/schemas/ExpenseRowPartial"
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
-        "required": [
-          "ok",
-          "data"
-        ],
-        "type": "object"
-      },
       "ExpenseRowPartial": {
         "additionalProperties": false,
         "description": "One expense; each related record by its slug or id, or null.",
@@ -13037,7 +13888,7 @@
             "$ref": "#/components/schemas/Created"
           },
           "expense": {
-            "$ref": "#/components/schemas/ExpenseRow"
+            "$ref": "#/components/schemas/ExpenseRecord"
           },
           "message": {
             "$ref": "#/components/schemas/CallMessage"
@@ -13223,6 +14074,106 @@
       "ExpenseVendor": {
         "description": "Who was paid.",
         "type": "string"
+      },
+      "ExpiryPart": {
+        "additionalProperties": false,
+        "properties": {
+          "days_left": {
+            "description": "Whole days until it expires.",
+            "type": "integer"
+          },
+          "not_after": {
+            "description": "When the certificate expires, an ISO 8601 date-time.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "renewal_at": {
+            "description": "When its renewal window opens, an ISO 8601 date-time.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "not_after",
+          "days_left",
+          "renewal_at"
+        ],
+        "type": "object"
+      },
+      "ExpiryPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "days_left": {
+            "$ref": "#/components/schemas/ExpiryPart/properties/days_left"
+          },
+          "not_after": {
+            "$ref": "#/components/schemas/ExpiryPart/properties/not_after"
+          },
+          "renewal_at": {
+            "$ref": "#/components/schemas/ExpiryPart/properties/renewal_at"
+          }
+        },
+        "type": "object"
+      },
+      "ExposurePart": {
+        "additionalProperties": false,
+        "description": "Who can reach the name, by the worst of its routes.",
+        "properties": {
+          "label": {
+            "description": "That level, in words.",
+            "type": "string"
+          },
+          "level": {
+            "description": "How open its worst route is: `open`, `unknown`, `gated`, `private` or `unrouted`.",
+            "type": "string"
+          },
+          "path_gates": {
+            "description": "The paths a gate stands in front of on an open route that no gate covers whole.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reach": {
+            "$ref": "#/components/schemas/AudiencePart",
+            "description": "Who its worst route lets in."
+          },
+          "tone": {
+            "description": "How that level is colored: `serious`, `attention`, `neutral` or `good`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "label",
+          "tone",
+          "reach",
+          "path_gates"
+        ],
+        "type": "object"
+      },
+      "ExposurePartPartial": {
+        "additionalProperties": false,
+        "description": "Who can reach the name, by the worst of its routes.",
+        "properties": {
+          "label": {
+            "$ref": "#/components/schemas/ExposurePart/properties/label"
+          },
+          "level": {
+            "$ref": "#/components/schemas/ExposurePart/properties/level"
+          },
+          "path_gates": {
+            "$ref": "#/components/schemas/ExposurePart/properties/path_gates"
+          },
+          "reach": {
+            "$ref": "#/components/schemas/AudiencePartPartial",
+            "description": "Who its worst route lets in."
+          },
+          "tone": {
+            "$ref": "#/components/schemas/ExposurePart/properties/tone"
+          }
+        },
+        "type": "object"
       },
       "ExternalUrl": {
         "description": "Where it is published outside HQ. Empty for none.",
@@ -15547,9 +16498,31 @@
             "description": "What the insight is about, in a few words.",
             "type": "string"
           },
+          "links": {
+            "description": "What it names, each group under what it is to the domain.",
+            "items": {
+              "$ref": "#/components/schemas/LinkGroupPart"
+            },
+            "type": "array"
+          },
+          "note": {
+            "description": "A reason kept beside it, in a line; empty for none.",
+            "type": "string"
+          },
+          "note_title": {
+            "description": "The note's full reason, where `note` says it in fewer words; empty for none.",
+            "type": "string"
+          },
           "notice": {
             "description": "Whether it is a notice worth knowing, short of a concern.",
             "type": "boolean"
+          },
+          "rows": {
+            "description": "The whole list a counted `value` stands for; empty for none.",
+            "items": {
+              "$ref": "#/components/schemas/InsightRowPart"
+            },
+            "type": "array"
           },
           "url": {
             "description": "Where to look into it; empty for none.",
@@ -15566,7 +16539,11 @@
           "detail",
           "url",
           "concern",
-          "notice"
+          "notice",
+          "rows",
+          "links",
+          "note",
+          "note_title"
         ],
         "type": "object"
       },
@@ -15582,14 +16559,87 @@
           "label": {
             "$ref": "#/components/schemas/InsightPart/properties/label"
           },
+          "links": {
+            "description": "What it names, each group under what it is to the domain.",
+            "items": {
+              "$ref": "#/components/schemas/LinkGroupPartPartial"
+            },
+            "type": "array"
+          },
+          "note": {
+            "$ref": "#/components/schemas/InsightPart/properties/note"
+          },
+          "note_title": {
+            "$ref": "#/components/schemas/InsightPart/properties/note_title"
+          },
           "notice": {
             "$ref": "#/components/schemas/InsightPart/properties/notice"
+          },
+          "rows": {
+            "description": "The whole list a counted `value` stands for; empty for none.",
+            "items": {
+              "$ref": "#/components/schemas/InsightRowPartPartial"
+            },
+            "type": "array"
           },
           "url": {
             "$ref": "#/components/schemas/InsightPart/properties/url"
           },
           "value": {
             "$ref": "#/components/schemas/InsightPart/properties/value"
+          }
+        },
+        "type": "object"
+      },
+      "InsightRowPart": {
+        "additionalProperties": false,
+        "properties": {
+          "badge": {
+            "description": "That state in words; empty for none.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "The one fact that sets it apart; empty for none.",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OptionalTone"
+          },
+          "title": {
+            "description": "What the row names.",
+            "type": "string"
+          },
+          "url": {
+            "description": "Its page; empty for none.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "detail",
+          "url",
+          "status",
+          "badge"
+        ],
+        "type": "object"
+      },
+      "InsightRowPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "badge": {
+            "$ref": "#/components/schemas/InsightRowPart/properties/badge"
+          },
+          "detail": {
+            "$ref": "#/components/schemas/InsightRowPart/properties/detail"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OptionalTone"
+          },
+          "title": {
+            "$ref": "#/components/schemas/InsightRowPart/properties/title"
+          },
+          "url": {
+            "$ref": "#/components/schemas/InsightRowPart/properties/url"
           }
         },
         "type": "object"
@@ -15843,6 +16893,43 @@
         ],
         "type": "object"
       },
+      "LinkGroupPart": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "description": "What the things it names are to the domain, such as `Served by`.",
+            "type": "string"
+          },
+          "links": {
+            "description": "The things it names.",
+            "items": {
+              "$ref": "#/components/schemas/EntityLink"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "links"
+        ],
+        "type": "object"
+      },
+      "LinkGroupPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "$ref": "#/components/schemas/LinkGroupPart/properties/label"
+          },
+          "links": {
+            "description": "The things it names.",
+            "items": {
+              "$ref": "#/components/schemas/EntityLinkPartial"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "LinkedAssets": {
         "description": "The slugs of the assets it is about, sorted.",
         "items": {
@@ -15906,9 +16993,58 @@
           }
         },
         "required": [
-          "filters",
-          "fields"
+          "filters"
         ],
+        "type": "object"
+      },
+      "LoadPart": {
+        "additionalProperties": false,
+        "properties": {
+          "metrics": {
+            "description": "Each measure of the last reading, less a count of containers where `containers` lists them.",
+            "items": {
+              "$ref": "#/components/schemas/MetricPart"
+            },
+            "type": "array"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObservedAt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "metrics",
+          "observed_at"
+        ],
+        "type": "object"
+      },
+      "LoadPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "metrics": {
+            "description": "Each measure of the last reading, less a count of containers where `containers` lists them.",
+            "items": {
+              "$ref": "#/components/schemas/MetricPartPartial"
+            },
+            "type": "array"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObservedAt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
         "type": "object"
       },
       "LookupAddressReadRequest": {
@@ -16078,10 +17214,44 @@
         },
         "type": "object"
       },
+      "MachinePointer": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "Which machine, by its name.",
+            "type": "string"
+          },
+          "url": {
+            "description": "That machine's page in HQ.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "type": "object"
+      },
+      "MachinePointerPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/MachinePointer/properties/name"
+          },
+          "url": {
+            "$ref": "#/components/schemas/MachinePointer/properties/url"
+          }
+        },
+        "type": "object"
+      },
       "MachineRecord": {
         "additionalProperties": false,
         "description": "One machine whole: how it is reached, what it serves and what runs on it.",
         "properties": {
+          "address": {
+            "description": "The address its connection reaches it at; empty when none says.",
+            "type": "string"
+          },
           "addresses": {
             "$ref": "#/components/schemas/MachineRow/properties/addresses"
           },
@@ -16123,6 +17293,18 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "load": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LoadPart",
+                "title": "Load part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its last reading of load; null when nothing reads it."
           },
           "name": {
             "$ref": "#/components/schemas/MachineRow/properties/name"
@@ -16170,11 +17352,22 @@
           "roles": {
             "$ref": "#/components/schemas/MachineRow/properties/roles"
           },
+          "running": {
+            "description": "How many of `containers` are running.",
+            "type": "integer"
+          },
           "runs_hq": {
             "$ref": "#/components/schemas/MachineRow/properties/runs_hq"
           },
           "state": {
             "$ref": "#/components/schemas/MachineRow/properties/state"
+          },
+          "tailnet_device": {
+            "description": "The key of HQ's record of its tailnet device, which approves its routes; empty for none.",
+            "type": "string"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/MachineRow/properties/tone"
           },
           "unanswered": {
             "description": "Those of `reached_by` that did not answer their last check.",
@@ -16191,6 +17384,7 @@
           "name",
           "url",
           "state",
+          "tone",
           "role",
           "roles",
           "addresses",
@@ -16199,6 +17393,8 @@
           "node",
           "declaration",
           "aliases",
+          "address",
+          "tailnet_device",
           "header_addresses",
           "containers_visible",
           "hq_hostnames",
@@ -16207,6 +17403,8 @@
           "unanswered",
           "resources",
           "containers",
+          "running",
+          "load",
           "presence"
         ],
         "type": "object"
@@ -16245,6 +17443,9 @@
         "additionalProperties": false,
         "description": "One machine whole: how it is reached, what it serves and what runs on it.",
         "properties": {
+          "address": {
+            "$ref": "#/components/schemas/MachineRecord/properties/address"
+          },
           "addresses": {
             "$ref": "#/components/schemas/MachineRowPartial/properties/addresses"
           },
@@ -16276,6 +17477,18 @@
           },
           "hq_hostnames": {
             "$ref": "#/components/schemas/MachineRecord/properties/hq_hostnames"
+          },
+          "load": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LoadPartPartial",
+                "title": "Load part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its last reading of load; null when nothing reads it."
           },
           "name": {
             "$ref": "#/components/schemas/MachineRowPartial/properties/name"
@@ -16310,11 +17523,20 @@
           "roles": {
             "$ref": "#/components/schemas/MachineRowPartial/properties/roles"
           },
+          "running": {
+            "$ref": "#/components/schemas/MachineRecord/properties/running"
+          },
           "runs_hq": {
             "$ref": "#/components/schemas/MachineRowPartial/properties/runs_hq"
           },
           "state": {
             "$ref": "#/components/schemas/MachineRowPartial/properties/state"
+          },
+          "tailnet_device": {
+            "$ref": "#/components/schemas/MachineRecord/properties/tailnet_device"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/MachineRowPartial/properties/tone"
           },
           "unanswered": {
             "$ref": "#/components/schemas/MachineRecord/properties/unanswered"
@@ -16382,15 +17604,19 @@
             "description": "Whether it can be reached now, such as `online`, `away` for a personal device that is off, `offline` or `not monitored`.",
             "type": "string"
           },
-          "url": {
-            "description": "The machine's page in HQ.",
+          "tone": {
+            "description": "How its state is colored: `good`, `neutral` or `serious`.",
             "type": "string"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
           "name",
           "url",
           "state",
+          "tone",
           "role",
           "roles",
           "addresses",
@@ -16427,8 +17653,11 @@
           "state": {
             "$ref": "#/components/schemas/MachineRow/properties/state"
           },
+          "tone": {
+            "$ref": "#/components/schemas/MachineRow/properties/tone"
+          },
           "url": {
-            "$ref": "#/components/schemas/MachineRow/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -16671,11 +17900,83 @@
       },
       "ManagedResourceRecord": {
         "additionalProperties": false,
-        "description": "One managed record, what HQ derives from it, and the operations run on it.",
+        "description": "One managed record whole, what HQ derives from it, and the operations run on it.",
         "properties": {
-          "derived": {
-            "description": "What HQ derives from the record. It holds health, allowed actions, machines and services, expected beside live, certificate expiry, pending approvals and what uses it.",
+          "actions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ActionPart"
+            },
+            "description": "Each action of its controller, by verb, and whether it may run.",
             "type": "object"
+          },
+          "awaiting_approval": {
+            "description": "How many changes to it wait for an operator's approval.",
+            "type": "integer"
+          },
+          "certificate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CertificatePart",
+                "title": "Certificate part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A certificate as the controller resolves it; null for anything else."
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/conditions"
+          },
+          "consumers": {
+            "description": "Where a certificate is installed.",
+            "items": {
+              "$ref": "#/components/schemas/ConsumerPart"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/enabled"
+          },
+          "expiry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpiryPart",
+                "title": "Expiry part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A certificate's expiry and renewal; null for anything else."
+          },
+          "generation": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/generation"
+          },
+          "health": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/health"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/id"
+          },
+          "in_sync": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/in_sync"
+          },
+          "key": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/key"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/kind"
+          },
+          "last_observed_at": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/last_observed_at"
+          },
+          "name": {
+            "description": "The name its page is titled by.",
+            "type": "string"
+          },
+          "observed_generation": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/observed_generation"
           },
           "operations": {
             "description": "The latest operations that changed it, newest first.",
@@ -16684,23 +17985,197 @@
             },
             "type": "array"
           },
-          "resource": {
-            "$ref": "#/components/schemas/ManagedResourceItem"
+          "origin_machine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachinePointer",
+                "title": "Machine pointer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine it sends traffic to; null for none."
+          },
+          "provider_machine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachinePointer",
+                "title": "Machine pointer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine the provider that manages it runs on; null when unknown."
+          },
+          "public_effect": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/public_effect"
+          },
+          "readout": {
+            "description": "Its settings, what HQ expects beside what was last read.",
+            "items": {
+              "$ref": "#/components/schemas/ReadoutPart"
+            },
+            "type": "array"
+          },
+          "removal": {
+            "$ref": "#/components/schemas/RemovalPart"
+          },
+          "resolution_error": {
+            "description": "Why a certificate could not be resolved; empty when it was.",
+            "type": "string"
+          },
+          "services": {
+            "description": "The services it is part of.",
+            "items": {
+              "$ref": "#/components/schemas/ServicePointer"
+            },
+            "type": "array"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/spec"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingPart"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/status"
+          },
+          "unused_names": {
+            "description": "The names on a certificate nothing is served under.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/updated_at"
+          },
+          "url": {
+            "description": "Its page in HQ: its own, or the page of the machine it declares.",
+            "type": "string"
+          },
+          "used_by": {
+            "description": "The hostnames served with a certificate.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [
-          "resource",
-          "derived",
+          "key",
+          "kind",
+          "enabled",
+          "in_sync",
+          "health",
+          "public_effect",
+          "last_observed_at",
+          "id",
+          "spec",
+          "status",
+          "conditions",
+          "generation",
+          "observed_generation",
+          "updated_at",
+          "url",
+          "name",
+          "standing",
+          "actions",
+          "removal",
+          "origin_machine",
+          "provider_machine",
+          "services",
+          "readout",
+          "expiry",
+          "awaiting_approval",
+          "certificate",
+          "consumers",
+          "resolution_error",
+          "used_by",
+          "unused_names",
           "operations"
         ],
         "type": "object"
       },
       "ManagedResourceRecordPartial": {
         "additionalProperties": false,
-        "description": "One managed record, what HQ derives from it, and the operations run on it.",
+        "description": "One managed record whole, what HQ derives from it, and the operations run on it.",
         "properties": {
-          "derived": {
-            "$ref": "#/components/schemas/ManagedResourceRecord/properties/derived"
+          "actions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ActionPartPartial"
+            },
+            "description": "Each action of its controller, by verb, and whether it may run.",
+            "type": "object"
+          },
+          "awaiting_approval": {
+            "$ref": "#/components/schemas/ManagedResourceRecord/properties/awaiting_approval"
+          },
+          "certificate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CertificatePartPartial",
+                "title": "Certificate part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A certificate as the controller resolves it; null for anything else."
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/conditions"
+          },
+          "consumers": {
+            "description": "Where a certificate is installed.",
+            "items": {
+              "$ref": "#/components/schemas/ConsumerPartPartial"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/enabled"
+          },
+          "expiry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpiryPartPartial",
+                "title": "Expiry part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A certificate's expiry and renewal; null for anything else."
+          },
+          "generation": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/generation"
+          },
+          "health": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/health"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/id"
+          },
+          "in_sync": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/in_sync"
+          },
+          "key": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/key"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/kind"
+          },
+          "last_observed_at": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/last_observed_at"
+          },
+          "name": {
+            "$ref": "#/components/schemas/ManagedResourceRecord/properties/name"
+          },
+          "observed_generation": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/observed_generation"
           },
           "operations": {
             "description": "The latest operations that changed it, newest first.",
@@ -16709,8 +18184,73 @@
             },
             "type": "array"
           },
-          "resource": {
-            "$ref": "#/components/schemas/ManagedResourceItemPartial"
+          "origin_machine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachinePointerPartial",
+                "title": "Machine pointer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine it sends traffic to; null for none."
+          },
+          "provider_machine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachinePointerPartial",
+                "title": "Machine pointer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine the provider that manages it runs on; null when unknown."
+          },
+          "public_effect": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/public_effect"
+          },
+          "readout": {
+            "description": "Its settings, what HQ expects beside what was last read.",
+            "items": {
+              "$ref": "#/components/schemas/ReadoutPartPartial"
+            },
+            "type": "array"
+          },
+          "removal": {
+            "$ref": "#/components/schemas/RemovalPartPartial"
+          },
+          "resolution_error": {
+            "$ref": "#/components/schemas/ManagedResourceRecord/properties/resolution_error"
+          },
+          "services": {
+            "description": "The services it is part of.",
+            "items": {
+              "$ref": "#/components/schemas/ServicePointerPartial"
+            },
+            "type": "array"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/spec"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingPartPartial"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/status"
+          },
+          "unused_names": {
+            "$ref": "#/components/schemas/ManagedResourceRecord/properties/unused_names"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ManagedResourceRecord/properties/url"
+          },
+          "used_by": {
+            "$ref": "#/components/schemas/ManagedResourceRecord/properties/used_by"
           }
         },
         "type": "object"
@@ -17461,8 +19001,7 @@
             "type": "string"
           },
           "url": {
-            "description": "Its page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -17525,7 +19064,7 @@
             "$ref": "#/components/schemas/Match/properties/summary"
           },
           "url": {
-            "$ref": "#/components/schemas/Match/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -17618,6 +19157,44 @@
           "ok",
           "error"
         ],
+        "type": "object"
+      },
+      "MetricPart": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "description": "A line under it, such as `4 cores`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "What it measures, such as `CPU`.",
+            "type": "string"
+          },
+          "value": {
+            "description": "The measure, as a page shows it, such as `12%`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "MetricPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/MetricPart/properties/detail"
+          },
+          "label": {
+            "$ref": "#/components/schemas/MetricPart/properties/label"
+          },
+          "value": {
+            "$ref": "#/components/schemas/MetricPart/properties/value"
+          }
+        },
         "type": "object"
       },
       "MissingConnection": {
@@ -18144,6 +19721,39 @@
         ],
         "type": "object"
       },
+      "OpeningPart": {
+        "additionalProperties": false,
+        "properties": {
+          "open_to": {
+            "description": "Who the policy lets in at that port, as the policy writes them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "port": {
+            "description": "A port the tailnet policy opens on it.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "port",
+          "open_to"
+        ],
+        "type": "object"
+      },
+      "OpeningPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "open_to": {
+            "$ref": "#/components/schemas/OpeningPart/properties/open_to"
+          },
+          "port": {
+            "$ref": "#/components/schemas/OpeningPart/properties/port"
+          }
+        },
+        "type": "object"
+      },
       "OperationAction": {
         "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `approve-routes`, `run` or `scan`.",
         "type": "string"
@@ -18650,6 +20260,10 @@
         },
         "type": "object"
       },
+      "OptionalTone": {
+        "description": "How it stands: `serious`, `attention`, `neutral` or `good`, or empty for no state.",
+        "type": "string"
+      },
       "Origin": {
         "additionalProperties": false,
         "description": "Where a request for the name is finally served, and what serves it there.",
@@ -18663,16 +20277,46 @@
             "description": "The container serving it there; empty when none is known.",
             "type": "string"
           },
+          "external": {
+            "description": "Whether this is served somewhere HQ does not reach: a Pages site, a mail\nhost, someone else's server. An unknown host inside the network is\n``qualifier``'s to say.",
+            "readOnly": true,
+            "type": "boolean"
+          },
+          "headline": {
+            "description": "What to call whatever serves this, in one phrase.\n\nHere rather than in a template, because there are two templates and one\nfact. Phrased in each, they drift, and the board and the page disagree\nabout the same origin.",
+            "readOnly": true,
+            "type": "string"
+          },
           "host": {
             "default": "",
             "description": "The machine at that address; empty when it matches none.",
             "type": "string"
+          },
+          "known": {
+            "description": "Whether the address belongs to a machine HQ knows.\n\nAn ingress forwarding to an address no host claims may work, yet it is\nsomewhere HQ cannot describe, reconcile or reach, which a page says in\nwords rather than as a bare IP.",
+            "readOnly": true,
+            "type": "boolean"
+          },
+          "parked": {
+            "description": "Whether the name points at a documentation address, where nothing answers.",
+            "readOnly": true,
+            "type": "boolean"
+          },
+          "routed": {
+            "default": true,
+            "description": "Whether a proxy forwards to it, over a record that names it.",
+            "type": "boolean"
           }
         },
         "required": [
           "address",
           "host",
-          "container"
+          "container",
+          "routed",
+          "parked",
+          "external",
+          "known",
+          "headline"
         ],
         "type": "object"
       },
@@ -18686,8 +20330,23 @@
           "container": {
             "$ref": "#/components/schemas/Origin/properties/container"
           },
+          "external": {
+            "$ref": "#/components/schemas/Origin/properties/external"
+          },
+          "headline": {
+            "$ref": "#/components/schemas/Origin/properties/headline"
+          },
           "host": {
             "$ref": "#/components/schemas/Origin/properties/host"
+          },
+          "known": {
+            "$ref": "#/components/schemas/Origin/properties/known"
+          },
+          "parked": {
+            "$ref": "#/components/schemas/Origin/properties/parked"
+          },
+          "routed": {
+            "$ref": "#/components/schemas/Origin/properties/routed"
           }
         },
         "type": "object"
@@ -18784,6 +20443,10 @@
           "next"
         ],
         "type": "object"
+      },
+      "PageUrl": {
+        "description": "Its page in HQ.",
+        "type": "string"
       },
       "PaidFrom": {
         "description": "The account that paid. A `type:key` reference; empty when not recorded.",
@@ -18957,6 +20620,84 @@
           "other"
         ],
         "type": "string"
+      },
+      "PeeringPart": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "description": "Whether traffic is passing between the two now.",
+            "type": "boolean"
+          },
+          "direct_endpoint": {
+            "description": "The address a direct path reaches it at; empty for none.",
+            "type": "string"
+          },
+          "last_handshake": {
+            "description": "When it and HQ's machine last completed a handshake, as reported.",
+            "type": "string"
+          },
+          "path": {
+            "description": "How the two reach each other: `direct`, `relayed`, or `negotiating` before any traffic.",
+            "type": "string"
+          },
+          "public_key": {
+            "description": "Its node key.",
+            "type": "string"
+          },
+          "relay": {
+            "description": "The relay that carries a path with no direct one, or stands by for one.",
+            "type": "string"
+          },
+          "rx_bytes": {
+            "description": "The bytes HQ's machine has received from it.",
+            "type": "integer"
+          },
+          "tx_bytes": {
+            "description": "The bytes HQ's machine has sent it.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "last_handshake",
+          "active",
+          "path",
+          "direct_endpoint",
+          "relay",
+          "rx_bytes",
+          "tx_bytes",
+          "public_key"
+        ],
+        "type": "object"
+      },
+      "PeeringPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "$ref": "#/components/schemas/PeeringPart/properties/active"
+          },
+          "direct_endpoint": {
+            "$ref": "#/components/schemas/PeeringPart/properties/direct_endpoint"
+          },
+          "last_handshake": {
+            "$ref": "#/components/schemas/PeeringPart/properties/last_handshake"
+          },
+          "path": {
+            "$ref": "#/components/schemas/PeeringPart/properties/path"
+          },
+          "public_key": {
+            "$ref": "#/components/schemas/PeeringPart/properties/public_key"
+          },
+          "relay": {
+            "$ref": "#/components/schemas/PeeringPart/properties/relay"
+          },
+          "rx_bytes": {
+            "$ref": "#/components/schemas/PeeringPart/properties/rx_bytes"
+          },
+          "tx_bytes": {
+            "$ref": "#/components/schemas/PeeringPart/properties/tx_bytes"
+          }
+        },
+        "type": "object"
       },
       "Permitted": {
         "description": "Whether the caller holds every permission `required_capabilities` names; absent from a read that names no caller.",
@@ -19758,6 +21499,10 @@
             "description": "Whether the tailnet has approved it as an exit node.",
             "type": "boolean"
           },
+          "external": {
+            "description": "Whether it belongs to another tailnet, shared into this one.",
+            "type": "boolean"
+          },
           "key_expires": {
             "anyOf": [
               {
@@ -19784,6 +21529,10 @@
             ],
             "description": "When the tailnet last saw it, as reported; null when not said."
           },
+          "lock_error": {
+            "description": "Why tailnet lock has not signed it; empty when signed or lock is off.",
+            "type": "string"
+          },
           "observed_at": {
             "anyOf": [
               {
@@ -19794,6 +21543,10 @@
               }
             ]
           },
+          "observer": {
+            "description": "Whether it is HQ's own machine, whose tailnet client this reading is from.",
+            "type": "boolean"
+          },
           "offers_exit_node": {
             "description": "Whether it offers to be an exit node.",
             "type": "boolean"
@@ -19802,9 +21555,44 @@
             "description": "Whether the tailnet says it is online now.",
             "type": "boolean"
           },
+          "openings": {
+            "description": "Who the tailnet policy lets in, per port.",
+            "items": {
+              "$ref": "#/components/schemas/OpeningPart"
+            },
+            "type": "array"
+          },
           "os": {
             "description": "The operating system its client reports.",
             "type": "string"
+          },
+          "peering": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeeringPart",
+                "title": "Peering part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How it and HQ's machine are talking; null until a handshake completes."
+          },
+          "reached_hq": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArrivalPart",
+                "title": "Arrival part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last request that came to HQ from it; null when none came lately."
+          },
+          "signs_tailnet_lock": {
+            "description": "Whether its device is one tailnet lock trusts to sign.",
+            "type": "boolean"
           },
           "ssh_enabled": {
             "description": "Whether Tailscale SSH is on for it.",
@@ -19824,6 +21612,13 @@
           "tailnet_name": {
             "description": "What the tailnet calls it.",
             "type": "string"
+          },
+          "unapproved_routes": {
+            "description": "Those of its advertised routes the tailnet has not approved, which reach nothing.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "update_available": {
             "description": "Whether a newer client is published for it.",
@@ -19849,6 +21644,14 @@
           "exit_node_approved",
           "ssh_enabled",
           "blocks_incoming",
+          "external",
+          "lock_error",
+          "signs_tailnet_lock",
+          "unapproved_routes",
+          "observer",
+          "reached_hq",
+          "peering",
+          "openings",
           "observed_at"
         ],
         "type": "object"
@@ -19877,6 +21680,9 @@
           "exit_node_approved": {
             "$ref": "#/components/schemas/PresencePart/properties/exit_node_approved"
           },
+          "external": {
+            "$ref": "#/components/schemas/PresencePart/properties/external"
+          },
           "key_expires": {
             "$ref": "#/components/schemas/PresencePart/properties/key_expires"
           },
@@ -19885,6 +21691,9 @@
           },
           "last_seen": {
             "$ref": "#/components/schemas/PresencePart/properties/last_seen"
+          },
+          "lock_error": {
+            "$ref": "#/components/schemas/PresencePart/properties/lock_error"
           },
           "observed_at": {
             "anyOf": [
@@ -19896,14 +21705,51 @@
               }
             ]
           },
+          "observer": {
+            "$ref": "#/components/schemas/PresencePart/properties/observer"
+          },
           "offers_exit_node": {
             "$ref": "#/components/schemas/PresencePart/properties/offers_exit_node"
           },
           "online": {
             "$ref": "#/components/schemas/PresencePart/properties/online"
           },
+          "openings": {
+            "description": "Who the tailnet policy lets in, per port.",
+            "items": {
+              "$ref": "#/components/schemas/OpeningPartPartial"
+            },
+            "type": "array"
+          },
           "os": {
             "$ref": "#/components/schemas/PresencePart/properties/os"
+          },
+          "peering": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeeringPartPartial",
+                "title": "Peering part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How it and HQ's machine are talking; null until a handshake completes."
+          },
+          "reached_hq": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArrivalPartPartial",
+                "title": "Arrival part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last request that came to HQ from it; null when none came lately."
+          },
+          "signs_tailnet_lock": {
+            "$ref": "#/components/schemas/PresencePart/properties/signs_tailnet_lock"
           },
           "ssh_enabled": {
             "$ref": "#/components/schemas/PresencePart/properties/ssh_enabled"
@@ -19916,6 +21762,9 @@
           },
           "tailnet_name": {
             "$ref": "#/components/schemas/PresencePart/properties/tailnet_name"
+          },
+          "unapproved_routes": {
+            "$ref": "#/components/schemas/PresencePart/properties/unapproved_routes"
           },
           "update_available": {
             "$ref": "#/components/schemas/PresencePart/properties/update_available"
@@ -20404,8 +22253,7 @@
             "type": "string"
           },
           "url": {
-            "description": "The project's page in HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
@@ -20425,7 +22273,7 @@
             "$ref": "#/components/schemas/ProjectPart/properties/slug"
           },
           "url": {
-            "$ref": "#/components/schemas/ProjectPart/properties/url"
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -20440,6 +22288,9 @@
           "dependency_updates": {
             "$ref": "#/components/schemas/ProjectRow/properties/dependency_updates"
           },
+          "deployment_notes": {
+            "$ref": "#/components/schemas/ProjectRow/properties/deployment_notes"
+          },
           "description": {
             "$ref": "#/components/schemas/ProjectRow/properties/description"
           },
@@ -20449,6 +22300,9 @@
           "name": {
             "$ref": "#/components/schemas/ProjectRow/properties/name"
           },
+          "notes": {
+            "$ref": "#/components/schemas/ProjectRow/properties/notes"
+          },
           "public_url": {
             "$ref": "#/components/schemas/ProjectRow/properties/public_url"
           },
@@ -20457,6 +22311,9 @@
           },
           "repository_url": {
             "$ref": "#/components/schemas/ProjectRow/properties/repository_url"
+          },
+          "security_notes": {
+            "$ref": "#/components/schemas/ProjectRow/properties/security_notes"
           },
           "slug": {
             "$ref": "#/components/schemas/ProjectRow/properties/slug"
@@ -20472,10 +22329,14 @@
           },
           "updates": {
             "$ref": "#/components/schemas/ProjectRow/properties/updates"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ProjectRow/properties/url"
           }
         },
         "required": [
           "slug",
+          "url",
           "name",
           "category",
           "status",
@@ -20485,6 +22346,9 @@
           "public_url",
           "last_push_at",
           "dependency_updates",
+          "deployment_notes",
+          "security_notes",
+          "notes",
           "updated_at",
           "relationships"
         ],
@@ -20500,6 +22364,9 @@
           "dependency_updates": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/dependency_updates"
           },
+          "deployment_notes": {
+            "$ref": "#/components/schemas/ProjectRowPartial/properties/deployment_notes"
+          },
           "description": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/description"
           },
@@ -20509,6 +22376,9 @@
           "name": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/name"
           },
+          "notes": {
+            "$ref": "#/components/schemas/ProjectRowPartial/properties/notes"
+          },
           "public_url": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/public_url"
           },
@@ -20517,6 +22387,9 @@
           },
           "repository_url": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/repository_url"
+          },
+          "security_notes": {
+            "$ref": "#/components/schemas/ProjectRowPartial/properties/security_notes"
           },
           "slug": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/slug"
@@ -20532,6 +22405,9 @@
           },
           "updates": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/updates"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ProjectRowPartial/properties/url"
           }
         },
         "type": "object"
@@ -20590,6 +22466,9 @@
           "dependency_updates": {
             "$ref": "#/components/schemas/DependencyUpdates"
           },
+          "deployment_notes": {
+            "$ref": "#/components/schemas/DeploymentNotes"
+          },
           "description": {
             "$ref": "#/components/schemas/ProjectDescription"
           },
@@ -20607,11 +22486,17 @@
           "name": {
             "$ref": "#/components/schemas/ProjectName"
           },
+          "notes": {
+            "$ref": "#/components/schemas/Notes"
+          },
           "public_url": {
             "$ref": "#/components/schemas/PublishedUrl"
           },
           "repository_url": {
             "$ref": "#/components/schemas/RepositoryUrl"
+          },
+          "security_notes": {
+            "$ref": "#/components/schemas/SecurityNotes"
           },
           "slug": {
             "$ref": "#/components/schemas/RecordSlug"
@@ -20631,10 +22516,14 @@
           },
           "updates": {
             "$ref": "#/components/schemas/Updates"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
           "slug",
+          "url",
           "name",
           "category",
           "status",
@@ -20644,6 +22533,9 @@
           "public_url",
           "last_push_at",
           "dependency_updates",
+          "deployment_notes",
+          "security_notes",
+          "notes",
           "updated_at"
         ],
         "type": "object"
@@ -20688,6 +22580,9 @@
           "dependency_updates": {
             "$ref": "#/components/schemas/DependencyUpdates"
           },
+          "deployment_notes": {
+            "$ref": "#/components/schemas/DeploymentNotes"
+          },
           "description": {
             "$ref": "#/components/schemas/ProjectDescription"
           },
@@ -20697,11 +22592,17 @@
           "name": {
             "$ref": "#/components/schemas/ProjectName"
           },
+          "notes": {
+            "$ref": "#/components/schemas/Notes"
+          },
           "public_url": {
             "$ref": "#/components/schemas/PublishedUrl"
           },
           "repository_url": {
             "$ref": "#/components/schemas/RepositoryUrl"
+          },
+          "security_notes": {
+            "$ref": "#/components/schemas/SecurityNotes"
           },
           "slug": {
             "$ref": "#/components/schemas/RecordSlug"
@@ -20717,6 +22618,9 @@
           },
           "updates": {
             "$ref": "#/components/schemas/UpdatesPartial"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -21796,6 +23700,44 @@
         },
         "type": "object"
       },
+      "ReadoutPart": {
+        "additionalProperties": false,
+        "properties": {
+          "desired": {
+            "description": "What HQ expects of it; empty when HQ expects nothing.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The setting, as its type's card labels it.",
+            "type": "string"
+          },
+          "observed": {
+            "description": "What was last read of it; empty when not read.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "desired",
+          "observed"
+        ],
+        "type": "object"
+      },
+      "ReadoutPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "desired": {
+            "$ref": "#/components/schemas/ReadoutPart/properties/desired"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ReadoutPart/properties/label"
+          },
+          "observed": {
+            "$ref": "#/components/schemas/ReadoutPart/properties/observed"
+          }
+        },
+        "type": "object"
+      },
       "ReceiptAsset": {
         "anyOf": [
           {
@@ -21862,6 +23804,190 @@
           "key": "id",
           "resource": "expenses"
         }
+      },
+      "ReceiptRecord": {
+        "additionalProperties": false,
+        "description": "One receipt with what it is called, whether HQ holds its file, and the names of what it proves.",
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/amount"
+          },
+          "asset_name": {
+            "description": "The name of the asset it is for; empty for none.",
+            "type": "string"
+          },
+          "content_type": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/content_type"
+          },
+          "date": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/date"
+          },
+          "expense_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "That expense's day, an ISO 8601 date; null for none."
+          },
+          "expense_label": {
+            "description": "What the expense it proves is called; empty for none.",
+            "type": "string"
+          },
+          "file": {
+            "description": "Whether HQ holds its file: `stored`, `missing` when HQ's storage no longer has it, or `none` for no file.",
+            "enum": [
+              "stored",
+              "missing",
+              "none"
+            ],
+            "type": "string"
+          },
+          "file_type_label": {
+            "description": "The file's type in words; empty for one HQ does not accept.",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/id"
+          },
+          "label": {
+            "description": "What the receipt is called wherever it is named: who it is from, else its file.",
+            "type": "string"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/notes"
+          },
+          "original_filename": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/original_filename"
+          },
+          "related_asset": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/related_asset"
+          },
+          "related_expense": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/related_expense"
+          },
+          "size_bytes": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/size_bytes"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/updated_at"
+          },
+          "uploaded_at": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/uploaded_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          },
+          "vendor": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/vendor"
+          }
+        },
+        "required": [
+          "id",
+          "original_filename",
+          "content_type",
+          "size_bytes",
+          "vendor",
+          "date",
+          "amount",
+          "notes",
+          "related_expense",
+          "related_asset",
+          "uploaded_at",
+          "updated_at",
+          "url",
+          "label",
+          "file",
+          "file_type_label",
+          "expense_label",
+          "expense_date",
+          "asset_name"
+        ],
+        "type": "object"
+      },
+      "ReceiptRecordPartial": {
+        "additionalProperties": false,
+        "description": "One receipt with what it is called, whether HQ holds its file, and the names of what it proves.",
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/amount"
+          },
+          "asset_name": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/asset_name"
+          },
+          "content_type": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/content_type"
+          },
+          "date": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/date"
+          },
+          "expense_date": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/expense_date"
+          },
+          "expense_label": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/expense_label"
+          },
+          "file": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/file"
+          },
+          "file_type_label": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/file_type_label"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/id"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ReceiptRecord/properties/label"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/notes"
+          },
+          "original_filename": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/original_filename"
+          },
+          "related_asset": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/related_asset"
+          },
+          "related_expense": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/related_expense"
+          },
+          "size_bytes": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/size_bytes"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/updated_at"
+          },
+          "uploaded_at": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/uploaded_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          },
+          "vendor": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/vendor"
+          }
+        },
+        "type": "object"
+      },
+      "ReceiptRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReceiptRecordPartial"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
       },
       "ReceiptRow": {
         "additionalProperties": false,
@@ -22717,6 +24843,46 @@
         },
         "type": "object"
       },
+      "RemovalPart": {
+        "additionalProperties": false,
+        "description": "Whether and how it may be removed.",
+        "properties": {
+          "mode": {
+            "description": "How it is removed: `delete` at its provider, `forget` HQ's record of it, or `unavailable`.",
+            "type": "string"
+          },
+          "pending": {
+            "description": "Whether a removal is in flight.",
+            "type": "boolean"
+          },
+          "reason": {
+            "description": "Why it may not be removed now; empty when it may.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "reason",
+          "pending"
+        ],
+        "type": "object"
+      },
+      "RemovalPartPartial": {
+        "additionalProperties": false,
+        "description": "Whether and how it may be removed.",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/RemovalPart/properties/mode"
+          },
+          "pending": {
+            "$ref": "#/components/schemas/RemovalPart/properties/pending"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/RemovalPart/properties/reason"
+          }
+        },
+        "type": "object"
+      },
       "RepositoryPart": {
         "additionalProperties": false,
         "properties": {
@@ -22869,7 +25035,7 @@
           },
           "schema_version": {
             "$ref": "#/components/schemas/SchemaVersion",
-            "const": 3
+            "const": 4
           }
         },
         "required": [
@@ -23194,6 +25360,10 @@
       "RolePart": {
         "additionalProperties": false,
         "properties": {
+          "detail": {
+            "description": "What the role means, and what was read that shows it.",
+            "type": "string"
+          },
           "id": {
             "description": "The role's stable id, such as `tailnet-dns`.",
             "type": "string"
@@ -23205,13 +25375,17 @@
         },
         "required": [
           "id",
-          "label"
+          "label",
+          "detail"
         ],
         "type": "object"
       },
       "RolePartPartial": {
         "additionalProperties": false,
         "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/RolePart/properties/detail"
+          },
           "id": {
             "$ref": "#/components/schemas/RolePart/properties/id"
           },
@@ -23490,8 +25664,19 @@
         "additionalProperties": false,
         "description": "One run whole: its row, the worker's lease while it holds it, and each task's outcome.",
         "properties": {
+          "affected": {
+            "description": "Each name it found serving another certificate.",
+            "items": {
+              "$ref": "#/components/schemas/ServedPart"
+            },
+            "type": "array"
+          },
           "approved_by": {
             "$ref": "#/components/schemas/RunRow/properties/approved_by"
+          },
+          "attempts": {
+            "description": "How many times a worker has taken it up.",
+            "type": "integer"
           },
           "by": {
             "$ref": "#/components/schemas/RunRow/properties/by"
@@ -23508,12 +25693,20 @@
           "duration_seconds": {
             "$ref": "#/components/schemas/RunRow/properties/duration_seconds"
           },
+          "effect": {
+            "description": "What its playbook changes, as its record pins it, which cancelling it takes the authority of.",
+            "type": "string"
+          },
           "events": {
             "description": "Each task's outcome on each machine, in the order the worker ran them.",
             "items": {
               "$ref": "#/components/schemas/RunTask"
             },
             "type": "array"
+          },
+          "expected": {
+            "description": "The SHA-256 fingerprint of the certificate it checked each name for; empty when it checked none.",
+            "type": "string"
           },
           "finished_at": {
             "$ref": "#/components/schemas/RunRow/properties/finished_at"
@@ -23535,11 +25728,19 @@
             ],
             "description": "When that worker must next report, or HQ reads the run as stopped; null unless one runs it."
           },
+          "matched": {
+            "description": "How many names it found serving the certificate it checked for.",
+            "type": "integer"
+          },
           "operation_id": {
             "$ref": "#/components/schemas/RunRow/properties/operation_id"
           },
           "playbook": {
             "$ref": "#/components/schemas/RunRow/properties/playbook"
+          },
+          "reason": {
+            "description": "Why its asker asked for it; empty when they gave no reason.",
+            "type": "string"
           },
           "started_at": {
             "$ref": "#/components/schemas/RunRow/properties/started_at"
@@ -23553,6 +25754,15 @@
           "stated": {
             "$ref": "#/components/schemas/RunRow/properties/stated"
           },
+          "title": {
+            "$ref": "#/components/schemas/RunRow/properties/title"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/RunRow/properties/tone"
+          },
+          "url": {
+            "$ref": "#/components/schemas/RunRow/properties/url"
+          },
           "worker": {
             "description": "The worker running it now; empty unless one is.",
             "type": "string"
@@ -23560,10 +25770,13 @@
         },
         "required": [
           "operation_id",
+          "url",
+          "title",
           "playbook",
           "capability",
           "state",
           "state_label",
+          "tone",
           "headline",
           "hosts",
           "by",
@@ -23574,9 +25787,15 @@
           "finished_at",
           "duration_seconds",
           "stated",
+          "reason",
+          "effect",
+          "attempts",
           "worker",
           "lease_until",
-          "events"
+          "events",
+          "expected",
+          "affected",
+          "matched"
         ],
         "type": "object"
       },
@@ -23584,8 +25803,18 @@
         "additionalProperties": false,
         "description": "One run whole: its row, the worker's lease while it holds it, and each task's outcome.",
         "properties": {
+          "affected": {
+            "description": "Each name it found serving another certificate.",
+            "items": {
+              "$ref": "#/components/schemas/ServedPartPartial"
+            },
+            "type": "array"
+          },
           "approved_by": {
             "$ref": "#/components/schemas/RunRowPartial/properties/approved_by"
+          },
+          "attempts": {
+            "$ref": "#/components/schemas/RunRecord/properties/attempts"
           },
           "by": {
             "$ref": "#/components/schemas/RunRowPartial/properties/by"
@@ -23602,12 +25831,18 @@
           "duration_seconds": {
             "$ref": "#/components/schemas/RunRowPartial/properties/duration_seconds"
           },
+          "effect": {
+            "$ref": "#/components/schemas/RunRecord/properties/effect"
+          },
           "events": {
             "description": "Each task's outcome on each machine, in the order the worker ran them.",
             "items": {
               "$ref": "#/components/schemas/RunTaskPartial"
             },
             "type": "array"
+          },
+          "expected": {
+            "$ref": "#/components/schemas/RunRecord/properties/expected"
           },
           "finished_at": {
             "$ref": "#/components/schemas/RunRowPartial/properties/finished_at"
@@ -23621,11 +25856,17 @@
           "lease_until": {
             "$ref": "#/components/schemas/RunRecord/properties/lease_until"
           },
+          "matched": {
+            "$ref": "#/components/schemas/RunRecord/properties/matched"
+          },
           "operation_id": {
             "$ref": "#/components/schemas/RunRowPartial/properties/operation_id"
           },
           "playbook": {
             "$ref": "#/components/schemas/RunRowPartial/properties/playbook"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/RunRecord/properties/reason"
           },
           "started_at": {
             "$ref": "#/components/schemas/RunRowPartial/properties/started_at"
@@ -23638,6 +25879,15 @@
           },
           "stated": {
             "$ref": "#/components/schemas/RunRowPartial/properties/stated"
+          },
+          "title": {
+            "$ref": "#/components/schemas/RunRowPartial/properties/title"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/RunRowPartial/properties/tone"
+          },
+          "url": {
+            "$ref": "#/components/schemas/RunRowPartial/properties/url"
           },
           "worker": {
             "$ref": "#/components/schemas/RunRecord/properties/worker"
@@ -23674,7 +25924,7 @@
             "type": "string"
           },
           "capability": {
-            "description": "The command it was asked for through, by name.",
+            "description": "The command it was asked for through, by name: a playbook's, or the scan's refresh.",
             "type": "string"
           },
           "correlation": {
@@ -23722,7 +25972,7 @@
             "type": "string"
           },
           "playbook": {
-            "description": "The id of the playbook it runs, which the `playbook` filter takes.",
+            "description": "The id of the playbook it runs, which the `playbook` filter takes; empty for a scan.",
             "type": "string"
           },
           "started_at": {
@@ -23750,14 +26000,28 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "title": {
+            "description": "What it is, in words.",
+            "type": "string"
+          },
+          "tone": {
+            "description": "How that state is colored: `serious`, `attention`, `neutral` or `good`.",
+            "type": "string"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "required": [
           "operation_id",
+          "url",
+          "title",
           "playbook",
           "capability",
           "state",
           "state_label",
+          "tone",
           "headline",
           "hosts",
           "by",
@@ -23848,6 +26112,15 @@
           },
           "stated": {
             "$ref": "#/components/schemas/RunRow/properties/stated"
+          },
+          "title": {
+            "$ref": "#/components/schemas/RunRow/properties/title"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/RunRow/properties/tone"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -23871,13 +26144,18 @@
           "task": {
             "description": "The task, by its name in the playbook.",
             "type": "string"
+          },
+          "tone": {
+            "description": "How its outcome is colored: `serious`, `attention`, `neutral` or `good`.",
+            "type": "string"
           }
         },
         "required": [
           "host",
           "task",
           "outcome",
-          "message"
+          "message",
+          "tone"
         ],
         "type": "object"
       },
@@ -23896,6 +26174,9 @@
           },
           "task": {
             "$ref": "#/components/schemas/RunTask/properties/task"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/RunTask/properties/tone"
           }
         },
         "type": "object"
@@ -24396,6 +26677,46 @@
         },
         "type": "object"
       },
+      "ServedPart": {
+        "additionalProperties": false,
+        "description": "One name a certificate check found serving another certificate.",
+        "properties": {
+          "consumer": {
+            "description": "What serves the name, as the check names it.",
+            "type": "string"
+          },
+          "domain": {
+            "description": "The name it serves.",
+            "type": "string"
+          },
+          "fingerprint_sha256": {
+            "description": "The SHA-256 fingerprint of the certificate it serves.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "consumer",
+          "domain",
+          "fingerprint_sha256"
+        ],
+        "type": "object"
+      },
+      "ServedPartPartial": {
+        "additionalProperties": false,
+        "description": "One name a certificate check found serving another certificate.",
+        "properties": {
+          "consumer": {
+            "$ref": "#/components/schemas/ServedPart/properties/consumer"
+          },
+          "domain": {
+            "$ref": "#/components/schemas/ServedPart/properties/domain"
+          },
+          "fingerprint_sha256": {
+            "$ref": "#/components/schemas/ServedPart/properties/fingerprint_sha256"
+          }
+        },
+        "type": "object"
+      },
       "ServiceAdopted": {
         "additionalProperties": false,
         "description": "The records behind one hostname, taken under HQ's management.",
@@ -24550,32 +26871,182 @@
         },
         "type": "object"
       },
-      "ServiceRecord": {
+      "ServicePointer": {
         "additionalProperties": false,
-        "description": "One service name and the path a request for it takes.",
         "properties": {
-          "path": {
-            "$ref": "#/components/schemas/PathRecord"
+          "hostname": {
+            "description": "The service's hostname.",
+            "type": "string"
           },
-          "service": {
-            "$ref": "#/components/schemas/ServiceItem"
+          "url": {
+            "description": "That service's page in HQ.",
+            "type": "string"
           }
         },
         "required": [
-          "service",
-          "path"
+          "hostname",
+          "url"
+        ],
+        "type": "object"
+      },
+      "ServicePointerPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "hostname": {
+            "$ref": "#/components/schemas/ServicePointer/properties/hostname"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ServicePointer/properties/url"
+          }
+        },
+        "type": "object"
+      },
+      "ServiceRecord": {
+        "additionalProperties": false,
+        "description": "One service name whole and the path a request for it takes.",
+        "properties": {
+          "alias_records": {
+            "description": "HQ's records behind those other names.",
+            "items": {
+              "$ref": "#/components/schemas/AliasRecordPart"
+            },
+            "type": "array"
+          },
+          "aliases": {
+            "description": "The other names that lead to it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "exposure": {
+            "$ref": "#/components/schemas/ExposurePart"
+          },
+          "facets": {
+            "$ref": "#/components/schemas/ServiceItem/properties/facets"
+          },
+          "faults": {
+            "$ref": "#/components/schemas/ServiceRow/properties/faults"
+          },
+          "hostname": {
+            "$ref": "#/components/schemas/ServiceRow/properties/hostname"
+          },
+          "listing": {
+            "description": "`listed` for a listed service, `prospect` for a hostname nothing serves yet, whose facets each read as not set up.",
+            "type": "string"
+          },
+          "mark": {
+            "$ref": "#/components/schemas/ServiceItem/properties/mark"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ServiceRow/properties/origin"
+          },
+          "path": {
+            "$ref": "#/components/schemas/PathRecord"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ServiceRow/properties/project"
+          },
+          "provider_answers": {
+            "description": "The DNS service that answers for the name itself, where a proxied record puts it in front.",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ServiceRow/properties/status"
+          },
+          "status_label": {
+            "$ref": "#/components/schemas/ServiceRow/properties/status_label"
+          },
+          "summary": {
+            "description": "What it is, where it runs, and whether it is healthy.",
+            "items": {
+              "$ref": "#/components/schemas/SummaryPart"
+            },
+            "type": "array"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          }
+        },
+        "required": [
+          "hostname",
+          "status",
+          "status_label",
+          "origin",
+          "project",
+          "faults",
+          "mark",
+          "facets",
+          "url",
+          "listing",
+          "path",
+          "summary",
+          "exposure",
+          "aliases",
+          "alias_records",
+          "provider_answers"
         ],
         "type": "object"
       },
       "ServiceRecordPartial": {
         "additionalProperties": false,
-        "description": "One service name and the path a request for it takes.",
+        "description": "One service name whole and the path a request for it takes.",
         "properties": {
+          "alias_records": {
+            "description": "HQ's records behind those other names.",
+            "items": {
+              "$ref": "#/components/schemas/AliasRecordPartPartial"
+            },
+            "type": "array"
+          },
+          "aliases": {
+            "$ref": "#/components/schemas/ServiceRecord/properties/aliases"
+          },
+          "exposure": {
+            "$ref": "#/components/schemas/ExposurePartPartial"
+          },
+          "facets": {
+            "$ref": "#/components/schemas/ServiceItemPartial/properties/facets"
+          },
+          "faults": {
+            "$ref": "#/components/schemas/ServiceRowPartial/properties/faults"
+          },
+          "hostname": {
+            "$ref": "#/components/schemas/ServiceRowPartial/properties/hostname"
+          },
+          "listing": {
+            "$ref": "#/components/schemas/ServiceRecord/properties/listing"
+          },
+          "mark": {
+            "$ref": "#/components/schemas/ServiceItemPartial/properties/mark"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ServiceRowPartial/properties/origin"
+          },
           "path": {
             "$ref": "#/components/schemas/PathRecordPartial"
           },
-          "service": {
-            "$ref": "#/components/schemas/ServiceItemPartial"
+          "project": {
+            "$ref": "#/components/schemas/ServiceRowPartial/properties/project"
+          },
+          "provider_answers": {
+            "$ref": "#/components/schemas/ServiceRecord/properties/provider_answers"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ServiceRowPartial/properties/status"
+          },
+          "status_label": {
+            "$ref": "#/components/schemas/ServiceRowPartial/properties/status_label"
+          },
+          "summary": {
+            "description": "What it is, where it runs, and whether it is healthy.",
+            "items": {
+              "$ref": "#/components/schemas/SummaryPartPartial"
+            },
+            "type": "array"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
           }
         },
         "type": "object"
@@ -25084,6 +27555,86 @@
         ],
         "type": "object"
       },
+      "StandingPart": {
+        "additionalProperties": false,
+        "description": "Where it stands, as the one line its page and its row say it.",
+        "properties": {
+          "detail": {
+            "description": "What the state means for it, as a sentence; empty for none.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Its state in the words a page shows, such as `Change waiting to apply`.",
+            "type": "string"
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it was last read, an ISO 8601 date-time; null when never."
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it came to stand so, an ISO 8601 date-time; null when unsaid."
+          },
+          "state": {
+            "description": "Its state in one word: `off`, `drifted`, `deploying`, `degraded`, `pending`, `unseen`, `working`, `recorded` or `unread`.",
+            "type": "string"
+          },
+          "tone": {
+            "description": "How its state is colored: `neutral`, `serious`, `attention` or `good`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "tone",
+          "label",
+          "detail",
+          "since",
+          "read_at"
+        ],
+        "type": "object"
+      },
+      "StandingPartPartial": {
+        "additionalProperties": false,
+        "description": "Where it stands, as the one line its page and its row say it.",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/StandingPart/properties/detail"
+          },
+          "label": {
+            "$ref": "#/components/schemas/StandingPart/properties/label"
+          },
+          "read_at": {
+            "$ref": "#/components/schemas/StandingPart/properties/read_at"
+          },
+          "since": {
+            "$ref": "#/components/schemas/StandingPart/properties/since"
+          },
+          "state": {
+            "$ref": "#/components/schemas/StandingPart/properties/state"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/StandingPart/properties/tone"
+          }
+        },
+        "type": "object"
+      },
       "Step": {
         "description": "One step of what to do about a finding, told apart by its `kind`.",
         "discriminator": {
@@ -25150,6 +27701,89 @@
           "ok",
           "data"
         ],
+        "type": "object"
+      },
+      "SummaryPart": {
+        "additionalProperties": false,
+        "description": "One fact of the service's summary: what it is, where it runs, whether it is healthy.",
+        "properties": {
+          "detail": {
+            "description": "What backs it, each a line.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "icon": {
+            "description": "The kind of fact it is, as a symbol's name, such as `activity`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "What the fact is, such as `Health` or `Certificate`.",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityLink",
+                "title": "Entity link"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The page of what `value` names; null for none."
+          },
+          "tone": {
+            "$ref": "#/components/schemas/OptionalTone"
+          },
+          "value": {
+            "description": "The fact, in a few words.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "link",
+          "detail",
+          "tone",
+          "icon"
+        ],
+        "type": "object"
+      },
+      "SummaryPartPartial": {
+        "additionalProperties": false,
+        "description": "One fact of the service's summary: what it is, where it runs, whether it is healthy.",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/SummaryPart/properties/detail"
+          },
+          "icon": {
+            "$ref": "#/components/schemas/SummaryPart/properties/icon"
+          },
+          "label": {
+            "$ref": "#/components/schemas/SummaryPart/properties/label"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityLinkPartial",
+                "title": "Entity link"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The page of what `value` names; null for none."
+          },
+          "tone": {
+            "$ref": "#/components/schemas/OptionalTone"
+          },
+          "value": {
+            "$ref": "#/components/schemas/SummaryPart/properties/value"
+          }
+        },
         "type": "object"
       },
       "SweptKind": {
@@ -35199,7 +37833,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ExpenseRowPageFields"
+            "$ref": "#/components/parameters/ExpenseRecordFields"
           }
         ],
         "responses": {
@@ -35207,7 +37841,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExpenseRowPageSuccess"
+                  "$ref": "#/components/schemas/ExpenseRecordPageSuccess"
                 }
               }
             },
@@ -35218,6 +37852,26 @@
               }
             },
             "links": {
+              "expenseDeleteV2": {
+                "operationId": "expenseDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/id}"
+                }
+              },
+              "expenseUpdateV2": {
+                "operationId": "expenseUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/id}"
+                }
+              },
+              "getExpensesV2": {
+                "operationId": "getExpensesV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/id"
+                }
+              },
               "listExpensesV2": {
                 "operationId": "listExpensesV2",
                 "parameters": {
@@ -35266,6 +37920,90 @@
         "tags": [
           "hq.expenses"
         ],
+        "x-hq-resource": "expenses"
+      }
+    },
+    "/api/v2/resources/expenses/{identifier}/": {
+      "get": {
+        "description": "One of the records Expenses lists, found by its `id`.",
+        "operationId": "getExpensesV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/ExpenseRecordFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpenseRecordSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "expenseDeleteV2": {
+                "operationId": "expenseDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/id}"
+                }
+              },
+              "expenseUpdateV2": {
+                "operationId": "expenseUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/id}"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Expenses: one by id",
+        "tags": [
+          "hq.expenses"
+        ],
+        "x-hq-identifier": "id",
         "x-hq-resource": "expenses"
       }
     },
@@ -35547,7 +38285,103 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ManagedResourceRecordSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedResourceRecordSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "certificateRenewV2": {
+                "description": "Only for a record whose `kind` is `tls.certificate`.",
+                "operationId": "certificateRenewV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "dashboardMachineSelectV2": {
+                "description": "Only for a record whose `kind` is `machine`.",
+                "operationId": "dashboardMachineSelectV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceAcceptObservedV2": {
+                "operationId": "infrastructureResourceAcceptObservedV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceReconcileV2": {
+                "operationId": "infrastructureResourceReconcileV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceRemoveV2": {
+                "operationId": "infrastructureResourceRemoveV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceRestartV2": {
+                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "operationId": "infrastructureResourceRestartV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceStartV2": {
+                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "operationId": "infrastructureResourceStartV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceStopV2": {
+                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "operationId": "infrastructureResourceStopV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceUpdateV2": {
+                "operationId": "infrastructureResourceUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "tailnetPolicyRemoveEmptyGroupsV2": {
+                "description": "Only for a record whose `kind` is `tailscale.policy`.",
+                "operationId": "tailnetPolicyRemoveEmptyGroupsV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "tailnetReachAllowV2": {
+                "description": "Only for a record whose `kind` is `tls.certificate`.",
+                "operationId": "tailnetReachAllowV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "tailnetRoutesApproveV2": {
+                "description": "Only for a record whose `kind` is `tailscale.device`.",
+                "operationId": "tailnetRoutesApproveV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -36446,6 +39280,12 @@
               }
             },
             "links": {
+              "getReceiptsV2": {
+                "operationId": "getReceiptsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/id"
+                }
+              },
               "listReceiptsV2": {
                 "operationId": "listReceiptsV2",
                 "parameters": {
@@ -36453,6 +39293,20 @@
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
                   "query.unmatched_only": "$request.query.unmatched_only"
+                }
+              },
+              "receiptDeleteV2": {
+                "operationId": "receiptDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/id}"
+                }
+              },
+              "receiptUpdateV2": {
+                "operationId": "receiptUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/items/0/updated_at}",
+                  "target": "{$response.body#/data/items/0/id}"
                 }
               }
             }
@@ -36493,6 +39347,90 @@
         "tags": [
           "hq.receipts"
         ],
+        "x-hq-resource": "receipts"
+      }
+    },
+    "/api/v2/resources/receipts/{identifier}/": {
+      "get": {
+        "description": "One of the records Receipts lists, found by its `id`.",
+        "operationId": "getReceiptsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/ReceiptRecordFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptRecordSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "receiptDeleteV2": {
+                "operationId": "receiptDeleteV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/id}"
+                }
+              },
+              "receiptUpdateV2": {
+                "operationId": "receiptUpdateV2",
+                "requestBody": {
+                  "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/id}"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Receipts: one by id",
+        "tags": [
+          "hq.receipts"
+        ],
+        "x-hq-identifier": "id",
         "x-hq-resource": "receipts"
       }
     },
@@ -36606,7 +39544,7 @@
     },
     "/api/v2/resources/runs/": {
       "get": {
-        "description": "Every run of a playbook: its machines, who asked and approved it, its state and each task's outcome.",
+        "description": "Every run of a playbook, and every scan of their source: its machines, who asked and approved it, its state and each task's outcome.",
         "operationId": "listRunsV2",
         "parameters": [
           {

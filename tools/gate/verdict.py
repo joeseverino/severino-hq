@@ -1,12 +1,7 @@
-"""A gate's last lines name what failed and the command that reruns just that,
-so nobody reads back through its output, and above them each failed task's
-last lines and each failed test's last frame.
+"""A gate's last lines name what failed and the command that reruns just that, so nobody reads back through its output.
 
-Each failed task is named as mise's run report names it, its last lines as
-mise logged them, and each failed test as the test runner records it, and `var/gate/<name>.txt` keeps the lines whole, beside the
-run before it in `<name>.prev.txt`, under a first line naming the tree the gate
-judged; `var/gate/<name>.log` keeps all the run printed (docs/Development.md,
-The gates).
+`var/gate/<name>.txt` keeps the lines whole beside the run before it, and
+`var/gate/<name>.log` all the run printed (docs/Development.md, The gates).
 `python -m tools.gate.verdict <name> <command...>` runs one command so, and
 `--step <label> <command...>...` several.
 """
@@ -37,8 +32,8 @@ ROOT = Path(__file__).resolve().parents[2]
 REPORTS = "HQ_TEST_REPORTS"
 # A file each command is handed, where it may say what it judged, for a gate
 # whose name alone does not (the pages and widths a survey drew): its first
-# line, what the judging came to, ends the verdict line, and every line is
-# kept under it.
+# line, what the judging came to, joins the verdict line when the step failed,
+# and every line is kept under it.
 DETAIL = "HQ_GATE_DETAIL"
 # A file each command is handed for the one command that runs again what it
 # failed, for a command whose failures no task or test label reruns (a look
@@ -375,10 +370,11 @@ def verdict(name: str, started: float, steps: list[Step], passed: str = "", outc
     if waited := sum(step.waited for step in steps):
         elapsed += f", {waited:.0f}s of it waiting for the turn"
     failed = [failure for step in steps for failure in step.failures()]
-    said = [step.detail[0] for step in steps if step.detail]
+    # Only a failed step's judging is said, so the line reads as the failures alone.
+    said = [step.detail[0] for step in steps if step.detail and not step.ok]
     if failed:
         return f"[{name}] {outcome} in {elapsed}: {'; '.join([*said, *failed])}"
-    return f"[{name}] passed in {elapsed}" + (f": {'; '.join(said)}" if said else "") + passed
+    return f"[{name}] passed in {elapsed}" + passed
 
 
 def test_reruns(name: str, steps: list[Step], tests: str) -> dict[str, list[str]]:
@@ -459,16 +455,10 @@ OPENED: Gate | None = None
 class Gate:
     """One gate's run, opened before anything it prints and closed on its verdict.
 
-    Its first line names the file the verdict is kept in and the log that
-    keeps all the run printed: a long output read back through a tool that
-    keeps only its head loses the last line, and the head is the one part
-    every cut copy shows. `close` is reached only through an opened gate, so
-    no gate ends on a verdict without having said where it is kept.
-
-    The kept file opens on the tree the gate judged, taken as it opens and
-    again as it closes, so a pass is attested from the file alone: it holds
-    for a commit whose tree that line names. A checkout that changed in the
-    run judged no one tree, and the line says so.
+    Its first line names where the verdict and the log are kept, since a cut
+    copy always shows the head. The kept file opens on the tree the gate
+    judged, read as it opens and closes, so a pass is attested from the file
+    alone.
     """
 
     def __init__(self, name: str, root: Path = JUDGED) -> None:

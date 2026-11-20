@@ -3,13 +3,13 @@
 import asyncio
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from mcp import types
 from mcp.server.lowlevel import Server
 
 from hq.platform.application.markup_testing import elements, texts
+from hq.platform.core.testing import operator
 
 from .. import listing
 from ..server import mcp
@@ -118,7 +118,7 @@ class CardTests(TestCase):
                 ),
             ),
         )
-        self.client.force_login(get_user_model().objects.create_user("operator"))
+        operator(self.client)
 
         with mock.patch("hq.platform.mcp.listing.endpoint", return_value=endpoint):
             part = self.client.get(reverse("agent_policy"), HTTP_X_FRAGMENT="mcp_endpoint")

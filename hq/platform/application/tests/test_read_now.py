@@ -7,7 +7,6 @@ gated capability, POST only.
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -16,12 +15,13 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import READER, operator
 
 from ..action_links import read_now_link, read_now_payload
 from ..cadence import forced_reads, settle_read_requests, sweep_due
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import command_spec, execute_capability
 from ..credential_sight import fed_kinds
-from ..security import Capability, Principal, cli_principal
+from ..security import cli_principal
 
 READ_NOW = "infrastructure.controller.refresh"
 SWEEPS = override_settings(
@@ -145,7 +145,7 @@ class RefusalTests(TestCase):
         self.assertFalse(ReadRequest.objects.exists())
 
     def test_a_reader_may_not_ask(self):
-        reader = Principal("reader", "test", frozenset({Capability.READ}))
+        reader = READER
 
         result = execute_capability(READ_NOW, {"connection_ref": "example-tailnet"}, principal=reader)
 
@@ -159,7 +159,7 @@ class RefusalTests(TestCase):
 class WebTests(TestCase):
     def setUp(self):
         connect("example-tailnet", "tailscale")
-        self.client.force_login(get_user_model().objects.create_user("operator", password="pw", is_staff=True))
+        operator(self.client)
 
     def test_the_link_posts_what_it_names_and_returns_with_the_result(self):
         link = read_now_link(cli_principal(), connection_ref="example-tailnet")
@@ -168,7 +168,7 @@ class WebTests(TestCase):
 
         self.assertEqual(link.method, "POST")
         self.assertEqual(ReadRequest.objects.get().connection_ref, "example-tailnet")
-        self.assertIn(capability_registry()[link.capability].requested("example-tailnet"), text(response))
+        self.assertIn(command_spec(link.capability).requested("example-tailnet"), text(response))
 
     def test_a_refusal_is_said_on_the_page_it_came_from(self):
         response = self.client.post(
@@ -231,7 +231,7 @@ class VerificationTests(TestCase):
         self.assertEqual(action.method, "GET")
 
     def test_a_reader_is_offered_the_check_not_the_read(self):
-        reader = Principal("reader", "test", frozenset({Capability.READ}))
+        reader = READER
 
         action = self.verify(self.finding(scope="tailscale.device"), principal=reader)
         self.assertIsNone(self.read(self.finding(scope="tailscale.device"), principal=reader))

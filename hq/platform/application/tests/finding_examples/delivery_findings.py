@@ -3,8 +3,8 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND
+from hq.platform.core.testing import declare
 
 from ...delivery_progress import STALLED_AFTER
 from . import Example, Examples
@@ -16,10 +16,10 @@ def delivered(stage: str, state: str, behind_for: timedelta = timedelta(minutes=
     """A delivery whose approved commit production does not run yet, at ``stage`` as the controller words
     it and ``state`` as it decides it."""
 
-    ManagedResource.objects.create(
-        key="delivery",
-        kind=KIND,
-        spec={"repository": "example/host", "workflow": COMPOSE_WORKFLOW, "branch": "main", "production": CURRENT},
+    declare(
+        "delivery",
+        KIND,
+        {"repository": "example/host", "workflow": COMPOSE_WORKFLOW, "branch": "main", "production": CURRENT},
         generation=1,
         observed_generation=1,
         last_observed_at=timezone.now(),

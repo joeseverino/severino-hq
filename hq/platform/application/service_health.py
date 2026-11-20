@@ -14,6 +14,7 @@ from django.utils.text import capfirst, get_text_list
 from hq.platform.application.labels import dotted
 
 from .projection import read_once
+from .references import Kind
 from .tone import Tone
 from .ui import counted, ended
 lazy from . import connections
@@ -202,12 +203,12 @@ def _hq_findings() -> tuple[Any, ...]:
     own = hq_service(catalog=connections.machines_once())
     if own is None:
         return ()
-    subjects = {f"service:{name}" for name in own.hostnames}
+    subjects = {Kind.SERVICE.of(name) for name in own.hostnames}
     if own.machine:
-        subjects.add(f"machine:{own.machine}")
+        subjects.add(Kind.MACHINE.of(own.machine))
     reader = Principal("hq-health", INTERNAL_INTERFACE, frozenset({Capability.READ}))
     return tuple(
         finding
         for finding in estate_findings(principal=reader)
-        if finding.subject in subjects or finding.subject.startswith("controller:")
+        if finding.subject in subjects or Kind.CONTROLLER.identity_in(finding.subject)
     )

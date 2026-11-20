@@ -1,11 +1,9 @@
 """The worker's calls to HQ: claim, renew and report, over HQ's bridge socket.
 
-The Go controller's client (``controller/runtime/bridge.go``) in Python, with
-the same trust: the socket's directory and the socket itself belong to this
-account and are open to no other, and the peer answering is this account, so
-a socket swapped in after the check is still refused. One connection per call,
-no redirect followed, an answer read only up to the bridge's bound and taken
-only as JSON.
+The Go controller's client (``controller/runtime/bridge.go``) with the same
+trust: the socket and its directory are this account's alone and the peer must
+be this account, so a swapped socket is refused. No redirect, a bounded answer,
+JSON only.
 """
 
 import http.client

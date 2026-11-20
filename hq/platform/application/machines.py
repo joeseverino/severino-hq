@@ -33,11 +33,10 @@ lazy from .connections import connection_rows
 lazy from .entity_links import entity_link
 lazy from .facts import Subject, snapshots_of
 lazy from .infrastructure import declared_machines, enabled_resources
+lazy from .machine_records import MachineRecord, MachineRow
 lazy from .machine_roles import role_context, roles_of
-lazy from .moments import moment, when_day
 lazy from .projection import read_once
 lazy from .reach import network_of
-lazy from .resource_records import MachineRecord, MachineRow
 lazy from .service_facets import connected_kinds
 lazy from .whereabouts import locate, whereabouts
 
@@ -208,15 +207,6 @@ class Machine:
             return MachineState.ONLINE if self.reachable else MachineState.NOT_ANSWERING
         return MachineState.UNMONITORED
 
-    @property
-    def state_since(self) -> str:
-        """The day the tailnet last saw a machine that is away or offline, or ""."""
-
-        if self.presence is None or self.presence.online:
-            return ""
-        seen = moment(str(self.presence.last_seen or ""))
-        return when_day(seen) if seen is not None else ""
-
 
 def _own(address: str) -> bool:
     """Whether an address says where a machine is. A loopback address is
@@ -353,16 +343,6 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
 def _with_roles(machines) -> tuple[Machine, ...]:
     context = role_context()
     return tuple(replace(item, roles=roles_of(item, context)) for item in machines)
-
-
-def declaration_seed(found: Machine) -> dict[str, Any]:
-    """What a machine declaration starts from: the name and addresses HQ knows.
-
-    Keyed by the machine spec's own fields, so it seeds the form through the
-    same query parameters every other create does.
-    """
-
-    return {"name": found.name, "addresses": list(found.addresses)}
 
 
 def _host_addresses(containers: dict[str, list[Running]]) -> dict[str, str]:

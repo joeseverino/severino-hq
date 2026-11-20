@@ -1,11 +1,8 @@
-"""Read once per request, and derive once per change, for an extension's own pages.
+"""Read once per request, and derive once per change, for an extension's own pages (docs/Plugins.md, Derived reads).
 
-``read_once`` shares one read among the functions assembling a page, and
-``derivation`` keeps a fact of the extension's own across requests until a
-table it reads is written. The rules an answer keeps, the clock among them:
-docs/Plugins.md, Derived reads. ``freshness`` says whether a reading of a kind
-is current by the kind's one ``ReadCadence``, which an extension declares in
-``PluginIntegration.cadences``.
+``read_once`` shares a read within a request, ``derivation`` keeps a fact until
+a table it reads is written, and ``freshness`` judges a reading by its kind's
+``ReadCadence``.
 """
 
 from collections.abc import Callable
@@ -13,16 +10,8 @@ from typing import Any
 
 from hq.platform.application import derivations as _derivations
 
-# present is the instant the others compare against; a derivation that asks one
-# of the others is derived again at the moment its answer would change.
-from hq.platform.application.derivations import (
-    passed,
-    present,
-    reached,
-    since,
-    today,
-    whole,
-)
+# A derivation that asks one of these is derived again at the moment its answer would change.
+from hq.platform.application.derivations import reached, today, whole
 
 # A reading's state (current, due, stale or never) and the cadence it is judged by.
 from hq.platform.application.freshness import Freshness, ReadCadence, freshness
@@ -54,11 +43,8 @@ __all__ = [
     "day_span",
     "derivation",
     "freshness",
-    "passed",
-    "present",
     "reached",
     "read_once",
-    "since",
     "today",
     "whole",
 ]

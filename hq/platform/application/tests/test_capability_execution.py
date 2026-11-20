@@ -12,6 +12,7 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import NOBODY
 from hq.platform.mcp.capability_answer import agent_capabilities
 
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
@@ -37,7 +38,7 @@ class CapabilityTests(TestCase):
         )
         principal = Principal("test", "test", frozenset({"example.read"}))
 
-        with commands_registered({spec.name: spec}):
+        with commands_registered(spec):
             result = execute_capability(spec.name, {}, principal=principal)
 
         self.assertEqual(result, {"ok": True, "value": "works"})
@@ -99,7 +100,7 @@ class CapabilityTests(TestCase):
         result = execute_capability(
             "expense.update",
             {},
-            principal=Principal("nobody", "test", frozenset()),
+            principal=NOBODY,
             target="not-an-integer",
         )
 
@@ -200,7 +201,7 @@ class CapabilityTests(TestCase):
             lambda command, **kwargs: {"ok": True},
         )
         principal = Principal("test", "test", frozenset({"example.read"}))
-        with commands_registered({spec.name: spec}):
+        with commands_registered(spec):
             result = execute_capability(spec.name, payload, principal=principal)
         self.assertFalse(result["ok"], result)
         self.assertEqual(result["error"]["code"], "invalid_input")
@@ -237,9 +238,13 @@ class CapabilityTests(TestCase):
         self.assertEqual(result["error"]["message"], "project.create: name is required.")
 
     def test_a_wrong_type_names_the_field_and_the_type(self):
+        from typing import Annotated
+
+        from pydantic import Field
+
         @dataclass(frozen=True, slots=True)
         class CountCommand:
-            counts: list[int]
+            counts: list[Annotated[int, Field(le=100)]]
 
         error = self._refusal(CountCommand, {"counts": [1, "two"]})
 
@@ -439,7 +444,7 @@ class WriteActTests(TestCase):
         spec = CapabilitySpec(
             "example.thing.set", "Write an example.", "remote_write", "example.write", ExampleWrite, handler
         )
-        with commands_registered({spec.name: spec}):
+        with commands_registered(spec):
             return execute_capability(spec.name, payload, principal=self.principal)
 
     def written_since(self, before):

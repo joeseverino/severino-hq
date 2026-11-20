@@ -1,5 +1,5 @@
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
+from hq.platform.core.testing import declare
 
 from . import Example, Examples, Raised, connection, stored
 
@@ -7,22 +7,16 @@ ZONE, RECORD, TARGET = "cloudflare.zone", "cloudflare.dns_record", "tls.delivery
 
 
 def record(key: str, zone: str, *, enabled: bool = True, **spec) -> None:
-    ManagedResource.objects.create(
-        key=key,
-        kind=RECORD,
+    declare(
+        key,
+        RECORD,
+        {"zone": zone, "name": f"app.{normalized_hostname(zone)}", "record_type": "A", "content": "192.0.2.10", **spec},
         enabled=enabled,
-        spec={
-            "zone": zone,
-            "name": f"app.{normalized_hostname(zone)}",
-            "record_type": "A",
-            "content": "192.0.2.10",
-            **spec,
-        },
     )
 
 
 def target(key: str, ref: str) -> None:
-    ManagedResource.objects.create(key=key, kind=TARGET, spec={"kind": "caddy", "connection_ref": ref, "name": key})
+    declare(key, TARGET, {"kind": "caddy", "connection_ref": ref, "name": key})
 
 
 LISTED = ({"zone": "example.com", "connection_ref": "example-dns"},)
@@ -36,7 +30,7 @@ def in_zones(*records: dict, read=LISTED, raises: tuple[Raised | str, ...] = ())
         connection("example-dns", "cloudflare_dns")
         for each in records:
             if each.get("expected"):
-                ManagedResource.objects.create(key="expected", kind=ZONE, spec={"zone": each["expected"]})
+                declare("expected", ZONE, {"zone": each["expected"]})
             else:
                 record(**each)
 
@@ -54,7 +48,7 @@ def targets(*pairs: tuple[str, str], raises: tuple[Raised | str, ...] = ()) -> E
 
 def unconnected() -> None:
     connection("example-edge", "ssh")
-    ManagedResource.objects.create(key="unconnected", kind="machine", spec={"name": "example"})
+    declare("unconnected", "machine", {"name": "example"})
 
 
 EXAMPLES = (

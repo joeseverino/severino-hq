@@ -11,7 +11,7 @@ from typing import Any
 
 from django.db import transaction
 
-from hq.platform.core.audit import audit_operation
+from hq.platform.core import bindings
 lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND
@@ -55,7 +55,7 @@ def record_sweep(payload: dict[str, Any], *, admitted: Admitted) -> dict[str, An
     adopted: list[str] = []
     # HQ's own act inside the controller's report, so its rows say HQ took
     # the records on, as an adoption a person asks for says who did.
-    with audit_operation(operation=ADOPT, principal=principal):
+    with bindings.audit_operation(operation=ADOPT, principal=principal):
         for kind in _adoptable_kinds():
             adopted += adopt_discovered(kind, principal=principal)["adopted"]
         # Records last, and separately, because they are the one kind whose

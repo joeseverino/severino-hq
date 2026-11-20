@@ -22,10 +22,10 @@ mise prints the tasks live, so this file does not list them:
 
 What the listing does not say:
 
-- `fast` selects through Python imports, app names and the paths a module
-  names, and runs every walk of the tree the change reaches (each on any
-  change, unless its class declares what it reads with `@reads`), so only a
-  test that finds a file by a name computed as it runs needs `check`.
+- `fast` checks only the files a change touched and runs the tests it
+  reaches through imports, names and the paths a module names. A gate or test
+  that reads the whole tree (the derived files, the structural bar, a test
+  tagged `tree`) and the composed suite are CI's and `check`'s.
 - A new test is proven to fail without the fix by `mise run test --at <base>
   <labels>`, never by a base worktree, snapshot or checkout made by hand.
 - In a worktree of your own, try a change on `dev:scratch`, a throwaway
@@ -111,7 +111,9 @@ derives from its adapter's `DEFINITIONS`, `CONNECTIONS` and `OBSERVATIONS`
 (`r.Supplied.For`), never a setting by name
 ([Providers](docs/Architecture.md#providers)).
 
-Tests live in each package's `tests/` directory. When a definition moves,
+Tests live in each package's `tests/` directory, and what one arranges (a
+person, a signed-in client, a declared resource, the standard principals, a
+drawn template) comes from `hq/platform/core/testing.py`. When a definition moves,
 retarget every `mock.patch` that named its old home, since a patch of a name
 no longer looked up there patches nothing. A check that walks a path (an
 architecture test, a glob) fails when its path matches nothing.
@@ -196,6 +198,10 @@ than styling a page.
   `tools/lint/ast-grep/rules`, with its scope in its own `files:` and
   `ignores:` (`sgconfig.yml` there names the scopes), and its cases in
   `rule-tests/`.
+- A piece only one home may use lives in a module of its own, which a
+  `protected` contract in `pyproject.toml` lets only that home import
+  (`lint:imports`), never an ast-grep rule naming it. The home imports it
+  whole (`from . import idempotency`), so it re-exports none of its names.
 - Python says a thing the one way HQ already has for it, never by hand:
   - a text cut to a length with an ellipsis is `Truncator(text).chars(n)`;
   - a raised first letter is `capfirst(text)`;
@@ -222,9 +228,9 @@ A piece of work is done when `mise run fast` passes on its tip, with the
 tests its change touches (`mise run test <labels>`). A change to what a page
 shows also needs `mise run dev:look` on each page its templates draw.
 
-The whole-tree runs belong to CI. A shared sheet or part reaches pages the
-change never named, so the browser suite on the pushed branch judges every
-page in both engines; no whole-tree run is repeated on the Mac.
+The whole-tree runs belong to CI and `check`. A shared sheet or part reaches
+pages the change never named, so the browser suite on the pushed branch judges
+every page in both engines; no whole-tree run is repeated on the Mac.
 
 That branch is ready when `mise run check --release` exits 0, or
 `mise run check --release --remote` for a pushed commit: every CI gate, the

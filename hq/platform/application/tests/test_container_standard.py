@@ -7,7 +7,7 @@ from django.test import TestCase
 from ..container_standard import EXAMPLES
 from ..containers import containers
 from ..standards import INTENDED, Standing
-from .test_containers import HIGH, estate, inventory
+from .test_containers import HIGH, container, estate, inventory
 
 
 def runtime(container="web", **fields):
@@ -24,18 +24,8 @@ class StandardTests(TestCase):
         return next(item.posture for item in containers() if item.running.name == name)
 
     def test_a_check_declared_by_design_is_shown_with_its_reason_and_never_a_gap(self):
-        from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(
-            key="example-box-web",
-            kind="portainer.container",
-            spec={
-                "connection_ref": "example-portainer",
-                "host": "example-box",
-                "name": "web",
-                "by_design": {"own-network": "It answers DNS on the host's port 53."},
-            },
-        )
+        container(by_design={"own-network": "It answers DNS on the host's port 53."})
 
         found = self.posture(**{**KEPT, "network_mode": "host", "user": "root"})
 
@@ -60,7 +50,6 @@ class StandardTests(TestCase):
         )
 
     def test_a_container_declared_to_hold_the_socket_is_not_flagged_for_it(self):
-        from hq.domains.control_plane.models import ManagedResource
 
         socket = {
             "type": "bind",
@@ -68,21 +57,11 @@ class StandardTests(TestCase):
             "destination": "/var/run/docker.sock",
             "read_only": True,
         }
-        ManagedResource.objects.create(
-            key="example-box-web",
-            kind="portainer.container",
-            spec={
-                "connection_ref": "example-portainer",
-                "host": "example-box",
-                "name": "web",
-                "holds_docker_socket": True,
-            },
-        )
+        container(holds_docker_socket=True)
 
         self.assertEqual(self.posture(**{**KEPT, "mounts": [socket]}).state_of("no-docker-socket"), Standing.MET)
 
     def test_a_declared_socket_holder_may_write_dockers_own_data_but_nothing_else(self):
-        from hq.domains.control_plane.models import ManagedResource
 
         socket = {
             "type": "bind",
@@ -97,16 +76,7 @@ class StandardTests(TestCase):
             "read_only": False,
         }
         etc = {"type": "bind", "source": "/etc", "destination": "/host-etc", "read_only": False}
-        ManagedResource.objects.create(
-            key="example-box-web",
-            kind="portainer.container",
-            spec={
-                "connection_ref": "example-portainer",
-                "host": "example-box",
-                "name": "web",
-                "holds_docker_socket": True,
-            },
-        )
+        container(holds_docker_socket=True)
 
         self.assertEqual(
             self.posture(**{**KEPT, "mounts": [socket, volumes]}).state_of("no-system-path-writable"), Standing.MET

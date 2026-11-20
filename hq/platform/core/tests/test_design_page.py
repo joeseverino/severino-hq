@@ -12,14 +12,14 @@ from pathlib import Path
 from unittest import mock
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.core.management import CommandError, call_command
-from django.test import SimpleTestCase, TestCase, override_settings, tag
+from django.test import SimpleTestCase, override_settings, tag
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import all_elements, elements, select
 from hq.platform.core import design_gallery
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import SignedInTestCase
 from hq.platform.core.tests.browser import catalog
 from hq.platform.core.tests.browser.catalog.common import alone
 
@@ -42,7 +42,7 @@ def _light(html):
     return [element for element in all_elements(html) if not element.shadowed]
 
 
-class DesignPageTests(TestCase):
+class DesignPageTests(SignedInTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -51,9 +51,6 @@ class DesignPageTests(TestCase):
         cls.built = Path(folder.name) / "design-gallery.html"
         call_command("design_gallery", output=cls.built, stdout=io.StringIO())
         cls.gallery = cls.built.read_text(encoding="utf-8")
-
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("reader", password="unused-password"))
 
     def test_the_build_draws_every_entry_under_its_name_within_its_budget(self):
         labels = [element.attrs.get("aria-label") for element in select(self.gallery, "role", "region")]

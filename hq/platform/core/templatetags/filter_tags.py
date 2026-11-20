@@ -97,7 +97,7 @@ slotted(
         holds is the bar's `keep=`, the query's other fields as the view hands them, each sent again while
         it has a value. The search takes the line's room; every other control is as wide as what it says,
         a select its longest option. A control the script shows only once it has something to act on is
-        drawn `hidden` in the bar and stays so. *Gate:* the `hand-drawn-filter-bar` rule refuses
+        drawn `hidden` in the bar and stays so. *Gate:* the `filter-bar` shape refuses
         `.filter-bar`, a search field and a select written by hand, outside the parts that draw them.
         `test_filter_tags.FilterBarUseTests` reads every `{% filter_bar %}` in the templates. It refuses a
         count written in the summary and a narrowing bar with no count.

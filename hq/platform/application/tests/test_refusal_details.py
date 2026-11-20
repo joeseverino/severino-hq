@@ -9,12 +9,13 @@ from jsonschema import Draft202012Validator
 
 from hq.domains.docs_index.importer import validate_manifest_data
 from hq.platform.application.input_errors import django_refusal, pydantic_refusal
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.refusal_status import Refusal, next_call
 from hq.platform.mcp.shapes import REFUSED
 
 
 def _meets(details: Any) -> bool:
-    return Draft202012Validator(REFUSED).is_valid(Refusal("invalid_input", "Example refused.", details).answer())
+    return Draft202012Validator(REFUSED).is_valid(Refusal(Code.INVALID_INPUT, "Example refused.", details).answer())
 
 
 class RefusalDetailsTests(SimpleTestCase):

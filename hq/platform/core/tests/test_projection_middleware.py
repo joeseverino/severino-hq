@@ -2,21 +2,19 @@
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare, operator
 
 
 class ProjectionMiddlewareTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
-        ManagedResource.objects.create(
-            key="app-proxy",
-            kind="npm.proxy_host",
-            spec={"domain_names": ["app.example.com"], "forward_host": "10.0.0.5", "forward_port": 8080},
+        operator(self.client)
+        declare(
+            "app-proxy",
+            "npm.proxy_host",
+            {"domain_names": ["app.example.com"], "forward_host": "10.0.0.5", "forward_port": 8080},
             enabled=True,
         )
 

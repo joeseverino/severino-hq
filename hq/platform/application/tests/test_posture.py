@@ -6,13 +6,13 @@ import subprocess
 import sys
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.platform.application.markup_testing import links, text
+from hq.platform.core.testing import SignedInTestCase
 
 from ..connection_catalog import connection_catalog
 from ..inventory_testing import store
@@ -236,10 +236,7 @@ class ReadingTests(TestCase):
             self.assertIn(result.check.label, found.count_line)
 
 
-class PageTests(TestCase):
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("posture-reader"))
-
+class PageTests(SignedInTestCase):
     def test_the_connections_page_shows_each_check_and_no_paragraph_of_them(self):
         response = self.client.get(reverse("control_plane:connections"))
 

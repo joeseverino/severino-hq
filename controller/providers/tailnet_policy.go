@@ -106,7 +106,7 @@ func (c tailnetClient) tailnetPolicy(ctx context.Context) (tailnetPolicyDocument
 func (c tailnetClient) tailnetPolicyVersion(ctx context.Context) (tailnetPolicyDocument, string, error) {
 	raw, etag, err := c.callHeader(ctx, tailnet("acl"), map[string]string{"Accept": "application/json"}, "etag")
 	if code := httpStatus(err); code != 0 {
-		return nil, "", tailnetRefused("the policy read", "policy_file:read", code)
+		return nil, "", tailnetRefused("the policy read", runtime.TailscaleScopePolicyFileRead, code)
 	}
 	if err != nil {
 		return nil, etag, fmt.Errorf("read the tailnet policy: %w", err)

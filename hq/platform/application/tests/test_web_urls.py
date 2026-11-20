@@ -8,11 +8,11 @@ import re
 import string
 from unittest import skipUnless
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import text
+from hq.platform.core.testing import operator
 
 from ..entity_links import declared_link, entity_link, web_url
 
@@ -160,7 +160,7 @@ class RenderedLinkTests(TestCase):
         from hq.domains.docs_index.models import DocumentationRecord
 
         record = DocumentationRecord.objects.create(doc_id="example-doc", title="Example", external_url=HOSTILE[0])
-        self.client.force_login(get_user_model().objects.create_user("example-operator", password="x" * 20))
+        operator(self.client)
 
         body = self.client.get(reverse("docs_index:detail", args=[record.doc_id])).content.decode()
 

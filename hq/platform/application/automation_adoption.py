@@ -1,30 +1,10 @@
-"""Adopting a proposal: one scanned commit of the automation source becomes
-the catalog HQ runs procedures from, playbook by playbook or all at once, once
-an operator agrees.
+"""Adopting a proposal: one scanned commit of the automation source becomes the
+catalog HQ runs procedures from, once an operator agrees.
 
-A Refresh proposes (``automation_sources``); this adopts. How a commit is
-judged and how an adoption reaches every process: docs/Architecture.md,
-"Adopting the playbooks".
-
-Security properties:
-
-- Only a commit GitHub verified as signed is adopted. The scan read that with
-  the worker's token (``hq_runner.catalog.github_verify``); this process holds
-  no token and asks nothing of GitHub, so it trusts the verification the
-  scan recorded and nothing else.
-- A commit carrying an ``ansible.cfg`` or a directory Ansible loads code from
-  (``unpinned``, kinds ``config`` and ``plugins``) is refused, since a run
-  would load what no reviewer of a procedure reads.
-- Adoption is a person's act. Adopting and rejecting take
-  ``adopt_playbooks``, held only at the operator's own interfaces
-  (``security.HELD_ONLY_AT``): an agent may refresh, and its adoption is
-  refused, never held for approval.
-- Each procedure runs at the commit it was adopted from, which pins every
-  file a run checks out, so a file a newer commit changes (a role two
-  playbooks share) reaches only a playbook adopted from that commit.
-- Each input is closed: a text input has its choices or a sidecar's pattern
-  and length, and a free-form type is refused, so a run's parameters can
-  name no execution field (``automation_manifest._closed``).
+How a commit is judged, what is refused and how an adoption reaches every
+process: docs/Architecture.md, "Adopting the playbooks". Adoption is a person's
+act: ``adopt_playbooks`` is held only at the operator's own interfaces
+(``security.HELD_ONLY_AT``), so an agent's adoption is refused, never held.
 """
 
 import json
@@ -68,6 +48,7 @@ from .contracts import Closed, Effect
 from .integration_specs import CapabilitySpec
 from .projection import read_once
 from .record_errors import PolicyError, RecordNotFound
+from .record_fields import RecordId
 from .security import Capability, Principal
 lazy from . import agent_registry
 lazy from .approval_review import SUMMARY
@@ -361,6 +342,10 @@ def _input(option: str, terms: Mapping[str, Any], bound: InputBound | None, inpu
         return f"The input name {option} isn't allowed; use lowercase letters, digits and underscores."
     if kind not in (*SCALARS, "list") or terms.get("elements") not in (None, *SCALARS):
         return f"The input {option} takes {kind}, a free-form type; name each value it allows."
+    # A run's command is published with each input's words, and a model
+    # filling one in has only them to go by.
+    if not _description(terms.get("description")).strip():
+        return f"The input {option} says nothing of what it is; give it a description in its argument_specs."
     try:
         adopted = AdoptedInput.model_validate_json(
             json.dumps(
@@ -777,12 +762,15 @@ class Adopted(TypedDict):
 # A playbook as a change of a scan names it: its id, or its sidecar where two declare one id.
 PlaybookKey = Annotated[RequiredText, Strict(), Field(max_length=200, title="Playbook")]
 
+# The scan result a change of a scan is adopted or rejected from.
+type ScanResult = Annotated[RecordId, Strict(), Describe("The scan result's ID.")]
+
 
 @dataclass(frozen=True, slots=True)
 class AdoptProposal:
     """The scan result to adopt, and the one playbook to adopt from it."""
 
-    proposal: Annotated[StrictInt, Field(ge=1, title="Scan result"), Describe("The scan result's ID.")]
+    proposal: Annotated[ScanResult, Field(title="Scan result")]
     playbook: Annotated[
         PlaybookKey | None,
         Describe("The playbook whose change to adopt, by its id; left out, every change that waits is adopted."),
@@ -864,7 +852,7 @@ class Rejected(TypedDict):
 class RejectProposal:
     """The scan result to reject, and the one playbook to reject from it."""
 
-    proposal: Annotated[StrictInt, Field(ge=1, title="Scan result"), Describe("The scan result's ID.")]
+    proposal: Annotated[ScanResult, Field(title="Scan result")]
     playbook: Annotated[
         PlaybookKey | None,
         Describe(

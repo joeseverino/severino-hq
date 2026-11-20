@@ -37,6 +37,7 @@ from hq.platform.application.infrastructure import ManagedResourceCommand, save_
 from hq.platform.application.resource_operations import OperationCommand, request_reconcile
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.testing import declare
 from hq.platform.core.tests.unix_serving import post, served, socket_directory
 
 from .certificate_cases import certificate_spec, declare_targets
@@ -251,7 +252,7 @@ class ControllerPassTests(TransactionTestCase):
         glance pass that runs beside it, and answered before the sweep ends."""
 
         self.bridge.held = "sweep-due"
-        machine = ManagedResource.objects.create(key="example-controller", kind="machine", spec={"name": "example"})
+        machine = declare("example-controller", "machine", {"name": "example"})
         ProviderConnection.objects.create(
             connection_ref="example-ssh",
             controller_id=machine.key,

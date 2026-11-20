@@ -1,7 +1,7 @@
 from datetime import timedelta
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.platform.core.models import UpstreamReading
+from hq.platform.core.testing import declare
 
 from ... import readings
 from ...cadence import AUTOMATION_HEARTBEAT
@@ -14,7 +14,7 @@ def worker(seen: timedelta | None = None, *, source: bool = True, raises: tuple[
 
     def given() -> None:
         if source:
-            ManagedResource.objects.create(key="automation-source", kind="automation.source", spec={})
+            declare("automation-source", "automation.source")
         if seen is not None:
             readings.record(AUTOMATION_HEARTBEAT, {})
             UpstreamReading.objects.filter(key=AUTOMATION_HEARTBEAT).update(observed_at=AT - seen)

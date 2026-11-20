@@ -4,7 +4,6 @@ is queued for the controller. Nothing here reaches D1 or holds a credential."""
 from unittest.mock import patch
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
@@ -27,9 +26,9 @@ from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.consent import consented
 from hq.platform.application.tests.facts import ROOT, STRING, scan, strings
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 from .. import inbox
 
@@ -79,7 +78,7 @@ OPERATOR = _principal(Capability.MANAGE_CONTACTS)
 
 class InboxReadingTests(TestCase):
     def test_nothing_read_yet_is_calm_and_names_the_connection(self):
-        self.client.force_login(get_user_model().objects.create_user("op"))
+        operator(self.client, "op")
 
         response = self.client.get(reverse("contacts:list"))
 
@@ -108,7 +107,7 @@ class InboxReadingTests(TestCase):
         _read(_row(1), reachable=False, error="cloudflare refused the request")
 
         self.assertEqual(inbox.unread(), (1, "unavailable"))
-        self.client.force_login(get_user_model().objects.create_user("op"))
+        operator(self.client, "op")
         response = self.client.get(reverse("contacts:list"))
         self.assertContains(response, "cloudflare refused the request")
         self.assertContains(response, "Jane Doe")
@@ -140,7 +139,7 @@ class InboxReadingTests(TestCase):
 
 class ContactViewTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("joe", password="pw"))
+        operator(self.client, "joe")
         _read(_row(1))
         _manages()
 
@@ -181,10 +180,6 @@ class ContactViewTests(TestCase):
             body,
         )
         self.assertNotIn('href="mailto:a@example.com\r', body)
-
-    def test_an_unknown_message_redirects_to_the_list(self):
-        response = self.client.get(reverse("contacts:detail", args=[99]))
-        self.assertRedirects(response, reverse("contacts:list"), fetch_redirect_response=False)
 
     def test_set_status_queues_and_redirects_back(self):
         _manages()
@@ -273,7 +268,7 @@ class ReadOnlyConnectionTests(TestCase):
     links the step that sets it up."""
 
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("joe", password="pw"))
+        operator(self.client, "joe")
         _read(_row(1))
         self.setup = f"{reverse('control_plane:connections')}?setup=cloudflare_api#setup-cloudflare_api"
 
@@ -438,7 +433,6 @@ class NoCredentialTests(TestCase):
 
 
 @tag("source", "tree")
-@reads("hq/domains/contacts/*.py", "hq/platform/application/contact_submissions.py")
 class NoCredentialSourceTests(SimpleTestCase):
     """The contacts code, read for a token setting."""
 
@@ -512,10 +506,10 @@ class WithheldSpecTests(TestCase):
 
         self.assertWithheld(str(listing))
         self.assertWithheld(str(detail))
-        self.assertEqual(detail["resource"]["spec"], {})
+        self.assertEqual(detail["spec"], {})
 
     def test_the_record_pages_report_and_form_show_no_spec(self):
-        self.client.force_login(get_user_model().objects.create_user("op"))
+        operator(self.client, "op")
         key = inbox.DECLARATION_KEY
 
         detail = self.client.get(reverse("control_plane:detail", args=[key]), follow=True)

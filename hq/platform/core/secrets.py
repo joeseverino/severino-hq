@@ -1,12 +1,8 @@
 """Sealing the few secrets an operator hands HQ on purpose to the controller, and refusing to hold them otherwise.
 
-The credentials HQ uses never reach the web container. A secret handed to it (an
-internally signed certificate's key, kept so installing it on another service is
-a click) is sealed to the controller: HQ holds only the public half of the
-controller's key, so what it seals only the controller can open. With no key,
-storing fails loudly, since a store that degrades to plaintext is worse than
-none. controller/internal/sealing/sealing.go owns the format, and every
-constant below agrees with it.
+HQ holds only the controller's public key, so what it seals only the controller
+can open. With no key, storing fails, since a store that degrades to plaintext
+is worse than none. controller/internal/sealing/sealing.go owns the format.
 """
 
 import base64

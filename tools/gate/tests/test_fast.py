@@ -6,6 +6,7 @@ import io
 import os
 import subprocess
 import tempfile
+import time
 from pathlib import Path, PurePath
 from unittest import mock
 
@@ -129,28 +130,6 @@ class SelectableTests(SimpleTestCase):
                 ]
                 self.assertFalse(missed, f"{name} runs {', '.join(missed)}, which its sources leave out: add each")
 
-    def test_an_edit_inside_a_test_body_selects_no_gate_that_never_reads_a_test(self):
-        """Each gate whose sources leave the test modules out is still selected by a module it reads."""
-
-        from tests.mise_tasks import matched
-
-        leaf = PurePath("hq/platform/mcp/tests/test_answer_defaults.py")
-        read = {
-            "lint:deploycheck": "hq/config/settings.py",
-            "test:migrations": "hq/domains/jobs/models.py",
-            "lint:sdk-breaking": "hq_sdk/ui.py",
-            "lint:deptry": "hq/platform/mcp/server.py",
-            "lint:drift-api-document": "hq/platform/api/views.py",
-            "lint:drift-bridge-contract": "hq/domains/jobs/models.py",
-            "lint:drift-shared-ui-reference": "hq_sdk/ui.py",
-        }
-        listed = mise_tasks()
-        for name, path in read.items():
-            with self.subTest(name):
-                sources = listed[name]["sources"]
-                self.assertTrue(matched(PurePath(path), sources), f"{name} is not selected by {path}, which it reads")
-                self.assertFalse(matched(leaf, sources), f"{name} is selected by {leaf}, which it never reads")
-
     def test_only_a_file_a_page_draws_selects_the_look(self):
         """fast's browser look runs on a change to a sheet or a template, and
         never on a change to Python alone."""
@@ -162,3 +141,19 @@ class SelectableTests(SimpleTestCase):
             self.assertTrue(matched(PurePath(path), sources), path)
         for path in ("hq/platform/core/templatetags/part_tags.py", "static/js/app.js"):
             self.assertFalse(matched(PurePath(path), sources), path)
+
+
+class VerdictLineTests(SimpleTestCase):
+    def test_the_line_names_only_what_failed_and_a_passing_look_says_nothing(self):
+        look = Step("look", detail=["every_layout_check_holds holds on all 3 pages at 2 widths"])
+        tests = Step("tests", ok=False, tasks=["fast:tests"])
+        started = time.monotonic()
+
+        failed = verdict.verdict("fast", started, [look, tests])
+        passed = verdict.verdict("fast", started, [look])
+        judged = verdict.verdict("fast", started, [Step("look", ok=False, detail=["2 findings on 3 pages"])])
+
+        self.assertIn("fast:tests", failed)
+        self.assertNotIn("holds on", failed)
+        self.assertNotIn("holds on", passed)
+        self.assertIn("2 findings on 3 pages", judged)

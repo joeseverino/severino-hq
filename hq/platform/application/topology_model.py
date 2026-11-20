@@ -17,6 +17,7 @@ from .describe import Describe, listed
 from .entity_links import EntityLink
 from .json_schemas import ObservedMoment
 from .moments import moment
+from .references import Kind
 from .tone import Tone
 from .ui import ended
 
@@ -313,11 +314,11 @@ def newest_stamp(*stamps: str) -> str:
     return max(moments).isoformat() if moments else ""
 
 
-def derived_id(kind: str, *parts: str) -> str:
+def derived_id(kind: Kind, *parts: str) -> str:
     """Keep composite observation ids stable and compact, not confidential."""
 
     digest = sha256("\0".join(parts).encode()).hexdigest()[:16]
-    return f"{kind}:{digest}"
+    return kind.of(digest)
 
 
 # Every reader of the topology holds it, so a gate is compared above it.
@@ -334,7 +335,7 @@ def edge_between(source: str, target: str, kind: str, label: str = "", status: s
     """The edge of one relation kind from ``source`` to ``target``, with a stable id."""
 
     return TopologyEdge(
-        id=derived_id("edge", source, target, kind),
+        id=derived_id(Kind.EDGE, source, target, kind),
         source=source,
         target=target,
         kind=kind,

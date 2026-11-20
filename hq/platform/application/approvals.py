@@ -30,6 +30,7 @@ from .contracts import Effect
 from .derivations import holds_until
 from .held_answer import HELD, ApprovalApplied, ApprovalRejected, HeldCall, serialize_approval
 from .record_errors import PolicyError, RecordNotFound
+from .refusal_codes import Code
 from .refusal_status import refusal_of, refuse
 from .sealing import Sealed, sealer
 from .security import (
@@ -103,13 +104,13 @@ class RefusedHold(ApprovalError):
     the exception's string form, under `code`.
     """
 
-    code = "refused_hold"
+    code = Code.REFUSED_HOLD
 
 
 class TooManyPendingApprovals(RefusedHold):
     """One actor is holding more outstanding requests than it may."""
 
-    code = "too_many_pending_approvals"
+    code = Code.TOO_MANY_PENDING_APPROVALS
 
 
 class UnreadableSubject(RefusedHold):
@@ -120,7 +121,7 @@ class UnreadableSubject(RefusedHold):
     person" into "runs whenever the read comes back empty".
     """
 
-    code = "approval_subject_unreadable"
+    code = Code.APPROVAL_SUBJECT_UNREADABLE
 
 
 @dataclass(frozen=True, slots=True)
@@ -454,17 +455,17 @@ def own_held_request(approval_id: str, *, principal: Principal) -> ApprovalReque
 # How a request that ran nothing ended, as the refusal its caller is answered with.
 _UNAPPLIED = {
     ApprovalRequest.State.EXPIRED: (
-        "expired",
+        Code.EXPIRED,
         "This request expired before it was decided, so nothing was written. Ask again if you still need the change.",
     ),
     ApprovalRequest.State.STALE: (
-        "stale",
+        Code.STALE,
         (
             "What this change acts on changed after you asked, so nothing was written. "
             "Ask again if you still need the change."
         ),
     ),
-    ApprovalRequest.State.WITHDRAWN: ("withdrawn", "You withdrew this request, so nothing was written."),
+    ApprovalRequest.State.WITHDRAWN: (Code.WITHDRAWN, "You withdrew this request, so nothing was written."),
 }
 
 
@@ -487,7 +488,7 @@ def outcome(held: ApprovalRequest) -> dict[str, Any] | None:
     if state == ApprovalRequest.State.REJECTED:
         note = held.decision_note.strip()
         said = f"An operator declined this change in HQ: {note}" if note else "An operator declined this change in HQ."
-        return refuse("declined", said)
+        return refuse(Code.DECLINED, said)
     code, said = _UNAPPLIED[state]
     return refuse(code, said)
 
@@ -517,7 +518,6 @@ def lapse_expired() -> int:
                     _LAPSED_NOTE,
                     operation=LAPSE,
                     principal=principal,
-                    rebinds=True,
                 )
                 lapsed += 1
     return lapsed
@@ -562,9 +562,7 @@ def pending(*, principal: Principal, limit: int | None = 50, capability: str = "
     return waiting
 
 
-def _settle(
-    held: ApprovalRequest, state: str, note: str, *, operation: str, principal: Principal, rebinds: bool = False
-) -> None:
+def _settle(held: ApprovalRequest, state: str, note: str, *, operation: str, principal: Principal) -> None:
     """Record an outcome nobody chose, in a savepoint of its own.
 
     The two callers below go on to raise ``Settled``, which must not leave the
@@ -573,7 +571,7 @@ def _settle(
     decision that cannot be taken.
     """
 
-    with own_operation(held, operation=operation, principal=principal, rebinds=rebinds), transaction.atomic():
+    with own_operation(held, operation=operation, principal=principal), transaction.atomic():
         _record(held, state, decision_note=note)
 
 
@@ -717,12 +715,10 @@ def _stopped_askers(principal: Principal, rows: tuple[ApprovalRequest, ...]) -> 
 def _refusal(principal: Principal, held: ApprovalRequest, decision: str, *, stopped: bool) -> Refusal | None:
     """Why ``principal`` may not take ``decision`` on ``held``, or None.
 
-    Only a person, and not the caller that asked. The interface is the test
-    rather than a capability, and that is the whole point of the module. The
-    requesting token already held every capability its request needed; a
-    capability to approve would be one more thing that token could be granted,
-    or could be found to have been granted, and the gate would be back where
-    it started.
+    Only a person, and not the caller that asked. The interface is the test,
+    never a capability: a capability to approve would be one more thing the
+    requesting token could be granted, and the gate would be back where it
+    started.
     """
 
     if held.state != ApprovalRequest.State.PENDING:
@@ -806,14 +802,9 @@ def approve(command: ApproveCommand, *, principal: Principal) -> ApprovalApplied
 class Approved(Sealed):
     """A held change a person has just approved, the only thing ``execute_approved`` runs (``sealing``).
 
-    - One place makes one: ``_apply``, once the approver may decide and the
-      change is still what was asked for. Only this module holds its seal, so
-      no other path has a value that makes a run approved.
-    - It carries the whole change (the spec, the validated command, its
-      target, the fields sent) and who acts, so what runs approved is what
-      the person saw, and nothing handed beside it can swap any part.
-    - ``execute_approved`` reads it only through ``approval``, which refuses
-      anything this module did not seal.
+    Only ``_apply`` makes one, once the approver may decide and the change is
+    still what was asked. It carries the whole change and who acts, so what
+    runs is what the person saw.
     """
 
     __slots__ = ()
@@ -867,7 +858,7 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
         locked = _lock_pending(held)
         # The one binding that runs as someone other than whoever started the
         # operation: the approver agreed, and the change is the requester's.
-        with own_operation(held, operation=spec.name, principal=acting, rebinds=True):
+        with own_operation(held, operation=spec.name, principal=acting):
             result = execute_approved(
                 _seal(Approval(spec, command, locked.target or None, acting, frozenset(held.payload)))
             )

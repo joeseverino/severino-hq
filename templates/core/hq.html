@@ -161,10 +161,7 @@ row in the flow.
               {% list %}{% for reason in row.reasons %}<li>{% muted %}{{ reason|breakable }}{% endmuted %}</li>{% empty %}{% if row.remedy %}<li>{% muted %}{{ row.remedy|breakable }}{% endmuted %}</li>{% elif row.error and not row.read %}<li>{% muted %}{{ row.error|breakable }}{% endmuted %}</li>{% endif %}{% endfor %}{% endlist %}
             </td>
             <td>{% if row.stale %}<strong>Out of date</strong>{% elif row.read and row.state == "readable" %}{{ row.state_label|breakable }}{% else %}<strong>{{ row.state_label|breakable }}</strong>{% endif %}</td>
-            <td>{% comment %}
-            a kind never read counts 0 records, so whether it was read decides the mark
-            <!-- ast-grep-ignore: hand-drawn-missing-value -->
-            {% endcomment %}{% if row.read %}{{ row.records|breakable }}{% else %}{% empty_value %}{% endif %}</td>
+            <td>{% if row.read %}{{ row.records|breakable }}{% else %}{% empty_value %}{% endif %}</td>
             <td class="optional-col">{% include "partials/_reading_age.html" with at=row.observed_at only %}</td>
           </tr>
         {% endfor %}

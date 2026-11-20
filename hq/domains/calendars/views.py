@@ -5,11 +5,10 @@ from typing import ClassVar, override
 from uuid import UUID
 
 from django.http import HttpResponseRedirect
-from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views import View
-from django.views.generic import CreateView, DeleteView, RedirectView, TemplateView, UpdateView
+from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 
 from hq.platform.application.calendar import calendar_day, calendar_month, month_of, month_url
 from hq.platform.application.calendar_entries import (
@@ -23,7 +22,7 @@ from hq.platform.application.capabilities import capability_title
 from hq.platform.application.card_items import ListRow
 from hq.platform.application.entity_links import web_url
 from hq.platform.application.moments import stamp_day, when_day
-from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
 from hq.platform.application.references import reference_of
 from hq.platform.application.security import Capability, safe_next, web_principal
 from hq.platform.application.web_writes import execute_posted
@@ -233,16 +232,15 @@ class EntryFormPage(EntryWrite, CommandFormPage, EntryPage, CapabilityFormMixin)
         return form
 
 
-class EntryDetailView(RedirectView):
-    """An entry's own address opens it on the calendar."""
+class EntryDetailView(RecordPageMixin, View):
+    """An entry's own address opens it on the calendar, where its record's
+    page is: the composed month, which reads the entry beside the days."""
 
+    resource = "calendar"
+    context_object_name = "entry"
     required_capability = Capability.READ_CALENDAR
-    # A redirect answers every method by default; this one is only followed.
+    # Only followed.
     http_method_names: ClassVar[list[str]] = ["get", "head"]
-
-    @override
-    def get_redirect_url(self, uid):
-        return get_object_or_404(Entry, uid=uid).get_absolute_url()
 
 
 class EntryCreateView(EntryFormPage, CreateView):

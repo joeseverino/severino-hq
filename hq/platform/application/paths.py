@@ -104,7 +104,7 @@ def _swept(kind: str) -> dict[str, list[_Row]]:
     }
     found: dict[str, list[_Row]] = {}
     for snapshot in snapshots_of(kind):
-        if not snapshot.reachable or provider.from_record is None:
+        if not snapshot.reachable or not provider.sweeps:
             continue
         for record in snapshot.records or ():
             spec = record_spec(kind, record)

@@ -117,13 +117,9 @@ _UNKNOWN_OUTCOME = {
 def _fail_lapsed_runs(now) -> None:
     """End each lapsed run its manifest does not call safe to repeat.
 
-    A run may have changed machines before its worker stopped renewing, and
-    HQ cannot tell, so running it again could act twice. It ends cancelled,
-    the state that reads "Stopped early", as a run still claimed with its
-    lease run out already reads, so the one cause reads one way before and
-    after this ends it. Saved one by one
-    under the run's own id, so each ending is an audited row that leads back
-    to the ask. At most one run per procedure is active, so these are few.
+    A run may have changed machines before its worker stopped, so running it
+    again could act twice. It ends cancelled, saved under its own id so each
+    ending is an audited row.
     """
 
     lapsed = (
@@ -146,15 +142,10 @@ def _fail_lapsed_runs(now) -> None:
 def release_lapsed(now) -> None:
     """Put back the work whose lease ran out, or end it if its record is off.
 
-    The one rule for a lease that ran out: a claim asks it before it leases,
-    and a run's ask before it looks for the run in its way, so work nobody
-    is doing never holds a playbook or a machine.
-
-    Switching a record off cancels its queued work (``save_managed_resource``)
-    and leaves claimed work to finish. Claimed work whose lease lapses would
-    otherwise queue again for a record HQ was told to leave alone, so it ends
-    cancelled instead, all but a removal, in the one statement that releases it.
-    A run is never put back blindly (``_fail_lapsed_runs``).
+    Asked before every claim, so work nobody is doing never holds a playbook or
+    a machine. Claimed work for a switched-off record ends cancelled rather
+    than queueing again, and a run is never put back blindly
+    (``_fail_lapsed_runs``).
     """
 
     _fail_lapsed_runs(now)
@@ -511,14 +502,9 @@ def over_live(operation: OperationRequest) -> str:
     """Why a reconcile that carries the copy it replaces may not be applied,
     ``UNREAD`` while no read since it was queued can say, or "" when it may.
 
-    The apply writes HQ's whole copy over the live record, so it is held to do
-    no more than the change that queued it: the copy is still the one that
-    change wrote, and a read made after the change was approved found the live
-    record as the copy it replaced. A live record changed in between would be
-    overwritten too, so the reconcile is refused and applying it is asked
-    again, where the whole difference is shown. The read is the sweep's, asked
-    for as the reconcile is queued, and the controller's pass reads before its
-    second round of claims.
+    The apply writes HQ's whole copy over the live record, so it is held to the
+    change that queued it: a live record changed in between would be
+    overwritten too, so the reconcile is refused and asked again.
     """
 
     replaced = (operation.input or {}).get(REPLACES)
@@ -547,17 +533,10 @@ def _stop(reason: str, lease_expires_at=None) -> dict[str, Any]:
 def renew_operation(operation_id: str, *, controller_id: str, lease_seconds: int = 300) -> dict[str, Any]:
     """Extend the lease the claimant holds, and say whether it may go on.
 
-    A worker running long work renews while it runs, so its lease lapses only
-    when it stops renewing. Only the claimant renews, and only before its
-    lease runs out: a lapsed lease is released by the next claim, and a run's
-    outcome is then unknown (``_fail_lapsed_runs``). ``continue`` is false
-    once its asker is held by the pause or a block, or the operation was
-    cancelled, and the worker stops. A held lease is still extended, so the
-    worker has time to stop and report what it did.
-
-    The renewal itself is lease bookkeeping, written with no audit row: the
-    claim and the outcome are the operation's events, and a row per renewal
-    would bury them.
+    Only the claimant renews, and only before its lease runs out. ``continue``
+    is false once its asker is paused or blocked or the operation was
+    cancelled; the lease is still extended so the worker can report. No audit
+    row: a row per renewal would bury the claim and the outcome.
     """
 
     _check_lease(lease_seconds)
@@ -694,14 +673,10 @@ def _stated_bytes(stated: dict[str, Any]) -> int:
 
 
 def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[str, Any]:
-    """Record how a run ended, as evidence on the run alone.
+    """Record how a run ended, as evidence on the run alone, struck of secrets.
 
-    A procedure's record holds the manifest it is pinned to, never what a run
-    found, so nothing here writes it. The events arrive bounded by the bridge
-    contract (``RunEvent``) and struck of secrets at its door
-    (``secret_shapes``); what its playbook stated (``RunStated``) is kept as
-    ``stated``, held to its bounds (``_hold_stated``) and struck again here,
-    so one built outside a request holds no secret either.
+    What its playbook stated is struck again here, so one built outside a
+    request holds no secret either.
     """
 
     events = [dict(event) for event in report.events]
@@ -800,15 +775,7 @@ def _settle_report(operation: OperationRequest, report: ControllerReport) -> dic
 
 
 def controller_registry() -> dict[str, Any]:
-    """The provider declarations a controller acts on, as data.
-
-    A controller that cannot import these declarations asks for them: which
-    actions it may apply, which it must refuse and why, which kinds need material
-    HQ holds, which connections can read each kind, which extensions the image
-    composes, whose public GitHub profile is due a read, which GitHub
-    repositories HQ holds and which are due a full read, and which repositories
-    a dependency update run covers and whether one is due.
-    """
+    """The provider declarations a controller acts on, as data, for a controller that cannot import them."""
 
     registry = controller_capability_registry()
     return {

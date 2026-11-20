@@ -609,8 +609,8 @@ person holds it. Granting it to the client in the identity provider and signing
 in again gets the call through. The 403's `WWW-Authenticate` repeats it as
 `scope` (RFC 6750 section 3.1). A permission the person's role lacks, or one no
 token can hold, stays `forbidden`. Branch on the status; the code says which
-cause. A code has one status wherever it is answered. `CODES` in
-`hq/platform/application/refusal_status.py` declares each code once, with what
+cause. A code has one status wherever it is answered. `Code` in
+`hq/platform/application/refusal_codes.py` declares each code once, with what
 it means, its status, the doors that can answer it and whether it waits, and
 every list of codes is derived from it. Each operation's response for a status
 lists the codes it answers there as its `code` field's `const` or `enum`. A
@@ -773,10 +773,10 @@ another is the same: the base is a component of its own, and each field the
 extension inherits is a `$ref` to the base's property
 (`#/components/schemas/MachineRow/properties/name`), so a field is described
 where it is declared. It is never `allOf` its base, since a closed base refuses
-every key its extension adds. A document holding two
-identical described fragments fails `test_described_once.py`, run in
-the host's suite and in the composed suite before a deploy, so an extension's
-declarations are held too. Serving the document never runs it.
+every key its extension adds. A document holding two identical described
+fragments, a property or parameter that says nothing of what it is, or an
+object naming none of its fields does not build (`fragments.said_once`), the
+composed one included, so an extension's declarations are held too.
 
 Each answer names the requests it leads to as OpenAPI links, derived in one
 place (`_Builder.links`) from what the registries say of it: a page links to
@@ -803,10 +803,9 @@ with read authority and the writes of the records that live in HQ's database,
 each scenario rolled back. Besides conformance it fails a next page that
 repeats a record of the page before it, a read an answer named that finds
 nothing, and a write that took an `expected_updated_at` other than the one
-read. `mise run test:api-properties` runs both modules.
-
-These tooling tests run explicitly in the contributor gates. Production test
-discovery does not require development dependencies.
+read. `mise run test:api-properties` runs both modules, as CI's Test job and
+`mise run check` do; `fast` leaves them to those. Production test discovery
+does not require development dependencies.
 
 ### MCP tools
 

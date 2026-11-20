@@ -1,13 +1,8 @@
 """Development-only layers. Off unless asked for, and never in the host image.
 
-The Django Debug Toolbar is installed from `the dev dependency group`, which the
-image never installs, so production cannot import it. The settings enable it
-only when all four hold: DEBUG is on, `SEVERINO_DEBUG_TOOLBAR` is set, the
-suite is not running, and the package is importable.
-
-The scratch server's sign-in link (core/dev_sign_in.py) is routed only on the
-scratch profile, with DEBUG on and the server bound to loopback, outside the
-suite.
+The Debug Toolbar comes from the dev dependency group, which the image never
+installs, and the scratch sign-in link is routed only on the scratch profile on
+loopback, so neither can reach production.
 """
 
 import importlib.util

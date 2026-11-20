@@ -8,7 +8,7 @@ docs/Architecture.md, "Running a playbook".
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, make_dataclass, replace
-from functools import lru_cache, partial
+from functools import partial
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
@@ -36,6 +36,7 @@ from .automation_manifest import OperationManifest, OperationRegistry, sorted_un
 from .command_fields import Among, AmongNow, Describe, ForAgents, Names, NonEmpty
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
+from .process_caches import kept
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 from .tone import Tone
@@ -78,7 +79,7 @@ if TYPE_CHECKING:
 
 # One catalog at a time: a process builds its commands from the catalog
 # adopted now, and builds them anew once another is.
-@lru_cache(maxsize=1)
+@kept
 def _registry(generation: str) -> OperationRegistry:
     return OperationRegistry(automation_adoption.manifests(generation))
 
@@ -91,10 +92,6 @@ def operation_registry(generation: str | None = None) -> OperationRegistry:
     """
 
     return _registry(automation_adoption.generation() if generation is None else generation)
-
-
-def clear_operation_registry_cache() -> None:
-    _registry.cache_clear()
 
 
 # The variant of a playbook's run command that runs it again as it ran.
@@ -349,12 +346,9 @@ def run_subject(manifest: OperationManifest, command: RunCommand) -> ApprovalSub
 def _record(manifest: OperationManifest, *, consented: Consented) -> ManagedResource:
     """The procedure's record, written as its manifest now says.
 
-    Written here, when a run is asked for, rather than when the registry is
-    composed: composing happens in every process and before any database is
-    migrated, with nobody to attribute a write to, while a request has a
-    transaction, an actor and an audit binding. An id nobody runs needs no
-    record, and each ask pins the record to the manifest it was asked of, so
-    the record says what its latest run bound to.
+    Written when a run is asked for, where a transaction, an actor and an audit
+    binding exist, never as the registry is composed in every process before
+    migrations.
     """
 
     key = resource_key(manifest.id)
@@ -600,12 +594,13 @@ def _cancel_button(operation_id: str) -> PageAction | None:
     return pages.PageAction.command(CANCEL, field="operation_id", value=operation_id)
 
 
-def cancel_action(run: WorkRun, principal: Principal) -> PageAction | None:
-    """The button that cancels ``run`` where it is listed, posting its id, or None."""
+def cancel_action(operation_id: str, playbook: str, state: str, effect: str, principal: Principal) -> PageAction | None:
+    """The button that cancels the run of ``playbook`` ``operation_id`` names,
+    posting its id, or None; a scan runs no playbook, and is never cancelled."""
 
-    if run.source != RUN or not operation_of(run.kind) or not _offers_cancel(run.state, run.effect, principal):
+    if not playbook or not _offers_cancel(state, effect, principal):
         return None
-    return _cancel_button(run.id)
+    return _cancel_button(operation_id)
 
 
 def run_here_url(operation_id: str, hosts: tuple[str, ...]) -> str:
@@ -666,7 +661,13 @@ def _fixes(manifest: OperationManifest) -> tuple[CommandFact, ...]:
 def listed_with_actions(runs: Iterable[WorkRun], principal: Principal) -> list[WorkRun]:
     """``runs`` each with what ``principal`` may do to it where it is listed."""
 
-    return [replace(run, actions=(action,)) if (action := cancel_action(run, principal)) else run for run in runs]
+    return [
+        replace(run, actions=(action,))
+        if run.source == RUN
+        and (action := cancel_action(run.id, operation_of(run.kind), run.state, run.effect, principal))
+        else run
+        for run in runs
+    ]
 
 
 # What a manifest's ``retry`` lets a run that stopped without a known

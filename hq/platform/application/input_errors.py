@@ -17,7 +17,7 @@ from pydantic_core.core_schema import ErrorType
 
 from hq.platform.core.rules import RULE
 
-from .record_errors import NOT_FOUND
+from .refusal_codes import Code
 from .ui import ended
 
 # How many problems the sentence names before pointing at ``details``.
@@ -48,7 +48,7 @@ _DJANGO_REASONS = {
     "invalid_choice": "is not one of the allowed choices",
     "unique": "is already taken",
     "unique_together": "is already taken",
-    NOT_FOUND: "names nothing HQ has",
+    Code.NOT_FOUND: "names nothing HQ has",
 }
 
 

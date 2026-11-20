@@ -8,7 +8,6 @@ next pass. Where it does not, the anonymous public read is the fallback.
 
 from datetime import UTC, datetime, timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -21,6 +20,7 @@ from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 from ..capabilities import execute_capability
 from ..outbound_work import ANOTHER_RUNNING
@@ -134,7 +134,7 @@ class RefreshAsksTheAppTests(TestCase):
 
 class RefreshButtonTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user(username="operator", password="x"))
+        operator(self.client)
         Project.objects.create(name="Alpha", slug="alpha", repository_url="https://github.com/example/alpha")
         Project.objects.create(name="Beta", slug="beta", repository_url="https://github.com/example/beta")
 

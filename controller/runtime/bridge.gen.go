@@ -1043,6 +1043,45 @@ func (e TailnetRange) Valid() bool {
 	}
 }
 
+// Defines values for TailscaleScope.
+const (
+	TailscaleScopeDNSRead                      TailscaleScope = "dns:read"
+	TailscaleScopeDevicesCoreRead              TailscaleScope = "devices:core:read"
+	TailscaleScopeDevicesPostureAttributesRead TailscaleScope = "devices:posture_attributes:read"
+	TailscaleScopeDevicesRoutesRead            TailscaleScope = "devices:routes:read"
+	TailscaleScopeFeatureSettingsRead          TailscaleScope = "feature_settings:read"
+	TailscaleScopeNetworkingSettingsRead       TailscaleScope = "networking_settings:read"
+	TailscaleScopePolicyFileRead               TailscaleScope = "policy_file:read"
+	TailscaleScopeServicesRead                 TailscaleScope = "services:read"
+	TailscaleScopeUsersRead                    TailscaleScope = "users:read"
+)
+
+// Valid indicates whether the value is a known member of the TailscaleScope enum.
+func (e TailscaleScope) Valid() bool {
+	switch e {
+	case TailscaleScopeDNSRead:
+		return true
+	case TailscaleScopeDevicesCoreRead:
+		return true
+	case TailscaleScopeDevicesPostureAttributesRead:
+		return true
+	case TailscaleScopeDevicesRoutesRead:
+		return true
+	case TailscaleScopeFeatureSettingsRead:
+		return true
+	case TailscaleScopeNetworkingSettingsRead:
+		return true
+	case TailscaleScopePolicyFileRead:
+		return true
+	case TailscaleScopeServicesRead:
+		return true
+	case TailscaleScopeUsersRead:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UnpinnedPathKind.
 const (
 	Config    UnpinnedPathKind = "config"
@@ -2602,6 +2641,9 @@ type TailscaleDNSRecord struct {
 	SearchPaths      []string            `json:"search_paths,omitempty"`
 	SplitDNS         map[string][]string `json:"split_dns,omitempty"`
 }
+
+// TailscaleScope A read scope a Tailscale credential is granted, which a refused read names.
+type TailscaleScope string
 
 // TailscaleSettingsRecord One tailscale.settings record: Tailnet settings.
 type TailscaleSettingsRecord struct {

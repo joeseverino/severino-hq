@@ -3,7 +3,6 @@
 from datetime import timedelta
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -12,6 +11,7 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import ObservationRecord, ObservationSpec, registry
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.testing import operator
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
 
 PERIMETER = "host.perimeter"
@@ -35,7 +35,7 @@ def dns_kinds():
     first, second, *_rest = sorted(
         kind
         for kind, spec in PROVIDERS.items()
-        if spec.from_record and spec.answers and spec.hostnames and spec.sample_record
+        if spec.sweeps and spec.answers and spec.hostnames and spec.sample_record
     )
     return first, second
 
@@ -46,9 +46,9 @@ def record_for(kind, hostname, address):
     spec = PROVIDERS[kind]
     sample = dict(spec.sample_record or {})
     for field, value in sample.items():
-        if value == next(iter(spec.hostnames(spec.from_record(sample))), None):
+        if value == next(iter(spec.hostnames(spec.record_spec(sample))), None):
             sample[field] = hostname
-        elif value in spec.answers(spec.from_record(sample)):
+        elif value in spec.answers(spec.record_spec(sample)):
             sample[field] = address
     return sample
 
@@ -117,8 +117,7 @@ class QueryCountTests(TestCase):
         )
 
     def test_the_machine_page_does_not_scale_with_records(self):
-        user = get_user_model().objects.create_user("facts-op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client)
 
         def page(_count):
             response = self.client.get(reverse("control_plane:machine", kwargs={"name": "host-1"}))

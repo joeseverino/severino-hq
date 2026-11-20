@@ -1,12 +1,8 @@
 """The open problems as ``get_findings`` answers them: each action the tool call that carries it out.
 
-An agent cannot follow a web path, so a finding's actions here are calls, built
-from what the finding already holds and never read back out of a URL: a press
-runs through ``execute_capability``, an investigation is the
-trace ``action_links.INVESTIGATIONS`` declares, an offer reads its subject
-through the resource a topology node is read by, and "Check again" is this
-read narrowed to the finding's rule. An action none of these derives is left
-out. What a finding says beside its actions is the API's (``findings.FindingFacts``).
+An agent cannot follow a web path, so each action is a call built from what the
+finding holds, never read back out of a URL. One none of these derives is left
+out.
 """
 
 from dataclasses import asdict

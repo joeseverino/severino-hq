@@ -143,7 +143,7 @@ WORK_QUEUE = _part(
     problems, the checks a subject does not meet, the steps a request contradicts and a domain's own
     attention list all use one projection (`hq/platform/application/decisions.py`). They draw it as
     one table (its rows `partials/_queue_rows.html`). A page never draws a list of its own (the
-    `hand-drawn-findings` rule). A row is a table row as any other: its words in the cell that names
+    `list` shape of `hand_drawn.SHAPES`). A row is a table row as any other: its words in the cell that names
     it, what it offers in `{% row_actions %}`, so it stands at the table's own density and gives way
     as every table does. It reads, in order:
 
@@ -519,7 +519,7 @@ PARTS = (
         connection can't make the change passes `gap`; the closing row draws the verb unusable and what it
         needs beside it. A form a script or test finds names its `data-` attributes as `hooks`. A form
         answered in another region's place gives that region's id as `in_place`. *Catalog:*
-        `form/write-gap`. *Gate:* `lint:ast-grep` (`hand-drawn-form.yml`), which holds every form that
+        `form/write-gap`. *Gate:* the `form` shape of `hand_drawn.SHAPES`, which holds every form that
         writes to the form part, and `test_form_page.py`, which holds every routed create and edit view to
         the frame and the card to it alone.
 

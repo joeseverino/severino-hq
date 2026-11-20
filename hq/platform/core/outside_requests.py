@@ -1,14 +1,8 @@
 """Work HQ runs outside Django's request cycle, given what the cycle gives a request.
 
-Django's handler runs each request's synchronous work on a thread of its own
-and checks the thread's database connections when the request starts and
-again when it ends (``close_old_connections`` on its request signals). A
-background thread, an ASGI application mounted beside Django and a loop
-serving its own socket get neither, so each enters one of these instead. A
-connection inside an open transaction belongs to whoever opened it, a
-synchronous caller this work runs under (a test's case among them), and is
-left to it. ``lint:ast-grep`` holds that nothing else checks connections or
-opens a thread-sensitive context.
+A background thread, a mounted ASGI application or a loop of its own gets none
+of Django's connection checks, so each enters one of these. A connection inside
+an open transaction is left to whoever opened it.
 """
 
 from collections.abc import AsyncIterator, Iterator

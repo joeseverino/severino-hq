@@ -20,7 +20,7 @@ from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, Ope
 
 from ..approvals import ApprovalError, ApproveCommand, approve
 from ..automation_adoption import REJECT
-from ..capabilities import capability_registry, run_capability
+from ..capabilities import capability_spec, run_capability
 from ..machines import Machine
 from ..security import MCP_INTERFACE, Capability, Principal, agent_subject, mcp_principal
 from .test_approvals import an_operator
@@ -150,13 +150,13 @@ class AdoptionTestCase(RefreshTestCase):
 class AdoptTests(AdoptionTestCase):
     def test_a_person_adopts_a_verified_proposal_and_its_procedures_become_commands(self):
         proposal = self.proposed(catalog(procedure("check")))
-        self.assertNotIn("automation.example.check.run", capability_registry())
+        self.assertIsNone(capability_spec("automation.example.check.run"))
 
         answer = self.adopt(proposal)
 
         self.assertTrue(answer["adopted"], answer)
         self.assertEqual(self.adopted(), [FIRST])
-        self.assertIn("automation.example.check.run", capability_registry())
+        self.assertIsNotNone(capability_spec("automation.example.check.run"))
 
     def test_someone_who_cannot_manage_infrastructure_is_refused(self):
         proposal = self.proposed(catalog(procedure("check")))
@@ -191,9 +191,17 @@ class AdoptTests(AdoptionTestCase):
         self.assertIn("playbooks/check.hq.yml", said)
         self.assertIn("playbooks/other.hq.yml", said)
 
+    def test_an_input_that_says_nothing_of_what_it_is_refuses_the_commit(self):
+        unsaid = procedure("check")
+        unsaid["roles"][0]["argument_spec"]["options"] = {"cache": {"type": "str", "choices": ["web"]}}
+
+        self.assertIn("cache says nothing", self.refused(self.adopt(self.proposed(catalog(unsaid)))))
+
     def test_a_procedure_s_inputs_are_its_role_s_argument_spec_bounded_by_its_sidecar(self):
         bounded = procedure("check", inputs={"unit": {"pattern": "^[a-z]+$", "max_length": 8}})
-        bounded["roles"][0]["argument_spec"]["options"] = {"unit": {"type": "str", "required": True}}
+        bounded["roles"][0]["argument_spec"]["options"] = {
+            "unit": {"type": "str", "required": True, "description": "The unit to check."}
+        }
         self.adopt(self.proposed(catalog(bounded)))
         machines = patch("hq.platform.application.automation_runs.machine_catalog", return_value=(Machine(APP),))
 
@@ -214,13 +222,12 @@ class AdoptTests(AdoptionTestCase):
 class RegistryTests(AdoptionTestCase):
     def test_another_adoption_changes_the_commands_without_a_restart(self):
         self.adopt(self.proposed(catalog(procedure("check"))))
-        self.assertIn("automation.example.check.run", capability_registry())
+        self.assertIsNotNone(capability_spec("automation.example.check.run"))
 
         self.adopt(self.proposed(catalog(procedure("other"), revision=SECOND)), key="example-adopt-2")
 
-        commands = capability_registry()
-        self.assertNotIn("automation.example.check.run", commands)
-        self.assertIn("automation.example.other.run", commands)
+        self.assertIsNone(capability_spec("automation.example.check.run"))
+        self.assertIsNotNone(capability_spec("automation.example.other.run"))
 
     def test_a_process_that_did_not_adopt_catches_up_at_its_next_request(self):
         from hq.platform.application.automation_adoption import forget, served
@@ -228,10 +235,10 @@ class RegistryTests(AdoptionTestCase):
         self.adopt(self.proposed(catalog(procedure("check"))))
         # A process that read the catalog before another process adopted this one.
         forget()
-        self.assertNotIn("automation.example.check.run", capability_registry())
+        self.assertIsNone(capability_spec("automation.example.check.run"))
 
         with served():
-            self.assertIn("automation.example.check.run", capability_registry())
+            self.assertIsNotNone(capability_spec("automation.example.check.run"))
 
     def test_a_command_the_catalog_does_not_hold_is_named_without_reading_the_catalog(self):
         from django.db import connection
@@ -240,7 +247,7 @@ class RegistryTests(AdoptionTestCase):
         from hq.domains.control_plane.models import AdoptedCatalog
 
         from ..automation_adoption import ADOPT, forget, served
-        from ..capabilities import capability_title, capability_words
+        from ..capabilities import capability_title, capability_words, command_spec
 
         name = "automation.example.check.run"
         self.adopt(self.proposed(catalog(procedure("check"))))
@@ -249,12 +256,12 @@ class RegistryTests(AdoptionTestCase):
         with served(), CaptureQueriesContext(connection) as sent:
             words = capability_words(ADOPT)
         self.assertFalse([query for query in sent if AdoptedCatalog._meta.db_table in query["sql"]])
-        self.assertEqual(words, capability_registry()[ADOPT].words(""))
+        self.assertEqual(words, command_spec(ADOPT).words(""))
 
         # A procedure is still read at the catalog adopted now.
         forget()
         with served():
-            self.assertEqual(capability_title(name), capability_registry()[name].title)
+            self.assertEqual(capability_title(name), command_spec(name).title)
 
     def test_adopting_tells_every_listening_agent_its_tools_changed(self):
         from ..agent_registry import TOOLS_CHANGED
@@ -505,7 +512,7 @@ class PlaybookByPlaybookTests(AdoptionTestCase):
         self.adopt(newer, key="example-adopt-removal", playbook="example.other")
 
         self.assertEqual({key: found.revision for key, found in self.pinned().items()}, {"example.check": FIRST})
-        self.assertNotIn("automation.example.other.run", capability_registry())
+        self.assertIsNone(capability_spec("automation.example.other.run"))
 
     def test_a_playbook_hq_cannot_run_is_refused_alone_and_the_one_beside_it_is_adopted(self):
         self.adopt(self.proposed(catalog(procedure("check"))))

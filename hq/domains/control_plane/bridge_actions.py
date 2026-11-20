@@ -109,22 +109,12 @@ def _material(parameters: Parameters, payload: Any) -> Any:
 
 @final
 class Admitted(Sealed):
-    """A controller the bridge admitted, the only thing a controller report's writer takes.
+    """A controller the bridge admitted, the only thing a controller report's writer takes (``sealing``).
 
-    A report's writer (``record_sweep``, ``record_connections``,
-    ``record_step_failures``, ``record_analytics``,
-    ``record_dashboard_observations``) asks nobody's permission: the bridge
-    decided who may report when it admitted the controller's request, and
-    this is that decision, carried to the writer (``sealing``).
-
-    - One place makes one: ``_reports``, as the bridge runs a report's
-      action. Its seal lives only in that closure, so no import mints one,
-      and no other door, an adapter or a capability's handler, has a value to
-      hand a writer.
-    - A writer reads it only through ``admission``, which refuses anything the
-      bridge did not seal, so a stand-in writes nothing.
-    - It names the controller the request came from, which the writer stores
-      each row against, so a writer is never told a controller by its caller.
+    A report's writer asks nobody's permission: the bridge decided at
+    admission. Only ``_reports`` holds the seal, so no other door has a value
+    to hand a writer, and the controller each row is stored against comes from
+    here, never from the caller.
     """
 
     __slots__ = ()

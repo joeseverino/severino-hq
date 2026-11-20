@@ -6,7 +6,6 @@ from django.utils.functional import cached_property
 from django.views.generic import (
     CreateView,
     DeleteView,
-    DetailView,
     ListView,
     TemplateView,
     UpdateView,
@@ -22,7 +21,7 @@ from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
 from hq.platform.application.moments import moment
-from hq.platform.application.pages import PageAction, PageBadge, PageMixin
+from hq.platform.application.pages import PageAction, PageBadge, PageMixin, RecordPageMixin
 from hq.platform.application.projects import (
     DEPENDENCY_UPDATES,
     REFRESH,
@@ -141,7 +140,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
 UPDATES_REGION = "#updates-state"
 
 
-def run_now_ask(project, principal, asked) -> Ask | None:
+def run_now_ask(slug: str, principal, asked) -> Ask | None:
     """The page's Update dependencies control, standing as the ask made at
     ``asked`` does. None for a principal the capability does not permit."""
 
@@ -149,7 +148,7 @@ def run_now_ask(project, principal, asked) -> Ask | None:
         return None
     return Ask(
         capability_words(RUN_NOW),
-        reverse("projects:updates_run", args=[project.slug]),
+        reverse("projects:updates_run", args=[slug]),
         standing=read_standing((RUN_KIND,), asked) if asked is not None else Standing(),
         status_url=read_status_url((RUN_KIND,), asked) if asked is not None else "",
         refresh=UPDATES_REGION,
@@ -177,33 +176,32 @@ class ProjectPage(PageMixin):
         return record.name
 
 
-class ProjectDetailView(PageMixin, DetailView):
-    model = Project
+class ProjectDetailView(RecordPageMixin, TemplateView):
     page_trail = PROJECTS_TRAIL
     template_name = "projects/project_detail.html"
-    slug_field = "slug"
-    slug_url_kwarg = "slug"
+    resource = "projects"
     context_object_name = "project"
-    queryset = Project.objects.prefetch_related("content_items", "assets", "documentation_records", "expenses")
+    model = Project
+    stored_related = ("content_items", "assets", "documentation_records", "expenses")
 
     @cached_property
     def repository(self):
         """GitHub's stored reading of the project's repository, when there is one."""
 
-        return repository_for(self.object.repository_url)
+        return repository_for(self.record["repository_url"])
 
     @cached_property
     def run_asked(self):
         """When an update run was asked for and not yet handed off. Only an
         opted-in repository's page asks: the run covers every one of them."""
 
-        return asked_at() if self.object.dependency_updates and self.repository is not None else None
+        return asked_at() if self.record["dependency_updates"] and self.repository is not None else None
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["github"] = self.repository
-        project = self.object
+        project = self.stored
         documents = related_documents(project.documentation_records.all(), about=project)
         context["related"] = related.related(
             related.writeups(project.content_items.all(), status=True),
@@ -214,12 +212,13 @@ class ProjectDetailView(PageMixin, DetailView):
         )
         if context["github"] is not None:
             context["posture"] = posture_of(context["github"])
-            context["updates_run"] = last_run(project.repository_url)
+            context["updates_run"] = last_run(self.record["repository_url"])
             context["run_asked"] = self.run_asked
 
         # Its state beside its name, as a service shows its reach; the category
         # leads the line of facts under it.
-        context["page_badges"] = (PageBadge(self.object.state.label, self.object.state.tone),)
+        state = Project.Status(self.record["status"])
+        context["page_badges"] = (PageBadge(state.label, state.tone),)
         context["page_facts"] = self.facts()
         return context
 
@@ -228,48 +227,49 @@ class ProjectDetailView(PageMixin, DetailView):
 
         # The work moves where the code does: a push says when it last
         # changed better than the last edit of this record does.
-        repository = self.repository
+        record, repository = self.record, self.repository
         return render_to_string(
             "projects/_project_meta.html",
             {
-                "project": self.object,
+                "project": record,
+                "category": dict(PROJECT_CATEGORY_CHOICES)[record["category"]],
                 # The reverse of the tie the service page makes: where it is
                 # published names the service, and the service what runs it.
-                "runs_on": where_it_runs(self.object.public_url),
-                "address": _written_as(self.object.public_url),
+                "runs_on": where_it_runs(record["public_url"]),
+                "address": _written_as(record["public_url"]),
                 "pushed_at": moment(str(repository.pushed_at or "")) if repository is not None else None,
                 # The GitHub panel names the repository when it is read.
-                "repository_url": "" if repository is not None else web_url(self.object.repository_url),
-                "repository": _written_as(self.object.repository_url),
-                "sections": hq_sections(self.object),
+                "repository_url": "" if repository is not None else web_url(record["repository_url"]),
+                "repository": _written_as(record["repository_url"]),
+                "sections": hq_sections(record["repository_url"]),
             },
         )
 
     @override
     def get_page_title(self):
-        return self.object.name
+        return self.record["name"]
 
     @override
     def get_page_lede(self):
         """What the project is, in its own words."""
 
-        return linebreaksbr(self.object.description)
+        return linebreaksbr(self.record["description"])
 
     @override
     def get_page_actions(self):
-        project = self.object
+        record = self.record
         actions = []
-        if github_repository(project.repository_url):
-            actions.append(ask(REFRESH, project.slug))
-        if project.repository_url:
-            switch = "off" if project.dependency_updates else "on"
-            actions.append(PageAction.command(DEPENDENCY_UPDATES, project.slug, variant=switch))
-        if project.dependency_updates and self.repository is not None:
-            run_now = run_now_ask(project, web_principal(self.request.user), self.run_asked)
+        if github_repository(record["repository_url"]):
+            actions.append(ask(REFRESH, record["slug"]))
+        if record["repository_url"]:
+            switch = "off" if record["dependency_updates"] else "on"
+            actions.append(PageAction.command(DEPENDENCY_UPDATES, record["slug"], variant=switch))
+        if record["dependency_updates"] and self.repository is not None:
+            run_now = run_now_ask(record["slug"], web_principal(self.request.user), self.run_asked)
             actions += [run_now] if run_now is not None else []
         actions += [
-            PageAction.command("project.update", project.slug),
-            PageAction.command("project.delete", project.slug),
+            PageAction.command("project.update", record["slug"]),
+            PageAction.command("project.delete", record["slug"]),
         ]
         return tuple(actions)
 

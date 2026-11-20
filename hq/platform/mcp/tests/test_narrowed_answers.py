@@ -4,12 +4,12 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 from pydantic import ValidationError
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.capabilities import InvalidCapabilityQuery
 from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.projection import PageScope
 from hq.platform.application.resources import BoundedQuery, InvalidResourceInput, _page
 from hq.platform.application.security import mcp_principal
+from hq.platform.core.testing import declare
 
 from .. import services
 from ..identity import set_principal
@@ -53,10 +53,10 @@ class CutOffListSaysSoTests(TestCase):
     def setUp(self):
         self.enterContext(set_principal(mcp_principal()))
         for index in range(3):
-            ManagedResource.objects.create(
-                key=f"example-proxy-{index}",
-                kind="npm.proxy_host",
-                spec={"domain_names": [f"app{index}.example.com"], "forward_host": "192.0.2.10"},
+            declare(
+                f"example-proxy-{index}",
+                "npm.proxy_host",
+                {"domain_names": [f"app{index}.example.com"], "forward_host": "192.0.2.10"},
             )
 
     def test_a_full_page_says_it_was_cut_off_and_how_to_ask_for_the_rest(self):

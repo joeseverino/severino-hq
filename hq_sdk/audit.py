@@ -15,7 +15,7 @@ from hq.platform.core.audit import (
 # Typed metadata, exported so an extension records "12 updated, 1 failed" in
 # the vocabulary every other event already uses, so `metadata` stays comparable
 # across callers.
-from hq.platform.core.facets import Counts, Failure, Source, Steps, Timing
+from hq.platform.core.facets import Counts, Failure, Source
 from hq.platform.core.models import AuditLog
 
 # An extension's demo writes each audited record inside one, so its event reads
@@ -30,8 +30,6 @@ __all__ = [
     "Counts",
     "Failure",
     "Source",
-    "Steps",
-    "Timing",
     "audit_events",
     "record_event",
     "record_operation",

@@ -11,7 +11,6 @@ action queue and the service pages emit is followed and checked.
 
 from urllib.parse import parse_qs, urlsplit
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import Resolver404, resolve, reverse
 
@@ -19,6 +18,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import all_elements, elements, text, texts
 from hq.platform.application.pages import runs_at
+from hq.platform.core.testing import declare, operator
 
 from ..action_links import command_url
 from ..capabilities import capability_registry, capability_words
@@ -43,7 +43,7 @@ def chosen(page) -> list[str]:
 
 
 def an_operator():
-    return get_user_model().objects.create_user("example-operator", password="x" * 20, is_staff=True, is_superuser=True)
+    return operator()
 
 
 def _kind_for(spec) -> str:
@@ -71,9 +71,7 @@ class EveryTargetedCommandPreselectsTests(TestCase):
             for index in range(MAX_PAGE_SIZE + 1)
         )
         commands = [
-            spec
-            for spec in capability_registry().values()
-            if spec.subject_resource == "infrastructure" and spec.target_kind
+            spec for spec in capability_registry() if spec.subject_resource == "infrastructure" and spec.target_kind
         ]
         self.assertTrue(commands)
         for spec in commands:
@@ -130,15 +128,15 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
             {"domain": "app.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
             {"domain": "db.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
         )
-        ManagedResource.objects.create(
-            key="example-db-rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "db.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
+        declare(
+            "example-db-rewrite",
+            "adguard.rewrite",
+            {"domain": "db.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
         )
-        ManagedResource.objects.create(
-            key="example-shop-proxy",
-            kind="npm.proxy_host",
-            spec={
+        declare(
+            "example-shop-proxy",
+            "npm.proxy_host",
+            {
                 "domain_names": ["shop.example.com"],
                 "forward_scheme": "http",
                 "forward_host": "198.51.100.20",

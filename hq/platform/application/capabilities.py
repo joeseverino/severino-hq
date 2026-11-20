@@ -12,11 +12,13 @@ from jsonschema import Draft202012Validator, validators
 from jsonschema.exceptions import ValidationError as JSONSchemaError
 from pydantic import ConfigDict, TypeAdapter, ValidationError as PydanticValidationError, with_config
 
-from hq.platform.core.audit import audit_connection, audit_operation, record_event, tallied
+from hq.platform.core import bindings
+from hq.platform.core.audit import audit_connection, record_event, tallied
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tracing import note, span
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
+from . import compiled_graph, idempotency
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion
 from .approvals import Approved, approval, hold_for_approval
 from .call_envelope import read_call
@@ -25,14 +27,6 @@ from .contracts import DOTTED_NAME, Effect
 from .default_hold import kind_waits
 from .describe import Describe, listed
 from .held_answer import HeldCall
-from .idempotency import (
-    KEY_SHAPE,
-    IdempotencyConflict,
-    InvalidIdempotencyKey,
-    execute_once,
-    request_fingerprint,
-    validate_key,
-)
 from .integration_specs import (
     CONSENT_KEYWORD,
     IDEMPOTENCY_FIELD,
@@ -49,10 +43,11 @@ from .integration_specs import (
     takes_sent_fields,
     takes_stale_write_token,
 )
-from .integrations import held_graph, integration_graph
+from .integrations import held_graph
 from .labels import human_label
 from .projection import QueryRefusal
 from .record_errors import PolicyError
+from .refusal_codes import Code
 from .refusal_status import Refusal, next_call, refusal_of, refuse, refused
 from .sealing import Sealed, sealer
 from .security import (
@@ -86,7 +81,7 @@ def capability_spec(name: str) -> CapabilitySpec | None:
     an adopted procedure's reads the adopted catalog; every other command is
     the same at every adoption, so a page that names one asks nothing."""
 
-    graph = integration_graph() if automation_runs.runs_procedure(name) else held_graph()
+    graph = compiled_graph.integration_graph() if automation_runs.runs_procedure(name) else held_graph()
     return graph.capabilities.get(name)
 
 
@@ -100,10 +95,11 @@ def command_spec(name: str) -> CapabilitySpec:
     return spec
 
 
-def capability_registry() -> dict[str, CapabilitySpec]:
-    """Every command, at the catalog adopted now; one command is ``capability_spec``."""
+def capability_registry() -> tuple[CapabilitySpec, ...]:
+    """Every command, at the catalog adopted now. It is walked, never
+    searched: one command is ``capability_spec``'s."""
 
-    return dict(integration_graph().capabilities)
+    return tuple(compiled_graph.integration_graph().capabilities.values())
 
 
 class CapabilitySummary(TypedDict):
@@ -157,14 +153,14 @@ def _reachable(principal: Principal, *, name: str = "", resource: str = "") -> l
     ``infrastructure.resource.reconcile``), so a filter never matches half a word; one that names nothing is refused.
     """
 
-    graph, name, resource = integration_graph(), name.strip(), resource.strip()
+    name, resource = name.strip(), resource.strip()
     if name and not DOTTED_NAME.match(name):
         raise InvalidCapabilityQuery("capabilities: name is a dotted capability name or a prefix of one.")
-    if resource and resource not in graph.resources:
+    if resource and resource not in held_graph().resources:
         raise InvalidCapabilityQuery("HQ has no list by that name. describe_resources names each one.")
     return [
         spec
-        for spec in graph.capabilities.values()
+        for spec in capability_registry()
         if (not name or spec.name == name or spec.name.startswith(f"{name}."))
         and (not resource or spec.subject_resource == resource)
         and could_ever_hold(principal, spec.required_capabilities)
@@ -261,6 +257,12 @@ class Performed(TypedDict):
     ok: Literal[True]
 
 
+def first_answer(principal: Principal, key: str) -> dict[str, Any] | None:
+    """What ``principal``'s call under retry ``key`` was answered when it ran, or None while it has none."""
+
+    return idempotency.answered(actor=agent_subject(principal), key=key)
+
+
 class Ran(NamedTuple):
     """A capability's answer, and whether it is the first answer to its retry key, replayed."""
 
@@ -280,13 +282,9 @@ def run_capability(
 ) -> Ran:
     """Run one capability: the one place a retry key is read, required and kept.
 
-    Every door runs a capability here or through ``execute_capability``, which
-    is this with the answer alone: that is the signature ``hq_sdk`` publishes to
-    the extensions, while a door also hands over the key it carries beside the
-    payload (the API's header, a form's hidden field) and says whether the
-    answer was replayed. A door with no place beside the payload (an MCP tool
-    call) sends the key as the payload's ``idempotency_key``; one that takes it
-    beside the payload alone says ``key_in_payload=False`` (the API's header).
+    ``execute_capability`` is this with the answer alone, the signature
+    ``hq_sdk`` publishes. A door with no place beside the payload sends the key
+    as its ``idempotency_key``; the API's header says ``key_in_payload=False``.
     """
 
     with span(f"capability {name}", **{"hq.capability": name, "hq.interface": principal.interface}):
@@ -321,7 +319,7 @@ def _named_run(
     if spec is None:
         return Ran(
             refuse(
-                "unknown_capability",
+                Code.UNKNOWN_CAPABILITY,
                 f"Unknown capability {name!r}. describe_capabilities lists the ones you may run.",
                 {"next": next_call("describe_capabilities")},
             )
@@ -336,13 +334,13 @@ def _named_run(
             sent_key=idempotency_key,
             key_in_payload=key_in_payload,
         )
-    except InvalidIdempotencyKey as exc:
-        return Ran(refuse("invalid_idempotency_key", exc.reason))
+    except idempotency.InvalidIdempotencyKey as exc:
+        return Ran(refuse(Code.INVALID_IDEMPOTENCY_KEY, exc.reason))
     except Exception as exc:  # noqa: BLE001 - every other failure is answered in the one refusal shape
         return Ran(adapter_refusal(name, exc, principal=principal))
 
 
-def adapter_refusal(name: str, exc: Exception, *, principal: Principal | None = None) -> dict[str, Any]:
+def adapter_refusal(name: str, exc: Exception, *, principal: Principal | None) -> dict[str, Any]:
     """What an adapter answers for ``exc``, raised running ``name``: a code, and only HQ's own words.
 
     The one policy every adapter applies to an exception it caught, a
@@ -377,7 +375,7 @@ def _authorized_run(
         where = f"payload.{IDEMPOTENCY_FIELD}" if key_in_payload else f"{IDEMPOTENCY_HEADER} header"
         return Ran(
             refuse(
-                "idempotency_key_required",
+                Code.IDEMPOTENCY_KEY_REQUIRED,
                 f"A capability that changes something needs an idempotency key. Send a new {where}, "
                 "and the same one when you retry this change.",
                 {"field": where.removesuffix(" header")},
@@ -410,8 +408,8 @@ def _authorized_run(
             act,
             actor=agent_subject(principal),
         )
-    except IdempotencyConflict as exc:
-        return Ran(refuse("idempotency_conflict", exc.reason))
+    except idempotency.IdempotencyConflict as exc:
+        return Ran(refuse(Code.IDEMPOTENCY_CONFLICT, exc.reason))
 
 
 def key_required(effect: Effect, principal: Principal) -> bool:
@@ -460,8 +458,8 @@ def _valid_key(given: object) -> str:
     """
 
     if not isinstance(given, str):
-        raise InvalidIdempotencyKey(KEY_SHAPE)
-    return validate_key(given)
+        raise idempotency.InvalidIdempotencyKey(idempotency.KEY_SHAPE)
+    return idempotency.validate_key(given)
 
 
 def _once(
@@ -480,10 +478,10 @@ def _once(
     corrected request.
     """
 
-    result, replayed = execute_once(
+    result, replayed = idempotency.execute_once(
         actor=actor,
         key=key,
-        request_sha256=request_fingerprint(spec.name, request),
+        request_sha256=idempotency.request_fingerprint(spec.name, request),
         operation=act,
     )
     return Ran(result, replayed)
@@ -501,13 +499,13 @@ def _target_refusal(
 
     if spec.target_kind and target is None:
         return refuse(
-            "target_required",
+            Code.TARGET_REQUIRED,
             f"{spec.name} requires a target: send the record it acts on as target.",
             {"field": "target"},
         )
     if not spec.target_kind and target is not None:
         return refuse(
-            "target_not_allowed",
+            Code.TARGET_NOT_ALLOWED,
             f"{spec.name} does not accept a target: send the call without one.",
             {"field": "target"},
         )
@@ -621,12 +619,6 @@ def _field_adapter(command_type: type, name: str) -> TypeAdapter[Any] | None:
 def _wrong_type(error: JSONSchemaError) -> tuple[Any, JSONSchemaError] | None:
     """The JSON type ``error`` says a value should have been sent in, and the
     error that holds the value; ``None`` for an error of another kind.
-
-    A union whose every branch is only a type (``boolean`` or ``null``) is
-    that type; a union of shapes, such as a manifest entry's, none of which
-    the value fits, is the deepest type error found when every branch finds
-    one. A branch refusing the value on another keyword alone (a number past
-    its maximum) admits its type, so Pydantic judges it.
     """
 
     if error.validator == "type":
@@ -654,22 +646,11 @@ NEEDS_APPROVAL = "This change needs approval. Ask for it through the API or MCP,
 class Consented(Sealed):
     """What the capability runner decided for one run, which every declaration write asks (``sealing``).
 
-    A declaration writer (``save_managed_resource``, the operation queue's
-    ``_queue_operation``, and every handler that reaches one) takes this in
-    place of a principal, reads it through ``consent``, and asks that for the
-    kind it writes before writing (``Consent.require``). That gives one
-    property: no gated declaration is written without a person's consent,
-    whichever capability's handler writes it.
-
-    - Two places make one, both in this module: the runner's consent step
-      (``_consent``), once operator policy and the default hold have let the
-      run through, and ``execute_approved``, handed the ``approvals.Approved``
-      only a person's approval makes (``approved``). Only this module holds its seal, so a path
-      that writes a declaration without passing either has no value to hand
-      the writer, and ``consent`` refuses anything else.
-    - The runner hands one only to a handler that names ``consented``, never
-      a principal beside it, so who acts and who approved are read from the
-      consent alone and cannot disagree with it.
+    A declaration writer takes this in place of a principal and asks it for the
+    kind it writes (``Consent.require``), so no gated declaration is written
+    without a person's consent, whichever handler writes it. Only ``_consent``
+    and ``execute_approved`` make one, and who acts and who approved are read
+    from it alone.
     """
 
     __slots__ = ()
@@ -685,13 +666,9 @@ class Consent:
     def admits(self, kind: str) -> bool:
         """Whether this run may write a declaration of ``kind``.
 
-        The one place the rule lives: a kind that waits for a person
-        (``default_hold.kind_waits``) is written only by an interactive
-        principal, under standing policy or a person's approval
-        (``approved_by``), or in an approved run. The hold judges a run by the
-        kind its target or command names; this judges the kind actually
-        written, so a capability of any subject, writing a kind its command
-        never named, is refused at the write all the same.
+        The one place the rule lives. The hold judges a run by the kind its
+        command names; this judges the kind actually written, so a write of a
+        kind the command never named is refused all the same.
         """
 
         provider = PROVIDERS.get(kind)
@@ -772,7 +749,7 @@ def _run(
     if takes_sent_fields(spec.handler):
         arguments[SENT_KEYWORD] = sent
     with (
-        audit_operation(operation=spec.name, principal=principal),
+        bindings.audit_operation(operation=spec.name, principal=principal),
         audit_connection(getattr(command, "connection_ref", "") or ""),
         tallied() as written,
         ringing() as asked,

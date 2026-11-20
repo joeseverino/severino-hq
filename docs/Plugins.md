@@ -565,7 +565,6 @@ Supply the help the shared card shows (`partials/_work_queue.html` in
 | Field | For |
 | --- | --- |
 | `Finding.remedies` | the HQ commands that fix it, each a `FindingRemedy`; HQ offers each one the reader may run as a press |
-| `Finding.steps` | what the operator does, in order: `Run(label, command, notes)` for a command on their own machine, `Do(text, notes)` for what to do in words. Neither can be built empty |
 | `Finding.primary` | the page the work is done on (a short label; a sentence is shown as a sentence) |
 | `Finding.no_help_reason` | why HQ can offer no command for it |
 | `Finding.check` | the link that reads it again |
@@ -596,8 +595,8 @@ the keyword being the one its `target_kind` binds (`current_slug`,
 leaves it out and is never handed it.
 
 A handler refuses with one of the host's error codes, the ones the API
-reference lists on each operation (`REFUSAL_STATUS` in
-`hq/platform/application/refusal_status.py`); any other code is answered as
+reference lists on each operation (`Code` in
+`hq/platform/application/refusal_codes.py`); any other code is answered as
 `operation_failed`.
 
 Fields that shape the Command Center form:
@@ -616,20 +615,10 @@ Fields that shape the Command Center form:
 - `reached_from` is the route of the page a person starts the command from,
   for one that needs a value only that page hands out (a held change's id, a
   token HQ gave a live record). Search links there instead of to the form,
-  and the form says where to start. `ON_ITS_PAGE` marks one that the page of
-  whatever it acts on sends, which search does not offer.
+  and the form says where to start.
 - `home` is the route of the page a command belongs to when its records are
   no `ResourceSpec` of its own. Its page's trail and Cancel lead there,
   called what the navigation calls that page, instead of to Search.
-- `about` is what the command's page says of it under the form: a callable,
-  read each time the page is drawn and given its reader's `Principal`, so it
-  says only what they may read, that returns a `CommandAbout(label,
-  facts, sections)`. Its `facts` are drawn as one section headed `label`
-  (required once there are facts), each a `CommandFact(label, value,
-  detail)` whose `detail` is the lines under the value. `sections` holds the
-  host's own page sections (a procedure's latest runs), which `hq_sdk` offers
-  no way to build, so an extension supplies a label and facts. Both types are
-  in `hq_sdk.capabilities`; `None` leaves the page to its form.
 
 A command's fields say what they are through markers in their `Annotated`
 type, the ones the host's commands use, all from `hq_sdk.capabilities`:
@@ -718,7 +707,7 @@ update that would reset a field it was not sent.
 
 **Resources.** A `ResourceSpec` may expose a list read, a detail handler with
 one stable identifier, a `SearchDefinition`, or any combination. Its list read
-is one `hq_sdk.resources.ListRead`: its reader, the `ResourceQuery` subclass
+is one `hq_sdk.resources.ListRead`: its reader, the `TopQuery` subclass
 it takes, the TypedDict one item is whole, and the `fields` a list keeps when
 the caller names none, every key of the item where it names none. A list
 answers only its item's keys, and the API document types each item by it. HQ validates names, permissions, a query
@@ -853,7 +842,7 @@ that opens a dialog declares that as well,
 `PageAction("Import", url, modal=PageDialog("import", "Import records", "notes/_import_form.html"))`,
 which `page.html` draws once with the page's context. A head action may also be
 the control `hq_sdk.outbound.ask` returns, so `get_page_actions` returns
-`tuple[PageAction | Ask, ...]`, both from `hq_sdk.pages`. A POST action sends
+`PageAction`s and those controls. A POST action sends
 its `value` as its `field`. One that must also send what it acts on, an
 identifier that may be any string, names it in `fields`
 (`fields={"client_id": client_id}`). It is then a form of its own, never
@@ -913,14 +902,10 @@ by hand: the pill and tone classes are not public.
 
 No template draws by hand what a shared part draws. The table at the end of
 this section names each such shape (a `<section>`, a heading, a fold, a form
-that writes, a notice and the rest) beside the part to write instead. `hq plugin
-check` refuses each where it is drawn, with the host's `hand-drawn-*` ast-grep
-rules (`tools/lint/ast-grep/rules`), which hold the host's own templates
-too. `ast-grep scan --update-all` moves the ones whose rule carries a fix. A shape a page still draws is marked on the line above it, inside a
-Django comment no page receives, with why:
-`{% comment %}`, then `<!-- ast-grep-ignore: hand-drawn-fold --> why` alone
-on its line, then `{% endcomment %}` on the shape's own line before it. A
-mark no shape needs any more fails the check, so the marks only fall.
+that writes, a notice and the rest) beside the part to write instead. HQ's
+template loaders refuse a template that draws one as it loads, with its line
+and what to write (`hq/platform/core/hand_drawn.py`), and `hq plugin check`
+reads every template of the extension the same way.
 `PLUGIN_API_VERSION` 11 retires `{% section_head %}`, whose head
 `{% section %}` draws, and publishes `partials/_icon.html`.
 `PLUGIN_API_VERSION` 12 retires the classes a page drew by hand before the
@@ -960,6 +945,18 @@ the column that names each row wherever a row can hold anything back.
 `{% prose_list %}`, `{% link_chips %}` and `{% title_meta %}`: `{% list
 kind=... %}` draws every list, and the classes `code-list` and `address-list`
 are its `codes` and `labeled` kinds.
+`PLUGIN_API_VERSION` 21 retires `hq_sdk.capabilities.capability_registry`:
+one command is `command_spec(name)`. It also retires
+`hq_sdk.testing.unclosed_template_comments`: the host refuses a template with
+a comment left open as it loads. It keeps only the exports an extension
+imports, so `hq_sdk.site` goes, and so do `audit.Steps` and `Timing`,
+`capabilities.ON_ITS_PAGE`, `CommandAbout`, `CommandFact` and
+`capability_spec`, `pages.Ask` and `Page`, `plugin.Do` and `Run`,
+`reads.passed`, `present` and `since`, `references.Mention`, `Mentions`,
+`ReferencePickerMixin` and `referenced_by`, `resources.ResourceQuery`,
+`tables.TableQuery`, `testing.Element` and `undefined_style_classes`,
+`ui.Dot`, `Dots`, `PageNavigation`, `PageSection` and `ago`, and
+`writes.CapabilityDeleteMixin`.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
@@ -971,7 +968,7 @@ ranks derived from the columns unless one says `drop=`.
 
 A list whose rows come from a projection rather than a model's queryset
 overrides `get_table_rows(query)`. It is handed the address's filters,
-search and sort as a `TableQuery` (`query.chosen("state")`, `query.search`,
+search and sort (`query.chosen("state")`, `query.search`,
 `query.sort`) and answers `Projected(rows, read)`. `rows` is a queryset the
 paginator counts and slices in the database, and `read` the function that
 turns one page of it into the rows the template draws. Its columns declare their
@@ -1028,7 +1025,7 @@ each part's, in [Shared UI](Shared-UI.md#each-parts-rules), and those across par
 
 What the host writes for a value is pinned by example in
 `hq/platform/application/tests/test_sdk_text.py`: `span`, `when`, `when_day`,
-`counted`, `measured`, `money`, `signed_number`, `ended` and `ago`, so a change
+`counted`, `measured`, `money`, `signed_number` and `ended`, so a change
 of wording is reviewed in that test's diff.
 
 An extension's test asserts what it composed from them
@@ -1036,9 +1033,8 @@ An extension's test asserts what it composed from them
 which reads the host's no-break spaces as spaces. It never writes the host's
 words or markup out itself: what a page says and links to is read through the
 host's markup reader in `hq_sdk.testing` (`text`, `texts`, `links`, `hrefs`,
-`elements`, `select`, `within`, `with_class`, `all_elements`, and the
-`Element` each returns), which reads a page as a browser does. Text that names the deployment reads
-`hq_sdk.site.host()`, never a setting.
+`elements`, `select`, `within`, `with_class` and `all_elements`), which
+reads a page as a browser does.
 
 An amount is written by `{{ amount|money }}` in a template and
 `hq_sdk.money.money` in Python:
@@ -1069,8 +1065,7 @@ never negative.
 An overview says what it is built from by putting
 `hq_sdk.pages.built_from(plugin.id)`, a link to the project that names the
 extension's repository, in its context as `built_from`; `page.html` draws the
-line after the page. An extension's suite checks its templates for a
-`{# #}` comment left open with `hq_sdk.testing.unclosed_template_comments`.
+line after the page.
 
 A list extends `list_page.html` and declares its empty state on the view, never
 in its template:
@@ -1087,12 +1082,6 @@ list, from those.
 Wrap a `.data-table` in `.table-scroll`. HQ keeps its headings visible through
 long result sets with sticky cells, and the table stays the one semantic and
 interactive source.
-
-Dense pages declare their sections on the page,
-`navigation=PageNavigation((PageSection("overview", "Overview"), ...))`, which
-`page.html` draws, and put the stable `id` on each section. HQ owns overflow,
-sticky positioning, scroll-aware current state and fragment history. Labels may
-change; section IDs are durable links.
 
 ### What a template prints
 
@@ -1284,7 +1273,7 @@ def overview():
 
 HQ counts writes to every model table in the writing transaction, an
 extension's included, so nothing is invalidated by hand and nothing is served
-older than its rows. Asking `today`, `reached`, `passed`, `since` or `whole`
+older than its rows. Asking `today`, `reached` or `whole`
 also derives the answer again when one of them would change. An extension keeps
 no process-level cache, `cache.set` or timestamp table beside this; the
 extension check refuses `django.core.cache` in its source.
@@ -1366,8 +1355,8 @@ class Note(models.Model):
   one statement. `shows` are the columns a line is built from: its link is
   `str(row)` to `row.get_absolute_url()`, and `note` an attribute that says a
   few words beside it.
-- **Writing one.** A `ModelForm` field for it is the shared picker; the view
-  takes `ReferencePickerMixin`. A save through `full_clean` stores the name and
+- **Writing one.** A command field marked `Refers` is the shared picker. A
+  save through `full_clean` stores the name and
   refuses a new reference that names nothing. A sync that copies records in
   stores what `as_stored(text)` answers, which keeps one that names nothing.
 - **Reporting one that names nothing.** Return `dangling(Note)` from the

@@ -3,7 +3,6 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -12,7 +11,6 @@ from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
     DashboardRefreshRequest,
-    ManagedResource,
     ProviderConnection,
 )
 from hq.platform.application import readings
@@ -23,6 +21,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from hq.platform.application.tests.glance_readings import HOST
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 
 GRANTED = frozenset(Capability)
 CREDENTIALS = (
@@ -46,7 +45,7 @@ def without(username: str, capability: Capability):
 
 class DashboardSettingsTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
+        operator(self.client, "op")
         self.url = reverse("dashboard_glance_settings")
 
     def save(self, **fields):
@@ -97,8 +96,8 @@ class DashboardSettingsTests(TestCase):
 
 class DashboardRefreshTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
-        machine = ManagedResource.objects.create(key="app-server", kind="machine", spec={"name": "app"})
+        operator(self.client, "op")
+        machine = declare("app-server", "machine", {"name": "app"})
         ProviderConnection.objects.create(
             connection_ref="app-ssh",
             controller_id="app-server",

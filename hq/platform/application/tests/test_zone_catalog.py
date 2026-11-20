@@ -1,6 +1,7 @@
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ..zones import zone_catalog
 
@@ -8,11 +9,7 @@ RECORD_KIND = "cloudflare.dns_record"
 
 
 def declared_record(key: str, **spec) -> ManagedResource:
-    return ManagedResource.objects.create(
-        key=key,
-        kind=RECORD_KIND,
-        spec={"name": "www.example.net", "record_type": "A", "content": "192.0.2.7", **spec},
-    )
+    return declare(key, RECORD_KIND, {"name": "www.example.net", "record_type": "A", "content": "192.0.2.7", **spec})
 
 
 class DeclaredRecordPlacementTests(TestCase):

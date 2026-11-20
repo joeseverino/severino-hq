@@ -14,6 +14,7 @@ from hq.platform.application.labels import dotted
 
 from ..integration_specs import ListRead, ResourceSpec
 from ..projection import complete, projection_scope
+from ..references import Kind
 from ..resources import EmptyQuery
 from ..tone import Tone
 from .band import Tile
@@ -22,11 +23,11 @@ from .sight_part import KEYLESS, HqSight, Sees, sight, sight_json, sight_tile
 from .work_part import Renderer, Work, WorkUnit, work, work_json
 lazy from .. import hq_self, request_context, service_health
 lazy from ..entity_links import entity_link
+lazy from ..estate_records import Problem
 lazy from ..findings import finding_key
 lazy from ..hq_self import hq_hostnames, own_machine, serving, site_label
-lazy from ..problems import About, problems_by_part
+lazy from ..problems import About, grouped, problems_by_part
 lazy from ..request_path import request_path
-lazy from ..resource_records import Problem
 lazy from ..security import Capability, Principal
 
 
@@ -48,10 +49,7 @@ class HQContext:
     def problems_in(self) -> dict[str, tuple[Mapping[str, Any], ...]]:
         """The problems about each part of the page, by part."""
 
-        found: dict[str, list[Mapping[str, Any]]] = {}
-        for part, item in zip(self.parts, self.problems, strict=True):
-            found.setdefault(part, []).append(item)
-        return {part: tuple(items) for part, items in found.items()}
+        return grouped(zip(self.parts, self.problems, strict=True))
 
     @property
     def tiles(self) -> tuple[Tile, ...]:
@@ -121,7 +119,7 @@ def _problems(
     names = [entity_link("service", name).url for name in hq_hostnames()]
     # A controller has no page of its own, so its findings are found by key.
     keys = [
-        finding_key(finding) for finding in service_health.hq_findings() if finding.subject.startswith("controller:")
+        finding_key(finding) for finding in service_health.hq_findings() if Kind.CONTROLLER.identity_in(finding.subject)
     ]
     repository = repository_of(container)
     return problems_by_part(

@@ -5,21 +5,20 @@ ended, which the agent then reads by its id. What every door promises of a
 playbook's run is ``hq/platform/api/tests/test_promises_each_door.py``'s."""
 
 from asgiref.sync import async_to_sync
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from mcp import Client, types
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.application.approvals import ApproveCommand, approve
 from hq.platform.application.controller import ControllerReport, claim_next_operation, report_operation
-from hq.platform.application.security import Capability, Principal, web_principal
+from hq.platform.application.security import web_principal
 from hq.platform.application.tests.procedures import APP, RESTART, RESTART_RUN, Supply, manifest, run_payload
+from hq.platform.core.testing import AGENT, operator
 
 from ..identity import set_principal
 from ..server import mcp
 from .test_held_tasks import Tasks, _task
 
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 WORKER = "example-worker"
 TASK = {"host": APP, "task": "Restart the service", "outcome": "changed", "message": "Restarted."}
 
@@ -49,7 +48,7 @@ class AutomationLoopTests(TestCase):
         self.assertEqual((created.task_id, created.status), (str(held.pk), "working"))
         self.assertFalse(OperationRequest.objects.exists())
 
-        approve(ApproveCommand(created.task_id), principal=web_principal(get_user_model().objects.create_user("o")))
+        approve(ApproveCommand(created.task_id), principal=web_principal(operator()))
         claimed = claim_next_operation(WORKER, capabilities=(("automation.operation", "run"),))
         operation = OperationRequest.objects.get(pk=claimed["operation"]["id"])
         report = ControllerReport(
@@ -70,5 +69,5 @@ class AutomationLoopTests(TestCase):
         self.assertFalse(result.is_error)
         self.assertEqual(result.structured_content["operation"]["id"], str(operation.pk))
         self.assertEqual((run["playbook"], run["state"], run["correlation"]), (RESTART, "succeeded", "example-loop"))
-        self.assertEqual(run["events"], [TASK])
+        self.assertEqual(run["events"], [{**TASK, "tone": "good"}])
         self.assertTrue(run["approved_by"])

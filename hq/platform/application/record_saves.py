@@ -148,14 +148,11 @@ def as_sent(record: Model, command: type, keys: Mapping[str, str]) -> dict[str, 
 
 def row(record: Any, shape: Any, **given: Any) -> Any:
     """``record``, a model or any object, read as ``shape``, the TypedDict that
-    declares the answer: each field's attribute as the field's type says, an
-    amount as its decimal string, a day or time in ISO 8601, an id as its
-    string, empty text null where the type allows null, a sequence as a list,
-    a part a TypedDict types read the same way, one ``Written`` types as
-    ``as_written`` writes it, and a linked record by the key its ``Names``
-    gives, or null for a doc too sensitive to share. A field the record does
-    not hold under its name is ``given``, read by its type too; a field the
-    shape does not require is left out unless given."""
+    declares the answer, each field as its type says.
+
+    A field the record does not hold under its name is ``given``; a field the
+    shape does not require is left out unless given.
+    """
 
     values: dict[str, Any] = {}
     for name, names, read in _row_fields(shape):

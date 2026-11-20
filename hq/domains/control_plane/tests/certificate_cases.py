@@ -1,6 +1,6 @@
 """A certificate spec and the three places it is installed, shared by the control plane's tests."""
 
-from ..models import ManagedResource
+from hq.platform.core.testing import declare
 
 DOMAINS = [
     "example.com",
@@ -55,10 +55,5 @@ def declare_targets():
     """The three places the certificate in these tests is installed."""
 
     return [
-        ManagedResource.objects.create(
-            key=f"{spec['connection_ref']}-certificate-target",
-            kind="tls.delivery_target",
-            spec=dict(spec),
-        )
-        for spec in TARGETS
+        declare(f"{spec['connection_ref']}-certificate-target", "tls.delivery_target", dict(spec)) for spec in TARGETS
     ]

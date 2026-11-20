@@ -23,7 +23,7 @@ from hq.platform.application.security import (
 from hq.platform.core.models import AgentAccess, AgentIdentity
 
 from . import agent_devices
-from .agent_devices import DeviceStanding, Unplaced
+from .agent_devices import DeviceStanding
 from .agent_registry import identity_of
 from .capability_policy import SET_POLICY, PolicyCommand, apply_changes
 from .command_fields import Describe
@@ -31,6 +31,7 @@ from .contracts import Effect
 from .integration_specs import CapabilitySpec
 from .own_devices import SET_OWN_DEVICE, OwnDeviceCommand, set_own_device
 from .record_errors import PolicyError, RecordNotFound
+from .refusal_codes import Code
 from .refusal_status import Refusal
 from .sessions import SIGN_OUT, SignOutCommand, sign_out
 
@@ -81,7 +82,7 @@ def held_askers() -> Q:
 class AgentRefusal:
     """Why a caller may do nothing right now: a code a client keys on, and a sentence for it."""
 
-    code: str
+    code: Code
     reason: str
 
     @property
@@ -91,23 +92,23 @@ class AgentRefusal:
         return Refusal(self.code, self.reason)
 
 
-AGENTS_PAUSED = AgentRefusal("agents_paused", "An operator paused all agents in HQ. Try again later.")
-AGENT_BLOCKED = AgentRefusal("agent_blocked", "An operator blocked this client in HQ.")
+AGENTS_PAUSED = AgentRefusal(Code.AGENTS_PAUSED, "An operator paused all agents in HQ. Try again later.")
+AGENT_BLOCKED = AgentRefusal(Code.AGENT_BLOCKED, "An operator blocked this client in HQ.")
 DEVICE_AWAITING_APPROVAL = AgentRefusal(
-    "device_awaiting_approval",
+    Code.DEVICE_AWAITING_APPROVAL,
     "This client is not approved on this device yet. Once it is approved on HQ's Agents page, the next call runs.",
 )
 DEVICE_BLOCKED = AgentRefusal(
-    "device_blocked",
+    Code.DEVICE_BLOCKED,
     "An operator blocked this client on this device. It can be allowed again on HQ's Agents page.",
 )
 DEVICE_UNKNOWN = AgentRefusal(
-    Unplaced.NO_DEVICE,
+    Code.DEVICE_UNKNOWN,
     "No tailnet device sent this call, so HQ refused it. Call HQ over the tailnet from the agent's device, "
     "then approve that device on HQ's Agents page.",
 )
 TAILNET_UNAVAILABLE = AgentRefusal(
-    Unplaced.UNANSWERED,
+    Code.TAILNET_UNAVAILABLE,
     "HQ could not ask tailscaled which device sent this call, so HQ refused it. "
     "Try again. If it keeps failing, check tailscaled on HQ's host.",
 )
@@ -115,13 +116,13 @@ _DEVICE_REFUSALS = {
     DeviceStanding.AWAITING: DEVICE_AWAITING_APPROVAL,
     DeviceStanding.BLOCKED: DEVICE_BLOCKED,
 }
-_UNPLACED_REFUSALS = {Unplaced.NO_DEVICE: DEVICE_UNKNOWN, Unplaced.UNANSWERED: TAILNET_UNAVAILABLE}
+_UNPLACED_REFUSALS = {Code.DEVICE_UNKNOWN: DEVICE_UNKNOWN, Code.TAILNET_UNAVAILABLE: TAILNET_UNAVAILABLE}
 # The codes a call the tailnet could not place is refused with, which the
 # Agents page reads back as the addresses an agent was refused from.
-UNPLACED_CODES = frozenset(str(code) for code in Unplaced)
+UNPLACED_CODES = frozenset(_UNPLACED_REFUSALS)
 
 
-def unplaced(refused: Unplaced, detail: str = "") -> AgentRefusal:
+def unplaced(refused: Code, detail: str = "") -> AgentRefusal:
     """The refusal of a call the tailnet could not place, with the daemon's own words where it has any."""
 
     refusal = _UNPLACED_REFUSALS[refused]
@@ -266,14 +267,9 @@ class AgentRemoved(TypedDict):
 def remove_agent(_command: AgentRemoveCommand, *, principal: Principal, current_key: str) -> AgentRemoved:
     """Remove one agent HQ has seen, by its subject, with its devices and its own rules. People only.
 
-    Removal grants nothing. A client that signs in again afterwards is a new
-    identity, as one HQ has never seen: its first call from each device waits
-    for approval again, and its grant is whatever its next token carries.
-    Removal never lifts a block, since the block lives on the row removed:
-    a blocked agent is refused until a person allows it, which is the one
-    way a block ends. What the agent did and asked for stays as history: the
-    audit log, which the Agents page counts its activity from, and the
-    changes it asked for, which a person still decides.
+    Removal grants nothing: a client that signs in again is a new identity
+    whose calls wait for approval again. It never lifts a block, which only a
+    person's allow ends. The audit log and held changes stay.
     """
 
     person(principal)

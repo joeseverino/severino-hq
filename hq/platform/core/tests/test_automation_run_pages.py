@@ -10,13 +10,13 @@ from django.urls import reverse
 
 from hq.platform.application.automation_runs import access_words
 from hq.platform.application.markup_testing import links, select, text, texts, with_class, within
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import source_files, template_files
 from hq.platform.application.tests.tree import ROOT
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.automation import CACHE_FLUSH, PROCEDURES, REVISION
 from hq.platform.core.example_estate.names import MACHINE
 from hq.platform.core.example_estate.testing import throwaway_media
+from hq.platform.core.testing import declare
 
 RUN = f"automation.{CACHE_FLUSH}.run"
 
@@ -167,7 +167,7 @@ class ProcedurePageTests(TestCase):
         playbook, and a held run's sentence names it so too."""
 
         from hq.platform.application.automation_adoption import playbook_titles
-        from hq.platform.application.capabilities import capability_registry
+        from hq.platform.application.capabilities import command_spec
 
         titles = playbook_titles()
         self.assertTrue(titles)
@@ -181,7 +181,7 @@ class ProcedurePageTests(TestCase):
                     if element.attrs.get("type") == "submit"
                 ]
                 self.assertEqual(buttons, [title])
-                self.assertIn(title, capability_registry()[f"automation.{operation_id}.run"].wanted())
+                self.assertIn(title, command_spec(f"automation.{operation_id}.run").wanted())
 
     def test_an_agent_reads_whether_its_run_waits_and_the_page_says_none_of_it(self):
         """Whether an agent's run waits for a person is in the notes
@@ -189,13 +189,13 @@ class ProcedurePageTests(TestCase):
 
         from hq.platform.application.approvals import no_rule_allows
         from hq.platform.application.automation_adoption import playbook_titles
-        from hq.platform.application.capabilities import capability_registry
+        from hq.platform.application.capabilities import command_spec
 
         waits_note = "When an agent asks, the run waits for an operator's approval."
         waits = set()
         for operation_id in playbook_titles():
             with self.subTest(procedure=operation_id):
-                spec = capability_registry()[f"automation.{operation_id}.run"]
+                spec = command_spec(f"automation.{operation_id}.run")
                 waits.add(no_rule_allows(spec))
                 self.assertEqual(waits_note in spec.execution_notes, no_rule_allows(spec))
                 page = self.page(operation_id)
@@ -283,14 +283,11 @@ class ProcedurePageTests(TestCase):
 
         # A record the catalog does not name keeps its own page.
         record = ManagedResource.objects.get(key=resource_key(CACHE_FLUSH))
-        dropped = ManagedResource.objects.create(
-            key=resource_key("example.retired"), kind=record.kind, spec={**record.spec, "operation": "example.retired"}
-        )
+        dropped = declare(resource_key("example.retired"), record.kind, {**record.spec, "operation": "example.retired"})
         self.assertEqual(self.client.get(reverse("control_plane:detail", kwargs={"key": dropped.key})).status_code, 200)
 
 
 @tag("source", "tree")
-@reads("**/*.py", "!**/tests/**/*.py", "**/templates/**")
 class NoProcedureNamedTests(SimpleTestCase):
     """The host draws a procedure from the adopted catalog alone: no template
     and no module outside the example estate and the tests names one."""

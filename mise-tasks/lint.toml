@@ -3,7 +3,9 @@
 # rewrites them all.
 #
 # A quick gate, one `mise run fast` runs when a change affects it, is tagged
-# fast. Its sources are the files it reads, then the dependencies, tool pins
+# fast: it reads the files a change touched, or the few its sources name. A
+# gate whose input is the whole tree is untagged, left to this job and
+# `mise run check`. A quick gate's sources are the files it reads, then the dependencies, tool pins
 # and task definitions every gate reads; `!` takes out a path its tool never
 # reads, as the tool's own config says. outputs = [] keeps mise from skipping
 # it as up to date. tools/tests/test_drift_sources.py holds a drift gate's
@@ -19,6 +21,9 @@ usage = 'flag "--fix" help="Write the fixes the tool makes instead of checking: 
 ["lint:mypy"]
 description = "mypy type-checks the seams pyproject.toml names and the browser test package's calls, then every source module for code its types rule out"
 hide = true
+# Quick though it names the whole tree: mypy's cache (.mypy_cache, which a
+# worktree copies) rechecks only a changed module and those whose imports'
+# interfaces changed.
 tags = ["fast", "heavy"]
 sources = [
   "**/*.py",
@@ -57,6 +62,12 @@ extends = "hk"
 vars = { step = "prose" }
 depends = ["setup:lint-tools"]
 
+["lint:task-modes"]
+description = "Every file task under mise-tasks/ is executable, so mise runs it rather than hiding it"
+hide = true
+extends = "hk"
+vars = { step = "task-modes" }
+
 ["lint:openapi"]
 description = "Both OpenAPI descriptions pass specification lint"
 hide = true
@@ -86,72 +97,19 @@ run = "redocly lint --config=tools/lint/redocly.yaml --format=stylish hq/platfor
 ["lint:sdk-breaking"]
 description = "hq_sdk keeps the shape its base offered extensions, or PLUGIN_API_VERSION moves with the break"
 hide = true
-tags = ["fast"]
-sources = [
-  "hq/**/*.py",
-  "hq_sdk/**/*.py",
-  "!**/tests/**",
-  "!**/test_*.py",
-  "!**/tests.py",
-  "tools/sdk_breaking.py",
-  "tools/pipeline/plugin_identity.py",
-  "tools/pipeline/__init__.py",
-  "tools/__init__.py",
-  "tools/gate/__init__.py",
-  "tools/gate/chain.py",
-  "tools/gate/tree.py",
-  "tools/gate/verdict.py",
-  "hq/platform/core/tests/__init__.py",
-  "hq/platform/core/tests/task.py",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-]
-outputs = []
-# The base is fast's; CI's lint job names the commit its change lands on in
-# CHECK_BASE.
+# CI's lint job names the commit its change lands on in CHECK_BASE.
 usage = 'arg "[base]" env="CHECK_BASE" help="The ref to compare with; default the branch HEAD lands on, then origin/main"'
 run = 'uv run python -m tools.sdk_breaking "${usage_base:-}"'
 
 ["lint:deptry"]
 description = "Host code imports only declared runtime dependencies and imports every one, or pyproject.toml says why not"
 hide = true
-tags = ["fast"]
-sources = [
-  "hq/**/*.py",
-  "hq_sdk/**/*.py",
-  "hq_runner/**/*.py",
-  "!**/tests/**",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-]
-outputs = []
 # The code is these three packages less their tests/ ([tool.deptry]).
 run = "uv run deptry hq hq_sdk hq_runner"
 
 ["lint:imports"]
 description = "Each module imports only what pyproject.toml's import contracts allow it"
 hide = true
-tags = ["fast"]
-sources = [
-  "hq/**/*.py",
-  "hq_sdk/**/*.py",
-  "hq_runner/**/*.py",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-]
-outputs = []
 run = "uv run lint-imports --no-cache"
 
 ["lint:lockfile"]
@@ -234,23 +192,6 @@ run = [
 ["lint:deploycheck"]
 description = "Production settings raise no security warning"
 hide = true
-tags = ["fast"]
-sources = [
-  "**/*.py",
-  "!**/tests/**",
-  "!**/test_*.py",
-  "!**/tests.py",
-  "hq/domains/control_plane/bridge_base.json",
-  "hq/domains/docs_index/schema.json",
-  "deploy/systemd/severino-hq-secrets.timer",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-]
-outputs = []
 # DEBUG off, a real host. The values mirror a production configuration so the
 # check judges how settings.py reads one. The key is a throwaway long enough
 # for the strength check.
@@ -261,28 +202,6 @@ run = "uv run python manage.py check --deploy --fail-level WARNING"
 ["lint:structural"]
 description = "No new near-duplicate pair outside tests"
 hide = true
-tags = ["fast", "heavy"]
-sources = [
-  "**/*.py",
-  "**/*.go",
-  "**/*.js",
-  "**/*.mjs",
-  "**/*.sh",
-  "mise-tasks/**",
-  "tools/structural/**",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-  "!**/test_*.py",
-  "!**/tests.py",
-  "!**/*_tests.py",
-  "!**/tests/**",
-  "!**/*_test.go",
-]
-outputs = []
 usage = '''
 flag "--record" help="Rewrite the baseline from this tree instead of checking it"
 flag "--pairs" help="First print every pair outside tests with the classification that explains it, or unexplained, one per line, sorted"
@@ -375,34 +294,6 @@ run = "go tool govulncheck -test ./..."
 description = "docs/Shared-UI.md is what the host's templates offer an extension"
 hide = true
 extends = "drift"
-sources = [
-  "**/*.py",
-  "!**/tests/**",
-  "!**/test_*.py",
-  "!**/tests.py",
-  "docs/Shared-UI.md",
-  "hq/domains/control_plane/bridge_base.json",
-  "hq/domains/docs_index/schema.json",
-  # The frames and partials its tables read; an extension's
-  # check derives the rest of the template contract as it runs.
-  "templates/page.html",
-  "templates/list_page.html",
-  "templates/confirm_page.html",
-  "templates/form_page.html",
-  "templates/partials/**",
-  # Each public class and hook the table lists is held to the stylesheet and
-  # scripts that still define it.
-  "static/css/**",
-  "static/js/**",
-  "tools/lint/ast-grep/rules/hand-drawn-*.yml",
-  "deploy/systemd/severino-hq-secrets.timer",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-]
 vars = { command = "shared_ui_reference", writes = "docs/Shared-UI.md" }
 
 ["lint:drift-api-document"]
@@ -415,23 +306,6 @@ vars = { command = "api_openapi", writes = "hq/platform/api/hq-api.openapi.json"
 description = "The controller's contracts are the ones the registry derives"
 hide = true
 extends = "drift"
-sources = [
-  "**/*.py",
-  "!**/tests/**",
-  "!**/test_*.py",
-  "!**/tests.py",
-  "hq/domains/control_plane/bridge_base.json",
-  "hq/domains/docs_index/schema.json",
-  "controller/api/**",
-  "hq/config/controller-connections.json",
-  "deploy/systemd/severino-hq-secrets.timer",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-]
 vars = { command = "bridge_contract", writes = "controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json hq/config/controller-connections.json" }
 
 ["lint:drift-connections-reference"]

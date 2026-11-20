@@ -29,7 +29,7 @@ from typing import NamedTuple
 
 from hq.platform.core.tests.task import RefError, Usage, commit_of, git
 from tools.dev import extension_set
-from tools.gate import chain, fast, room
+from tools.gate import chain, fast, ran, room
 from tools.gate.room import GATE, LOCK, lock_file
 from tools.gate.tree import working_tree
 from tools.gate.turn import ALL, held_locks, inside
@@ -243,6 +243,10 @@ def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
     refs = {f"refs/gate/{run}": commit}
     for name in sorted(REFS & values.keys()):
         values[name] = refs[f"refs/gate/{run}-{name}"] = commit_of(values[name])
+    # fast's record of what each test ran reads its own tree, which goes as a commit of it.
+    record = ran.recorded() if task == "fast" else None
+    if record:
+        refs[f"refs/gate/{run}-record"] = gate_commit(ROOT, record.tree)
     remote = f"{host}:{checkout}"
     push(ROOT, remote, [f"{sha}:{ref}" for ref, sha in refs.items()])
     # A run that composes composes this machine's extension checkout, sent as the tree is, from its clone beside
@@ -272,6 +276,8 @@ def send(task: str, host: str, checkout: str, values: dict[str, str]) -> Sent:
     # fast's chain: the trees passed here, so it selects as it would here.
     if chain.passes().is_dir():
         done(["rsync", "-a", "-e", shlex.join(SSH), str(chain.passes()), f"{remote}/.git/severino/"])
+    if record:
+        done(["rsync", "-a", "--delete", "-e", shlex.join(SSH), str(ran.records()), f"{remote}/.git/severino/"])
     return Sent(tree, commit, git("rev-parse", "HEAD", root=ROOT)[0], argv, run, extension, packages, fixed)
 
 
@@ -309,7 +315,9 @@ def run_there(task: str, host: str, checkout: str, values: dict[str, str], took:
         status = stream.wait()
     if there is None:
         # No worktree took the tree; the refs it would have taken are removed with nothing else to.
-        push(ROOT, f"{host}:{checkout}", [f":refs/gate/{sent.id}{suffix}" for suffix in ("", "-base", "-at")])
+        push(
+            ROOT, f"{host}:{checkout}", [f":refs/gate/{sent.id}{suffix}" for suffix in ("", "-base", "-at", "-record")]
+        )
         raise RefError(f"{host} made no worktree of tree {sent.tree[:9]}")
     back = subprocess.run(host_half(host, "back", sent.id), capture_output=True, check=False).stdout
     bring_back(back, sent, there, host, task)

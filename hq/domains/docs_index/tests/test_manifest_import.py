@@ -3,7 +3,6 @@
 import json
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
@@ -14,6 +13,7 @@ from hq.platform.application.documentation import MAX_MANIFEST_ITEMS, SYNC
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import Capability, Principal
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 from ..models import DocumentationRecord
 
@@ -34,7 +34,7 @@ def _file(data) -> SimpleUploadedFile:
 
 class ManifestImportViewTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("op"))
+        operator(self.client, "op")
 
     def post(self, data, **extra):
         return self.client.post(

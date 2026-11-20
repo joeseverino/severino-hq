@@ -5,8 +5,6 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
-
 from .facts import TOP, Import, imports, scan
 from .source import template_files
 
@@ -192,7 +190,6 @@ def _readers(modules: dict[str, _Module]) -> set[Unit]:
 
 
 @tag("source", "tree")
-@reads("hq/platform/application/**/*.py", lists=("hq/platform/application/**",))
 class ReadingItemsCarryTheirAgeTests(SimpleTestCase):
     def test_every_item_built_from_a_stored_reading_carries_observed_at(self):
         """Without it a card cannot say how old its claim is, and an old
@@ -237,7 +234,6 @@ OWN_WORDING = re.compile(r"\bread\b[^{<]{0,4}\{\{[^}]*\|(?:when|when_text):\"ago
 
 
 @tag("source", "tree")
-@reads("**/templates/**")
 class OneWordingTests(SimpleTestCase):
     def test_a_page_says_a_readings_age_through_the_partial(self):
         """Each page worded it its own way ("read 5 minutes ago", "as of",

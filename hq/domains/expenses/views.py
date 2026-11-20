@@ -5,17 +5,18 @@ from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
     DeleteView,
-    DetailView,
     ListView,
+    TemplateView,
     UpdateView,
 )
 
 from hq.platform.application import related
 from hq.platform.application.documentation import document_link
+from hq.platform.application.entity_links import entity_link
 from hq.platform.application.expenses import costs_by_category
 from hq.platform.application.labels import dotted
-from hq.platform.application.moments import when_day
-from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.moments import stamp_day, when_day
+from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
 from hq.platform.application.projection import years_of
 from hq.platform.application.references import referenced_by_row, resolve_many
 from hq.platform.application.security import web_principal
@@ -92,44 +93,50 @@ class ExpensePage(PageMixin):
         return str(record)
 
 
-class ExpenseDetailView(PageMixin, DetailView):
-    model = Expense
+class ExpenseDetailView(RecordPageMixin, TemplateView):
+    resource = "expenses"
+    context_object_name = "expense"
+    url_kwarg = "pk"
     page_trail = EXPENSES_TRAIL
     template_name = "expenses/expense_detail.html"
-    context_object_name = "expense"
-    queryset = Expense.objects.select_related(
-        "related_project",
-        "related_asset",
-        "related_content",
-        "related_documentation",
-    ).prefetch_related("receipts")
+    model = Expense
+    stored_related = ("receipts",)
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        record = self.object.related_documentation
-        context["document"] = document_link(record) if record is not None else None
-        expense, principal = self.object, web_principal(self.request.user)
+        record, principal = self.record, web_principal(self.request.user)
+        named = (
+            ("project", record["related_project"], record["project_name"]),
+            ("asset", record["related_asset"], record["asset_name"]),
+            ("writeup", record["related_content"], record["content_title"]),
+        )
+        context["links"] = {kind: entity_link(kind, key, label=name) if key else None for kind, key, name in named}
+        doc_id = record["related_documentation"]
+        context["document"] = document_link(doc_id, record["document_title"]) if doc_id else None
+        # The records of other kinds that name this one, read by it, and the
+        # saved names of its references, which its record leaves to their owner.
+        found = self.stored
         context["account"], context["about"] = resolve_many(
-            [(expense.paid_from, expense.paid_from_name), (expense.about, expense.about_name)],
+            [(record["paid_from"], found.paid_from_name), (record["about"], found.about_name)],
             principal=principal,
         )
-        context["related"] = related.related(
-            related.receipts(expense.receipts.all()), *referenced_by_row(expense, principal=principal)
-        )
+        receipts = related.receipts(found.receipts.all())
+        context["receipted"] = bool(receipts.items)
+        context["related"] = related.related(receipts, *referenced_by_row(found, principal=principal))
         return context
 
     @override
     def get_page_title(self):
-        return self.object.label
+        return self.record["label"]
 
     @override
     def get_page_lede(self):
-        return dotted(when_day(self.object.date), self.object.get_category_display())
+        return dotted(when_day(stamp_day(self.record["date"])), self.record["category_label"])
 
     @override
     def get_page_actions(self):
-        pk = self.object.pk
+        pk = self.record["id"]
         return (
             PageAction.command("expense.update", pk),
             PageAction.command("expense.delete", pk),

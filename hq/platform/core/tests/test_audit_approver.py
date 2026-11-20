@@ -7,7 +7,8 @@ from hq.platform.application.approvals import ApproveCommand, approve
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.security import Principal, cli_principal, mcp_principal
 from hq.platform.application.tests.test_approvals import POLICY_KEY, an_operator, declare_policy, reconcile_payload
-from hq.platform.core.audit import audit_operation, audited_labels, record_event
+from hq.platform.core.audit import audited_labels, record_event
+from hq.platform.core.bindings import audit_operation
 from hq.platform.core.models import AuditLog
 
 

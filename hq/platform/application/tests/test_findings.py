@@ -7,17 +7,14 @@ from django.utils import timezone
 from pydantic import ValidationError
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
+from hq.platform.core.testing import MANAGER, READER, declare
 
 from ..findings import FINDINGS_SCHEMA_VERSION, derive_findings, finding_rules, findings, rule_for
-from ..security import Capability, Principal
 from ..topology import derive_topology
 from ..topology_model import Topology, TopologyEdge, TopologyNode
-from .finding_principals import MANAGE
 from .host_only import host_only
 from .inventory_records import kind_read
 from .sentinel import SentinelMixin, plant_credentials
-
-READ = Principal("reader", "test", frozenset({Capability.READ}))
 
 
 def observed(resource: ManagedResource, when, *, reason="Observed", revision=1, status=None):
@@ -55,18 +52,14 @@ class FindingsTests(SentinelMixin, TestCase):
         )
 
     def rewrite(self, key, **spec):
-        return ManagedResource.objects.create(
-            key=key,
-            kind="adguard.rewrite",
-            spec={"domain": f"{key}.example.test", "answer": "192.0.2.10", **spec},
-        )
+        return declare(key, "adguard.rewrite", {"domain": f"{key}.example.test", "answer": "192.0.2.10", **spec})
 
-    def raised(self, principal=MANAGE):
+    def raised(self, principal=MANAGER):
         with host_only():
             projection = derive_topology(principal=principal)
         return derive_findings(projection, principal=principal)
 
-    def names(self, principal=MANAGE):
+    def names(self, principal=MANAGER):
         return [(f.rule, f.subject) for f in self.raised(principal)]
 
     # ----- the archetype ---------------------------------------------------
@@ -153,7 +146,7 @@ class FindingsTests(SentinelMixin, TestCase):
             ),
         )
 
-        raised = derive_findings(topology, principal=READ)
+        raised = derive_findings(topology, principal=READER)
 
         self.assertEqual([item.rule for item in raised], ["kind-never-swept"] * 2)
 
@@ -166,13 +159,13 @@ class FindingsTests(SentinelMixin, TestCase):
 
         from hq.domains.control_plane.providers import PROVIDERS
 
-        rebuilt = PROVIDERS["tailscale.device"].from_record(
+        rebuilt = PROVIDERS["tailscale.device"].record_spec(
             {"name": "example-device", "key_expires": "2026-12-01T00:00:00Z"}
         )
         self.assertIs(rebuilt["key_expiry_disabled"], False)
 
         # No expiry is the setting, not an unknown date.
-        disabled = PROVIDERS["tailscale.device"].from_record({"name": "forever"})
+        disabled = PROVIDERS["tailscale.device"].record_spec({"name": "forever"})
         self.assertIs(disabled["key_expiry_disabled"], True)
 
     # ----- properties that must hold ---------------------------------------
@@ -181,10 +174,10 @@ class FindingsTests(SentinelMixin, TestCase):
         observed(self.rewrite("one"), self.now)
         observed(self.rewrite("two"), self.now - timedelta(hours=9))
         with host_only():
-            projection = derive_topology(principal=MANAGE)
+            projection = derive_topology(principal=MANAGER)
         before = list(ManagedResource.objects.values_list("key", "last_observed_at", "conditions"))
 
-        derive_findings(projection, principal=MANAGE)
+        derive_findings(projection, principal=MANAGER)
 
         self.assertEqual(
             before,
@@ -198,8 +191,8 @@ class FindingsTests(SentinelMixin, TestCase):
         observed(self.rewrite("swept"), self.now)
         observed(skipped, self.now - timedelta(hours=6))
 
-        as_operator = self.raised(MANAGE)
-        as_reader = self.raised(READ)
+        as_operator = self.raised(MANAGER)
+        as_reader = self.raised(READER)
 
         self.assertTrue(any(list(f.presses) for f in as_operator))
         self.assertTrue(as_reader, "the reader still sees the finding")
@@ -210,17 +203,17 @@ class FindingsTests(SentinelMixin, TestCase):
         observed(self.rewrite("two"), self.now)
 
         with host_only():
-            visible = {n.id for n in derive_topology(principal=READ).nodes}
-        subjects = {f.subject for f in self.raised(READ) if f.subject}
+            visible = {n.id for n in derive_topology(principal=READER).nodes}
+        subjects = {f.subject for f in self.raised(READER) if f.subject}
 
         self.assertLessEqual(subjects, visible)
 
     def test_no_rule_offers_a_destructive_capability(self):
         """A finding may link to a review page; it may never hand over a delete."""
 
-        from ..integrations import integration_graph
+        from ..capabilities import capability_registry
 
-        destructive = {spec.name for spec in integration_graph().capabilities.values() if spec.effect == "destructive"}
+        destructive = {spec.name for spec in capability_registry() if spec.effect == "destructive"}
         observed(self.rewrite("skipped"), self.now - timedelta(hours=9))
         observed(self.rewrite("swept"), self.now)
 
@@ -229,9 +222,9 @@ class FindingsTests(SentinelMixin, TestCase):
         self.assertEqual(offered & destructive, set())
 
     def test_every_remedy_names_a_capability_the_registry_holds(self):
-        from ..integrations import integration_graph
+        from ..capabilities import capability_registry
 
-        known = set(integration_graph().capabilities)
+        known = {spec.name for spec in capability_registry()}
         observed(self.rewrite("skipped"), self.now - timedelta(hours=9))
         observed(self.rewrite("swept"), self.now)
 
@@ -261,8 +254,8 @@ class FindingsTests(SentinelMixin, TestCase):
         observed(self.rewrite("swept"), self.now)
 
         with host_only():
-            whole = findings(principal=MANAGE)
-            narrowed = findings(principal=MANAGE, rule="skipped-by-a-sweep")
+            whole = findings(principal=MANAGER)
+            narrowed = findings(principal=MANAGER, rule="skipped-by-a-sweep")
 
         self.assertEqual(narrowed["rule"], "skipped-by-a-sweep")
         self.assertIsNone(whole["rule"])
@@ -281,7 +274,7 @@ class FindingsTests(SentinelMixin, TestCase):
         observed(self.rewrite("swept"), self.now)
 
         with host_only():
-            whole = findings(principal=MANAGE)
+            whole = findings(principal=MANAGER)
 
         self.assertTrue(whole["findings"])
         self.assertNoSentinel(whole)
@@ -292,9 +285,9 @@ class FindingsTests(SentinelMixin, TestCase):
         self.rewrite("never")
 
         with host_only():
-            whole = findings(principal=MANAGE)
-            floored = findings(principal=MANAGE, severity="serious")
-            first = findings(principal=MANAGE, limit=1)
+            whole = findings(principal=MANAGER)
+            floored = findings(principal=MANAGER, severity="serious")
+            first = findings(principal=MANAGER, limit=1)
         severities = [item["severity"] for item in whole["findings"]]
         # The estate has something below the floor and more than one finding.
         self.assertIn("serious", severities)
@@ -316,7 +309,7 @@ class FindingsTests(SentinelMixin, TestCase):
     def test_a_severity_off_the_ladder_or_a_limit_below_one_is_refused(self):
         for narrowing in ({"severity": "critical"}, {"limit": 0}):
             with self.subTest(**narrowing), self.assertRaises(ValidationError) as refused:
-                findings(principal=MANAGE, **narrowing)
+                findings(principal=MANAGER, **narrowing)
             self.assertEqual([error["loc"] for error in refused.exception.errors()], [tuple(narrowing)])
 
     def test_an_unknown_rule_name_does_not_resolve(self):
@@ -349,17 +342,13 @@ class AutoRepairTests(TestCase):
         )
 
     def rewrite(self, key):
-        return ManagedResource.objects.create(
-            key=key,
-            kind="adguard.rewrite",
-            spec={"domain": f"{key}.example.test", "answer": "192.0.2.10"},
-        )
+        return declare(key, "adguard.rewrite", {"domain": f"{key}.example.test", "answer": "192.0.2.10"})
 
     def repairs(self):
         from ..findings import auto_remediable
 
         with host_only():
-            return auto_remediable(principal=MANAGE)
+            return auto_remediable(principal=MANAGER)
 
     def test_a_skipped_record_is_offered_for_repair(self):
         skipped = self.rewrite("skipped")
@@ -402,7 +391,7 @@ class AutoRepairTests(TestCase):
         observed(self.rewrite("swept"), self.now)
 
         with host_only():
-            self.assertEqual(len(auto_remediable(principal=MANAGE, limit=4)), 4)
+            self.assertEqual(len(auto_remediable(principal=MANAGER, limit=4)), 4)
 
     def test_only_actions_the_controller_contract_runs_unattended_qualify(self):
         """HQ forms no second opinion about unattended safety."""

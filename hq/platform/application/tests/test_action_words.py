@@ -18,10 +18,9 @@ from tempfile import TemporaryDirectory
 from django.test import SimpleTestCase, tag
 
 from hq.domains.control_plane.models import OperationRequest
-from hq.platform.application.tests.reads import reads
 
 from ..action_links import capability_action_link, command_action, read_now_link
-from ..capabilities import capability_registry
+from ..capabilities import capability_registry, capability_spec, command_spec
 from ..outbound_work import ask, declared_work
 from .facts import ROOT, grouped, scan
 from .source import template_files
@@ -127,11 +126,11 @@ def _restated(label: ast.expr, words: set[str]) -> list[str]:
     ]
 
 
-def _variant(node: ast.Call, registry) -> tuple[str, str] | None:
+def _variant(node: ast.Call) -> tuple[str, str] | None:
     """The command and the variant of its words a call names, when it names both."""
 
     literals = [arg.value for arg in node.args if isinstance(arg, ast.Constant)]
-    name = next((value for value in literals if value in registry), None)
+    name = next((value for value in literals if capability_spec(value)), None)
     variant = next(
         (getattr(keyword.value, "value", None) for keyword in node.keywords if keyword.arg == "variant"),
         literals[1] if _called(node) == "capability_words" and len(literals) > 1 else None,
@@ -142,7 +141,7 @@ def _variant(node: ast.Call, registry) -> tuple[str, str] | None:
 def _declared_words() -> set[str]:
     words = {choice.label for choice in OperationRequest.Action}
     words |= {work.words for work in declared_work().values()}
-    for spec in capability_registry().values():
+    for spec in capability_registry():
         words |= {spec.words(), *(text for _name, text in spec.variants)}
     return words
 
@@ -169,13 +168,11 @@ class CommandBuilderTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "!**/tests/**/*.py", "**/templates/**/*.html", lists=("hq/**", "**/templates/**"))
 class CallSiteWordsTests(SimpleTestCase):
     """No button, link or toast for a command brings text of its own.
 
     The checks with one fixed answer are ast-grep rules (lint:ast-grep):
-    capability-linked-by-action-links, command-control-says-declared-words
-    and requested-said-by-integration-specs.
+    command-control-says-declared-words and requested-said-by-integration-specs.
     """
 
     def test_no_control_restates_a_declared_word(self):
@@ -244,15 +241,12 @@ class CallSiteWordsTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "!**/tests/**/*.py", "**/templates/**/*.html", lists=("hq/**", "**/templates/**"))
 class DeclaredWordsTests(SimpleTestCase):
     """Every action has the words a surface asks it for."""
 
     def test_every_command_hq_declares_is_named_for_a_person(self):
         unnamed = [
-            name
-            for name, spec in capability_registry().items()
-            if spec.handler.__module__.startswith("hq.") and not spec.label
+            spec.name for spec in capability_registry() if spec.handler.__module__.startswith("hq.") and not spec.label
         ]
         self.assertEqual(unnamed, [])
 
@@ -260,18 +254,17 @@ class DeclaredWordsTests(SimpleTestCase):
         """``words("all")`` on a command that declares no "all" is a KeyError
         at the press; here it is a failure before it ships."""
 
-        registry = capability_registry()
         asked = set()
         for where, node in _found().get("names-a-variant", []):
             assert isinstance(node, ast.Call)
-            if (named := _variant(node, registry)) is not None:
+            if (named := _variant(node)) is not None:
                 asked.add((where.rpartition(":")[0], *named))
         tag_use = re.compile(r'\{%\s*words\s+"([^"]+)"(?:\s+"([^"]+)")?\s*%\}')
         for template, path in template_files():
             for name, variant in tag_use.findall(path.read_text(encoding="utf-8")):
-                self.assertIn(name, registry, f"{template} names a command that is not declared")
+                self.assertTrue(capability_spec(name), f"{template} names a command that is not declared")
                 if variant:
                     asked.add((template, name, variant))
         self.assertTrue(asked)
-        missing = [item for item in sorted(asked) if item[2] not in dict(registry[item[1]].variants)]
+        missing = [item for item in sorted(asked) if item[2] not in dict(command_spec(item[1]).variants)]
         self.assertEqual(missing, [])

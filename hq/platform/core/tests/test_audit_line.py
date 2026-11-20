@@ -6,6 +6,7 @@ from django.db import transaction
 from django.test import TestCase
 
 from hq.platform.application import denials
+from hq.platform.application.refusal_codes import Code
 from hq.platform.core.audit import record_event
 from hq.platform.core.logging import JsonFormatter
 from hq.platform.core.models import AuditLog
@@ -62,7 +63,7 @@ class AuditLineTests(TestCase):
 
     def test_a_recounted_refusal_writes_its_new_count(self):
         def refused():
-            denials.record_denial(interface="mcp", reason="invalid_credential", source="192.0.2.7", authenticated=False)
+            denials.record_denial(interface="mcp", reason=Code.INVALID_TOKEN, source="192.0.2.7", authenticated=False)
 
         refused()
         lines = self.lines(refused)

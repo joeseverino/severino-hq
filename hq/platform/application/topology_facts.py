@@ -11,6 +11,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.domains.control_plane.observations.host import PERIMETER_KIND
 lazy from hq.platform.core.network import parse_ip
 
+from .references import Kind
 from .topology_model import TopologyNode
 lazy from . import tailnet
 lazy from .conditions import DRIFTED, held_since
@@ -173,8 +174,8 @@ def add_observed_facts(
     for resource in resources:
         entries, endpoints = unreachable_consumers(resource)
         if entries:
-            found[f"resource:{resource.key}"] = entries
-            blocked.extend((f"resource:{resource.key}", item) for item in endpoints)
+            found[Kind.RESOURCE.of(resource.key)] = entries
+            blocked.extend((Kind.RESOURCE.of(resource.key), item) for item in endpoints)
 
     # Why it could not be reached, where the tailnet policy is the answer.
     #
@@ -242,7 +243,7 @@ def _add_to(found: dict[str, tuple[tuple[str, str], ...]], resource, entries: tu
     """Add ``entries`` to a resource's facts, never over what it already holds."""
 
     if entries:
-        found[f"resource:{resource.key}"] = (*found.get(f"resource:{resource.key}", ()), *entries)
+        found[Kind.RESOURCE.of(resource.key)] = (*found.get(Kind.RESOURCE.of(resource.key), ()), *entries)
 
 
 def _drift_facts(resource) -> tuple[tuple[str, str], ...]:

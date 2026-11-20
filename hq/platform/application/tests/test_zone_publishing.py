@@ -1,12 +1,12 @@
 """Publishing a name: adopting its records, publishing a service, names served elsewhere, and letting a domain go."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.testing import declare, operator
 
 from ..adoption_testing import managing_everything
 from ..report_testing import bridged
@@ -28,12 +28,7 @@ class SelfClosingAdoptionTests(TestCase):
         managing_everything(*DNS_CONNECTIONS)
 
     def _declare_domain(self):
-        ManagedResource.objects.create(
-            key="example-com",
-            kind=ZONE_KIND,
-            spec={"zone": "example.com", "connection_ref": "cf-example"},
-            enabled=True,
-        )
+        declare("example-com", ZONE_KIND, {"zone": "example.com", "connection_ref": "cf-example"}, enabled=True)
 
     def test_a_sweep_takes_on_every_record_in_a_declared_domain(self):
         self._declare_domain()
@@ -131,11 +126,8 @@ class StopManagingDomainTests(TestCase):
         managing_everything(*DNS_CONNECTIONS)
         sweep()
         self.principal = cli_principal()
-        self.zone = ManagedResource.objects.create(
-            key="example-com",
-            kind=ZONE_KIND,
-            spec={"zone": "example.com", "connection_ref": "cf-example"},
-            enabled=True,
+        self.zone = declare(
+            "example-com", ZONE_KIND, {"zone": "example.com", "connection_ref": "cf-example"}, enabled=True
         )
         bridged("inventory", {RECORD_KIND: {"ok": True, "records": APEX}})
 
@@ -195,8 +187,7 @@ class PublishAServiceTests(TestCase):
     """
 
     def setUp(self):
-        user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client, "op")
 
     def test_a_name_with_nothing_behind_it_has_a_page(self):
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "new.example.com"}))
@@ -227,14 +218,10 @@ class PublishAServiceTests(TestCase):
         "This name has TLS" is true, and is not the same as "this name works".
         """
 
-        ManagedResource.objects.create(
-            key="wildcard",
-            kind="tls.certificate",
-            spec={
-                "certificate_name": "wildcard",
-                "domains": ["*.example.com"],
-                "install_on": ["edge"],
-            },
+        declare(
+            "wildcard",
+            "tls.certificate",
+            {"certificate_name": "wildcard", "domains": ["*.example.com"], "install_on": ["edge"]},
             enabled=True,
         )
 
@@ -295,17 +282,10 @@ class ExternallyServedNameTests(TestCase):
     """
 
     def _record(self, key, name, rtype, content):
-        ManagedResource.objects.create(
-            key=key,
-            kind=RECORD_KIND,
-            spec={
-                "zone": "example.com",
-                "name": name,
-                "record_type": rtype,
-                "content": content,
-                "proxied": False,
-                "ttl": 1,
-            },
+        declare(
+            key,
+            RECORD_KIND,
+            {"zone": "example.com", "name": name, "record_type": rtype, "content": content, "proxied": False, "ttl": 1},
             enabled=True,
         )
 
@@ -335,10 +315,10 @@ class ExternallyServedNameTests(TestCase):
         self.assertIsNone(prospects(("example.com",))[0].origin)
 
     def test_an_internal_proxy_origin_is_not_called_external(self):
-        ManagedResource.objects.create(
-            key="proxy",
-            kind="npm.proxy_host",
-            spec={
+        declare(
+            "proxy",
+            "npm.proxy_host",
+            {
                 "domain_names": ["app.example.com"],
                 "forward_scheme": "http",
                 "forward_host": "10.0.0.5",
@@ -371,17 +351,10 @@ class WhatCountsAsAServiceTests(TestCase):
     """
 
     def _record(self, key, name, rtype, content):
-        ManagedResource.objects.create(
-            key=key,
-            kind=RECORD_KIND,
-            spec={
-                "zone": "example.com",
-                "name": name,
-                "record_type": rtype,
-                "content": content,
-                "proxied": False,
-                "ttl": 1,
-            },
+        declare(
+            key,
+            RECORD_KIND,
+            {"zone": "example.com", "name": name, "record_type": rtype, "content": content, "proxied": False, "ttl": 1},
             enabled=True,
         )
 
@@ -430,10 +403,10 @@ class ExternallyAnsweredFacetTests(TestCase):
     """
 
     def setUp(self):
-        ManagedResource.objects.create(
-            key="site",
-            kind=RECORD_KIND,
-            spec={
+        declare(
+            "site",
+            RECORD_KIND,
+            {
                 "zone": "example.com",
                 "name": "example.com",
                 "record_type": "CNAME",
@@ -443,8 +416,7 @@ class ExternallyAnsweredFacetTests(TestCase):
             },
             enabled=True,
         )
-        user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(user)
+        operator(self.client, "op")
 
     def test_a_routing_facet_is_not_reported_missing_when_the_name_leaves_the_network(self):
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "example.com"}))
@@ -463,12 +435,7 @@ class ExternallyAnsweredFacetTests(TestCase):
     def test_an_internally_served_name_still_asks_for_its_ingress(self):
         """The excuse is external routing, not any missing origin."""
 
-        ManagedResource.objects.create(
-            key="rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.9"},
-            enabled=True,
-        )
+        declare("rewrite", "adguard.rewrite", {"domain": "app.example.com", "answer": "10.0.0.9"}, enabled=True)
 
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "app.example.com"}))
 

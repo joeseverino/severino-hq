@@ -1,12 +1,9 @@
-"""`mise run audit:memory [--seed <name>] [--host-alone] [--top <n>] [--after <paths>]`: what each module costs in memory.
+"""`mise run audit:memory [--seed <name>] [--host-alone] [--top <n>] [--after
+<paths>]`: what each module costs in memory.
 
-Each module's and package's own share of HQ's Python memory, at boot and after a pass over the
-navigation's pages, ranked, as tools.perf.memory_probe counts it in a process of its own. The
-database is a throwaway one, seeded as dev:scratch seeds it, and the extensions are the ones
-dev:scratch composes. The probe serves as the image does, with DEBUG off. With ``--after``, each
-path boot never takes (memory_probe.AFTER) is a stage of its own after the pass, its modules'
-import times read from ``python -X importtime`` in a second, untraced run. Each run is kept as
-var/perf/memory-<commit>-<time>.json, the share of every module and every package's row in it.
+Each module's own share at boot and after a pass over the navigation's pages,
+counted by tools.perf.memory_probe on a throwaway database. Each run is kept as
+var/perf/memory-<commit>-<time>.json.
 """
 
 import io

@@ -22,13 +22,13 @@ def _keeping_specs():
     registry = capability_registry()
     creating = {
         spec.command_type
-        for spec in registry.values()
+        for spec in registry
         if not spec.target_kind and command_schema(spec.command_type).get("properties")
     }
     names = {f"{records.noun}.{verb}" for records in host_records() for verb in ("update", "upsert")}
     return [
         spec
-        for spec in registry.values()
+        for spec in registry
         if spec.name in names or (spec.target_kind and spec.command_type in creating and spec.effect.changes)
     ]
 
@@ -49,15 +49,12 @@ def _spec(name: str, command_type: type, target_kind: str | None) -> CapabilityS
 
 class KeepingSelectionTests(SimpleTestCase):
     def test_a_targeted_command_is_held_only_when_it_shares_fields_a_create_takes(self):
-        registry = {
-            spec.name: spec
-            for spec in (
-                _spec("example.thing.start", _Nothing, None),
-                _spec("example.thing.stop", _Nothing, "key"),
-                _spec("example.thing.add", _Named, None),
-                _spec("example.thing.rename", _Named, "key"),
-            )
-        }
+        registry = (
+            _spec("example.thing.start", _Nothing, None),
+            _spec("example.thing.stop", _Nothing, "key"),
+            _spec("example.thing.add", _Named, None),
+            _spec("example.thing.rename", _Named, "key"),
+        )
         with mock.patch(f"{__name__}.capability_registry", return_value=registry):
             held = {spec.name for spec in _keeping_specs()}
         self.assertIn("example.thing.rename", held)
@@ -73,7 +70,7 @@ class EveryUpdateIsToldWhatWasSentTests(SimpleTestCase):
                 self.assertTrue(takes_sent_fields(spec.handler), f"{spec.name} would reset what it was not sent")
 
     def test_every_targeted_write_told_what_was_sent_says_what_it_keeps_and_no_other(self):
-        for spec in capability_registry().values():
+        for spec in capability_registry():
             if not spec.target_kind:
                 continue
             with self.subTest(spec.name):
@@ -84,7 +81,7 @@ class EveryUpdateIsToldWhatWasSentTests(SimpleTestCase):
                 )
 
     def test_an_update_says_a_field_left_out_keeps_its_value_requires_none_it_keeps_and_shows_no_default(self):
-        for spec in capability_registry().values():
+        for spec in capability_registry():
             if (kept := kept_by(spec)) is None:
                 continue
             with self.subTest(spec.name):

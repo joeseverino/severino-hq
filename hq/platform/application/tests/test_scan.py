@@ -2,13 +2,10 @@
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
-
 from .facts import scan
 
 
 @tag("source", "tree")
-@reads("hq/platform/application/tests/facts.py", lists=("example/moved",))
 class ScanPathTests(SimpleTestCase):
     def test_a_path_that_is_not_there_is_refused_rather_than_read_as_empty(self):
         with self.assertRaisesMessage(FileNotFoundError, "example/moved"):

@@ -1,7 +1,5 @@
 """Discoverable, authorized read resources shared by every HQ adapter."""
 
-import hashlib
-import json
 import re
 from collections.abc import Callable, Iterable, Mapping
 from typing import Annotated, Any, Literal, NotRequired, TypedDict
@@ -16,6 +14,8 @@ from pydantic import (
     with_config,
 )
 
+from hq.platform.core.digests import digest
+
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion, WebRoute
 from .contracts import Closed
 from .describe import Describe
@@ -24,7 +24,7 @@ from .input_errors import pydantic_refusal
 from .integration_specs import PAGE_FIELD, ResourceSpec, typed_keys
 from .integration_validation import required_capability_names
 from .integrations import held_graph
-from .json_schemas import json_schema, narrowed
+from .json_schemas import narrowed, sent_schema
 from .projection import MAX_PAGE_SIZE, CursorRefusal, NextPage, PageScope, page_size, paging
 from .record_errors import HostRefusal, RecordNotFound
 from .refusal_status import next_call
@@ -209,7 +209,7 @@ class ListOperation(TypedDict):
             "given this name says each one's type and choices."
         ),
     ]
-    fields: Annotated[list[str], Describe("The fields each item keeps unless the caller names its own.")]
+    fields: NotRequired[Annotated[list[str], Describe("The fields each item keeps unless the caller names its own.")]]
     query_schema: NotRequired[
         Annotated[
             dict[str, Any],
@@ -264,7 +264,7 @@ class ResourceDescription(TypedDict):
 
 
 # The shape describe_resources answers in; it moves when that shape does.
-RESOURCES_SCHEMA_VERSION = 3
+RESOURCES_SCHEMA_VERSION = 4
 
 
 class ResourceCatalog(TypedDict):
@@ -292,10 +292,10 @@ def describe_resources(*, principal: Principal | None = None, name: str = "") ->
 def _listing(spec: ResourceSpec, *, whole: bool) -> ListOperation | None:
     if not spec.listing:
         return None
-    query = spec.listing.query
-    listing: ListOperation = {"filters": list(list_filters(query)), "fields": list(spec.listing.fields)}
+    listing: ListOperation = {"filters": list(list_filters(spec.listing.query))}
     if whole:
-        schema = json_schema(query)
+        listing["fields"] = list(spec.listing.fields)
+        schema = sent_schema(spec.listing.query)
         properties = schema.get("properties", {})
         listing["query_schema"] = narrowed(schema, properties.keys() - PAGING)
         if PAGING & properties.keys():
@@ -386,6 +386,24 @@ def list_resource(
     return {**page, "items": items}
 
 
+def every_item(name: str, *, principal: Principal, fields: Fields | None = None) -> list[dict[str, Any]]:
+    """Every item of a resource's list, read page after page through
+    ``list_resource`` at its largest page: what a web page drawing the whole
+    list shows."""
+
+    spec = _resource(name)
+    query: dict[str, Any] = (
+        {"limit": MAX_PAGE_SIZE} if spec.listing and "limit" in spec.listing.query.model_fields else {}
+    )
+    items: list[dict[str, Any]] = []
+    while True:
+        page = list_resource(name, query, principal=principal, strict=False, fields=fields)
+        items.extend(page["items"])
+        if page["next"] is None:
+            return items
+        query = {**query, **page["next"]}
+
+
 class PagePosition(TypedDict):
     """Where a page of a list stopped."""
 
@@ -456,10 +474,7 @@ def _bound(parsed: BaseModel) -> str:
     """The filters a page was read under, as one digest: every query field but the page's size and cursor."""
 
     terms = parsed.model_dump(mode="json", exclude={"limit", PAGE_FIELD})
-    # A cursor issued before carries this digest of spaced JSON; on digest's
-    # form it would be refused as issued under other filters.
-    # ast-grep-ignore: json-digest-by-digests
-    return hashlib.sha256(json.dumps(terms, sort_keys=True).encode()).hexdigest()[:32]
+    return digest(terms)[:32]
 
 
 def _issued(name: str, bound: str, position: dict[str, Any] | None) -> str:

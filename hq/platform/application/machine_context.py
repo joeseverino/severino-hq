@@ -23,23 +23,21 @@ from .entity_links import entity_link, kind_label
 from .projection import projection_scope
 from .security import Principal
 from .service_context import Cell, ServiceSection, recent_changes, recent_work
-from .tone import Tone
 from .ui import MISSING
 lazy from . import connections, services
 lazy from .cadence import connection_providers
 lazy from .finding_model import CONTAINERS_CARD, TAILNET_CARD
-lazy from .findings import rule_for, rule_of
 lazy from .hq_self import hq_service
 lazy from .locate import host_of
+lazy from .machine_records import MachineRecord
 lazy from .machines import Machine
 lazy from .own_addresses import tailnet_sightings
 lazy from .policy_links import PolicyNames
-lazy from .problems import problems_about
+lazy from .problems import About, problems_about
 lazy from .public_registry import public_endpoints
 lazy from .reach import network_of
 lazy from .routes import reverse
 lazy from .tailnet import TAILNET_KIND
-lazy from .tailnet_signers import signer_of
 lazy from .topology_model import RELATIONS
 lazy from .work_runs import runs_on
 
@@ -223,65 +221,54 @@ def serves_links(machine, relationships) -> tuple:
     return tuple(dict.fromkeys(serves))
 
 
-def machine_links(machine: Machine, relationships) -> dict[str, object]:
-    """Every entity the machine page names outside its sections, as links.
-
-    What it is reached through, what it serves, what else is declared on it,
-    its tailnet device, and who the tailnet policy admits to it. A policy alias
-    names an address; it links to the machine answering there.
+def machine_links(record: MachineRecord) -> dict[str, object]:
+    """Every entity the machine page names outside its sections, as links,
+    from its record: what it is reached through, its tailnet device, and who
+    the tailnet policy admits to it. A policy alias names an address; it
+    links to the machine answering there.
     """
 
-    presence = machine.presence
-    serves = serves_links(machine, relationships)
+    presence = record["presence"]
     links: dict[str, object] = {
         "reached_links": tuple(
-            (_reached_through(machine, ref), ref in machine.unanswered) for ref in machine.reached_by
+            (_reached_through(record, ref), ref in record["unanswered"]) for ref in record["reached_by"]
         ),
-        "serves_links": serves,
-        "serves_count": len(serves) + len(machine.roles),
-        "declaration_links": tuple(entity_link("resource", key) for key in machine.other_declarations),
         "labeled_addresses": (),
         "tailscale_version": "",
         "device_link": None,
         "magic_dns_link": None,
         "opening_links": (),
-        "tailnet_signer": None,
     }
     if presence is None:
         return links
-    links["labeled_addresses"] = labeled_addresses(machine)
+    links["labeled_addresses"] = labeled_addresses(record)
     # The release, without the build it was cut from.
-    links["tailscale_version"] = str(presence.client_version or "").partition("-")[0]
-    record = {"addresses": presence.addresses}
+    links["tailscale_version"] = presence["client_version"].partition("-")[0]
+    addresses = {"addresses": [presence["tailnet_address"]]}
     links["device_link"] = (
-        entity_link(TAILNET_KIND, machine.route_approval_key, label=presence.tailnet_name)
-        if machine.route_approval_key
-        else entity_link(TAILNET_KIND, presence.tailnet_name, record=record)
+        entity_link(TAILNET_KIND, record["tailnet_device"], label=presence["tailnet_name"])
+        if record["tailnet_device"]
+        else entity_link(TAILNET_KIND, presence["tailnet_name"], record=addresses)
     )
-    if presence.dns_name:
-        links["magic_dns_link"] = entity_link(TAILNET_KIND, presence.dns_name, record=record)
-    links["tailnet_signer"] = signer_of(machine.name)
+    if presence["dns_name"]:
+        links["magic_dns_link"] = entity_link(TAILNET_KIND, presence["dns_name"], record=addresses)
     names = PolicyNames()
-    links["opening_links"] = tuple((port, names.of(who)) for port, who in presence.openings)
+    links["opening_links"] = tuple((item["port"], names.of(item["open_to"])) for item in presence["openings"])
     return links
 
 
-def problems_by_part(machine: Machine, principal: Principal) -> dict[str, tuple[dict, ...]]:
-    """The machine's open problems ``principal`` may read, by where its page
-    draws them: under the card its rule declares (``FindingRule.card``) when
-    the page draws that card, and an urgent one, or any other, above the page
+def problem_parts(record: MachineRecord) -> dict[str, About]:
+    """Where a machine's page draws its problems (``problems_by_part``): under
+    each card the page draws that a rule declares, and the rest above the page
     with the machine's own state (``page``)."""
 
-    drawn = {CONTAINERS_CARD: bool(machine.containers), TAILNET_CARD: machine.presence is not None}
-    found: dict[str, list[dict]] = {"page": [], CONTAINERS_CARD: [], TAILNET_CARD: []}
-    for item in problems_about(machine.url, principal):
-        rule = rule_for(rule_of(item["key"]))
-        card = rule.card if rule is not None and item.get("status") != Tone.SERIOUS else ""
-        found[card if drawn.get(card) else "page"].append(item)
-    return {part: tuple(items) for part, items in found.items()}
+    url = (record["url"],)
+    drawn = {CONTAINERS_CARD: bool(record["containers"]), TAILNET_CARD: record["presence"] is not None}
+    cards = {card: About(urls=url, cards=(card,)) for card, shown in drawn.items() if shown}
+    return {**cards, "page": About(urls=url)}
 
 
-def _reached_through(machine: Machine, ref: str):
+def _reached_through(record: MachineRecord, ref: str):
     """A connection that reaches the machine, as its page names it.
 
     A connection named for the machine it reaches would read, on that
@@ -289,7 +276,7 @@ def _reached_through(machine: Machine, ref: str):
     kind instead ("SSH"), its own name kept for hover.
     """
 
-    own = {str(name).lower() for name in (machine.name, *machine.aliases)}
+    own = {str(name).lower() for name in (record["name"], *record["aliases"])}
     providers = connection_providers(ref) if ref.lower() in own else ()
     if not providers:
         return entity_link("connection", ref)
@@ -300,7 +287,7 @@ def _reached_through(machine: Machine, ref: str):
 _NETWORKS = {"tailnet": "Tailnet", "network": "LAN", "public": "Public"}
 
 
-def labeled_addresses(machine) -> tuple[tuple[str, str], ...]:
+def labeled_addresses(record: MachineRecord) -> tuple[tuple[str, str], ...]:
     """``(label, address)`` for each address the machine is reached at, by the
     network it is on, each once.
 
@@ -309,8 +296,8 @@ def labeled_addresses(machine) -> tuple[tuple[str, str], ...]:
     machine's own names say nothing about where it is.
     """
 
-    own = {name.lower() for name in (machine.name, *machine.aliases)}
-    hosts = dict.fromkeys(host_of(address) for address in machine.addresses)
+    own = {name.lower() for name in (record["name"], *record["aliases"])}
+    hosts = dict.fromkeys(host_of(address) for address in record["addresses"])
     return tuple(
         (_label(host), host) for host in hosts if host and host.lower() not in own and network_of(host) != "loopback"
     )

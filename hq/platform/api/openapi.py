@@ -16,7 +16,7 @@ from typing import Any, TypeAliasType, get_args
 
 from django.urls import URLPattern, reverse
 
-from hq.platform.application.capabilities import capability_registry, describe_capabilities
+from hq.platform.application.capabilities import capability_registry, command_spec, describe_capabilities
 from hq.platform.application.contracts import effect_glossary
 from hq.platform.application.field_masks import FIELD_PATH_PATTERN, WHOLE_RECORD
 from hq.platform.application.held_answer import HELD, AwaitingApproval
@@ -32,8 +32,8 @@ from hq.platform.application.integration_specs import (
     takes_stale_write_token,
     typed_keys,
 )
-from hq.platform.application.json_schemas import LOCAL, json_schema
-from hq.platform.application.refusal_status import LATER_CODES
+from hq.platform.application.json_schemas import LOCAL, sent_schema
+from hq.platform.application.refusal_codes import LATER_CODES, Code
 from hq.platform.application.resource_operations import RunAsked
 from hq.platform.application.resources import describe_resources, mask_paths, masked_kind, resource_registry
 from hq.platform.application.run_reads import RUNS
@@ -42,7 +42,7 @@ lazy from hq.platform.application.routes import routed
 
 from . import urls, views
 from .components import SCHEMAS, Components
-from .fragments import OpenAPIError, camel as _camel, pascal as _pascal
+from .fragments import OpenAPIError, camel as _camel, pascal as _pascal, said_once
 from .refusal_names import LATER_STATUSES, codes_by_status, refusal_name
 from .tags import API_TAG, Tags
 
@@ -109,7 +109,7 @@ class _Builder:
     def _responses(
         self,
         view: Any,
-        codes: Iterable[str],
+        codes: Iterable[Code],
         answer: tuple[str, dict[str, Any]] | None,
         held: Any,
         links: dict[str, Any],
@@ -179,7 +179,7 @@ class _Builder:
             response["links"] = links
         return self.component("responses", self.responses, f"{name}{phrase}", response)
 
-    def refusal(self, status: int, codes: list[str]) -> str:
+    def refusal(self, status: int, codes: list[Code]) -> str:
         """The response, and its schema, for refusing at ``status`` with ``codes``, named for them."""
 
         name = refusal_name(status, codes)
@@ -205,12 +205,12 @@ class _Builder:
                 "required": True,
                 "schema": {"type": "string", "const": views.REALM},
             }
-        if "insufficient_scope" in codes:
+        if Code.INSUFFICIENT_SCOPE in codes:
             # One component every 403 that can answer the code shares.
             headers["WWW-Authenticate"] = self.component(
                 "headers",
                 self.headers,
-                _pascal("insufficient_scope") + _pascal("WWW-Authenticate"),
+                _pascal(Code.INSUFFICIENT_SCOPE) + _pascal("WWW-Authenticate"),
                 {
                     "description": (
                         'On `insufficient_scope`: `Bearer` with `error="insufficient_scope"` and `scope`, the '
@@ -264,14 +264,8 @@ class _Builder:
         """Each request an answer leads to, as Link Objects (OpenAPI 3.2.0,
         section 4.20) keyed by the operation they call.
 
-        Derived from what the registries say of the answer: an answer typed
-        as ``READ_BY`` names leads to the read of what it carries; a page of
-        ``resource`` (``listed``, its query parameters ``query``) leads to the
-        page after it, with the same query, and its first item to that item's
-        read; a page or a record leads to each command on ``resource`` that
-        takes it as its target, with its ``updated_at`` where the command
-        checks for a stale write. A value is a runtime expression (section
-        4.20.3), one in a request body embedded in its string in braces.
+        Derived from the registries: a ``READ_BY`` answer, a page's next page
+        and first item, and each command that takes the record as its target.
         """
 
         found: dict[str, Any] = {}
@@ -302,9 +296,8 @@ class _Builder:
             found[_read_id(resource)] = _link(
                 _read_id(resource), {"path.identifier": f"$response.body#{at}/{identifier}"}
             )
-        registry = capability_registry()
         for command in self.capabilities:
-            capability = registry[command["name"]]
+            capability = command_spec(command["name"])
             if capability.subject_resource != resource or not capability.target_kind:
                 continue
             body = {"target": f"{{$response.body#{at}/{identifier}}}"}
@@ -417,7 +410,6 @@ class _Builder:
             ],
             requestBody=_body(generic),
         )
-        registry = capability_registry()
         requests = {spec["name"]: self.components.hoist(views.request_schema(spec)) for spec in self.capabilities}
         # A target several capabilities take in the same words is written once,
         # as the component named for the first of them.
@@ -452,7 +444,7 @@ class _Builder:
             request = requests[name]
             payload = request["properties"]["payload"]
             if len(takers := shapes[json.dumps(payload, sort_keys=True)]) > 1:
-                shared = {"$ref": self.components.add(registry[takers[0]].command_type.__name__, payload)}
+                shared = {"$ref": self.components.add(command_spec(takers[0]).command_type.__name__, payload)}
                 request = {**request, "properties": {**request["properties"], "payload": shared}}
             # Capabilities taking one body share its schema, each under its own name.
             first = self.requests.setdefault(json.dumps(request, sort_keys=True), f"{_pascal(name)}Request")
@@ -464,14 +456,14 @@ class _Builder:
                 view,
                 _camel(name),
                 self.tags.of_capability(name),
-                links=self.links(answering=answer_type(registry[name])),
+                links=self.links(answering=answer_type(command_spec(name))),
                 summary=spec["label"],
                 description=spec["summary"],
                 parameters=([{"$ref": f"#/components/parameters/{IDEMPOTENCY_KEY}"}] if spec["effect"].changes else []),
                 requestBody=_body(body),
-                codes=views.execute_codes(registry[name]),
-                answer=self.answer_of(registry[name]),
-                held=views.capability_held(registry[name]),
+                codes=views.execute_codes(command_spec(name)),
+                answer=self.answer_of(command_spec(name)),
+                held=views.capability_held(command_spec(name)),
                 scopes=spec["required_capabilities"],
                 **{"x-hq-capability": name, EFFECT_EXTENSION: spec["effect"]},
             )
@@ -611,7 +603,7 @@ class _Builder:
                         spec["name"]
                         for spec in self.resources
                         if spec["operations"]["get"]
-                        and json_schema(self.resource_specs[spec["name"]].identifier_type) == _TEXT
+                        and sent_schema(self.resource_specs[spec["name"]].identifier_type) == _TEXT
                     ],
                     "read of one record",
                 ),
@@ -625,7 +617,7 @@ class _Builder:
                 continue
             name = spec["name"]
             field = detail["identifier"]
-            identifier = json_schema(self.resource_specs[name].identifier_type)
+            identifier = sent_schema(self.resource_specs[name].identifier_type)
             listed = spec["operations"]["list"] is not None
             # A resource with a list holds the records its summary describes,
             # and this reads one of them; one without is read one at a time,
@@ -788,45 +780,47 @@ def document() -> dict[str, Any]:
     builder = _Builder()
     for route, pattern in routes():
         builder.route(route, pattern)
-    return {
-        "openapi": OPENAPI_VERSION,
-        "$self": reverse("hq_api:openapi"),
-        "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
-        "info": {
-            "title": "Severino HQ machine API",
-            "version": str(VERSION),
-            "description": views.first_line(views.__doc__)
-            + " Derived from HQ's routes and its capability, resource and domain registries.\n\n"
-            + effect_glossary(EFFECT_EXTENSION),
-        },
-        "tags": builder.tags.render(),
-        "paths": dict(sorted(builder.paths.items())),
-        "components": {
-            "securitySchemes": {
-                BEARER: {
-                    "type": "http",
-                    "scheme": "bearer",
-                    "bearerFormat": "JWT",
-                    "description": (
-                        "An access token from HQ's identity provider, addressed to this API. The names an "
-                        "operation's security lists are the HQ capabilities its token must carry, every one."
-                    ),
-                }
+    return said_once(
+        {
+            "openapi": OPENAPI_VERSION,
+            "$self": reverse("hq_api:openapi"),
+            "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+            "info": {
+                "title": "Severino HQ machine API",
+                "version": str(VERSION),
+                "description": views.first_line(views.__doc__)
+                + " Derived from HQ's routes and its capability, resource and domain registries.\n\n"
+                + effect_glossary(EFFECT_EXTENSION),
             },
-            "parameters": dict(
-                sorted(
-                    {
-                        IDEMPOTENCY_KEY: builder.retry_key(required=True),
-                        **builder.parameters,
-                        "Fields": _mask({"type": "string", "pattern": FIELD_PATH_PATTERN}),
-                    }.items()
-                )
-            ),
-            "responses": dict(sorted(builder.responses.items())),
-            "headers": dict(sorted(builder.headers.items())),
-            "schemas": dict(sorted(builder.components.written().items())),
-        },
-    }
+            "tags": builder.tags.render(),
+            "paths": dict(sorted(builder.paths.items())),
+            "components": {
+                "securitySchemes": {
+                    BEARER: {
+                        "type": "http",
+                        "scheme": "bearer",
+                        "bearerFormat": "JWT",
+                        "description": (
+                            "An access token from HQ's identity provider, addressed to this API. The names an "
+                            "operation's security lists are the HQ capabilities its token must carry, every one."
+                        ),
+                    }
+                },
+                "parameters": dict(
+                    sorted(
+                        {
+                            IDEMPOTENCY_KEY: builder.retry_key(required=True),
+                            **builder.parameters,
+                            "Fields": _mask({"type": "string", "pattern": FIELD_PATH_PATTERN}),
+                        }.items()
+                    )
+                ),
+                "responses": dict(sorted(builder.responses.items())),
+                "headers": dict(sorted(builder.headers.items())),
+                "schemas": dict(sorted(builder.components.written().items())),
+            },
+        }
+    )
 
 
 def render(value: dict[str, Any]) -> str:

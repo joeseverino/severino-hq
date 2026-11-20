@@ -1,18 +1,9 @@
 """What a controller's reading of its own machine says, about that machine's node.
 
-A reading such as ``host.render_status`` or ``host.unit`` is taken by a
-controller of the machine it runs on. Each stored record is one row
-(``ReadingRow``) about the node of that controller, or, for a record read
-through one of its connections (``host.reboot``'s of an edge), about the
-machine that connection reaches (``placed``). The topology only makes sure
-that node stands; the rules are gathered and read the rows from the store.
-A reading that could not be taken is a row too, so what went quiet is said
-and not dropped.
-
-A reading says how things stood when it was taken, so a rule judges its rows
-as of then. Once it is out of date (``freshness``), ``stated`` withholds its rows from every rule, and ``unjudged`` hands the
-reading's own "not read" rule when it was taken and, where the bridge refused
-the report that would have replaced it, why.
+Each stored record is one row about the controller's node, or the machine a
+connection reaches (``placed``). A reading that could not be taken is a row
+too, so what went quiet is said. Once out of date (``freshness``), ``stated``
+withholds its rows from every rule and ``unjudged`` says why.
 """
 
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -28,6 +19,7 @@ from .finding_model import Finding, FindingEstate, FindingRemedy, cannot_run_com
 from .finding_steps import Do, Run
 from .freshness import LAST_READ, freshness
 from .moments import when
+from .references import Kind
 from .tone import Tone
 from .topology_model import TopologyNode, derived_id
 from .ui import ended
@@ -88,7 +80,7 @@ def placed(
 
     if through:
         return _reached(nodes, machine, through)
-    node_id = derived_id("controller", controller)
+    node_id = derived_id(Kind.CONTROLLER, controller)
     if node_id not in nodes:
         node_id = machine(controller) or node_id
     return nodes.get(node_id) or TopologyNode(
@@ -97,7 +89,7 @@ def placed(
 
 
 def _reached(nodes: Mapping[str, TopologyNode], machine: Callable[[Any], str], ref: str) -> TopologyNode:
-    node_id = machine(ref) or derived_id("target", ref)
+    node_id = machine(ref) or derived_id(Kind.TARGET, ref)
     return nodes.get(node_id) or TopologyNode(id=node_id, kind="target", label=ref, subtitle="Machine")
 
 

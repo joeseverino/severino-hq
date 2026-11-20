@@ -4,7 +4,7 @@
 #USAGE flag "--tailnet <name>" default="-" help="Tailnet (default: -, the credential's own)"
 #USAGE flag "--description <text>" default="hq-observer" help="Client description"
 #USAGE flag "--tag <tag>" var=#true help="Tag the client; repeatable"
-#USAGE flag "--scopes <file>" help="Scope list (default: tools/tailscale-observer-scopes.txt)"
+#USAGE flag "--scopes <file>" help="Scope list file (default: what the readings need)"
 #USAGE flag "--store <ref>" help="Create the client and store its secret at op://<vault>/<item>/<field>"
 #USAGE flag "--store-id <ref>" help="With --store, store the client id at op://<vault>/<item>/<field> (same item)"
 

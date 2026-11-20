@@ -13,12 +13,9 @@ from django.db import connections
 def use_the_file_clone(creation, worker_id):
     """Point a worker at the database file that was cloned for it.
 
-    Under ``spawn`` (macOS's default) and ``forkserver`` (Linux's) Django
-    copies each clone into a shared-cache in-memory database, which locks whole
-    tables instead of using WAL and so deadlocks a test against work it started
-    on another thread. The file keeps a serial run's journal mode, as Django
-    does under ``fork``; under those two methods Django names a file clone even
-    for an in-memory test database.
+    Under ``spawn`` and ``forkserver`` Django copies each clone into a shared-
+    cache in-memory database, which locks whole tables instead of using WAL and
+    so deadlocks a test against work it started on another thread.
     """
 
     creation.connection.settings_dict.update(creation.get_test_db_clone_settings(worker_id))

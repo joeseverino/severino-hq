@@ -4,14 +4,14 @@
 
 {% include "partials/_problems.html" with problems=problems_in.page %}
 
-{% if load_metrics %}
-  {% section "Current load" lede=machine.telemetry.summary %}
+{% if machine.load.metrics %}
+  {% section "Current load" %}
     {% facts layout="band" %}
-      {% for metric in load_metrics %}{% fact metric.label value=metric.value detail=metric.detail %}{% endfor %}
+      {% for metric in machine.load.metrics %}{% fact metric.label value=metric.value detail=metric.detail %}{% endfor %}
     {% endfacts %}
   {% aside %}
-    {% if machine.telemetry_observed_at %}
-      {% muted %}{% include "partials/_reading_age.html" with at=machine.telemetry_observed_at only %}{% endmuted %}
+    {% if machine.load.observed_at %}
+      {% muted %}{% include "partials/_reading_age.html" with at=machine.load.observed_at only %}{% endmuted %}
     {% endif %}
   {% endsection %}
 {% endif %}
@@ -31,15 +31,15 @@ last done to it is read before its parts.
   {% if unused_images %}{% list kind="dots" %}<li>{% status unused_images|length|counted:"unused image,unused images"|add:"," unused_size "can be freed" tone="attention" pill=False %}</li>{% endlist %}{% endif %}
   {% if unused_images %}{% command text="ssh "|add:machine.name|add:' "sudo docker image prune -a"' %}{% endif %}
   {% include "partials/_problems.html#rest" with rest=problems_in.containers %}
-  {% if machine.containers %}{% include "control_plane/_container_rows.html" with containers=machine.on_show label="Shown containers" %}{% endif %}
-  {% if machine.folded %}
+  {% if machine.containers %}{% include "control_plane/_container_rows.html" with containers=shown_containers label="Shown containers" %}{% endif %}
+  {% if folded_containers %}
     {% comment %}
     Watched exactly like the rest (start, stop and restart all work) just
     not what anybody opened this page to look at. Folded rather than dropped,
     because a container HQ can act on and does not show is worse than either.
     {% endcomment %}
-    {% section "Hidden" count=machine.folded|length fold=True %}
-      {% include "control_plane/_container_rows.html" with containers=machine.folded label="Hidden containers" %}
+    {% section "Hidden" count=folded_containers|length fold=True %}
+      {% include "control_plane/_container_rows.html" with containers=folded_containers label="Hidden containers" %}
     {% endsection %}
   {% endif %}
 {% aside %}{% if docker %}{% muted %}{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}{% endmuted %}{% endif %}
@@ -77,15 +77,15 @@ last done to it is read before its parts.
     {% fact "Addresses" %}{% list kind="labeled" %}{% for label, address in labeled_addresses %}<li><span>{{ label|breakable }}</span> <code>{{ address|breakable }}</code></li>{% endfor %}{% endlist %}{% endfact %}
     {% fact "Device" %}{% entity device_link %}{% endfact %}
     {% if magic_dns_link %}{% fact "MagicDNS" %}{% entity magic_dns_link code=True %}{% endfact %}{% endif %}
-    {% fact "State" %}{% if machine.presence.online %}Connected{% else %}Not connected{% if machine.state_since %}, last seen {{ machine.state_since|breakable }}{% endif %}{% endif %}{% endfact %}
+    {% fact "State" %}{% if machine.presence.online %}Connected{% else %}Not connected{% if machine.presence.last_seen %}, last seen {{ machine.presence.last_seen|when:"day" }}{% endif %}{% endif %}{% endfact %}
     {% comment %}
     When a request last came to HQ from this machine. Not said of the
     machine HQ runs on: its controller reaches HQ without a request, so the
     last request from its own address says nothing about whether it is
     there.
     {% endcomment %}
-    {% if machine.presence.reached_hq and not machine.presence.observer %}{% fact "Last reached HQ" value=machine.presence.reached_hq.phrase|capfirst %}{% endif %}
-    {% fact "Node key" %}{% if machine.presence.key_expiry %}{{ machine.presence.key_expiry|capfirst|breakable }}{% else %}Does not expire{% endif %}{% endfact %}
+    {% with arrival=machine.presence.reached_hq %}{% if arrival and not machine.presence.observer %}{% fact "Last reached HQ" %}{{ arrival.last_seen|when_text:"ago"|capfirst|breakable:"," }} {{ arrival.how|breakable }}{% endfact %}{% endif %}{% endwith %}
+    {% fact "Node key" %}{% if machine.presence.key_expires %}{{ machine.presence.key_expires|when_text:"expiry"|capfirst|breakable }}{% else %}Does not expire{% endif %}{% endfact %}
     {% fact "Runs" %}{{ machine.presence.os|or_empty }}{% if tailscale_version %}{% dot %}<span title="{{ machine.presence.client_version }}">Tailscale {{ tailscale_version|breakable }}</span>{% if machine.presence.update_available %} <strong>(update available)</strong>{% endif %}{% endif %}{% endfact %}
     {% comment %}
     Each shown only when true. A device that runs no Tailscale SSH, accepts
@@ -96,7 +96,7 @@ last done to it is read before its parts.
     {% if machine.presence.blocks_incoming %}{% fact "Shields" value="Up. Blocks all inbound connections." %}{% endif %}
     {% if machine.presence.external %}{% fact "Belongs to" value="Another tailnet (shared in)" %}{% endif %}
     {% if not machine.presence.authorized %}{% fact "Authorized" %}<strong>No</strong>. It cannot connect until you approve it.{% endfact %}{% endif %}
-    {% if machine.presence.lock_error %}{% fact "Tailnet lock" %}<strong>Not signed</strong>: {{ machine.presence.lock_error|breakable }}{% endfact %}{% elif tailnet_signer %}{% fact "Tailnet lock" value="Signing device" %}{% endif %}
+    {% if machine.presence.lock_error %}{% fact "Tailnet lock" %}<strong>Not signed</strong>: {{ machine.presence.lock_error|breakable }}{% endfact %}{% elif machine.presence.signs_tailnet_lock %}{% fact "Tailnet lock" value="Signing device" %}{% endif %}
     {% comment %}
     Offered and approved, never one of the two. A route is advertised by the
     machine and then has to be approved in the coordination server; until it
@@ -144,7 +144,7 @@ last done to it is read before its parts.
 {% endlayout %}
 {% if machine.presence %}
 {% layout %}
-  {% if machine.presence.peered %}
+  {% with peering=machine.presence.peering %}{% if peering %}
     {% comment %}
     The peering, stated rather than implied. This reading comes from the daemon
     on the machine HQ runs on, so a device appearing in it at all is a peer of
@@ -157,21 +157,21 @@ last done to it is read before its parts.
     {% endcomment %}
     {% section "Peered with HQ" %}
       {% facts %}
-        {% fact "Handshake" %}Completed {{ machine.presence.handshake|breakable }}{% if machine.presence.active %}{% dot %}active{% endif %}{% endfact %}
+        {% fact "Handshake" %}Completed {{ peering.last_handshake|when:"ago" }}{% if peering.active %}{% dot %}active{% endif %}{% endfact %}
         {% fact "Path" %}
-          {% if machine.presence.peer_path == "direct" %}
-            Direct: {% with mark=machine.presence.relay|then:"," %}<code>{{ machine.presence.direct_endpoint|breakable:mark }}</code>{% endwith %}{% if machine.presence.relay %} fallback relay <code>{{ machine.presence.relay|breakable }}</code>{% endif %}
-          {% elif machine.presence.peer_path == "relayed" %}
-            Relayed through <code>{{ machine.presence.relay|breakable }}</code> because no direct path was found. It is still encrypted end to end.
+          {% if peering.path == "direct" %}
+            Direct: {% with mark=peering.relay|then:"," %}<code>{{ peering.direct_endpoint|breakable:mark }}</code>{% endwith %}{% if peering.relay %} fallback relay <code>{{ peering.relay|breakable }}</code>{% endif %}
+          {% elif peering.path == "relayed" %}
+            Relayed through <code>{{ peering.relay|breakable }}</code> because no direct path was found. It is still encrypted end to end.
           {% else %}
             No path yet. One is set up when traffic starts.
           {% endif %}
         {% endfact %}
-        {% fact "Traffic" %}{{ machine.presence.rx_bytes|bytes }} in{% dot %}{{ machine.presence.tx_bytes|bytes }} out{% endfact %}
-        {% fact "Node key" %}<code>{{ machine.presence.public_key|breakable }}</code>{% endfact %}
+        {% fact "Traffic" %}{{ peering.rx_bytes|bytes }} in{% dot %}{{ peering.tx_bytes|bytes }} out{% endfact %}
+        {% fact "Node key" %}<code>{{ peering.public_key|breakable }}</code>{% endfact %}
       {% endfacts %}
     {% endsection %}
-  {% endif %}
+  {% endif %}{% endwith %}
 {% partial short %}
 {% endlayout %}
 {% endif %}

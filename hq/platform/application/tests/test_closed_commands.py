@@ -11,11 +11,11 @@ is held without a case of its own. A type whose own config declares
 from collections.abc import Iterator, Mapping
 from typing import Any
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from pydantic import TypeAdapter, ValidationError
 
 from hq.domains.control_plane.models import CapabilityRule
+from hq.platform.core.testing import operator
 
 from ..capabilities import capability_registry, execute_capability, validate_command
 from ..capability_policy import SET_POLICY
@@ -117,19 +117,19 @@ def _refused_at(errors: list[dict[str, Any]], path: tuple[Any, ...]) -> bool:
 class ClosedCommandTests(SimpleTestCase):
     def test_every_command_refuses_an_unknown_field_at_every_depth(self):
         open_levels = []
-        for name, spec in sorted(capability_registry().items()):
+        for spec in capability_registry():
             schema = capability_schema(spec)
             declared_open = _declared_open(TypeAdapter(spec.command_type).core_schema)
             for path, payload, node in _objects(schema, schema.get("$defs", {})):
                 if frozenset(node["properties"]) in declared_open:
                     continue
-                where = f"{name} at {'.'.join(map(str, path)) or 'the top'}"
+                where = f"{spec.name} at {'.'.join(map(str, path)) or 'the top'}"
                 if node.get("additionalProperties") is not False:
                     open_levels.append(f"{where}: its schema is open")
                 try:
                     validate_command(spec, payload)
                 except ValidationError as exc:
-                    details = pydantic_refusal(name, exc.errors()).details
+                    details = pydantic_refusal(spec.name, exc.errors()).details
                     if _refused_at(details, path):
                         continue
                 open_levels.append(f"{where}: an unknown field is not refused")
@@ -145,7 +145,7 @@ class ClosedCommandTests(SimpleTestCase):
 
 class RetiredNestedFieldTests(TestCase):
     def test_a_retired_field_inside_a_policy_cell_is_refused_by_its_path(self):
-        person = get_user_model().objects.create_user("example-operator")
+        person = operator()
         cell = {"subject": "example-agent", "capability": "project.create", "rule": "allow", "scope": "all"}
 
         result = execute_capability(SET_POLICY, keyed({"rules": [cell]}), principal=web_principal(person))

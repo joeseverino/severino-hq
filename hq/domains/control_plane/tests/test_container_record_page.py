@@ -1,12 +1,10 @@
 """A declared container's record page, whether or not the reading has it running."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.inventory_testing import store
-
-from ..models import ManagedResource
+from hq.platform.core.testing import declare, operator
 
 ON_BOX = {"host": "example-box", "host_address": "192.0.2.10", "connection_ref": "example-portainer"}
 
@@ -20,15 +18,13 @@ def running(name: str) -> dict:
 
 class ContainerRecordPageTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("operator", password="x" * 20))
-        ManagedResource.objects.create(
-            key="example-box", kind="machine", spec={"name": "example-box", "addresses": ["192.0.2.10"]}
-        )
+        operator(self.client)
+        declare("example-box", "machine", {"name": "example-box", "addresses": ["192.0.2.10"]})
         for name in ("web", "gone"):
-            ManagedResource.objects.create(
-                key=f"example-box-{name}",
-                kind="portainer.container",
-                spec={"host": "example-box", "name": name, "connection_ref": "example-portainer"},
+            declare(
+                f"example-box-{name}",
+                "portainer.container",
+                {"host": "example-box", "name": name, "connection_ref": "example-portainer"},
             )
         # The sweep reads the machine and finds only one of the two declared.
         store("portainer.container", running("web"))

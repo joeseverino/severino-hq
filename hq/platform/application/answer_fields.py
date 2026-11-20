@@ -1,11 +1,8 @@
-"""The fields several answers carry with one meaning, each said once.
+"""The fields several answers carry with one meaning, each said once as a named type alias.
 
-Each is a named type alias, so the API document writes its definition once
-under the alias's name and each use as a reference to it (``json_schemas``).
-A field whose meaning differs by type (a ``status``, a ``label``, an ``id``)
-is declared with its type, where it means what it says. Like ``describe``,
-it is a leaf that loads neither HQ nor pydantic at import, so a leaf contract
-(``workflow_contracts``) can use it too.
+The API document then defines each once under the alias's name
+(``json_schemas``). A leaf that loads neither HQ nor pydantic, so a leaf
+contract (``workflow_contracts``) can use it too.
 """
 
 from dataclasses import dataclass
@@ -45,6 +42,7 @@ type Outcome = Annotated[bool, Describe("Whether HQ did what was asked: true bes
 type ObservedAt = Annotated[str, DateTime(), Describe("When it was last read from its source, an ISO 8601 date-time.")]
 type NotRead = Annotated[Literal[""], Describe("Empty: nothing has read it.")]
 type UpdatedAt = Annotated[str, DateTime(), Describe("When it last changed in HQ, an ISO 8601 date-time.")]
+type AddedAt = Annotated[str, DateTime(), Describe("When it was added to HQ, an ISO 8601 date-time.")]
 # The one sentence a write says of what it did: every door carries it, and a
 # page shows it once the write runs (``web_writes.said``).
 type CallMessage = Annotated[str, Describe("What the call did, in a sentence.")]
@@ -70,6 +68,8 @@ type WebRoute = Annotated[
 type RecordSlug = Annotated[
     str, Describe("Its address in HQ, unique among records of its type: what its page and its links name it by.")
 ]
+# A record's own page, as ``entity_link`` builds it.
+type PageUrl = Annotated[str, Describe("Its page in HQ.")]
 # What an asset and an expense say of their cost alike.
 type TotalCostAmount = Annotated[
     str, Describe("What it cost in all, a decimal string with two places.", examples=("12.50",))

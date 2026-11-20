@@ -4,13 +4,13 @@ connection's problems and purpose, a backlog's own things, a list under its type
 from types import SimpleNamespace
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.assets.models import Asset
 from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import hrefs, with_class
+from hq.platform.core.testing import operator
 
 from ..attention import raised
 from ..connection_context import connections_context
@@ -82,7 +82,7 @@ class ConnectionRowsTests(TestCase):
         self.assertGreaterEqual(row.problems, 1)
         self.assertEqual(row.as_dict()["open_problems"], row.problems)
         self.assertIn("about=", row.problems_url)
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client, "owner", email="owner@example.test")
         with host_only():
             queue = self.client.get(row.problems_url)
             page = self.client.get(reverse("control_plane:connections"))
@@ -138,7 +138,7 @@ class RecordListTests(TestCase):
 
     def test_the_page_draws_a_group_for_each_type_and_filters_by_the_url(self):
         estate(2)
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client, "owner", email="owner@example.test")
 
         page = self.client.get(reverse("control_plane:list"))
         one = self.client.get(reverse("control_plane:list"), {"q": "s0.example.com"})

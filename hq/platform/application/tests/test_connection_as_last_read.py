@@ -7,13 +7,13 @@ only a disagreement a current reading shows is one.
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.application.markup_testing import select
+from hq.platform.core.testing import operator
 from hq.platform.core.tests.forwarding import arrived
 
 from .. import cadence
@@ -95,7 +95,7 @@ class AsLastReadTests(TestCase):
 
 class PanelTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("panel-reader"))
+        operator(self.client)
         # A controller reports to this HQ, so an old reading is one it can refresh.
         cadence.note_controller()
 

@@ -1,8 +1,6 @@
 """A command field that names records is a choice of those records."""
 
 from django import forms
-from django.contrib.auth import get_user_model
-from django.test import TestCase
 
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
@@ -10,20 +8,19 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import capability_registry, command_spec
 from hq.platform.application.command_fields import named_records
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.command_targets import CommandTargetOption, record_options
 from hq.platform.application.integration_specs import capability_schema
-from hq.platform.application.integrations import integration_graph
+from hq.platform.application.integrations import held_graph
 from hq.platform.application.markup_testing import select, within
 from hq.platform.application.references import NO_LONGER_OFFERED
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
+from hq.platform.core.testing import SignedInTestCase
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
-
-User = get_user_model()
 
 
 def option_values(page, name: str) -> list[str]:
@@ -34,26 +31,15 @@ def option_values(page, name: str) -> list[str]:
     return options + boxes
 
 
-class RecordFieldTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = User.objects.create_superuser(
-            username="record-fields",
-            email="operator@example.test",
-            password="strongtestpass-1234",
-        )
-
-    def setUp(self):
-        self.client.force_login(self.user)
-
+class RecordFieldTests(SignedInTestCase):
     def test_every_record_field_names_a_listable_resource(self):
-        resources = integration_graph().resources
-        for name, spec in capability_registry().items():
+        resources = held_graph().resources
+        for spec in capability_registry():
             for field, schema in capability_schema(spec).get("properties", {}).items():
                 declared = named_records(schema)
                 if declared is None:
                     continue
-                with self.subTest(command=name, field=field):
+                with self.subTest(command=spec.name, field=field):
                     resource = resources.get(declared["resource"])
                     self.assertIsNotNone(resource)
                     self.assertIsNotNone(resource.listing)
@@ -91,7 +77,7 @@ class RecordFieldTests(TestCase):
 
     def test_a_value_its_source_no_longer_lists_is_kept_under_its_own_heading(self):
         form_class = command_form_class(
-            capability_registry()["expense.create"],
+            command_spec("expense.create"),
             record_choices={"related_project": (CommandTargetOption("example-live", "Live"),)},
         )
 
@@ -102,14 +88,14 @@ class RecordFieldTests(TestCase):
         self.assertIn("example-live", choices)
 
     def test_a_field_whose_source_cannot_be_listed_is_typed(self):
-        form_class = command_form_class(capability_registry()["expense.create"], record_choices={})
+        form_class = command_form_class(command_spec("expense.create"), record_choices={})
 
         self.assertNotIn("related_project", form_class.record_names)
         self.assertNotIsInstance(form_class.base_fields["related_project"], forms.ChoiceField)
 
     def test_the_choices_cost_the_same_however_many_records(self):
         principal = Principal("operator", "web", frozenset({Capability.READ}))
-        schema = capability_schema(capability_registry()["content.create"])
+        schema = capability_schema(command_spec("content.create"))
 
         def arrange(count):
             for index in range(Project.objects.count(), count):

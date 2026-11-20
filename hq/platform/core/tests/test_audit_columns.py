@@ -5,9 +5,8 @@ from hq.platform.application.markup_testing import elements, with_class
 from hq.platform.application.tables import ranked
 from hq.platform.core.audit_views import AuditLogListView
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import SignedInTestCase
 from hq_sdk.testing import plain
-
-from .signed_in_case import _AuthedTestCase
 
 
 class AuditColumnTests(SimpleTestCase):
@@ -18,7 +17,7 @@ class AuditColumnTests(SimpleTestCase):
         self.assertEqual(next(column.drop for column in columns if column.label == "Type"), 0)
 
 
-class AuditWhatTests(_AuthedTestCase):
+class AuditWhatTests(SignedInTestCase):
     """On a phone a row is What and When, so there What says what happened
     too, in the word the Action column says it in; wider, that column says it
     and What does not repeat it."""

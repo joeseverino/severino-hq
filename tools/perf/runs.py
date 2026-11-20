@@ -1,11 +1,7 @@
 """A perf run as it is kept: var/perf/<run>.json, rewritten as each measurement finishes.
 
-A run is named by both commits and the target, and the second it started, so
-no run overwrites another of the same commit. Its document holds each side's
-report under `base` and `here`, each carrying the plan it was measured under
-the failures it met and the load it was measured under, so a later run asking
-the same plan of the same commit under a load alike can take a complete report
-instead of measuring it again.
+Each side's report carries its plan, failures and load, so a later run asking
+the same of the same commit can take it instead of measuring again.
 """
 
 import copy

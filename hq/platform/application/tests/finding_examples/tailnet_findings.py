@@ -1,6 +1,6 @@
 import json
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from . import Example, Examples
 
@@ -37,9 +37,7 @@ PROXY = ("example-proxy", {"port_bindings": [{"container_port": "443/tcp", "host
 
 
 def a_machine() -> None:
-    ManagedResource.objects.create(
-        key="example-host", kind="machine", spec={"name": "example-host", "addresses": ["100.64.0.5"]}
-    )
+    declare("example-host", "machine", {"name": "example-host", "addresses": ["100.64.0.5"]})
 
 
 def loopback(*runtimes: tuple[str, dict], grants: tuple[dict, ...] = (GRANT,), **example) -> Example:

@@ -1,14 +1,7 @@
-"""The tags a data table is declared through.
+"""The tags a data table is declared through: ``table_region``,
+``table_heading``, ``row_toggle``, ``row_select`` and ``row_state``.
 
-``{% table_region %}`` wraps the table in the box it fits and draws what
-follows from its headings: a figure's alignment down its column, the sort
-control only where there are rows to sort, and, where a row can hold anything
-back, each row's toggle in the cell that names it. ``{% table_heading %}`` draws each column heading with its kind, its
-drop rank and its sort control, and ``{% row_toggle %}`` draws the disclosure
-of a row in a table with no headings to say where its gutter is.
-``{% row_select %}`` draws a row's tick-box under the heading that selects
-every row, and ``{% row_state %}`` says how a row stands among the others. Which columns
-show is the browser's to say (``TABLE_REGION``'s rules).
+Which columns show is the browser's to say (``TABLE_REGION``'s rules).
 """
 
 import inspect
@@ -156,23 +149,13 @@ def _unnamed(roles: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 
 def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
-    """The region's tables with each cell marked for what the stylesheet reads.
+    """The region's tables with each cell marked for what the stylesheet reads;
+    None when no table holds a row beneath its head.
 
-    A blank body cell is ``data-blank``, a cell of a column blank in every
-    row ``data-blank-column``; a cell says the width its column leaves at
-    (``data-drop``), a body cell its column's kind, a long one held to a
-    few lines (``cell-clamp``), a short one held whole up to its column's
-    share (``cell-short``), each in a box of the region's own only where no
-    element of the cell can be it (``Cells._box``), and a group's heading
-    row spans every declared column. After each row that
-    holds something back is its open line (``_detail_row``).
-    What a part of a cell is, which decides how it wraps, is its ``data-cell``:
-    ``name`` for what names the row, else the role its class declares
-    (``table_cells.ROLE_CLASSES``), so the stylesheet never reads a cell's content.
-    Without ``sorts`` no row sorts on the page, so no heading keeps its control.
-    A region whose rows hold a cell back draws the frame tables.js copies it
-    onto the row's open line with (``_LINE_FRAME``), once.
-    None when the region holds tables and none of them a row beneath its head.
+    Blank cells and columns, each column's drop width and kind, clamped and
+    short cells, and each part's ``data-cell`` role
+    (``table_cells.ROLE_CLASSES``), so the stylesheet never reads a cell's
+    content. Each row that holds something back is followed by its open line.
     """
 
     cells = Cells(sorts=sorts)
@@ -489,9 +472,9 @@ TABLE_REGION = table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  #
     **A table is laid out before any script runs.** Nothing is measured to lay a table out:
     `tables.js` only sorts, selects and opens rows, and loads deferred (*Gate:*
     `test_the_table_script_lays_nothing_out`). No table is drawn by hand, an extension's included:
-    ast-grep's `hand-drawn-table` refuses a table outside its region, in the host and through the
-    plugin check in every extension, and the host's suite reads every installed extension's templates
-    for a heading, a region or a drop rank written by hand. *Gates:* `hand-drawn-table`,
+    the `table` shape of `hand_drawn.SHAPES` refuses a table outside its region as any template of
+    the host or an extension loads, and the host's suite reads every installed extension's templates
+    for a heading, a region or a drop rank written by hand. *Gates:* the `table` shape,
     `test_every_table_is_declared_through_the_tags`.
 
     A long value in a cell (a line past `table_cells.LONG`) wraps, and in a narrow box is held to its
@@ -784,7 +767,7 @@ ROW_ACTIONS = Part(
     page sets its table's cells otherwise. What can be done to a row's record ends the row as
     `{% row_actions actions %}`, under a heading of kind `control`. Each is a `PageAction` drawn as a
     compact control with its middle on the first line's. A page never draws a button in a cell
-    (*Gate:* the `hand-drawn-row-actions` rule). A row's controls stand side by side on one line,
+    (*Gate:* the `row-actions` shape). A row's controls stand side by side on one line,
     which their column asks for, and the words beside them wrap first; in a narrow box they take the
     row's last line. Every row's controls end on one edge, and each draws its edge of its own but the
     last, which is quiet only when it sets the row aside (`put_away`, a button). A cell of the row's

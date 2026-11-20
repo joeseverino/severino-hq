@@ -46,8 +46,7 @@ fi
 
 # The host's structural rules for a test's read
 # of a table cell, of a word a page lacks or of a shared part's markup
-# (page-read-by-what-it-says), the shapes a shared part draws
-# drawn by hand in a template (hand-drawn-*), and a queue item that does not
+# (page-read-by-what-it-says), and a queue item that does not
 # say why it is urgent (attention-item-says-why) or only restates its rating
 # (attention-why-restates-rating) or, raised by a threshold, not what clears it
 # (threshold-says-what-clears-it), and a query added to an address by hand
@@ -66,7 +65,7 @@ host_tool() {
 }
 ast_grep=$(host_tool ast-grep)
 typos=$(host_tool typos)
-"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^(cell-read-by-its-text|absent-text-read-from-the-text|page-read-by-what-it-says|attention-item-says-why|attention-why-restates-rating|threshold-says-what-clears-it|query-added-by-with-query|hand-drawn-.+)$' \
+"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^(cell-read-by-its-text|absent-text-read-from-the-text|page-read-by-what-it-says|attention-item-says-why|attention-why-restates-rating|threshold-says-what-clears-it|query-added-by-with-query|plural-said-by-counted)$' \
     --error=unused-suppression --report-style medium src
 "$typos" --config "$hq_root/_typos.toml" .
 
@@ -117,11 +116,10 @@ MYPYPATH="$hq_root" "$python" -m mypy --show-traceback --cache-dir "$work/mypy"
 # every routed view's source, the plugin's included. A package keeps no copy
 # of any of them.
 "$python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered \
-    hq.platform.application.tests.test_architecture_pages.InterfaceTextTests hq.platform.core.tests.test_counts.CountPlacementTests \
-    hq.platform.core.tests.test_template_chips.TemplateChipTests hq.platform.core.tests.test_table_contract.TableContractTests \
+    hq.platform.core.tests.test_table_contract.TableContractTests \
     hq.platform.application.tests.test_reading_age.OneWordingTests \
     hq.platform.application.tests.test_script_loading hq.platform.application.tests.test_action_words.DeclaredWordsTests \
-    hq.platform.application.tests.test_architecture_pages.PageTitleTests hq.platform.application.tests.test_architecture_primitives.OnePrimitiveTests \
+    hq.platform.application.tests.test_architecture_primitives.OnePrimitiveTests \
     hq.platform.application.tests.test_architecture_primitives.FragmentPrimitiveTests \
     hq.platform.application.tests.test_shared_markup.SharedMarkupTemplateTests \
     hq.platform.core.tests.test_template_values.TemplateValueTests \

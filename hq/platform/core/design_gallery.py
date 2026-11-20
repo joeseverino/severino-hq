@@ -1,12 +1,8 @@
-"""The Design page's gallery: every entry of the component catalog, as the
-page's content.
+"""The Design page's gallery: every entry of the component catalog, as the page's content.
 
-The catalog is test code, so it reaches HQ through this module alone (an
-import contract in pyproject.toml holds that). The image draws the markup its
-build wrote with `manage.py design_gallery` to SEVERINO_DESIGN_GALLERY, after
-the assets were collected, so its asset addresses are the image's own. A
-checkout names no file, whatever DEBUG says, and its server draws the catalog
-as it stands on each request for the page.
+The catalog is test code, so it reaches HQ through this module alone (an import
+contract in pyproject.toml). The image draws the markup its build wrote; a
+checkout draws the catalog as it stands.
 """
 
 from functools import cache

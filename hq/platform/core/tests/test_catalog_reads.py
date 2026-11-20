@@ -1,12 +1,11 @@
 """A page reads the adopted playbook catalog only where it draws something of it."""
 
-from django.contrib.auth import get_user_model
 from django.db import connection
-from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.domains.control_plane.models import AdoptedCatalog
+from hq.platform.core.testing import SignedInTestCase
 
 # Pages that name commands (a page action, a tool, an audit row's words) and
 # draw no playbook, so the catalog has no job on them.
@@ -24,11 +23,7 @@ PAGES = (
 )
 
 
-class CatalogReadTests(TestCase):
-    def setUp(self):
-        owner = get_user_model().objects.create_superuser("example-owner", "owner@example.com", "unused")
-        self.client.force_login(owner)
-
+class CatalogReadTests(SignedInTestCase):
     def test_a_page_that_draws_no_playbook_reads_no_catalog(self):
         for name in PAGES:
             with self.subTest(name), CaptureQueriesContext(connection) as sent:

@@ -10,7 +10,6 @@ once the form has cleaned its fields.
 from unittest import mock
 
 from django import forms
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.db import models
@@ -19,6 +18,7 @@ from django.urls import reverse
 from django.views.generic.edit import BaseUpdateView
 
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core.testing import operator
 from hq.platform.core.tests.test_browser_derived_fixtures import _Fill
 
 from ..routes import routed
@@ -86,8 +86,7 @@ def _refuse(_record):
 
 class RefusedEditTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_user("operator", password="unused-test-pass")
-        self.client.force_login(user)
+        user = operator(self.client)
         self.fill = _Fill(user)
 
     def test_a_refused_edit_shows_its_errors_under_the_stored_head(self):

@@ -4,8 +4,8 @@ The programs that develop, check and release HQ: what mise tasks, CI and the
 operator's machine run. None of it is in the image (`Dockerfile.dockerignore`
 admits nothing from here, and `image:verify:no-dev` fails an image that
 carries any of it). So code that `hq` and `tools/` both use lives under `hq`,
-and the ast-grep rule `tools-imported-only-by-tools` refuses an import of
-`tools` from outside it.
+and an import contract in `pyproject.toml` (`lint:imports`) refuses an
+import of `tools` from outside it.
 
 | Folder | What it holds |
 | --- | --- |

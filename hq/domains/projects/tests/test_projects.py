@@ -2,7 +2,6 @@
 
 from decimal import Decimal
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -17,6 +16,7 @@ from hq.platform.application.projection import projection_scope
 from hq.platform.application.projects import hq_sections, refresh_summary
 from hq.platform.application.tests.test_relationships import estate
 from hq.platform.application.where_it_runs import where_it_runs
+from hq.platform.core.testing import SignedInTestCase, operator
 
 
 def _document(doc_id, title, doc_type="runbook", status="active"):
@@ -25,7 +25,7 @@ def _document(doc_id, title, doc_type="runbook", status="active"):
 
 class ProjectPageTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("project-reader"))
+        operator(self.client)
         self.project = Project.objects.create(name="Example Tool", slug="example-tool")
         self.other = Project.objects.create(name="Example Site", slug="example-site")
 
@@ -142,7 +142,7 @@ class ProjectPageTests(TestCase):
 
 class ProjectFormTests(TestCase):
     def test_the_edit_form_names_each_address_as_a_url(self):
-        self.client.force_login(get_user_model().objects.create_user("project-editor", is_superuser=True))
+        operator(self.client)
         project = Project.objects.create(name="Example Tool", slug="example-tool")
 
         labels = texts(self.client.get(reverse("projects:edit", args=[project.slug])), "label")
@@ -163,7 +163,7 @@ class ProjectSectionTests(ComposedPluginTestCase, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.client.force_login(get_user_model().objects.create_user("section-reader"))
+        operator(self.client)
 
     def test_the_section_of_hq_built_from_the_repository_is_one_tap_away(self):
         built = Project.objects.create(
@@ -173,8 +173,8 @@ class ProjectSectionTests(ComposedPluginTestCase, TestCase):
             name="Example Tool", slug="example-tool", repository_url="https://github.com/example/tool"
         )
 
-        self.assertEqual(hq_sections(built), (("Alpha", reverse("projects:list")),))
-        self.assertEqual(hq_sections(other), ())
+        self.assertEqual(hq_sections(built.repository_url), (("Alpha", reverse("projects:list")),))
+        self.assertEqual(hq_sections(other.repository_url), ())
         response = self.client.get(reverse("projects:detail", args=[built.slug]))
         self.assertIn(("Alpha in HQ", reverse("projects:list")), links(response))
 
@@ -214,10 +214,7 @@ class ProjectSectionTests(ComposedPluginTestCase, TestCase):
         self.assertNotIn("Built from", text(unnamed))
 
 
-class ProjectListTests(TestCase):
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("project-lister"))
-
+class ProjectListTests(SignedInTestCase):
     def test_a_slug_that_only_repeats_the_name_is_not_shown(self):
         Project.objects.create(name="Example", slug="example", technologies_used="Go, SQLite,Django,htmx, CSS")
         Project.objects.create(name="Example Tool", slug="tool")
@@ -261,7 +258,7 @@ class ProjectListTests(TestCase):
 
 class ProjectToggleTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("project-toggler"))
+        operator(self.client)
         written = ContentItem.objects.create(title="Example writeup", slug="example-writeup")
         documented = _document("rb-example", "Example runbook")
         self.bare = Project.objects.create(name="Bare", slug="bare", status=Project.Status.ACTIVE)
@@ -288,7 +285,7 @@ class PostureProjectTests(TestCase):
         from hq.platform.application.markup_testing import hrefs
         from hq.platform.application.tests.test_github_estate import store
 
-        self.client.force_login(get_user_model().objects.create_user("posture-reader"))
+        operator(self.client)
         project = Project.objects.create(name="Alpha", slug="alpha", repository_url="https://github.com/Example/Alpha")
         store(private=True)
 

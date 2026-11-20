@@ -1,12 +1,9 @@
-"""The automation worker as a program: ``python -m hq_runner`` claims queued runs
-and scans over the bridge, one pass at a time, until none is left, then exits.
+"""The automation worker as a program: ``python -m hq_runner`` claims queued
+runs and scans, one pass at a time, until none is left.
 
-Everything it reads is named by its environment, set by the host's launcher:
-where the bridge, the journal, the connections document, the ssh directory and
-its scratch space are, and which repository its procedures come from. Nothing
-in a claim names any of them. Each pass works in a directory of its own under
-the scratch space (the procedure's checkout, ansible-runner's private data),
-removed when the pass ends; only the journal outlives it.
+Everything it reads is named by its environment, set by the host's launcher,
+never by a claim. Each pass works in a directory of its own, removed as it
+ends; only the journal outlives it.
 """
 
 import os

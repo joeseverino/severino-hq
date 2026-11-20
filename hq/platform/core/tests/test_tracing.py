@@ -5,12 +5,12 @@ import subprocess
 import sys
 from unittest import mock, skipUnless
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from hq.platform.application.agent_access import SET_AGENT_ACCESS
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core.testing import operator
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
 try:
@@ -117,8 +117,7 @@ class TracedTests(TestCase):
         self.enterContext(mock.patch.object(tracing, "tracer", return_value=tracer))
 
     def test_a_web_request_is_one_trace_under_its_request_id_with_a_span_for_its_capability(self):
-        user = get_user_model().objects.create_user("example-operator", password="x" * 20)
-        self.client.force_login(user)
+        user = operator(self.client)
 
         response = self.client.post(reverse("agent_access"), form_keyed({"paused": "1"}))
 

@@ -1,13 +1,8 @@
-"""All the work HQ started, as one list: its own jobs and the automation work
-it queued (each procedure's runs and the source's scans), each said in the
-same words and drawn in the same row shape.
+"""All the work HQ started, as one list: its jobs and its queued automation work, in the same words and row shape.
 
-A job stays a ``jobs.Job`` and a run an ``OperationRequest``, since the
-runner's lock and the worker's claim and lease need each record as it is. The
-list is a database union of the two, filtered, ordered and paginated there,
-whose page of ids is then read back with one query per source, so a page
-costs the same however much work has run. A held run is an
-``ApprovalRequest``, not an operation, and is not listed here.
+Each stays its own record, since the runner's lock and the worker's lease need
+it as it is. The list is a database union, so a page costs the same however
+much work has run.
 """
 
 import json
@@ -30,13 +25,14 @@ from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
 from .automation_runs import capability_name, resource_key, run_title
 from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
-from .routes import reverse
 from .tone import Tone, Toned
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
 lazy from .cadence import automation_standing
+lazy from .entity_links import entity_link
 lazy from .history import Acts, asked_by, asking, who_did_each
 lazy from .outbound_work import job_names
+lazy from .references import Kind
 
 type Source = Literal["job", "run"]
 JOB: Source = "job"
@@ -398,7 +394,7 @@ def work_kinds(*, now: datetime | None = None) -> list[WorkKind]:
     return sorted(latest.values(), key=lambda found: found.title.casefold())
 
 
-def playbook_runs(
+def listed_runs(
     *,
     playbook: str = "",
     host: str = "",
@@ -406,17 +402,15 @@ def playbook_runs(
     state: tuple[str, ...] = (),
     now: datetime | None = None,
 ) -> QuerySet:
-    """The runs of a playbook that match, never a scan, each annotated with
-    how it is seen and what it is called, for ``run_rows``.
+    """The runs of a playbook and the scans of their source that match, each
+    annotated with how it is seen and what it is called, for ``run_rows``.
 
     ``playbook`` is a procedure's id, ``host`` a machine's canonical name,
     ``correlation`` the id its asker sent, and ``state`` a ``JobState`` value
     as seen; each left empty keeps every run.
     """
 
-    found = seen_as_runs(
-        OperationRequest.objects.filter(action=OperationRequest.Action.RUN).select_related("resource"), now
-    )
+    found = seen_as_runs(OperationRequest.objects.filter(action__in=_LISTED).select_related("resource"), now)
     if playbook:
         found = found.filter(resource__key=resource_key(playbook))
     if host:
@@ -487,7 +481,7 @@ def run_of(operation_id: str, now: datetime | None = None) -> tuple[WorkRun, Ope
 def run_url(operation_id: str) -> str:
     """The page of the run or scan ``operation_id``."""
 
-    return reverse("jobs:run", kwargs={"pk": operation_id})
+    return entity_link(Kind.RUN, operation_id).url
 
 
 def run_hosts() -> list[str]:

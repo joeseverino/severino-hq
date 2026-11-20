@@ -15,6 +15,7 @@ from hq.platform.application.http_read import USER_AGENT
 from hq.platform.application.labels import adding
 from hq.platform.application.markup_testing import elements, links, select, text
 from hq.platform.application.tests import network
+from hq.platform.core.testing import SignedInTestCase
 
 
 def _payload():
@@ -217,13 +218,8 @@ class ContentSyncTests(TestCase):
         self.assertEqual(payload["count"], 2)
 
 
-class ContentPageTests(TestCase):
+class ContentPageTests(SignedInTestCase):
     """What a writeup's or page's own page calls things, and where it leads."""
-
-    def setUp(self):
-        from django.contrib.auth import get_user_model
-
-        self.client.force_login(get_user_model().objects.create_superuser("content-reader"))
 
     def test_a_draft_with_a_date_calls_it_planned(self):
         draft = ContentItem.objects.create(

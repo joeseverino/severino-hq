@@ -1,14 +1,7 @@
 """What a secret the controller handles looks like, so none enters HQ through the bridge.
 
-A report carries what a provider answered, and a provider can answer with the
-credential HQ's controller sent it. The shapes are the credentials the
-controller holds or mints (``controller/providers``), by the prefix or
-structure each issuer documents.
-
-A payload has each match struck in place, the way the controller's mask
-strikes a secret it resolved, and goes on: some of its strings are written by
-outsiders (a contact form's message, a pull request's title), and refusing
-the request for one would let anyone stop a sync.
+A match is struck in place and the payload goes on, since some of its strings
+are written by outsiders and refusing the request would let anyone stop a sync.
 """
 
 import re

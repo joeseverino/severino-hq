@@ -2,7 +2,6 @@
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -10,7 +9,8 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND
 from hq.platform.application.markup_testing import all_elements, select, texts
-from hq.platform.core.attribution import operation_context
+from hq.platform.core.bindings import operation_context
+from hq.platform.core.testing import declare, operator
 from hq_sdk.testing import plain
 
 from ..doors import door_words
@@ -84,8 +84,7 @@ class RecordPageTests(TestCase):
 
         managing_everything()
         rewrite(conditions=READY, last_observed_at=timezone.now())
-        user = get_user_model().objects.create_user("operator", password="pw", is_staff=True, is_superuser=True)
-        self.client.force_login(user)
+        operator(self.client)
 
     def test_the_page_is_titled_by_the_name_and_says_each_setting_once(self):
         response = self.client.get(reverse("control_plane:detail", args=["app-dns"]))
@@ -220,10 +219,10 @@ class ReportedFieldTests(TestCase):
             "branch": "main",
             "production": CURRENT,
         }
-        self.resource = ManagedResource.objects.create(
-            key="delivery",
-            kind=KIND,
-            spec=self.spec,
+        self.resource = declare(
+            "delivery",
+            KIND,
+            self.spec,
             generation=1,
             observed_generation=1,
             last_observed_at=timezone.now(),
@@ -233,8 +232,7 @@ class ReportedFieldTests(TestCase):
             "example.alpha: bbbbbbb is approved, production still runs aaaaaaa. "
             "Deploy run 9 finished without deploying it."
         )
-        user = get_user_model().objects.create_user("operator", password="pw", is_staff=True, is_superuser=True)
-        self.client.force_login(user)
+        operator(self.client)
 
     def read(self, production: str) -> None:
         kind_read(KIND, timezone.now())

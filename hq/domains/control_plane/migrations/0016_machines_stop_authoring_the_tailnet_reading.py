@@ -1,14 +1,6 @@
 """Drop the machine fields nothing reads, and the one the tailnet reports.
 
-`operating_system` is a second place to write down something HQ reads from
-the tailnet on every sweep. `form`, `ssh_alias` and `ssh_port` are read only by
-the readout at the top of the form they are typed into: nothing resolves
-through them and no page decides anything by them.
-
-Specs validate with `extra="forbid"`, so a key left behind fails every machine
-in the estate rather than being ignored. It is removed here rather than
-tolerated, because a spec that validates only by accident is the next drift.
-
+Specs forbid extra keys, so each is removed from every spec here too.
 Reversible: the fields are restored empty.
 """
 

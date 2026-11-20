@@ -1,14 +1,7 @@
 """Re-project every indexed body through the readable formatter.
 
-Rows written before this hold a Python dict where the snippet under a result
-gets cut from. Production runs ``migrate`` on every boot and nothing else, so
-this is the only place a projection gets rebuilt without an operator
-remembering to.
-
-Field lists come from the live registry rather than being restated, so a
-body's definition lives in one place.
-Rows come from the historical models, as a migration requires. A scope whose
-model is not in this migration's state is skipped; its own saves reindex it.
+Production runs ``migrate`` on every boot and nothing else, so this is the one
+place the projection is rebuilt without an operator remembering to.
 """
 
 from django.db import migrations

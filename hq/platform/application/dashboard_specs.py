@@ -9,9 +9,9 @@ from .appearance import SET_THEME, ThemeCommand, set_theme
 from .contracts import Effect
 from .demo import SET_DEMO, DemoCommand, set_demo, showing_demo
 from .domains import queue_sources
+from .estate_records import ActionItem, ActionItemRow
 from .integration_specs import ON_ITS_PAGE, CapabilitySpec, ListRead, ResourceSpec, typed_keys
 from .plugins import ATTENTION_ORDER
-from .resource_records import ActionItem, ActionItemRow
 from .resources import TEXT_FILTER, BoundedQuery, one_of
 from .security import Capability
 

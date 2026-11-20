@@ -9,12 +9,12 @@ come out the same whichever page asks, plus the ones the shared parser exists
 for.
 """
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
+from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..infrastructure import declared_machines
@@ -23,18 +23,14 @@ from ..whereabouts import Origin, locate
 
 
 def a_machine(key, name, *addresses, role=""):
-    return ManagedResource.objects.create(
-        key=key,
-        kind="machine",
-        spec={"name": name, "role": role, "addresses": list(addresses)},
-    )
+    return declare(key, "machine", {"name": name, "role": role, "addresses": list(addresses)})
 
 
 def a_proxy(key, hostname, host, port=8000):
-    return ManagedResource.objects.create(
-        key=key,
-        kind="npm.proxy_host",
-        spec={
+    return declare(
+        key,
+        "npm.proxy_host",
+        {
             "domain_names": [hostname],
             "forward_scheme": "http",
             "forward_host": host,
@@ -195,8 +191,7 @@ class ConnectionPageTests(TestCase):
     """The page whose subject is what HQ can reach, naming what it reaches."""
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="an-operator", password="not-a-real-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
         a_machine("example-alpha", "example-alpha", "10.0.0.5")
 
     def page(self):
@@ -233,8 +228,7 @@ class ProxyPageTests(TestCase):
     """A forwarding address, named where HQ can and printed where it cannot."""
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="an-operator", password="not-a-real-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
         a_machine("example-alpha", "example-alpha", "10.0.0.5", role="Workstation")
 
     def board(self):
@@ -249,15 +243,6 @@ class ProxyPageTests(TestCase):
             response,
             reverse("control_plane:machine", kwargs={"name": "example-alpha"}),
         )
-
-    def test_the_resource_page_names_it_too(self):
-        a_proxy("example-proxy", "dev.example.com", "10.0.0.5")
-
-        response = self.client.get(reverse("control_plane:detail", kwargs={"key": "example-proxy"}))
-        self.assertContains(response, "example-alpha")
-        # Still said out loud, because the address is what nginx was configured
-        # with and the name is HQ's reading of it.
-        self.assertContains(response, "10.0.0.5")
 
     def test_the_board_names_the_machine_a_proxy_forwards_to_at_one_cost_for_every_row(self):
         """Read once for the page: per row it would grow with the estate."""

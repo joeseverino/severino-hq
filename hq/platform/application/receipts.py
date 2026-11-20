@@ -4,6 +4,7 @@ import base64
 import hashlib
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
 from typing import Annotated, Any, TypedDict
 
 from django.core.files.uploadedfile import SimpleUploadedFile, UploadedFile
@@ -22,14 +23,16 @@ from hq.domains.receipts.validation import (
 )
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
-lazy from hq.domains.receipts.specs import ReceiptRow
+lazy from hq.domains.receipts.specs import ReceiptRecord, ReceiptRow
 
 from .command_fields import Day, Describe, Names, RequiredText, Upload, stored_in
+from .entity_links import entity_link
 from .integration_specs import Kept, keeps
 from .projection import listing
 from .record_errors import RecordNotFound
 from .record_fields import Notes, RecordId
 from .record_saves import Held, as_sent, found, held, row, written
+from .references import Kind
 from .security import Principal
 lazy from .record_answers import ReceiptSaved, ReceiptUploaded
 lazy from .ui import ended
@@ -115,6 +118,48 @@ _REPLACED = Kept(_stored, always_sent=frozenset({"file"}))
 
 def serialize_receipt(receipt: Receipt) -> ReceiptRow:
     return row(receipt, ReceiptRow)
+
+
+def stored_file(receipt: Receipt) -> Path | None:
+    """The receipt's file on this host's disk, or None when it has none, is
+    kept where HQ cannot open it, or is missing."""
+
+    if not receipt.file:
+        return None
+    try:
+        path = Path(receipt.file.path)
+    except ValueError, NotImplementedError:
+        return None
+    return path if path.is_file() else None
+
+
+def served_type(content_type: str) -> str:
+    """The type a receipt's file goes out as, from the type stored with it.
+    Never guessed from the filename, which the uploader chooses: the stored
+    type, only if it is one HQ agreed to accept; anything else, including a
+    blank left by an older upload, is an opaque byte stream."""
+
+    stored = (content_type or "").strip().lower()
+    return stored if stored in ALLOWED_RECEIPT_CONTENT_TYPES else "application/octet-stream"
+
+
+def get_receipt(identifier: int) -> ReceiptRecord:
+    """One receipt by its id, with what its page names."""
+
+    receipt = Receipt.objects.select_related("related_expense", "related_asset").filter(pk=identifier).first()
+    if receipt is None:
+        raise RecordNotFound("No receipt has that id.")
+    expense, asset = receipt.related_expense, receipt.related_asset
+    return {
+        **serialize_receipt(receipt),
+        "url": entity_link(Kind.RECEIPT, str(receipt.pk)).url,
+        "label": receipt.label,
+        "file": "stored" if stored_file(receipt) else "missing" if receipt.file else "none",
+        "file_type_label": receipt.file_type,
+        "expense_label": expense.label if expense else "",
+        "expense_date": expense.date.isoformat() if expense else None,
+        "asset_name": asset.item_name if asset else "",
+    }
 
 
 def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str, Any]:

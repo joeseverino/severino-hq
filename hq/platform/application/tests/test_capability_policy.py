@@ -2,7 +2,6 @@
 
 from dataclasses import replace
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -12,11 +11,12 @@ from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AgentIdentity, AuditLog
+from hq.platform.core.testing import operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from hq_sdk.testing import plain
 
 from ..approvals import APPROVE, DELETING_FLAGS, ApproveCommand, approve
-from ..capabilities import capability_registry, execute_capability, validate_command
+from ..capabilities import capability_registry, command_spec, execute_capability, validate_command
 from ..capability_policy import RULE_LABELS, Rule, decide, field_name, matrix, set_rule
 from ..certificates import UPLOAD
 from ..default_hold import needs_approval
@@ -37,7 +37,7 @@ def agent(actor="example-agent", interface="mcp", capabilities=WRITES):
 
 
 def spec(name):
-    return capability_registry()[name]
+    return command_spec(name)
 
 
 _EMPTY = {"array": [], "object": {}, "string": "", "boolean": False, "integer": 0, "number": 0}
@@ -52,7 +52,7 @@ def required_fields(registered):
 
 class PolicyTestCase(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
+        self.user = operator(username="op")
         self.operator = web_principal(self.user)
 
     def rule(self, subject, capability, rule):
@@ -83,8 +83,8 @@ class DefaultTests(PolicyTestCase):
         DocumentationRecord.objects.create(doc_id="example-kept", title="Kept", obsidian_path="Kept.md")
         everything = agent(capabilities=frozenset(Capability))
         flagged = [
-            (name, flag, set(capability_schema(registered)["properties"]))
-            for name, registered in capability_registry().items()
+            (registered.name, flag, set(capability_schema(registered)["properties"]))
+            for registered in capability_registry()
             for flag in DELETING_FLAGS
             if flag in capability_schema(registered).get("properties", {})
         ]

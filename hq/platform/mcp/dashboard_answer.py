@@ -1,18 +1,14 @@
 """HQ at a glance as ``dashboard_snapshot`` answers it: what needs doing, from
 the operating snapshot without the parts only its page reads.
 
-The page and this answer read one projection (``dashboard.operating_snapshot``).
-The answer keeps the figures, the cards and the priority queue's first page,
-since every domain, an extension's too, raises items into it, and names, in
-place of each list another tool reads (the whole queue, the recent activity,
-the active projects, the draft and published content), the call that reads it.
-Each queue item is the one a list of action items holds (``dashboard.listed_item``).
+It keeps the figures, the cards and the queue's first page, and names the call
+that reads each other list.
 """
 
 from typing import Any, TypedDict
 
 from hq.platform.application.dashboard import WITHHELD_ACTIVITY, Kpis, Upstreams, listed_item, operating_snapshot
-from hq.platform.application.resource_records import ActionItem
+from hq.platform.application.estate_records import ActionItem
 from hq.platform.application.resources import readable, resource_registry
 from hq.platform.application.security import Principal
 

@@ -2,7 +2,6 @@
 
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -19,14 +18,14 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, web_principal
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentIdentity, AuditLog
+from hq.platform.core.testing import operator
 
 
 class PolicyWriteTests(TestCase):
     """The page's save runs ``agent.policy.set``, which only a person holds."""
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(self.user)
+        self.user = operator(self.client, "op")
         AgentIdentity.objects.create(client_id="example-agent", granted=["read", "delete_projects"])
         self.field = field_name("example-agent", "project.delete")
 
@@ -89,8 +88,7 @@ class PolicyRefusalTests(TestCase):
     """A save that is refused, whole or in part, is said over the rules' tables, on the page it was sent from."""
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(self.user)
+        self.user = operator(self.client, "op")
         AgentIdentity.objects.create(client_id="example-agent", granted=["read", "delete_projects"])
 
     def save(self, rules):

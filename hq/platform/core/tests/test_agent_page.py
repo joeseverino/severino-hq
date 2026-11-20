@@ -16,11 +16,12 @@ from hq.platform.application import agent_access, agent_registry, denials, roles
 from hq.platform.application.linked_accounts import SIGN_IN
 from hq.platform.application.markup_testing import actions, elements, select, text, within
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.security import Capability, Principal, agent_grant, agent_grantable, agent_principal
 from hq.platform.application.tokens import DEVICE_SCOPE
-from hq.platform.core.audit import operation_context
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog, LinkedAccount, OwnDevice
-from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 from hq.platform.mcp.listing import Endpoint, Offer, Offered
 
 AGENT = "example-agent"
@@ -91,8 +92,7 @@ class AccessTests(TestCase):
         self.assertFalse(agent_access.agents_paused())
 
     def test_a_reader_who_may_change_nothing_is_offered_no_control_or_form(self):
-        with no_default_role():
-            viewer = get_user_model().objects.create_user("riley")
+        viewer = person(username="riley")
         roles.assign(viewer, roles.Role.VIEWER)
         self.client.force_login(viewer)
         page = self.client.get(reverse("agent_policy"))
@@ -121,7 +121,7 @@ class AgentRowTests(TestCase):
         self.assertIsNone(AgentIdentity.objects.get(client_id=AGENT).blocked_at)
 
     def test_a_refusal_for_calling_too_much_is_on_its_row(self):
-        denials.record_denial(interface="mcp", reason="rate_limited", actor=AGENT)
+        denials.record_denial(interface="mcp", reason=Code.RATE_LIMITED, actor=AGENT)
 
         row = " ".join(element.words for element in within(self.page(), "data-agent", AGENT))
 
@@ -200,8 +200,7 @@ class MissingPermissionTests(TestCase):
         self.assertFalse(select(page, "data-missing"))
 
     def test_nothing_its_persons_role_lacks_is_named(self):
-        with no_default_role():
-            viewer = get_user_model().objects.create_user("riley")
+        viewer = person(username="riley")
         roles.assign(viewer, roles.Role.VIEWER)
 
         # Every permission offered that a viewer holds, whatever the installed
@@ -371,7 +370,7 @@ class AgentDeviceTests(TestCase):
 
     def test_an_address_no_device_sent_is_on_the_page_as_refused_with_nothing_to_press(self):
         with operation_context(interface="mcp", actor=AGENT, operation="example"):
-            denials.record_denial(interface="mcp", reason="device_unknown", actor=AGENT, source=UNPLACED_AT)
+            denials.record_denial(interface="mcp", reason=Code.DEVICE_UNKNOWN, actor=AGENT, source=UNPLACED_AT)
 
         page = self.page()
 

@@ -22,12 +22,12 @@ import httpx2
 
 from hq.platform.application.http_read import UNREACHABLE
 from hq.platform.core.tests.task import Usage
+lazy from hq.domains.control_plane.credential_reads import observer_permissions
 lazy from hq.platform.application.entity_links import https_url
 
 # The secrets the wiring sets, as HQ's posture check names them.
 lazy from hq.platform.application.github_posture import APP_CLIENT_ID, APP_KEY
 
-HERE = Path(__file__).resolve().parent
 STORED = "Stored in {item} ({vault}); the controller reads it on its next render."
 
 
@@ -252,9 +252,13 @@ def mint(provider: Provider, session: Session, onepassword: OnePassword) -> None
     session.say(STORED.format(item=stores[0].item, vault=stores[0].vault))
 
 
-def listed(path: Path, what: str) -> tuple[str, ...]:
-    """A list file's entries: one per line, comments and blank lines skipped."""
+def listed(usage: Usage, flag: str, provider: str, what: str) -> tuple[str, ...]:
+    """The entries of the list file ``flag`` names, one per line, comments and
+    blank lines skipped; else what ``provider``'s observer credential needs."""
 
+    if not usage.text(flag):
+        return tuple(name.api for name in observer_permissions(provider))
+    path = Path(usage.text(flag))
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
@@ -367,10 +371,7 @@ def cloudflare_plan(session: Session) -> Plan | None:
     if not (account.isascii() and account.isalnum()):
         raise UsageError("The account id is alphanumeric.")
     expires = _expiry(usage)
-    lines = listed(
-        Path(usage.text("permissions")) if usage.text("permissions") else HERE / "cloudflare-observer-permissions.txt",
-        "Permission list",
-    )
+    lines = listed(usage, "permissions", "cloudflare_api", "Permission list")
     ips = usage.repeated("allow_ip")
     name = usage.text("name", "hq-observer")
     resolved = resolve_permissions(lines, groups)
@@ -418,9 +419,7 @@ _DESCRIPTION = re.compile(r"^[A-Za-z0-9 -]{1,50}$")
 
 def tailscale_plan(session: Session) -> Plan:
     usage = session.usage
-    scopes = listed(
-        Path(usage.text("scopes")) if usage.text("scopes") else HERE / "tailscale-observer-scopes.txt", "Scope list"
-    )
+    scopes = listed(usage, "scopes", "tailscale", "Scope list")
     if not _TAILNET.match(usage.text("tailnet", "-")):
         raise UsageError("The tailnet name is malformed.")
     description = usage.text("description", "hq-observer")

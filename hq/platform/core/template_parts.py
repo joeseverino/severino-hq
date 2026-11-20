@@ -113,24 +113,14 @@ type Shape = Callable[[str, dict], dict]
 
 @dataclass(frozen=True)
 class Example:
-    """A part as a template writes it, with what it is given: one state of
-    it, which the component catalog draws on a page of its own and the
-    survey holds. A part with no ``name`` and no ``template`` is its include.
+    """A part as a template writes it, with what it is given: one state the component catalog draws.
 
-    ``context`` is what the template is drawn with, or a function that
-    builds it when the catalog is drawn, for values a module cannot build as
-    it loads. ``premise`` is what the example must draw to stand for its
-    state, as a probe and its argument returning what falls short of it,
-    which the survey finds: a value meant to wrap that fits on one line holds
-    nothing the survey could find wrong. ``heads_the_page`` says the part is
-    a page's own head; any other is drawn under one, as every HQ page is.
-    ``frame`` says the part is the page frame's own, which base.html draws
-    beside the page's main rather than in it, ``"before"`` or ``"after"``, so
-    it is drawn there, beside a main that holds a page head alone; ``"main"``
-    is the main itself. ``address`` is the address the part is drawn at, for
-    a part that reads its request (a page's query, or the row its address
-    opens), and ``settings`` those it is drawn under, for a part only some
-    deployments draw."""
+    With no ``name`` and no ``template`` it is the part's include. ``context``
+    may be a function, for values a module cannot build as it loads;
+    ``premise`` probes what the example must draw to stand for its state.
+    ``heads_the_page``, ``frame``, ``address`` and ``settings`` say where it is
+    drawn: a page's head, base.html's main, an address, a deployment's settings.
+    """
 
     template: str = ""
     context: Mapping[str, Any] | Callable[[], Mapping[str, Any]] = field(default_factory=dict)
@@ -148,26 +138,14 @@ class Example:
 
 @dataclass(frozen=True, kw_only=True)
 class Part:
-    """A shared part, declared once: what it is, the partial that draws it,
-    the parts it encloses (the first follows the opening tag), what it takes
-    in order and as options, whether a page may give it ``data_*`` options,
-    the shape that turns what a page gave into the partial's variables, and
-    the classes its partial writes. Everything else said about the part (its
-    parameters in the template contract, its row in docs/Shared-UI.md, the
-    check of what a page gave, who may write a class) is read from here.
-    ``public`` tags are an extension's to write too. Every part shows itself
-    written in ``example`` (a template, or an ``Example`` with what it is
-    given), its default catalog entry, and in each of its ``states``, an
-    entry of the state's name, so a new option or state of a part is an
-    example on its declaration. ``rules``
-    is what a page drawing it holds to past what ``about`` says, in Markdown,
-    which docs/Shared-UI.md states under the part's name; docs/Design.md
-    holds only what holds across parts.
+    """A shared part, declared once: its contract, its docs/Shared-UI.md row and the check of a page's use read it.
 
-    A tag drawn by a Python ``function`` (a simple tag, or with a
-    ``partial`` an inclusion tag) takes the options its signature declares,
-    so the Part says only what a signature cannot. A part with no ``name``
-    has no tag: a template includes its partial by path."""
+    ``public`` tags are an extension's to write too. ``example`` and each of
+    ``states`` are its catalog entries, so a new option or state is an example
+    on its declaration. ``rules``, in Markdown, is what docs/Shared-UI.md
+    states under its name. A Python ``function``'s tag takes the options its
+    signature declares; a part with no ``name`` is included by path.
+    """
 
     name: str
     about: str

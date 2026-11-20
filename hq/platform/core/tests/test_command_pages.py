@@ -10,35 +10,34 @@ agent may ask for, a held request said as what it wants done to its target.
 from dataclasses import dataclass, replace
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ApprovalRequest, DashboardMachine, ManagedResource
+from hq.domains.control_plane.models import ApprovalRequest, DashboardMachine
 from hq.domains.projects.models import Project
 from hq.platform.application.action_links import command_url
 from hq.platform.application.agent_access import SET_AGENT_ACCESS
 from hq.platform.application.approval_review import asked
 from hq.platform.application.attention import waiting_for_approval
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import capability_registry, command_spec
 from hq.platform.application.capability_policy import agents_may_hold
 from hq.platform.application.glance import DASHBOARD_MACHINE
 from hq.platform.application.integration_specs import CapabilitySpec, command_schema, kept_by
 from hq.platform.application.integration_testing import override_integration_graph
-from hq.platform.application.integrations import integration_graph
+from hq.platform.application.integrations import held_graph
 from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugins import plugin_capability_specs
 from hq.platform.application.projects import DEPENDENCY_UPDATES
 from hq.platform.application.security import Capability, could_hold
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
-from hq.platform.core.attribution import operation_context
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AgentAccess
+from hq.platform.core.testing import declare, operator
 
 from .command_shapes import SWITCH_WORDS, optional_fields, sets_yes_or_no
 
-User = get_user_model()
 # The changes said on their page, by the confirmation their button waits on.
 # A change to HQ alone is said by its button.
 CONFIRMED = {"infrastructure_change", "destructive"}
@@ -86,7 +85,7 @@ def checkboxes(page) -> list[str]:
 class EveryCommandPageTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
+        cls.user = operator(email="operator@example.test")
 
     def setUp(self):
         self.client.force_login(self.user)
@@ -95,7 +94,7 @@ class EveryCommandPageTests(TestCase):
         return self.client.get(command_url(name, target))
 
     def test_every_page_states_its_effect_and_says_its_commands_words(self):
-        for spec in capability_registry().values():
+        for spec in capability_registry():
             with self.subTest(command=spec.name):
                 page = self.page(spec.name)
 
@@ -119,7 +118,7 @@ class EveryCommandPageTests(TestCase):
         extensions = {spec.name for spec in plugin_capability_specs()}
         switches = [
             spec
-            for spec in capability_registry().values()
+            for spec in capability_registry()
             if spec.name not in extensions and sets_yes_or_no(command_schema(spec.command_type))
         ]
         for spec in switches:
@@ -129,7 +128,7 @@ class EveryCommandPageTests(TestCase):
 
     def test_only_a_form_that_can_blank_a_field_warns_of_it(self):
         warned = set()
-        for spec in capability_registry().values():
+        for spec in capability_registry():
             schema = command_schema(spec.command_type)
             with self.subTest(command=spec.name):
                 if not select(self.page(spec.name), "data-command-blanks"):
@@ -153,7 +152,7 @@ class EveryHeldRequestTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
+        cls.user = operator(email="operator@example.test")
 
     def setUp(self):
         self.client.force_login(self.user)
@@ -166,7 +165,7 @@ class EveryHeldRequestTests(TestCase):
         return card, bell
 
     def test_every_command_an_agent_may_ask_for_says_what_it_wants_done(self):
-        asked = [spec for spec in capability_registry().values() if spec.effect != "read" and agents_may_hold(spec)]
+        asked = [spec for spec in capability_registry() if spec.effect != "read" and agents_may_hold(spec)]
         for spec in asked:
             target = ("7" if spec.target_kind == "integer" else "example-target") if spec.target_kind else ""
             # Held as an agent's call holds it, so its audit row names the agent.
@@ -195,7 +194,7 @@ class SwitchPageTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
+        cls.user = operator(email="operator@example.test")
         for slug, on in (("example-on", True), ("example-off", False)):
             Project.objects.create(
                 name=slug, slug=slug, repository_url=f"https://github.com/example/{slug}", dependency_updates=on
@@ -205,7 +204,7 @@ class SwitchPageTests(TestCase):
         self.client.force_login(self.user)
 
     def test_it_says_where_the_project_stands_and_offers_only_the_change(self):
-        spec = capability_registry()[DEPENDENCY_UPDATES]
+        spec = command_spec(DEPENDENCY_UPDATES)
         for slug, state, offered in (
             ("example-on", "On", spec.words("off")),
             ("example-off", "Off", spec.words("on")),
@@ -242,13 +241,13 @@ class DeclaredStateSwitchTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
+        cls.user = operator(email="operator@example.test")
 
     def setUp(self):
         self.client.force_login(self.user)
 
     def test_the_agents_pause_says_where_it_stands(self):
-        spec = capability_registry()[SET_AGENT_ACCESS]
+        spec = command_spec(SET_AGENT_ACCESS)
         for paused, state, offered in ((True, "On", spec.words("off")), (False, "Off", spec.words("on"))):
             AgentAccess.objects.update_or_create(pk=1, defaults={"paused": paused})
             with self.subTest(paused=paused):
@@ -258,10 +257,9 @@ class DeclaredStateSwitchTests(TestCase):
                 self.assertEqual(buttons(page), [offered])
 
     def test_a_machines_place_on_the_dashboard_says_where_it_stands(self):
-        spec = capability_registry()[DASHBOARD_MACHINE]
+        spec = command_spec(DASHBOARD_MACHINE)
         shown, hidden = (
-            ManagedResource.objects.create(key=key, kind="machine", spec={"name": key}, enabled=True)
-            for key in ("example-shown", "example-hidden")
+            declare(key, "machine", {"name": key}, enabled=True) for key in ("example-shown", "example-hidden")
         )
         DashboardMachine.objects.create(machine=shown)
         for machine, state, offered in ((shown, "On", spec.words("off")), (hidden, "Off", spec.words("on"))):
@@ -303,11 +301,11 @@ class WordlessSwitchTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("example-operator", "operator@example.test", "x" * 20)
+        cls.user = operator(email="operator@example.test")
 
     def setUp(self):
         self.client.force_login(self.user)
-        graph = integration_graph()
+        graph = held_graph()
         composed = replace(graph, capabilities={**graph.capabilities, WORDLESS.name: WORDLESS})
         self.enterContext(override_integration_graph(composed))
         SENT.clear()

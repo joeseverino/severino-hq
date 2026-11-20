@@ -3,7 +3,6 @@
 from functools import cached_property
 from typing import override
 
-from django.http import Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 from django.views import View
@@ -17,7 +16,7 @@ from hq.platform.application.exposure_fixes import gate_links
 from hq.platform.application.hq_self import LABEL as HQ_LABEL, hq_service
 from hq.platform.application.inventory import inventory_state
 from hq.platform.application.labels import sentence
-from hq.platform.application.pages import PageAction, PageMixin, RowMark, RowOrder, page_context
+from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin, RowMark, RowOrder, page_context
 from hq.platform.application.resource_capabilities import (
     LIFECYCLE_VERBS,
     resource_capabilities,
@@ -29,11 +28,10 @@ from hq.platform.application.service_context import (
     page_parts,
     sections_for,
     service_badges,
-    service_summary,
 )
 from hq.platform.application.service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET
 from hq.platform.application.service_list import listed_service, listed_services
-from hq.platform.application.services import alias_target
+from hq.platform.application.services import alias_summary, alias_target, fault_rows
 from hq.platform.application.ui import PageNavigation, PageSection
 from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted
@@ -135,14 +133,16 @@ class ServiceListView(PageMixin, TemplateView):
         return context
 
 
-class ServiceDetailView(PageMixin, TemplateView):
+class ServiceDetailView(RecordPageMixin, TemplateView):
     """One hostname, whether or not anything has been declared for it yet.
 
-    A name with nothing behind it still has a page: it is where publishing a
-    service starts.
+    A name with nothing behind it still has a page, its record a prospect:
+    it is where publishing a service starts.
     """
 
     template_name = "control_plane/service_detail.html"
+    resource = "services"
+    context_object_name = "record"
 
     @override
     def get(self, request, *args, **kwargs):
@@ -153,8 +153,6 @@ class ServiceDetailView(PageMixin, TemplateView):
         contradicting itself about its own data.
         """
 
-        if not entity_link("service", kwargs["hostname"]).url:
-            raise Http404("Not a host name.")
         canonical = alias_target(kwargs["hostname"])
         if canonical:
             return redirect("control_plane:service", hostname=canonical)
@@ -162,7 +160,7 @@ class ServiceDetailView(PageMixin, TemplateView):
 
     @cached_property
     def service(self):
-        return listed_service(self.kwargs["hostname"])
+        return listed_service(self.record["hostname"])
 
     @cached_property
     def own(self):
@@ -187,10 +185,6 @@ class ServiceDetailView(PageMixin, TemplateView):
         # here: the board builds every service and needs none of it.
         return sections_for(self.service)
 
-    @override
-    def get_page_title(self):
-        return self.service.hostname
-
     page_trail = (("Services", reverse_lazy("control_plane:services")),)
 
     @override
@@ -202,7 +196,7 @@ class ServiceDetailView(PageMixin, TemplateView):
                 *((PageSection("parts", "Not set up"),) if self.missing_facets else ()),
                 *(PageSection(section.id, section.label) for section in self.sections),
                 *((PageSection("relationships", "Relationships"),) if self.relationships.groups else ()),
-                *((PageSection("resources", "Other names"),) if self.service.alias_claims else ()),
+                *((PageSection("resources", "Other names"),) if self.record["alias_records"] else ()),
             )
         )
 
@@ -242,9 +236,8 @@ class ServiceDetailView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["service"] = self.service
-        context["page_visit"] = page_visit("service", self.service.hostname)
-        context["summary"] = service_summary(self.service)
-        context["page_badges"] = service_badges(self.service, own=self.own is not None)
+        context["page_visit"] = page_visit("service", self.record["hostname"])
+        context["page_badges"] = service_badges(self.record["exposure"]["reach"], own=self.own is not None)
         context.update(page_parts(self.service, self.request))
         context["missing_facets"] = self.missing_facets
         # The trace of this name in the topology, beside the path it draws.
@@ -253,11 +246,10 @@ class ServiceDetailView(PageMixin, TemplateView):
         context["sections"] = self.sections
         context["relationships"] = self.relationships
         context["read_only"] = self.own is not None
-        # Who reaches it, and, when that is anyone on the internet unasked,
-        # the gate HQ can put in front.
-        exposure = self.service.exposure
-        context["exposure"] = exposure
-        context["gate_fixes"] = gate_links(self.service) if exposure.level == OPEN else ()
+        # When anyone on the internet reaches it unasked, the gate HQ can put in front.
+        context["gate_fixes"] = gate_links(self.service) if self.record["exposure"]["level"] == OPEN else ()
+        context["fault_rows"] = fault_rows(self.record["hostname"], faults) if (faults := self.record["faults"]) else ()
+        context["alias_summary"] = alias_summary(self.record["aliases"])
         context["hq_label"] = HQ_LABEL
         context["runtime_facet"] = RUNTIME_FACET
         context["hq_machine"] = entity_link("machine", self.own.machine) if self.own and self.own.machine else None

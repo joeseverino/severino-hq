@@ -1,11 +1,7 @@
-"""The open problems about one thing, for that thing's own page.
+"""The open problems about one thing, for that thing's own page: the queue's items whose subject is that page.
 
-Every queue item names its subject, a link to that thing's page, so the problems
-about a machine, service, record, domain or connection are the queue's items
-whose subject is that page, as the queue's own cards; nothing is detected here.
-Only the host's sections are read: their queue is stored until the estate
-changes, while an extension's is composed per request about its own records.
-Each answer is the reader's, through ``attention.readable_by``.
+Nothing is detected here, and each answer is the reader's, through
+``attention.readable_by``.
 """
 
 from collections.abc import Iterable, Mapping
@@ -18,9 +14,10 @@ from .first_seen import look_due, note_open
 lazy from . import domains
 lazy from .attention import readable_by
 lazy from .dashboard import gathered_rows
-lazy from .findings import finding_key
+lazy from .findings import finding_key, rule_for, rule_of
 lazy from .projection import projection_scope
 lazy from .security import Principal
+lazy from .tone import Tone
 
 
 def _host_entries() -> tuple[dict[str, Any], ...]:
@@ -65,6 +62,10 @@ class About:
     # container on its machine and the image it runs: an item about another
     # of them is not its.
     parts: Iterable[str] = ()
+    # The cards of the page it stands for (``FindingRule.card``): it holds
+    # only an item whose rule declares one of them, and never an urgent one,
+    # which a page draws above everything with its subject's own state.
+    cards: Iterable[str] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +77,7 @@ class _Part:
     keys: frozenset[str]
     roots: tuple[str, ...]
     parts: frozenset[str]
+    cards: frozenset[str]
 
     @classmethod
     def of(cls, name: str, about: About) -> _Part:
@@ -85,6 +87,7 @@ class _Part:
             frozenset(filter(None, about.keys)),
             tuple(root.rstrip("/") for root in about.under if root),
             frozenset(filter(None, about.parts)),
+            frozenset(filter(None, about.cards)),
         )
 
     def holds(self, entry: Mapping[str, Any], item: Mapping[str, Any]) -> bool:
@@ -93,6 +96,10 @@ class _Part:
         finding = entry["finding"]
         if self.parts and finding.part and finding.part not in self.parts:
             return False
+        if self.cards:
+            rule = rule_for(rule_of(item["key"]))
+            if rule is None or rule.card not in self.cards or item.get("status") == Tone.SERIOUS:
+                return False
         link = str(item["url"] or "")
         return (
             (item["subject"] or {}).get("url") in self.pages
@@ -118,6 +125,15 @@ def problems_by_part(parts: Mapping[str, About], principal: Principal) -> tuple[
         if name is not None:
             found.append((name, item))
     return tuple(found)
+
+
+def grouped(found: Iterable[tuple[str, Mapping[str, Any]]]) -> dict[str, tuple[Mapping[str, Any], ...]]:
+    """``problems_by_part``'s answer by part, as a page draws each under its part."""
+
+    by_part: dict[str, list[Mapping[str, Any]]] = {}
+    for part, item in found:
+        by_part.setdefault(part, []).append(item)
+    return {part: tuple(items) for part, items in by_part.items()}
 
 
 def problem_counts(principal: Principal) -> dict[str, int]:

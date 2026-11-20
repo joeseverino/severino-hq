@@ -1,11 +1,7 @@
 """Who a token HQ did not issue names: an agent's or a device's, and a browser's sign-in.
 
-Pocket ID mints and HQ only verifies, so there is no credential here to leak
-and revoking a client happens where every other credential is revoked. Its
-permission keys are HQ's capability names, with no mapping table between them
-(HQ verifies; it does not issue, in API). Every door a token reaches (the
-machine API, MCP, the browser's sign-in and sign-out) reads it here, under
-the application, so no door depends on another.
+Pocket ID mints and HQ only verifies, so there is no credential here to leak.
+Every door a token reaches reads it here, so no door depends on another.
 """
 
 import logging
@@ -21,6 +17,7 @@ from jwt import PyJWK, PyJWKClient
 from . import own_devices
 from .linked_accounts import sign_in_subject
 from .own_devices import REGISTERED
+from .refusal_codes import Code
 from .security import (
     AuthorizationError,
     Principal,
@@ -66,8 +63,6 @@ class ClientReason(Exception):
     has nothing to say publicly.
     """
 
-    code = "error"
-
     def __init__(self, reason: str = "", *args: object) -> None:
         super().__init__(reason, *args)
         self.reason = reason
@@ -76,7 +71,7 @@ class ClientReason(Exception):
 class TokenError(ClientReason):
     """A presented token is absent, malformed, expired, or not addressed to HQ."""
 
-    code = "invalid_token"
+    code = Code.INVALID_TOKEN
 
 
 # Seconds between reads of the identity provider's key set, and the least
@@ -269,12 +264,9 @@ def granted(claims: dict[str, Any]) -> frozenset[str]:
 def token_principal(claims: dict[str, Any], interface: str) -> Principal:
     """The agent or the person's device a verified token names, on the surface it called through.
 
-    Every surface a token reaches turns it into a principal here. A token
-    carrying ``DEVICE_SCOPE`` from a client its person registered in HQ as
-    their own is ``device_principal``'s: its grant within its person's role,
-    never paused. Every other is ``agent_principal``'s: its grant, never
-    widened, within the role of the person who signed it in, if one did. A token naming a person with no role
-    is refused.
+    A ``DEVICE_SCOPE`` token from a client its person registered is a device,
+    never paused; every other is an agent, its grant never widened past its
+    person's role. A token naming a person with no role is refused.
     """
 
     grant = granted(claims)

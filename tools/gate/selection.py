@@ -11,28 +11,21 @@ import re
 import subprocess
 import sys
 from collections.abc import Iterable
-from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import NamedTuple
 
 import grimp
 
-from hq.platform.application.tests.reads import Reads
-from hq.platform.application.tests.tree import TreeTests, tree_tests
-from hq.platform.core.tests.task import RefError, names
-from tests.mise_tasks import ROOT as TASKS_ROOT, body, mise_tasks, run_files, runs
-from tools.gate import chain
+from hq.platform.core.tests.task import RefError, changed_paths, names
+from tests.mise_tasks import run_files
+from tools.gate import chain, ran
+from tools.gate.names import Edit, at_base, changes, module_name, name_reach, outlines
 
 # Never part of the Django suite: other languages and vendored trees.
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
 # The module every test that reads the tasks goes through; a change to a task
 # definition, or to a file a task runs, reaches those tests as a change to it would.
 TASK_READER = "tests.mise_tasks"
-# A test task that runs its labels in a dependency group's environment, which
-# the default one fast tests in lacks: a module it names is selected as that
-# task, never as a label.
-GROUP_TASK = "test:"
-GROUP_RUN = re.compile(r"\buv run\b[^\n]*--group\b[^\n]*\bmanage\.py test\b((?:\s+[\w.]+)+)")
 # How many importers away from a changed module a test is still selected
 # through any import, one a function or a lazy import makes as it runs among
 # them: one that imports it, or imports a module that does. Further out such a
@@ -48,13 +41,6 @@ def defines_tasks(path: str) -> bool:
     which the tests that read the tasks read with it."""
 
     return path == "mise.toml" or path.startswith("mise-tasks/") or path in run_files()
-
-
-def module_name(path: Path) -> str:
-    parts = list(path.with_suffix("").parts)
-    if parts[-1] == "__init__":
-        parts.pop()
-    return ".".join(parts)
 
 
 def python_files() -> list[Path]:
@@ -213,18 +199,18 @@ def string_attributes(node: ast.ClassDef) -> dict[str, str]:
     }
 
 
-def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple[set[str], set[str]]:
+def affected(changed: list[str], deleted: list[str], files: list[Path], base: str) -> tuple[set[str], set[str]]:
     """(modules the change reaches, the apps whose models it reaches).
 
-    It reaches the modules that import what it touched, those that name a file it touched, and those that
-    name a route whose view it reaches, by its name or its path: a test that drives a view through the
-    client imports its models, never its views.
+    It reaches the modules that refer to what it changed (``reached``), those that name a file it touched,
+    and those that name a route whose view it reaches, by its name or its path: a test that drives a view
+    through the client imports its models, never its views.
     """
 
-    reverse = with_gone(importers(files), deleted, files)
     paths = [*changed, *deleted]
     started = seeds(paths)
-    imported = importing(started, reverse, files)
+    every = routes(chain.ROOT, tuple(files))
+    names, loading = reached(changed, deleted, files, base, {route.urls for route in every})
     read = reading(paths, files)
     index = named(chain.ROOT, tuple(files))
     shown = [path for path in rendering(paths) if not path.endswith(".py")]
@@ -232,20 +218,60 @@ def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple
     readers = {
         module_name(Path(path)): path for parts in (Path(p).parts for p in shown) for path in Naming(index).file(parts)
     }
-    every = routes(chain.ROOT, tuple(files))
     hit = {
         route
         for route in every
         if route.urls in started
-        or route.view in imported
+        or route.view in loading
+        or (route.definition in names.get(route.view, ()) if route.definition else bool(names.get(route.view)))
         or (route.view in read and route.view not in readers)
         or (route.view in readers and route.definition in defined_naming(readers[route.view], tuple(shown)))
     }
-    near = imported | read
+    near = set(names) | loading | read
     by_name = {path for route in hit for path in Naming(index)((route.name,))}
     by_path = {path for parts, paths in requested(index, every).items() if parts in hit for path in paths}
     touched = {label for prefix, label in django_apps(files).items() if f"{prefix.replace('/', '.')}.models" in near}
     return near | {module_name(Path(path)) for path in by_name | by_path}, touched
+
+
+def reached(
+    changed: list[str], deleted: list[str], files: list[Path], base: str, urls: set[str]
+) -> tuple[dict[str, set[str]], set[str]]:
+    """(each module the change reaches through the names it changed since ``base``, with the names it
+    changes there; the modules it reaches as they load).
+
+    A test depends on what it runs, pytest-testmon's model: an edited function body reaches the tests the
+    record says ran it (tools/gate/ran.py), and a definition edited as its module loads (a constant, a
+    class's body, a signature) reaches the bodies and the definitions that refer to it, read from the
+    source (tools/gate/names.py ``name_reach``). The record is read against what changed since its own
+    tree as well as since ``base``, so what a test runs that its record predates is a change too. A test
+    module the record does not hold, or the whole selection when there is no record, takes the reach read
+    from the source alone. What a name cannot carry (a deleted module, a migration, a task definition, a
+    statement reached only as its module loads) reaches every module that loads it (``importing``).
+    """
+
+    every = outlines(files)
+    record = ran.recorded()
+    since = [p for p in changed_paths(record.tree, chain.ROOT)[0] if p.endswith(".py")] if record else []
+    edited = [path for path in {*changed, *since} if path.endswith(".py") and module_name(Path(path)) in every]
+    was, held = at_base(base, edited), at_base(record.tree, edited) if record else {}
+    seeded: dict[str, Edit] = {}
+    for path in edited:
+        now = (chain.ROOT / path).read_text(encoding="utf-8")
+        edit = changes(was.get(path), now)
+        seeded[module_name(Path(path))] = edit.joined(changes(held.get(path), now)) if record else edit
+    tests = {module_name(path) for path in files if is_test(path)}
+    found = name_reach(seeded, every, urls | tests, record.started(held) if record else None)
+    names = found.names
+    if record:
+        # A source test reads the repository's files, which the record's run leaves out and no record of the
+        # lines run would see.
+        sourced = {module_name(p) for p in files if is_test(p) and '@tag("source"' in (chain.ROOT / p).read_text()}
+        static = name_reach(seeded, every, urls | tests).names.keys() & (tests - (record.tests - sourced))
+        names = names | {test: set() for test in record.ran(found.ran, held) | static}
+    start = (seeds([*changed, *deleted]) - seeded.keys()) | found.dynamic
+    loading = importing(start, with_gone(importers(files), deleted, files), files) if start else set()
+    return names, loading
 
 
 def requested(index: dict[tuple[tuple[str, ...], bool], set[str]], every: tuple[Route, ...]) -> dict[Route, set[str]]:
@@ -668,71 +694,6 @@ def chosen(modules: dict[str, Path], reached: set[str], touched: set[str]) -> se
     return picked
 
 
-@functools.cache
-def group_tests() -> dict[str, str]:
-    """Each test module a test task runs in a dependency group's environment, by its label: module -> task."""
-
-    found: dict[str, str] = {}
-    for name, task in mise_tasks().items():
-        run_labels = GROUP_RUN.search(body(task)) if name.startswith(GROUP_TASK) else None
-        if not run_labels:
-            continue
-        labels = run_labels[1].split()
-        for path in runs(task):
-            module = module_name(path.relative_to(TASKS_ROOT))
-            if any(label == module or label.startswith(module + ".") for label in labels):
-                found[module] = name
-    return found
-
-
-def group_tasks(files: list[Path], reached: set[str], touched: set[str]) -> tuple[str, ...]:
-    """The test tasks whose group-run modules the change reaches as it would reach a test module."""
-
-    present = {module_name(p): p for p in files}
-    modules = {m: present[m] for m in group_tests() if m in present}
-    picked = chosen(modules, reached, touched)
-    return tuple(sorted({group_tests()[m] for m in picked}))
-
-
-def with_tree(
-    labels: list[str],
-    paths: list[str],
-    listed: list[str] | None = None,
-    walking: Future[TreeTests] | None = None,
-) -> list[str]:
-    """The selected labels, and each test tagged tree that ``paths`` reach, of those
-    ``walking`` finds or else of a walk run now: a walk finds a file by no import or name, so one that declares
-    nothing runs on any change, and one that declares its reads (reads.py) on a change to them, ``listed``
-    (``paths`` when not given) being what was added or deleted."""
-
-    if not paths:
-        return labels
-    found = walking.result() if walking else tree_tests(chain.ROOT)
-    names = paths if listed is None else listed
-    reached = [label for label, held in found if held is None or Reads(*held).selects(paths, names)]
-    print(f"[fast] {len(reached)} of the {len(found)} tests tagged tree run: those the change reaches")
-    return [*labels, *reached]
-
-
-def listed_change(base: str, deleted: list[str]) -> list[str]:
-    """The paths a change adds or deletes since ``base``, untracked ones included: all a listing can tell."""
-
-    added = names("diff", "--name-only", "--no-renames", "--diff-filter=A", base, root=chain.ROOT)
-    return sorted({*added, *names("ls-files", "--others", "--exclude-standard", root=chain.ROOT), *deleted})
-
-
-def walk_for_tree() -> Future[TreeTests]:
-    """The walk for the tests tagged tree, started now on a thread: it runs in a
-    process of its own (``apart``), so it overlaps the reading of the import
-    graph and the paths the modules name, which it does not depend on."""
-
-    pool = ThreadPoolExecutor(max_workers=1)
-    walking = pool.submit(tree_tests, chain.ROOT)
-    # Leaving the pool's block would wait for the walk; this lets it run on.
-    pool.shutdown(wait=False)
-    return walking
-
-
 # The module every test that reads each of the browser gate's modules goes
 # through. Such a test is a source check that starts no browser (the probe
 # check among them), so those selected run ahead of the rest, in fast:source,
@@ -748,11 +709,7 @@ def source_first(labels: list[str], files: list[Path]) -> tuple[list[str], list[
     return first, [label for label in labels if label not in first]
 
 
-def selection(
-    changed: list[str], deleted: list[str], files: list[Path]
-) -> tuple[list[str], int, tuple[set[str], set[str]]]:
-    """(the test modules to run, how many there are, what the change reaches and the apps it touches)."""
+def selection(changed: list[str], deleted: list[str], files: list[Path], base: str) -> tuple[list[str], int]:
+    """(the test modules to run, how many there are)."""
 
-    reached, touched = affected(changed, deleted, files)
-    labels, total = test_labels(files, reached, touched)
-    return labels, total, (reached, touched)
+    return test_labels(files, *affected(changed, deleted, files, base))

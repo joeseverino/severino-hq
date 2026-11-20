@@ -8,7 +8,8 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest
 from hq.domains.jobs.runner import run
-from hq.platform.core.audit import audit_operation, operation_context, record_event
+from hq.platform.core.audit import record_event
+from hq.platform.core.bindings import audit_operation, operation_context
 from hq.platform.core.models import AuditLog
 
 from ..adoption_testing import connection
@@ -66,7 +67,7 @@ class CapabilityRunTests(TestCase):
 
     def run_pair(self, prefix: str) -> list[AuditLog]:
         mark = last_row()
-        with commands_registered({NAME: PAIR}):
+        with commands_registered(PAIR):
             result = execute_capability(NAME, {"prefix": prefix}, principal=cli_principal())
         self.assertTrue(result["ok"], result)
         return list(rows_after(mark))
@@ -213,7 +214,7 @@ class JobTests(TestCase):
 
     def test_a_capability_run_inside_a_job_writes_under_the_jobs_id(self):
         def work(progress):
-            with commands_registered({NAME: PAIR}):
+            with commands_registered(PAIR):
                 return execute_capability(NAME, {"prefix": "example-job"}, principal=cli_principal())
 
         mark = last_row()

@@ -6,6 +6,7 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.core.testing import declare
 from hq.platform.core.tests.forwarding import arrived
 
 from ..request_connection import connection
@@ -35,7 +36,6 @@ class ServingDeviceTests(TestCase):
     """
 
     def setUp(self):
-        from hq.domains.control_plane.models import ManagedResource
 
         # The controller swept from one node; HQ runs on the other.
         a_tailnet(
@@ -48,14 +48,10 @@ class ServingDeviceTests(TestCase):
         )
         # Only the declaration holds both halves: the address the host answers
         # at, and the address the tailnet knows it by.
-        ManagedResource.objects.create(
-            key="example-host",
-            kind="machine",
-            spec={
-                "name": "example-host",
-                "addresses": ["192.0.2.10", "100.64.0.5"],
-                "role": "example",
-            },
+        declare(
+            "example-host",
+            "machine",
+            {"name": "example-host", "addresses": ["192.0.2.10", "100.64.0.5"], "role": "example"},
         )
 
     def serving(self, own, served=()):

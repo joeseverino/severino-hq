@@ -5,6 +5,7 @@ import unicodedata
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from hq.platform.application.capabilities import CapabilitySpec
 from hq.platform.application.domains import NAVIGATION_GROUPS, Domain, all_domains, domain_navigation
 from hq.platform.application.plugins import NavigationItem
 
@@ -51,7 +52,7 @@ def _first_declarer(domains: Iterable[Domain], declared: Callable[[Domain], list
 class Tags:
     """The document's sections: the domains of the domain registry under their nav groups, in the bar's order."""
 
-    def __init__(self, resources: dict[str, Any], capabilities: dict[str, Any]) -> None:
+    def __init__(self, resources: dict[str, Any], capabilities: Iterable[CapabilitySpec]) -> None:
         self.domains = {domain.id: domain for domain in all_domains()}
         domains = self.domains.values()
         # What a domain serves stands in its section by one rule, the host's
@@ -59,8 +60,8 @@ class Tags:
         # domain whose nav item is its page (a resource's web page, a
         # capability's starting page, a route's `page`), else, for a
         # capability, the domain of the resource it acts on. What none places
-        # carries no tag, which test_sections refuses; only the API's own
-        # routes, which serve every domain, stand in its section.
+        # carries no tag; only the API's own routes, which serve every
+        # domain, stand in its section.
         self.pages = _first_declarer(domains, lambda domain: [item.route for item in domain.navigation])
         self.resource_owner = _first_declarer(domains, _declared_resources)
         for name, resource in resources.items():
@@ -68,10 +69,10 @@ class Tags:
                 self.resource_owner[name] = self.pages[resource.web_route]
         declared = _first_declarer(domains, _declared_capabilities)
         self.capability_owner = {
-            name: owner
-            for name, capability in capabilities.items()
+            capability.name: owner
+            for capability in capabilities
             if (
-                owner := declared.get(name)
+                owner := declared.get(capability.name)
                 or self.pages.get(capability.reached_from)
                 or self.resource_owner.get(capability.subject_resource or "")
             )

@@ -3,15 +3,16 @@ of a row is refused on every write path but the three HQ's contract makes."""
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
 from django.db.utils import DatabaseError
 from django.test import TestCase
 from django.utils import timezone
 
 from hq.platform.application import denials
+from hq.platform.application.refusal_codes import Code
 from hq.platform.core.audit import ROUTINE_EVENTS, prune_routine, record_event
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 REFUSED = (DatabaseError, IntegrityError)
 
@@ -57,19 +58,19 @@ class RefusedTests(TestCase):
         self.assertRefused(lambda: _sql(f"DELETE FROM {table}"))
 
     def test_who_acted_cannot_be_moved_onto_someone_else(self):
-        first, second = (get_user_model().objects.create_user(name) for name in ("example-a", "example-b"))
+        first, second = (operator(username=name) for name in ("example-a", "example-b"))
         row = _row(user=first)
 
         self.assertRefused(lambda: AuditLog.objects.filter(pk=row.pk).update(user=second))
 
     def test_clearing_the_user_cannot_carry_another_change(self):
-        row = _row(user=get_user_model().objects.create_user("example-a"))
+        row = _row(user=operator(username="example-a"))
 
         self.assertRefused(lambda: AuditLog.objects.filter(pk=row.pk).update(user=None, message="rewritten"))
 
     def test_a_routine_event_a_user_made_is_kept(self):
         action, object_type = min(ROUTINE_EVENTS)
-        row = _row(action=action, object_type=object_type, user=get_user_model().objects.create_user("example-a"))
+        row = _row(action=action, object_type=object_type, user=operator(username="example-a"))
 
         self.assertRefused(lambda: AuditLog.objects.filter(pk=row.pk).delete())
 
@@ -110,7 +111,7 @@ class AllowedTests(TestCase):
         self.assertTrue(AuditLog.objects.filter(pk=kept.pk).exists())
 
     def test_a_deleted_user_leaves_their_rows_saying_who_they_were(self):
-        user = get_user_model().objects.create_user("example-operator")
+        user = operator(username="example-operator")
         row = record_event(action=AuditLog.Action.UPDATED, type_label="Example", user=user)
 
         user.delete()
@@ -121,7 +122,7 @@ class AllowedTests(TestCase):
 
     def test_a_coalesced_refusal_counts_every_call(self):
         for _ in range(3):
-            denials.record_denial(interface="mcp", reason="invalid_credential", source="192.0.2.7", authenticated=False)
+            denials.record_denial(interface="mcp", reason=Code.INVALID_TOKEN, source="192.0.2.7", authenticated=False)
 
         row = AuditLog.objects.get(action=AuditLog.Action.DENIED)
         self.assertEqual(row.metadata["count"], 3)

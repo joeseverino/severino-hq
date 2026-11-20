@@ -31,7 +31,7 @@ class UnkeyedWriteTests(TestCase):
     def _runnable(self, interface):
         """Every change an agent on ``interface`` may run, with the token granting it."""
 
-        for name, spec in sorted(capability_registry().items()):
+        for spec in capability_registry():
             if spec.effect == "read":
                 continue
             scope = _scope(spec)
@@ -42,7 +42,7 @@ class UnkeyedWriteTests(TestCase):
             except AuthorizationError:
                 # Refused for authority first, which no key changes.
                 continue
-            yield name, spec, scope, principal
+            yield spec.name, spec, scope, principal
 
     def test_every_change_through_mcp_without_a_key_is_refused(self):
         walked = 0

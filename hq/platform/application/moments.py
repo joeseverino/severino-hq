@@ -1,14 +1,8 @@
 """How HQ reads a stamp someone else wrote, and writes a moment, a day and an age.
 
-One owner for both, so every reader agrees on a stamp's edges and a page, a
-chart tip and an extension all say a time the same way. ``hq_sdk.ui`` hands the
-words to extensions, and ``core.templatetags.value_tags`` owns the filters that
-put them in a page, ``when`` and its plain-text twin ``when_text``.
-
-A stamp that is unparsable, empty or missing reads as ``None``: a reading is a
-fact about the world, and a caller for whom that is an error raises its own.
-The edges where callers differ (a naive stamp, Go's zero time) are parameters,
-so a caller states which answer it needs.
+One owner, so every reader agrees on a stamp's edges and every page says a time
+the same way. A bad stamp reads as ``None``; a caller for whom that is an error
+raises its own.
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -342,4 +336,5 @@ WHEN_FORMS = {
     "numeral": numeral,  # "3", the day of the month in a calendar's cell
     "length": length,  # "5 minutes", how far it lies from now either way
     "ahead": ahead,  # "in 3 days", or "5 days ago" once it has passed
+    "expiry": expiry_words,  # "expires in 3 days", "expired 4 days ago"
 }

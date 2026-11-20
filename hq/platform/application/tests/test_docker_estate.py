@@ -1,21 +1,19 @@
 """Docker readings in the relation graph, on the machine page, and as findings."""
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.application.markup_testing import select, text
+from hq.platform.core.testing import READER, declare, operator
 
 from ..docker_estate import IMAGE_BEHIND, IMAGE_UNTAGGED, image_verdicts, reference_tag
 from ..inventory_testing import store
 from ..projection import projection_scope
 from ..relationships import relationships_for
-from ..security import Capability, Principal
 from ..topology import relation_graph
 from ..topology_model import RELATIONS
 
-READER = Principal("reader", "test", frozenset({Capability.READ}))
 ON_LAB = {"connection_ref": "example-portainer", "environment_id": 1, "host": "lab-1", "host_address": "192.0.2.10"}
 OLD, NEW, LOOSE = "sha256:" + "a" * 64, "sha256:" + "b" * 64, "sha256:" + "c" * 64
 
@@ -34,12 +32,10 @@ def images():
 
 
 def estate():
-    ManagedResource.objects.create(key="lab-1", kind="machine", spec={"name": "lab-1", "addresses": ["192.0.2.10"]})
+    declare("lab-1", "machine", {"name": "lab-1", "addresses": ["192.0.2.10"]})
     for name in ("web", "db", "cache"):
-        ManagedResource.objects.create(
-            key=f"lab-{name}",
-            kind="portainer.container",
-            spec={"host": "lab-1", "name": name, "connection_ref": "example-portainer"},
+        declare(
+            f"lab-{name}", "portainer.container", {"host": "lab-1", "name": name, "connection_ref": "example-portainer"}
         )
     store(
         "portainer.network",
@@ -154,7 +150,7 @@ class GraphTests(TestCase):
 class MachinePageTests(TestCase):
     def setUp(self):
         estate()
-        self.client.force_login(get_user_model().objects.create_superuser("operator", password="x" * 20))
+        operator(self.client)
 
     def test_the_machine_page_says_where_data_lives_and_what_runs_behind(self):
         response = self.client.get(reverse("control_plane:machine", args=["lab-1"]))
@@ -200,9 +196,7 @@ class MachinePageTests(TestCase):
         )
 
     def test_one_environment_refused_is_said_on_that_machine_only(self):
-        ManagedResource.objects.create(
-            key="edge-2", kind="machine", spec={"name": "edge-2", "addresses": ["198.51.100.30"]}
-        )
+        declare("edge-2", "machine", {"name": "edge-2", "addresses": ["198.51.100.30"]})
         self.refuse_edge()
 
         edge = self.client.get(reverse("control_plane:machine", args=["edge-2"]))

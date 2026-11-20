@@ -5,12 +5,12 @@ for a run it asked for, over the same command."""
 
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.application.markup_testing import select, text
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import AGENT, operator
 
 from ..capabilities import run_capability
 from ..controller import claim_next_operation
@@ -20,7 +20,6 @@ from .procedures import APP, DB, EDGE, RESTART_RUN, Supply, approved_run, manife
 CANCEL = "automation.run.cancel"
 OPERATOR = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 VIEWER = Principal("example-viewer", "web", frozenset({Capability.READ}))
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 OTHER_AGENT = Principal("example-other-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 LOGS = "example.service_logs"
 LOGS_RUN = f"automation.{LOGS}.run"
@@ -65,8 +64,7 @@ class CancelTestCase(TestCase):
 class SignedInTestCase(CancelTestCase):
     def setUp(self):
         super().setUp()
-        self.person = get_user_model().objects.create_superuser("owner", "owner@example.test", "pw")
-        self.client.force_login(self.person)
+        self.person = operator(self.client)
         # The Run form offers the machines HQ knows.
         machines = patch(
             "hq.platform.application.machines.machine_catalog", side_effect=lambda **_: self.supply.machines

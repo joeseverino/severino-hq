@@ -37,7 +37,7 @@ or anything acting for them may do. The roles are declared once, in
 | Role | Holds |
 | --- | --- |
 | `operator` | every capability, the host's and every extension's (`operator_capabilities`) |
-| `viewer` | the reads: `read` and every extension's read capabilities, and `show_demo`, which switches stand-in values on in their own browser |
+| `viewer` | the reads: `read` and every extension's read capabilities, `read_sensitive_documentation`, and `show_demo`, which switches stand-in values on in their own browser |
 
 What each subject holds, with `HELD_ONLY_AT` and `NEEDS_A_PERSON` applied on top:
 
@@ -125,6 +125,12 @@ is refused the audit log (`read_audit_log`) and the calendar
   same-origin` and `Cross-Origin-Resource-Policy: same-origin` enabled. The
   static mount sets the last two itself, because it sits above the Django
   middleware that sets them everywhere else.
+- Answers are compressed (`hq/platform/core/compression.py`), so BREACH
+  applies: a compressed page reflecting input beside a secret leaks it through
+  its length. Each secret a page carries is fresh per response (Django masks
+  the CSRF token, the CSP nonce is new each time), the session cookie is never
+  in a body, and the rest is the operator's own data behind SameSite=Lax
+  cookies on the tailnet. Nothing pads a body, so none of this leans on one.
 - Who sent a request, and over which scheme, is decided once, before any
   route. Uvicorn's `ProxyHeadersMiddleware`, applied in `hq/config/asgi.py`
   (`ForwardedCaller` in `hq/platform/core/network.py`), reads

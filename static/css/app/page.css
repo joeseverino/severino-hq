@@ -198,10 +198,8 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
      its label at its center. */
   display: inline-flex; align-items: center; justify-content: center; gap: var(--space-3);
   padding: var(--space-3) var(--space-6);
-  border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink);
-  border-radius: var(--radius-sm);
   cursor: pointer;
   font: inherit;
   font-size: var(--text-sm);
@@ -217,7 +215,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   white-space: nowrap;
   text-decoration: none;
   transition: border-color .12s ease, background .12s ease, box-shadow .12s ease;
-  box-shadow: var(--shadow-sm);
+  --control-lift: var(--shadow-sm);
 }
 /* An icon inside a button is a glyph, not a block: it must not stretch the
    box or shrink when the row runs out of room. */
@@ -231,33 +229,33 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    the ghost's color. */
 .btn.glyph { min-width: var(--control-compact); min-height: var(--control-compact); block-size: var(--control-compact); padding: 0 var(--space-3); color: var(--accent-2); font-weight: 650; line-height: 1; }
 @media (hover: hover) { .btn.glyph:hover { color: var(--accent); } }
-.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: none; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); --control-lift: none; }
 @media (hover: hover) { .btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); } }
 .btn.danger { background: var(--danger); color: var(--accent-ink); border-color: var(--danger); }
 /* A quiet control: words only until hovered. */
-.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); --control-lift: none; }
 /* A quiet compact button opening a row's controls stands its pad and border out, so its words start where a bordered button's edge would. */ [data-kind="control"] > .btn.ghost.compact:first-child { margin-inline-start: calc(-1 * var(--space-4) - 1px); }
 @media (hover: hover) { .btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; } }
 /* A destructive action that should not be the loudest thing in its row: the
    same surface and lift as its neighbors, in red. */
-.btn.ghost.danger { background: var(--surface); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); color: var(--danger); box-shadow: var(--shadow-sm); }
+.btn.ghost.danger { background: var(--surface); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); color: var(--danger); --control-lift: var(--shadow-sm); }
 @media (hover: hover) { .btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); } }
 /* A control in a row or a head among words, a line's height rather than a
    form's. */
 .btn.compact { min-height: var(--control-compact); padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }
 /* A control among words, drawn as a link: the words alone, in their type. */
-.btn.link { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--accent); font: inherit; }
+.btn.link { min-height: 0; padding: 0; background: none; color: var(--accent); font: inherit; }
 .btn.link:hover { text-decoration: underline; }
 /* A control of the site header's bar, on the bar's own ground and as tall as
    its row. It weighs what the push button does, so each control's rule in the
    header's section sets its own width and padding over it. */
-.btn:where(.bar) { block-size: var(--control-size); padding: 0 var(--space-5); border-color: var(--bar-control-line); background: var(--bar-control-bg); color: var(--ink-2); box-shadow: none; }
+.btn:where(.bar) { block-size: var(--control-size); padding: 0 var(--space-5); border-color: var(--bar-control-line); background: var(--bar-control-bg); color: var(--ink-2); --control-lift: none; }
 @media (hover: hover) { .btn:where(.bar):hover { border-color: var(--bar-control-line); background: var(--bar-control-bg-hover); color: var(--ink); } }
 .btn:where(.bar):has(+ :popover-open) { background: var(--bar-control-bg-hover); color: var(--ink); }
 /* A row of a menu (connection.css draws the panel and its rows' type): a row
    like the others, whichever look it has beside the title. Written after
    every look, so it is the one that holds. Destructive keeps only its color. */
-.btn.menu { display: flex; width: 100%; justify-content: flex-start; min-height: 0; border: 0; background: none; box-shadow: none; color: var(--muted); }
+.btn.menu { display: flex; width: 100%; justify-content: flex-start; min-height: 0; background: none; color: var(--muted); }
 @media (hover: hover) { .btn.menu:hover { color: var(--ink); background: var(--bg-tint); } }
 .btn.menu.danger { color: var(--danger); }
 /* A control that would be refused stands as a span, focusable for its reason
@@ -368,7 +366,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 }
 .primary-nav a {
   color: var(--muted); font-weight: 500; font-size: var(--text-sm);
-  padding: var(--space-2) var(--space-5); border-radius: 6px;
+  padding: var(--space-2) var(--space-5); border-radius: var(--radius-sm);
   white-space: nowrap;
   transition: background .12s ease, color .12s ease;
 }
@@ -405,7 +403,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   display: inline-flex;
   align-items: center;
   padding: var(--space-2) var(--space-5);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--muted);
   font-size: var(--text-sm);
   font-weight: 500;
@@ -531,15 +529,15 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    what the person may do share the first, when they signed in is the second. */
 .menu-identity { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; padding: var(--space-4) var(--space-5) var(--space-5); border-bottom: 1px solid var(--line-2); }
 .menu-identity > * { grid-column: 2; }
-.menu-identity-picture { grid-column: 1; grid-row: 1 / span 2; width: 36px; height: 36px; margin-right: var(--space-5); border-radius: 50%; object-fit: cover; background: var(--bg-tint); }
+.menu-identity-picture { grid-column: 1; grid-row: 1 / span 2; width: 36px; height: 36px; margin-right: var(--space-5); border-radius: var(--radius-pill); object-fit: cover; background: var(--bg-tint); }
 .menu-identity-who { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
 .menu-identity-when { color: var(--muted); font-size: var(--text-2xs); }
 /* What an account may do, said once beside its name. Not a status: it has no
    tone, only the accent, and it never changes while you watch. */
-.role-mark { flex: none; padding: 0 var(--space-3); border: 1px solid var(--accent); border-radius: var(--radius-pill); color: var(--accent); font-size: var(--text-2xs); font-weight: 600; line-height: 1.5; }
+.role-mark { flex: none; padding: 0 var(--space-3); border-color: var(--accent); border-radius: var(--radius-pill); color: var(--accent); font-size: var(--text-2xs); font-weight: 600; line-height: 1.5; }
 /* The person's own picture as the control's mark. Its margins make it as tall
    as the control's one line, like everything else in it. */
-.user-menu .user-avatar { width: 22px; height: 22px; margin-block: calc((var(--control-size) - 2px - 22px) / 2); border-radius: 50%; object-fit: cover; background: var(--bg-tint); }
+.user-menu .user-avatar { width: 22px; height: 22px; margin-block: calc((var(--control-size) - 2px - 22px) / 2); border-radius: var(--radius-pill); object-fit: cover; background: var(--bg-tint); }
 .user-menu-panel {
   display: flex;
   /* As wide as what it holds, up to a width that still fits beside the
@@ -556,7 +554,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   width: 100%;
   align-items: center;
   padding: var(--space-3) var(--space-5);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--ink);
   font-size: var(--text-sm);
   font-weight: 500;
@@ -589,13 +587,13 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 /* A switch in the profile menu. The track carries the state, so the label
    never has to rename itself to say what is currently true. */
 .switch-track {
-  width: 26px; height: 15px; border: 1px solid var(--line); border-radius: var(--radius-pill);
+  width: 26px; height: 15px; border-radius: var(--radius-pill);
   background: var(--line);
   transition: background .12s ease-out, border-color .12s ease-out;
 }
 .switch-knob {
-  display: block; width: 11px; height: 11px; margin: 1px; border-radius: 50%;
-  background: var(--surface); box-shadow: var(--shadow-knob);
+  display: block; width: 11px; height: 11px; margin: 1px; border-radius: var(--radius-pill);
+  background: var(--surface);
   transition: transform .12s ease-out;
 }
 [aria-checked="true"] .switch-track { background: var(--accent); border-color: var(--accent); }
@@ -613,6 +611,6 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   border-radius: var(--radius-pill); color: var(--muted); font-size: var(--text-md);
 }
 .menu-item.menu-theme-option:hover { background: var(--surface); color: var(--ink); }
-.menu-item.menu-theme-option[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+.menu-item.menu-theme-option[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
 
 }

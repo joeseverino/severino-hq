@@ -3,20 +3,21 @@ A zone's DNS records as one table: the records that send traffic somewhere,
 then the policy and verification records folded away under their own group,
 so both halves share one set of columns and sort alike.
 
-Expects `routing` and `policy`, each record with its actions (zone_views'
-`_record_rows`), `zone` and `public_dns_enabled`; with public DNS
+Expects `routing` and `policy`, each record (a domain record's `records`)
+with its actions (zone_views' `_record_actions`), `managed`, `ttl_set` and
+`public_dns_enabled`; with public DNS
 changes off, a record offers no Edit or Remove it would refuse. A state is said
 only where it is not healthy, and a TTL only where it is not automatic:
 seventeen rows that each say "Healthy" and "Auto" say nothing, and a zone
-whose every record is automatic has no TTL column (`zone.ttl_set`). Where the Value
+whose every record is automatic has no TTL column (`ttl_set`). Where the Value
 column has left, a record that shares its name and type with another says its
 value under its name (`record.summary`), so the two still read as two.
 {% endcomment %}
 {% partialdef record_row %}
         <tr{% if folded %} data-folded="{{ folded }}"{% endif %}>
           <td>
-            {% if record.service_url %}
-              <strong>{% entity "service"|entity_of:record.name %}</strong>
+            {% if record.service %}
+              <strong>{% entity "service"|entity_of:record.service %}</strong>
             {% else %}
               <strong>{{ record.name|breakable }}</strong>
             {% endif %}
@@ -27,8 +28,8 @@ value under its name (`record.summary`), so the two still read as two.
             <code>{{ record.value|breakable }}</code>
             {% if record.proxied %}{% status "Proxied" tone="neutral" %}{% endif %}
           </td>
-          {% if zone.ttl_set %}<td>{% if record.ttl != 1 %}{{ record.ttl|measured:"s" }}{% endif %}</td>{% endif %}
-          {% if zone.managed %}
+          {% if ttl_set %}<td>{% if record.ttl != 1 %}{{ record.ttl|measured:"s" }}{% endif %}</td>{% endif %}
+          {% if managed %}
             <td>
               {% comment %}
               A type HQ does not model is still a real record in this zone, and
@@ -39,7 +40,7 @@ value under its name (`record.summary`), so the two still read as two.
               {% endcomment %}
               {% if not record.manageable %}
                 {% status record.record_type "not managed" tone="neutral" %}
-              {% elif record.managed %}
+              {% elif record.declaration %}
                 {% if record.health.state != "healthy" %}{% status record.health.label tone=record.health.state %}{% endif %}
               {% else %}
                 {% status "New" tone="attention" %}
@@ -56,8 +57,8 @@ value under its name (`record.summary`), so the two still read as two.
         {% table_heading "Name" "identifier" local_sort=True %}
         {% table_heading "Type" "identifier" css="key-col" local_sort=True %}
         {% table_heading "Value" "identifier" drop=4 local_sort=True %}
-        {% if zone.ttl_set %}{% table_heading "TTL" "status" drop=3 local_sort=True %}{% endif %}
-        {% if zone.managed %}{% table_heading "State" "status" local_sort=True %}{% table_heading "Actions" css="actions-col" hidden=True %}{% endif %}
+        {% if ttl_set %}{% table_heading "TTL" "status" drop=3 local_sort=True %}{% endif %}
+        {% if managed %}{% table_heading "State" "status" local_sort=True %}{% table_heading "Actions" css="actions-col" hidden=True %}{% endif %}
       </tr>
     </thead>
     <tbody>

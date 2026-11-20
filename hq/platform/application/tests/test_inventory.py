@@ -1,6 +1,5 @@
 """Seeing what the providers hold: what a sweep records, what a reading stands for, and what an observation is."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -8,6 +7,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests import audit_rows
 
 from ..adoption import unmanaged
@@ -112,8 +112,7 @@ class ReadingStandingTests(TestCase):
 
     def test_the_page_names_the_state_never_a_generic_unreachable(self):
         self.row("npm.proxy_host", reachable=False, error="The address answered with a web page.")
-        user = get_user_model().objects.create_user("operator", password="pw", is_staff=True)
-        self.client.force_login(user)
+        operator(self.client)
 
         response = self.client.get(reverse("control_plane:services"))
 
@@ -161,11 +160,7 @@ class UnmanagedTests(TestCase):
         """
         for answer in ("10.0.0.10", "10.9.9.9"):
             with self.subTest(answer=answer):
-                resource = ManagedResource.objects.create(
-                    key="app-dns",
-                    kind="adguard.rewrite",
-                    spec={"domain": "app.example.com", "answer": answer},
-                )
+                resource = declare("app-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": answer})
 
                 self.assertNotIn("app.example.com", [item.hostname for item in unmanaged()])
                 resource.delete()
@@ -184,7 +179,7 @@ class ProviderRecordContractTests(TestCase):
         """
 
         for kind, provider in PROVIDERS.items():
-            if provider.from_record is None:
+            if not provider.sweeps:
                 continue
             with self.subTest(kind=kind):
                 self.assertTrue(
@@ -198,7 +193,7 @@ class ProviderRecordContractTests(TestCase):
             ("npm.proxy_host", A_PROXY),
         ):
             with self.subTest(kind=kind):
-                spec = PROVIDERS[kind].from_record(record)
+                spec = PROVIDERS[kind].record_spec(record)
                 self.assertEqual(validate_spec(kind, spec), spec)
 
 
@@ -213,7 +208,7 @@ class ObservationIsNotAnEventTests(TestCase):
 
     def setUp(self):
         self.principal = cli_principal()
-        self.resource = ManagedResource.objects.create(key="watched", kind="adguard.rewrite", spec=dict(A_REWRITE))
+        self.resource = declare("watched", "adguard.rewrite", dict(A_REWRITE))
         self.before = audit_rows.mark()
 
     def sweep(self, record=None):

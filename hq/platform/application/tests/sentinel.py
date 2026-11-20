@@ -3,7 +3,7 @@
 import json
 from typing import Any
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ..report_testing import bridged, report_connections
 
@@ -23,9 +23,7 @@ def plant_credentials() -> None:
     could include.
     """
 
-    ManagedResource.objects.create(
-        key=RESOURCE, kind="adguard.rewrite", spec={"domain": REWRITE, "answer": "192.0.2.10"}
-    )
+    declare(RESOURCE, "adguard.rewrite", {"domain": REWRITE, "answer": "192.0.2.10"})
     report_connections(
         [
             {

@@ -2,7 +2,6 @@
 
 import asyncio
 
-from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase
 from mcp.server.subscriptions import ToolsListChanged
 
@@ -12,6 +11,7 @@ from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.security import Capability, Principal, web_principal
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.outside_requests import connections_of_its_own
+from hq.platform.core.testing import operator
 
 from ..identity import set_principal
 from ..listen import STREAMS
@@ -28,7 +28,7 @@ class ResumeTests(TransactionTestCase):
     because the brakes are asked on a pooled thread and lifted on another, as in production."""
 
     def test_a_stream_held_back_while_agents_are_paused_hears_once_they_resume(self):
-        person = get_user_model().objects.create_user("example-operator")
+        person = operator()
         roles.give_operator(person)
 
         def pausing(paused):

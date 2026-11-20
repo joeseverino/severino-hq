@@ -3,16 +3,17 @@
 from datetime import timedelta
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.platform.core.audit import stamped
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import command_spec, execute_capability
 from ..denials import LABEL, record_denial
+from ..refusal_codes import Code
 from ..security import Capability, Principal
 
 A_TOKEN_VALUE = "not.a.real-token-but-must-never-be-kept"
@@ -36,12 +37,12 @@ class AuthenticatedRefusalTests(TestCase):
         self.assertTrue(row.metadata["authenticated"])
         self.assertEqual(row.actor_label, "example-agent")
         # The log says what was refused as its button does.
-        self.assertIn(capability_registry()["project.create"].title, row.message)
+        self.assertIn(command_spec("project.create").title, row.message)
         self.assertNotIn("project.create", row.message)
 
     def test_every_authenticated_refusal_gets_its_own_row(self):
         for _ in range(3):
-            record_denial(interface="mcp", reason="agents_paused", actor="example-agent")
+            record_denial(interface="mcp", reason=Code.AGENTS_PAUSED, actor="example-agent")
 
         self.assertEqual(_denials().count(), 3)
 
@@ -49,7 +50,7 @@ class AuthenticatedRefusalTests(TestCase):
 class UnauthenticatedRefusalTests(TestCase):
     def test_repeats_from_one_source_are_counted_not_multiplied(self):
         for _ in range(5):
-            record_denial(interface="mcp", reason="invalid_credential", source="100.64.0.7", authenticated=False)
+            record_denial(interface="mcp", reason=Code.INVALID_TOKEN, source="100.64.0.7", authenticated=False)
 
         row = _denials().get()
         self.assertEqual(row.metadata["count"], 5)
@@ -57,15 +58,15 @@ class UnauthenticatedRefusalTests(TestCase):
 
     def test_a_different_source_is_a_different_row(self):
         for source in ("100.64.0.7", "100.64.0.8"):
-            record_denial(interface="mcp", reason="invalid_credential", source=source, authenticated=False)
+            record_denial(interface="mcp", reason=Code.INVALID_TOKEN, source=source, authenticated=False)
 
         self.assertEqual(_denials().count(), 2)
 
     def test_the_window_closes(self):
         with stamped(lambda *_: {"created_at": timezone.now() - timedelta(minutes=5)}):
-            record_denial(interface="api", reason="invalid_token", source="100.64.0.7", authenticated=False)
+            record_denial(interface="api", reason=Code.INVALID_TOKEN, source="100.64.0.7", authenticated=False)
 
-        record_denial(interface="api", reason="invalid_token", source="100.64.0.7", authenticated=False)
+        record_denial(interface="api", reason=Code.INVALID_TOKEN, source="100.64.0.7", authenticated=False)
 
         self.assertEqual(_denials().count(), 2)
 
@@ -73,7 +74,7 @@ class UnauthenticatedRefusalTests(TestCase):
 class NeverInTheWayTests(TestCase):
     def test_a_failure_to_record_is_swallowed(self):
         with mock.patch("hq.platform.application.denials.record_event", side_effect=RuntimeError("disk full")):
-            record_denial(interface="mcp", reason="agents_paused", actor="example-agent")
+            record_denial(interface="mcp", reason=Code.AGENTS_PAUSED, actor="example-agent")
 
         self.assertEqual(_denials().count(), 0)
 
@@ -99,16 +100,15 @@ class ApiDoorTests(TestCase):
 
 class WhoColumnTests(TestCase):
     def test_a_machine_actor_is_named_in_the_list_not_called_system(self):
-        user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(user)
-        record_denial(interface="mcp", reason="agents_paused", actor="example-agent")
+        operator(self.client, "op")
+        record_denial(interface="mcp", reason=Code.AGENTS_PAUSED, actor="example-agent")
 
         page = self.client.get(reverse("core:audit_list")).content.decode()
 
         self.assertIn("example-agent", page)
 
     def test_the_label_prefers_a_person_then_an_agent_then_an_address(self):
-        user = get_user_model().objects.create_user("op", password="x" * 20)
+        user = operator(username="op")
         cases = (
             (AuditLog(user=user, metadata={"actor": "example-agent"}), "op"),
             (AuditLog(metadata={"actor": "example-agent"}), "example-agent"),
@@ -122,6 +122,6 @@ class WhoColumnTests(TestCase):
 
 class LabelTests(TestCase):
     def test_denials_are_filed_under_one_label(self):
-        record_denial(interface="mcp", reason="agents_paused", actor="example-agent")
+        record_denial(interface="mcp", reason=Code.AGENTS_PAUSED, actor="example-agent")
 
         self.assertEqual(_denials().get().object_type, LABEL)

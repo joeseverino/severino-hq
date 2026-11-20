@@ -12,12 +12,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.platform.application import agent_activity, agent_limits, agent_registry, denials, roles
-from hq.platform.application.agent_limits import RATE_LIMITED
 from hq.platform.application.linked_accounts import bind_sign_in
 from hq.platform.application.markup_testing import all_elements
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.security import AuthorizationError, agent_principal
 from hq.platform.core.models import AgentIdentity, AuditLog
-from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 
 AGENT = "example-agent"
 OTHER = "example-other"
@@ -30,8 +30,7 @@ def _seen(client_id: str, granted=("read",), person=None) -> None:
 def _person(username: str, role: str = ""):
     """A person signed in as ``username``'s key, holding ``role`` (none when blank)."""
 
-    with no_default_role():
-        user = get_user_model().objects.create_user(username)
+    user = person(username=username)
     bind_sign_in(user, username)
     if role:
         roles.assign(user, role)
@@ -53,7 +52,7 @@ class ActivityTests(TestCase):
         _seen(OTHER)
         _did(AGENT)
         _did(AGENT)
-        denials.record_denial(interface="mcp", reason="forbidden", actor=AGENT)
+        denials.record_denial(interface="mcp", reason=Code.FORBIDDEN, actor=AGENT)
         _did(OTHER)
 
         found = agent_activity.recent_activity([AGENT, OTHER])
@@ -63,11 +62,11 @@ class ActivityTests(TestCase):
 
     def test_a_counted_rate_refusal_stands_for_every_call_it_counted(self):
         _seen(AGENT)
-        denials.record_denial(interface="mcp", reason=RATE_LIMITED, actor=AGENT)
-        refused = AuditLog.objects.get(metadata__reason=RATE_LIMITED)
+        denials.record_denial(interface="mcp", reason=Code.RATE_LIMITED, actor=AGENT)
+        refused = AuditLog.objects.get(metadata__reason=Code.RATE_LIMITED)
         refused.metadata = {**refused.metadata, "count": 14}
         refused.save(update_fields=["metadata"])
-        denials.record_denial(interface="mcp", reason="forbidden", actor=AGENT)
+        denials.record_denial(interface="mcp", reason=Code.FORBIDDEN, actor=AGENT)
 
         activity = agent_activity.recent_activity([AGENT])[AGENT]
 
@@ -174,7 +173,7 @@ def _listening(client_id: str, streams: int) -> None:
     """``client_id`` holding ``streams`` listen streams open, as the MCP door holds each."""
 
     for _ in range(streams):
-        held = agent_limits.LIMITS.listen(client_id)
+        held = agent_limits.limits().listen(client_id)
         assert isinstance(held, agent_limits.Slot), held
 
 
@@ -212,9 +211,9 @@ class StreamTests(TestCase):
 
         self.assertEqual(streams.open, streams.cap)
         self.assertTrue(streams.full)
-        refused = agent_limits.LIMITS.listen(AGENT)
+        refused = agent_limits.limits().listen(AGENT)
         self.assertIsInstance(refused, agent_limits.Limited)
-        self.assertEqual(refused.code, agent_limits.TOO_MANY_CALLS)
+        self.assertEqual(refused.code, Code.TOO_MANY_CALLS)
 
 
 class QueryBudgetTests(TestCase):
@@ -233,7 +232,7 @@ class QueryBudgetTests(TestCase):
             _seen(client, person=_person(f"person-{index}", roles.Role.VIEWER if index % 2 else ""))
             for _ in range(8):
                 _did(client)
-                denials.record_denial(interface="api", reason="forbidden", actor=client)
+                denials.record_denial(interface="api", reason=Code.FORBIDDEN, actor=client)
 
         self.assertEqual(self._queries(), few)
 
@@ -267,11 +266,11 @@ class PageTests(TestCase):
 
     def test_the_refused_headline_counts_what_the_rows_count(self):
         _seen(AGENT)
-        denials.record_denial(interface="mcp", reason=RATE_LIMITED, actor=AGENT)
-        refused = AuditLog.objects.get(metadata__reason=RATE_LIMITED)
+        denials.record_denial(interface="mcp", reason=Code.RATE_LIMITED, actor=AGENT)
+        refused = AuditLog.objects.get(metadata__reason=Code.RATE_LIMITED)
         refused.metadata = {**refused.metadata, denials.COUNT: 14}
         refused.save(update_fields=["metadata"])
-        denials.record_denial(interface="mcp", reason="forbidden", actor=AGENT)
+        denials.record_denial(interface="mcp", reason=Code.FORBIDDEN, actor=AGENT)
         self.client.force_login(get_user_model().objects.create_user("operator"))
 
         page = self.client.get(reverse("agent_policy"))

@@ -2,7 +2,6 @@
 
 import re
 
-from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -17,8 +16,10 @@ from hq.platform.application.read_models import recent_activity
 from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.tests.writers import keyed, runbook
 from hq.platform.core import append_only
-from hq.platform.core.audit import audit_operation, record_event
+from hq.platform.core.audit import record_event
+from hq.platform.core.bindings import audit_operation
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 # Written out, so the module imports at a ref without the names.
 SCHEDULER = "timer"
@@ -32,7 +33,7 @@ def _changes_two(progress) -> dict:
 
 class AuditEventPageTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "x" * 14))
+        operator(self.client, "owner", email="owner@example.test")
         with append_only.lifted():
             AuditLog.objects.all().delete()
 
@@ -106,8 +107,7 @@ class EventPageTests(TestCase):
     """An event's page states each fact once, under a label that names one thing."""
 
     def setUp(self):
-        person = get_user_model().objects.create_superuser("owner", "owner@example.test", "x" * 14)
-        self.client.force_login(person)
+        person = operator(self.client, "owner", email="owner@example.test")
         self.job = run(
             "example.import",
             "Import the examples",

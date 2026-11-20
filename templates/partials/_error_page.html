@@ -13,9 +13,7 @@ than decorating the mistake.
 {% endcomment %}
 <div class="error-page">
   <p class="error-page-code">{{ code|breakable }}</p>
-  {% comment %}
-  <!-- ast-grep-ignore: hand-drawn-heading --> an error page stands outside the page frame, so it titles itself
-  {% endcomment %}<h1>{{ title|breakable }}</h1>
+  <h1>{{ title|breakable }}</h1>
   <p class="error-page-body">{{ body|breakable }}{% if request_id %} Its request id is <code>{{ request_id|breakable:"." }}</code>{% endif %}</p>
   {% if search %}
   {% url 'search' as search_url %}

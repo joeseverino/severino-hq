@@ -1,27 +1,9 @@
-"""Call one MCP tool as the operator, from a shell on the host.
+"""Call one MCP tool as the operator, from a shell on the host, or as an agent
+on a development server (docs/Development.md).
 
 The shell already requires the operator's own credentials, so there is no
-shared token; agents use MCP, each under its own identity. The contract is the
-MCP tool surface itself, so the two cannot drift: ``{"tool": "<name>",
-"arguments": {...}}`` on stdin, the tool's JSON result as an MCP caller receives
-it on stdout. A refusal is the doors' ``{"ok": false}`` answer on stdout, its
-message on stderr, and a non-zero exit.
-
-``--agent <client> --grant <permission>`` makes the call as that agent instead,
-on a development server, so an agent's path is walked without an identity
-provider. Its security properties:
-
-- It answers only with DEBUG on and when every host Django serves is a
-  loopback one, as a scratch server's are, and refuses otherwise, so it
-  never acts on a server anyone else reaches.
-- The principal is ``agent_principal``'s of the grant named, the one way a
-  token becomes a principal, so it holds no permission the command line did
-  not name and none an agent's token could not carry. A name HQ does not
-  grant an agent is refused, never dropped.
-- The call is let through as a verified token is (``agent_admission.admitted``)
-  and served by the MCP server's own tool call, in an operation bound to the
-  agent alone, so its rate, brakes, authorization and approval are the ones
-  an agent meets over /mcp/.
+shared token, and the contract is the MCP tool surface itself, so the two
+cannot drift.
 """
 
 import json
@@ -38,6 +20,7 @@ lazy from mcp.shared.exceptions import MCPError
 from hq.config.networks import is_loopback
 from hq.platform.application.capabilities import adapter_refusal
 from hq.platform.application.lists import split_list
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.refusal_status import refusal_of, refuse
 from hq.platform.application.security import Principal, cli_principal
 from hq.platform.core import strict_json
@@ -45,8 +28,8 @@ from hq.platform.mcp.identity import set_principal
 from hq.platform.mcp.server import mcp, structured
 lazy from hq.platform.application import agent_admission
 lazy from hq.platform.application.security import MCP_INTERFACE, agent_grantable, agent_principal
+lazy from hq.platform.core import bindings
 lazy from hq.platform.core.attribution import outside_every_door
-lazy from hq.platform.core.audit import audit_operation
 
 FIELDS = frozenset({"tool", "arguments"})
 # Where the agent door records its calls from: the server's own loopback.
@@ -59,20 +42,20 @@ def _request(text: str) -> tuple[Any, dict[str, Any]] | dict[str, Any]:
     try:
         request = strict_json.loads(text)
     except ValueError:
-        return refuse("invalid_json", "The request is not valid JSON.")
+        return refuse(Code.INVALID_JSON, "The request is not valid JSON.")
     if not isinstance(request, dict):
-        return refuse("invalid_json", "The request must be a JSON object.")
+        return refuse(Code.INVALID_JSON, "The request must be a JSON object.")
     unknown = request.keys() - FIELDS
     if unknown:
-        return refuse("invalid_input", f"Unknown request fields: {', '.join(sorted(unknown))}.")
+        return refuse(Code.INVALID_INPUT, f"Unknown request fields: {', '.join(sorted(unknown))}.")
     if not isinstance(request.get("tool"), str):
-        return refuse("invalid_input", 'The request needs a string "tool".')
+        return refuse(Code.INVALID_INPUT, 'The request needs a string "tool".')
     arguments = request.get("arguments", {})
     if not isinstance(arguments, dict):
-        return refuse("invalid_input", '"arguments" must be a JSON object.')
+        return refuse(Code.INVALID_INPUT, '"arguments" must be a JSON object.')
     tool = mcp.tools.get(request["tool"])
     if tool is None:
-        return refuse("invalid_input", f"Unknown tool: {request['tool']}")
+        return refuse(Code.INVALID_INPUT, f"Unknown tool: {request['tool']}")
     return tool, arguments
 
 
@@ -140,12 +123,12 @@ def answered_as(text: str, principal: Principal) -> Any:
         outside_every_door(),
         agent_admission.carrying(admitted) as caller,
         set_principal(caller),
-        audit_operation(operation=MCP_INTERFACE, principal=caller),
+        bindings.audit_operation(operation=MCP_INTERFACE, principal=caller),
     ):
         try:
             result = async_to_sync(call)()
         except MCPError as exc:
-            return refuse("invalid_input", str(exc))
+            return refuse(Code.INVALID_INPUT, str(exc))
     return result.structured_content
 
 

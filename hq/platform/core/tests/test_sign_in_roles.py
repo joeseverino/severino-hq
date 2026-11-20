@@ -17,6 +17,7 @@ from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AuditLog, PersonRole
 from hq.platform.core.oidc import SSO_FAILURE_SESSION_KEY, HQOIDCAuthenticationBackend
 from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 from hq.platform.core.tests.test_id_token import CLIENT, NONCE, _id_token
 
 User = get_user_model()
@@ -120,8 +121,7 @@ class RoleSettingTests(TestCase):
 
 class WebPrincipalTests(TestCase):
     def test_a_person_with_no_role_holds_nothing(self):
-        with no_default_role():
-            user = User.objects.create_user("example-person")
+        user = person(username="example-person")
 
         self.assertEqual(web_principal(user).capabilities, frozenset())
 

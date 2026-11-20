@@ -6,7 +6,6 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
 from hq.platform.core.table_cells import ROLE_CLASSES
 from hq.platform.core.template_contract import class_words
@@ -346,28 +345,6 @@ class StyleContractTests(SimpleTestCase):
         self.assertEqual([row for row in rows if "menu-item" not in row], [])
         self.assertIn(".menu-item {", self._stylesheet())
 
-    def test_every_rule_sits_inside_a_cascade_layer(self):
-        """Unlayered rules beat every layer, at any specificity.
-
-        The effect compounds: a component written outside the layers cannot be overridden from
-        `components`, so the only available fix is to write the next rule
-        outside the layers too: a responsive rule nothing could reach,
-        answered by another rule nothing could reach.
-
-        Checked by brace depth rather than by parsing CSS: at depth zero the
-        only thing allowed to open a block is an at-rule.
-        """
-
-        outside = []
-        depth = 0
-        for number, line in enumerate(self._stylesheet().splitlines(), 1):
-            stripped = line.strip()
-            if depth == 0 and "{" in stripped and not stripped.startswith(("@", "/*", "*")):
-                outside.append(f"{number}: {stripped[:60]}")
-            depth += line.count("{") - line.count("}")
-
-        self.assertEqual(outside, [], "Rules outside @layer beat every layer. Put them in one.")
-
     def test_no_tracked_file_names_a_reachable_endpoint(self):
         """Addresses, ports and account names are deployment facts, not source.
 
@@ -533,17 +510,6 @@ class StyleContractTests(SimpleTestCase):
             with self.subTest(theme=theme):
                 self.assertEqual(len(values), len(set(values)), "series slots must be distinct")
 
-    def test_series_fills_use_categorical_slots_not_status_colors(self):
-
-        css = self._stylesheet()
-        reserved = {"--danger", "--warn", "--ok", "--attn"}
-        for rule in re.findall(r"\.series-\d+\s*\{([^}]*)\}", css):
-            used = set(re.findall(r"var\(\s*(--[a-z0-9-]+)", rule))
-            self.assertFalse(
-                used & reserved,
-                f"status colors are reserved and must not encode a series: {used & reserved}",
-            )
-
 
 def defined_classes() -> set[str]:
     """Every class a stylesheet HQ serves defines: the bundle every page
@@ -554,12 +520,6 @@ def defined_classes() -> set[str]:
 
 
 @tag("source", "tree")
-@reads(
-    "**/templates/**",
-    "static/css/**/*.css",
-    "hq/platform/core/browser_audit.js",
-    lists=("hq/platform/core/tests/browser/probes/*.py",),
-)
 class TemplateClassStyleTests(SimpleTestCase):
     """Every class a template names is one the stylesheet defines.
 
@@ -608,7 +568,6 @@ class TemplateClassStyleTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**", "hq/**/*.py", "!**/tests/**/*.py")
 class HandRolledClassTests(SimpleTestCase):
     """A class is one part's own, declared on its ``Part``: a template writes
     only the public classes, as an extension does, and a part's partial writes

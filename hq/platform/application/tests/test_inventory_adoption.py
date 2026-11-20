@@ -8,7 +8,6 @@ reset it to HQ's defaults (HSTS off, for one).
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -18,6 +17,7 @@ from hq.domains.control_plane.providers import PROVIDERS, validate_spec
 from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 
 from ..adoption import (
     AdoptCommand,
@@ -106,8 +106,7 @@ class AdoptionTests(TestCase):
 
 class AdoptionWebTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="operator", password="test-only-password")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
         managing_everything()
         # Stored without adopting, because the tests below exercise the manual
         # button, which only has anything to do when nothing took the record
@@ -203,7 +202,7 @@ class AdoptServiceTests(TestCase):
     def test_a_failure_partway_adopts_nothing(self):
         """Half a service is worse than none: HQ would own the ingress and not
         the name, and the service page would show a gap that is not real."""
-        ManagedResource.objects.create(key="shop-example-com-proxy", kind="adguard.rewrite", spec=A_REWRITE)
+        declare("shop-example-com-proxy", "adguard.rewrite", A_REWRITE)
 
         with (
             mock.patch(

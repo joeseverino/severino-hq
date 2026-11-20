@@ -4,23 +4,19 @@ import inspect
 import re
 from types import SimpleNamespace
 
-from django.template import Context, Template, TemplateSyntaxError
+from django.template import TemplateSyntaxError
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.markup_testing import elements, select, with_class
-from hq.platform.application.tests.reads import reads
+from hq.platform.core.testing import render
 from hq.platform.core.tests.test_part_tags import _catalog_templates
 from hq.platform.core.tests.test_template_values import template_sources
 
 
-def _render(source: str, **context) -> str:
-    return Template(source).render(Context(context))
-
-
 class FilterBarTagTests(SimpleTestCase):
     def test_it_is_a_query_in_a_search_landmark_sent_by_filter(self):
-        html = _render('{% filter_bar %}<select name="year"><option>2026</option></select>{% endfilter_bar %}')
+        html = render('{% filter_bar %}<select name="year"><option>2026</option></select>{% endfilter_bar %}')
 
         (landmark,) = elements(html, "search")
         (bar,) = with_class(html, "filter-bar")
@@ -36,7 +32,7 @@ class FilterBarTagTests(SimpleTestCase):
         self.assertEqual(select(html, "role", "status"), [])
 
     def test_narrowed_it_offers_the_way_back_and_says_what_shows(self):
-        html = _render(
+        html = render(
             '{% filter_bar filtered=narrowed clear=every shown=3 total=1200 %}<input type="search" name="q">'
             "{% summary %}1 needs a look.{% endfilter_bar %}",
             narrowed=True,
@@ -53,7 +49,7 @@ class FilterBarTagTests(SimpleTestCase):
         self.assertEqual(shown.words, "3")
 
     def test_what_it_holds_back_is_counted_beside_the_one_link_that_shows_it(self):
-        html = _render(
+        html = render(
             '{% filter_bar shown=93 total=170 held=held more="/example/?view=all" %}'
             '<input type="search">{% endfilter_bar %}',
             held=("30 readings", "47 records with no links"),
@@ -70,10 +66,10 @@ class FilterBarTagTests(SimpleTestCase):
             '{% filter_bar shown=3 total=12 held=held %}<input name="q">{% endfilter_bar %}',
         ):
             with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
-                _render(source, held=("3 readings",))
+                render(source, held=("3 readings",))
 
     def test_its_button_and_clear_stand_apart_from_the_controls_they_send(self):
-        html = _render(
+        html = render(
             '{% filter_bar filtered=True clear="/example/" %}<input type="search" name="q">{% endfilter_bar %}'
         )
 
@@ -85,16 +81,16 @@ class FilterBarTagTests(SimpleTestCase):
             self.assertIn(send, sent.ancestors)
 
     def test_nothing_narrowed_offers_no_way_back(self):
-        html = _render('{% filter_bar filtered=narrowed clear="/example/" %}<input name="q">{% endfilter_bar %}')
+        html = render('{% filter_bar filtered=narrowed clear="/example/" %}<input name="q">{% endfilter_bar %}')
 
         self.assertEqual(elements(html, "a"), [])
 
     def test_narrowed_with_no_way_back_is_refused(self):
         with self.assertRaises(TemplateSyntaxError):
-            _render('{% filter_bar filtered=True %}<input name="q">{% endfilter_bar %}')
+            render('{% filter_bar filtered=True %}<input name="q">{% endfilter_bar %}')
 
     def test_it_asks_another_page_in_its_own_words_with_the_pages_hooks(self):
-        html = _render(
+        html = render(
             '{% filter_bar verb="Check" action="/example/check/" css="example" data_fragment_target="example" %}'
             '<select name="to"></select>{% endfilter_bar %}'
         )
@@ -107,7 +103,7 @@ class FilterBarTagTests(SimpleTestCase):
         self.assertEqual(button.words, "Check")
 
     def test_its_search_is_drawn_first_and_the_query_s_other_fields_are_sent_again(self):
-        html = _render(
+        html = render(
             '{% filter_bar search="Filter by name" query=q keep=kept autofocus=True %}{% choices %}'
             '{% select "kind" kinds label="Kind" every="kind" %}{% endfilter_bar %}',
             q="example",
@@ -142,7 +138,7 @@ class FilterBarFoldTests(SimpleTestCase):
     KINDS = (("host", "Example host"),)
 
     def test_the_filters_control_opens_the_panel_that_holds_the_choices_and_sends_them(self):
-        html = _render(self.SOURCE, states=self.STATES, kinds=self.KINDS, state="")
+        html = render(self.SOURCE, states=self.STATES, kinds=self.KINDS, state="")
 
         (fold,) = select(html, "data-filter-bar-fold")
         self.assertEqual((fold.tag, fold.attrs["type"], fold.words), ("button", "button", "Filters"))
@@ -157,7 +153,7 @@ class FilterBarFoldTests(SimpleTestCase):
         self.assertEqual(button.words, "Apply", "never Filter beside Filters")
 
     def test_choices_with_no_search_fold_and_a_bar_keeps_its_own_verb(self):
-        html = _render(
+        html = render(
             '{% filter_bar verb="Check" %}{% choices %}<select name="to"><option>a</option></select>{% endfilter_bar %}'
         )
 
@@ -168,8 +164,8 @@ class FilterBarFoldTests(SimpleTestCase):
         self.assertEqual(button.words, "Check")
 
     def test_a_folded_bar_says_how_many_of_its_choices_are_set(self):
-        unset = _render(self.SOURCE, states=self.STATES, kinds=self.KINDS, state="")
-        chosen = _render(self.SOURCE, states=self.STATES, kinds=self.KINDS, state="on")
+        unset = render(self.SOURCE, states=self.STATES, kinds=self.KINDS, state="")
+        chosen = render(self.SOURCE, states=self.STATES, kinds=self.KINDS, state="on")
 
         self.assertEqual(with_class(unset, "filter-count"), [])
         (count,) = with_class(chosen, "filter-count")
@@ -187,7 +183,7 @@ class FilterBarFoldTests(SimpleTestCase):
             '{% filter_bar id=named %}<input type="search" name="q">{% choices %}'
             '<select name="kind"><option>a</option></select>{% endfilter_bar %}'
         )
-        html = _render(source) + _render(source, named="example-other")
+        html = render(source) + render(source, named="example-other")
 
         folds = [fold.attrs["popovertarget"] for fold in select(html, "data-filter-bar-fold")]
         self.assertEqual(len(set(folds)), 2)
@@ -225,7 +221,7 @@ class FilterBarFoldTests(SimpleTestCase):
     def test_the_sizer_is_a_copy_no_one_reaches_sends_or_finds(self):
         from hq.platform.core.templatetags.filter_tags import unnamed
 
-        html = _render(self.SOURCE, states=self.STATES, kinds=self.KINDS, state="on")
+        html = render(self.SOURCE, states=self.STATES, kinds=self.KINDS, state="on")
 
         (sizer,) = re.findall(r'<div class="filter-bar-sizer"([^>]*)>(.*?)</div>\s*</div>', html, re.DOTALL)
         self.assertIn('aria-hidden="true"', sizer[0])
@@ -245,7 +241,7 @@ class FilterBarFoldTests(SimpleTestCase):
             '<div class="table-filter-options" id="example-menu" popover><div><label>'
             '<input type="checkbox" name="kind" value="host"> Example host</label></div></div></div>'
         )
-        html = _render(
+        html = render(
             '{% filter_bar %}<input type="search" name="q">{% choices %}{{ menu|safe }}{% endfilter_bar %}', menu=menu
         )
 
@@ -263,7 +259,7 @@ class FilterBarFoldTests(SimpleTestCase):
         self.assertEqual(str(unnamed("<b><i popover><i>x</i></i>y</b>")), "<b><i popover></i>y</b>")
 
     def test_a_bar_with_no_choices_draws_no_fold(self):
-        html = _render('{% filter_bar %}<input type="search" name="q">{% endfilter_bar %}')
+        html = render('{% filter_bar %}<input type="search" name="q">{% endfilter_bar %}')
 
         self.assertEqual(select(html, "data-filter-bar-fold"), [])
         self.assertEqual(select(html, "popover"), [])
@@ -358,7 +354,6 @@ class FilterBarFaultTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**")
 class FilterBarUseTests(SimpleTestCase):
     def test_every_filter_bar_says_its_count_through_the_part(self):
         """Every bar reads the same: the search first and the choices beside

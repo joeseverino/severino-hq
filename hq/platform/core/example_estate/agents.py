@@ -1,12 +1,5 @@
-"""An agent HQ has seen: it called over the API and MCP from the server, a
-device the operator approved for it, was refused a change to the tailnet the
-operator blocked it from, and asked to answer the photos library's name with
-the server's tailnet address, which waits because the operator asks to see the
-records it changes first, and holds one update stream open. Beside it, the agents of the last week (``lately``):
-one calling from the owner's laptop, a device that waits for the owner's
-approval, and once from the server's own loopback, which no tailnet device
-sent and so was refused, holding every update stream it may; and one a
-viewer signed in, calling from the owner's phone, which the owner blocked.
+"""An agent HQ has seen, with its devices, a refusal, a held change and an open
+stream, and the agents of the last week (``lately``).
 
 Each step runs the way a verified token's call does in production, so the
 Agents page and the approvals queue read what HQ itself records.
@@ -25,7 +18,6 @@ from hq.domains.control_plane.models import CapabilityRule, ManagedResource
 from hq.platform.application import (
     agent_access,
     agent_admission,
-    agent_devices,
     agent_limits,
     agent_registry,
     denials,
@@ -35,12 +27,13 @@ from hq.platform.application import (
 )
 from hq.platform.application.agent_access import SET_AGENT_BLOCK
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
-from hq.platform.application.agent_limits import RATE_LIMITED, Slot
+from hq.platform.application.agent_limits import Slot
 from hq.platform.application.approvals import is_held
 from hq.platform.application.capabilities import command_spec, run_capability
 from hq.platform.application.capability_policy import SET_POLICY, set_rule
 from hq.platform.application.linked_accounts import sign_in_subject
 from hq.platform.application.own_devices import SET_OWN_DEVICE
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.security import (
     API_INTERFACE,
     MCP_INTERFACE,
@@ -51,8 +44,9 @@ from hq.platform.application.security import (
     web_principal,
 )
 from hq.platform.application.tokens import token_principal
+from hq.platform.core import bindings
 from hq.platform.core.attribution import from_the_shell, signing_in
-from hq.platform.core.audit import audit_operation, stamped
+from hq.platform.core.audit import stamped
 from hq.platform.core.models import AgentDevice, AgentIdentity, LinkedAccount, OwnDevice, PersonRole
 
 from . import doors
@@ -164,14 +158,9 @@ def asks_to_open_the_policy():
 
 
 def lately(owner=None):
-    """The week behind the Agents page, after the months ``history.settle`` dates.
-
-    An assistant the owner signed in through their own sign-in, carrying every
-    permission HQ offers but one, calling over MCP faster than HQ lets it, and
-    once from the server's loopback, which no tailnet device sent; a reader a viewer
-    signed in, granted more than their role, calling from the owner's phone,
-    which the owner blocked there; a build runner calling as itself, which the
-    owner blocked; and the owner's phone, registered as their own device.
+    """The week behind the Agents page, after the months ``history.settle``
+    dates: an over-rate assistant, an over-granted reader, a blocked runner
+    and the owner's phone.
     """
 
     # The server was approved for the agent the day it was first seen (``history.settle``).
@@ -212,10 +201,10 @@ def lately(owner=None):
     # Refused for its rate: a minute of refusals, written as the one row that counts them.
     counted = {"created_at": now() - timedelta(minutes=14), "metadata": {denials.COUNT: RATE_LIMITED_TIMES}}
     with stamped(lambda _obj, _action, _type: counted), doors.mcp():
-        denials.record_denial(interface=MCP_INTERFACE, reason=RATE_LIMITED, actor=ASSISTANT)
+        denials.record_denial(interface=MCP_INTERFACE, reason=Code.RATE_LIMITED, actor=ASSISTANT)
     if owner is not None:
         # Stopped at its admission: the tailnet placed it on no device.
-        unplaced = agent_access.unplaced(agent_devices.Unplaced.NO_DEVICE)
+        unplaced = agent_access.unplaced(Code.DEVICE_UNKNOWN)
         stopped = agent_admission.Stopped(token_principal(_assistant_claims(), MCP_INTERFACE), unplaced)
         with _on(now() - timedelta(minutes=30)), doors.mcp():
             refused = agent_admission.refused(stopped, source=UNPLACED_AT)
@@ -260,16 +249,13 @@ def _assistant_claims(person=PERSON):
 def _listen(principal, streams):
     """``principal`` holding ``streams`` update streams open, each opened as the MCP door opens one.
 
-    HQ counts a stream in its one serving process's memory, so these are held
-    for the life of the process that builds the estate: a page it draws shows
-    them, as the demo, ``dev:look`` and the browser gates draw, and a server
-    the ``seed`` command filled from another process holds none. A database
-    rolled back gives none of them back, so an estate built again in the same
-    process opens only those it lacks.
+    A stream lives in the serving process's memory, so these last as long as
+    the process that builds the estate, and a rebuild opens only those it
+    lacks.
     """
 
     with doors.mcp():
-        for _ in range(streams - agent_limits.LIMITS.listening(agent_subject(principal))):
+        for _ in range(streams - agent_limits.limits().listening(agent_subject(principal))):
             held = agent_admission.stream_opened(principal)
             _expect(held, isinstance(held, Slot), "opened")
 
@@ -379,7 +365,7 @@ def _deciding(owner):
         with from_the_shell(SET_POLICY):
             yield
         return
-    with doors.page("agent_policy"), audit_operation(operation=SET_POLICY, principal=web_principal(owner)):
+    with doors.page("agent_policy"), bindings.audit_operation(operation=SET_POLICY, principal=web_principal(owner)):
         yield
 
 

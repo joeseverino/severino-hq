@@ -13,15 +13,27 @@ from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from .adoption import ADOPT, AdoptCommand, adopt
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
+from .path_records import PathRecord
 from .projection import complete, projection_scope, read_once
 from .record_errors import RecordNotFound
 from .resources import EmptyQuery
 from .security import Capability
 from .service_facets import zone_holding
+from .service_records import (
+    AliasRecordPart,
+    ExposurePart,
+    FacetPart,
+    ServiceItem,
+    ServiceRecord,
+    ServiceRow,
+    SummaryPart,
+)
 from .services import (
     CONTAINER_KIND,
     HQ_MARK,
+    LISTED,
     OBSERVED_MARK,
+    PROSPECT,
     Service,
     ordered_services,
     prospects,
@@ -33,7 +45,7 @@ lazy from .derived_reads import get_path, serialize_path
 lazy from .facts import readings
 lazy from .hq_self import hq_service
 lazy from .record_saves import row
-lazy from .resource_records import FacetPart, PathRecord, ServiceItem, ServiceRecord, ServiceRow
+lazy from .service_context import service_summary
 
 
 def listed_services(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
@@ -101,14 +113,33 @@ def list_services() -> dict[str, Any]:
 
 
 def get_service(hostname: str) -> ServiceRecord:
-    """One listed hostname, with the resources behind each facet and its request path."""
+    """One hostname with the resources behind each facet and its request path:
+    a listed one, or any other hostname, which nothing serves yet."""
 
     wanted = normalized_hostname(hostname)
     with projection_scope():
         found = next((service for service in listed_services() if service.hostname == wanted), None)
+        listing = LISTED
         if found is None:
-            raise RecordNotFound("No service is listed for that hostname.")
-        return {"service": serialize_service(found), "path": serialize_path(found.path)}
+            if not is_hostname(wanted):
+                raise RecordNotFound("That is not a hostname.")
+            (found,), listing = prospects((wanted,)), PROSPECT
+        exposure = found.exposure
+        return {
+            **serialize_service(found),
+            "url": found.url,
+            "listing": listing,
+            "path": serialize_path(found.path),
+            "summary": [row(item, SummaryPart) for item in service_summary(found)],
+            "exposure": row(
+                exposure,
+                ExposurePart,
+                path_gates=exposure.worst.path_gates if exposure.worst else (),
+            ),
+            "aliases": list(found.aliases),
+            "alias_records": [row(claim, AliasRecordPart, alias=alias) for alias, claim in found.alias_claims],
+            "provider_answers": found.provider_answers,
+        }
 
 
 @dataclass(frozen=True, slots=True)

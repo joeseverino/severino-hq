@@ -15,7 +15,6 @@ from django.template import engines
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.page_parts import SectionPart
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.ui import BUTTON_LOOKS, button_classes
 from hq.platform.core.stylesheets import stylesheet
 from hq.platform.core.template_contract import parts
@@ -206,7 +205,6 @@ class SelectorExtractionTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**", "**/templatetags/*.py", "hq/platform/core/table_cells.py")
 class BrowserGateSelectorTests(SimpleTestCase):
     def test_every_gate_selector_names_rendered_markup(self):
         missing = sorted(
@@ -219,9 +217,6 @@ class BrowserGateSelectorTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads(
-    "**/templates/**", "**/templatetags/*.py", "hq/platform/core/table_cells.py", "hq/platform/core/browser_audit.js"
-)
 class LayoutAuditSelectorTests(SimpleTestCase):
     def test_the_audit_reads_selectors(self):
         self.assertGreater(len(audit_selectors(AUDIT.read_text(encoding="utf-8"))), 5)

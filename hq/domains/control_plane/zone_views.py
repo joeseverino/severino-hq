@@ -8,43 +8,43 @@ second truth, only a second way of slicing the first.
 """
 
 from dataclasses import replace
+from functools import cached_property
+from typing import override
 
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
 from django.views import View
+from django.views.generic import TemplateView
 
 from hq.domains.control_plane.forms import MailFailuresForm, MailPolicyForm, MailSendersForm
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.inventory import inventory_state
 from hq.platform.application.mail_policy import mail_overview, parse_spf
-from hq.platform.application.pages import PageAction, page_context
+from hq.platform.application.pages import PageAction, RecordPageMixin, page_context
 from hq.platform.application.pins import DOMAIN, PIN, pinned
+from hq.platform.application.references import Kind
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
     MAIL_POLICY,
     REMOVAL_CAPABILITY,
     UPDATE_CAPABILITY,
+    Offered,
+    declaration_actions,
     public_dns_enabled,
-    resource_capabilities,
 )
+from hq.platform.application.resources import every_item
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.ui import counted
 from hq.platform.application.web_writes import execute_posted
-from hq.platform.application.zones import (
-    ADOPT_ZONE,
-    RECORD_KIND,
-    domain_context,
-    find_zone,
-    zone_catalog,
-)
+from hq.platform.application.zones import ADOPT_ZONE, RECORD_KIND, find_zone, zone_catalog
 from hq.platform.core.templatetags.value_tags import entity
 from hq.platform.core.web_refusals import refused
 
 
-def _records_lede(zone) -> str:
+def _records_lede(domain) -> str:
     """Where this domain's records stand, as a clause beside the heading.
 
     Unmanaged records are not a backlog: a declared domain takes on its records
@@ -52,14 +52,19 @@ def _records_lede(zone) -> str:
     takes it on.
     """
 
-    if not zone.managed:
-        return f"{counted(len(zone.records), 'record')}, none managed by HQ"
-    if not zone.adoptable:
-        return f"{counted(zone.managed_count, 'record')}, all managed by HQ"
-    return f"{counted(zone.managed_count, 'record')} managed by HQ, {len(zone.adoptable)} new"
+    records = domain["records"]
+    if not domain["declaration"]:
+        return f"{counted(len(records), 'record')}, none managed by HQ"
+    managed = sum(1 for record in records if record["declaration"])
+    new = sum(
+        1 for record in records if not record["declaration"] and record["manageable"] and not record["observed_only"]
+    )
+    if not new:
+        return f"{counted(managed, 'record')}, all managed by HQ"
+    return f"{counted(managed, 'record')} managed by HQ, {new} new"
 
 
-def _page_relationships(zone, relationships):
+def _page_relationships(domain, relationships):
     """What a domain relates to, as its own page says it: each thing once.
 
     The cards at the head of the page already name the domain's services, so
@@ -71,10 +76,11 @@ def _page_relationships(zone, relationships):
 
     carded = {
         url
-        for card in zone.cards
+        for insight in domain["insights"]
+        if not insight["notice"]
         for url in (
-            *(row.url for row in card.rows or ()),
-            *(link.url for _label, links in card.links or () for link in links),
+            *(each["url"] for each in insight["rows"]),
+            *(link["url"] for group in insight["links"] for link in group["links"]),
         )
         if url
     }
@@ -230,44 +236,71 @@ class ZonePinView(View):
         return redirect(safe_next(request, fallback=reverse("zones:index")))
 
 
-def _pin_action(zone) -> PageAction | None:
+def _pin_action(name: str, pinned: bool) -> PageAction | None:
     """Star a domain from its own head.
 
     Starring decides which domain `/domains/` opens: the catalog sorts pinned
     first, and that page goes to the first managed domain.
     """
 
-    return PageAction.command(PIN, zone.zone, variant="off" if zone.pinned else "on")
+    return PageAction.command(PIN, name, variant="off" if pinned else "on")
 
 
-class ZoneDetailView(View):
+class ZoneDetailView(RecordPageMixin, TemplateView):
     """One domain: every record in it, and what the zone currently says."""
 
-    def get(self, request, zone):
-        context = domain_context(zone, pinned=pinned(request.user, DOMAIN))
-        if context is None:
-            raise Http404("No such domain.")
-        found, zones = context.zone, context.zones
+    template_name = "control_plane/zone_detail.html"
+    resource = "domains"
+    context_object_name = "domain"
+    url_kwarg = "zone"
+
+    @cached_property
+    def pins(self) -> frozenset[str]:
+        return pinned(self.request.user, DOMAIN)
+
+    @override
+    def get_page_lede(self):
+        ref = self.record["connection_ref"]
+        if not ref:
+            return ""
+        return format_html("Records from {}.", entity({"request": self.request}, entity_link("connection", ref)))
+
+    @override
+    def get_page_actions(self):
+        name = self.record["name"]
+        return (_pin_action(name, name in self.pins), *declaration_actions(self.record["declaration"]))
+
+    @override
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        domain = self.record
+        name = domain["name"]
+        here = self.request.get_full_path()
         relationships, read_with = _page_relationships(
-            found, relationships_for(f"zone:{found.zone}", principal=web_principal(request.user))
+            domain, relationships_for(Kind.ZONE.of(name), principal=web_principal(self.request.user))
         )
-        return render(
-            request,
-            "control_plane/zone_detail.html",
+        rows = [(record, _record_actions(record, here)) for record in domain["records"]]
+        every = every_item("domains", principal=web_principal(self.request.user), fields=["name", "url", "declaration"])
+        context.update(
             {
-                "zone": found,
                 # Every domain, so the switcher can reach an undeclared one
-                # without going back to a list to find it.
+                # without going back to a list to find it: pinned first, as
+                # the catalog sorts them.
                 "zones": [
                     {
-                        "url": each.url,
-                        "zone": each.zone,
-                        "pinned": each.pinned,
-                        "managed": each.managed,
-                        "current": each.zone == found.zone,
+                        "url": each["url"],
+                        "zone": each["name"],
+                        "pinned": each["name"] in self.pins,
+                        "managed": bool(each["declaration"]),
+                        "current": each["name"] == name,
                     }
-                    for each in zones
+                    for each in sorted(every, key=lambda each: (each["name"] not in self.pins, each["name"]))
                 ],
+                "adopt": (
+                    PageAction.command(ADOPT_ZONE, name, field="token", value=domain["adoption"], primary=True)
+                    if domain["adoption"]
+                    else None
+                ),
                 "record_kind": RECORD_KIND,
                 "inventory": inventory_state(),
                 # A deployment can have changing public DNS switched off. Where
@@ -275,64 +308,32 @@ class ZoneDetailView(View):
                 # buttons that always fail is worse than a page that says so
                 # once.
                 "public_dns_enabled": public_dns_enabled(),
-                "records_lede": _records_lede(found),
+                "records_lede": _records_lede(domain),
+                # 1 leaves a TTL to the DNS service (Cloudflare's "Auto"), which
+                # the table leaves blank, so a zone where every record does has
+                # no TTL column.
+                "ttl_set": any(record["ttl"] != 1 for record in domain["records"]),
                 "record_rows": {
-                    "routing": _record_rows(found.routing, request.get_full_path()),
-                    "policy": _record_rows(found.policy, request.get_full_path()),
+                    "routing": [(record, actions) for record, actions in rows if not record["secondary"]],
+                    "policy": [(record, actions) for record, actions in rows if record["secondary"]],
                 },
                 "relationships": relationships,
                 "read_with": read_with,
-                **page_context(
-                    found.zone,
-                    (
-                        format_html(
-                            "Records from {}.",
-                            entity({"request": request}, entity_link("connection", found.connection_ref)),
-                        )
-                        if found.connection_ref
-                        else ""
-                    ),
-                    actions=(_pin_action(found), *_declaration_actions(found)),
-                ),
-            },
+            }
         )
+        return context
 
 
 def _record_actions(record, here: str) -> tuple[PageAction, ...]:
     """What a record's declaration offers from its row: Edit, which comes back
     to this page, and Remove."""
 
+    key = record["declaration"]
     offered = (
-        record.offered.edit(record.resource_key, next=here) if record.offered else None,
-        PageAction.command(REMOVAL_CAPABILITY, record.resource_key)
-        if record.offered and record.offered.removes
-        else None,
+        Offered(edits=record["edits"]).edit(key, next=here),
+        PageAction.command(REMOVAL_CAPABILITY, key) if record["removes"] else None,
     )
     return tuple(filter(None, offered))
-
-
-def _record_rows(records, here: str) -> list[tuple]:
-    """Each record with its row's actions, as ``_zone_records.html`` draws them."""
-
-    return [(record, _record_actions(record, here)) for record in records]
-
-
-def _declaration_actions(zone) -> tuple[PageAction, ...]:
-    """Edit and removal for the domain's declaration, which lives on this page."""
-
-    if not zone.resource_key:
-        return ()
-    resource = ManagedResource.objects.filter(key=zone.resource_key).first()
-    if resource is None:
-        return ()
-    capabilities = resource_capabilities(resource)
-    offered = capabilities.offered
-    key = zone.resource_key
-    shown = (
-        offered.edit(key),
-        PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant) if offered.removes else None,
-    )
-    return tuple(filter(None, shown))
 
 
 class ZoneAdoptView(View):

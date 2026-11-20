@@ -10,6 +10,7 @@ with neither naming the other.
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from functools import cache
 from typing import TYPE_CHECKING, Any, override
 
@@ -24,9 +25,9 @@ from django.utils.text import capfirst
 
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .record_errors import NOT_FOUND
+from .refusal_codes import Code
 from .tone import Tone
-lazy from . import entity_links, security
+lazy from . import entity_links
 lazy from .card_items import ListRow
 lazy from .demo import showing_demo
 lazy from .entity_links import NODE_KINDS, entity_link, kind_label, node_name
@@ -41,8 +42,45 @@ lazy from .topology import derive_topology
 if TYPE_CHECKING:
     from .entity_links import EntityLink
 
+
+class Kind(StrEnum):
+    """A kind HQ's own code names things by, so a reference to one is built
+    from its member and a misspelled kind does not load."""
+
+    CONTROLLER = "controller"
+    CONNECTION = "connection"
+    MACHINE = "machine"
+    SERVICE = "service"
+    ZONE = "zone"
+    ABILITY = "ability"
+    RESOURCE = "resource"
+    REGISTRY = "registry"
+    TARGET = "target"
+    DEPENDENCY = "dependency"
+    # A topology edge's id, which names no page.
+    EDGE = "edge"
+    PROJECT = "project"
+    ASSET = "asset"
+    WRITEUP = "writeup"
+    DOCUMENT = "document"
+    EXPENSE = "expense"
+    RECEIPT = "receipt"
+    # A message sent through the site's contact form, and a run of a playbook or a scan.
+    MESSAGE = "message"
+    RUN = "run"
+
+    def of(self, identity: str) -> str:
+        """The reference to the thing of this kind named ``identity``."""
+        return str(Reference(self, identity))
+
+    def identity_in(self, value: Any) -> str:
+        """What ``value`` names when it refers to a thing of this kind; "" otherwise."""
+        reference = Reference.parse(value)
+        return reference.identity if reference is not None and reference.kind == self else ""
+
+
 # The kinds the topology names by their label, which is what their page is addressed by.
-ESTATE_KINDS = ("machine", "zone", "service")
+ESTATE_KINDS = (Kind.MACHINE, Kind.ZONE, Kind.SERVICE)
 NAME_SUFFIX = "_name"
 # In a field's ``kinds``: every registry kind that is a certificate.
 CERTIFICATE = "certificate"
@@ -201,7 +239,7 @@ class ReferenceField(models.CharField):
             setattr(model_instance, self.name_attname, link.label[: _name_length(self)])
             return value
         if not self._stored(model_instance, value):
-            raise ValidationError(f"HQ has nothing called {value!r} to link this to.", code=NOT_FOUND)
+            raise ValidationError(f"HQ has nothing called {value!r} to link this to.", code=Code.NOT_FOUND)
         return value
 
     @override
@@ -219,14 +257,6 @@ class ReferenceField(models.CharField):
         if row._state.adding or row.pk is None:
             return False
         return type(row)._default_manager.filter(pk=row.pk, **{self.attname: value}).exists()
-
-    @override
-    def formfield(self, **kwargs: Any) -> Any:
-        return ReferenceChoiceField(
-            reference=self,
-            label=kwargs.get("label") or str(self.verbose_name).capitalize(),
-            help_text=kwargs.get("help_text", self.help_text),
-        )
 
 
 def _reader() -> Principal:
@@ -509,30 +539,6 @@ def as_stored(value: object) -> tuple[str, str]:
 # ----- Choosing one in a form ----------------------------------------------------
 
 
-class ReferenceChoiceField(forms.ChoiceField):
-    """The one picker for a reference: a list grouped by what each thing is.
-
-    It offers nothing until ``bind`` gives it the viewer, so a form built
-    without one accepts only the value it already holds.
-    """
-
-    def __init__(self, *, reference: ReferenceField, **kwargs: Any) -> None:
-        self.reference = reference
-        super().__init__(required=False, choices=[("", "Nothing")], **kwargs)
-
-
-def bind(form: forms.BaseForm, *, principal: Principal) -> None:
-    """Fill every reference picker on ``form`` with what this viewer may choose."""
-
-    pickers = [name for name, field in form.fields.items() if isinstance(field, ReferenceChoiceField)]
-    for name in pickers:
-        field = form.fields[name]
-        held = form.initial.get(name) or getattr(form.instance, name, "")
-        kept = getattr(form.instance, f"{name}{NAME_SUFFIX}", "")
-        field.choices = choices(field.reference, principal=principal, held=(held, kept))
-    leave_off_unoffered(form, pickers)
-
-
 def leave_off_unoffered(form: forms.BaseForm, pickers: Iterable[str]) -> None:
     """Drop each of ``pickers`` that offers nothing to choose from ``form``.
 
@@ -544,15 +550,6 @@ def leave_off_unoffered(form: forms.BaseForm, pickers: Iterable[str]) -> None:
     for name in [name for name in pickers if not form.fields[name].required]:
         if not any(_option_values(form.fields[name].choices)):
             del form.fields[name]
-
-
-class ReferencePickerMixin:
-    """For a view of a form with a reference on it: its pickers offer what this viewer may choose."""
-
-    def get_form(self, form_class: type[forms.BaseForm] | None = None) -> forms.BaseForm:
-        form = super().get_form(form_class)
-        bind(form, principal=security.web_principal(self.request.user))
-        return form
 
 
 def choices(field: ReferenceField, *, principal: Principal, held: tuple[str, str] = ("", "")) -> list[tuple[Any, Any]]:

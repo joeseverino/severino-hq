@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from hq.domains.control_plane.dns_lookup import LookupUnavailable
 
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import command_spec, execute_capability
 from ..integration_specs import command_adapter
 from ..lookup import AddressCommand, NameCommand, look_up_address, look_up_name
 from ..security import Capability, Principal
@@ -180,11 +180,9 @@ class ReadCapabilityTests(TestCase):
     """The `read` effect."""
 
     def test_both_lookups_are_registered_as_reads(self):
-        registry = capability_registry()
-
         for name in ("lookup.name.read", "lookup.address.read"):
             with self.subTest(name=name):
-                self.assertEqual(registry[name].effect, "read")
+                self.assertEqual(command_spec(name).effect, "read")
 
     def test_a_read_executes_without_an_idempotency_key(self):
         """The branch that skips `execute_once`, which nothing exercised before."""

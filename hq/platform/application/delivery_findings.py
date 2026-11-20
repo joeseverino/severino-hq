@@ -9,6 +9,7 @@ the delivery's own record, read as its health says (``infrastructure``).
 from .delivery_progress import STALLED_AFTER, WAITING, delivery_progress
 from .entity_links import entity_link
 from .finding_model import Finding, FindingEstate, FindingRule, opens
+from .references import Kind
 from .tone import Tone
 from .ui import counted, ended
 lazy from .infrastructure import enabled_resources, resource_health
@@ -32,7 +33,7 @@ def _deploys(_estate: FindingEstate) -> tuple[Finding, ...]:
             found.append(
                 Finding(
                     rule=DEPLOY_WAITING,
-                    subject=f"resource:{resource.key}",
+                    subject=Kind.RESOURCE.of(resource.key),
                     title="A deploy is waiting for your approval",
                     severity=Tone.ATTENTION,
                     explanation=said,
@@ -47,7 +48,7 @@ def _deploys(_estate: FindingEstate) -> tuple[Finding, ...]:
         found.append(
             Finding(
                 rule=DEPLOYING,
-                subject=f"resource:{resource.key}",
+                subject=Kind.RESOURCE.of(resource.key),
                 title="A deploy is running" if progress.state == "running" else "A deploy is about to start",
                 severity=Tone.ATTENTION,
                 explanation=(f"{said} It becomes a problem if production is still behind after {STALLS_AFTER}."),

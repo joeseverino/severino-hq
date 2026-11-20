@@ -23,7 +23,6 @@ from hq.domains.calendars.models import Entry
 from hq.domains.control_plane.models import (
     ApprovalRequest,
     DashboardConfiguration,
-    ManagedResource,
     OperationRequest,
 )
 from hq.domains.docs_index.models import DocumentationRecord
@@ -32,6 +31,7 @@ from hq.platform.core import revisions
 from hq.platform.core.management.commands import constraint_preflight
 from hq.platform.core.models import AgentAccess, AgentDevice, AgentIdentity
 from hq.platform.core.rules import Rule, one_of
+from hq.platform.core.testing import declare
 
 DAY = date(2026, 10, 1)
 
@@ -73,7 +73,7 @@ class RuleTests(TestCase):
     def test_the_database_refuses_a_row_written_around_full_clean(self):
         now = timezone.now()
         entry = Entry.objects.create(title="Entry", starts_on=DAY)
-        resource = ManagedResource.objects.create(key="example", kind="adguard.rewrite", spec={})
+        resource = declare("example", "adguard.rewrite")
         asked = {"resource": resource, "requested_actor": "someone", "requested_interface": "web"}
         queued = OperationRequest.objects.create(**asked, action="reconcile", idempotency_key="queued")
         pending = ApprovalRequest.objects.create(

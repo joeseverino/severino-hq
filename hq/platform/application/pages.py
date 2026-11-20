@@ -1,13 +1,8 @@
 """The frame every page shares: its head, its actions, its section navigation.
 
-A view says what its page is (a title, a lede, the actions it offers) and
-``templates/page.html`` draws it the same way on every page, host or extension.
-A page template fills only ``{% block page %}``, so it never writes its own head
-or a form for one button (a posting ``button``). Class-based views mix in
-``PageMixin``; function views pass ``page_context`` to ``render``.
-
-Every page also reads under one capability, checked before its view runs
-(``page_refusal``, docs/Security.md#what-a-page-reads-under).
+A view says what its page is and ``templates/page.html`` draws it the same way
+on every page. Every page reads under one capability, checked before its view
+runs (docs/Security.md#what-a-page-reads-under).
 """
 
 import dataclasses
@@ -15,13 +10,17 @@ import re
 from collections.abc import Callable, Iterable, Mapping
 from copy import copy
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 from weakref import WeakKeyDictionary
 
 from django.core.exceptions import ImproperlyConfigured
+from django.http import Http404
+from django.shortcuts import redirect
 from django.urls import NoReverseMatch, Resolver404, get_resolver, get_script_prefix, get_urlconf, resolve
 from django.utils.functional import Promise
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from .asks import Ask
 from .fragments import FragmentMixin
@@ -33,9 +32,11 @@ lazy from .capabilities import command_spec
 lazy from .contracts import Effect
 lazy from .outbound_work import refusal as outbound_refusal
 lazy from .page_reads import remedy
+lazy from .record_errors import RecordNotFound
 lazy from .refusal_status import Refusal, refusal_of
 lazy from .request_context import current as current_request
 lazy from .request_identity import signed_in
+lazy from .resources import every_item, get_resource, resource_registry
 lazy from .routes import reverse, routed
 lazy from .security import AuthorizationError, Capability, web_principal
 
@@ -69,11 +70,7 @@ class PageDialog:
 class PageAction:
     """One control in a page's head or a row's end.
 
-    Built as it is, it is a link (GET) somewhere, and may open a dialog
-    (``modal``) while still pointing at a page that does the same job: a
-    ``PageDialog`` the page draws, or the id of one the host already draws on
-    every page. A control for a command is built by ``command`` alone, which
-    reads its words, address, method, danger and permission from the
+    A control for a command is built by ``command`` alone, from the
     declarations, so a hand-built one cannot post, look destructive or say
     words of its own.
     """
@@ -115,21 +112,13 @@ class PageAction:
         modal: PageDialog | str = "",
         confirms: bool = False,
     ) -> PageAction | None:
-        """The control that runs the command ``name`` on ``target``, or None
-        when the person the page is for may not run it.
+        """The control that runs the command ``name`` on ``target``, or None when the page's person may not run it.
 
-        Its words are the command's (``variant`` one of its declared modes),
-        it looks destructive when the command is, and it reaches the route
-        whose view declares it ``runs`` the command (``command_route``), else
-        the command's own page. A press that sends something (``value``,
-        ``fields``) posts it, as one to a view that answers only POST does;
-        any other opens the form or confirmation its view draws. ``target`` is the route's one argument, or its arguments
-        by name; ``query`` is added to the address (a ``next``, a form's
-        first values). One that opens its view's form may open it in a
-        dialog instead (``modal``). It is drawn unusable, saying why, while the command
-        would be refused for ``target`` (``refused``, else the work's own).
-        The press on the confirmation that view draws ``confirms``: it posts
-        there.
+        Its words (``variant`` a declared mode), danger, address and method are
+        the command's. ``value`` or ``fields`` make the press post, ``query``
+        is added to the address, ``modal`` opens a dialog, and ``confirms`` is
+        the press on its view's confirmation. It is drawn unusable, saying why,
+        while the command would be refused for ``target``.
         """
 
         if not runs_here(name):
@@ -493,15 +482,111 @@ class PageMixin(FragmentMixin):
         return context
 
 
+def _names_its_read(cls: type) -> None:
+    if not (getattr(cls, "resource", "") and getattr(cls, "context_object_name", "")):
+        raise ImproperlyConfigured(f"{cls.__name__} names the resource it reads and its context_object_name.")
+
+
+class RecordListMixin(PageMixin):
+    """The list page of a resource kind, its rows the items that kind's API
+    and MCP list read answer (``resources.every_item``), so a row says what an
+    agent's list says. The template reads them as ``context_object_name``."""
+
+    # The ``ResourceSpec`` whose list read draws the page, by its name.
+    resource = ""
+    context_object_name = ""
+    # The fields of each item the page draws, as a field mask; none, its list's own.
+    fields: tuple[str, ...] = ()
+    records: list[dict[str, Any]]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        _names_its_read(cls)
+
+    def get(self, request: Any, *args: Any, **kwargs: Any) -> Any:
+        principal = web_principal(request.user)
+        self.records = every_item(self.resource, principal=principal, fields=list(self.fields) or None)
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        context[self.context_object_name] = self.records
+        return context
+
+
+class RecordPageMixin(PageMixin):
+    """The page of one record of a resource kind, drawn from the record that
+    kind's API and MCP read answer (``resources.get_resource``), so what the
+    three say of a thing is computed once. The template reads it as
+    ``context_object_name``; what else the view adds is presentation, or
+    another kind's records about this one."""
+
+    # The ``ResourceSpec`` whose read of one draws the page, by its name.
+    resource = ""
+    context_object_name = ""
+    # The route's name for the identifier, where it is not the identifier's own (``pk``).
+    url_kwarg = ""
+    record: dict[str, Any]
+    # The model whose stored row the records of other kinds about this one
+    # are asked by, and the relations they read (``stored``).
+    model: Any = None
+    stored_related: tuple[str, ...] = ()
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        _names_its_read(cls)
+
+    @property
+    def identifier(self) -> str:
+        return str(resource_registry()[self.resource].identifier)
+
+    def get(self, request: Any, *args: Any, **kwargs: Any) -> Any:
+        if (elsewhere := self.read(request, kwargs)) is not None:
+            return elsewhere
+        return super().get(request, *args, **kwargs)
+
+    def read(self, request: Any, kwargs: dict[str, Any]) -> Any:
+        """Read ``record``, the one the route names, or answer with where its
+        page is when that is not here. A page that posts reads it first too."""
+
+        # As the route wrote it, which the read parses as its kind's identifier.
+        asked = str(kwargs[self.url_kwarg or self.identifier])
+        try:
+            self.record = get_resource(self.resource, asked, principal=web_principal(request.user), strict=False)
+        except RecordNotFound as exc:
+            raise Http404(str(exc)) from exc
+        # Asked for by another of its names, or a record whose page is
+        # another kind's, such as a machine's declaration or an event read
+        # on its calendar: the page lives at the record's own address, never
+        # at one off this site.
+        url = str(self.record["url"])
+        if unquote(urlsplit(url).path) == request.path:
+            return None
+        if not url_has_allowed_host_and_scheme(url, allowed_hosts={request.get_host()}):
+            raise ImproperlyConfigured(f"{self.resource!r} answered a page HQ does not serve: {url!r}.")
+        return redirect(url)
+
+    @cached_property
+    def stored(self) -> Any:
+        """The record's row as stored, with ``stored_related`` fetched."""
+
+        identifier = self.identifier
+        return self.model.objects.prefetch_related(*self.stored_related).get(**{identifier: self.record[identifier]})
+
+    def get_page_title(self) -> str:
+        return str(self.record[self.identifier])
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        context[self.context_object_name] = self.record
+        return context
+
+
 def page_capabilities(view: Callable[..., Any]) -> tuple[str, ...]:
     """What the routed ``view`` reads under: READ, and the one ``required_capability`` it declares.
 
-    Every page reads the estate HQ draws around it (its navigation, a
-    reference picker, the calendar's events), so READ is never replaced, only
-    added to. A class declares its own as an attribute, a function view
-    through ``hq_sdk.web.capability_required``. One that declares the
-    attribute and leaves it empty (``hq_sdk.web.CapabilityRequiredMixin``'s
-    default) is refused, since it meant to name one.
+    READ is never replaced, since every page reads the estate around it. A
+    declared but empty attribute is refused, since it meant to name one.
     """
 
     # A class view's attributes are its class's; a function view's are its own.

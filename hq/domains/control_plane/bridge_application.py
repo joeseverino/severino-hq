@@ -33,7 +33,7 @@ from hq.domains.control_plane.secret_shapes import struck
 from hq.platform.application import refused_reports
 from hq.platform.application.security import CONTROLLER_INTERFACE
 from hq.platform.application.ui import ended
-from hq.platform.core.attribution import operation_context
+from hq.platform.core import bindings
 from hq.platform.core.outside_requests import thread_of_its_own
 
 logger = logging.getLogger("severino.bridge")
@@ -156,7 +156,9 @@ def _locations(exc: ValidationError) -> str:
 
 def _run(action: Action, parameters: dict[str, Any], payload: Any) -> bytes:
     # The bridge's door: whatever an action writes is the controller's.
-    with operation_context(interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=f"bridge.{action.name}"):
+    with bindings.operation_context(
+        interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=f"bridge.{action.name}"
+    ):
         answer = json.dumps(action.run(parameters, payload), sort_keys=True).encode()
         refused_reports.accepted(action.name, _controller(parameters))
         return answer
@@ -170,7 +172,9 @@ def _controller(parameters: dict[str, Any]) -> str:
 def _refused(action: Action, controller_id: str, refusal: Refused) -> None:
     # Kept apart from the action, which a refusal runs nothing of, so a
     # controller whose reports stop landing is a finding and not a silence.
-    with operation_context(interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=f"bridge.{action.name}.refused"):
+    with bindings.operation_context(
+        interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=f"bridge.{action.name}.refused"
+    ):
         refused_reports.note(action.name, controller_id, int(refusal.status), refusal.detail)
 
 

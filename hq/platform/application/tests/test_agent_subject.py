@@ -18,13 +18,14 @@ from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import select
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentIdentity
+from hq.platform.core.testing import operator
 from hq.platform.mcp import tasks
 
 from .. import agent_admission, agent_registry, roles
 from ..agent_access import SET_AGENT_BLOCK, refusal
 from ..agent_activity import standings
 from ..approvals import ApprovalError, ApproveCommand, approve, own_held_request, pending
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import command_spec, execute_capability
 from ..capability_policy import Rule, columns, decide, set_rule
 from ..controller import claim_next_operation
 from ..linked_accounts import bind_sign_in, sign_in_subject
@@ -44,9 +45,9 @@ def _signed_in(subject: str):
 
 class OneSubjectPerAgentAndPersonTests(TestCase):
     def setUp(self):
-        users = get_user_model()
-        self.anna = users.objects.create_user("anna", password="x" * 20)
-        self.ben = users.objects.create_user("ben", password="x" * 20)
+        get_user_model()
+        self.anna = operator(username="anna")
+        self.ben = operator(username="ben")
         for user, subject in ((self.anna, ANNA), (self.ben, BEN)):
             roles.assign(user, roles.Role.OPERATOR)
             bind_sign_in(user, sign_in_subject(settings.OIDC_ISSUER, subject))
@@ -65,7 +66,7 @@ class OneSubjectPerAgentAndPersonTests(TestCase):
         self.assertEqual(len({standing.subject for standing in standings()}), 2)
 
     def test_annas_on_rule_consents_for_anna_alone(self):
-        deleting = capability_registry()["project.delete"]
+        deleting = command_spec("project.delete")
         set_rule(subject=self.column_of(self.anna).subject, spec=deleting, rule=Rule.ALLOW, user=self.anna)
 
         self.assertEqual(decide(deleting, self.as_anna, {}, None).rule, Rule.ALLOW)

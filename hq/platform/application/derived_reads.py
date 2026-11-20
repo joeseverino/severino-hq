@@ -20,6 +20,7 @@ from .labels import human_label
 from .own_addresses import tailnet_sightings
 from .projection import complete, page_size, projection_scope, window
 from .record_errors import RecordNotFound
+from .references import Kind
 from .security import Principal
 from .standards import CheckResult, Measurement
 lazy from . import connections, dashboard, estate, machines, request_context
@@ -27,36 +28,27 @@ lazy from .action_items import filter_items
 lazy from .command_center import estate_search
 lazy from .connection_records import CredentialRecord, TallyPart
 lazy from .credential_sight import credential_sight, sight
+lazy from .domain_records import DnsRecordPart, DomainRecord, DomainRow, InsightPart
 lazy from .entity_links import entity_link
 lazy from .estate import estate_reading
+lazy from .glance import machine_metrics
 lazy from .hq_self import serving
 lazy from .infrastructure import enabled_resources
 lazy from .machine_context import header_addresses
+lazy from .machine_records import LoadPart, MachineRecord, PeeringPart, PresencePart
+lazy from .path_records import HopRow, ObservedPart, PathRecord, RoutePart
 lazy from .paths import path_to
+lazy from .reading_records import ReadingItem, ReadingRecord
+lazy from .record_parts import CheckPart, MeasurementPart
 lazy from .record_saves import row
+lazy from .relationship_records import JoinedReadingPart, RelationshipsRecord
 lazy from .relationships import readout_records, relationships_for
 lazy from .request_path import request_path, serialize_request_path
-lazy from .resource_records import (
-    CheckPart,
-    DnsRecordPart,
-    DomainRecord,
-    DomainRow,
-    HopRow,
-    JoinedReadingPart,
-    MachineRecord,
-    MeasurementPart,
-    ObservedPart,
-    PathRecord,
-    PresencePart,
-    ReadingItem,
-    ReadingRecord,
-    RelationshipsRecord,
-    RoutePart,
-)
 lazy from .search import global_search
 lazy from .service_list import services_by_zone
+lazy from .tailnet_signers import signer_of
 lazy from .topology import relation_graph
-lazy from .zones import ZONE_KIND, domain_context
+lazy from .zones import ZONE_KIND, find_zone, told_apart
 
 
 def _moment(value: Any) -> str | None:
@@ -113,22 +105,46 @@ def list_action_items(
 # ----- Machines ---------------------------------------------------------------
 
 
-def _presence(presence: Any) -> PresencePart | None:
+def _presence(machine: Any) -> PresencePart | None:
+    presence = machine.presence
     if presence is None:
         return None
-    return row(presence, PresencePart, lan_address=tailnet_sightings().lan_address(presence))
+    return row(
+        presence,
+        PresencePart,
+        lan_address=tailnet_sightings().lan_address(presence),
+        signs_tailnet_lock=signer_of(machine.name) is not None,
+        peering=row(presence, PeeringPart, path=presence.peer_path) if presence.peered else None,
+        openings=[{"port": port, "open_to": list(who)} for port, who in presence.openings],
+    )
+
+
+def _load(machine: Any) -> LoadPart | None:
+    if not machine.telemetry:
+        return None
+    # The container list is the count of what runs, so a reading taken at
+    # another moment does not state a second one beside it.
+    metrics = [
+        metric
+        for metric in machine_metrics(machine.telemetry)
+        if not (machine.containers and metric["label"] == "Containers")
+    ]
+    return {"metrics": metrics, "observed_at": _moment(machine.telemetry_observed_at)}
 
 
 def serialize_machine(machine: Any) -> MachineRecord:
     return row(
         machine,
         MachineRecord,
-        node=f"machine:{machine.name}",
+        node=Kind.MACHINE.of(machine.name),
         state=machine.state.label,
+        tone=machine.state.tone,
+        tailnet_device=machine.route_approval_key,
         header_addresses=[
             {"label": kind, "address": address, "holder": holder} for kind, address, holder in header_addresses(machine)
         ],
-        presence=_presence(machine.presence),
+        presence=_presence(machine),
+        load=_load(machine),
     )
 
 
@@ -165,7 +181,7 @@ def _domains() -> list[DomainRow]:
         found.append(
             {
                 "name": name,
-                "node": f"zone:{name}",
+                "node": Kind.ZONE.of(name),
                 "url": entity_link("zone", name).url,
                 "declaration": declared.get(name, ""),
                 "services": [
@@ -198,12 +214,30 @@ def get_domain(name: str) -> DomainRecord:
     wanted = normalized_hostname(name)
     with projection_scope():
         found = next((item for item in _domains() if item["name"] == wanted), None)
-        context = domain_context(wanted) if found is not None else None
-        if found is None or context is None:
+        zone = find_zone(wanted) if found is not None else None
+        if found is None or zone is None:
             raise RecordNotFound("No domain has that name.")
-        zone = context.zone
-        records = [row(record, DnsRecordPart, declaration=record.resource_key) for record in zone.listed]
-        return row(zone, DomainRecord, records=records, **found)
+        records = [
+            row(
+                record,
+                DnsRecordPart,
+                declaration=record.resource_key,
+                edits=bool(record.offered and record.offered.edits),
+                removes=bool(record.offered and record.offered.removes),
+            )
+            for record in told_apart(zone.listed)
+        ]
+        insights = [
+            row(
+                insight,
+                InsightPart,
+                links=[
+                    {"label": label, "links": [as_written(link) for link in links]} for label, links in insight.links
+                ],
+            )
+            for insight in zone.insights
+        ]
+        return row(zone, DomainRecord, records=records, insights=insights, adoption=zone.adopt_token, **found)
 
 
 # ----- Relationships ----------------------------------------------------------

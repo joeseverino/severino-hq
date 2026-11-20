@@ -1,10 +1,5 @@
-"""The shapes the connection, credential and tailnet resources answer in.
-
-Their rows and records, and each part of them HQ builds, as
-``resource_records`` declares the rest of the host's resources: the API
-document types each read by them, and a test holds every answer on the
-showcase data to its type.
-"""
+"""The shapes the connection, credential and tailnet resources answer in:
+their rows and records, and each part of them HQ builds."""
 
 from typing import Annotated, Any, TypedDict
 
@@ -23,7 +18,7 @@ from .credential_sight import STATE_LABELS
 from .describe import Describe, listed
 from .json_schemas import Written
 from .policy_links import PolicyName
-from .resource_records import WrittenLink
+from .record_parts import WrittenLink
 from .tone import Tone
 from .ui import ended
 from .workflows import WrittenAction

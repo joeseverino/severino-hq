@@ -36,7 +36,7 @@ from .read_models import ActivityEvent, recent_activity
 from .security import Capability, Principal
 from .workflows import WrittenAction
 lazy from .action_items import item_key, item_revision, waiting_count
-lazy from .resource_records import ActionItem
+lazy from .estate_records import ActionItem
 lazy from .routes import reverse
 lazy from .ui import DomainOverview
 

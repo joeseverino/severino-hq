@@ -51,7 +51,8 @@ from .contracts import Effect
 from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import CapabilitySpec, requested
 from .moments import duration
-from .record_errors import NOT_FOUND, Sentence
+from .record_errors import Sentence
+from .refusal_codes import Code
 from .security import Capability, Principal
 from .tone import Tone
 from .ui import ended
@@ -304,13 +305,8 @@ def note_automation() -> None:
     """Record that HQ's playbook worker reached HQ, as each of its claims
     arrives, so a worker that finds nothing to take still counts as seen.
 
-    Its security: it is written only by the bridge's claim of the worker's
-    own work (``bridge_actions``), over the socket only root and the web
-    account reach, never by a page, since a GET writes nothing
-    (``hq.platform.core.speculation``). It holds a moment and nothing else,
-    so it names no secret, no host credential and no repository. Forged, it
-    makes a worker that is not there read as present, which is what the
-    socket's boundary already rules out.
+    Written only by the bridge's claim over the root-only socket, never by a
+    page. It holds a moment and nothing else, so it names no secret.
     """
 
     reading = readings.stored(AUTOMATION_HEARTBEAT)
@@ -641,7 +637,7 @@ def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
     if len(named) > 1:
         raise ValidationError(dict.fromkeys(named, "Name one of connection_ref, kind or every_connection."))
     if ref and not connection_providers(ref):
-        raise ValidationError({"connection_ref": ValidationError("No such connection.", code=NOT_FOUND)})
+        raise ValidationError({"connection_ref": ValidationError("No such connection.", code=Code.NOT_FOUND)})
     return (ref, kind) if named else None
 
 
@@ -773,12 +769,9 @@ _asked: ContextVar[set[Doorbell] | None] = ContextVar("asked_doorbells", default
 def ringing() -> Iterator[set[Doorbell]]:
     """Ring each doorbell the work inside asks for once, as it returns.
 
-    The runner's, around every capability, so a handler's asks and its own
-    ring for a write are one ring however many there are. A capability run
-    inside another's joins the outer one's. Each is rung once what it
-    announces commits, so the worker never arrives to find nothing; robust,
-    since a write that committed does not fail for a hint that could not be
-    given. Work that raised rang for nothing, and rings nothing.
+    Around every capability, so a handler's asks are one ring, rung once they
+    commit so the worker never arrives to find nothing. Work that raised rings
+    nothing.
     """
 
     if (asked := _asked.get()) is not None:
@@ -808,19 +801,10 @@ RECORD_CONTRACTS = "record-contracts"
 def request_boot_reads() -> tuple[str, ...]:
     """Ask for what a new image needs read before HQ's readings are current; the kinds asked.
 
-    Delivery, wherever it is read: a deploy is when production changes which
-    commit of each extension it runs, so each commit's check run and a comment
-    on its merged pull request have something to report. The repositories,
-    where they are read: their deployments say which commit production runs,
-    and the deploy that booted this image has just moved them. And each kind
-    HQ holds readings of whose fingerprint moved since the last boot: those
-    records were let through under another contract, so serving them would
-    pass the old shape off as current. A boot with no fingerprints stored
-    knows nothing of what its records were held to, and asks every kind once.
-
-    Asked by the boot, not as a person's activity, so the idle cadence is
-    untouched. Only kinds a sweep reads and HQ holds are asked: a request
-    nothing answers would force sweeps until it expired.
+    A deploy moves which commit each extension runs and what the repositories'
+    deployments say, and a kind whose fingerprint moved holds readings let
+    through under another contract. Asked by the boot, so the idle cadence is
+    untouched.
     """
 
     current = {kind: spec.fingerprint(declared_names()) for kind, spec in OBSERVATIONS.items()}
@@ -848,18 +832,11 @@ def ask(
     activity: bool = False,
 ) -> datetime:
     """Ask a worker outside this process for work, the one way HQ does: store
-    what is asked, in the caller's transaction, and ring ``doorbell`` once it
-    commits. When it was asked.
-
-    ``reads`` are kinds the controller reads on its next pass, from
-    ``connection`` alone where one is named; ``connection`` alone forces every
-    kind its credential reads, and ``every`` the whole sweep. ``panels`` are the
-    dashboard panels the glance pass reads, each with what its audit row says.
-    Nothing asked, it only rings: the work is a row its writer already stored.
+    what is asked, in the caller's transaction, and ring ``doorbell`` once
+    it commits. When it was asked.
 
     ``activity`` notes that a person asked, so the active cadence decides the
-    sweep; HQ and the host asking on what they learned leave the idle cadence
-    alone. A kind HQ stores no reading of is refused, since nothing would
+    sweep. A kind HQ stores no reading of is refused, since nothing would
     answer it and it would force sweeps until it expired.
     """
 

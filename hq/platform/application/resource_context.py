@@ -15,12 +15,13 @@ from django.utils.text import Truncator
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
+from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_capability_registry, read_spec, readout_rows
 
 from .asks import APPLIES_SHORTLY
 from .display_words import as_members
-from .entity_links import entity_link
+from .entity_links import entity_link, record_name
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .freshness import behind
 from .infrastructure import (
@@ -40,6 +41,8 @@ lazy from .approvals import pending
 lazy from .conditions import DEGRADED, DRIFTED, held_since
 lazy from .connections import connection_readings
 lazy from .facts import kinds_read
+lazy from .managed_records import ManagedResourceRecord
+lazy from .projection import read_once
 lazy from .security import internal_principal
 lazy from .services import certificate_use
 lazy from .whereabouts import machine_link
@@ -300,23 +303,26 @@ class ResourceContext:
     # A certificate's services, and its names nothing is served under.
     certificate_use: Any = None
 
-    @property
-    def in_sync(self) -> bool:
-        return self.resource.generation == self.resource.observed_generation
+    def record(self) -> ManagedResourceRecord:
+        """The record whole with what HQ derives from it, as the API, MCP and its page read it."""
 
-    def as_dict(self) -> dict[str, Any]:
-        """The derived facts, for the API and MCP."""
-
-        origin = self.origin_machine
+        resource, origin, provider, expiry = self.resource, self.origin_machine, self.provider_machine, self.expiry
+        standing = record_status(resource, health=self.health)
+        resolved = self.resolved_spec if resource.kind == CERTIFICATE_KIND else None
         return {
-            "health": self.health,
-            "in_sync": self.in_sync,
+            **serialize_resource(resource),
+            "url": resource.get_absolute_url(),
+            "name": page_name(resource),
+            "standing": {
+                "state": str(standing.state),
+                "tone": str(standing.state.tone),
+                "label": standing.label,
+                "detail": standing.detail,
+                "since": standing.since.isoformat() if standing.since else None,
+                "read_at": standing.read_at.isoformat() if standing.read_at else None,
+            },
             "actions": {
-                verb: {
-                    "enabled": allowed.enabled,
-                    "reason": allowed.reason,
-                    "automatic": allowed.automatic,
-                }
+                verb: {"enabled": allowed.enabled, "reason": allowed.reason, "automatic": allowed.automatic}
                 for verb, allowed in self.capabilities.actions.items()
             },
             "removal": {
@@ -324,15 +330,8 @@ class ResourceContext:
                 "reason": self.capabilities.removal_reason,
                 "pending": self.capabilities.removal_pending,
             },
-            "origin_machine": ({"name": origin.name, "url": origin.url} if origin is not None else None),
-            "provider_machine": (
-                {
-                    "name": self.provider_machine["name"],
-                    "url": self.provider_machine["url"],
-                }
-                if self.provider_machine
-                else None
-            ),
+            "origin_machine": {"name": origin.name, "url": origin.url} if origin is not None else None,
+            "provider_machine": {"name": provider["name"], "url": provider["url"]} if provider else None,
             "services": [{"hostname": hostname, "url": url} for hostname, url in self.service_links],
             "readout": [
                 {"label": label, "desired": desired, "observed": observed}
@@ -340,40 +339,79 @@ class ResourceContext:
             ],
             "expiry": (
                 {
-                    "not_after": self.expiry.not_after.isoformat(),
-                    "days_left": self.expiry.days_left,
-                    "renewal_at": self.expiry.renewal_at.isoformat(),
+                    "not_after": expiry.not_after.isoformat(),
+                    "days_left": expiry.days_left,
+                    "renewal_at": expiry.renewal_at.isoformat(),
                 }
-                if self.expiry
+                if expiry
                 else None
             ),
             "awaiting_approval": len(self.awaiting_approval),
+            "certificate": (
+                {
+                    "certificate_name": str(resolved.get("certificate_name", "")),
+                    "renewal_window_days": int(resolved.get("renewal_window_days", 0)),
+                    "domains": list(resolved.get("domains", ())),
+                }
+                if resolved is not None
+                else None
+            ),
             "consumers": [
                 {
                     "name": consumer.get("name", ""),
                     "kind": consumer.get("kind", ""),
                     "domains": list(consumer.get("display_domains") or ()),
+                    "connection_ref": consumer.get("connection_ref", ""),
+                    "url": consumer.get("url", ""),
                 }
                 for consumer in self.display_consumers
             ],
             "resolution_error": self.resolution_error,
             "used_by": list(self.certificate_use.used_by) if self.certificate_use else [],
             "unused_names": list(self.certificate_use.unused) if self.certificate_use else [],
+            "operations": resource_history(resource),
         }
 
 
-def get_managed_resource(key: str) -> dict[str, Any]:
-    """Return resource state, what HQ derives from it, and operation history."""
+def page_name(resource: ManagedResource) -> str:
+    """The name a record's page is titled by: a container's own, the rest as ``record_name`` says it."""
+
+    if resource.kind == CONTAINER_KIND and resource.spec.get("name"):
+        return str(resource.spec["name"])
+    return record_name(resource.kind, resource.spec, resource.key)
+
+
+def get_managed_resource(key: str) -> ManagedResourceRecord:
+    """One managed record whole, what HQ derives from it, and its operations."""
 
     try:
-        resource = ManagedResource.objects.get(key=key)
+        resource = stored(key)
     except ManagedResource.DoesNotExist as exc:
         raise RecordNotFound("That record was not found.") from exc
-    return {
-        "resource": serialize_resource(resource),
-        "derived": resource_context(resource).as_dict(),
-        "operations": resource_history(resource),
-    }
+    return resource_context(resource).record()
+
+
+def awaiting_approval(key: str) -> tuple[Any, ...]:
+    """The changes to the record ``key`` a credential asked for that wait for an operator."""
+
+    return read_once(
+        f"infrastructure.awaiting:{key}",
+        lambda: tuple(
+            held for held in pending(principal=internal_principal("resource-context")) if held.resource_key == key
+        ),
+    )
+
+
+def stored(key: str) -> ManagedResource:
+    """The record ``key`` as stored, read once for the request that asks."""
+
+    return read_once(f"infrastructure.stored:{key}", lambda: ManagedResource.objects.get(key=key))
+
+
+def capabilities_of(resource: ManagedResource) -> ResourceCapabilities:
+    """What may be done to ``resource``, worked out once for the request that asks."""
+
+    return read_once(f"infrastructure.capabilities:{resource.key}", lambda: resource_capabilities(resource))
 
 
 def resource_context(resource: ManagedResource) -> ResourceContext:
@@ -382,18 +420,14 @@ def resource_context(resource: ManagedResource) -> ResourceContext:
     resolved, consumers, error = _consumers(resource)
     return ResourceContext(
         resource=resource,
-        capabilities=resource_capabilities(resource),
+        capabilities=capabilities_of(resource),
         health=resource_health(resource),
         origin_machine=origin_machine(resource),
         provider_machine=provider_machine(resource),
         service_links=service_links(resource),
         readout_rows=readout_rows(resource),
         expiry=expiry_of(resource),
-        awaiting_approval=tuple(
-            held
-            for held in pending(principal=internal_principal("resource-context"))
-            if held.resource_key == resource.key
-        ),
+        awaiting_approval=awaiting_approval(resource.key),
         resolved_spec=resolved,
         display_consumers=consumers,
         resolution_error=error,

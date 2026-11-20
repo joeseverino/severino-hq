@@ -68,9 +68,7 @@ drawn from it, and a page of one map takes the topology page's own.
       {% endif %}
     {% endfor %}
   </div>
-  {% comment %}
-  <!-- ast-grep-ignore: hand-drawn-section --> the map's details pane: a labeled live region the selection moves focus to, titled by the node it shows
-  {% endcomment %}<section class="topology-detail" id="{{ map_parts }}-detail" tabindex="-1" aria-label="Details" aria-live="polite" data-topology-detail="{{ focus_node }}" data-fragment-failure="Details did not load."{% if not topology_detail %} hidden{% endif %}>
+  <section class="topology-detail" id="{{ map_parts }}-detail" tabindex="-1" aria-label="Details" aria-live="polite" data-topology-detail="{{ focus_node }}" data-fragment-failure="Details did not load."{% if not topology_detail %} hidden{% endif %}>
     {% if topology_detail %}{% include "control_plane/_topology_node_body.html" with item=topology_detail %}{% endif %}
   </section>
   </div>

@@ -1,11 +1,11 @@
 """A job in the audit log: one row, naming it, saying how it ended, attributed."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.domains.jobs.runner import run
 from hq.platform.core.audit import ROUTINE_EVENTS, record_event
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 # Written out, so the module imports at a ref that has neither name.
 BACKGROUND_JOB = "Background job"
@@ -47,7 +47,7 @@ class OneRowPerJobTests(TestCase):
         self.assertIsNone(row.user)
 
     def test_a_run_someone_asked_for_is_never_routine(self):
-        person = get_user_model().objects.create_user("operator", password="x" * 14)
+        person = operator()
         asked = [
             run("example.mine", "Mine", lambda progress: {}, actor="operator", requested_by=person),
             run("example.agents", "An agent's", lambda progress: {}, actor="example-agent"),
@@ -59,7 +59,7 @@ class OneRowPerJobTests(TestCase):
             self.assertEqual(row.action, "done")
 
     def test_the_row_says_who_asked(self):
-        person = get_user_model().objects.create_user("operator", password="x" * 14)
+        person = operator()
         cases = (
             (run("example.a", "A", lambda progress: {}, actor="operator", requested_by=person), "operator"),
             (run("example.b", "B", lambda progress: {}, actor="example-agent"), "example-agent"),

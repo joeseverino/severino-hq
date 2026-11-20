@@ -410,8 +410,8 @@ def attach_traffic(items, *, days: int = CONTENT_TRAFFIC_DAYS):
     return items
 
 
-def item_traffic(item, *, days: int = CONTENT_TRAFFIC_DAYS) -> dict[str, Any]:
-    """One published item's traffic, and its recent days for a trend.
+def item_traffic(published_url: str, *, days: int = CONTENT_TRAFFIC_DAYS) -> dict[str, Any]:
+    """The traffic of the item published at ``published_url``, and its recent days for a trend.
 
     Answers the question the detail page is actually for: not "how did the site
     do" but "did anyone read this". Returns ``measured: False`` rather than
@@ -419,7 +419,7 @@ def item_traffic(item, *, days: int = CONTENT_TRAFFIC_DAYS) -> dict[str, Any]:
     an item nobody opens are different facts and a 0 says the wrong one.
     """
 
-    host, path = location_of(item.published_url)
+    host, path = location_of(published_url)
     if not host or not path:
         return {
             "path": "",

@@ -2,7 +2,6 @@
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.template import Context, Template
 from django.test import RequestFactory, TestCase
@@ -13,6 +12,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.context_processors import appearance
 from hq.platform.core.models import Appearance, AuditLog
+from hq.platform.core.testing import operator
 
 from ..appearance import SET_THEME, ThemeCommand, set_theme, theme_for
 from ..capabilities import execute_capability
@@ -43,7 +43,7 @@ def denials() -> int:
 
 class ThemeServiceTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
+        self.user = operator(username="op")
         self.person = web_principal(self.user)
 
     def choose(self, theme, principal=None):
@@ -104,8 +104,7 @@ class ThemeServiceTests(TestCase):
 
 class ThemeSwitchTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("op", password="x" * 20)
-        self.client.force_login(self.user)
+        self.user = operator(self.client, "op")
 
     def choose(self, theme, **extra):
         return self.client.post(reverse("theme"), form_keyed({"theme": theme, "next": reverse("dashboard")}), **extra)
@@ -155,8 +154,7 @@ class ThemeSwitchTests(TestCase):
 
     def test_a_choice_belongs_to_the_person_who_made_it(self):
         self.choose("dark")
-        other = get_user_model().objects.create_user("other", password="x" * 20)
-        self.client.force_login(other)
+        operator(self.client, "other")
 
         self.assertIsNone(drawn_theme(self.client.get(reverse("dashboard"))))
 

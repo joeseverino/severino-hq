@@ -1,4 +1,4 @@
-"""The layout rules held over single components, drawn on probe pages and pages of the stress estate."""
+"""The layout rules held over single components, drawn on probe pages and pages of the crowded estate."""
 
 import base64
 import json
@@ -285,7 +285,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
     @with_script
     def test_a_queue_row_is_its_words_and_buttons_and_opens_to_its_steps(self):
-        """Closed, a row is what is wrong, what it means and how to dismiss it;
+        """Closed, a row is what is wrong, what it means and the buttons that settle it;
         its steps are a press away, beneath it, and a family is a press away
         from its rows."""
 
@@ -300,10 +300,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 opened = 0
                 for row in rows.all():
                     self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
-                    # One Dismiss is shown, at the row's end, at every width:
-                    # a row's controls never leave it (tables.css).
-                    shown = row.locator(f"{SELECTORS['decision_dismiss']} >> visible=true").count()
-                    self.assertEqual(shown, 1)
+                    # Its controls never leave its end, at every width (tables.css).
+                    controls = row.locator(SELECTORS["decision_controls"])
+                    self.assertGreater(controls.count(), 0)
+                    self.assertEqual(controls.filter(visible=True).count(), controls.count())
                     # The row's steps are in its line beneath, drawn by the server.
                     if not row.evaluate(_HELD_BENEATH, SELECTORS["decision_steps"]):
                         continue
@@ -825,7 +825,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         read = [SELECTORS["vendored"], CLS_LIMIT]
         folds = "main " + SELECTORS["row_toggle"] + "[data-fold-toggle]"
         rows = "main " + SELECTORS["row_toggle"] + ":not([data-fold-toggle])"
-        for name in ("dense/action-items", "dense/containers"):
+        for name in ("action-items", "containers"):
             for width in WIDTHS:
                 with self.subTest(page=name, width=width):
                     self.open(name, width)
@@ -905,7 +905,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in (PHONE_SCREEN[0], 820):
             for how in ("toggle", "class"):
                 with self.subTest(width=width, opened_by=how):
-                    self.open("dense/action-items", width)
+                    self.open("action-items", width)
                     self.page.locator(SELECTORS["decision_family"]).evaluate_all(PRESS_EVERY_SHOWN)
                     self.page.evaluate(SETTLE)
                     columns = [SELECTORS["queue_table"], SELECTORS["queue_act"]]
@@ -929,7 +929,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
         for width in (PHONE_SCREEN[0], WIDE):
             with self.subTest(width=width):
-                self.open("dense/containers", width)
+                self.open("containers", width)
                 self.assertGreaterEqual(self.page.evaluate(_LAND_ON_A_ROW, SELECTORS["table_scroll"]), 0)
                 above = self.page.evaluate(_FOCUS_THE_ROW_ABOVE, [SELECTORS["table_scroll"], SELECTORS["target"]])
                 self.assertGreaterEqual(above, 0)
@@ -959,7 +959,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
         self.open("services", 1440)
         came = self.page.evaluate(
-            "(scroll) => [...document.querySelectorAll('main ' + scroll + ' > table tbody')]"
+            "(scroll) => [...document.querySelector('main ' + scroll + ' > table').tBodies]"
             ".map((body) => [...body.querySelectorAll(':scope > tr')]"
             ".filter((row) => !row.querySelector('[colspan]'))"
             ".map((row) => row.children[0].textContent.trim().replace(/\\s+/g, ' ')))",
@@ -984,7 +984,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
         for width in WIDTHS:
             with self.subTest(width=width):
-                self.open("dense/dashboard", width)
+                self.open("dashboard", width)
                 self.page.locator(SELECTORS["page_note"]).wait_for(state="visible")
                 self.assertEqual(self.page.evaluate(OVERLAPPING_TEXT, SELECTORS["floating"]), [])
 

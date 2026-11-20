@@ -2,6 +2,7 @@ from collections.abc import Callable
 from datetime import timedelta
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ...refused_reports import note
 from ..inventory_records import kind_read
@@ -28,9 +29,7 @@ def held(key: str, kind: str = REWRITE, *, seen: Ago | None = NOW, spec=None, st
     """A record HQ declares (a rewrite unless ``kind`` says), last seen ``seen`` ago or never, with ``row`` over it."""
 
     def make():
-        resource = ManagedResource.objects.create(
-            key=key, kind=kind, spec=spec or {"domain": f"{key}.example.com", "answer": "10.0.0.10"}
-        )
+        resource = declare(key, kind, spec or {"domain": f"{key}.example.com", "answer": "10.0.0.10"})
         if seen is not None:
             observed(resource, AT - seen.age, status=status)
         if row:

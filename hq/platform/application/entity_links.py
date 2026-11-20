@@ -19,6 +19,7 @@ from hq.domains.control_plane.providers import PROVIDERS, read_spec, registry_la
 from hq.platform.application.routes import reverse
 
 from .command_fields import Describe
+from .references import Kind
 lazy from .connections import connection_names
 lazy from .infrastructure import enabled_resources
 lazy from .projection import read_once
@@ -77,48 +78,47 @@ def _service_page(hostname: str) -> str:
 
 
 NODE_KINDS: Mapping[str, NodeKind] = {
-    "controller": NodeKind("controller", "controllers"),
-    "connection": NodeKind("connection", "connections", _connection_page),
-    "machine": NodeKind(
+    Kind.CONTROLLER: NodeKind("controller", "controllers"),
+    Kind.CONNECTION: NodeKind("connection", "connections", _connection_page),
+    Kind.MACHINE: NodeKind(
         "machine",
         "machines",
         lambda name: reverse("control_plane:machine", kwargs={"name": name}),
     ),
-    "service": NodeKind("service", "services", _service_page),
-    "zone": NodeKind("domain", "domains", lambda zone: reverse("zones:detail", kwargs={"zone": zone})),
-    "ability": NodeKind("reading", "readings"),
-    "resource": NodeKind(
+    Kind.SERVICE: NodeKind("service", "services", _service_page),
+    Kind.ZONE: NodeKind("domain", "domains", lambda zone: reverse("zones:detail", kwargs={"zone": zone})),
+    Kind.ABILITY: NodeKind("reading", "readings"),
+    Kind.RESOURCE: NodeKind(
         "record",
         "records",
         lambda key: reverse("control_plane:detail", kwargs={"key": key}),
     ),
-    "registry": NodeKind("lookup", "lookups"),
+    Kind.REGISTRY: NodeKind("lookup", "lookups"),
     # Not a topology node; named on pages all the same.
-    "project": NodeKind("project", "projects", lambda slug: reverse("projects:detail", kwargs={"slug": slug})),
+    Kind.PROJECT: NodeKind("project", "projects", lambda slug: reverse("projects:detail", kwargs={"slug": slug})),
     # The records: each names its own page, so a record's name is a link wherever it is said.
-    "asset": NodeKind("asset", "assets", lambda slug: reverse("assets:detail", kwargs={"slug": slug})),
-    "writeup": NodeKind(
+    Kind.ASSET: NodeKind("asset", "assets", lambda slug: reverse("assets:detail", kwargs={"slug": slug})),
+    Kind.WRITEUP: NodeKind(
         "writeup or page", "writeups and pages", lambda slug: reverse("content:detail", kwargs={"slug": slug})
     ),
-    "document": NodeKind(
+    Kind.DOCUMENT: NodeKind(
         "document", "documents", lambda doc_id: reverse("docs_index:detail", kwargs={"doc_id": doc_id})
     ),
-    "expense": NodeKind("expense", "expenses", lambda pk: reverse("expenses:detail", kwargs={"pk": pk})),
-    "receipt": NodeKind("receipt", "receipts", lambda pk: reverse("receipts:detail", kwargs={"pk": pk})),
-    "target": NodeKind("account or item", "accounts and items"),
-    "dependency": NodeKind("not in HQ", "not in HQ"),
+    Kind.EXPENSE: NodeKind("expense", "expenses", lambda pk: reverse("expenses:detail", kwargs={"pk": pk})),
+    Kind.RECEIPT: NodeKind("receipt", "receipts", lambda pk: reverse("receipts:detail", kwargs={"pk": pk})),
+    Kind.MESSAGE: NodeKind("message", "messages", lambda pk: reverse("contacts:detail", kwargs={"pk": pk})),
+    Kind.RUN: NodeKind("run", "runs", lambda pk: reverse("jobs:run", kwargs={"pk": pk})),
+    Kind.TARGET: NodeKind("account or item", "accounts and items"),
+    Kind.DEPENDENCY: NodeKind("not in HQ", "not in HQ"),
 }
 
 
 def record_name(kind: str, spec: Mapping[str, Any], key: str = "", *, leads: bool = True) -> str:
     """The name a record stands for, from its settings; its key when it has none.
 
-    A key is HQ's filing of a record. What a person knows it by is the name it
-    answers for and where that leads, or the name the thing itself carries. A
-    kind that is called something else says so (``ProviderSpec.name``). A
-    certificate keeps its key: it covers many names and is known by its own.
-    ``leads=False`` leaves out where the name leads, for a sentence that
-    says that itself.
+    A key is HQ's filing; a person knows a record by the name it answers for. A
+    certificate keeps its key, since it covers many names. ``leads=False``
+    leaves out where the name leads.
     """
 
     provider = PROVIDERS.get(kind)

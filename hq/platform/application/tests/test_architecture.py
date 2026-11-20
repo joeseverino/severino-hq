@@ -15,7 +15,6 @@ from django.test import SimpleTestCase, override_settings, tag
 from starlette.staticfiles import StaticFiles
 
 from hq.platform.application.tables import TableListMixin
-from hq.platform.application.tests.reads import reads
 from hq.platform.core.compression import Compressed
 from hq.platform.core.network import TrustedNetworkASGI
 from hq.platform.core.static import CachedStaticFiles
@@ -24,7 +23,6 @@ from .source import source_files, template_files
 from .test_view_writes import routed_modules, shown
 
 
-@reads("**/*.py", "!**/tests/**/test_*.py", "**/templates/**")
 class DeliveryAdapterArchitectureTests(SimpleTestCase):
     """Which module may import which is pyproject.toml's import contracts, held by lint:imports."""
 
@@ -108,7 +106,6 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/*.py", "**/*.go", "**/*.js", "**/*.css")
 class FileSizeTests(SimpleTestCase):
     """No source file is longer than the ceiling mise.toml declares.
 
@@ -156,7 +153,6 @@ class FileSizeTests(SimpleTestCase):
         self.assertEqual(over, {}, "split these by responsibility, a test module by the behavior it holds")
 
 
-@reads("**/*.py", "!**/tests/**/*.py", "**/templates/**", "static/js/**", "tools/lint/ast-grep/rules/**")
 class RequestNeverWaitsTests(SimpleTestCase):
     """A request answers from what HQ holds. It never reaches a network,
     starts a process or sleeps: the interpreter refuses it (``core.outbound``),
@@ -164,8 +160,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
 
     ROOT = Path(__file__).resolve().parents[4]
     # Where each declared exception is entered. An entry here is a place a
-    # request may wait: adding one is a decision, with its reason in ``ALLOWED``
-    # and its module in request-waits-only-where-listed's ignores.
+    # request may wait: adding one is a decision, with its reason in ``ALLOWED``.
     ENTERED = {
         "oidc": {"hq/platform/core/oidc.py"},
         "lookup": {"hq/platform/application/lookup.py"},
@@ -208,22 +203,13 @@ class RequestNeverWaitsTests(SimpleTestCase):
         ):
             RequestContextMiddleware(view)(RequestFactory().get("/example/"))
 
-    @tag("source")
+    @tag("source", "tree")
     def test_an_exception_is_declared_with_its_reason_and_entered_only_where_listed(self):
-        """request-waits-only-where-listed (tools/lint/ast-grep) refuses
-        allowed() in every other module; each listed one enters its own."""
-
-        import yaml
-
         from hq.platform.core.outbound import ALLOWED
 
-        listed = set().union(*self.ENTERED.values())
-        rule = self.ROOT / "tools/lint/ast-grep/rules/request-waits-only-where-listed.yml"
-        ignored = yaml.safe_load(rule.read_text(encoding="utf-8"))["ignores"]
-        self.assertEqual({glob for glob in ignored if "*" not in glob}, listed)
         entered: dict[str, set[str]] = {}
-        for relative in listed:
-            for node in ast.walk(ast.parse((self.ROOT / relative).read_text(encoding="utf-8"))):
+        for relative, source in self.sources():
+            for node in ast.walk(ast.parse(source)):
                 if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "allowed"):
                     continue
                 argument = node.args[0] if node.args else None
@@ -255,7 +241,6 @@ class RequestNeverWaitsTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads(lists=("hq/**/test*.py", "hq_sdk/**/test*.py"))
 class TestPlacementTests(SimpleTestCase):
     """Every test lives in its package's tests/ directory (CLAUDE.md), so
     coverage, discovery and the fast gate's selection see the same tree."""
@@ -283,7 +268,6 @@ class TestPlacementTests(SimpleTestCase):
         )
 
 
-# deptry reads the host code less its tests, a program the watch of @reads cannot hold.
 @tag("source", "tree")
 class RuntimeDependencyTests(SimpleTestCase):
     """lint:deptry holds every dependency to host code's imports, less the

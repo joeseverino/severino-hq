@@ -61,35 +61,41 @@ const readingMeasure = {
 // itself (a form's fields, a band's cells) says so in a disable comment.
 const autoGrid = /\brepeat\(\s*auto-(fit|fill)\b/i;
 const flowGrid = { "/./": [`/${autoGrid.source}/i`] };
-// A capsule's ends (a pill, a chip, a tag, a switch, a track) are as round as
-// its box is tall, which is --radius-pill. A corner rounder than the --radius
-// steps, written as a literal, is that fact written again.
-const capsuleRadius = {
-  "/^border(-[a-z]+)*-radius$/": ["/(?<![-\\w.])(\\d{3,}|[1-9]\\d)(\\.\\d+)?px|(?<![-\\w.])[\\d.]+r?em\\b/"],
-};
-// An open popover is one floating panel, drawn by base.css's `:popover-open`
-// rule, so no other rule casts the shadow of a panel over the page.
-const floatingShadow = { "box-shadow": ["/var\\(--shadow-pop\\)/"] };
+// Every edge, shadow and corner is drawn by a list in surfaces.css, so every
+// box rounds the same way; elsewhere a corner, or a property naming one, is a
+// step of the --radius scale (tokens.css).
+const frameProperties = ["border", "border-width", "border-style", "box-shadow"];
+const radiusStep = String.raw`(?:0|var\(--[\w-]*radius[\w-]*(?:,\s*var\(--radius(?:-sm|-pill)?\))?\))`;
+const radiusSteps = { "/^(border(-[a-z]+)*-radius|--[\\w-]*radius[\\w-]*)$/": [`/^${radiusStep}(?:\\s+${radiusStep}){0,3}$|^inherit$/`] };
+const allowedValues = (keys) => [{ "font-display": ["optional"], ...keys }, { message: (property, value) => (/radius/.test(property) ? `"${property}: ${value}" rounds a corner of its own: write var(--radius-sm), var(--radius) or var(--radius-pill)` : `Disallowed value "${value}" for property "${property}"`) }];
+// A file a rule fetches arrives after the page is drawn and moves what it
+// lands beside, past the moment the browser gate measures (`_DRAWN`). A face,
+// a @font-face's `src`, is the one fetch `document.fonts` reports, so the gate
+// waits for it.
+const fetched = { "/^(?!src$)/": ["/\\burl\\(/i"] };
+// What only a screen reader hears is clipped by `.visually-hidden`
+// (cadence.css) alone, so a change to how it is clipped is made once.
+const readerClip = { "clip-path": ["/inset\\(\\s*50%\\s*\\)/"] };
 // One list holds every disallowed value, so its message tells an auto grid, a
-// cut and a measure from the rest. Every sheet's list holds the capsule's, and
-// every sheet's but base.css's the floating panel's.
-const disallowedValues = (keys, { floating = true } = {}) => [
-  { ...keys, ...flowGrid, ...capsuleRadius, ...(floating ? floatingShadow : {}) },
+// cut and a measure from the rest. Every sheet's list holds the fetch's and
+// the reader's clip.
+const disallowedValues = (keys) => [
+  { ...keys, ...flowGrid, ...fetched, ...readerClip },
   {
     message: (property, value) =>
       matches(paletteTone, property) && new RegExp(paletteTone["/^.+$/"][0].slice(1, -1)).test(value)
         ? `"${property}: ${value}" picks a tone's palette: give the element its state's tone class (\`tone_class\`) and read the role it sets (--tone-mark, --tone-ink, --tone-bg, --tone-tint, --tone-wash, --tone-line)`
-        : matches(floatingShadow, property) && /--shadow-pop/.test(value)
-        ? `"${property}: ${value}" draws a floating panel of its own: an open popover is the panel base.css's \`:popover-open\` rule draws, so lay it out and leave its frame`
         : autoGrid.test(value)
         ? `"${property}: ${value}" lays out its own auto-fit grid: a run of sibling sections or cards is the layout part (\`{% layout %}\`, docs/Shared-UI.md); a part that lays out something else inside itself says so in a disable comment`
-        : matches(capsuleRadius, property)
-        ? `"${property}: ${value}" rounds a corner with a literal: a capsule's ends are var(--radius-pill), a card's corners var(--radius) or var(--radius-sm)`
         : matches(cutText, property)
         ? `"${property}: ${value}" cuts text outside cuts.css: move the whole rule to static/css/app/cuts.css, since a selector is styled in one sheet (test_a_selector_is_styled_in_one_place); a box that clips something other than text says why in a disable comment`
         : matches(readingMeasure, property)
           ? `"${property}: ${value}" stops text at a reading measure: prose fills the card or section it sits in (docs/Design.md); a cap that sizes something other than prose says why in a disable comment`
-          : `Disallowed value "${value}" for property "${property}"`,
+          : /\burl\(/i.test(value)
+            ? `"${property}: ${value}" fetches a file: a sheet fetches only a face, in @font-face's src`
+            : property === "clip-path"
+              ? `"${property}: ${value}" hides text for a screen reader: write the \`visually-hidden\` class`
+              : `Disallowed value "${value}" for property "${property}"`,
   },
 ];
 
@@ -109,7 +115,7 @@ const unspokenContent = { "/^content$/": [`/^\\s*(["'])(?:(?!\\1).)+\\1\\s*$/`, 
 // so no rule picks a tone's palette itself: the button's destructive look,
 // which is no state, is the one other reader.
 const paletteTone = {
-  "/^.+$/": ["/var\\(--(ok|warn|danger)(?![-\\w])|var\\(--tone-(positive|caution|critical|severe|info|neutral|special)-/"],
+  "/^.+$/": ["/var\\(--(ok|warn|danger|attn)(?![-\\w])|var\\(--tone-(positive|caution|critical|severe|info|neutral|special)-/"],
 };
 // What every component sheet holds its values to; the button's sheet leaves out
 // the tones' palette.
@@ -124,7 +130,7 @@ const caseProperties = ["text-transform", "font-variant-caps"];
 const caseOutsideKicker = { "/^(?!\\.eyebrow$)/": caseProperties };
 const caseMessage = (selector, property) =>
   `"${property}" changes a text's case in "${selector}": capitals are the kicker's, so write the \`eyebrow\` class on what heads a group, or say it in sentence case`;
-const disallowedProperties = (properties) => [properties, { message: (property) => `Disallowed property "${property}"` }];
+const disallowedProperties = (properties) => [properties, { message: (property) => (frameProperties.includes(property) ? `"${property}" draws a frame outside surfaces.css: name the part in its list there` : `Disallowed property "${property}"`) }];
 // A reader who asks for less motion gets it from one rule in base.css, which
 // stops every transition and animation, so a part never writes its own. A
 // part that draws something else in place of a motion says so in a disable
@@ -140,11 +146,13 @@ const mediaFeatures = (names) => [
 ];
 // How wide a box in a table is, its own or its tracks', is the table
 // primitive's: an open row holds every box in it to its cell (surfaces.css),
-// and a page that sizes one inside a table reopens what that closes. A
+// and a page that sizes one inside a table reopens what that closes. So is
+// how far a cell's line holds out, bounded by its column's share (`--hold`,
+// tables.css): a page's nowrap there widens the table past its box. A
 // selector reaches inside a table through `.data-table` and a combinator, a
 // cell, or the line beneath a row.
 const inTable = "(\\.data-table(?![-\\w])[^,]*[\\s>+~]|(^|[\\s>+~(,])(td|th)(?![-\\w])|\\.row-(detail|columns)(?![-\\w]))";
-const boxWidth = ["/^(min-|max-)?(width|inline-size)$/", "flex", "flex-basis", "/^grid(-template)?(-columns)?$/"];
+const tableHeld = ["/^(min-|max-)?(width|inline-size)$/", "flex", "flex-basis", "/^grid(-template)?(-columns)?$/", "white-space", "text-wrap-mode"];
 
 // A primitive looks one way, drawn in the sheets that draw it, so a page
 // built from it looks like every other (`hq/restyled-primitive`). Each is
@@ -163,12 +171,12 @@ const primitives = [
       "row-editor", "row-expand", "row-fold", "row-less", "row-more", "select-column", "stack-list", "strut", "table-clamp", "table-scroll", "tag", "token", "visually-hidden", "whole",
     ],
   },
-  { name: "button", classes: "btn", sheets: ["page"] },
+  { name: "button", classes: "btn", sheets: ["page", "surfaces"] },
   { name: "facts", classes: String.raw`facts-(?:list|band)|fact(?:-label|-value|-detail)?`, sheets: ["layout", "figures", "surfaces"] },
   { name: "field", classes: "field", sheets: ["forms"] },
   { name: "section", classes: String.raw`section(?:-[\w-]+)?`, sheets: ["layout", "page", "surfaces"] },
   { name: "stat", classes: String.raw`kpi(?:-[\w-]+)?`, sheets: ["cards", "surfaces"] },
-  { name: "notice", classes: String.raw`notice(?:-(?:attention|error|info|success|warning))?`, sheets: ["routes"] },
+  { name: "notice", classes: String.raw`notice(?:-(?:attention|error|info|success|warning))?`, sheets: ["routes", "surfaces"] },
   { name: "card", classes: "card", sheets: ["layout", "surfaces"] },
 ];
 const [table] = primitives;
@@ -237,6 +245,11 @@ export default {
     // A browser drops a rule whose selector is invalid (a `:has()` inside
     // another) without an error, so the rule silently matches nothing.
     "selector-no-invalid": true,
+    // An unlayered rule beats every layer at any specificity, so nothing in
+    // `components` could override it but another unlayered rule.
+    "rule-nesting-at-rule-required-list": ["layer"],
+    // A sheet another one imports is fetched once its parent arrives (`fetched`).
+    "at-rule-disallowed-list": ["import"],
     // A selector's rule is written once per file and at-rule block. The test
     // beside StyleContractTests holds it across sheets and `@layer` blocks.
     "no-duplicate-selectors": true,
@@ -272,16 +285,22 @@ export default {
     // each is shown only if it is ready for the first paint. Its file is
     // preloaded beside the stylesheet so it usually is (StyleContractTests).
     "at-rule-property-required-list": { "font-face": ["font-display"] },
-    "declaration-property-value-allowed-list": { "font-display": ["optional"] },
+    "declaration-property-value-allowed-list": allowedValues(radiusSteps),
+    "property-disallowed-list": disallowedProperties(frameProperties),
     "rule-selector-property-disallowed-list": [
       // The first key a selector matches decides, so a table's selector is
       // held to the kicker's rule too.
-      { [`/${inTable}/`]: [...boxWidth, ...caseProperties], ...caseOutsideKicker },
+      { [`/${inTable}/`]: [...tableHeld, ...caseProperties], ...caseOutsideKicker },
       { message: (selector, property) => (caseProperties.includes(property) ? caseMessage(selector, property) : `Disallowed property "${property}" for selector "${selector}"`) },
     ],
     "selector-disallowed-list": selectorRule([], () => childInIsMessage),
   },
   overrides: [
+    {
+      // The one sheet that draws a frame.
+      files: [sheet("surfaces")],
+      rules: { "property-disallowed-list": null },
+    },
     {
       // The table primitive sizes what a table holds.
       files: tablePrimitive,
@@ -305,7 +324,7 @@ export default {
       files: [sheet("base")],
       rules: {
         "media-feature-name-disallowed-list": mediaFeatures(["prefers-color-scheme"]),
-        "declaration-property-value-disallowed-list": disallowedValues(everySheet, { floating: false }),
+        "declaration-property-value-disallowed-list": disallowedValues(everySheet),
       },
     },
     {
@@ -317,6 +336,8 @@ export default {
         "function-disallowed-list": null,
         // The tokens set `color-scheme` from the operator's choice.
         "selector-attribute-name-disallowed-list": null,
+        // The tokens declare the --radius scale.
+        "declaration-property-value-allowed-list": allowedValues({}),
         "declaration-property-value-disallowed-list": disallowedValues({ ...literalFontSize, ...spacingLiteral, ...unspokenContent, ...cutText, ...readingMeasure }),
       },
     },
@@ -333,8 +354,10 @@ export default {
       files: [reference],
       rules: {
         "function-disallowed-list": [`/^(${colorFunctions}|color-mix)$/i`],
-        "property-disallowed-list": disallowedProperties([...caseProperties, "font-family"]),
+        "property-disallowed-list": disallowedProperties([...frameProperties, ...caseProperties, "font-family"]),
         "rule-selector-property-disallowed-list": null,
+        // Unlayered, to outrank the layers the viewer declares after HQ's (its header).
+        "rule-nesting-at-rule-required-list": null,
         "declaration-property-value-disallowed-list": disallowedValues({
           "/(^|-)font-size$/": ["/^[\\d.]/"],
           ...spacingLiteral,

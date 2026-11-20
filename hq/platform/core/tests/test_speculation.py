@@ -2,7 +2,6 @@
 
 import json
 
-from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_not_required
 from django.http import HttpResponse
 from django.test import Client, TestCase, override_settings
@@ -12,14 +11,12 @@ from hq.platform.core import revisions, speculation
 from hq.platform.core.bench import seed
 from hq.platform.core.management.commands.bench_pages import _pages
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import SignedInTestCase, operator
 
 PREFETCH = {"Sec-Purpose": "prefetch"}
 
 
-class RulesTests(TestCase):
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("operator"))
-
+class RulesTests(SignedInTestCase):
     def test_a_page_names_the_rules_and_a_part_of_one_does_not(self):
         page = self.client.get(reverse("calendar:month"))
         part = self.client.get(reverse("calendar:month"), headers={"X-Requested-With": "XMLHttpRequest"})
@@ -100,7 +97,7 @@ class SpeculativeRequestTests(TestCase):
         self.assertTrue(all(name.startswith(("reports:", "hq_api:")) for name in refused), refused)
 
     def test_signing_out_is_refused_before_it_runs(self):
-        self.client.force_login(get_user_model().objects.create_superuser("operator"))
+        operator(self.client)
 
         response = self.client.post(reverse("logout"), headers=PREFETCH)
 
@@ -109,7 +106,7 @@ class SpeculativeRequestTests(TestCase):
         self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)
 
     def test_an_export_is_refused_and_leaves_no_record(self):
-        self.client.force_login(get_user_model().objects.create_superuser("operator"))
+        operator(self.client)
         url = reverse("reports:expenses_csv")
 
         guessed = self.client.get(url, headers=PREFETCH)
@@ -120,14 +117,14 @@ class SpeculativeRequestTests(TestCase):
         self.assertTrue(AuditLog.objects.filter(action=AuditLog.Action.EXPORTED).exists())
 
     def test_a_prerender_is_refused_whole(self):
-        self.client.force_login(get_user_model().objects.create_superuser("operator"))
+        operator(self.client)
 
         response = self.client.get(reverse("dashboard"), headers={"Sec-Purpose": "prefetch;prerender"})
 
         self.assertEqual(response.status_code, 503)
 
     def test_a_prefetched_page_is_the_page(self):
-        self.client.force_login(get_user_model().objects.create_superuser("operator"))
+        operator(self.client)
 
         response = self.client.get(reverse("calendar:month"), headers=PREFETCH)
 
@@ -136,7 +133,7 @@ class SpeculativeRequestTests(TestCase):
 
     def test_a_lookup_that_reads_outside_hq_is_refused_when_prefetched(self):
         # dev:look opens the page as a person; a browser's own prefetch of it is still a guess.
-        self.client.force_login(get_user_model().objects.create_superuser("operator"))
+        operator(self.client)
 
         response = self.client.get(
             reverse("control_plane:tools"), {"tab": "dns", "name": "example.com"}, headers=PREFETCH

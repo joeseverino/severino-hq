@@ -4,12 +4,13 @@ import re
 from datetime import timedelta
 from io import StringIO
 
-from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+
+from hq.platform.core.testing import operator
 
 from ..audit import (
     CONNECTION_AUDIT_TYPE,
@@ -61,7 +62,7 @@ class ClassificationTests(TestCase):
 
 class PruneTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
+        self.user = operator()
 
     def test_only_old_routine_machine_events_are_deleted(self):
         old = _event(AuditLog.Action.OBSERVED, CONNECTION_AUDIT_TYPE, days_old=40)

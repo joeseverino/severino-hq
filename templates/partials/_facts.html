@@ -1,8 +1,9 @@
 {% comment %}
 Facts, drawn by {% facts %}: {% facts layout="band" label="Controller status" %}{% fact ... %}{% endfacts %}.
 A band is a row of cells; a list, the default, is each label beside its
-value. A band's `size` sets its values as small figures read across, status
+value; a line (inline) is a card's summary, each fact its value then its
+words. A band's `size` sets its values as small figures read across, status
 facts, headline figures (`large`) or headline figures led by the first
 (`lead`). Given `items` (each a `Kpi`) it draws each as its fact. Its options
 are its Part's (facts_tags, docs/Shared-UI.md).
-{% endcomment %}<dl class="{% if layout == 'band' %}facts-band{% if size == 'small' %} is-small{% elif size == 'large' %} is-large{% elif size == 'lead' %} is-lead{% endif %}{% else %}facts-list{% endif %}"{% if layout == 'band' %} data-band{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{{ attributes }}>{% if items %}{% for item in items %}{% fact item.label value=item.value url=item.url detail=item.detail detail_url=item.detail_url detail_tone=item.detail_tone tone=item.tone zero=item.is_zero icon=item.icon drawing=item.drawing title=item.tip %}{% endfor %}{% else %}{{ content|safe }}{% endif %}</dl>
+{% endcomment %}<dl class="{% if layout == 'band' %}facts-band{% if size == 'small' %} is-small{% elif size == 'large' %} is-large{% elif size == 'lead' %} is-lead{% endif %}{% elif layout == 'inline' %}facts-inline{% else %}facts-list{% endif %}"{% if layout == 'band' %} data-band{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{{ attributes }}>{% if items %}{% for item in items %}{% fact item.label value=item.value url=item.url detail=item.detail detail_url=item.detail_url detail_tone=item.detail_tone tone=item.tone zero=item.is_zero icon=item.icon drawing=item.drawing title=item.tip %}{% endfor %}{% else %}{{ content|safe }}{% endif %}</dl>

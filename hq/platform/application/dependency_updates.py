@@ -22,6 +22,7 @@ from hq.domains.projects.models import Project
 from .asks import AskedAnswer, asked_read
 from .freshness import RETRY_AFTER, freshness
 from .projection import iso, read_once
+from .refusal_codes import Code
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
 from .tone import Tone
@@ -155,6 +156,6 @@ def request_run(_command: DependencyRunCommand, *, principal: Principal) -> Aske
 
     del principal
     if not owners():
-        return refuse("precondition", "No project is opted in to dependency updates.")
+        return refuse(Code.PRECONDITION, "No project is opted in to dependency updates.")
     at = ask(reads=(KIND,), activity=True)
     return asked_read((KIND,), at, message=command_spec(RUN_NOW).requested()).answer()

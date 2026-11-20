@@ -1,12 +1,7 @@
-"""For an extension's source tree: the static checks it must pass.
+"""For an extension's source tree: the static checks it must pass, each read without importing the extension.
 
-Each read without importing the extension: its templates use only the public
-pieces of the host's, derived from the host's own templates and tags as the
-check runs (``template_contract.describe``), and no page sentence closes on a
-value by hand. What its Python
-imports is Ruff's to hold (tools/pipeline/extension-imports.toml), and the
-host's ast-grep rules ``plugin:check`` names hold the rest
-(tools/pipeline/check-plugin.sh).
+Its Python imports are Ruff's to hold (tools/pipeline/extension-imports.toml)
+and the rest the ast-grep rules ``plugin:check`` names.
 """
 
 import argparse
@@ -21,6 +16,7 @@ lazy from django.apps import apps
 lazy from django.template.base import Lexer, TokenType
 
 lazy from hq.platform.core import template_contract
+lazy from hq.platform.core.hand_drawn import hand_drawn
 
 # Sentence checks ------------------------------------------------------------
 
@@ -219,7 +215,6 @@ _FILTER = re.compile(r"\|\s*(\w+)(\s*:)?")
 _TEMPLATE_TAG = re.compile(r"\{[{%#].*?[}%#]\}", re.DOTALL)
 _HOOK = re.compile(r"\s(data-[a-z][a-z0-9-]*)")
 _STYLE = re.compile(r"\sstyle\s*=", re.IGNORECASE)
-_HEADING = re.compile(r"<h1[\s>]", re.IGNORECASE)
 
 
 def _is_register(node: ast.AST) -> bool:
@@ -455,11 +450,6 @@ class _Template:
         for match in _STYLE.finditer(markup):
             line = markup.count("\n", 0, match.start()) + 1
             self.problem(line, "writes a style attribute, which HQ's policy refuses; draw it through a public partial")
-        # A page's heading is its frame's, drawn from page_context's title, so
-        # it is the title the window's tab says.
-        for match in _HEADING.finditer(markup):
-            line = markup.count("\n", 0, match.start()) + 1
-            self.problem(line, "writes an h1, which the frame draws from page_context's title")
 
 
 def template_violations(source_root: str | Path) -> list[str]:
@@ -481,7 +471,8 @@ def template_violations(source_root: str | Path) -> list[str]:
         except UnicodeDecodeError:  # noqa: S112 - an image or font kept beside the templates is no template
             continue
         reader = _Template(name, templates, own_templates, own_libraries)
-        found.extend((path.relative_to(root).as_posix(), line, message) for line, message in reader.check(text))
+        problems = [*reader.check(text), *hand_drawn(text, name)]
+        found.extend((path.relative_to(root).as_posix(), line, message) for line, message in problems)
     return [f"{path}:{line}: {message}" for path, line, message in sorted(found)]
 
 

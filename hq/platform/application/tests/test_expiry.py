@@ -7,10 +7,9 @@ from pathlib import Path
 from django.test import SimpleTestCase, TestCase, tag
 from django.utils import timezone as dj_timezone
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
-from hq.platform.application.tests.reads import reads
+from hq.platform.core.testing import declare
 
 from ..expiry import days_until, renewal_opens_at, renewal_window
 from ..resource_context import resource_context
@@ -56,7 +55,6 @@ class DaysUntilTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/*.py", "!*/**/tests/**/*.py")
 class DaysUntilSourceTests(SimpleTestCase):
     """No other module counts days itself."""
 
@@ -86,10 +84,10 @@ class DaysUntilSourceTests(SimpleTestCase):
 
 class OneAnswerTests(TestCase):
     def setUp(self):
-        self.resource = ManagedResource.objects.create(
-            key="example-wildcard",
-            kind=CERTIFICATE_KIND,
-            spec={"certificate_name": "example-wildcard", "domains": ["*.example.com"]},
+        self.resource = declare(
+            "example-wildcard",
+            CERTIFICATE_KIND,
+            {"certificate_name": "example-wildcard", "domains": ["*.example.com"]},
             status={"not_after": (dj_timezone.now() + timedelta(days=87, hours=12, minutes=30)).isoformat()},
         )
 
@@ -107,15 +105,13 @@ class OneAnswerTests(TestCase):
     def test_the_api_and_mcp_return_the_derived_facts(self):
         found = get_resource("infrastructure", "example-wildcard", principal=EVERYTHING)
 
-        derived = found["derived"]
-        self.assertEqual(derived["expiry"]["days_left"], 88)
+        self.assertEqual(found["expiry"]["days_left"], 88)
         self.assertEqual(
-            derived["expiry"]["renewal_at"],
+            found["expiry"]["renewal_at"],
             resource_context(self.resource).expiry.renewal_at.isoformat(),
         )
-        self.assertIn("renew", derived["actions"])
-        self.assertIn(derived["removal"]["mode"], {"delete", "forget", "unavailable"})
-        self.assertEqual(derived["health"], found["resource"]["health"])
+        self.assertIn("renew", found["actions"])
+        self.assertIn(found["removal"]["mode"], {"delete", "forget", "unavailable"})
 
     def test_an_unreadable_expiry_is_none_not_an_error(self):
         self.resource.status = {"not_after": "not a date"}

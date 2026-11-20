@@ -6,7 +6,6 @@ from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
@@ -16,6 +15,7 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.permissions import Tailscale
 from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL, PERMISSION_REFUSAL
+from hq.platform.core.testing import operator
 from tests.mise_tasks import body, mise_tasks
 
 from ..credential_mint import (
@@ -280,8 +280,7 @@ class MintCommandTests(TestCase):
 
 class RenderedFixTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_superuser(username="operator", password="not-a-real-password")
-        self.client.force_login(user)
+        operator(self.client)
         production_shape()
         report_connections(
             [

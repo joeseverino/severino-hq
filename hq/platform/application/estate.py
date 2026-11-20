@@ -38,10 +38,10 @@ lazy from . import connections, derived_reads, services, zones
 lazy from .connection_catalog import connection_total
 lazy from .connections import connection_rows
 lazy from .credential_sight import credential_sight
+lazy from .estate_records import EstateFigure
 lazy from .facts import Subject, inventory_about, readings
 lazy from .infrastructure import enabled_resources
 lazy from .machines import MachineState
-lazy from .resource_records import EstateFigure
 lazy from .services import service_reading
 lazy from .zones import ZONE_KIND
 

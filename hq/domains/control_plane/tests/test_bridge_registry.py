@@ -3,15 +3,14 @@
 Each fact has one owner. The registry's are built into schemas every time
 (``bridge_registry``), the bridge's own are written in ``bridge_base.json``,
 and the files the controller's generator and the secret renderer read are
-written from the two. These hold the join, the files, and the names the
-controller's constants take.
+written from the two. These hold the join and the names the controller's
+constants take.
 """
 
 import json
 import subprocess
 import sys
 from io import StringIO
-from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
@@ -26,11 +25,7 @@ from hq.domains.control_plane.connection_shapes import SHAPES, projections
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters import caddy
 from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS
-from hq.platform.application.tests.facts import TOP, grouped, scan
-from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
-
-PACKAGE = Path(bridge_contract.__file__).parent
 
 
 def _base() -> dict:
@@ -76,63 +71,6 @@ class JoinTests(SimpleTestCase):
             self.assertRaisesMessage(ValueError, "Two declarations"),
         ):
             bridge_registry.schemas()
-
-
-WRITTEN = ("hq-controller.openapi.json", "hq-connections.openapi.json", "controller-connections.json")
-PATHS = ("CONTRACT_PATH", "CONNECTIONS_PATH", "SHAPES_PATH")
-# The first statement of a module, a class or a function, comments aside.
-DOCSTRING = {
-    "kind": "expression_statement",
-    "nthChild": {"position": 1, "ofRule": {"not": {"kind": "comment"}}},
-    "any": [
-        TOP,
-        {
-            "inside": {
-                "kind": "block",
-                "inside": {"any": [{"kind": "class_definition"}, {"kind": "function_definition"}]},
-            }
-        },
-    ],
-}
-RULES = {
-    # A string that names a written file, outside a docstring.
-    "named": {
-        "kind": "string_content",
-        "regex": "|".join(name.replace(".", r"\.") for name in WRITTEN),
-        "not": {"inside": {"kind": "string", "inside": DOCSTRING}},
-    },
-    # A path's name read as a value: neither assigned nor an attribute's or a keyword's.
-    "read": {
-        "kind": "identifier",
-        "regex": f"^({'|'.join(PATHS)})$",
-        "not": {
-            "any": [
-                {"inside": {"kind": "assignment", "field": "left"}},
-                {"inside": {"kind": "attribute", "field": "attribute"}},
-                {"inside": {"kind": "keyword_argument", "field": "name"}},
-            ]
-        },
-    },
-    "emitted": {"kind": "function_definition", "has": {"field": "name", "regex": "^emitted$"}, **TOP},
-}
-
-
-@tag("source", "tree")
-@reads("hq/**/*.py", "!**/tests/**/*.py", lists=("hq/**",))
-class WrittenFileTests(SimpleTestCase):
-    def test_python_reads_no_fact_back_from_a_file_it_writes(self):
-        """Only ``bridge_contract`` names the written files, and only to write them."""
-
-        found = grouped(
-            each for each in scan(RULES, PACKAGE.parents[1], tests=False) if not each.path.name.startswith("test")
-        )
-        self.assertEqual(sorted({each.path.name for each in found["named"]}), ["bridge_contract.py"])
-
-        home = PACKAGE / "bridge_contract.py"
-        read = [each for each in found["read"] if each.path == home]
-        (emitted,) = (each for each in found["emitted"] if each.path == home)
-        self.assertEqual(sorted(each.text for each in read), sorted(PATHS))
-        self.assertLessEqual(set(PATHS), {each.text for each in read if emitted.start <= each.start < emitted.end})
 
 
 class RegistrySchemaTests(SimpleTestCase):
@@ -285,11 +223,6 @@ _VALUES = {
 @tag("source")
 class RequiredAppVariablesTests(SimpleTestCase):
     """The renderer refuses an item without what production cannot run without, and nothing else."""
-
-    def test_the_renderers_registry_requires_what_the_settings_declare(self):
-        emitted = json.loads(bridge_contract.SHAPES_PATH.read_text(encoding="utf-8"))
-
-        self.assertEqual(emitted["required_app_variables"], sorted(settings.REQUIRED_APP_VARIABLES))
 
     def test_production_runs_on_the_required_variables_alone(self):
         """A setting production refuses to load without and the list lacks fails here."""

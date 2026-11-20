@@ -16,7 +16,6 @@
 /* The region is the container a table's columns are counted against: a table beside a chart is as narrow as one on a phone. min-width: 0, or a grid or flex ancestor sizes to the table. */
 .table-scroll { container: table-region / inline-size; --controls: none; margin-bottom: var(--space-8); min-width: 0; max-width: 100%; }
 .table-scroll .data-table { margin-bottom: 0; }
-.table-scroll > .data-table { border: 0; border-radius: 0; box-shadow: none; }
 /* A trailing margin inside a padded box is a band of empty card. */
 .table-scroll:last-child { margin-bottom: 0; }
 /* A chart's table is read whole in the chart's order, so it scrolls in its region rather than let a column go; its block axis is stated or it computes to `auto`. */
@@ -45,20 +44,19 @@
   --held-wraps: 0;
   --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-wide, 0) + 1) - 2 * var(--cell-pad));
   inline-size: 100%; border-collapse: collapse;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm);
 }
 /* Every cell is set at the top, where the row's toggle stands, and draws the row's rule beneath it. */
 .data-table th, .data-table td { padding: var(--row-pad) var(--cell-pad); text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: var(--text-sm); overflow-wrap: break-word; }
 .data-table thead th { background: var(--surface-2); font-size: var(--text-xs); line-height: var(--heading-line); color: var(--muted); font-weight: 600; }
 /* The heading sticks under the page's chrome while its rows scroll by; a pane's sticks to the pane's own top. Its fill is opaque, so the rows pass under it. */
-.data-table > thead > tr > th { position: sticky; z-index: 2; inset-block-start: calc(var(--site-header-height) + var(--page-nav-height)); border-bottom: 0; box-shadow: inset 0 -1px 0 var(--line); }
+.data-table > thead > tr > th { position: sticky; z-index: 2; inset-block-start: calc(var(--site-header-height) + var(--page-nav-height)); border-bottom: 0; --rules: inset 0 -1px 0 var(--line); }
 /* A row a link lands on, or a control the keyboard reaches, is scrolled to below the heading that sticks over the rows. */
 .data-table:has(> thead) > tbody :is(tr, a, button, input, select, textarea, summary, [tabindex]) {
   scroll-margin-block-start: calc(var(--page-nav-height) + var(--heading-height));
 }
 .table-scroll:is([data-chart], .is-pane) > .data-table > thead > tr > th { inset-block-start: 0; }
 /* A pane is the scroll container, as tall as its rows up to a fixed reading height, as a ledger is; scroll chaining is kept, so reaching its last row hands the wheel back to the page. */
-.table-scroll.is-pane:not([data-chart]) { max-block-size: 480px; overflow-y: auto; }
+.table-scroll.is-pane:not([data-chart]) { max-block-size: 480px; overflow: auto; }
 .table-scroll.is-pane:not([data-chart]) .data-table:has(> thead) > tbody :is(tr, a, button, input, select, textarea, summary, [tabindex]) {
   scroll-margin-block-start: var(--heading-height);
 }
@@ -84,8 +82,7 @@
 /* A row or group a reader should weigh first (a row's `data-attention`, row_group attention=) is washed in the caution tone, and a group's words beside its name, which say why, are its ink. */
 .data-table tr[data-attention] > * { background: var(--tone-wash); }
 .data-table .row-group[data-attention] .count { color: var(--tone-ink); }
-/* Inside a card the card is the frame, so the table drops its own; a card that holds only a table leaves its top and foot to the table's cells, as its sides are (surfaces.css), so one inset stands between its edge and the words. */
-.card .data-table { border: 0; border-radius: 0; box-shadow: none; }
+/* A card that holds only a table leaves its top and foot to the table's cells, as its sides are (surfaces.css), so one inset stands between its edge and the words. */
 .card:not(.section-body):has(> .table-scroll:only-child) { padding-block: 0; }
 /* A totals row is ruled off and weighted, a conclusion about the rows above; a table is the only way a total lands under its column. */
 .data-table tfoot td {
@@ -110,8 +107,9 @@
 .data-table[data-columns="10"] { --columns: 10; }
 /* A short value's box is no box on the open line, unless it is the value's own list. */
 .cell-short:not(ul, ol) { display: contents; }
-/* A state keeps its line. A short value of words keeps its line up to its share; a longer one (past `table_cells.SHORT`, or a state or figure longer than a line of words, `data-long`) wraps at its words in a line of `--row-words`, or its share where that is less, so no column of words is set a word to a line. */
-.data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) { white-space: nowrap; }
+/* A state keeps its line; one of several parts (`cell-part`) keeps it up to its share, as a short value does, and past it wraps only between them, its one track `fit-content()` of the share (below). A short value of words keeps its line up to its share; a longer one (past `table_cells.SHORT`, or a state or figure longer than a line of words, `data-long`) wraps at its words in a line of `--row-words`, or its share where that is less, so no column of words is set a word to a line. */
+.data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long], :has(.cell-part)) { white-space: nowrap; }
+.data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) > .stack-list:has(.cell-part) { display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; }
 /* The line is the words', so the cell's padding is added to it. */
 .data-table > tbody > tr:not(.row-detail) > :is(td, th):is([data-long], :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]):not([data-blank], :has(> .cell-short))) {
   box-sizing: content-box; min-inline-size: min(var(--row-words), var(--share));
@@ -142,7 +140,7 @@
 /* A filter is its button and the panel it opens in the top layer, placed against the button (its anchor, below): the scope keeps each panel to its own button. */
 .table-filter-menu { display: grid; anchor-scope: --filter; }
 /* A menu, a toggle and the sort are pressed by their labels, so they wear the Filter button's edge and stand at the control size; only the search wears a field's. The sort's select sits inside that box, so it takes no control height of its own. */
-.table-filter-menu > button, .table-toggle, .table-sort { box-sizing: border-box; block-size: var(--control-size); display: flex; justify-content: center; align-items: center; gap: var(--space-3); padding: 0 var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-sm); color: var(--ink); font-size: var(--text-sm); font-weight: 500; line-height: 1.45; cursor: pointer; transition: border-color .12s ease, background-color .12s ease; }
+.table-filter-menu > button, .table-toggle, .table-sort { box-sizing: border-box; block-size: var(--control-size); display: flex; justify-content: center; align-items: center; gap: var(--space-3); padding: 0 var(--space-4); background: var(--surface); --control-lift: var(--shadow-sm); color: var(--ink); font-size: var(--text-sm); font-weight: 500; line-height: 1.45; cursor: pointer; transition: border-color .12s ease, background-color .12s ease; }
 .table-filter-menu > button:hover, .table-toggle:hover, .table-sort:hover { border-color: var(--line-strong); background-color: var(--surface-2); }
 .table-filter-menu > button { anchor-name: --filter; font-family: inherit; }
 /* HQ's chevron, set in from the end by --chevron-inset: worn by every select and by a filter that opens to its choices, so it reads as a choice, not an action. Declared here, after the filter button's own padding and background, which it must follow in this layer. */
@@ -158,21 +156,21 @@
 /* Hung below its button from the button's left edge; one that would cross the screen's right edge hangs from the button's right edge instead, which the browser decides against the viewport the top layer places it in. */
 .table-filter-options { position-anchor: --filter; inset: auto; top: calc(anchor(bottom) + 4px); left: anchor(left); position-try-fallbacks: flip-inline; margin: 0; min-width: min(220px, anchor-size(width)); max-width: calc(100vw - 32px); max-height: 280px; gap: var(--space-1); }
 .table-filter-options:popover-open { display: grid; }
-.table-filter-options label { display: flex; gap: var(--space-4); align-items: center; padding: var(--space-3); border-radius: 4px; font-size: var(--text-sm); }
+.table-filter-options label { display: flex; gap: var(--space-4); align-items: center; padding: var(--space-3); border-radius: var(--radius-sm); font-size: var(--text-sm); }
 .table-filter-options label:hover { background: var(--surface-2); }
 .filter-count { min-width: 18px; padding: 1px var(--space-2); border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-ink); font-size: var(--text-2xs); text-align: center; }
-.table-sort select { --chevron-inset: 0px; block-size: auto; min-block-size: 0; border: 0; padding-inline-start: 0; background-color: transparent; color: inherit; }
-.table-selection { position: sticky; top: 8px; z-index: 15; display: flex; align-items: center; gap: var(--space-4); margin: 0 0 var(--space-4); padding: var(--space-4) var(--space-5); background: var(--ink); color: var(--surface); border-radius: var(--radius-sm); box-shadow: var(--shadow); }
+.table-sort select { --chevron-inset: 0px; block-size: auto; min-block-size: 0; padding-inline-start: 0; background-color: transparent; color: inherit; }
+.table-selection { position: sticky; top: 8px; z-index: 15; display: flex; align-items: center; gap: var(--space-4); margin: 0 0 var(--space-4); padding: var(--space-4) var(--space-5); background: var(--ink); color: var(--surface); border-color: var(--ink); }
 .table-selection[hidden] { display: none; }
 .table-selection strong { margin-right: auto; font-size: var(--text-sm); }
 main[aria-busy="true"] :is([data-table-results], [data-search-results]) { opacity: .55; transition: opacity 100ms ease; }
 
-.scope-chip { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); text-decoration: none; }
+.scope-chip { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); border-radius: var(--radius-pill); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); text-decoration: none; }
 a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-decoration: none; }
 /* The current choice in a switch: a heavier border, drawn inside so the chip
    keeps its size. The chip is inside its link, which holds the count a chip
    never does. */
-[aria-current] > .scope-chip { color: var(--ink); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+[aria-current] > .scope-chip { color: var(--ink); border-color: var(--accent); outline: 1px solid var(--accent); outline-offset: -2px; }
 /* A switch (`{% switch %}`): links to the same view in a row that wraps, the
    current one marked by its chip. */
 .switch { margin: 0 0 var(--stack-gap); }
@@ -327,7 +325,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
    and cells and what an open line holds keep the tight end of the spacing
    scale, since a phone's width is the words'. An open row shows its
    `narrow-more` parts in place, each on a line of its own that asks its
-   column for no width, so opening a row moves no column. */
+   column for no width and wraps in it, so opening a row moves no column. */
 .data-table .narrow-only { display: none; }
 @container table-region (width < 36rem) {
   .data-table { --cell-pad: var(--space-4); }
@@ -347,7 +345,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table[data-wide-columns="8"] { --gone-wide: 8; }
   .data-table[data-wide-columns="9"] { --gone-wide: 9; }
   .data-table > tbody > tr:has(> [data-kind] .narrow-more) .row-expand { display: grid; }
-  .data-table > tbody > tr.is-expanded [data-kind] .narrow-more { display: block; contain: inline-size; }
+  .data-table > tbody > tr.is-expanded [data-kind] .narrow-more { display: block; contain: inline-size; white-space: normal; }
   /* A value its clamp holds here (`cell-clamp`, cuts.css) opens its row, which releases it in place. The toggle shows whether or not the value overran its clamp, since no CSS every engine has can tell. */
   .data-table > tbody > tr:has(.cell-clamp) .row-expand { display: grid; }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
@@ -355,8 +353,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* A table cell cannot take a line of its own, so a narrow table whose rows hold labeled controls (any but a glyph), or the narrowest one whose rows hold any, is a grid of its columns' tracks instead, each row a subgrid of them, every cell under its heading (a column that has left takes no track). A row's controls take its last line, from where its name starts, rising past no words, so the row's whole pad stands under them; a control that wraps starts its line there too, and a quiet one opening it stands its pad out (page.css). The table and its rows name their controls again, which weighs these rules above a column's own width and display. */
 .table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] :is(a, button, [role="button"])) { --controls: icons; }
 .table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] :is(a, button, [role="button"]):not(.glyph)) { --controls: labeled; }
-/* A row of four labeled controls asks a line of their own sooner, as a table of more columns lets them leave sooner (above). */
-.table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] > .btn:not(.glyph) ~ .btn:not(.glyph) ~ .btn:not(.glyph) ~ .btn:not(.glyph)) { --controls: crowded; }
+/* A row of three controls, of any look, asks a line of their own sooner, as a table of more columns lets them leave sooner (above). */
+.table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] > .btn ~ .btn ~ .btn) { --controls: crowded; }
 @container table-region ((width < 36rem) and style(--controls: labeled)) or ((width < 48rem) and style(--controls: crowded)) or ((width < 20rem) and style(--controls: icons)) {
   .data-table:has(> tbody > tr > [data-kind="control"] :is(a, button, [role="button"]):not([hidden])) {
     display: grid; grid-template-columns: var(--lead,) [name] minmax(auto, 1fr) repeat(var(--columns), auto);

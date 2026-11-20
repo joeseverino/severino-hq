@@ -4,19 +4,20 @@ import json
 from datetime import timedelta
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.db import DatabaseError, connection
 from django.test import RequestFactory, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
+from hq.platform.core.testing import READER, declare, operator
 from hq.platform.core.tests.forwarding import arrived
 
 from .. import arrivals
+from ..resources import get_resource
 
 LAPTOP = "100.64.0.20"
 PROXY = "172.18.0.2"
@@ -196,8 +197,7 @@ class ArrivalTests(TestCase):
         self.assertEqual(stored()[0]["count"], 3)
 
     def test_the_middleware_counts_page_loads_and_writes_on_a_post(self):
-        user = get_user_model().objects.create_user("someone", password="not-used-here")
-        self.client.force_login(user)
+        operator(self.client, "someone")
 
         self.client.get(reverse("dashboard"), **arrived(REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_FOR=LAPTOP))
         self.assertEqual(stored(), [])
@@ -206,30 +206,27 @@ class ArrivalTests(TestCase):
         self.assertEqual(stored()[0]["device"], "a-laptop")
         self.assertEqual(stored()[0]["count"], 2)
 
-    def test_the_machine_page_says_when_the_device_last_reached_hq(self):
-        ManagedResource.objects.create(key="a-laptop", kind="machine", spec={"name": "a-laptop", "addresses": [LAPTOP]})
+    def test_the_machine_says_when_the_device_last_reached_hq(self):
+        declare("a-laptop", "machine", {"name": "a-laptop", "addresses": [LAPTOP]})
         arrivals.note(a_request())
-        user = get_user_model().objects.create_user("someone", password="not-used-here")
-        self.client.force_login(user)
 
         with override_settings(SEVERINO_REQUEST_PATH_SECONDS=0):
-            response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-laptop"}))
+            presence = get_resource("machines", "a-laptop", principal=READER)["presence"]
 
-        self.assertContains(response, "Last reached HQ")
-        self.assertContains(response, "relayed over the tailnet, through the proxy at 172.18.0.2")
+        self.assertTrue(presence["reached_hq"]["last_seen"])
+        self.assertEqual(presence["reached_hq"]["how"], "relayed over the tailnet, through the proxy at 172.18.0.2")
 
     def test_it_is_not_said_of_the_machine_hq_runs_on(self):
         """Its controller reaches HQ without a request, so its last request says nothing."""
 
         from hq.domains.control_plane.models import ProviderInventory
 
-        ManagedResource.objects.create(key="a-laptop", kind="machine", spec={"name": "a-laptop", "addresses": [LAPTOP]})
+        declare("a-laptop", "machine", {"name": "a-laptop", "addresses": [LAPTOP]})
         arrivals.note(a_request())
         for row in ProviderInventory.objects.filter(kind="tailscale.device"):
             row.records = [{**record, "self": True} for record in row.records]
             row.save()
-        user = get_user_model().objects.create_user("someone", password="not-used-here")
-        self.client.force_login(user)
+        operator(self.client, "someone")
 
         with override_settings(SEVERINO_REQUEST_PATH_SECONDS=0):
             response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-laptop"}))

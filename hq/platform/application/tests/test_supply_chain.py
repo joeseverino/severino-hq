@@ -1,19 +1,19 @@
 from datetime import timedelta
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations.public_registry import DIGEST_KIND as DIGEST
+from hq.platform.core.testing import operator
 
 from ..containers import DECLARED, LABEL, PROVENANCE, REGISTRY, VULNERABLE, containers
 from ..report_testing import bridged
 from ..security import cli_principal
-from .test_containers import estate, inventory
-from .test_upgrades import TARGET, declare, published
+from .test_containers import container, estate, inventory
+from .test_upgrades import TARGET, published
 
 APP = "ghcr.io/example/app@sha256:aaa"
 APP_TARGET = f"ghcr.io/example/app@{TARGET}"
@@ -69,16 +69,7 @@ class SourceTests(TestCase):
 
         self.assertEqual((item("app").standing.upstream, item("app").standing.source_from), ("example/app", LABEL))
 
-        ManagedResource.objects.create(
-            key="example-box-app",
-            kind="portainer.container",
-            spec={
-                "connection_ref": "example-portainer",
-                "host": "example-box",
-                "name": "app",
-                "source": "https://github.com/example/declared",
-            },
-        )
+        container("app", source="https://github.com/example/declared")
         self.assertEqual(
             (item("app").standing.upstream, item("app").standing.source_from), ("example/declared", DECLARED)
         )
@@ -158,7 +149,7 @@ class UpgradeTests(TestCase):
     def test_an_upgrade_says_what_the_targets_packages_clear_and_bring(self):
         estate()
         published()
-        declare("app")
+        container("app")
         inventory("registry.digest", [attested(APP), attested(APP_TARGET)])
         inventory(
             "registry.vulnerabilities",
@@ -177,7 +168,7 @@ class UpgradeTests(TestCase):
     def test_a_target_is_vetted_by_what_its_publisher_attached(self):
         estate()
         published()
-        declare("app")
+        container("app")
         inventory("registry.digest", [attested(APP), attested(APP_TARGET, packages=(), revision="", source="")])
 
         reasons = {blocker.id for blocker in self.plan("app").not_automatic}
@@ -267,8 +258,8 @@ class ContainerJoinTests(TestCase):
         from ..relationships import relationships_for
 
         estate()
-        declare("web")
-        declare("app")
+        container("web")
+        container("app")
         inventory(
             "portainer.network",
             [
@@ -291,7 +282,7 @@ class ContainerJoinTests(TestCase):
 
     def test_the_container_page_shows_what_it_does_not_say_elsewhere(self):
         estate()
-        declare("web")
+        container("web")
         inventory(
             "portainer.network",
             [
@@ -316,7 +307,7 @@ class ContainerJoinTests(TestCase):
                 },
             ],
         )
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client)
 
         page = self.client.get(reverse("control_plane:detail", args=["example-box-web"]))
 

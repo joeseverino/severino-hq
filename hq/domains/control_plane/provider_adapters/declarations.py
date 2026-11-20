@@ -405,7 +405,7 @@ NETWORK = ProviderSpec(
     declaration_only=True,
     hostnames=None,
     readout=_network_readout,
-    # No ``from_record``: nothing sweeps a range. What HQ observes are the
+    # No ``_from_record``: nothing sweeps a range. What HQ observes are the
     # things that answer inside one.
     key_hint=_network_key_hint,
     removal_note=lambda spec: (
@@ -445,7 +445,7 @@ MACHINE = ProviderSpec(
     declaration_only=True,
     hostnames=None,
     readout=_machine_readout,
-    # No ``from_record``: nothing sweeps machines into an inventory, so
+    # No ``_from_record``: nothing sweeps machines into an inventory, so
     # there is no record to adopt one from. What HQ observes about a machine
     # arrives as containers and connections, which name it in passing.
     key_hint=_machine_key_hint,
@@ -475,7 +475,7 @@ DELIVERY_TARGET = ProviderSpec(
     resolution_input=True,
     hostnames=None,
     readout=_delivery_target_readout,
-    # No ``from_record`` for the same reason as a machine: how a place takes
+    # No ``_from_record`` for the same reason as a machine: how a place takes
     # a certificate is not something any provider reports, which is exactly
     # why it has to be stated.
     key_hint=_delivery_target_key_hint,

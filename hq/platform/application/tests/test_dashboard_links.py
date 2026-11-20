@@ -2,12 +2,12 @@
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import elements
+from hq.platform.core.testing import operator
 
 from ..outward_links import offered_links
 
@@ -44,7 +44,7 @@ class EmptyLinksTests(TestCase):
     Links card, even while the chooser has links it could offer."""
 
     def test_no_link_draws_no_card(self):
-        self.client.force_login(get_user_model().objects.create_user("operator", password="x" * 20))
+        operator(self.client)
         with mock.patch("hq.platform.core.dashboard_views.outward_links", return_value=([], False)):
             page = self.client.get(reverse("dashboard")).content.decode()
 

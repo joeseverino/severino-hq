@@ -4,6 +4,7 @@ class's time, and the results a parallel worker sends its parent."""
 import json
 import os
 import pickle
+import sys
 import traceback
 import unittest
 import unittest.util
@@ -218,6 +219,17 @@ class CompositionRemoteRunner(RemoteTestRunner):
     resultclass = CompositionRemoteResult
 
 
+def measuring(module: str) -> None:
+    """Under coverage with a core that keeps contexts (``mise run fast:map``'s), what runs from here on is
+    kept under the test module's name: tools/gate/ran.py reads which tests ran which lines by it."""
+
+    # Imported only by a run under coverage, which the image never makes.
+    coverage = sys.modules.get("coverage")
+    current = coverage.Coverage.current() if coverage else None
+    if current is not None and current.config.core == "ctrace":
+        current.switch_context(module)
+
+
 class ClassTimedSuite(unittest.TestSuite):
     """A suite that sets each class up on a fresh process (``isolation_testing.fresh``),
     tells its result how long each class took, from its ``setUpClass`` to the
@@ -236,6 +248,7 @@ class ClassTimedSuite(unittest.TestSuite):
 
     def _handleClassSetUp(self, test, result):
         if type(test) is not getattr(result, "_previousTestClass", None):
+            measuring(type(test).__module__)
             fresh()
             stalls.stall_watch.mark(f"{unittest.util.strclass(type(test))} setUpClass")
             self._timing = (test, monotonic())

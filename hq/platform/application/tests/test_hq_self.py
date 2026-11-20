@@ -2,13 +2,13 @@
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory
 from hq.platform.application.markup_testing import all_elements, select, texts, with_class
+from hq.platform.core.testing import READER, declare, operator
 
 from ..hq_self import LABEL, hq_hostnames, hq_service, served_at
 from ..machines import machine
@@ -27,8 +27,8 @@ def own(*addresses):
     )
 
 
-def declare(name, *addresses):
-    ManagedResource.objects.create(key=name, kind="machine", spec={"name": name, "addresses": list(addresses)})
+def machine_at(name, *addresses):
+    declare(name, "machine", {"name": name, "addresses": list(addresses)})
 
 
 class SiteUrlTests(TestCase):
@@ -74,8 +74,8 @@ class HostnameTests(TestCase):
 @SITE
 class MachineTests(TestCase):
     def test_the_machine_its_name_answers_at_runs_it(self):
-        declare("example-host", "100.64.0.9")
-        declare("example-other", "100.64.0.10")
+        machine_at("example-host", "100.64.0.9")
+        machine_at("example-other", "100.64.0.10")
         ProviderInventory.objects.create(
             kind="adguard.rewrite",
             records=[{"domain": "hq.example.com", "answer": "100.64.0.9"}],
@@ -91,13 +91,13 @@ class MachineTests(TestCase):
         self.assertFalse(other.runs_hq)
 
     def test_the_machine_at_its_listen_address_runs_it(self):
-        declare("example-host", "192.0.2.44")
+        machine_at("example-host", "192.0.2.44")
 
         with own("192.0.2.44"):
             self.assertTrue(machine("example-host").runs_hq)
 
     def test_no_address_in_common_claims_nothing(self):
-        declare("example-host", "192.0.2.44")
+        machine_at("example-host", "192.0.2.44")
 
         with own("192.0.2.99"):
             self.assertFalse(machine("example-host").runs_hq)
@@ -106,9 +106,8 @@ class MachineTests(TestCase):
 @SITE
 class PageTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_user("hq-operator", password="x" * 20)
-        self.client.force_login(user)
-        declare("example-host", "192.0.2.44")
+        operator(self.client)
+        machine_at("example-host", "192.0.2.44")
 
     def test_the_machine_page_serves_hq(self):
         with own("192.0.2.44"):
@@ -206,7 +205,7 @@ class TailnetMachineTests(TestCase):
             self.assertEqual(hq_service().machine, "")
 
     def test_loopback_and_link_local_name_no_machine(self):
-        declare("example-host", "127.0.0.1", "169.254.0.5", "fe80::5")
+        machine_at("example-host", "127.0.0.1", "169.254.0.5", "fe80::5")
 
         with own("169.254.0.5", "fe80::5"):
             self.assertFalse(machine("example-host").runs_hq)
@@ -219,11 +218,10 @@ class TailnetMachineTests(TestCase):
 @SITE
 class TopologyTests(TestCase):
     def test_hq_is_a_service_that_runs_on_its_machine(self):
-        from ..security import Capability, Principal
         from ..topology import derive_topology
 
-        declare("example-host", "192.0.2.44")
-        reader = Principal("reader", "test", frozenset({Capability.READ}))
+        machine_at("example-host", "192.0.2.44")
+        reader = READER
 
         with own("192.0.2.44"), host_only():
             topology = derive_topology(principal=reader)
@@ -238,11 +236,10 @@ class TopologyTests(TestCase):
         )
 
     def test_the_page_seeds_the_address_a_request_arrived_on(self):
-        from ..security import Capability, Principal
         from ..topology import derive_topology
 
         tailnet_device("example-laptop", ("100.64.0.5",))
-        reader = Principal("reader", "test", frozenset({Capability.READ}))
+        reader = READER
 
         with own(), host_only():
             topology = derive_topology(principal=reader, request=_Request("100.64.0.5"))

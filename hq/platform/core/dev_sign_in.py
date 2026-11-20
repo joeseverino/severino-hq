@@ -1,18 +1,8 @@
-"""Signing a browser in on a development server without typing a password.
+"""Signing a browser in on a development server without typing a password (docs/Development.md).
 
-The scratch server prints a sign-in link beside its address, as Jupyter prints
-its token URL, and opening it signs in the scratch server's throwaway account.
-What holds the link to that:
-
-- It is routed only where ``settings.SEVERINO_SCRATCH_ACCOUNT`` names an
-  account, which the settings derive from the scratch profile, DEBUG and a
-  loopback bind (config/devtools.py), and it answers a loopback caller alone.
-- Its token is signed with the server's key under a salt of its own, and names
-  the account's key, so it signs in that one account and no other.
-- It names the account's last sign-in too, and redeeming it moves that sign-in
-  in one conditional update, so it works once; ``LIFETIME`` after it was made,
-  it is refused.
-- It is written only to the server's own log.
+Its token is signed under a salt of its own and names one account, and
+redeeming it moves that account's last sign-in in one conditional update, so it
+works once.
 """
 
 from datetime import timedelta

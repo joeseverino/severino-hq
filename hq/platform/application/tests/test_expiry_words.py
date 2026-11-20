@@ -10,7 +10,7 @@ from unittest import mock
 from django.conf import settings
 from django.test import SimpleTestCase, TestCase, override_settings, tag
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import declare
 
 from ..certificate_expiry import HeldCertificate, judged as certificates_judged
 from ..credential_findings import EXPIRES, expiring as credentials_expiring
@@ -137,10 +137,10 @@ class EveryCallerTests(TestCase):
         from ..zone_insights import security
 
         sweep()
-        certificate = ManagedResource.objects.create(
-            key="wildcard",
-            kind="tls.certificate",
-            spec={"certificate_name": "wildcard", "domains": ["example.com"], "install_on": ["edge"]},
+        certificate = declare(
+            "wildcard",
+            "tls.certificate",
+            {"certificate_name": "wildcard", "domains": ["example.com"], "install_on": ["edge"]},
             enabled=True,
         )
 

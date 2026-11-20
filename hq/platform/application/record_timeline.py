@@ -1,11 +1,8 @@
 """A record's story: every audit row about it, oldest first.
 
-The one read the audit page's record filter and a record's own page share.
-A row names the record it is about in its ``subject`` (``register_audit``),
-which only rows written since that column exist carry; the log is append-only,
-so an older row is never given one and is found by what it does hold: the
-record's own rows by object type and id, its operations' and its approvals'
-the same way, and the rows of each operation those ids name.
+The one read the audit page's record filter and a record's own page share. The
+log is append-only, so a row from before ``subject`` existed is found by its
+object type and id.
 """
 
 from django.db.models import Q, QuerySet

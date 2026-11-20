@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Annotated, Any
 
-from pydantic import Field
+from pydantic import Field, computed_field
 
 from hq.config.networks import is_loopback
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
@@ -37,19 +37,21 @@ class Origin:
     #
     # Defaults true: an origin comes from an ingress unless a record says
     # otherwise.
-    routed: Annotated[bool, Field(exclude=True)] = True
+    routed: Annotated[bool, Describe("Whether a proxy forwards to it, over a record that names it.")] = True
     # What readings joined to the origin name as serving it: a Pages project,
     # the holder of a public address.
     serving: Annotated[tuple[str, ...], Field(exclude=True)] = ()
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
-    def parked(self) -> bool:
+    def parked(self) -> Annotated[bool, Describe("Whether it is a documentation address, where nothing answers.")]:
         """Whether the name points at a documentation address, where nothing answers."""
 
         return not self.known and is_documentation(host_of(self.address))
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
-    def external(self) -> bool:
+    def external(self) -> Annotated[bool, Describe("Whether it is served somewhere HQ does not reach.")]:
         """Whether this is served somewhere HQ does not reach: a Pages site, a mail
         host, someone else's server. An unknown host inside the network is
         ``qualifier``'s to say.
@@ -75,8 +77,9 @@ class Origin:
 
         return operator(self.address) if self.external else ""
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
-    def known(self) -> bool:
+    def known(self) -> Annotated[bool, Describe("Whether the address belongs to a machine HQ knows.")]:
         """Whether the address belongs to a machine HQ knows.
 
         An ingress forwarding to an address no host claims may work, yet it is
@@ -92,8 +95,9 @@ class Origin:
             return dotted(self.host, self.container)
         return self.host or self.address
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
-    def headline(self) -> str:
+    def headline(self) -> Annotated[str, Describe("What serves it, in one phrase, such as `Parked`.")]:
         """What to call whatever serves this, in one phrase.
 
         Here rather than in a template, because there are two templates and one
@@ -223,12 +227,9 @@ def locate(
 ) -> Origin:
     """Match a forwarding address to a machine, and if certain, a container.
 
-    The machine is ``application.locate``'s answer; this adds loopback and the
-    observed container. ``at`` carries the estate-wide readings across a loop of
-    lookups, and ``near`` is the machine the forwarding proxy runs on, where a
-    docker network's container name resolves first. ``loopback_on`` is the
-    machine the address was read on when the caller knows it (a controller
-    reporting its own connection): a loopback address is that machine.
+    ``at`` carries the estate-wide readings across a loop of lookups, ``near``
+    is the forwarding proxy's machine, and ``loopback_on`` the machine a
+    loopback address was read on.
     """
 
     machines = declared_machines() if machines is None else machines

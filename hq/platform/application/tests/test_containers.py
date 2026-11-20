@@ -1,13 +1,13 @@
 from dataclasses import replace
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.application.markup_testing import elements, text
+from hq.platform.core.testing import SignedInTestCase, declare
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 from hq_sdk.testing import plain
 
@@ -59,6 +59,14 @@ def running(name, image, host="example-box"):
         "network_mode": "bridge",
         "portainer_managed": False,
     }
+
+
+def container(name="web", **spec):
+    return declare(
+        f"example-box-{name}",
+        "portainer.container",
+        {"connection_ref": "example-portainer", "host": "example-box", "name": name, **spec},
+    )
 
 
 def estate(*, advisories=(), app_tags=("v1.2.0", "v1.3.0")):
@@ -370,10 +378,7 @@ def _needs(response) -> list[str]:
     return [group["standing"].label for need in response.context["need_sections"] for group in need["groups"]]
 
 
-class PageTests(TestCase):
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("owner", password="unused-password"))
-
+class PageTests(SignedInTestCase):
     def test_the_page_leads_with_what_needs_you(self):
         estate(advisories=[HIGH])
 
@@ -448,11 +453,7 @@ class PageTests(TestCase):
 
     def test_a_declared_container_links_to_its_own_page_and_shows_its_standing(self):
         estate()
-        ManagedResource.objects.create(
-            key="example-box-kuma",
-            kind="portainer.container",
-            spec={"connection_ref": "example-portainer", "host": "example-box", "name": "kuma"},
-        )
+        container("kuma")
 
         listing = self.client.get(reverse("control_plane:containers"))
         detail = self.client.get(reverse("control_plane:detail", args=["example-box-kuma"]))
@@ -473,19 +474,40 @@ class PageTests(TestCase):
     def test_a_machine_draws_each_problem_where_its_rule_declares(self):
         from types import SimpleNamespace
 
-        from ..machine_context import problems_by_part
+        from ..machine_context import problem_parts
+        from ..problems import grouped, problems_by_part
 
-        machine = SimpleNamespace(url="/machines/example-box/", containers=("kuma",), presence=object())
+        url = "/machines/example-box/"
+        record = {"url": url, "containers": [{"name": "kuma"}], "presence": {}}
         keys = {
             "restart": "hq.infrastructure:finding:reboot-pending:machine:example-box",
             "key": "hq.infrastructure:finding:tailnet-key-expiring:machine:example-box",
             "image": "hq.infrastructure:finding:container-image-update:machine:example-box:kuma",
+            "urgent": "hq.infrastructure:finding:container-image-update:machine:example-box:db",
         }
-        items = [{"key": key, "status": "attention"} for key in keys.values()]
-        with mock.patch("hq.platform.application.machine_context.problems_about", return_value=items):
-            drawn = {part: [item["key"] for item in found] for part, found in problems_by_part(machine, None).items()}
+        items = [
+            {
+                "key": key,
+                "status": "serious" if name == "urgent" else "attention",
+                "notice": False,
+                "url": url,
+                "subject": {"url": url},
+            }
+            for name, key in keys.items()
+        ]
+        entries = [{"finding": SimpleNamespace(held=False, part="")} for _ in items]
+        with (
+            mock.patch("hq.platform.application.problems._host_entries", return_value=entries),
+            mock.patch("hq.platform.application.problems.gathered_rows", return_value=items),
+            mock.patch("hq.platform.application.problems.readable_by", side_effect=lambda _who, found: found),
+        ):
+            found = grouped(problems_by_part(problem_parts(record), None))
+        drawn = {part: [item["key"] for item in items] for part, items in found.items()}
 
-        self.assertEqual(drawn, {"page": [keys["restart"]], "containers": [keys["image"]], "tailnet": [keys["key"]]})
+        self.assertEqual(
+            drawn,
+            {"page": [keys["restart"], keys["urgent"]], "containers": [keys["image"]], "tailnet": [keys["key"]]},
+        )
 
     def test_a_machine_draws_a_containers_update_under_its_containers(self):
         estate()
@@ -513,12 +535,9 @@ class PageTests(TestCase):
         self.assertContains(response, "No containers yet")
 
 
-class QueryBudgetTests(TestCase):
+class QueryBudgetTests(SignedInTestCase):
     """The page's cost is its readings, never its rows: every container's
     standing shares one read of each reading."""
-
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("owner", password="unused-password"))
 
     def arrange(self, count):
         estate()

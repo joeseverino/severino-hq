@@ -10,6 +10,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.tests import bridge_client
 from hq.platform.core.models import UpstreamReading
+from hq.platform.core.testing import declare
 
 from ..capabilities import run_capability
 from ..security import Capability, Principal
@@ -57,7 +58,7 @@ class LeaseTests(TestCase):
 
     def setUp(self):
         def resource(key: str) -> ManagedResource:
-            return ManagedResource.objects.create(key=key, kind="automation.source", spec={})
+            return declare(key, "automation.source")
 
         self.claim = OperationRequest.objects.create(
             resource=resource("example-app"),

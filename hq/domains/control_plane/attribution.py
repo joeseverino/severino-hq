@@ -18,11 +18,11 @@ def unattributed_kinds(observations, providers) -> list[str]:
         )
     ]
     for spec in providers:
-        if spec.unobserved_reason or spec.from_record is None:
+        if spec.unobserved_reason or not spec.sweeps:
             continue
         if not set(spec.connection_providers) & PER_CONNECTION_PROVIDERS:
             continue
         sample = dict(spec.sample_record or {})
-        if not sample.get("connection_ref") or "connection_ref" not in spec.from_record(sample):
+        if not sample.get("connection_ref") or "connection_ref" not in (spec.record_spec(sample) or {}):
             found.append(spec.kind)
     return sorted(found)

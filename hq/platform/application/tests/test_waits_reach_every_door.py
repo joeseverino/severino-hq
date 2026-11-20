@@ -84,12 +84,12 @@ class AtOnceWaitTests(TestCase):
         agent = Principal("example-wait-busy", "mcp", frozenset({Capability.READ}))
 
         async def steps(post):
-            with agent_limits.LIMITS.occupy(agent.actor):
+            with agent_limits.limits().occupy(agent.actor):
                 return await post("token", _call(1))
 
         with mock.patch(TOOL):
             answer = _session(steps, admitting(lambda _: agent)).json()["result"]
-        with _serving(), agent_limits.LIMITS.occupy("example-wait-busy-api"):
+        with _serving(), agent_limits.limits().occupy("example-wait-busy-api"):
             api = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_bearer('example-wait-busy-api')}")
 
         self.assertEqual(answer["structuredContent"]["error"]["code"], "too_many_calls")

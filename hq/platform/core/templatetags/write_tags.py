@@ -1,15 +1,8 @@
-"""The tags a write form is drawn through.
+"""The tags a write form is drawn through: ``write_token``, ``row_editor`` and
+``asks_one_question`` (each Part's rules).
 
-``{% write_token %}``: what every write form carries in place of
-``{% csrf_token %}``: the CSRF field, and a retry key drawn fresh for this
-drawing of the form (``hq.platform.application.web_writes``), so the form sent
-twice acts once.
-
-``{% row_editor %}``: a form that edits one row of a table, opened under that
-row (its Part's rules).
-
-``form|asks_one_question``: whether a form is one line of words to fill, which
-partials/_form.html draws on its button's line (its Part's rules).
+``{% write_token %}`` replaces ``{% csrf_token %}``, adding a retry key fresh
+for this drawing of the form, so the form sent twice acts once.
 """
 
 import copy
@@ -70,14 +63,11 @@ def row_editor(
     verb: Annotated[str, Describe("Its button's words.")],
     **initial: Annotated[Any, Describe("The row's values, each by its field's name.")],
 ):
-    """The way into a row's editor, and the editor itself where the page's
-    address opens it (``?edit=<key>``).
+    """The way into a row's editor, and the editor itself where the page's address opens it (``?edit=<key>``).
 
-    ``form`` is the one form the view declares for the table's editors, drawn
-    for the open row alone: with that row's values (``initial``, by field
-    name) unless it is bound, when it is drawn as it was sent. Its ids carry
-    the row's ``key``, so they are the row's own. ``label`` names the way in,
-    ``action`` is where the editor posts and ``verb`` its button's words.
+    ``form`` is drawn for the open row alone, with its ``initial`` values
+    unless bound; its ids carry the row's ``key``. ``label``, ``action`` and
+    ``verb`` name the way in, where it posts, and its button.
     """
 
     unknown = sorted(set(initial) - set(form.fields))

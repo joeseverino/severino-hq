@@ -1,12 +1,7 @@
-"""Each agent HQ has seen, as the Agents page shows it: its grant against its
-person's role, the devices it called from, what it did and was refused lately,
-and the listen streams it holds open now.
+"""Each agent HQ has seen, as the Agents page shows it: grant, devices, recent activity and open listen streams.
 
-The audit log names an agent's client as each event's ``actor`` and its device
-as ``device``, columns indexed with the time, so one windowed query over the
-last ``RECENT`` reads every agent's latest events and its counts together, one
-more each device's, and the page costs the same however long the log or how
-many agents and devices it holds.
+One windowed query over the indexed audit columns reads every agent's events,
+so the page costs the same however long the log.
 """
 
 from dataclasses import dataclass, replace
@@ -24,7 +19,7 @@ from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
 from . import agent_devices, agent_limits, denials, roles
 from .agent_access import UNPLACED_CODES
 from .agent_devices import DeviceStanding
-from .agent_limits import RATE_LIMITED, TOO_MANY_CALLS
+from .refusal_codes import LATER_CODES
 from .security import (
     MCP_INTERFACE,
     Capability,
@@ -44,9 +39,6 @@ SHOWN = 5
 # How a provider's permission list is written from HQ's catalog, which the
 # page's steps for adding an agent and a missing permission's fix point at.
 CLIENT_SETUP = "https://github.com/joeseverino/severino-hq/blob/main/docs/API.md#setting-up-a-client"
-
-# The refusals an agent earns by asking too much, rather than for what it asked.
-LIMITED = (RATE_LIMITED, TOO_MANY_CALLS)
 
 DENIED = Q(action=AuditLog.Action.DENIED)
 
@@ -223,7 +215,7 @@ def standings(viewer=None) -> list[AgentStanding]:
                 subject=subject,
                 label=str(identity),
                 devices=devices.get(identity.pk, ()),
-                streams=Streams(agent_limits.LIMITS.listening(subject), cap),
+                streams=Streams(agent_limits.limits().listening(subject), cap),
             )
         )
     return found
@@ -374,7 +366,7 @@ def recent_activity(clients: list[str]) -> dict[str, Activity]:
             rank=Window(RowNumber(), order_by=[F("created_at").desc(), F("id").desc()], **by_agent),
             changes=Window(Count("id", filter=~DENIED), **by_agent),
             refused=Window(_refusals(), **by_agent),
-            limited=Window(_refusals(Q(reason__in=LIMITED)), **by_agent),
+            limited=Window(_refusals(Q(reason__in=LATER_CODES)), **by_agent),
         )
         .filter(rank__lte=SHOWN)
         .select_related("user")

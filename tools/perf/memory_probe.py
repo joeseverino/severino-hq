@@ -1,19 +1,9 @@
 """What each module's own load holds of HQ's Python memory, at boot and after a pass over pages.
 
-Run by tools.perf.memory as ``python -m tools.perf.memory_probe <out>``, in a process of its
-own, so the count starts before HQ imports anything. tracemalloc counts the blocks Python's
-allocator holds: a C library's own allocations are not in it.
-
-A module's own share is what the memory traced grew by while its body ran, the loads it started
-taken out, so a module is never charged for a heavy one it imports. Every load, a lazy import's
-too when its name is first used, passes through importlib's ``_load_unlocked``, which the count
-wraps. Pages are asked one at a time, so one load runs at once.
-
-Each path named in ``MEMORY_AFTER`` is a stage of its own after the pass: the modules that serve
-it, which boot leaves lazy, are loaded with every lazy import made eager, so the stage holds the
-path's whole closure, the most its first call can load. With ``MEMORY_TIMED`` set nothing is
-counted: the same boot, pass and paths run untraced under ``python -X importtime``, a line on
-stderr naming each path before its loads, so the import times are tracemalloc's slowdown free.
+A module's share is what tracemalloc grew by while its body ran, less the loads
+it started, by wrapping importlib's ``_load_unlocked``. Each ``MEMORY_AFTER``
+path is a stage of its own with every lazy import eager. ``MEMORY_TIMED`` runs
+the same untraced under ``python -X importtime``.
 """
 
 import _frozen_importlib as bootstrap

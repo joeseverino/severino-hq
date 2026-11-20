@@ -4,7 +4,6 @@ from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.platform.application import roles
@@ -18,6 +17,7 @@ from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import MCP_INTERFACE, agent_principal, cli_principal
 from hq.platform.application.ui import DomainOverview
+from hq.platform.core.testing import SignedInTestCase, operator
 
 LOGGER = "severino.composition"
 EVENT = "composition.source.unreadable"
@@ -59,14 +59,7 @@ def cards(name, count=3):
     )
 
 
-class UnreadableSourceTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = get_user_model().objects.create_user(username="unreadable-sources")
-
-    def setUp(self):
-        self.client.force_login(self.user)
-
+class UnreadableSourceTests(SignedInTestCase):
     def composing(self, *domains):
         every = (*host_domains(), *domains)
         for module in ("domains", "dashboard"):
@@ -226,7 +219,7 @@ class StandInGateTests(TestCase):
             return [item["label"] for item in operating_snapshot(principal=principal)["priority"]]
 
     def test_a_viewer_who_holds_the_extensions_reads_sees_it(self):
-        viewer = get_user_model().objects.create_user(username="gated-viewer")
+        viewer = operator()
         roles.assign(viewer, roles.Role.VIEWER)
         self.client.force_login(viewer)
 

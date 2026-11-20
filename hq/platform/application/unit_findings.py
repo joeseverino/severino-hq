@@ -1,11 +1,8 @@
-"""Findings about the systemd units a machine runs for HQ: failed, not installed
-or not enabled, a timer not starting its unit, a service systemd keeps
-restarting, or units nobody could read.
+"""Findings about the systemd units a machine runs for HQ: failed, not
+installed or enabled, not started, restarting, or unread.
 
-A unit that fails stays failed in its machine's journal and nothing else
-notices, so these rules read the ``host.unit`` reading's one row per unit
-(docs/Derived-Facts.md says how it is taken). They name no unit, so one added
-to ``deploy/systemd`` is covered once installed.
+A failed unit stays failed in its journal and nothing else notices. The rules
+name no unit, so one added to ``deploy/systemd`` is covered once installed.
 """
 
 import shlex

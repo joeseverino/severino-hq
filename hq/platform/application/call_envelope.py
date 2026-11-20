@@ -1,12 +1,8 @@
 """What a capability call carries beside its command, read once for every door.
 
-``capabilities.run_capability`` reads every door's target and stale-write
-token with it, once the caller's authority is settled, so a target that is not
-of its capability's kind or a token that is no time is refused with one
-sentence wherever it was sent, and a caller without the grant learns nothing
-of either. The API reads a body's own form (``read_body``) before it asks. The
-API document and the capability catalog publish its schema
-(``api.views.request_schema``).
+Read once the caller's authority is settled, so a bad target or stale-write
+token is refused in one sentence wherever it was sent, and a caller without the
+grant learns nothing of either.
 """
 
 import re

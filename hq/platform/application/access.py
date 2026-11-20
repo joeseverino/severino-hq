@@ -98,7 +98,7 @@ def _runs_a_capability(principal: Principal) -> bool:
     # A change is held for a person only once its caller holds its grant
     # (run_capability authorizes before it asks the policy), so a caller who
     # could hold a grant but does not has nothing to run or to ask for.
-    return any(spec.permitted_to(principal) for spec in capabilities.capability_registry().values())
+    return any(spec.permitted_to(principal) for spec in capabilities.capability_registry())
 
 
 def _reads_a_kind(serves: Callable[[ResourceSpec], bool]) -> Callable[[Principal], bool]:

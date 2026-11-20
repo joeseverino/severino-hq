@@ -3,7 +3,8 @@
 from typing import Literal, TypedDict
 
 from hq.domains.reports import exports
-from hq.platform.core.audit import audit_operation, record_event
+from hq.platform.core import bindings
+from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
 from .security import Principal
@@ -37,7 +38,7 @@ def exported(filename: str, body: str, *, principal: Principal) -> None:
     """Record that ``principal`` took ``filename`` away: the one record of an
     export, whichever door handed it over."""
 
-    with audit_operation(operation=EXPORT, principal=principal):
+    with bindings.audit_operation(operation=EXPORT, principal=principal):
         record_event(
             action=AuditLog.Action.EXPORTED,
             type_label="Export",

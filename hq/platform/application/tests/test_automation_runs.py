@@ -6,15 +6,15 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest
 from hq.platform.application.markup_testing import links, text
 from hq.platform.core.models import AgentIdentity
+from hq.platform.core.testing import AGENT, MCP_READER, operator
 
 from ..automation_runs import CANCEL
-from ..capabilities import capability_registry, run_capability
+from ..capabilities import capability_registry, capability_spec, command_spec, run_capability
 from ..capability_policy import Rule, matrix, set_rule
 from ..controller import claim_next_operation
 from ..security import Capability, Principal, cli_principal
@@ -22,8 +22,6 @@ from .procedures import APP, DB, EDGE, RESTART, RESTART_KEY, RESTART_RUN, REVISI
 
 # A person's own click in the browser, which is their consent.
 OPERATOR = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 KIND = "automation.operation"
 LOGS = "example.service_logs"
 
@@ -113,7 +111,7 @@ class QueuedRunTests(RunTestCase):
     def test_a_read_procedure_runs_under_a_read_grant(self):
         self.supply(manifest(id=LOGS, effect="read", retry="safe"))
 
-        answer = run_capability(f"automation.{LOGS}.run", run_payload(), principal=READER).answer
+        answer = run_capability(f"automation.{LOGS}.run", run_payload(), principal=MCP_READER).answer
 
         self.assertTrue(answer["ok"], answer)
         self.assertEqual(OperationRequest.objects.get().input["operation"], LOGS)
@@ -143,7 +141,7 @@ class AgentAskedRunTests(RunTestCase):
         AgentIdentity.objects.create(
             client_id=AGENT.actor, interfaces=["mcp"], granted=["read", "manage_infrastructure"]
         )
-        self.user = get_user_model().objects.create_user("example-operator", password="x" * 20)
+        self.user = operator(username="example-operator")
 
     def assert_held(self, name):
         answer = self.ask(run_payload(), principal=AGENT, name=name)
@@ -157,11 +155,10 @@ class AgentAskedRunTests(RunTestCase):
                 self.assert_held(name)
 
     def test_no_agent_rule_can_allow_a_change(self):
-        registry = capability_registry()
         for name in self.CHANGES:
             with self.subTest(name):
                 with self.assertRaises(ValueError):
-                    set_rule(subject=AGENT.actor, spec=registry[name], rule=Rule.ALLOW, user=self.user)
+                    set_rule(subject=AGENT.actor, spec=command_spec(name), rule=Rule.ALLOW, user=self.user)
                 # A rule stored past that refusal still lifts nothing.
                 CapabilityRule.objects.update_or_create(
                     subject=AGENT.actor, capability=name, defaults={"rule": Rule.ALLOW}
@@ -223,7 +220,7 @@ class DoorbellTests(RunTestCase):
 
 class RefusedRunTests(RunTestCase):
     def test_a_read_grant_cannot_run_a_change(self):
-        self.refused(run_payload(), "forbidden", principal=READER)
+        self.refused(run_payload(), "forbidden", principal=MCP_READER)
 
         self.assertFalse(OperationRequest.objects.exists())
 
@@ -357,7 +354,7 @@ class HeldRunPageTests(RunTestCase):
         super().setUp()
         self.supply(manifest(), manifest(id=LOGS))
         self.first = self.ask(run_payload(APP, DB))["operation"]
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client)
         machines = patch(
             "hq.platform.application.machines.machine_catalog", side_effect=lambda **_: self.supply.machines
         )
@@ -449,12 +446,10 @@ class CapabilityShapeTests(RunTestCase):
             manifest(id=LOGS, effect="read", retry="safe"),
             manifest(id="example.wipe", effect="destructive"),
         )
-        registry = capability_registry()
-
         effects = {
-            name: (registry[name].effect, registry[name].required_capabilities)
-            for name in registry
-            if name.startswith("automation.") and name.endswith(".run")
+            spec.name: (spec.effect, spec.required_capabilities)
+            for spec in capability_registry()
+            if spec.name.startswith("automation.") and spec.name.endswith(".run")
         }
 
         self.assertEqual(
@@ -469,4 +464,4 @@ class CapabilityShapeTests(RunTestCase):
     def test_a_procedure_no_longer_supplied_is_no_longer_a_command(self):
         self.supply()
 
-        self.assertNotIn(RESTART_RUN, capability_registry())
+        self.assertIsNone(capability_spec(RESTART_RUN))

@@ -13,8 +13,8 @@ from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.test_record_timeline import KEY, REWRITE, claim_and_report
 from hq.platform.core import audit
-from hq.platform.core.attribution import operation_context
 from hq.platform.core.audit import audited_labels, register_audit
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AuditLog
 
 # What ``audit._changes`` stores, in each shape it stores: a plain pair, a

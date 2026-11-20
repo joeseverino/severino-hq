@@ -3,21 +3,11 @@ from dataclasses import replace
 from django.test import TestCase
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource
-
 from ..upgrades import HIGH as HIGH_RISK, LOW, MAJOR, PATCH, change_between, plans
 from .test_container_standard import runtime
-from .test_containers import HIGH, estate, inventory
+from .test_containers import HIGH, container, estate, inventory
 
 TARGET = "sha256:" + "9" * 64
-
-
-def declare(name):
-    ManagedResource.objects.create(
-        key=f"example-box-{name}",
-        kind="portainer.container",
-        spec={"connection_ref": "example-portainer", "host": "example-box", "name": name},
-    )
 
 
 def published(app_tags=("v1.2.0", "v1.2.1"), digests=None):
@@ -71,7 +61,7 @@ class PlanTests(TestCase):
         estate(advisories=[{**HIGH, "vulnerabilities": [["< 1.2.1", "1.2.1"]]}])
         published()
         inventory("portainer.runtime", [runtime("app", healthcheck=True)])
-        declare("app")
+        container("app")
 
         plan = self.plan("app")
 
@@ -90,7 +80,7 @@ class PlanTests(TestCase):
         estate(advisories=[{**HIGH, "vulnerabilities": [["< 1.2.1", "1.2.1"]]}])
         published()
         inventory("portainer.runtime", [runtime("app", healthcheck=True)])
-        declare("app")
+        container("app")
 
         plan = self.plan("app")
         risky = replace(plan, fixes=(), data=({"type": "volume", "source": "app_data"},), verified_by=())
@@ -119,7 +109,7 @@ class PlanTests(TestCase):
                 )
             ],
         )
-        declare("app")
+        container("app")
 
         plan = self.plan("app")
 
@@ -149,7 +139,7 @@ class PlanTests(TestCase):
         estate()
         published()
         inventory("portainer.runtime", [runtime("app", healthcheck=True)])
-        declare("app")
+        container("app")
 
         reasons = {blocker.id for blocker in self.plan("app").not_automatic}
 
@@ -171,7 +161,7 @@ class PlanTests(TestCase):
         estate()
         published()
         inventory("portainer.runtime", [runtime("app", healthcheck=True)])
-        declare("app")
+        container("app")
 
         listed = list_resource("upgrades", {}, principal=cli_principal())
         found = get_resource("upgrades", "example-box:app", principal=cli_principal())
@@ -218,7 +208,7 @@ class JoinedReadingTests(TestCase):
 
         estate()
         published()
-        declare("app")
+        container("app")
         inventory(
             "portainer.volume",
             [
@@ -297,7 +287,7 @@ class ReadinessTests(TestCase):
 
         estate()
         published()
-        declare("web")
+        container("web")
         inventory(
             "portainer.volume",
             [

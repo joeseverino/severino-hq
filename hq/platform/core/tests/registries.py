@@ -80,8 +80,9 @@ def registries() -> dict[str, Any]:
     from django.core.checks.registry import registry as checks
     from django.core.signals import setting_changed
 
+    from hq.platform.application.capabilities import capability_registry
     from hq.platform.application.domains import domain_navigation
-    from hq.platform.application.integrations import integration_graph
+    from hq.platform.application.integrations import held_graph
     from hq.platform.application.plugins import installed_plugin_apps
     from hq.platform.application.routes import routed
     from hq.platform.core.audit import audited_labels
@@ -102,12 +103,12 @@ def registries() -> dict[str, Any]:
         "lookups": _lookups(),
         "checks": sorted(_named(check) for check in checks.get_checks(include_deployment_checks=True)),
     }
-    graph = integration_graph()
+    graph = held_graph()
     return booted | {
         "urls": sorted(f"{view.name} {view.path} {_named(view.pattern.callback)}" for view in routed()),
         "templates": sorted(_templates()),
         "audited": sorted(label for label in audited_labels().values()),
-        "capabilities": sorted(graph.capabilities),
+        "capabilities": sorted(spec.name for spec in capability_registry()),
         "resources": sorted(graph.resources),
         "connections": sorted(graph.connections),
         "search": sorted(graph.search),

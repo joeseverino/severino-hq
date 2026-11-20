@@ -1,17 +1,9 @@
 """How the worker reaches a machine: the runner-role SSH connection that names
-it, as the privilege profile a run needs, in the connections document the root
-renderer writes.
+it, as the profile a run needs, in the root renderer's connections document.
 
-A run names machines by their name in HQ, and each is reached through the
-``ssh_transport`` connection whose role is ``runner`` and whose ``machine`` and
-``profile`` are that machine and the run's profile: ``read`` for a procedure
-that names no privilege, else its privilege. So a read and a change never
-share a login. Any other connection in the document is another process's and
-is never read. The identity and the pinned host key are the files the
-renderer writes beside it (``<ssh dir>/<ref>`` and ``<ssh dir>/known_hosts``).
-The document is read as the controller reads it
-(``controller/connections/document.go:ReadFile``): this account's own private,
-single-link regular file, of the one schema version both sides accept.
+The profile is ``read`` for a procedure that names no privilege, so a read and
+a change never share a login. The document is read as the controller reads it
+(``controller/connections/document.go:ReadFile``).
 """
 
 import json

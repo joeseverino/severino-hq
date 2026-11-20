@@ -1,62 +1,36 @@
-"""The stress estate: every page it draws."""
+"""The stress estate: every page of the crowded estate and the derived lists."""
 
-import tempfile
 from functools import cache
-from pathlib import Path
 from types import MappingProxyType
 
-from django.db import transaction
-from django.test import override_settings
-
-from hq.platform.core import seeds
-from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, _asked_on_opening
+from hq.platform.core.tests.browser.estate import owner_client
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
-from hq.platform.core.tests.test_browser_fixtures import PAGES, render_pages
-
-# Every page, from the sparse estate and the dense one. The overflow and
-# density checks run all of them at WIDTHS.
-ALL_PAGES = (*PAGES, *DENSE_PAGES)
+from hq.platform.core.tests.test_browser_fixtures import PAGES, asked_on_opening, render_pages
 
 
 def stress_pages(asked):
-    """The pages of the three stress estates that ``asked`` names, by name:
-    an estate is built only for a page of its own asked, and rolled back once
-    rendered, so nothing else sees it. A sparse or
-    dense page asks for its readings on opening, and hears what the dense
-    estate answers, so that one is built for either."""
+    """The pages of the crowded estate and the derived lists that ``asked``
+    names, by name: a set is built only for a page of its own asked, and
+    rolled back once rendered, so nothing else sees it. A crowded page asks
+    for its readings on opening, and hears what that estate answers."""
 
     asked = set(asked)
-    sparse, dense = ({name: page for name, page in family.items() if name in asked} for family in (PAGES, DENSE_PAGES))
-    derived = {name: page for name, page in derived_pages().items() if name in asked}
     pages: dict[str, str] = {}
-    # Drawn with a controller reporting here, so a page about one thing
-    # draws the note it keeps in its head (cadence.WorkerStanding.here).
-    with tempfile.TemporaryDirectory() as directory:
-        heartbeat = Path(directory) / "controller-heartbeat"
-        heartbeat.touch()
-        for seed, chosen, needed in (
-            ("sparse", sparse, sparse),
-            ("dense", dense, sparse or dense),
-            ("derived", derived, derived),
-        ):
-            if needed:
-                with (
-                    override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(heartbeat)),
-                    transaction.atomic(),
-                    seeds.built(seed) as owner,
-                ):
-                    pages |= render_pages(owner, chosen)
-                    # Asked once every page is drawn, so each is drawn before anything was asked.
-                    pages |= _asked_on_opening(owner) if seed == "dense" else {}
-                    transaction.set_rollback(True)
+    for seed, family in (("crowded", PAGES), ("derived", derived_pages())):
+        chosen = {name: page for name, page in family.items() if name in asked}
+        if chosen:
+            with owner_client(seed) as client:
+                pages |= render_pages(client, chosen)
+                # Asked once every page is drawn, so each is drawn before anything was asked.
+                pages |= asked_on_opening(client) if seed == "crowded" else {}
     return pages
 
 
 @cache
 def stress_estate():
-    """Every page of the three stress estates and the derived lists' names:
-    ``(pages, lists)``. Rendered once a process, so a worker handed a second
-    layout class does not build the estates again."""
+    """Every page of the crowded estate and the derived lists, and the derived
+    lists' names: ``(pages, lists)``. Rendered once a process, so a worker
+    handed a second layout class does not build the estates again."""
 
     lists = tuple(derived_pages())
-    return MappingProxyType(stress_pages([*ALL_PAGES, *lists])), lists
+    return MappingProxyType(stress_pages([*PAGES, *lists])), lists

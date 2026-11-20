@@ -9,14 +9,13 @@ asking for a column that points at infrastructure.
 
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
-from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import all_elements, select, with_class, within
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import SignedInTestCase, declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..service_context import Cell, ServiceSection, sections_for
@@ -25,12 +24,8 @@ from ..ui import MISSING
 
 
 def a_service(hostname="probe.example.com"):
-    ManagedResource.objects.create(
-        key="probe-dns",
-        kind="adguard.rewrite",
-        spec={"domain": hostname, "answer": "10.0.0.1"},
-        generation=1,
-        observed_generation=1,
+    declare(
+        "probe-dns", "adguard.rewrite", {"domain": hostname, "answer": "10.0.0.1"}, generation=1, observed_generation=1
     )
     return prospects((hostname,))[0]
 
@@ -148,11 +143,7 @@ class ActivityTests(TestCase):
         self.assertNotIn("activity", by_id(service))
 
 
-class PageTests(TestCase):
-    def setUp(self):
-        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(self.user)
-
+class PageTests(SignedInTestCase):
     def test_the_page_renders_what_the_registry_produced(self):
         a_project(name="A Project", repository_url="https://github.com/example/a")
         a_service()
@@ -314,8 +305,7 @@ class TopologyWindowTests(TestCase):
         from ..security import web_principal
         from ..topology import derive_topology
 
-        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
-        self.client.force_login(user)
+        user = operator(self.client)
         a_service("measured.example.com")
         site = AnalyticsSite.objects.create(site_tag="tag-measured", host="measured.example.com")
         RumDaily.objects.create(

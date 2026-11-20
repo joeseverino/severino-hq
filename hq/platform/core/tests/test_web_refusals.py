@@ -7,6 +7,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.backends.signed_cookies import SessionStore
 from django.test import RequestFactory, SimpleTestCase
 
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.refusal_status import refuse
 
 from ..web_refusals import refusal_response, refused
@@ -40,7 +41,7 @@ class RefusedTests(SimpleTestCase):
     def test_without_a_form_the_refusals_own_sentence_goes_on_the_next_page(self):
         request = a_request()
 
-        refusal = refused(request, refuse("forbidden", SENTENCE))
+        refusal = refused(request, refuse(Code.FORBIDDEN, SENTENCE))
 
         self.assertEqual(refusal.status, 403)
         self.assertEqual(said(request), [SENTENCE])
@@ -48,7 +49,7 @@ class RefusedTests(SimpleTestCase):
     def test_a_detail_naming_a_field_goes_beside_it(self):
         form = ExampleForm({"name": ""})
         form.is_valid()
-        answer = refuse("invalid_input", SENTENCE, [{"type": "missing", "loc": ["name"], "msg": "Field required"}])
+        answer = refuse(Code.INVALID_INPUT, SENTENCE, [{"type": "missing", "loc": ["name"], "msg": "Field required"}])
 
         refusal = refused(a_request(), answer, form=form)
 
@@ -59,14 +60,21 @@ class RefusedTests(SimpleTestCase):
     def test_a_detail_naming_no_field_on_the_form_leaves_the_sentence_above_it(self):
         form = ExampleForm({"name": ""})
         form.is_valid()
-        answer = refuse("invalid_input", SENTENCE, [{"type": "missing", "loc": ["elsewhere"], "msg": "Field required"}])
+        answer = refuse(
+            Code.INVALID_INPUT, SENTENCE, [{"type": "missing", "loc": ["elsewhere"], "msg": "Field required"}]
+        )
 
         refused(a_request(), answer, form=form)
 
         self.assertEqual(form.non_field_errors(), [SENTENCE])
 
     def test_a_refusal_as_the_response_carries_its_codes_status_and_its_sentence(self):
-        for code, status in (("not_found", 404), ("forbidden", 403), ("invalid_input", 400), ("conflict", 409)):
+        for code, status in (
+            (Code.NOT_FOUND, 404),
+            (Code.FORBIDDEN, 403),
+            (Code.INVALID_INPUT, 400),
+            (Code.CONFLICT, 409),
+        ):
             with self.subTest(code=code):
                 response = refusal_response(refuse(code, SENTENCE))
 

@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 
 from hq.platform.core.models import AuditLog, LinkedAccount
+from hq.platform.core.testing import operator
 
 from ..linked_accounts import GITHUB, claimed_github_login, linked_login, record_claimed_accounts
 
@@ -18,7 +19,7 @@ class ClaimTests(SimpleTestCase):
 
 class RecordTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("operator")
+        self.user = operator()
 
     def test_a_sign_in_that_claims_an_account_links_it_once(self):
         record_claimed_accounts(self.user, {"github": "example-user"})

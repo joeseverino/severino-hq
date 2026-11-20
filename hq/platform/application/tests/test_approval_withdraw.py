@@ -5,12 +5,12 @@ else may withdraw it."""
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import AGENT, operator
 
 from ..approvals import MAX_PENDING_PER_ACTOR, ApproveCommand, approve, pending
 from ..capabilities import run_capability
@@ -19,7 +19,6 @@ from ..security import Capability, Principal, web_principal
 from .procedures import RESTART_RUN, Supply, manifest, run_payload
 
 WITHDRAW = "approval.withdraw"
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 OTHER_AGENT = Principal("example-other-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 
 
@@ -92,7 +91,7 @@ class AskerWithdrawsTests(WithdrawTestCase):
 class RefusedWithdrawTests(WithdrawTestCase):
     def test_another_caller_s_request_is_no_request(self):
         held = self.hold()
-        person = web_principal(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        person = web_principal(operator(username="owner", email="owner@example.test"))
 
         for other in (OTHER_AGENT, person):
             with self.subTest(other.actor):
@@ -101,7 +100,7 @@ class RefusedWithdrawTests(WithdrawTestCase):
 
     def test_a_decided_request_cannot_be_withdrawn(self):
         held = self.hold()
-        person = get_user_model().objects.create_superuser("owner", "owner@example.test", "pw")
+        person = operator(username="owner", email="owner@example.test")
         approve(ApproveCommand(held), principal=web_principal(person))
 
         self.refused(held, "precondition")
@@ -110,7 +109,7 @@ class RefusedWithdrawTests(WithdrawTestCase):
     def test_a_withdrawn_request_cannot_be_approved(self):
         held = self.hold()
         self.withdraw(held)
-        person = get_user_model().objects.create_superuser("owner", "owner@example.test", "pw")
+        person = operator(username="owner", email="owner@example.test")
 
         answer = run_capability(
             "approval.approve", {"approval_id": held}, principal=web_principal(person), idempotency_key="approve"

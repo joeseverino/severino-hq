@@ -14,6 +14,7 @@ from hq.platform.application.infrastructure import (
 from hq.platform.application.record_errors import PolicyError
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.testing import declare
 
 from ..desired_state import advance_dependents
 from ..models import ManagedResource
@@ -105,11 +106,7 @@ class DesiredStateOwnershipTests(TestCase):
 
     def _certificate(self):
         declare_targets()
-        return ManagedResource.objects.create(
-            key="example-wildcard",
-            kind="tls.certificate",
-            spec=certificate_spec(),
-        )
+        return declare("example-wildcard", "tls.certificate", certificate_spec())
 
     def test_a_certificate_says_what_it_covers_without_being_resolved(self):
         """The names are on the resource, so nothing else has to be present."""
@@ -135,14 +132,8 @@ class DesiredStateOwnershipTests(TestCase):
         """Two certificates at one target must not collide on one name."""
 
         self._certificate()
-        other = ManagedResource.objects.create(
-            key="another",
-            kind="tls.certificate",
-            spec={
-                **certificate_spec(),
-                "certificate_name": "another",
-                "install_on": ["edge"],
-            },
+        other = declare(
+            "another", "tls.certificate", {**certificate_spec(), "certificate_name": "another", "install_on": ["edge"]}
         )
 
         self.assertEqual(resolved_spec(other)["consumers"][0]["name"], "another-caddy")

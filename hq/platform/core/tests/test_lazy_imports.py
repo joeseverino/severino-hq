@@ -17,7 +17,6 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 from django.utils.functional import SimpleLazyObject, empty
 
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.tree import SUITE
 from hq.platform.core.tests.registries import ENTRYPOINTS, PREFIX, module_of, registries
 from hq.platform.core.tests.test_settings_env import REPO_ROOT
@@ -85,6 +84,8 @@ def _held(module: str, loaded: set[str], ours: tuple[str, ...]) -> bool:
     return module in loaded or module.partition(".")[0] in ours
 
 
+# Each test boots a fresh process, which loads what any change can reach.
+@tag("tree")
 class LazyBootTests(SimpleTestCase):
     def test_a_lazy_boot_registers_everything_an_eager_one_does(self):
         for entrypoint in ENTRYPOINTS:
@@ -225,7 +226,6 @@ def submodules_of(package: Path) -> set[str]:
 
 
 @tag("source", "tree")
-@reads("**/__init__.py", lists=("*", "**/*.py"))
 class SubmoduleShadowTests(SimpleTestCase):
     def test_no_package_binds_a_name_its_submodule_has(self):
         found = [

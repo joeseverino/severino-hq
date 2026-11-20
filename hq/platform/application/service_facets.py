@@ -189,12 +189,8 @@ class ServiceFacet:
     def routes(self) -> bool:
         """Whether providers of this facet exist to say where a name is served.
 
-        Read from the registry: a provider that declares an ``origin`` hook is
-        one whose job includes answering "and then what serves it". Tells a
-        facet that is genuinely missing from one that cannot apply, because a
-        name resolving straight to something outside is already routed and needs
-        nothing on this network to answer for it. What runs a name is where it
-        is served, so the runtime facet always routes.
+        Tells a facet that is missing from one that cannot apply. What runs a
+        name is where it is served, so the runtime facet always routes.
         """
 
         return self.id == RUNTIME_FACET or any(

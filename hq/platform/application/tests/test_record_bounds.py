@@ -8,7 +8,7 @@ from jsonschema import Draft202012Validator
 
 from hq.domains.calendars.models import Entry
 from hq.platform.application import business_use
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import capability_registry, command_spec
 from hq.platform.application.integration_specs import capability_schema
 from hq.platform.application.json_schemas import fields
 
@@ -16,8 +16,8 @@ from hq.platform.application.json_schemas import fields
 class RecordBoundsTests(SimpleTestCase):
     def test_a_bounded_number_says_its_models_bounds(self):
         bounded = {
-            name: field
-            for name, spec in capability_registry().items()
+            spec.name: field
+            for spec in capability_registry()
             if (field := fields(capability_schema(spec)).get(business_use.FIELD))
         }
         self.assertTrue(bounded, f"no command takes {business_use.FIELD}")
@@ -29,7 +29,7 @@ class RecordBoundsTests(SimpleTestCase):
 
     def test_a_number_its_model_leaves_to_the_column_says_no_bound(self):
         # The column type's own range is the database's, not a rule a client works within.
-        schema = fields(capability_schema(capability_registry()["asset.create"]))
+        schema = fields(capability_schema(command_spec("asset.create")))
         self.assertNotIn("maximum", schema["total_cost"])
 
 
@@ -37,7 +37,7 @@ class CalendarIntervalBoundsTests(TestCase):
     """A rule a model holds as a constraint rather than a validator, said alike."""
 
     def test_a_repeat_interval_says_exactly_the_range_its_model_holds(self):
-        field = fields(capability_schema(capability_registry()["calendar.entry.create"]))["interval"]
+        field = fields(capability_schema(command_spec("calendar.entry.create")))["interval"]
         low, high = field["minimum"], field["maximum"]
         for interval in (low - 1, low, high, high + 1):
             with self.subTest(interval=interval):
@@ -51,7 +51,7 @@ class CalendarIntervalBoundsTests(TestCase):
                 self.assertEqual(said, held)
 
     def test_a_title_says_exactly_what_its_model_refuses(self):
-        field = fields(capability_schema(capability_registry()["calendar.entry.create"]))["title"]
+        field = fields(capability_schema(command_spec("calendar.entry.create")))["title"]
         for title in ("", " ", "\t", "\x00", " \x00a", "a\x00", " a ", "x" * 160, "x" * 161):
             with self.subTest(title=title):
                 said = Draft202012Validator(field).is_valid(title)

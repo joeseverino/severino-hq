@@ -1,14 +1,8 @@
 """The development servers' application: the production one, on a schema brought up to the code first.
 
-Uvicorn's reloader starts a new worker for each change, and the worker calls
-this factory before it takes a connection, so a change that brings a
-migration is applied before any page reads the new schema, as the container
-migrates at boot. When nothing is new it costs a directory listing and one
-query.
-
-On the scratch server it also writes the sign-in link (core/dev_sign_in.py) to
-the log once the worker's startup is complete, a new one for each worker, and
-says so when its database is empty.
+Each reloaded worker migrates before it takes a connection, as the container
+does at boot, so no page reads a schema older than the code. On the scratch
+server it also logs the sign-in link (core/dev_sign_in.py).
 """
 
 import asyncio

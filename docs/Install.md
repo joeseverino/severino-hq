@@ -242,8 +242,8 @@ shape needs. Every provider's item, field by field, is in
 [Connections](Connections.md); the rules are in [Secrets](Secrets.md#connections).
 
 Tailscale is a natural first, because HQ already needs a tailnet. In the
-Tailscale admin console, create an OAuth client with the read scopes in
-[`tools/tailscale-observer-scopes.txt`](../tools/tailscale-observer-scopes.txt).
+Tailscale admin console, create an OAuth client with the read scopes
+`mise run mint:tailscale` asks for ([Secrets](Secrets.md#minting-observer-credentials)).
 Then create an **API Credential** item in the vault:
 
 | Field | Value |

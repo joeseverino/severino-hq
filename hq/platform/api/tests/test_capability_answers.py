@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Annotated, Literal, TypedDict
 
 from django.test import SimpleTestCase
+from pydantic import Field
 
 from hq.platform.application import integration_specs
 from hq.platform.application.capabilities import capability_registry
@@ -30,7 +31,7 @@ class ExampleCounted(TypedDict):
 
 @dataclass(frozen=True, slots=True)
 class ExampleCommand:
-    value: int = 0
+    value: Annotated[int, Field(le=100), Describe("How many to count.")] = 0
 
 
 def _typed(command: ExampleCommand, *, principal) -> ExampleCounted:
@@ -71,7 +72,7 @@ def _resolved(document: dict, value: dict) -> dict:
 
 class CapabilityAnswerTests(SimpleTestCase):
     def test_every_host_capability_names_the_shape_it_answers(self):
-        host = [spec for spec in capability_registry().values() if spec.handler.__module__.startswith("hq.")]
+        host = [spec for spec in capability_registry() if spec.handler.__module__.startswith("hq.")]
 
         self.assertTrue(host)
         self.assertEqual(

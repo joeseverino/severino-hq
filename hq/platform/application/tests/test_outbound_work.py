@@ -19,7 +19,6 @@ from pathlib import Path
 from unittest import mock
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.test import (
@@ -39,18 +38,17 @@ from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
 from hq.platform.application import host_work, outbound_work
-from hq.platform.application.capabilities import capability_registry, execute_capability
+from hq.platform.application.capabilities import capability_spec, command_spec, execute_capability
 from hq.platform.application.contracts import Effect
 from hq.platform.application.integration_specs import requested
 from hq.platform.application.markup_testing import elements
 from hq.platform.application.outbound_work import OutboundWork, capability_for, due, validate
-from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.plugins import PluginIntegration, clear_plugin_composition_cache
+from hq.platform.application.plugin_testing import form_keyed, installed, sibling
 from hq.platform.application.security import Principal, cli_principal, internal_principal
-from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import serving
+from hq.platform.core.testing import operator
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
 from hq_sdk.outbound import Failed, ask, run_now
 from hq_sdk.testing import OutboundInRequest, held_jobs, reaches_out
@@ -115,17 +113,14 @@ class ComposedExample(TestCase):
             },
         )
         composed.start()
-        self.addCleanup(clear_plugin_composition_cache)
         self.addCleanup(composed.stop)
-        clear_plugin_composition_cache()
 
         self.registry = Registry()
         reading = mock.patch.object(registry, "read", self.registry.read)
         reading.start()
         self.addCleanup(reading.stop)
 
-        self.user = get_user_model().objects.create_user("operator", password="x")
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
         self.page = reverse("example_plugin:index")
         self.route = reverse("jobs:ask", args=[example.LOOKUP])
 
@@ -262,7 +257,7 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
 
 class TheCapabilityIsDerivedTests(ComposedExample):
     def test_the_declaration_is_a_capability_every_adapter_can_ask_through(self):
-        spec = capability_registry()[example.LOOKUP]
+        spec = command_spec(example.LOOKUP)
 
         self.assertEqual((spec.effect, spec.target_kind, spec.target_label), ("remote_write", "key", "Note"))
         self.assertEqual(spec.required_capabilities, ("notes.write",))
@@ -370,11 +365,8 @@ class DeclarationTests(SimpleTestCase):
     def test_two_declarations_of_one_name_fail(self):
         from hq.platform.application import outbound_work
 
-        integration = PluginIntegration(outbound=lambda: (self.work(), self.work()))
-        outbound_work.clear_outbound_work_cache()
-        self.addCleanup(outbound_work.clear_outbound_work_cache)
         with (
-            mock.patch("hq.platform.application.plugins.installed_integrations", return_value=((None, integration),)),
+            offering_work(self.work(), self.work()),
             self.assertRaisesMessage(ImproperlyConfigured, "Duplicate outbound work"),
         ):
             outbound_work.declared_work()
@@ -383,11 +375,8 @@ class DeclarationTests(SimpleTestCase):
         from hq.platform.application import outbound_work
         from hq.platform.application.projects import REFRESH
 
-        integration = PluginIntegration(outbound=lambda: (self.work(name=REFRESH),))
-        outbound_work.clear_outbound_work_cache()
-        self.addCleanup(outbound_work.clear_outbound_work_cache)
         with (
-            mock.patch("hq.platform.application.plugins.installed_integrations", return_value=((None, integration),)),
+            offering_work(self.work(name=REFRESH)),
             self.assertRaisesMessage(ImproperlyConfigured, f"Duplicate outbound work {REFRESH!r}"),
         ):
             outbound_work.declared_work()
@@ -531,12 +520,18 @@ INSTANCE = re.compile(r"^(?:Unit|OnFailure)=severino-hq-job@(?P<name>.+)\.servic
 def host_declares(*works: OutboundWork):
     """The host's own work as ``works``, beside whatever the composition installs."""
 
-    outbound_work.clear_outbound_work_cache()
-    try:
-        with mock.patch.object(host_work, "outbound", return_value=works):
-            yield
-    finally:
-        outbound_work.clear_outbound_work_cache()
+    # What the host declares is fixed in a process, so its caches are not keyed on it.
+    outbound_work._declared.cache_clear()
+    outbound_work._host.cache_clear()
+    with mock.patch.object(host_work, "outbound", return_value=works):
+        yield
+
+
+def offering_work(*works: OutboundWork):
+    """An example extension installed for the block, declaring ``works``."""
+
+    manifest, contribution = sibling()
+    return installed((manifest, replace(contribution, outbound=lambda: works)))
 
 
 def own(name="example.work", run=lambda progress, *, subject, principal: {}, every=None) -> OutboundWork:
@@ -578,11 +573,7 @@ class HostWorkTests(TestCase):
 
         from hq.platform.application.projects import REFRESH
 
-        extension = PluginIntegration(outbound=lambda: (own("example.theirs"),))
-        with (
-            host_declares(own()),
-            mock.patch("hq.platform.application.plugins.installed_integrations", return_value=((None, extension),)),
-        ):
+        with host_declares(own()), offering_work(own("example.theirs")):
             self.assertIn("example.theirs", outbound_work.declared_work())
             for name in ("example.other", "example.theirs", REFRESH):
                 with self.subTest(name), self.assertRaisesMessage(ValueError, f"No host work named {name!r}"):
@@ -600,12 +591,12 @@ class HostWorkTests(TestCase):
     def test_it_is_offered_to_nobody(self):
         with host_declares(own()):
             self.assertNotIn("example.work", {spec.name for spec in outbound_work.capability_specs()})
-            self.assertNotIn("example.work", capability_registry())
+            self.assertIsNone(capability_spec("example.work"))
             with self.assertRaises(LookupError):
                 ask("example.work")
             with self.assertRaises(ImproperlyConfigured):
                 capability_for(own())
-            self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+            operator(self.client)
             response = self.client.post(reverse("jobs:ask", args=["example.work"]), form_keyed({}))
         self.assertEqual(response.status_code, 404)
         self.assertFalse(Job.objects.exists())
@@ -630,7 +621,6 @@ class StartForHostTests(TransactionTestCase):
 
 
 @tag("source", "tree")
-@reads("deploy/systemd/**")
 class ShippedUnitTests(TestCase):
     """The shipped units and the declarations name the same work: a timer
     starts it on a schedule, or a failed unit starts it through OnFailure."""

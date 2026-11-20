@@ -7,7 +7,7 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.url_query import with_query
 
 from .action_links import command_url
-from .capabilities import CapabilitySpec
+from .capabilities import CapabilitySpec, capability_registry
 from .command_targets import starting_page
 from .connection_catalog import connection_catalog
 from .connections import ConnectionAbility, ConnectionSpec
@@ -15,7 +15,7 @@ from .contracts import route_url
 from .entity_links import entity_link
 from .facts import in_zone
 from .findings import finding_rules
-from .integrations import integration_graph
+from .integrations import held_graph
 from .labels import dotted
 from .resources import ResourceSpec
 from .security import Capability, Principal
@@ -400,7 +400,7 @@ def command_center(query: str, *, principal: Principal, include_live_connections
 
 def _command_center(query: str, *, principal: Principal, include_live_connections: bool) -> dict:
 
-    graph = integration_graph()
+    graph = held_graph()
     permitted_connections = tuple(spec for spec in graph.connections.values() if spec.permitted_to(principal))
     # Registry discovery is a zero-query application primitive used by CLI,
     # MCP and contract checks. The web palette explicitly opts into cached live
@@ -414,7 +414,7 @@ def _command_center(query: str, *, principal: Principal, include_live_connection
         "estate": estate,
         "resources": _matching(_resource_items(tuple(graph.resources.values()), principal), query),
         "commands": _ranked(
-            _command_items(tuple(graph.capabilities.values()), permitted_connections, principal, query),
+            _command_items(capability_registry(), permitted_connections, principal, query),
             query,
         ),
         "connections": _matching((*live_connections, *_connection_items(permitted_connections, query)), query),

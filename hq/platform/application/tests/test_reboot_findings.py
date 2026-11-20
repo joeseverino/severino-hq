@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.platform.core.testing import declare, operator
 
 from ..findings import estate_findings
 from ..inventory_testing import store
@@ -71,15 +72,12 @@ class WaitingTests(TestCase):
         tailnet_connection()
 
     def test_the_machine_the_controller_runs_on_shows_it_on_its_page(self):
-        from django.contrib.auth import get_user_model
         from django.urls import reverse
 
-        from hq.domains.control_plane.models import ManagedResource
-
         # A controller reports as its machine's name, as it does by default.
-        ManagedResource.objects.create(key="example-controller", kind="machine", spec={"name": "example-controller"})
+        declare("example-controller", "machine", {"name": "example-controller"})
         sweep(reading())
-        self.client.force_login(get_user_model().objects.create_user(username="an-operator", password="not-used"))
+        operator(self.client, "an-operator")
 
         page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-controller"}))
 
@@ -87,7 +85,6 @@ class WaitingTests(TestCase):
         self.assertContains(page, f"rule%3D{RULE}")
 
     def test_an_edge_that_waits_shows_it_on_its_own_machines_page(self):
-        from django.contrib.auth import get_user_model
         from django.urls import reverse
 
         edge()
@@ -95,7 +92,7 @@ class WaitingTests(TestCase):
         # says it waits on its kernel.
         sweep(reading(pending=False))
         sweep(reading(connection_ref="example-edge", packages=["linux-image-example"]), kind=EDGE_KIND)
-        self.client.force_login(get_user_model().objects.create_user(username="an-operator", password="not-used"))
+        operator(self.client, "an-operator")
 
         (finding,) = raised(RULE)
         page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-edge"}))

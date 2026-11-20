@@ -1,18 +1,8 @@
-"""Rename tailnet device declarations to ``<name>-tailnet``.
+"""Rename tailnet device declarations to ``<name>-tailnet``, and the audit entries that name them.
 
-A key is unique across every kind, and a machine and its tailnet device both
-keyed on the bare device name, so whichever was adopted second was filed as
-``<name>-2``: a suffix recording only arrival order, which reads as a second
-machine. ``_tailnet_device_key_hint`` qualifies the key for new adoptions; this
-brings existing declarations to the same shape.
-
-Audit entries are rewritten alongside. They reference a resource by key as a
-string rather than by relation -- deliberately, so history survives the deletion
-of the thing it describes -- which means a rename that ignored them would sever
-every record of what was done to these devices. Operations follow their resource
-by foreign key and need no help.
-
-Reversible: the down migration restores the bare name where it is free.
+A machine and its tailnet device both keyed on the bare name, so the second was
+filed as ``<name>-2``. Audit entries name a resource by key so history survives
+a deletion, so they are rewritten too. Reversible where the bare name is free.
 """
 
 from django.db import migrations
@@ -23,16 +13,7 @@ SUFFIX = "-tailnet"
 
 
 def _keyed(hint: str) -> str:
-    """The key ``suggest_key`` would produce for this hint.
-
-    Slugified the same way and for the same reason: a device name is a display
-    string ("Sam's MacBook Pro") and a key is an identifier that appears
-    in a URL. Renaming without this turns a perfectly good key into one the
-    resource route cannot match, which is a worse outcome than the suffix.
-
-    Dots become separators first, exactly as ``suggest_key`` does, so a device
-    named like a hostname does not slug into one unreadable word.
-    """
+    """The key ``suggest_key`` would produce for this hint, slugified the same way so the resource route matches it."""
 
     return slugify(hint.replace(".", "-"))[:180]
 

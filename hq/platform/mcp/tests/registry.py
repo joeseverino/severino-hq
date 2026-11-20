@@ -11,7 +11,7 @@ from typing import Any, TypedDict
 
 from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.integration_testing import override_integration_graph
-from hq.platform.application.integrations import integration_graph
+from hq.platform.application.integrations import held_graph
 from hq.platform.application.resources import EmptyQuery, resource_registry
 
 from ..binding import bind_tools
@@ -57,7 +57,7 @@ def with_kind(spec: ResourceSpec) -> dict[str, ResourceSpec]:
 def registry_patched(registry: dict[str, ResourceSpec]) -> Iterator[None]:
     """The composed graph with ``registry`` as its resources, for a tool a test binds itself."""
 
-    with override_integration_graph(replace(integration_graph(), resources=registry)):
+    with override_integration_graph(replace(held_graph(), resources=registry)):
         yield
 
 

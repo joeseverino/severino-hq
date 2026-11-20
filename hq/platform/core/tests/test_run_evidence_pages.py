@@ -5,7 +5,6 @@ is a synthetic ``example.*`` one."""
 from unittest import mock
 from urllib.parse import urlencode
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -15,6 +14,7 @@ from hq.platform.core import seeds
 from hq.platform.core.example_estate.automation import CACHE_FLUSH, CORRELATION
 from hq.platform.core.example_estate.names import MACHINE
 from hq.platform.core.example_estate.testing import throwaway_media
+from hq.platform.core.testing import operator
 
 # A capability no role grants.
 UNHELD = "example.unheld"
@@ -50,7 +50,7 @@ class RunEvidencePageTests(TestCase):
     def setUpTestData(cls):
         with throwaway_media(), seeds.built("showcase") as owner:
             cls.owner = owner
-        cls.viewer = get_user_model().objects.create_user("example-viewer")
+        cls.viewer = operator()
         roles.assign(cls.viewer, roles.Role.VIEWER)
 
     def page(self, user, url: str) -> str:

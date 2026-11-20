@@ -1,13 +1,13 @@
 """Each connection's last activity: stored on the event, read in bounded queries."""
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderConnection
+from hq.domains.control_plane.models import OperationRequest, ProviderConnection
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import SignedInTestCase, declare
 from hq.platform.core.tests import audit_rows
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
@@ -73,11 +73,7 @@ class ConnectionEventTests(TestCase):
         self.assertFalse(audit_rows.since(before).filter(connection="example-ssh").exists())
 
     def test_a_resource_and_its_operations_name_their_connection(self):
-        resource = ManagedResource.objects.create(
-            key="example-zone",
-            kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": "example-dns"},
-        )
+        resource = declare("example-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
         OperationRequest.objects.create(
             resource=resource,
             action=OperationRequest.Action.RECONCILE,
@@ -93,11 +89,7 @@ class ConnectionEventTests(TestCase):
         )
 
 
-class LastActivityPageTests(TestCase):
-    def setUp(self):
-        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(user)
-
+class LastActivityPageTests(SignedInTestCase):
     def _connection(self, ref, provider="cloudflare_dns"):
         return ProviderConnection.objects.create(
             connection_ref=ref,

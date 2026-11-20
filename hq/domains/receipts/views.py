@@ -17,7 +17,6 @@ from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
     DeleteView,
-    DetailView,
     ListView,
     TemplateView,
     UpdateView,
@@ -26,10 +25,18 @@ from django.views.generic import (
 
 from hq.domains.expenses.models import Expense
 from hq.platform.application.labels import dotted, dotted_html, human_bytes
-from hq.platform.application.moments import when
+from hq.platform.application.moments import moment, when
 from hq.platform.application.money import money
-from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD, file_taken, serialize_receipt
+from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
+from hq.platform.application.receipts import (
+    REPLACE,
+    UPDATE,
+    UPLOAD,
+    file_taken,
+    serialize_receipt,
+    served_type,
+    stored_file,
+)
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
 from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted
@@ -39,7 +46,6 @@ from hq.platform.core.web_refusals import refused
 
 from .models import Receipt
 from .validation import (
-    ALLOWED_RECEIPT_CONTENT_TYPES,
     INLINE_SAFE_CONTENT_TYPES,
     PICTURE_CONTENT_TYPES,
 )
@@ -91,47 +97,44 @@ class ReceiptPage(PageMixin):
         return str(record)
 
 
-class ReceiptDetailView(PageMixin, DetailView):
-    queryset = Receipt.objects.select_related("related_expense", "related_asset")
-    template_name = "receipts/receipt_detail.html"
+class ReceiptDetailView(RecordPageMixin, TemplateView):
+    resource = "receipts"
     context_object_name = "receipt"
-
-    @cached_property
-    def stored(self) -> Path | None:
-        return stored_file(self.object)
+    url_kwarg = "pk"
+    template_name = "receipts/receipt_detail.html"
 
     @override
     def get_page_title(self):
-        return self.object.label
+        return self.record["label"]
 
     @override
     def get_page_lede(self):
-        receipt = self.object
-        return dotted(receipt.original_filename, f"uploaded {when(receipt.uploaded_at)}")
+        record = self.record
+        return dotted(record["original_filename"], f"uploaded {when(moment(record['uploaded_at']))}")
 
     @override
     def get_page_actions(self):
-        receipt = self.object
+        record = self.record
+        pk = record["id"]
         actions = []
-        if not receipt.related_expense and not receipt.related_asset:
-            actions.append(PageAction.command(UPDATE, receipt.pk, variant="expense", primary=True))
+        if not record["related_expense"] and not record["related_asset"]:
+            actions.append(PageAction.command(UPDATE, pk, variant="expense", primary=True))
+        stored = record["file"] == "stored"
         actions += [
-            *([PageAction("Download file", reverse("receipts:file", args=[receipt.pk]))] if self.stored else []),
-            PageAction.command("receipt.update", receipt.pk),
-            PageAction.command("receipt.delete", receipt.pk),
+            *([PageAction("Download file", reverse("receipts:file", args=[pk]))] if stored else []),
+            PageAction.command("receipt.update", pk),
+            PageAction.command("receipt.delete", pk),
         ]
         return tuple(actions)
 
     @override
     def get_context_data(self, **kwargs):
-        receipt = self.object
-        stored = self.stored is not None
+        record = self.record
+        size = record["size_bytes"]
         return super().get_context_data(
             **kwargs,
-            file_stored=stored,
-            file_missing=bool(receipt.file) and not stored,
-            file_picture=stored and served_type(receipt) in PICTURE_CONTENT_TYPES,
-            file_line=dotted(receipt.file_type, human_bytes(receipt.size_bytes) if receipt.size_bytes else ""),
+            file_picture=record["file"] == "stored" and served_type(record["content_type"]) in PICTURE_CONTENT_TYPES,
+            file_line=dotted(record["file_type_label"], human_bytes(size) if size else ""),
         )
 
 
@@ -293,29 +296,6 @@ class ReceiptDeleteView(ReceiptPage, RecordDeleteMixin, DeleteView):
     context_object_name = "receipt"
 
 
-def stored_file(receipt: Receipt) -> Path | None:
-    """The receipt's file on this host's disk, or None when it has none, is
-    kept where HQ cannot open it, or is missing."""
-
-    if not receipt.file:
-        return None
-    try:
-        path = Path(receipt.file.path)
-    except ValueError, NotImplementedError:
-        return None
-    return path if path.is_file() else None
-
-
-def served_type(receipt: Receipt) -> str:
-    """The type the file goes out as. Never guessed from the filename, which
-    the uploader chooses: the stored type, only if it is one this app agreed
-    to accept; anything else, including a blank left by an older upload, is
-    an opaque byte stream."""
-
-    stored = (receipt.content_type or "").strip().lower()
-    return stored if stored in ALLOWED_RECEIPT_CONTENT_TYPES else "application/octet-stream"
-
-
 def _file_response(receipt: Receipt, path: Path, content_type: str, *, inline: bool) -> FileResponse:
     response = FileResponse(
         path.open("rb"),
@@ -338,7 +318,7 @@ class ReceiptFileView(View):
 
         file_taken(receipt)
 
-        content_type = served_type(receipt)
+        content_type = served_type(receipt.content_type)
         # Rendered in place only for the formats meant to be looked at.
         # Downloading the rest costs a click and removes the question of what
         # a browser might decide to do with it.
@@ -356,7 +336,7 @@ class ReceiptPictureView(View):
 
     def get(self, _request, pk: int):
         receipt = get_object_or_404(Receipt, pk=pk)
-        content_type = served_type(receipt)
+        content_type = served_type(receipt.content_type)
         if content_type not in PICTURE_CONTENT_TYPES or (path := stored_file(receipt)) is None:
             raise Http404("This receipt has no picture to show.")
         return _file_response(receipt, path, content_type, inline=True)

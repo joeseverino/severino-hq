@@ -1,12 +1,7 @@
 """How a bearer token is let through an agent door, the same on /mcp/ and the machine API.
 
-Each door parses its own transport and answers in its own protocol; what it
-asks is answered here, once. ``admit`` says who a token is, ``refused``
-whether that caller may act right now, ``at_once`` holds one of its calls at
-once, and ``stream_opened`` one of its listen streams. They are apart because
-the doors ask them at different moments: the machine API at the door, MCP at
-each tool call, so a paused or throttled agent keeps its connection and its
-next call after that runs on it.
+Each door parses its own transport; what it asks is answered here, once. The
+questions are apart because the doors ask them at different moments.
 """
 
 import contextlib
@@ -19,6 +14,7 @@ from .agent_access import AgentRefusal
 from .agent_limits import Limited, Slot
 from .agent_registry import observe
 from .denials import record_denial, record_limited, settle
+from .refusal_codes import Code
 from .security import AuthorizationError, Capability, Principal, agent_subject
 from .tokens import TokenError, token_principal, verify
 
@@ -28,7 +24,7 @@ class Unadmitted:
     """A bearer no principal came of: ``verified`` when the token itself was
     good but grants nothing HQ can use, which is a 403 rather than a 401."""
 
-    code: str
+    code: Code
     reason: str
     verified: bool
 
@@ -58,14 +54,10 @@ _carried: ContextVar[Limited | AgentRefusal | None] = ContextVar("hq_agent_stopp
 def admit(bearer: str, *, interface: str, source: str) -> Principal | Stopped | Unadmitted:
     """The principal ``bearer`` names on ``interface``, or why there is none.
 
-    A refused token is recorded against ``source``, the peer that sent it,
-    since no identity was established. An admitted one spends one call of its
-    rate before anything is written, so a flood costs no write past its
-    refusal's; within its rate it is placed on the tailnet device at
-    ``source`` and observed, before any brake, so a paused agent and a device
-    awaiting approval are still registered. A call the tailnet could not
-    place is stopped here, where the two doors meet, so neither door can let
-    it through as the client alone.
+    A refused token is recorded against ``source``. An admitted one spends its
+    rate before any write, so a flood costs no write past its refusal. A call
+    the tailnet could not place is stopped here, where the two doors meet, so
+    neither can let it through as the client alone.
     """
 
     if not bearer:
@@ -77,7 +69,7 @@ def admit(bearer: str, *, interface: str, source: str) -> Principal | Stopped | 
             unadmitted = Unadmitted(exc.code, exc.reason, verified=False)
         except AuthorizationError as exc:
             # RFC 6750's word for a good token that grants too little, on both doors.
-            unadmitted = Unadmitted("insufficient_scope", exc.reason, verified=True)
+            unadmitted = Unadmitted(Code.INSUFFICIENT_SCOPE, exc.reason, verified=True)
         else:
             return admitted(principal, source=source)
     record_denial(interface=interface, reason=unadmitted.code, source=source, authenticated=False)
@@ -93,7 +85,7 @@ def admitted(principal: Principal, *, source: str) -> Principal | Stopped:
     token, so every step after the token is the one production takes.
     """
 
-    limited = agent_limits.LIMITS.take(agent_subject(principal))
+    limited = agent_limits.limits().take(agent_subject(principal))
     if limited is not None:
         return Stopped(principal, limited)
     settle(principal.actor)
@@ -154,7 +146,7 @@ def at_once(principal: Principal, *, source: str = "") -> Iterator[Limited | Non
     """One of ``principal``'s calls at once, held for the block; the block is given the
     refusal instead when the agent, or every agent together, has all of them in flight."""
 
-    held = agent_limits.LIMITS.occupy(agent_subject(principal))
+    held = agent_limits.limits().occupy(agent_subject(principal))
     if isinstance(held, Limited):
         record_limited(
             interface=principal.interface,
@@ -173,7 +165,7 @@ def stream_opened(principal: Principal, *, source: str = "") -> Slot | Limited:
     """One of ``principal``'s listen streams, held until the slot is given back,
     or the refusal, recorded, when the agent has all of them open."""
 
-    held = agent_limits.LIMITS.listen(agent_subject(principal))
+    held = agent_limits.limits().listen(agent_subject(principal))
     if isinstance(held, Limited):
         record_limited(
             interface=principal.interface,

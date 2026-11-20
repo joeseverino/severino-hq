@@ -15,13 +15,14 @@ holds what holds across parts: [Rules](#rules) and [Held by eye](#held-by-eye),
 what no gate measures. A part's own rules are on its `Part` declaration
 (`rules`), stated under its name in [Shared UI](Shared-UI.md#each-parts-rules).
 
-The stylesheet is the sheets `hq/platform/core/stylesheets.py` lists, each
-one responsibility under the file-size ceiling (`SEVERINO_FILE_LINE_LIMIT`), linked in that order. The
+The stylesheet is every sheet in `static/css/app`, each one responsibility
+under the file-size ceiling (`SEVERINO_FILE_LINE_LIMIT`), linked in the order
+`hq/platform/core/stylesheets.py` gives, any it leaves out last. The
 first declares the cascade layers (`tokens`, `base`, `components`, `fit`)
 and the rest fill them; `fit` holds what a table lets go as its region
-narrows, so it outranks any component's own display. Inside a layer a later sheet wins a tie, so a sheet is added
-to the list where its rules belong in the cascade, and every check of the
-stylesheet reads it through that list.
+narrows, so it outranks any component's own display. Inside a layer a later sheet wins a tie, so a sheet is named
+in that order where its rules belong in the cascade, and every check of the
+stylesheet reads it through `SHEETS`.
 
 **Browsers.** HQ's floor is the current and the previous release of each
 engine: Safari (on the Mac and on iOS), Chromium and Firefox, read from
@@ -149,7 +150,9 @@ one radius, one background, one shadow, drawn by the single surface rule in
 `css/app/surfaces.css`. A component joins by adding its selector to that rule's list and
 declares only its layout. A surface inside a surface draws no frame and no
 inset: the outer one already says "these belong together". Nesting is handled
-by inheritance, so nobody has to remember it.
+by inheritance, so nobody has to remember it. Every other edge and shadow is
+drawn there too, from one list each; a corner elsewhere is a radius token.
+*Gate:* `lint:css` refuses any other border, shadow or corner.
 
 **Size to content, fit the window.** Layouts are intrinsic: grids fit as many
 columns as their content allows (`repeat(auto-fit, minmax(min(100%, X), 1fr))`),
@@ -256,12 +259,10 @@ opens, closes and dismisses the popover. Inside a menu every control is a plain
 row; a destructive one is only its color.
 
 Every popover open is one floating panel, a menu's, a fact's, the sections
-drawer, a filter bar's folded choices and a table's filter alike: its frame,
-corners, fill and shadow are base.css's `:popover-open` rule, and its own rule
-says only how it is laid out. Closed, a popover is part of the page, so one
-drawn in its row (the header's sections, a filter bar's choices) carries no
-frame to undo. A select's picker is drawn the same. *Gate:* `lint:css` refuses
-a floating panel's shadow anywhere but base.css.
+drawer, a filter bar's folded choices and a table's filter alike: its frame is
+surfaces.css's panel list, and its own rule says only how it is laid out.
+Closed, a popover is part of the page, so one drawn in its row (the header's
+sections, a filter bar's choices) carries no frame to undo.
 
 **One disclosure.** Every `details` shows the same mark,
 turned when open. A section that folds is `{% section fold=True %}`, its
@@ -271,7 +272,7 @@ heading the toggle.
 paths, ports) in `<code>` and leaves counts, words and phrases as text.
 
 Numbers are never chips: a figure stands in a band of facts, a numeric column or a
-sentence (`hq/platform/core/tests/test_template_chips.py`). One that carries a
+sentence (the figure-in-chip shape, `hq/platform/core/hand_drawn.py`). One that carries a
 state says it in ink, as `.figure` with its tone class
 (`<span class="figure tone-attention">`).
 
@@ -356,6 +357,7 @@ column needs nothing else.
 | `when:"dateline"` | "Wednesday, Nov 18" | the day a page opens on, over its title |
 | `when:"length"` | "5 minutes", either way from now | a wait |
 | `when:"ahead"` | "in 3 days" | a wait |
+| `when:"expiry"` | "expires in 3 days", "expired 4 days ago" | a deadline |
 | `{{ at\|when_text:"ago" }}` | the words of any form, as plain text | an attribute, or a table cell's line, which sorts on the first `<time>` it holds |
 | `when_range` | "Oct 3 – Oct 9", a year both ends share said once | a run of days |
 
@@ -381,8 +383,8 @@ miles|measured:"mi,2" }}` for a unit or a word the count leaves alone
 (`measured:"more"`), never `floatformat` before it: the count after the comma
 rounds the figure as `floatformat` would, and `ui.measured` writes the same
 in Python. A measured zero is 0; the missing mark is for no value. The value tags that say a figure in words (`bytes`,
-`seconds`, `when`) join theirs. *Gate:* the `hand-drawn-split-figure` rule,
-over the host's templates and every extension's.
+`seconds`, `when`) join theirs. *Gate:* the `split-figure` shape (`hand_drawn.SHAPES`),
+refused as any template of the host or an extension loads.
 
 A bare figure counting what a heading heads (`.count`) stands in that
 heading after its words: `<h2>Readings <span class="count">7</span></h2>`,

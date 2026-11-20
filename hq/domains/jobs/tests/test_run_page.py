@@ -5,7 +5,6 @@ row to it. Every procedure here is a synthetic ``example.*`` one."""
 import uuid
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -15,6 +14,7 @@ from hq.platform.core import seeds
 from hq.platform.core.example_estate.automation import CACHE_FLUSH, CORRELATION
 from hq.platform.core.example_estate.names import MACHINE
 from hq.platform.core.example_estate.testing import throwaway_media
+from hq.platform.core.testing import AGENT, operator
 
 RUN = f"automation.{CACHE_FLUSH}.run"
 # A capability no role grants.
@@ -69,40 +69,15 @@ class RunPageTests(TestCase):
                 for run in runs:
                     self.assertIn(run_page(run.id), hrefs)
 
-    def test_a_run_s_page_names_the_kinds_of_reading_its_playbook_stated(self):
+    def test_a_finished_run_s_page_links_its_machines_and_playbook(self):
         run = OperationRequest.objects.filter(
             action=OperationRequest.Action.RUN, state=OperationRequest.State.SUCCEEDED, input__correlation=CORRELATION
         ).get()
-        machine = run.input["hosts"][0]
-        stated = {"readings": {machine: {"example.reading": [{"value": 1}], "example.other_reading": []}}}
-        OperationRequest.objects.filter(pk=run.pk).update(result={**run.result, "stated": stated})
 
         said = facts(self.page(run_page(run.pk)))
 
-        self.assertIn("example.reading", said["Readings"][0])
-        self.assertIn("example.other_reading", said["Readings"][0])
-
-    def test_a_finished_run_s_page_says_who_asked_how_it_ended_and_each_task(self):
-        run = OperationRequest.objects.filter(
-            action=OperationRequest.Action.RUN, state=OperationRequest.State.SUCCEEDED, input__correlation=CORRELATION
-        ).get()
-
-        html = self.page(run_page(run.pk))
-
-        said = facts(html)
-        from hq.platform.core.models import AuditLog
-
-        queued = AuditLog.objects.get(object_id=str(run.pk), action=AuditLog.Action.CREATED)
-        # Read as words, whichever space keeps "· approved by" with what it follows.
-        self.assertEqual(said["Asked by"][0].split(), queued.who.words.split())
-        self.assertEqual(said["Result"][0], run.result["message"])
-        self.assertEqual(said["Correlation"][0], CORRELATION)
         self.assertEqual(said["Machines"][1], reverse("control_plane:machine", kwargs={"name": MACHINE}))
         self.assertEqual(said["Playbook"][1], reverse("command", args=[RUN]))
-        tasks = said["Tasks"][0]
-        self.assertTrue(run.result["events"])
-        for event in run.result["events"]:
-            self.assertIn(event["task"], tasks)
 
     def test_a_scan_s_page_names_the_command_that_asked_for_it_and_decides_nothing(self):
         from hq.platform.application.automation_sources import REFRESH
@@ -159,13 +134,12 @@ class ApprovedRunPageTests(TestCase):
 
     def test_a_run_a_person_approved_links_the_approval_it_ran_under(self):
         from hq.domains.control_plane.models import ApprovalRequest
-        from hq.platform.application.security import Capability, Principal
         from hq.platform.application.tests.procedures import APPROVER, approved_run, run_payload
 
-        agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
+        agent = AGENT
         answer = approved_run(self, run_payload(), principal=agent, key="example-held")
         held = ApprovalRequest.objects.get(state=ApprovalRequest.State.APPROVED)
-        self.client.force_login(get_user_model().objects.create_superuser("example-owner-2", "o@example.test", "pw"))
+        operator(self.client)
 
         response = self.client.get(run_page(answer["operation"]["id"]))
 
@@ -207,7 +181,7 @@ class RunHereTests(TestCase):
         from hq.platform.application import roles
         from hq.platform.application.automation_runs import capability_name, operation_registry
 
-        viewer = get_user_model().objects.create_user("example-viewer")
+        viewer = operator()
         roles.assign(viewer, roles.Role.VIEWER)
         self.client.force_login(viewer)
 

@@ -12,26 +12,27 @@ from annotationlib import Format
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from functools import cache
 from typing import Annotated, Any, NotRequired, cast
 
 from django.core.exceptions import ImproperlyConfigured
 lazy from django.utils import timezone
 
 lazy from hq.domains.jobs.models import Job
-lazy from hq.domains.jobs.runner import ALREADY_RUNNING, SCHEDULER, JobConflict, Progress, due as is_due, run, start
+lazy from hq.domains.jobs.runner import ALREADY_RUNNING, SCHEDULER, Progress, due as is_due, run, start
 
 from .asks import FAILED, Ask, Asked, AskedAnswer, Standing
 from .contracts import DOTTED_NAME, Effect
 from .describe import Describe
 from .integration_specs import CapabilitySpec, requested
+from .process_caches import kept
 from .projection import read_once
-from .record_errors import RecordNotFound
+from .record_errors import RecordConflict, RecordNotFound
+from .refusal_codes import Code
 from .refusal_status import RefusalEnvelope, refuse
 from .security import WAITING_INTERFACES, Principal, internal_principal, person_of
 from .ui import ended
 lazy from .domains import host_specs
-lazy from .plugins import plugin_outbound_work
+lazy from .plugins import Composition, composition, plugin_outbound_work
 lazy from .routes import reverse
 lazy from .work_runs import job_run, standing_of
 
@@ -136,8 +137,8 @@ def validate(work: object) -> OutboundWork:
     return work
 
 
-@cache
-def _declared() -> dict[str, OutboundWork]:
+@kept
+def _declared(_composition: Composition) -> dict[str, OutboundWork]:
     declared: dict[str, OutboundWork] = {}
     # The host's domains declare theirs as an extension does, so neither can
     # take a name the other holds.
@@ -149,7 +150,7 @@ def _declared() -> dict[str, OutboundWork]:
     return declared
 
 
-@cache
+@kept
 def _host() -> frozenset[str]:
     return frozenset(work.name for work in host_specs("outbound") if not work.offered)
 
@@ -157,7 +158,7 @@ def _host() -> frozenset[str]:
 def declared_work() -> dict[str, OutboundWork]:
     """Every piece of outbound work the composition declares, by name."""
 
-    return _declared()
+    return _declared(composition())
 
 
 def host_work() -> tuple[OutboundWork, ...]:
@@ -177,11 +178,6 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
     """The capability each piece of offered work is asked for through."""
 
     return tuple(capability_for(work) for work in declared_work().values() if work.offered)
-
-
-def clear_outbound_work_cache() -> None:
-    _declared.cache_clear()
-    _host.cache_clear()
 
 
 def capability_for(work: OutboundWork) -> CapabilitySpec:
@@ -276,7 +272,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> W
 
     reason = _refusal(work, subject)
     if reason:
-        return cast(RefusalEnvelope, refuse("precondition", reason))
+        return cast(RefusalEnvelope, refuse(Code.PRECONDITION, reason))
     waited = principal.interface in WAITING_INTERFACES
     try:
         job = (run if waited else start)(
@@ -287,7 +283,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> W
             requested_by=person_of(principal),
             request={SUBJECT_FIELD: subject},
         )
-    except JobConflict:
+    except RecordConflict:
         live = Job.objects.filter(kind=work.name, state__in=("queued", "running")).first()
         if live is not None and live.request.get(SUBJECT_FIELD, "") == subject:
             return {**_job_asked(live, ALREADY_RUNNING), "started": False, "job": str(live.pk)}
@@ -297,7 +293,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> W
         return {**_job_asked(job, requested(work.words, subject)), "started": True, "job": str(job.pk)}
     standing = standing_of(job_run(job))
     if standing.state == FAILED:
-        return cast(RefusalEnvelope, refuse("work_failed", standing.note or ended(standing.label)))
+        return cast(RefusalEnvelope, refuse(Code.WORK_FAILED, standing.note or ended(standing.label)))
     return {**_job_asked(job, standing.note), "started": True, "job": str(job.pk), "result": job.result}
 
 
@@ -361,7 +357,7 @@ def run_for_host(name: str) -> dict[str, Any]:
     work = _host_named(name)
     try:
         job = run_now(work.name, principal=_scheduler())
-    except JobConflict:
+    except RecordConflict:
         return {"name": name, "state": "running", "note": ALREADY_RUNNING}
     return {"name": name, "state": job.state, "note": job_run(job).note, "job": str(job.pk)}
 
@@ -380,7 +376,7 @@ def start_for_host(name: str) -> bool:
             actor=principal.actor,
             request={SUBJECT_FIELD: ""},
         )
-    except JobConflict:
+    except RecordConflict:
         return False
     return True
 

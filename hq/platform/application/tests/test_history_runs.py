@@ -2,7 +2,6 @@
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -11,6 +10,7 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.application.markup_testing import select, text
 from hq.platform.core import append_only
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 # Written out, so the module imports at a ref without the names.
 SHOWN = 5
@@ -19,7 +19,7 @@ SHOWN = 5
 class MomentRunTests(TestCase):
     def setUp(self):
         self.now = timezone.now()
-        self.client.force_login(get_user_model().objects.create_user("example-operator", password="x" * 20))
+        operator(self.client)
         with append_only.lifted():
             AuditLog.objects.all().delete()
 

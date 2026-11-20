@@ -4,11 +4,11 @@ beneath it, wherever HQ shows one; systemctl is given the name systemd has."""
 import re
 from pathlib import Path
 
-from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import texts
+from hq.platform.core.testing import SignedInTestCase
 
 from ..findings import estate_findings
 from ..projection import projection_scope
@@ -29,10 +29,7 @@ def mounted(**said) -> dict:
     return service(MOUNT, file_state="enabled", active="active", sub="mounted", title=MOUNT_TITLE, **said)
 
 
-class PageTests(TestCase):
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("operator"))
-
+class PageTests(SignedInTestCase):
     def test_the_hq_page_names_each_unit_by_its_title_and_keeps_its_name(self):
         sweep(mounted(), timer(TIMER, title=TIMER_TITLE), service(title=SERVICE_TITLE))
 

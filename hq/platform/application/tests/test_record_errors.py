@@ -16,7 +16,6 @@ from hq.domains.assets.models import Asset
 from hq.domains.calendars.models import Entry
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
-from hq.platform.application.tests.reads import reads
 
 from .. import approvals
 from ..capabilities import capability_registry, execute_capability
@@ -50,8 +49,8 @@ class RecordRefusalTests(TestCase):
     def test_a_missing_record_is_not_found_and_names_nothing_sent(self):
         # Each write that keeps what it is not sent of its record reads that record first.
         cases = {
-            name: ({}, SENT_UID if TARGET_KINDS[spec.target_kind].coerce is str else SENT_ID)
-            for name, spec in capability_registry().items()
+            spec.name: ({}, SENT_UID if TARGET_KINDS[spec.target_kind].coerce is str else SENT_ID)
+            for spec in capability_registry()
             if kept_by(spec)
         }
         self.assertTrue(cases, "no command keeps its record")
@@ -119,7 +118,6 @@ def _subclasses(cls: type) -> set[type]:
 
 
 @tag("source", "tree")
-@reads("hq/**/*.py", "!**/tests/**/*.py")
 class RefusalTextTests(SimpleTestCase):
     """A capability answers with a refusal's text, so every refusal is built from a sentence HQ wrote."""
 

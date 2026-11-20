@@ -15,7 +15,7 @@ from unittest import mock
 from django.conf import settings
 
 from hq.config.sandbox import MARKERS
-lazy from hq.platform.application import agent_limits, automation_adoption, plugins
+lazy from hq.platform.application import agent_limits, automation_adoption, derivations, process_caches
 
 if TYPE_CHECKING:
     from hq.platform.application.agent_limits import Limits
@@ -33,7 +33,8 @@ def patches_leave_no_copy() -> None:
     loads, and either can happen while a test patches ``domains.all_domains``.
     The importer then holds the mock, which the patch never put there and so
     never takes back, and every later test in the process reads it. Each such
-    copy is given back the patched name's own value.
+    copy is given back the patched name's own value, and each process cache
+    holds again what it held as the patch began (``process_caches``).
     """
 
     global _left_by
@@ -49,6 +50,7 @@ def _noting_aliases(enter):
     @functools.wraps(enter)
     def entering(patcher):
         _read_new_modules()
+        patcher.held = [cached.held for cached in process_caches.KEPT]
         return enter(patcher)
 
     return entering
@@ -66,6 +68,10 @@ def _taking_back_copies(leave):
         finally:
             if started:
                 _give_back(name, replaced, _held(target, name))
+                # A cache first made while the patch held starts empty.
+                began = getattr(patcher, "held", [])
+                for index, cached in enumerate(process_caches.KEPT):
+                    cached.held = began[index] if index < len(began) else None
 
     return leaving
 
@@ -165,8 +171,9 @@ def _hold_markers(held: dict[str, tuple[bytes, int]]) -> None:
 
 
 def fresh() -> None:
-    """Leave this process as a new one starts: the composition read again, no
-    catalog adopted, a new set of agent limits and no controller's markers.
+    """Leave this process as a new one starts: no catalog adopted, as the
+    rolled back database holds none, no question remembered, a new set of agent
+    limits and no controller's markers.
 
     The suite calls it before each class sets up (``run_report.ClassTimedSuite``),
     the one point every class passes whatever the class before it did: its
@@ -176,15 +183,15 @@ def fresh() -> None:
     from.
     """
 
-    plugins.clear_plugin_composition_cache()
     automation_adoption.forget()
-    agent_limits.LIMITS = agent_limits.Limits()
+    derivations.forget()
+    agent_limits._LIMITS = agent_limits.Limits()
     _hold_markers({})
 
 
 class CompositionIsolation:
-    """Make process caches, and the agent limits and the controller's markers
-    every request shares, obey the same per-test isolation as the database.
+    """Make the adopted catalog and remembered questions, and the agent limits
+    and the controller's markers every request shares, obey the same per-test isolation as the database.
 
     The limits and markers are isolated as ``setUpTestData`` rows are: each
     class sets up on a fresh process (``fresh``), and each of its tests gets a
@@ -198,15 +205,15 @@ class CompositionIsolation:
     _class_markers: dict[str, tuple[bytes, int]] | None = None
 
     def startTest(self, test):
-        plugins.clear_plugin_composition_cache()
         automation_adoption.forget()
+        derivations.forget()
         if type(test) is not self._class:
             # The first of its class: what the set holds is what its setup left.
-            self._class, self._class_limits = type(test), agent_limits.LIMITS
+            self._class, self._class_limits = type(test), agent_limits.limits()
             self._class_markers = _markers_held()
         else:
             _hold_markers(self._class_markers or {})
-        agent_limits.LIMITS = _copied(self._class_limits)
+        agent_limits._LIMITS = _copied(self._class_limits)
         return super().startTest(test)
 
 

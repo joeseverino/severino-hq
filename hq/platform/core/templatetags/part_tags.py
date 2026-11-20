@@ -1,11 +1,10 @@
-"""The page parts a template writes as tags, each drawn by the partial its
-``page_parts`` dataclass draws through, so a page built in a template and one
-built in code look the same, and the tag's options are the dataclass's fields.
+"""The page parts a template writes as tags, each drawn by its ``page_parts``
+dataclass's partial, so a page built in a template and one built in code
+look the same.
 
-Not ``Library.simple_block_tag``: Django's parses only up to its end tag, so
-it cannot take the later parts, and it renders the body before the tag's
-function runs, so a section inside a section could not head itself a level
-down. The arguments are still read by Django's own ``parse_bits``.
+Not ``Library.simple_block_tag``, which parses only up to its end tag and
+renders the body before the function runs, so a nested section could not head
+itself a level down.
 """
 
 from dataclasses import Field, fields

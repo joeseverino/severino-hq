@@ -7,11 +7,12 @@ payload is held to the JSON types its schema publishes.
 from dataclasses import dataclass
 from typing import Annotated
 
-from django.contrib.auth import get_user_model
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
 from pydantic import Field
+
+from hq.platform.core.testing import operator
 
 from ..capabilities import CapabilitySpec, execute_capability
 from ..integration_testing import commands_registered
@@ -25,7 +26,7 @@ Weekday = Annotated[int, Field(ge=0, le=6)]
 class PlanCommand:
     days: list[Weekday] | None = None
     split: list[tuple[Weekday, str]] | None = None
-    sessions: int | None = None
+    sessions: Annotated[int, Field(le=100)] | None = None
 
 
 # What a plan's form posts: each number as its text, as a choice sends it.
@@ -43,7 +44,7 @@ class FormTypeTests(TestCase):
             PlanCommand,
             self.handler,
         )
-        self.person = get_user_model().objects.create_superuser("operator", password="unused-test-pass")
+        self.person = operator()
 
     def handler(self, command, **_bound):
         self.ran.append(command)
@@ -53,7 +54,7 @@ class FormTypeTests(TestCase):
         request = RequestFactory().post("/example/plan/", {RETRY_KEY_FIELD: key})
         request.user = self.person
         SessionMiddleware(lambda request: HttpResponse()).process_request(request)
-        with commands_registered({self.spec.name: self.spec}):
+        with commands_registered(self.spec):
             return run_posted(request, self.spec.name, payload).answer
 
     def test_a_forms_text_runs_its_command_in_the_commands_types(self):
@@ -69,7 +70,7 @@ class FormTypeTests(TestCase):
         self.assertEqual(self.ran, [])
 
     def test_an_agents_text_for_a_number_is_still_refused(self):
-        with commands_registered({self.spec.name: self.spec}):
+        with commands_registered(self.spec):
             answer = execute_capability(self.spec.name, AS_POSTED, principal=cli_principal())
 
         self.assertEqual(answer["error"]["code"], "invalid_input")

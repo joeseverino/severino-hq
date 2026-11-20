@@ -61,18 +61,12 @@ from hq.platform.application.integration_specs import (
     CapabilitySpec,
     answer_type,
 )
-from hq.platform.application.json_schemas import json_schema, merged_definitions
+from hq.platform.application.json_schemas import merged_definitions, sent_schema
 from hq.platform.application.lists import split_list
 from hq.platform.application.pages import page_refusal
 from hq.platform.application.projection import QueryRefusal
-from hq.platform.application.refusal_status import (
-    Door,
-    Refusal,
-    RefusalEnvelope,
-    answered_by,
-    capability_doors,
-    refusal_of,
-)
+from hq.platform.application.refusal_codes import Code, Door, answered_by
+from hq.platform.application.refusal_status import Refusal, RefusalEnvelope, capability_doors, refusal_of
 from hq.platform.application.request_identity import signed_in
 from hq.platform.application.resources import (
     ResourceCatalog,
@@ -233,7 +227,7 @@ def _answer(refusal: Refusal) -> HttpResponse:
     return response
 
 
-def _fail(message: str, *, code: str, details: Any = None) -> HttpResponse:
+def _fail(message: str, *, code: Code, details: Any = None) -> HttpResponse:
     return _answer(Refusal(code, message, details))
 
 
@@ -326,12 +320,12 @@ def _unserved(request: HttpRequest, methods: tuple[str, ...], *, configured: boo
     if not configured:
         return _fail(
             "The machine API is not configured on this deployment.",
-            code="not_configured",
+            code=Code.NOT_CONFIGURED,
         )
     if request.method not in methods:
         response = _fail(
             f"{request.method} is not allowed here.",
-            code="method_not_allowed",
+            code=Code.METHOD_NOT_ALLOWED,
         )
         response["Allow"] = ", ".join(methods)
         return response
@@ -402,21 +396,16 @@ def _endpoint(
     title: str,
     requires: Access,
     data: Any,
-    codes: Iterable[str] = (),
+    codes: Iterable[Code] = (),
     held: Any = None,
     operator_session: bool = False,
     page: str = "",
 ) -> Callable[[APIView], View]:
     """Authenticate, then put every failure in the same envelope.
 
-    Every argument is the endpoint's declaration, which ``openapi.py`` reads:
-    ``requires`` who may call it, which every call is refused by before the
-    view runs, as an MCP tool's is, so the read behind it asks nobody again;
-    ``data`` is what a success carries under ``data`` (None: not enveloped),
-    ``held`` what it carries there at HELD_STATUS (None: it holds nothing),
-    ``codes`` the error codes it answers beside ENDPOINT_CODES, ``title``
-    the operation in a few words, and ``page`` the route of the web page that
-    shows what it answers, for one that serves a single domain.
+    Every argument is the endpoint's declaration, which ``openapi.py`` reads.
+    ``requires`` refuses a call before the view runs, as an MCP tool's does, so
+    the read behind it asks nobody again.
     """
 
     # ``operator_session`` lets a signed-in operator's session read a GET view
@@ -500,7 +489,7 @@ def openapi(_request: APIRequest) -> HttpResponse:
 
 
 @_endpoint(
-    ("GET",), title="List capabilities", requires=ANYONE, data=CapabilityRequestCatalog, codes=("invalid_input",)
+    ("GET",), title="List capabilities", requires=ANYONE, data=CapabilityRequestCatalog, codes=(Code.INVALID_INPUT,)
 )
 def capabilities(request: APIRequest) -> HttpResponse:
     """Every capability, each flagged by whether your token may run it.
@@ -555,7 +544,11 @@ capabilities.__dict__.update(__hq_query_fields__=capability_query)
 
 
 @_endpoint(
-    ("GET",), title="List resources", requires=ANYONE, data=ResourceCatalog, codes=("invalid_input", "unknown_resource")
+    ("GET",),
+    title="List resources",
+    requires=ANYONE,
+    data=ResourceCatalog,
+    codes=(Code.INVALID_INPUT, Code.UNKNOWN_RESOURCE),
 )
 def resources(request: APIRequest) -> HttpResponse:
     """Every readable resource, with the operations your token may use.
@@ -651,7 +644,7 @@ def _projection(
     title: str,
     doc: str,
     page: str,
-    codes: tuple[str, ...] = ("invalid_input",),
+    codes: tuple[Code, ...] = (Code.INVALID_INPUT,),
 ) -> View:
     """One principal-scoped projection, served with its query model's inputs.
 
@@ -662,7 +655,7 @@ def _projection(
     tool name, so both doors say it alike.
     """
 
-    fields = json_schema(query)["properties"]
+    fields = sent_schema(query)["properties"]
 
     def view(request: APIRequest) -> HttpResponse:
         # A repeat, or a focus that names nothing, is answered as
@@ -700,7 +693,7 @@ topology: View = _projection(
     """,
     "control_plane:topology",
     # A focus no node on the map has.
-    ("invalid_input", "not_found"),
+    (Code.INVALID_INPUT, Code.NOT_FOUND),
 )
 
 findings: View = _projection(
@@ -753,7 +746,7 @@ def resource_list(request: APIRequest, name: str) -> HttpResponse:
         if len(values) != 1:
             return _fail(
                 f"Query field {key!r} may appear only once.",
-                code="invalid_input",
+                code=Code.INVALID_INPUT,
             )
         filters[key] = values[0]
     fields = _selection(filters.pop(RESERVED_QUERY_FIELD, None))
@@ -775,7 +768,7 @@ def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResp
 
     asked = request.GET.getlist(RESERVED_QUERY_FIELD)
     if len(asked) > 1:
-        return _fail(f"Query field {RESERVED_QUERY_FIELD!r} may appear only once.", code="invalid_input")
+        return _fail(f"Query field {RESERVED_QUERY_FIELD!r} may appear only once.", code=Code.INVALID_INPUT)
     fields = _selection(asked[0] if asked else None)
     return _ok(get_application_resource(name, identifier, principal=request.principal, strict=False, fields=fields))
 
@@ -783,7 +776,7 @@ def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResp
 class EnvelopeError(Exception):
     """A request body that never reaches a capability, and why."""
 
-    def __init__(self, message: str, *, code: str = "invalid_input") -> None:
+    def __init__(self, message: str, *, code: Code = Code.INVALID_INPUT) -> None:
         super().__init__(message)
         self.message = message
         self.code = code
@@ -795,33 +788,33 @@ def _body_json(request: HttpRequest) -> dict[str, Any]:
     if request.content_type != "application/json":
         raise EnvelopeError(
             "Content-Type must be application/json.",
-            code="unsupported_media_type",
+            code=Code.UNSUPPORTED_MEDIA_TYPE,
         )
     try:
         body = request.body
     except RequestDataTooBig:
         raise EnvelopeError(
             "Request body exceeds this deployment's safety limit.",
-            code="request_too_large",
+            code=Code.REQUEST_TOO_LARGE,
         ) from None
     if not body:
         return {}
     try:
         payload = strict_json.loads(body)
     except ValueError, UnicodeDecodeError:
-        raise EnvelopeError("Request body is not valid JSON.", code="invalid_json") from None
+        raise EnvelopeError("Request body is not valid JSON.", code=Code.INVALID_JSON) from None
     if not isinstance(payload, dict):
-        raise EnvelopeError("Request body must be a JSON object.", code="invalid_json")
+        raise EnvelopeError("Request body must be a JSON object.", code=Code.INVALID_JSON)
     return payload
 
 
-def execute_codes(spec: CapabilitySpec | None) -> frozenset[str]:
+def execute_codes(spec: CapabilitySpec | None) -> frozenset[Code]:
     """Every code a call of ``spec`` can be answered with; for None, a call by any name."""
 
     return call_codes(capability_doors(spec))
 
 
-def call_codes(doors: Iterable[Door]) -> frozenset[str]:
+def call_codes(doors: Iterable[Door]) -> frozenset[Code]:
     """Every code a capability call passing ``doors`` can be answered with: every
     endpoint's, the envelope's own and the call's."""
 

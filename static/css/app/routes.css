@@ -11,9 +11,7 @@
 /* A note with the names in it as links. */
 .linked-text { white-space: pre-line; overflow-wrap: anywhere; }
 kbd {
-  border: 1px solid var(--line);
   border-bottom-width: 2px;
-  border-radius: 4px;
   background: var(--surface);
   padding: 1px var(--space-2);
   font: inherit;
@@ -35,9 +33,7 @@ kbd {
 .notice {
   margin: 0 0 var(--stack-gap);
   padding: var(--space-6) var(--space-7);
-  /* A callout: inside a surface it keeps its tint and its bar, not a frame. */
-  border: var(--surface-border, 1px solid var(--tone-line, var(--line)));
-  border-left: 3px solid var(--tone-line, var(--line));
+  border-color: var(--tone-line, var(--line));
   border-radius: var(--radius-sm);
   background: var(--tone-wash, var(--surface));
   color: var(--tone-ink, inherit);

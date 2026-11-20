@@ -11,7 +11,6 @@ from django.test import SimpleTestCase, tag
 from fontTools.ttLib import TTFont
 
 from hq.platform.application.tests.facts import scan
-from hq.platform.application.tests.reads import reads
 from tools.fonts.subset import ROOT, SERVED, stylesheet_features
 
 # Unicode's Default_Ignorable_Code_Point (DerivedCoreProperties.txt, Unicode
@@ -128,16 +127,6 @@ def _layout_features(font: Path) -> set[str]:
 
 
 @tag("source", "tree")
-@reads(
-    "hq/**/*.py",
-    "hq_sdk/**/*.py",
-    "!**/tests/**/*.py",
-    "static/**/*.css",
-    "static/js/**/*.js",
-    "static/fonts/inter/inter-variable-latin.woff2",
-    "templates/**/*.html",
-    lists=("hq/**", "hq_sdk/**", "static/**", "templates/**"),
-)
 class ServedFontTests(SimpleTestCase):
     def test_every_character_hq_prints_has_a_glyph(self):
         missing = undrawn(ROOT, SERVED)

@@ -2,8 +2,6 @@
 
 from decimal import Decimal
 
-from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.assets.models import Asset
@@ -11,12 +9,10 @@ from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import links, text
+from hq.platform.core.testing import SignedInTestCase
 
 
-class ReportsPageTests(TestCase):
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("report-reader"))
-
+class ReportsPageTests(SignedInTestCase):
     def test_status_counts_are_named_and_linked(self):
         Project.objects.create(name="Example Tool", slug="example-tool", status=Project.Status.ACTIVE)
         ContentItem.objects.create(title="Example writeup", slug="example-writeup")

@@ -79,7 +79,7 @@ every adapter:
 | Projection | Module | Also served as |
 |---|---|---|
 | Dashboard snapshot: KPIs, priority work, recent records, upstream state, activity | `dashboard.py` | MCP `dashboard_snapshot` |
-| A managed resource's allowed actions, removal mode, machines, services, readout, certificate expiry | `resource_context.py` | `derived` on the `infrastructure` detail |
+| A managed resource's allowed actions, removal mode, machines, services, readout, certificate expiry | `resource_context.py` | the `infrastructure` detail, and the record's page |
 | The tailnet page | `tailnet_context.py` | the `tailnet` resource |
 | The connections page | `connection_context.py` | the `connections` resource |
 | HQ's own page: release, machine and container, units, readings, problems | `hq_context/` (`release`, `work`, `sight`, composed in `__init__`) | the `hq` resource |
@@ -795,6 +795,10 @@ stale-write protection, and records the interface, actor and operation.
 | Deletes | `deletion.delete_record`, built per domain by `records.deleter` | A `destructive` capability with an exact target confirmation, a row lock and optional `expected_updated_at`; receipt storage is cleaned only after commit; MCP needs both the write and delete switches |
 
 MCP results omit sensitive and restricted documentation identifiers throughout.
+A person reads them whole, on the doc's page and where another record's page
+links one, through `read_sensitive_documentation`, which `HELD_ONLY_AT` keeps
+from every agent door; `application.sensitivity` is the one place either rule
+is applied.
 
 **Documentation sync.** `hq.platform.application.sync.execute_hq_sync()` is the
 one external sync. The local vault MCP emits the manifest and `hq sync` sends

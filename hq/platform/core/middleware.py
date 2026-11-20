@@ -20,8 +20,7 @@ from hq.platform.application import request_context
 from hq.platform.application.arrivals import ARRIVALS, note as note_arrival
 from hq.platform.application.cadence import note_activity
 from hq.platform.application.demo import DEMO_SESSION_KEY, demo_scope
-from hq.platform.core import speculation, tracing
-from hq.platform.core.attribution import operation_context
+from hq.platform.core import bindings, speculation, tracing
 from hq.platform.core.outbound import serving
 from hq.platform.core.write_bounds import NOTHING, Bound, writes
 lazy from hq.platform.application import automation_adoption, hq_self
@@ -83,7 +82,7 @@ def request_operation(path: str, *, operation_id: str) -> AbstractContextManager
         route = resolve(path)
     except Resolver404:
         route = None
-    return operation_context(
+    return bindings.operation_context(
         interface=API_INTERFACE if route is not None and API_NAMESPACE in route.app_names else WEB_INTERFACE,
         actor="",
         operation=(route.view_name or route.route) if route is not None else UNROUTED,
@@ -185,14 +184,9 @@ class LoginRequiredMiddleware(auth_middleware.LoginRequiredMiddleware):
     """Django's sign-in gate: every view needs a session unless it is marked
     ``@login_not_required`` where it is defined.
 
-    Also lets through the routes an extension declared as carrying their own
-    authentication. Skipping the redirect is not skipping auth: the view
-    still authenticates the request, and answers 401 rather than an HTML
-    login page a native client cannot use.
-
-    A signed-in person then opens a page only while their role holds the
-    capability it reads under (``pages.page_refusal``). Here, before the view,
-    because this is the one place every routed view passes through.
+    An extension's routes that carry their own authentication answer 401
+    instead of a redirect. A page's capability (``pages.page_refusal``) is
+    checked here too, the one place every routed view passes through.
     """
 
     @override

@@ -239,7 +239,7 @@ def keep_out_declaration(kind: str, spec: dict, *, principal) -> None:
     """
 
     provider = PROVIDERS.get(kind)
-    if provider is None or provider.from_record is None:
+    if provider is None or not provider.sweeps:
         return
     identity = record_identity(kind, spec)
     if not identity:
@@ -265,20 +265,10 @@ class Live(Sealed):
     """A record's spec as HQ's last read of its provider found it: the only
     thing ``infrastructure.save_adopted`` writes down (``sealing``).
 
-    Writing one down asks no consent, since HQ's copy then equals what is
-    live and nothing anybody would agree to has changed. Its security
-    properties:
-
-    - Two reads make one, both in this module and both of the stored sweep:
-      ``unmanaged`` (each record no declaration claims, which adopting and
-      the sweep's own adoption take) and ``found_live`` (the record a
-      declaration names, which keeping the live version takes). Only this
-      module holds its seal, so a spec a caller wrote cannot be written down
-      as adopted.
-    - It is read only through ``live_read``, which refuses anything this
-      module did not seal.
-    - The one thing added to a read is ``keeping``: the fields its provider
-      declares no sweep can observe, taken from the declaration it replaces.
+    Writing one asks no consent, since HQ's copy then equals what is live. Only
+    this module's two reads of the stored sweep (``unmanaged``, ``found_live``)
+    seal one, so a spec a caller wrote cannot be written down as adopted. The
+    one thing added is ``keeping``, the fields no sweep can observe.
     """
 
     __slots__ = ()
@@ -392,12 +382,9 @@ class Unmanaged:
 def unmanaged() -> tuple[Unmanaged, ...]:
     """Records a provider holds that no declaration accounts for.
 
-    A switched-off declaration counts: it pauses HQ's changes to its record,
-    and taking the record on again would undo the switch-off. Matched on
-    hostname rather than on any provider id, because that is how the
-    reconcilers find their own records. A declaration and a live record with
-    the same hostnames are the same thing by the only definition that governs
-    what actually happens.
+    A switched-off declaration counts, since taking its record on again would
+    undo the switch-off. Matched on hostname, as the reconcilers find their own
+    records.
     """
 
     declared: dict[str, set[tuple[str, ...]]] = {}
@@ -408,7 +395,7 @@ def unmanaged() -> tuple[Unmanaged, ...]:
     found: list[Unmanaged] = []
     for snapshot in every_snapshot():
         provider = PROVIDERS.get(snapshot.kind)
-        if provider is None or provider.from_record is None:
+        if provider is None or not provider.sweeps:
             continue
         known = declared.get(snapshot.kind, set())
         for record in snapshot.records:
@@ -669,12 +656,9 @@ def suggested_key(item: Unmanaged) -> str:
 def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:
     """Take on every record of one kind that no declaration accounts for.
 
-    Only records read through a connection that manages, and none an operator
-    said HQ does not manage. The connection's ``manages`` is the decision; a
-    connection that only observes adopts nothing. A kind that stands behind
-    access (``requires_approval``) is taken on switched off: the controller's
-    report says what exists, never that anybody agreed to HQ acting on it, so
-    it stays inert until a person switches it on.
+    Only through a connection that manages. A kind behind access
+    (``requires_approval``) is taken on switched off: a report says what
+    exists, never that anybody agreed to HQ acting on it.
     """
 
     excluded = kept_out()

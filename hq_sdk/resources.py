@@ -2,7 +2,6 @@
 
 from hq.platform.application.integration_specs import ListRead
 from hq.platform.application.resources import (
-    ResourceQuery,
     ResourceSpec,
     StatusFilter,
     TextFilter,
@@ -14,7 +13,6 @@ from hq.platform.application.resources import (
 
 __all__ = [
     "ListRead",
-    "ResourceQuery",
     "ResourceSpec",
     "StatusFilter",
     "TextFilter",

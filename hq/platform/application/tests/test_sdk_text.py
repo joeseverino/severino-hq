@@ -7,7 +7,7 @@ and a change of wording shows in this file's diff.
 """
 
 from collections.abc import Callable
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal
 
 from django.test import SimpleTestCase
@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from hq.platform.application.derivation_testing import frozen
 from hq_sdk.money import money, signed_number
-from hq_sdk.ui import ago, counted, ended, measured, span, when, when_day
+from hq_sdk.ui import counted, ended, measured, span, when, when_day
 
 # The year every example is read in, so "this year" never moves an answer.
 _YEAR = 2026
@@ -23,10 +23,6 @@ _YEAR = 2026
 
 def _october(year: int, day: int, hour: int, minute: int) -> datetime:
     return datetime(year, 10, day, hour, minute, tzinfo=timezone.get_current_timezone())
-
-
-def _before(**length: float) -> Callable[[], str]:
-    return lambda: ago(timezone.now() - timedelta(**length))
 
 
 class HostWordsTests(SimpleTestCase):
@@ -112,14 +108,5 @@ class HostWordsTests(SimpleTestCase):
             [
                 (lambda: ended("Renews through Example"), "Renews through Example."),
                 (lambda: ended("Renews through Example, Inc."), "Renews through Example, Inc."),
-            ]
-        )
-
-    def test_ago(self):
-        self.assertWords(
-            [
-                (_before(seconds=30), "just now"),
-                (_before(hours=2), "2\xa0hours ago"),
-                (_before(days=5, hours=3), "5\xa0days ago"),
             ]
         )

@@ -3,7 +3,6 @@
 from dataclasses import replace
 from unittest import mock
 
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -11,6 +10,7 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import text
 from hq.platform.application.pages import runs_at
+from hq.platform.core.testing import NOBODY, READER, SignedInTestCase
 
 from ..command_center import command_center
 from ..connection_catalog import connection_catalog
@@ -23,15 +23,13 @@ from ..connections import (
     describe_connections,
 )
 from ..field_masks import WHOLE_RECORD
-from ..integrations import integration_graph
+from ..integrations import held_graph
 from ..plugin_testing import offering
 from ..resources import list_resource
 from ..security import Capability, Principal
 from .host_only import host_only
 from .sentinel import CONNECTION as SENTINEL_CONNECTION, SENTINEL, SentinelMixin, plant_credentials
 
-READ = Principal("reader", "test", frozenset({Capability.READ}))
-NONE = Principal("nobody", "test", frozenset())
 FINANCE = Principal("finance", "test", frozenset({"example.finance.read"}))
 FINANCE_OPERATOR = Principal(
     "finance-operator",
@@ -108,7 +106,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
         )
 
         with offering(spec):
-            self.assertIn(spec, integration_graph().connections.values())
+            self.assertIn(spec, held_graph().connections.values())
 
     def test_core_spec_derives_controller_abilities_and_carries_no_credential(self):
         from django.utils import timezone
@@ -126,7 +124,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
             observed_at=timezone.now(),
         )
 
-        outcome = _standing(READ)
+        outcome = _standing(READER)
         core = [item for item in outcome if item["family"] == "infrastructure.controllers"]
         connection = next(item for item in core if item["label"] == "example-cloudflare")
 
@@ -253,7 +251,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
             provider,
         )
         with offering(spec):
-            groups = connection_catalog(principal=NONE)
+            groups = connection_catalog(principal=NOBODY)
 
         self.assertEqual(groups, ())
         provider.assert_not_called()
@@ -295,7 +293,7 @@ class ConnectionRegistrationTests(TestCase):
 
     def test_two_letter_query_matches_word_starts_not_word_middles(self):
         with host_only():
-            discovered = command_center("sp", principal=READ)
+            discovered = command_center("sp", principal=READER)
 
         self.assertNotIn(
             "infrastructure.resource.create",
@@ -308,7 +306,7 @@ class ConnectionRegistrationTests(TestCase):
             ("tailnet proxy", {"Proxy host", "Tailnet device"}),
         ):
             with self.subTest(query), host_only():
-                discovered = command_center(query, principal=READ)
+                discovered = command_center(query, principal=READER)
 
                 self.assertEqual([item.name for item in discovered["connections"]], ["infrastructure.controllers"])
                 self.assertLessEqual(matched, set(discovered["connections"][0].badges))
@@ -350,7 +348,7 @@ class ConnectionRegistrationTests(TestCase):
 
     def test_command_center_caps_broad_ability_match_explanations(self):
         with host_only():
-            discovered = command_center("e", principal=READ)
+            discovered = command_center("e", principal=READER)
 
         core = next(item for item in discovered["connections"] if item.name == "infrastructure.controllers")
         self.assertLessEqual(len(core.badges), 4)
@@ -358,7 +356,7 @@ class ConnectionRegistrationTests(TestCase):
 
     def test_command_center_does_not_leak_connection_abilities_without_read(self):
         with host_only():
-            discovered = command_center("tailscale", principal=NONE)
+            discovered = command_center("tailscale", principal=NOBODY)
 
         self.assertEqual(discovered["connections"], ())
 
@@ -402,7 +400,7 @@ class ConnectionRegistrationTests(TestCase):
             offering(broken),
             self.assertRaisesRegex(ImproperlyConfigured, "invalid governed kinds"),
         ):
-            integration_graph()
+            held_graph()
 
     def test_plugin_connection_names_cannot_shadow_core(self):
         duplicate = ConnectionSpec(
@@ -416,7 +414,7 @@ class ConnectionRegistrationTests(TestCase):
             offering(duplicate),
             self.assertRaisesRegex(ImproperlyConfigured, "Duplicate connection"),
         ):
-            integration_graph()
+            held_graph()
 
     def test_unknown_instance_abilities_fail_closed(self):
         broken = ConnectionSpec(
@@ -440,7 +438,7 @@ class ConnectionRegistrationTests(TestCase):
             offering(broken),
             self.assertRaisesRegex(ImproperlyConfigured, "unknown abilities"),
         ):
-            connection_catalog(principal=READ)
+            connection_catalog(principal=READER)
 
     def test_unsafe_relationship_urls_fail_closed(self):
         broken = ConnectionSpec(
@@ -527,11 +525,7 @@ class ConnectionRegistrationTests(TestCase):
             describe_connections()
 
 
-class ConnectionWorkspaceTests(TestCase):
-    def setUp(self):
-        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
-        self.client.force_login(self.user)
-
+class ConnectionWorkspaceTests(SignedInTestCase):
     def test_a_plugin_spec_renders_what_it_declares_without_a_host_template_change(self):
         spec = _finance_spec()
         instance = replace(spec.instance_provider()[0], kind="unclassified")
@@ -695,7 +689,7 @@ class GrantEvidenceTests(TestCase):
             offering(spec),
             self.assertRaisesRegex(ImproperlyConfigured, "keyless but reports grants"),
         ):
-            connection_catalog(principal=READ)
+            connection_catalog(principal=READER)
 
     def test_controller_connections_carry_their_providers_credential_model(self):
         from django.utils import timezone
@@ -711,7 +705,7 @@ class GrantEvidenceTests(TestCase):
                 observed_at=timezone.now(),
             )
 
-        by_ref = {item["label"]: item for item in _standing(READ) if item["family"] == "infrastructure.controllers"}
+        by_ref = {item["label"]: item for item in _standing(READER) if item["family"] == "infrastructure.controllers"}
 
         # A login key is the whole machine: named as such, and ready.
         self.assertEqual(by_ref["a-ssh"]["credential_model"], "coarse")

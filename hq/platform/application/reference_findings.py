@@ -17,6 +17,7 @@ from hq.domains.control_plane.providers import PROVIDERS, read_record
 from .connection_lifecycle import UNREPORTED_NODE
 from .entity_links import node_name
 from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule
+from .references import Kind
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted, ended
@@ -140,7 +141,7 @@ def _names_nothing(estate: FindingEstate) -> tuple[Finding, ...]:
     parents = _missing_parents(listed)
     found: list[Finding] = []
     for resource in listed:
-        node = nodes.get(f"resource:{resource.key}")
+        node = nodes.get(Kind.RESOURCE.of(resource.key))
         if node is None or node.kind != "resource" or not node.managed:
             continue
         ref = resource.connection_ref

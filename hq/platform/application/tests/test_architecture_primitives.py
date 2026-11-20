@@ -6,13 +6,10 @@ from pathlib import Path
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
-
 from .source import template_files
 
 
 @tag("source", "tree")
-@reads("**/*.py", "!**/test*.py", "**/templates/**")
 class OnePrimitiveTests(SimpleTestCase):
     """Questions asked in many places are answered by one function."""
 
@@ -61,12 +58,6 @@ class OnePrimitiveTests(SimpleTestCase):
         ]
         self.assertIn("hq/platform/application/action_links.py", {relative for relative, _ in scanned})
         self.assertEqual(found, [])
-        templates = [
-            name
-            for name, path in template_files()
-            if re.search(r"""\{%\s*url\s+["']command["']""", path.read_text(encoding="utf-8"))
-        ]
-        self.assertEqual(templates, [])
 
     # Identifiers still written in bare code. Lower it as they move to
     # `|breakable`; never raise it.
@@ -98,18 +89,6 @@ class OnePrimitiveTests(SimpleTestCase):
         ]
         self.assertEqual(found, [])
 
-    def test_templates_say_byte_counts_through_the_bytes_filter(self):
-        found = [name for name, path in template_files() if "filesizeformat" in path.read_text(encoding="utf-8")]
-        self.assertEqual(found, [])
-
-    def test_templates_write_amounts_through_the_money_filter(self):
-        """``{{ amount|money }}``, never a dollar sign in front of a number filter,
-        which writes a negative amount as "$-5.00"."""
-
-        built = re.compile(r"\$\{\{")
-        found = [name for name, path in template_files() if built.search(path.read_text(encoding="utf-8"))]
-        self.assertEqual(found, [])
-
     def test_entity_pages_are_addressed_by_entity_link(self):
 
         page = re.compile(
@@ -126,7 +105,6 @@ class OnePrimitiveTests(SimpleTestCase):
         self.assertEqual(found, [])
 
 
-@reads("hq/**/*.py", "!**/tests/**/*.py")
 class RouteOwnerTests(SimpleTestCase):
     """Routes are resolved in one place, so the answer can be remembered."""
 
@@ -168,7 +146,6 @@ class RouteOwnerTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("**/templates/**")
 class FragmentPrimitiveTests(SimpleTestCase):
     """Reads are one component: `static/js/fragment.js` and the part it asks for.
 

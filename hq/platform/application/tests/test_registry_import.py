@@ -12,7 +12,7 @@ from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
 from hq.platform.core.models import AuditLog
 
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import command_spec, execute_capability
 from ..registry_import import MAX_IMPORT_RECORDS
 from ..security import Capability, Principal, cli_principal
 
@@ -239,9 +239,9 @@ class DerivedFieldTests(TestCase):
 
 class CapabilityGateTests(TestCase):
     def test_it_requires_what_both_upserts_require(self):
-        spec = capability_registry()["hq.import"]
-        upserts = set(capability_registry()["project.upsert"].required_capabilities) | set(
-            capability_registry()["asset.upsert"].required_capabilities
+        spec = command_spec("hq.import")
+        upserts = set(command_spec("project.upsert").required_capabilities) | set(
+            command_spec("asset.upsert").required_capabilities
         )
 
         self.assertEqual(set(spec.required_capabilities), upserts)

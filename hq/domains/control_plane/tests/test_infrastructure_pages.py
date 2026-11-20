@@ -4,7 +4,6 @@ import json
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -17,9 +16,12 @@ from hq.platform.application.finding_model import Finding
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.markup_testing import actions, hrefs, select, text
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.resource_refusals import INFRASTRUCTURE
+from hq.platform.application.resources import get_resource
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.consent import consented
 from hq.platform.application.topology_model import TopologyNode
+from hq.platform.core.testing import READER, declare, operator
 
 from ..models import DashboardMachine, ManagedResource, OperationRequest, ProviderConnection
 from ..provider_adapters.cloudflare import _dns_record_readout
@@ -31,11 +33,7 @@ from .certificate_cases import certificate_spec, declare_targets
 class InfrastructureWebTests(TestCase):
     def setUp(self):
         managing_everything()
-        self.user = get_user_model().objects.create_user(
-            username="operator",
-            password="test-only-password",
-        )
-        self.client.force_login(self.user)
+        self.user = operator(self.client)
         declare_targets()
         save_managed_resource(
             ManagedResourceCommand(
@@ -48,14 +46,10 @@ class InfrastructureWebTests(TestCase):
         self.resource = ManagedResource.objects.get(key="example-wildcard")
 
     def test_machine_edit_can_choose_the_dashboard_telemetry_owner(self):
-        machine = ManagedResource.objects.create(
-            key="example-host",
-            kind="machine",
-            spec={
-                "name": "example-host",
-                "role": "Infrastructure host",
-                "addresses": ["100.64.0.9"],
-            },
+        machine = declare(
+            "example-host",
+            "machine",
+            {"name": "example-host", "role": "Infrastructure host", "addresses": ["100.64.0.9"]},
         )
         edit_url = reverse("control_plane:edit", kwargs={"key": machine.key})
 
@@ -114,16 +108,8 @@ class InfrastructureWebTests(TestCase):
         self.assertIn(reverse("control_plane:certificate_download", args=[self.resource.key]), hrefs(response))
 
     def test_a_proxy_host_and_its_upstream_are_distinct_machine_edges(self):
-        ManagedResource.objects.create(
-            key="example-host",
-            kind="machine",
-            spec={"name": "example-host", "addresses": ["100.64.0.9"]},
-        )
-        ManagedResource.objects.create(
-            key="app-server",
-            kind="machine",
-            spec={"name": "app-server", "addresses": ["100.64.0.10"]},
-        )
+        declare("example-host", "machine", {"name": "example-host", "addresses": ["100.64.0.9"]})
+        declare("app-server", "machine", {"name": "app-server", "addresses": ["100.64.0.10"]})
         ProviderConnection.objects.create(
             connection_ref="an-npm",
             controller_id="example-host",
@@ -134,10 +120,10 @@ class InfrastructureWebTests(TestCase):
             probed=True,
             observed_at=timezone.now(),
         )
-        proxy = ManagedResource.objects.create(
-            key="an-app-proxy",
-            kind="npm.proxy_host",
-            spec={
+        proxy = declare(
+            "an-app-proxy",
+            "npm.proxy_host",
+            {
                 "domain_names": ["app.example.test"],
                 "forward_scheme": "http",
                 "forward_host": "100.64.0.10",
@@ -145,14 +131,11 @@ class InfrastructureWebTests(TestCase):
             },
         )
 
-        response = self.client.get(reverse("control_plane:detail", kwargs={"key": proxy.key}))
+        read = get_resource(INFRASTRUCTURE, proxy.key, principal=READER)
 
-        self.assertEqual(response.context["provider_machine"]["name"], "example-host")
-        self.assertEqual(response.context["origin_machine"].name, "app-server")
         # Two edges: the machine its provider runs on and the one it forwards to.
-        links = hrefs(response)
-        for name in ("example-host", "app-server"):
-            self.assertIn(reverse("control_plane:machine", kwargs={"name": name}), links)
+        for edge, name in (("provider_machine", "example-host"), ("origin_machine", "app-server")):
+            self.assertEqual(read[edge], {"name": name, "url": reverse("control_plane:machine", kwargs={"name": name})})
 
     def test_public_certificate_download_never_serves_private_key(self):
         self.resource.status = {"certificate_pem": "-----BEGIN PRIVATE KEY-----\nunsafe\n"}
@@ -180,20 +163,20 @@ class InfrastructureWebTests(TestCase):
 
 class InfrastructureViewsTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="joe", password="test-password")
-        self.resource = ManagedResource.objects.create(
-            key="example-wildcard",
-            kind="tls.certificate",
-            spec=certificate_spec(),
+        self.user = operator(username="joe")
+        self.resource = declare(
+            "example-wildcard",
+            "tls.certificate",
+            certificate_spec(),
             status={"certificate_pem": "PUBLIC CERTIFICATE ONLY"},
         )
         self.client.force_login(self.user)
 
     def test_a_row_does_not_repeat_under_its_name_what_its_name_says(self):
-        ManagedResource.objects.create(
-            key="example-proxy",
-            kind="npm.proxy_host",
-            spec={
+        declare(
+            "example-proxy",
+            "npm.proxy_host",
+            {
                 "domain_names": ["app.example.com"],
                 "forward_scheme": "http",
                 "forward_host": "10.0.0.10",
@@ -221,11 +204,7 @@ class InfrastructureViewsTests(TestCase):
         # one: nothing collects certificates, so measuring them against the
         # sweep interval says only that they are not swept, which this rule
         # does not claim.
-        ManagedResource.objects.create(
-            key="unswept-rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "unswept.example", "answer": "10.0.0.9"},
-        )
+        declare("unswept-rewrite", "adguard.rewrite", {"domain": "unswept.example", "answer": "10.0.0.9"})
 
         response = self.client.get(reverse("control_plane:findings"))
 

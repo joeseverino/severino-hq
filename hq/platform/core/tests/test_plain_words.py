@@ -14,7 +14,6 @@ from unittest import mock
 from django.conf import settings
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.reads import reads
 from hq.platform.core import plain_words
 
 # Named as a path, so the fast gate runs this test when the config changes.
@@ -254,7 +253,6 @@ class ValeWarningTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("tools/lint/vale/**", lists=("tools/lint/vale/**", "templates/no-such-page.html"))
 class TemplatePieceTests(SimpleTestCase):
     def test_the_pieces_are_attributes_and_tag_literals_a_person_reads(self):
         template = (
@@ -312,7 +310,6 @@ class TemplatePieceTests(SimpleTestCase):
 
 
 @tag("source", "tree")
-@reads("tools/lint/vale/**", lists=("tools/lint/vale/**",))
 class DumpTests(SimpleTestCase):
     def test_the_dump_lists_each_line_of_text_the_rules_read_at_its_place(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -349,7 +346,7 @@ def command_labels() -> list[tuple[str, str]]:
 
     return [
         (where(spec), str(field.label))
-        for _name, spec in sorted(capability_registry().items())
+        for spec in sorted(capability_registry(), key=lambda spec: spec.name)
         for field in command_form_class(spec).base_fields.values()
         if field.label and not isinstance(field.widget, forms.HiddenInput)
     ]

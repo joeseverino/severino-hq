@@ -94,15 +94,12 @@ def _inventory(hosts: tuple[str, ...], targets: tuple[Target, ...]) -> dict[str,
 
 
 def environment(private_data_dir: Path, project_dir: Path) -> dict[str, str]:
-    """What every Ansible program the worker starts is told, for a project at
-    ``project_dir``: its configuration and every path it searches, all inside
-    ``private_data_dir`` but the project's own roles and the collections the
-    worker ships, which are found nowhere else: not in a home directory and
-    not on Python's path.
+    """What every Ansible program the worker starts is told: its configuration
+    and every path it searches, all inside ``private_data_dir`` but the
+    project's roles and the shipped collections.
 
-    Writes the empty configuration file it names, since Ansible goes on to the
-    working directory's ``ansible.cfg`` when the one ``ANSIBLE_CONFIG`` names
-    does not exist.
+    Writes the empty configuration file it names, since Ansible falls back to
+    the working directory's ``ansible.cfg`` when that file does not exist.
     """
 
     config = private_data_dir / "ansible.cfg"
@@ -125,14 +122,10 @@ def environment(private_data_dir: Path, project_dir: Path) -> dict[str, str]:
 
 
 def extravars(run: Run) -> dict[str, Any]:
-    """The run's parameters, and for a run through the read login, escalation
-    turned off.
+    """The run's parameters, and for a run through the read login, escalation turned off.
 
-    Turned off as an extra var, the one place Ansible ranks above everything
-    a project can set: play, block and task ``become`` keywords, and
-    ``ansible_become`` in a play's or task's vars, ``set_fact`` or
-    ``include_vars``, each of which outranks an inventory variable. Written
-    after the parameters, so none of them can turn it back on.
+    Off as an extra var, the one place Ansible ranks above every ``become`` a
+    project can set, and written after the parameters so none turns it back on.
     """
 
     found = dict(run.parameters)

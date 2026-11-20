@@ -3,8 +3,8 @@
 The runner isolates the adopted catalog, the agent limits and the controller's
 markers per test (``isolation_testing``). A class's own setup runs before its
 first test, so it is held to the same: a class that stopped in its setup,
-wrote in its teardown, or left a composition cached that a patch had narrowed,
-leaves nothing for the next class to set up on.
+wrote in its teardown, or built a process cache under a patch leaves nothing
+for the next class to set up on.
 """
 
 import io
@@ -12,15 +12,16 @@ import logging
 import unittest
 import unittest.mock
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.platform.application import cadence
 from hq.platform.application.automation_runs import runs_procedure
 from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.compiled_graph import compiled
 from hq.platform.application.security import web_principal
 from hq.platform.core.example_estate import automation
 from hq.platform.core.test_runner import SeverinoTestRunner
+from hq.platform.core.testing import operator
 
 
 def _run(*tests: unittest.TestCase, **options: bool) -> unittest.TestResult:
@@ -45,7 +46,7 @@ def _run(*tests: unittest.TestCase, **options: bool) -> unittest.TestResult:
 
 
 def _procedures() -> set[str]:
-    return {name for name in capability_registry() if runs_procedure(name)}
+    return {spec.name for spec in capability_registry() if runs_procedure(spec.name)}
 
 
 class ClassSetupStartsFreshTests(TestCase):
@@ -55,7 +56,7 @@ class ClassSetupStartsFreshTests(TestCase):
         class Adopts(unittest.TestCase):
             @classmethod
             def setUpClass(cls):
-                automation.adopted(web_principal(get_user_model().objects.create_user("example-adopter")))
+                automation.adopted(web_principal(operator()))
                 cadence.note_controller()
                 raise unittest.SkipTest("stops in its setup, so no test of it starts or stops")
 
@@ -122,25 +123,27 @@ class ClassSetupStartsFreshTests(TestCase):
                 self.assertEqual([said for _, said in result.failures + result.errors], [])
                 self.assertEqual(seen, {"heartbeat": False})
 
-    def test_a_class_sets_up_on_the_composition_as_it_is_not_as_a_patch_before_it_left_it_cached(self):
+    def test_a_class_sets_up_on_no_cache_a_patch_before_it_built(self):
         seen: dict[str, set[str]] = {}
 
         class Narrows(unittest.TestCase):
             def test_reads_its_commands_without_the_records(self):
                 with unittest.mock.patch(
-                    "hq.platform.application.integrations.record_capability_specs", return_value=()
+                    "hq.platform.application.compiled_graph.record_capability_specs", return_value=()
                 ):
-                    capability_registry()
+                    compiled.cache_clear()
+                    seen["narrowed"] = {spec.name for spec in capability_registry()}
 
         class Reads(unittest.TestCase):
             @classmethod
             def setUpClass(cls):
-                seen["set up"] = set(capability_registry())
+                seen["set up"] = {spec.name for spec in capability_registry()}
 
             def test_reads_its_commands(self):
-                seen["tested"] = set(capability_registry())
+                pass
 
         result = _run(Narrows("test_reads_its_commands_without_the_records"), Reads("test_reads_its_commands"))
 
         self.assertEqual([said for _, said in result.failures + result.errors], [])
-        self.assertEqual(seen["set up"], seen["tested"])
+        self.assertNotIn("project.update", seen["narrowed"])
+        self.assertIn("project.update", seen["set up"])

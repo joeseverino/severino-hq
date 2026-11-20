@@ -3,7 +3,6 @@
 import re
 from html.parser import HTMLParser
 
-from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
@@ -14,6 +13,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderConnection,
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import hrefs, text
+from hq.platform.core.testing import READER, declare, operator
 from hq.platform.core.tests.estate_sizes import (
     assert_cost_does_not_grow,
     assert_subject_cost_does_not_grow,
@@ -25,14 +25,12 @@ from ..entity_links import NODE_KINDS, EntityLink, entity_link, kind_label
 from ..facts import Subject, readings, unreadable_labels
 from ..projection import projection_scope
 from ..relationships import relationships_for
-from ..security import Capability, Principal
 from ..services import prospects
 from ..tailnet import TAILNET_KIND
 from ..topology import relation_graph
 from ..topology_model import READING_RANKS, RELATIONS
-from .test_hq_self import SITE, declare, own
+from .test_hq_self import SITE, machine_at, own
 
-READER = Principal("reader", "test", frozenset({Capability.READ}))
 CONTROLLER = "example-controller"
 ACCOUNT = "0123456789abcdef"
 
@@ -75,8 +73,7 @@ def dns(name, content, *, proxied, record_type="A"):
 
 
 def login(client, name="relations-op"):
-    user = get_user_model().objects.create_user(name, password="x" * 20)
-    client.force_login(user)
+    operator(client, name)
 
 
 @SITE
@@ -84,7 +81,7 @@ class OneEdgeBothEndsTests(TestCase):
     """The machine running HQ and HQ's own service read one edge."""
 
     def setUp(self):
-        declare("example-host", "192.0.2.44")
+        machine_at("example-host", "192.0.2.44")
         login(self.client)
 
     def test_the_machine_serves_it_and_it_runs_on_the_machine(self):
@@ -248,16 +245,8 @@ class EdgeCertificatePathTests(TestCase):
         self.assertEqual([item.record["id"] for item in found], ["e1"])
 
     def test_the_service_page_of_an_unproxied_name_names_no_edge_certificate(self):
-        ManagedResource.objects.create(
-            key="tail-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "tail.example.com", "answer": "100.64.0.1"},
-        )
-        ManagedResource.objects.create(
-            key="app-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "192.0.2.10"},
-        )
+        declare("tail-dns", "adguard.rewrite", {"domain": "tail.example.com", "answer": "100.64.0.1"})
+        declare("app-dns", "adguard.rewrite", {"domain": "app.example.com", "answer": "192.0.2.10"})
         login(self.client)
 
         tail = self.client.get(reverse("control_plane:service", args=["tail.example.com"]))
@@ -269,15 +258,10 @@ class EdgeCertificatePathTests(TestCase):
 
 
 def wildcard(key):
-    return ManagedResource.objects.create(
-        key=key,
-        kind="tls.certificate",
-        spec={
-            "certificate_name": key,
-            "domains": ["*.example.com"],
-            "install_on": ["a-proxy"],
-            "renewal_window_days": 30,
-        },
+    return declare(
+        key,
+        "tls.certificate",
+        {"certificate_name": key, "domains": ["*.example.com"], "install_on": ["a-proxy"], "renewal_window_days": 30},
     )
 
 
@@ -289,10 +273,10 @@ class ManagedCertificatePathTests(TestCase):
         wildcard("wildcard-b")
 
     def proxy(self, certificate=""):
-        return ManagedResource.objects.create(
-            key="app-proxy",
-            kind="npm.proxy_host",
-            spec={
+        return declare(
+            "app-proxy",
+            "npm.proxy_host",
+            {
                 "domain_names": ["app.example.com"],
                 "forward_scheme": "http",
                 "forward_host": "10.0.0.10",
@@ -322,21 +306,13 @@ def estate(size):
 
     connected("example-tailnet", PROVIDERS[TAILNET_KIND].connection_providers[0])
     connected("example-cloudflare", "cloudflare_api")
-    ManagedResource.objects.create(
-        key="example-com",
-        kind="cloudflare.zone",
-        spec={"zone": "example.com", "connection_ref": "example-cloudflare"},
-    )
+    declare("example-com", "cloudflare.zone", {"zone": "example.com", "connection_ref": "example-cloudflare"})
     store("cloudflare.zone", {"zone": "example.com", "connection_ref": "example-cloudflare", "account_id": ACCOUNT})
     devices, records, apps = [], [], []
     for index in range(size):
         name, address = f"example-host-{index}", f"100.64.0.{index + 1}"
-        ManagedResource.objects.create(key=name, kind="machine", spec={"name": name, "addresses": [address]})
-        ManagedResource.objects.create(
-            key=f"s{index}-dns",
-            kind="adguard.rewrite",
-            spec={"domain": f"s{index}.example.com", "answer": address},
-        )
+        declare(name, "machine", {"name": name, "addresses": [address]})
+        declare(f"s{index}-dns", "adguard.rewrite", {"domain": f"s{index}.example.com", "answer": address})
         devices.append({"name": name, "addresses": [address], "dns_name": f"{name}.example.ts.net", "online": True})
         records.append(dns(f"s{index}.example.com", address, proxied=True))
         apps.append(
@@ -512,11 +488,7 @@ class NoUnlinkedNamesTests(TestCase):
 class NoRawKindsTests(TestCase):
     def test_the_machine_page_names_its_declarations_by_label(self):
         estate(1)
-        ManagedResource.objects.create(
-            key="example-host-0-tailnet",
-            kind=TAILNET_KIND,
-            spec={"name": "example-host-0", "key_expiry_disabled": False},
-        )
+        declare("example-host-0-tailnet", TAILNET_KIND, {"name": "example-host-0", "key_expiry_disabled": False})
         login(self.client)
 
         page = self.client.get(reverse("control_plane:machine", args=["example-host-0"]))
@@ -572,10 +544,10 @@ class DomainCardTests(TestCase):
             ("net-apex", "example.net", "A", "192.0.2.1"),
             ("net-www", "www.example.net", "CNAME", "example.net"),
         ):
-            ManagedResource.objects.create(
-                key=key,
-                kind="cloudflare.dns_record",
-                spec={
+            declare(
+                key,
+                "cloudflare.dns_record",
+                {
                     "zone": "example.net",
                     "name": name,
                     "record_type": rtype,
@@ -589,7 +561,7 @@ class DomainCardTests(TestCase):
     def cards(self, zone):
         from ..zones import find_zone
 
-        return {card.label: card for card in find_zone(zone).cards}
+        return {card.label: card for card in find_zone(zone).insights if not card.notice}
 
     def test_a_parked_domain_says_so_with_who_handles_it(self):
         card = self.cards("example.net")["Services"]
@@ -656,7 +628,7 @@ class MachineServesAgreesTests(TestCase):
 
     @SITE
     def test_the_page_header_and_panel_agree(self):
-        declare("example-host", "192.0.2.44")
+        machine_at("example-host", "192.0.2.44")
         login(self.client)
 
         with own("192.0.2.44"):
@@ -675,7 +647,7 @@ class UnreadableScopeTests(TestCase):
         kind = next(kind for kind, spec in OBSERVATIONS.items() if spec.joins_hostnames and not spec.joins_addresses)
         store(kind, reachable=False, error="refused")
         connected("example-ssh", "ssh")
-        declare("example-host", "192.0.2.44")
+        machine_at("example-host", "192.0.2.44")
 
         with projection_scope():
             graph = relation_graph(principal=READER)

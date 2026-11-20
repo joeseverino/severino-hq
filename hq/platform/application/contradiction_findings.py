@@ -30,6 +30,7 @@ from .finding_model import (
     opens,
 )
 from .finding_steps import Do, told
+from .references import Kind
 from .tone import Tone
 from .ui import counted, ended
 lazy from . import exposure, zones
@@ -66,7 +67,7 @@ def _declared(hostname: str, kinds: Iterable[str]) -> tuple[str, ...]:
 
 
 def _subject(hostname: str) -> str:
-    return f"service:{hostname}"
+    return Kind.SERVICE.of(hostname)
 
 
 def _about(estate: FindingEstate, hostname: str, machine: str) -> dict[str, str]:
@@ -216,7 +217,7 @@ def _gates_guarding_nothing(_estate: FindingEstate) -> tuple[Finding, ...]:
                 found.append(
                     Finding(
                         rule="gate-guards-nothing",
-                        subject=f"service:{name}",
+                        subject=Kind.SERVICE.of(name),
                         title=f"{spec.label} {title} protects {name}, which has no DNS record",
                         severity=Tone.NEUTRAL,
                         explanation=(
@@ -309,7 +310,7 @@ def _unfronted_ports(_estate: FindingEstate) -> tuple[Finding, ...]:
         found.append(
             Finding(
                 rule="published-port-unfronted",
-                subject=f"machine:{machine.name}",
+                subject=Kind.MACHINE.of(machine.name),
                 part=item.running.name,
                 title=f"{item.running.name} on {machine.name} is open to the internet on "
                 f"{'port' if len(open_ports) == 1 else 'ports'} "
@@ -354,7 +355,7 @@ def _served_not_held(_estate: FindingEstate) -> tuple[Finding, ...]:
         found.append(
             Finding(
                 rule="served-certificate-not-held",
-                subject=f"resource:{resource.key}",
+                subject=Kind.RESOURCE.of(resource.key),
                 title=f"{names} serves a certificate other than {resource.key}",
                 severity=Tone.SERIOUS,
                 explanation=(

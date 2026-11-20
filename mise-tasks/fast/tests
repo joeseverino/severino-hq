@@ -18,9 +18,10 @@ set -eu
 # mise hands the words over shell-quoted, one word each.
 eval "set -- ${usage_labels:-}"
 [ "$#" -gt 0 ] || exit 0
-test_arguments="--noinput --parallel ${usage_parallel:-auto} ${usage_labels:-}"
+# A test tagged tree walks the checkout, so it is CI's lint:source, never fast's.
+test_arguments="--noinput --exclude-tag tree --parallel ${usage_parallel:-auto} ${usage_labels:-}"
 turn_bound=30m
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
 # The tests' own mise runs read the checkout's config alone.
-exec env -u MISE_ENV uv run python manage.py test --noinput --parallel "${usage_parallel:-auto}" "$@"
+exec env -u MISE_ENV uv run python manage.py test --noinput --exclude-tag tree --parallel "${usage_parallel:-auto}" "$@"

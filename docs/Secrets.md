@@ -487,8 +487,7 @@ CLOUDFLARE_BOOTSTRAP_TOKEN='op://Example Bootstrap/cloudflare/credential' \
 ```
 
 `op run` resolves the bootstrap reference (Touch ID); the task checks the
-connection item carries the field, mints a token with every permission in
-`tools/cloudflare-observer-permissions.txt`, and pipes the secret into
+connection item carries the field, mints a token with every permission its readings need, and pipes the secret into
 `op item edit` as the item's JSON template. The secret reaches no argument,
 file or output. The controller reads it on its next render.
 
@@ -503,16 +502,17 @@ take the bootstrap credential from the environment. Without `--store` they print
 create nothing: a secret goes into 1Password and nowhere else.
 
 - `mise run mint:cloudflare` needs a bootstrap token with API Tokens
-  Edit (API Tokens Write in the API). It resolves the names in `tools/cloudflare-observer-permissions.txt`
+  Edit (API Tokens Write in the API). It resolves the names of every permission the cloudflare_api readings need
   and creates a user-owned token with an expiry and optional client IP ranges.
   `--list-groups` prints the current names.
-- `mise run mint:tailscale` creates an OAuth client with the scopes in
-  `tools/tailscale-observer-scopes.txt`, all `:read`. The bootstrap needs the
+- `mise run mint:tailscale` creates an OAuth client with every scope the tailscale readings need, all `:read`. The bootstrap needs the
   `oauth_keys` scope: an API access token, or an OAuth client given as
   `TAILSCALE_BOOTSTRAP_CLIENT_ID` and `TAILSCALE_BOOTSTRAP_CLIENT_SECRET`.
 
-Both lists are the `requires` of every reading for that provider plus
-`hq.domains.control_plane.credential_reads`, and a test fails when they differ.
+Both lists are `observer_permissions` in
+`hq.domains.control_plane.credential_reads`: the `requires` of every reading
+for that provider plus the reads that are not readings yet. `--permissions` and
+`--scopes` take a file of names instead.
 
 `mise run wire-pocket-id` writes Pocket ID's permission list for HQ's API the
 same way, over `tools/pocket_id.py`: the operator's admin key comes from the

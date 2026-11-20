@@ -11,7 +11,7 @@ from pydantic import Field
 from hq.platform.application.contracts import Closed
 from hq.platform.application.markup_testing import elements
 
-from ..capabilities import capability_registry, run_capability
+from ..capabilities import command_spec, run_capability
 from ..command_forms import command_form_class
 from ..command_targets import record_options
 from ..integration_specs import capability_schema
@@ -48,7 +48,7 @@ class RunFormTests(TestCase):
         self.addCleanup(machines.stop)
 
     def form_class(self):
-        spec = capability_registry()[RESTART_RUN]
+        spec = command_spec(RESTART_RUN)
         return command_form_class(spec, record_choices=record_options(capability_schema(spec), principal=AGENT))
 
     def asked(self, form):

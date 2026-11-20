@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
+from hq.platform.application.references import Kind
 lazy from hq.domains.assets.models import Asset
 lazy from hq.domains.calendars.models import Entry
 lazy from hq.domains.content.models import ContentItem
@@ -253,7 +254,7 @@ def money():
     its receipt but this week's, a switch nothing else is about, and more gear
     handed down."""
 
-    machine = f"machine:{MACHINE}"
+    machine = Kind.MACHINE.of(MACHINE)
     today = timezone.localdate()
     asset = Asset.objects.create(
         item_name=SERVER[2],
@@ -282,7 +283,7 @@ def money():
 
 
 def _expense(days, vendor, item, category, cost, business_use, *, project=None, asset=None):
-    machine = f"machine:{MACHINE}"
+    machine = Kind.MACHINE.of(MACHINE)
     return Expense.objects.create(
         date=timezone.localdate() - timedelta(days=days),
         vendor=vendor,

@@ -41,9 +41,7 @@
     The one form every posting button submits. Outside everything else on the
     page, so a button inside another form still posts only what it names.
     {% endcomment %}
-    {% comment %}
-    <!-- ast-grep-ignore: hand-drawn-form --> the frame's menu verbs, each one button, and the one form every post button names
-    {% endcomment %}<form id="hq-post" method="post" hidden>{% write_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"></form>
+    <form id="hq-post" method="post" hidden>{% write_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"></form>
     {% include "partials/_modal.html" with id="command-center" title="Search" body_template="partials/_command_center.html" modal_class="command-center-modal" %}
     {% comment %}
     Empty until opened. The panel behind it reads the tailnet inventory and

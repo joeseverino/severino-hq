@@ -1,12 +1,8 @@
 """Where a service can be reached from, derived rather than declared.
 
-A DNS record answers with an address, an address belongs to a network, and a
-network is the tailnet, the house or the internet, so who can open a socket to
-a service follows from declarations HQ already reconciles. Otherwise it is
-invisible: a rewrite to a LAN address and one to a tailnet address look
-identical and differ only in who can reach what is behind them. A proxy's
-access list can narrow that audience and never widen it, so the narrower of
-the two is the reach.
+A rewrite to a LAN address and one to a tailnet address look identical and
+differ only in who can reach what is behind them, so reach follows the
+address's network, narrowed by any proxy access list, never widened.
 """
 
 import socket

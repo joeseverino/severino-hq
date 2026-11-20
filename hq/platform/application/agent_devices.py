@@ -1,14 +1,8 @@
 """The tailnet devices an agent calls HQ from (docs/Security.md#agents).
 
-A token proves the client and, for a delegated grant, the person; the tailnet
-proves the device, since its address is one only that device's WireGuard key
-answers for. So an agent's call is placed on the device tailscaled says sent
-it, asked per request (``tailscaled.whois``), and does nothing from a device
-until it is approved for that client and person. The approval is the person's
-own act in HQ, and the link between their HQ person and the device's tailnet
-owner: HQ never infers one namespace from the other. Where the deployment has
-a tailnet, a call it cannot place is refused; only a deployment with none
-answers for the client alone.
+The tailnet proves the device, so a call does nothing from a device until a
+person approves it for that client. HQ never infers one namespace from the
+other. With a tailnet, a call it cannot place is refused.
 """
 
 import contextlib
@@ -26,6 +20,7 @@ from hq.platform.core.models import AgentDevice, AgentIdentity
 from . import tailnet, tailscaled
 from .command_fields import Describe
 from .record_errors import RecordNotFound
+from .refusal_codes import Code
 from .security import AGENT_SURFACES, AuthorizationError, Principal, person
 lazy from .agent_registry import TOUCH_INTERVAL
 lazy from .hq_self import site_url
@@ -38,15 +33,6 @@ APPROVE_AGENT_DEVICE = "agent.device_approval.set"
 BLOCK_AGENT_DEVICE = "agent.device_block.set"
 
 
-class Unplaced(StrEnum):
-    """Why the tailnet could not place a call: the refusal code each door answers."""
-
-    # tailscaled holds no device at the address: loopback, the LAN, or an address no peer has.
-    NO_DEVICE = "device_unknown"
-    # tailscaled did not answer, so HQ cannot say who sent the call.
-    UNANSWERED = "tailnet_unavailable"
-
-
 @dataclass(frozen=True, slots=True)
 class Placement:
     """Where HQ places one call: on a device; nowhere, in a deployment with no
@@ -54,7 +40,7 @@ class Placement:
     says why, ``detail`` the daemon's own words)."""
 
     device: tailnet.Device | None = None
-    refused: Unplaced | None = None
+    refused: Code | None = None
     detail: str = ""
 
     @property
@@ -68,14 +54,9 @@ NOWHERE = Placement()
 def place(address: str) -> Placement:
     """The device the call from ``address`` came from, as tailscaled knows it now.
 
-    ``address`` is the caller as ``ForwardedCaller`` resolved it: through a
-    proxy HQ trusts it is the caller's own, and through any other it is the
-    peer that opened the socket, the one hop HQ can prove. So a forwarded
-    header never moves a call off the device that sent it. The deployment has
-    a tailnet when the host named tailscaled's socket (``tailscaled.socket_path``); then
-    every call is placed by the daemon, and one it holds no device for, or
-    cannot answer for, is refused, never let through as the client alone.
-    Without the socket nothing is placed, and the client is the finest unit.
+    ``address`` is ``ForwardedCaller``'s, so a forwarded header never moves a
+    call off its device. With a socket configured, a call the daemon cannot
+    place is refused, never let through as the client alone.
     """
 
     if not tailscaled.socket_path():
@@ -84,9 +65,9 @@ def place(address: str) -> Placement:
         found = tailscaled.whois(address)
     except tailscaled.Unavailable as exc:
         logger.warning("tailscaled did not place a call: %s", exc, extra={"event": "agents.device.unanswered"})
-        return Placement(refused=Unplaced.UNANSWERED, detail=str(exc))
+        return Placement(refused=Code.TAILNET_UNAVAILABLE, detail=str(exc))
     if found is None or not found.node_id:
-        return Placement(refused=Unplaced.NO_DEVICE)
+        return Placement(refused=Code.DEVICE_UNKNOWN)
     return Placement(found)
 
 
@@ -128,7 +109,7 @@ class DeviceStanding(StrEnum):
     UNPLACED = "unplaced"
     APPROVED = "approved"
     AWAITING = "awaiting"
-    # Refused at admission: the tailnet could not place the call (``Unplaced``).
+    # Refused at admission: the tailnet could not place the call (``Placement.refused``).
     UNPLACEABLE = "unplaceable"
     BLOCKED = "blocked"
 
@@ -136,12 +117,8 @@ class DeviceStanding(StrEnum):
 def standing(principal: Principal) -> DeviceStanding:
     """Whether ``principal``'s call may run from the device it came from. Fails closed.
 
-    Asked of an agent's call alone: a person's own client is their own act in
-    HQ already (``OwnDevice``). An admitted call carries the device its
-    admission placed it on; one that carries none was admitted where there is
-    no tailnet, since a call the tailnet could not place is stopped at
-    admission (``agent_admission.Stopped``) and never asked here. A read:
-    nothing here asks tailscaled or writes, since a GET is refused here too.
+    Asked of an agent's call alone, since a person's own client is their own
+    act. A read: nothing here asks tailscaled or writes.
     """
 
     if principal.interface not in AGENT_SURFACES or not principal.device:

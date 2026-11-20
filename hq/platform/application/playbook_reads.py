@@ -1,13 +1,8 @@
-"""The adopted playbooks and the scans of their repository as readable
-resources, for an agent to find what to run, where, and what waits for a person to adopt.
+"""The adopted playbooks and their repository's scans as readable resources,
+for an agent to find what to run, where, and what waits.
 
-Each playbook is read from the catalog its commands are built from
-(``automation_runs.capability_specs``), with the facts its Run page states
-(``automation_runs.about``), and each scan result as the Playbooks page
-reviews it (``automation_sources.standing``), so a read says what the pages
-say. What a page does not show is the machines a playbook can run on now:
-the ones the worker's newest scan says it has a login to as the playbook's
-profile, which an ask is held to (``automation_runs.reached``).
+Each is read from what its page reads, so a read says what the pages say, plus
+the machines a playbook can run on now (``automation_runs.reached``).
 """
 
 from typing import Annotated, Any, TypedDict

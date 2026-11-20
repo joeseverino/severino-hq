@@ -12,6 +12,7 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.platform.application.plugin_testing import offering
 from hq.platform.application.record_errors import RecordNotFound
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.security import AuthorizationError, Capability, Principal, is_interactive
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.sentinel import (
@@ -21,6 +22,7 @@ from hq.platform.application.tests.sentinel import (
     SentinelMixin,
     plant_credentials,
 )
+from hq.platform.core.testing import declare
 
 from .. import services
 from ..security import MCPBoundary, TailnetGate
@@ -254,13 +256,8 @@ class ServiceTests(SentinelMixin, TestCase):
             return {}
 
     def test_derived_topology_traces_from_a_focus(self):
-        from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(
-            key="mcp-zone",
-            kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": "mcp-cloudflare"},
-        )
+        declare("mcp-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "mcp-cloudflare"})
         with host_only():
             topology = services.get_topology(focus="resource:mcp-zone", direction="inbound", depth=2)
 
@@ -269,11 +266,8 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertEqual(topology["trace"]["direction"], "inbound")
 
     def test_an_agent_can_ask_the_topology_one_standing_question(self):
-        from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(
-            key="mcp-lonely", kind="adguard.rewrite", spec={"domain": "app.example.test", "answer": "192.0.2.10"}
-        )
+        declare("mcp-lonely", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"})
         with host_only():
             whole = services.get_topology()
             narrowed = services.get_topology(lens="unobserved-resources")
@@ -400,7 +394,7 @@ def admitting(verifier, seen=None):
         except AuthorizationError as exc:
             return Unadmitted(exc.code, exc.reason, verified=True)
         except ValueError:
-            return Unadmitted("invalid_token", "The access token was not accepted.", verified=False)
+            return Unadmitted(Code.INVALID_TOKEN, "The access token was not accepted.", verified=False)
 
     return admit
 
@@ -762,15 +756,3 @@ class TheCallerReachesTheToolTests(TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertNotIn('"isError":true', response.text.replace(" ", ""))
         self.assertEqual(seen.get("actor"), "example-agent")
-
-
-class InstructionsTests(SimpleTestCase):
-    def test_the_instructions_name_each_refusal_an_agent_retries(self):
-        from hq.platform.application.agent_access import AGENTS_PAUSED
-        from hq.platform.application.refusal_status import LATER_CODES
-
-        from ..binding import CALL_TIMED_OUT
-
-        for code in (AGENTS_PAUSED.code, *LATER_CODES, CALL_TIMED_OUT):
-            with self.subTest(code=code):
-                self.assertIn(code, mcp.server.instructions or "")

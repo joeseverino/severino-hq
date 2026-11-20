@@ -238,24 +238,14 @@ def button(
         Any, Describe("Each `data_*` hook, and the popover, dialog command or `hidden` a script acts on.")
     ],
 ):
-    """Every control that looks like a button, and the only thing that writes
-    one: a link to ``url``; with an ``offer``, one that posts what it sends;
-    with ``submit``, its form's own; with neither and no ``url``, one a script
-    or the platform acts on (``data_*``, ``BUTTON_ATTRIBUTES``). Its words may
-    open with an ``icon``, close with a ``count`` of what it holds, or end
-    with the ``arrow`` of a link onward. ``look`` is how
-    it looks (``ui.BUTTON_LOOKS``); the ``glyph`` look shows its ``icon``
-    alone, its words heard and unseen. ``css`` stands in for the button's look
-    on a control that is not drawn as one (a pin). ``outside`` leads out of HQ
-    as ``{% outside_link %}`` does. Disabled or the
-    page it names (``current``), it is neither a link nor a form, and stays in
-    the tab order so its title is read where it stands.
+    """Every control that looks like a button, and the only thing that writes one.
 
-    A page posts only through an offer, which is built where the rule that
-    would refuse its press is read (``PageAction.command``), so no page shows
-    a press its reader may not make. Its token is the request's, which an
-    ``{% include ... only %}`` keeps when it drops the context processors'
-    values."""
+    A link to ``url``; with an ``offer``, one that posts; with ``submit``, its
+    form's own; with neither, one a script acts on (``data_*``). Disabled or
+    ``current``, it stays in the tab order so its title is read. A page posts
+    only through an offer, built where the rule that would refuse the press is
+    read, so no page shows a press its reader may not make.
+    """
 
     posts = offer is not None
     if css and look:

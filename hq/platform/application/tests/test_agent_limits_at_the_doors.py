@@ -44,7 +44,7 @@ def _clock_held():
     call is inside the first's minute on any runner, whatever its clock or the
     process's shared limits do between the two."""
 
-    with mock.patch.object(agent_limits, "LIMITS", agent_limits.Limits(lambda: 1000.0)):
+    with mock.patch.object(agent_limits, "_LIMITS", agent_limits.Limits(lambda: 1000.0)):
         yield
 
 
@@ -149,7 +149,7 @@ class AtOnceAtTheDoorsTests(TestCase):
             return self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_bearer(actor)}")
 
     def test_the_machine_api_refuses_an_agent_with_all_its_calls_in_flight(self):
-        with agent_limits.LIMITS.occupy("example-busy-api"):
+        with agent_limits.limits().occupy("example-busy-api"):
             busy = self._api("example-busy-api")
             other = self._api("example-other-api")
 
@@ -160,7 +160,7 @@ class AtOnceAtTheDoorsTests(TestCase):
         self.assertEqual(self._api("example-busy-api").status_code, 200, "the call given back is free again")
 
     def test_the_machine_api_refuses_every_agent_once_all_together_are_in_flight(self):
-        with agent_limits.LIMITS.occupy("example-a"), agent_limits.LIMITS.occupy("example-b"):
+        with agent_limits.limits().occupy("example-a"), agent_limits.limits().occupy("example-b"):
             busy = self._api("example-c")
 
         self.assertEqual((busy.status_code, busy.json()["error"]["code"]), (429, "too_many_calls"))
@@ -169,7 +169,7 @@ class AtOnceAtTheDoorsTests(TestCase):
         agent = Principal("example-busy-mcp", "mcp", frozenset({Capability.READ}))
 
         async def steps(post):
-            with agent_limits.LIMITS.occupy(agent.actor):
+            with agent_limits.limits().occupy(agent.actor):
                 return await post("token", _call(1))
 
         with mock.patch(TOOL) as tool:
@@ -178,7 +178,7 @@ class AtOnceAtTheDoorsTests(TestCase):
         tool.assert_not_called()
         self.assertEqual(answer.status_code, 200)
         self.assertEqual(_code(answer), "too_many_calls")
-        self.assertEqual(agent_limits.LIMITS.held(), 0)
+        self.assertEqual(agent_limits.limits().held(), 0)
 
 
 @override_settings(SEVERINO_AGENT_CALL_TIMEOUT_SECONDS=0)
@@ -204,4 +204,4 @@ class TimeoutTests(TestCase):
         self.assertEqual(answer.status_code, 200)
         self.assertEqual(_code(answer), "call_timed_out")
         self.assertEqual(warned.call_args.kwargs["extra"]["event"], "mcp.call.timed_out")
-        self.assertEqual(agent_limits.LIMITS.held(), 0, "the call is given back once its thread ends")
+        self.assertEqual(agent_limits.limits().held(), 0, "the call is given back once its thread ends")

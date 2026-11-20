@@ -27,7 +27,7 @@ def _runs_only(module):
     return patch.object(
         module,
         "capability_registry",
-        lambda: {name: spec for name, spec in whole().items() if name.startswith("automation.")},
+        lambda: tuple(spec for spec in whole() if spec.name.startswith("automation.")),
     )
 
 

@@ -1,11 +1,7 @@
 """Findings from what the GitHub App's hourly allowance says: who else spends it.
 
-GitHub records nothing a person can read when a leaked App key or token is
-used for reads, so what everything else spent of the installation's hour,
-beside HQ's own sweeps, is the one sign there is (docs/Security.md). The
-allowance reading carries it (``observations.github``), and the rule is
-gathered: it reads each GitHub connection's allowance records, and speaks
-once their spend passes ``OTHERS_SPENT_ATTENTION``.
+GitHub records nothing readable when a leaked App key is used for reads, so
+what others spent of the hour is the one sign there is (docs/Security.md).
 """
 
 from collections.abc import Mapping

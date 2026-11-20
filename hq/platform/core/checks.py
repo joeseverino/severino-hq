@@ -2,7 +2,8 @@
 
 A system check runs before every management command, so nothing here reads the
 source tree: a rule about source is an architecture test, which a gate runs
-once (``hq.platform.core.interface_text`` holds the ones about markup).
+once, and one about a template is a shape refused as it loads
+(``hq.platform.core.hand_drawn``).
 """
 
 from django.conf import settings

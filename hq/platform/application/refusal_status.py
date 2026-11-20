@@ -1,19 +1,13 @@
-"""The one refusal contract: what every code HQ answers with means, and how a failure becomes one.
+"""The one refusal contract: the envelope every code (``refusal_codes.Code``) is answered in, and how a
+failure becomes one.
 
-HQ answers a failed call with its own error code, and each code has one HTTP
-status wherever it is answered. Mapping the ones that mean something other
-than "you sent nonsense" keeps a client on HTTP status alone for control flow,
-which is all a Shortcut can branch on comfortably, and keeps a refusal from
-being logged as something it is not.
-
-``refusal_of`` is the one place an exception becomes a refusal, so it is also
-the one place an authorization refusal is recorded in the audit log.
+``refusal_of`` is the one place an exception becomes a refusal, so the one
+place an authorization refusal is audited.
 """
 
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Annotated, Any, NotRequired, TypedDict, TypeIs
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -24,7 +18,8 @@ from hq.platform.core.errors import UpstreamUnavailable
 from .answer_fields import Outcome, Pinned
 from .input_errors import django_refusal, pydantic_refusal
 from .projection import QueryRefusal
-from .record_errors import NOT_FOUND, HostRefusal
+from .record_errors import HostRefusal
+from .refusal_codes import Code, Door
 from .security import AuthorizationError, InsufficientScope, Principal
 lazy from .approvals import RefusedHold
 lazy from .denials import record_denial
@@ -35,170 +30,8 @@ lazy from .resources import InvalidResourceInput, ResourceError
 logger = logging.getLogger("severino.capabilities")
 
 
-class Door(StrEnum):
-    """Where a code can be answered, so each operation lists only the codes that can reach it."""
-
-    # Any door admitting its caller, before anything runs.
-    ADMISSION = "admission"
-    # Any API endpoint: a method or surface it does not serve, a grant its view
-    # checks, or a failure HQ did not expect.
-    ENDPOINT = "endpoint"
-    # A request body that never reaches a capability.
-    BODY = "body"
-    # A door that stops waiting for a call: MCP's.
-    WAIT = "wait"
-    # A resource read.
-    RESOURCE = "resource"
-    # Every capability call: its authority, its policy, its command's shape,
-    # and whatever its handler raises, which no capability declares.
-    CAPABILITY = "capability"
-    # A capability call by a name nothing registered.
-    NAME = "name"
-    # A capability that acts on a target, called without one.
-    TARGETED = "targeted"
-    # A capability that takes no target, called with one.
-    UNTARGETED = "untargeted"
-    # A handler that checks the caller's stale-write token.
-    STALE_WRITE = "stale_write"
-    # A change's retry key.
-    RETRY_KEY = "retry_key"
-    # A change a person must agree to, which could not be held.
-    HOLD = "hold"
-    # A held change, once a person declined it or it lapsed.
-    DECISION = "decision"
-
-
-@dataclass(frozen=True, slots=True)
-class Code:
-    """One code's facts: its status, the doors that answer it, why it refused, and whether it says "later"."""
-
-    status: int
-    doors: frozenset[Door]
-    # Why, as the end of the audit log's sentence for the refusal: "example was
-    # refused “Edit a record”: it has no grant for this".
-    said: str
-    # Only a refusal that says "later" carries ``retry_after``, and the API's
-    # ``Retry-After`` header repeats it.
-    waits: bool = False
-
-
-def _code(status: int, said: str, *doors: Door, waits: bool = False) -> Code:
-    return Code(status, frozenset(doors), said, waits)
-
-
-# Every code, once, with its facts. Each set below is derived from it.
-CODES = {
-    "unknown_capability": _code(404, "HQ has no command by that name", Door.NAME),
-    "forbidden": _code(403, "it has no grant for this", Door.ENDPOINT, Door.CAPABILITY),
-    # The operator's standing rule refuses this client. Like a missing grant,
-    # no change to the request gets it through.
-    "denied_by_policy": _code(403, "the operator's rule refuses this client", Door.CAPABILITY),
-    NOT_FOUND: _code(404, "the record it names is not there", Door.RESOURCE, Door.CAPABILITY),
-    "unknown_resource": _code(404, "HQ has no list by that name", Door.RESOURCE),
-    # The resource exists, and has no list or detail to read.
-    "unsupported_operation": _code(405, "that list has nothing of that kind to read", Door.RESOURCE),
-    # The call had to be held, and the record it names could not be read to
-    # show the person deciding: the target is not there.
-    "approval_subject_unreadable": _code(
-        404, "the record it names could not be read to show the person deciding", Door.HOLD
-    ),
-    # A held call that could not be made to wait; its kinds say why.
-    "refused_hold": _code(409, "it could not be held for a person to decide", Door.HOLD),
-    # A held call a person refused: asking again the same way gets the same answer.
-    "declined": _code(403, "a person declined it", Door.DECISION),
-    # A held call nobody decided in time, or whose subject moved before it ran.
-    "expired": _code(409, "nobody decided it in time", Door.DECISION),
-    "stale": _code(409, "what it acts on changed before it ran", Door.DECISION),
-    # A held call its asker took back before anybody decided it.
-    "withdrawn": _code(409, "its asker withdrew it", Door.DECISION),
-    "conflict": _code(409, "what it acts on changed since it was read", Door.CAPABILITY, Door.STALE_WRITE),
-    "idempotency_conflict": _code(409, "its retry key was sent before with a different request", Door.RETRY_KEY),
-    # The request is valid; the state it acts on refuses it until it changes.
-    "precondition": _code(409, "what it acts on does not allow it yet", Door.CAPABILITY),
-    # The domain refused the command as sent (a confirmation that does not match).
-    "rejected": _code(409, "HQ refused the command as sent", Door.CAPABILITY),
-    # The work ran to its end and failed; the message is the job's own note.
-    "work_failed": _code(409, "the work ran and failed", Door.CAPABILITY),
-    # Something HQ did not expect went wrong: the log holds it, the answer says nothing of it.
-    "operation_failed": _code(500, "something HQ did not expect went wrong", Door.ENDPOINT, Door.CAPABILITY),
-    # A service outside HQ that the call reaches did not answer, or answered
-    # nothing usable: the request is sound, and asking again may succeed.
-    "upstream_unavailable": _code(
-        503, "a service outside HQ that it reaches did not answer", Door.ENDPOINT, Door.CAPABILITY
-    ),
-    "invalid_input": _code(400, "what it sent is not valid", Door.RESOURCE, Door.CAPABILITY),
-    "target_required": _code(400, "it names no record to act on", Door.TARGETED),
-    "target_not_allowed": _code(400, "it names a record, and this acts on none", Door.UNTARGETED),
-    # The uploaded certificate or key cannot be used; the message says why.
-    "invalid_material": _code(400, "the certificate or key cannot be used", Door.CAPABILITY),
-    # Nothing is wrong with the request. This client is holding more decisions
-    # than a person has answered, so the honest status is the one that says
-    # "later", not the one that says "malformed".
-    "too_many_pending_approvals": _code(429, "it is holding more requests than a person has answered", Door.HOLD),
-    # The agent is calling faster than its rate, or has as many calls in
-    # flight as it, or every agent together, may have: later, never malformed.
-    "rate_limited": _code(429, "it is calling faster than its rate", Door.ADMISSION, waits=True),
-    "too_many_calls": _code(429, "it has as many calls in flight as it may", Door.ADMISSION, waits=True),
-    # The token is missing, malformed, expired or not HQ's.
-    "invalid_token": _code(401, "its access token is missing, malformed, expired or not HQ's", Door.ADMISSION),
-    # A good token that grants nothing HQ can use, or lacks a permission its
-    # person holds: granting it to the client and signing in again gets it
-    # through, and `details.scope` names it.
-    "insufficient_scope": _code(
-        403, "its token lacks a permission this needs", Door.ADMISSION, Door.ENDPOINT, Door.CAPABILITY
-    ),
-    # The operator's brakes: no change to the request gets it through.
-    "agents_paused": _code(403, "agents are paused", Door.ADMISSION),
-    "agent_blocked": _code(403, "the operator blocked this client", Door.ADMISSION),
-    # A tailnet device nobody approved for this agent, or one a person blocked:
-    # approving or allowing it on the Agents page gets it through.
-    "device_awaiting_approval": _code(403, "nobody has approved it on this device yet", Door.ADMISSION),
-    "device_blocked": _code(403, "it is blocked on this device", Door.ADMISSION),
-    # The tailnet could not place the call: no device sent it, so nothing can be
-    # approved, or tailscaled did not answer, so asking again may.
-    "device_unknown": _code(403, "no tailnet device sent the call", Door.ADMISSION),
-    "tailnet_unavailable": _code(503, "HQ could not ask tailscaled which device sent the call", Door.ADMISSION),
-    # HQ stopped waiting for a call that may still finish.
-    "call_timed_out": _code(504, "HQ stopped waiting for the call", Door.WAIT),
-    "not_configured": _code(503, "HQ is not set up for this", Door.ENDPOINT),
-    "method_not_allowed": _code(405, "that address does not take this method", Door.ENDPOINT),
-    "unsupported_media_type": _code(415, "its body is not a type HQ takes", Door.BODY),
-    "request_too_large": _code(413, "its body is too large", Door.BODY),
-    "invalid_json": _code(400, "its body is not valid JSON", Door.BODY),
-    "idempotency_key_required": _code(400, "it sent no retry key", Door.RETRY_KEY),
-    "invalid_idempotency_key": _code(400, "its retry key is not valid", Door.RETRY_KEY),
-}
-
-
-def why(code: str, table: Mapping[str, Code] = CODES) -> str:
-    """Why ``code`` refused, as the end of a sentence; nothing for a code the table does not hold."""
-
-    facts = table.get(code)
-    return facts.said if facts is not None else ""
-
-
-def statuses(table: Mapping[str, Code] = CODES) -> dict[str, int]:
-    """Each code's one status, wherever it is answered."""
-
-    return {code: facts.status for code, facts in table.items()}
-
-
-def answered_by(*doors: Door, table: Mapping[str, Code] = CODES) -> frozenset[str]:
-    """The codes any of ``doors`` can answer."""
-
-    return frozenset(code for code, facts in table.items() if facts.doors & set(doors))
-
-
-def waiting(table: Mapping[str, Code] = CODES) -> frozenset[str]:
-    """The codes that say "later"."""
-
-    return frozenset(code for code, facts in table.items() if facts.waits)
-
-
-REFUSAL_STATUS = statuses()
-LATER_CODES = waiting()
 # The codes a missing grant answers: the caller's own, or its token's.
-WANTS_A_GRANT = frozenset({"forbidden", "insufficient_scope"})
+WANTS_A_GRANT = frozenset({Code.FORBIDDEN, Code.INSUFFICIENT_SCOPE})
 
 # A change's doors: a read takes no retry key and is never held.
 _WRITE_DOORS = (Door.RETRY_KEY, Door.HOLD, Door.DECISION)
@@ -309,41 +142,26 @@ class RefusalEnvelope(TypedDict):
 class Refusal:
     """One refusal, as every adapter answers it: HQ's code and words, and what goes with them."""
 
-    code: str
+    code: Code
     message: str
     details: RefusalDetails | None = None
     # Seconds until asking again can succeed, for a refusal that says "later".
     retry_after: int | None = None
 
     def __post_init__(self) -> None:
-        # A code the table does not hold is a defect in whoever answered it, and
-        # a client can key on no code it was never told of, so it is answered as
-        # the failure it is. The code stays in the log.
-        if self.code not in REFUSAL_STATUS:
-            logger.error("Refusal code %s has no status.", _loggable(self.code), extra={"event": "refusal.unlisted"})
-            for name, value in (
-                ("code", "operation_failed"),
-                ("message", "This request could not be executed."),
-                ("details", None),
-                ("retry_after", None),
-            ):
-                object.__setattr__(self, name, value)
         # The API document declares the wait only where a code says "later".
-        if self.retry_after is not None and self.code not in LATER_CODES:
-            logger.error(
-                "Refusal code %s carried a wait.", _loggable(self.code), extra={"event": "refusal.unlisted_wait"}
-            )
+        if not self.code.waits:
             object.__setattr__(self, "retry_after", None)
 
     @property
     def status(self) -> int:
-        return REFUSAL_STATUS[self.code]
+        return self.code.status
 
     @property
     def scope(self) -> str:
         """The permission an ``insufficient_scope`` refusal names, which a door's challenge repeats; "" for any other."""
 
-        if self.code != "insufficient_scope" or not isinstance(self.details, Mapping):
+        if self.code != Code.INSUFFICIENT_SCOPE or not isinstance(self.details, Mapping):
             return ""
         return str(self.details.get("scope", ""))
 
@@ -358,7 +176,7 @@ class Refusal:
         return {"ok": False, "error": error}
 
 
-def refuse(code: str, message: str, details: RefusalDetails | None = None) -> dict[str, Any]:
+def refuse(code: Code, message: str, details: RefusalDetails | None = None) -> dict[str, Any]:
     """A refusal's envelope, built where the refusal is decided."""
 
     return Refusal(code, message, details).answer()
@@ -387,12 +205,20 @@ def refusal_of(outcome: dict[str, Any] | Exception, *, name: str = "", principal
 
     if isinstance(outcome, dict):
         error = outcome.get("error") or {}
-        return Refusal(
-            error.get("code", "operation_failed"),
-            error.get("message", f"{name or 'This request'} could not be executed."),
-            error.get("details"),
-            error.get("retry_after"),
-        )
+        code = error.get("code", Code.OPERATION_FAILED)
+        if code in Code:
+            return Refusal(
+                Code(code),
+                error.get("message", f"{name or 'This request'} could not be executed."),
+                error.get("details"),
+                error.get("retry_after"),
+            )
+        # A plugin's handler answers its code as text. One the table does not
+        # hold is a defect in that plugin, and a client can key on no code it
+        # was never told of, so it is answered as the failure it is. The code
+        # stays in the log.
+        logger.error("Refusal code %s has no status.", _loggable(code), extra={"event": "refusal.unlisted"})
+        return Refusal(Code.OPERATION_FAILED, "This request could not be executed.")
     refusal = _mapped(outcome, name)
     if principal is not None and isinstance(outcome, (AuthorizationError, RefusedHold)):
         record_denial(
@@ -408,16 +234,16 @@ def refusal_of(outcome: dict[str, Any] | Exception, *, name: str = "", principal
 def _mapped(exc: Exception, name: str) -> Refusal:
     if isinstance(exc, PydanticValidationError):
         refused = pydantic_refusal(name, exc.errors())
-        return Refusal("invalid_input", refused.message, refused.details)
+        return Refusal(Code.INVALID_INPUT, refused.message, refused.details)
     if isinstance(exc, DjangoValidationError):
         refused = django_refusal(name, exc)
         # Only fields naming records that are not there: the call names a missing record.
         codes = [code for named in refused.details.values() for code in named]
-        missing = bool(codes) and all(code == NOT_FOUND for code in codes)
-        return Refusal(NOT_FOUND if missing else "invalid_input", refused.message, refused.details)
+        missing = bool(codes) and all(code == Code.NOT_FOUND for code in codes)
+        return Refusal(Code.NOT_FOUND if missing else Code.INVALID_INPUT, refused.message, refused.details)
     if isinstance(exc, InvalidResourceInput):
         # The pydantic error list describing the request sent, beside what the kind takes.
-        return Refusal("invalid_input", exc.reason, exc.details)
+        return Refusal(Code.INVALID_INPUT, exc.reason, exc.details)
     if isinstance(exc, HostRefusal):
         # Host-written text naming no request value (record_errors.py), and
         # what gets past it.
@@ -429,7 +255,7 @@ def _mapped(exc: Exception, name: str) -> Refusal:
         return Refusal(exc.code, exc.reason)
     if isinstance(exc, (QueryRefusal, ResourceError)):
         # A narrowing or a resource HQ cannot read, said in HQ's own sentence.
-        return Refusal("invalid_input", exc.reason)
+        return Refusal(Code.INVALID_INPUT, exc.reason)
     subject = name or "This request"
     if isinstance(exc, UpstreamUnavailable):
         # Every reader of a service outside HQ raises this for one that did
@@ -440,7 +266,7 @@ def _mapped(exc: Exception, name: str) -> Refusal:
             _loggable(exc),
             extra={"event": "capability.upstream_unavailable"},
         )
-        return Refusal("upstream_unavailable", f"{subject} could not reach a service outside HQ. Try again later.")
+        return Refusal(Code.UPSTREAM_UNAVAILABLE, f"{subject} could not reach a service outside HQ. Try again later.")
     # Neither handler nor dependency exception text crosses an adapter. It can
     # contain argument names, provider responses, paths, or values from the
     # request, so it stays in the log. The name is registry-owned and safe.
@@ -449,7 +275,7 @@ def _mapped(exc: Exception, name: str) -> Refusal:
         logger.warning(
             "%s was rejected: %s", _loggable(subject), _loggable(exc), extra={"event": "capability.rejected"}
         )
-        return Refusal("rejected", f"{subject} could not be executed.")
+        return Refusal(Code.REJECTED, f"{subject} could not be executed.")
     logger.error(
         "%s could not be executed: %s",
         _loggable(subject),
@@ -457,4 +283,4 @@ def _mapped(exc: Exception, name: str) -> Refusal:
         exc_info=exc,
         extra={"event": "capability.failed"},
     )
-    return Refusal("operation_failed", f"{subject} could not be executed.")
+    return Refusal(Code.OPERATION_FAILED, f"{subject} could not be executed.")

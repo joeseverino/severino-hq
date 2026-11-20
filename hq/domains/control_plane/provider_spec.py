@@ -6,6 +6,7 @@ apart from both so a provider can import its vocabulary without importing the
 registry that collects it.
 """
 
+import logging
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -36,6 +37,8 @@ from .glance_shapes import GlanceObservation
 from .names import in_zone
 from .observations.contract import ReadingPart, ServiceFacet
 from .permissions import Permission
+
+logger = logging.getLogger("severino.providers")
 
 
 @cache
@@ -385,7 +388,7 @@ class ProviderSpec:
     # Fields the provider structurally cannot report back, so a sweep must not
     # be read as disagreeing about them.
     #
-    # ``from_record`` serves two callers with opposite readings of a blank. To
+    # ``_from_record`` serves two callers with opposite readings of a blank. To
     # adoption it means "say nothing and keep what is there"; to the drift
     # comparison it means "the live record says empty". An NPM proxy host is
     # the case: NPM holds a numeric certificate id, not an HQ resource key.
@@ -487,8 +490,9 @@ class ProviderSpec:
     # reproduce it. This is what makes adoption safe: the declaration starts out
     # equal to the world, so the first reconciliation after adopting changes
     # nothing. Built from the same field set the reconciler sends, so a setting
-    # HQ can express is a setting adoption captures.
-    from_record: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    # HQ can express is a setting adoption captures. Read only through
+    # ``record_spec``, which says when it cannot read a record.
+    _from_record: Callable[[dict[str, Any]], dict[str, Any]] | None = None
     # What this resource actually does, as (label, desired, observed) rows.
     # Desired and observed sit side by side because the interesting case is when they differ, and either
     # may be blank: a certificate has no authored expiry, only a found one.
@@ -611,6 +615,36 @@ class ProviderSpec:
         """Why a found record of this kind is never taken on, as a refusal says it."""
 
         return self.adoption_gap
+
+    @property
+    def sweeps(self) -> bool:
+        """Whether a swept record of this kind reads back as a spec."""
+
+        return self._from_record is not None
+
+    def record_spec(self, record: Mapping[str, Any]) -> dict[str, Any] | None:
+        """The spec a swept record reproduces, or None when this kind has none
+        or cannot read the record.
+
+        The one place a swept record becomes a spec. A record the provider
+        cannot read is the controller's reading and the provider's model
+        disagreeing, so it is logged; leaving it out of a page hides it from
+        everything that reads the inventory.
+        """
+
+        if self._from_record is None:
+            return None
+        try:
+            return self._from_record(dict(record))
+        except (KeyError, TypeError, ValueError) as error:
+            logger.warning(
+                "A %s record from %s is one its provider cannot read: %r",
+                self.kind,
+                record.get("connection_ref") or "a connection",
+                error,
+                extra={"event": "providers.record.unreadable", "kind": self.kind},
+            )
+            return None
 
     def schema(self) -> dict[str, Any]:
         return json_schema(adapter(self.spec_type))

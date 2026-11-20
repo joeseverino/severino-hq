@@ -7,7 +7,7 @@ name a project publishes at, a document describes, an audit entry changed:
 every side already carries it, and storing the tie again would make two answers.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -214,15 +214,10 @@ RUNS_SECTION = "runs"
 def recent_work(
     runs: Sequence[WorkRun], *, by_machine: bool, more_url: str, principal: Principal | None = None
 ) -> ServiceSection | None:
-    """The latest ``runs`` as a section, each state in its word and tone; None
-    when there are none. A machine's page names what each run was
-    (``by_machine``), a playbook's page leads with when each was asked and
-    the machines each acted on, and ``more_url`` is every run of the two on
-    Jobs. Each row leads with the link to the run's own page.
+    """The latest ``runs`` as a section, each state in its word and tone; None when there are none.
 
-    Who asked for each run and its evidence are Jobs' to show, so only a
-    ``principal`` who may open Jobs reads them here, and opens a run's page;
-    without one, nobody does.
+    Who asked and the evidence are Jobs' to show, so only a ``principal`` who
+    may open Jobs reads them here.
     """
 
     shows = principal is not None and principal_opens(principal, urls.resolve(reverse("jobs:list")).func)
@@ -745,13 +740,14 @@ def missing_facets(service: Any) -> list[Any]:
     ]
 
 
-def service_badges(service: Any, *, own: bool) -> tuple[Any, ...]:
-    """Beside the hostname: who can reach it, and whether HQ may change it."""
+def service_badges(reach: Mapping[str, Any], *, own: bool) -> tuple[Any, ...]:
+    """Beside the hostname: who can reach it (its record's ``exposure.reach``),
+    and whether HQ may change it."""
 
-    reach = service.exposure.reach
     found = []
-    if reach.label:
-        found.append(PageBadge(reach.label, Tone.GOOD if reach.tailnet_only else Tone.NEUTRAL, reach.detail))
+    if reach["label"]:
+        tone = Tone.GOOD if reach["tailnet_only"] else Tone.NEUTRAL
+        found.append(PageBadge(reach["label"], tone, reach["detail"]))
     if own:
         found.append(PageBadge("Read-only", title="HQ's own name: changed by deploying HQ"))
     return tuple(found)

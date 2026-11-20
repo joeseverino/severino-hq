@@ -2,7 +2,6 @@
 the route whose view runs it, posted where that view draws no page; and an
 offer that runs no command only opens a page."""
 
-from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
@@ -12,7 +11,7 @@ from hq.platform.application.approvals import APPROVE, DECISIONS
 from hq.platform.application.contracts import Effect
 from hq.platform.application.pages import PageAction
 from hq.platform.application.resource_capabilities import REMOVAL_CAPABILITY, UPDATE_CAPABILITY
-from hq.platform.core.test_runner import no_default_role
+from hq.platform.core.testing import person
 
 RECONCILE = "infrastructure.resource.reconcile"
 KEY = "example-key"
@@ -20,8 +19,7 @@ KEY = "example-key"
 
 class CommandOfferTests(TestCase):
     def setUp(self):
-        with no_default_role():
-            self.operator = get_user_model().objects.create_user("operator")
+        self.operator = person(username="operator")
         roles.assign(self.operator, roles.Role.OPERATOR)
 
     def control(self, name, target):

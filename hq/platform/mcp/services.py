@@ -22,7 +22,7 @@ from hq.platform.application.input_errors import unknown_field_errors
 from hq.platform.application.integration_specs import FIELD_MASK, PAGE_FIELD
 from hq.platform.application.projection import MAX_PAGE_SIZE
 from hq.platform.application.read_models import DocumentationStatus, RecentActivity, SystemHealth
-from hq.platform.application.record_fields import RecordId
+from hq.platform.application.record_fields import MOST_INTEGER, RecordId
 from hq.platform.application.registry import RegistryAudit, audit_registry as audit_application_registry
 from hq.platform.application.reports import (
     ExportFormat,
@@ -52,9 +52,11 @@ from hq.platform.mcp.shapes import Budget, tool
 # The kind whose first page this tool answers smaller than the kind's own default.
 QUEUE = "action_items"
 
-# A page's size, beside the filters; the kind's own query holds it to its bounds.
+# A page's size, beside the filters; the kind's own query holds it to its
+# bounds, which differ by kind, so here it is held only to what an integer
+# column holds.
 type PageSize = Annotated[
-    int | None,
+    Annotated[int, Field(le=MOST_INTEGER)] | None,
     Field(
         description=(
             f"How many records a page holds: at most {MAX_PAGE_SIZE}, or the lower cap `describe_resources` "
@@ -87,7 +89,7 @@ describe_capabilities.__doc__ = f"{describe_capabilities.__doc__}\n{effect_gloss
     "Run a capability",
     requires=RUNS_A_CAPABILITY,
     budget=Budget(
-        420,
+        480,
         frozendict(
             {
                 "name": "project.create",
@@ -135,8 +137,8 @@ def describe_resources(name: str | None = None) -> ResourceCatalog:
     """Every resource HQ can read, the operations each supports, and whether you may use each.
 
     Each list names the `filters` it takes. Pass a kind as `name` to get its
-    `query_schema`, with each filter's type and values, and its `paging`:
-    the largest `limit`, and `cursor` where the list pages.
+    `fields`, its `query_schema` (each filter's type and values) and its
+    `paging`: the largest `limit`, and `cursor` where the list pages.
     """
 
     return describe_application_resources(principal=current_principal(), name=name or "")
@@ -222,7 +224,7 @@ def list_resource(
 
 # One record of its kind, with the fields describe_resources names for it.
 @tool(
-    "Read one record", requires=READS_A_RECORD, budget=Budget(700, frozendict({"name": "projects", "identifier": "hq"}))
+    "Read one record", requires=READS_A_RECORD, budget=Budget(720, frozendict({"name": "projects", "identifier": "hq"}))
 )
 def get_resource(
     name: str, identifier: str | RecordId, fields: Annotated[list[str] | None, Field(description=FIELD_MASK)] = None

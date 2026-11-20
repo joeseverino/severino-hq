@@ -1,20 +1,9 @@
 """Form views whose write is one capability, run through ``web_writes.run_posted``.
 
 The write side of what ``TableListMixin`` is for the read side: a record's
-create, update and delete share the same steps (its capability run under the
-key its form posted, reload, say its answer's ``message``, redirect), so they
-are declared once.
-A view names its capabilities (``CapabilityFormMixin``,
-``CapabilityDeleteMixin``), or for a plain ``Records`` domain only its form,
-and the runner authorizes, audits and runs the write once per drawing of the
-form.
-
-A plain form that posts a command and shows its page again names it too
-(``CapabilityCommandMixin``). None of them has a way to write but the runner.
-
-A resend is answered from the first post's answer before the form is
-validated again (``web_writes.posted_answer``), so that answer holds what a
-replay stands on: the record as the capability answered it.
+create, update and delete share their steps, so they are declared once, and
+none has a way to write but the runner. A resend is answered from the first
+post's answer (``web_writes.posted_answer``).
 """
 
 from collections.abc import Callable, Mapping
@@ -241,14 +230,12 @@ class _Records(_RecordWrite):
 
 
 class CommandForm:
-    """A record's form, derived from the command its create sends
-    (``command_form_class``), so each field says what that command says of
-    it at every door, and opened on a record as its update keeps it.
+    """A record's form, derived from the command its create sends, so each
+    field says what that command says of it at every door.
 
     For ``CreateView`` and ``UpdateView`` beside ``CapabilityFormMixin``.
-    ``field_order`` orders the fields where the command's own order is not
-    the one a person fills them in. A view that names a form of its own is
-    refused as it is declared.
+    ``field_order`` orders the fields where the command's order is not a
+    person's.
     """
 
     template_name = "form_page.html"
@@ -347,14 +334,12 @@ def form_close(stored: Any, adds: str, listed: str) -> dict[str, str]:
 
 
 class CapabilityCommandMixin(PostedOnce):
-    """A plain form whose submit runs a capability (``submits``), from a
-    page that then shows itself again (``success_url_name``).
+    """A plain form whose submit runs a capability (``submits``), from a page
+    that then shows itself again (``success_url_name``).
 
-    For ``FormView``. The form's values are sent as the command's payload
-    (``payload``, ``form_payload`` unless a view shapes them), on the record
-    ``target`` names, and a refusal's field problems land beside their
-    fields. A form whose controls run several commands names the one a post
-    runs (``capability``) and declares them all as ``runs``.
+    For ``FormView``. The form's values are the command's ``payload`` on the
+    record ``target`` names. A form running several commands names the one a
+    post runs (``capability``) and declares them all as ``runs``.
     """
 
     submits = ""

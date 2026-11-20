@@ -1,7 +1,7 @@
 """Each lint:drift-* gate's failure names the command that rewrites its own files,
 and that command, run as named, brings the gate back to passing: one gate in
 seconds, where `mise run fix` rewrites every derived file. The gate's own fix
-mode, which fast runs first and fix:derived runs for every gate tagged derived,
+mode, which fix:derived runs for every gate tagged derived,
 writes the same files, and exactly the files its declaration names."""
 
 import os
@@ -47,10 +47,9 @@ def records_itself(run: str) -> bool:
     return bool(RUNS_TASK.search(ECHOED.sub("", run)))
 
 
-# No walk of this checkout: what it holds comes from the task definitions
-# (tests.mise_tasks, which fast selects on a change to a task or a file a task
-# runs), and the rewrites run in a worktree of their own.
-@tag("source")
+# Each rewrite runs every derived file's writer over a worktree of the whole
+# checkout, so whatever selects it, it is CI's lint:source, never fast's.
+@tag("source", "tree")
 class DriftGateTests(SimpleTestCase):
     def test_every_drift_gate_is_a_declaration_or_records_itself(self):
         gates = drift_gates()
@@ -88,8 +87,6 @@ class DriftGateTests(SimpleTestCase):
                 'description = "An example derived file"',
                 "hide = true",
                 'tags = ["derived"]',
-                f'sources = ["{declared}"]',
-                "outputs = []",
                 """usage = 'flag "--fix" help="Rewrite the file"'""",
                 f'vars = {{ writes = "{declared}" }}',
                 f"""run = 'if [ "${{usage_fix:-}}" = true ]; then echo example >{declared}; else test -f {declared}; fi'""",

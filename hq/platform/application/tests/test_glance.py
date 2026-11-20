@@ -5,7 +5,6 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -22,6 +21,7 @@ from hq.platform.application.markup_testing import hrefs, select, text, with_cla
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
 from hq_sdk.testing import plain
 
@@ -118,7 +118,7 @@ class DashboardGlanceTests(TestCase):
         self.assertTrue(panel["due"])
 
     def test_a_machines_head_names_it_beside_another_machines(self):
-        other = ManagedResource.objects.create(key="db-server", kind="machine", spec={"name": "db"})
+        other = declare("db-server", "machine", {"name": "db"})
         DashboardMachine.objects.create(machine=other, position=1)
         for machine in (self.machine, other):
             readings.record(readings.machine_telemetry(machine.key), reported_machine(machine.key, host=HOST))
@@ -146,11 +146,8 @@ class DashboardGlanceTests(TestCase):
             self.assertIn(metric, plain(opened.text))
 
     def setUp(self):
-        self.machine = ManagedResource.objects.create(
-            key="app-server",
-            kind="machine",
-            spec={"name": "app", "addresses": ["100.64.0.10"]},
-            status={"kept": True},
+        self.machine = declare(
+            "app-server", "machine", {"name": "app", "addresses": ["100.64.0.10"]}, status={"kept": True}
         )
         ProviderConnection.objects.create(
             connection_ref="app-ssh",
@@ -386,11 +383,7 @@ class DashboardGlanceTests(TestCase):
         self.assertEqual(plan["targets"]["infrastructure"], [])
 
     def test_machine_selection_is_a_persisted_ui_setting(self):
-        other = ManagedResource.objects.create(
-            key="other-machine",
-            kind="machine",
-            spec={"name": "other-machine"},
-        )
+        other = declare("other-machine", "machine", {"name": "other-machine"})
 
         select_dashboard_machine(DashboardMachineCommand(selected=True), principal=AN_OPERATOR, current_key=other.key)
 
@@ -400,9 +393,8 @@ class DashboardGlanceTests(TestCase):
         )
 
     def test_the_machine_form_chooses_it_audited_under_the_operator(self):
-        user = get_user_model().objects.create_user(username="operator", password="test-only-password")
-        self.client.force_login(user)
-        other = ManagedResource.objects.create(key="other-machine", kind="machine", spec={"name": "other-machine"})
+        operator(self.client)
+        other = declare("other-machine", "machine", {"name": "other-machine"})
 
         response = self.client.post(
             reverse("control_plane:edit", kwargs={"key": other.key}),
@@ -415,7 +407,7 @@ class DashboardGlanceTests(TestCase):
         self.assertEqual((shown.metadata["actor"], shown.metadata["operation"]), ("operator", DASHBOARD_MACHINE))
 
     def test_only_a_person_in_the_browser_chooses_the_dashboard_machines(self):
-        other = ManagedResource.objects.create(key="other-machine", kind="machine", spec={"name": "other-machine"})
+        other = declare("other-machine", "machine", {"name": "other-machine"})
         granted = frozenset(Capability)
         for principal in (
             Principal("example-agent", "mcp", granted, granted=granted),
@@ -432,8 +424,8 @@ class DashboardGlanceTests(TestCase):
         self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.DENIED).count(), 3)
 
     def test_a_machine_switched_off_is_a_precondition_and_a_key_naming_no_machine_is_not_found(self):
-        ManagedResource.objects.create(key="off-machine", kind="machine", spec={"name": "off"}, enabled=False)
-        ManagedResource.objects.create(key="example-zone", kind="cloudflare.zone", spec={"name": "example.com"})
+        declare("off-machine", "machine", {"name": "off"}, enabled=False)
+        declare("example-zone", "cloudflare.zone", {"name": "example.com"})
         for key, code in (
             ("off-machine", "precondition"),
             ("nothing-by-this-name", "not_found"),
@@ -549,7 +541,7 @@ class GlanceRenderingTests(TestCase):
     """The template renders what the panel data says, whatever the panel is."""
 
     def setUp(self):
-        self.machine = ManagedResource.objects.create(key="app-server", kind="machine", spec={"name": "app"})
+        self.machine = declare("app-server", "machine", {"name": "app"})
         DashboardMachine.objects.create(machine=self.machine)
         DashboardConfiguration.objects.create(
             weather_point="0.0000,0.0000",
@@ -641,7 +633,7 @@ class GlanceRenderingTests(TestCase):
             self.assertEqual(dashboard_panels(), ())
 
     def test_the_settings_page_holds_the_form_and_its_placeholder_is_not_a_coordinate(self):
-        self.client.force_login(get_user_model().objects.create_user("glance-settings"))
+        operator(self.client)
         response = self.client.get(reverse("dashboard_glance_settings"))
 
         (point,) = select(response, "name", "weather_point")
@@ -683,8 +675,8 @@ class GlanceEndpointTests(TestCase):
     """Reading the glance writes nothing; a POST asks for a refresh."""
 
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
-        self.machine = ManagedResource.objects.create(key="app-server", kind="machine", spec={"name": "app"})
+        operator(self.client, "op")
+        self.machine = declare("app-server", "machine", {"name": "app"})
         ProviderConnection.objects.create(
             connection_ref="app-ssh",
             controller_id="app-server",

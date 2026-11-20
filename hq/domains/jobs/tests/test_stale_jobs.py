@@ -10,8 +10,9 @@ from django.utils import timezone
 
 from hq.platform.application import request_context
 from hq.platform.application.markup_testing import text
-from hq.platform.core.attribution import operation_context
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import operator
 
 from ..models import HEARTBEAT_GRACE, Job
 from ..runner import reap, run
@@ -28,7 +29,7 @@ def stopped(kind: str = "example.gone") -> Job:
 
 class StaleJobPageTests(TestCase):
     def setUp(self):
-        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        operator(self.client)
         self.job = stopped()
 
     def assertUnchanged(self, before: int) -> None:
@@ -66,12 +67,12 @@ class StaleJobSlotTests(TestCase):
         self.assertEqual(job.state, Job.State.LOST)
 
     def test_a_job_found_lost_in_someone_else_s_request_ends_as_its_requester_s(self):
-        users = get_user_model()
-        asker = users.objects.create_user("asker", "asker@example.test", "pw")
+        get_user_model()
+        asker = operator(username="asker")
         job = stopped("example.work")
         Job.objects.filter(pk=job.pk).update(requested_by=asker, actor="asker")
         request = RequestFactory().get("/")
-        request.user = users.objects.create_user("passer", "passer@example.test", "pw")
+        request.user = operator(username="passer")
 
         with request_context.bind(request), operation_context(interface="web", actor="passer", operation="example"):
             self.assertEqual(reap("example.work"), 1)

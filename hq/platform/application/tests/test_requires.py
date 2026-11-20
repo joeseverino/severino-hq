@@ -2,9 +2,9 @@ from dataclasses import dataclass
 
 from django.test import SimpleTestCase
 
-from ..security import AuthorizationError, Capability, Principal, Requires
+from hq.platform.core.testing import READER
 
-READER = Principal("reader", "test", frozenset({Capability.READ}))
+from ..security import AuthorizationError, Capability, Requires
 
 
 @dataclass(frozen=True, slots=True)

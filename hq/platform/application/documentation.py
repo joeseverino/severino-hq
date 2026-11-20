@@ -21,20 +21,20 @@ from hq.domains.projects.models import Project
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
-from .answer_fields import CallMessage
+from .answer_fields import CallMessage, LinkedAssets, LinkedProjects, PageUrl, RecordedExpenses, UpdatedAt
 from .command_fields import Day, Describe, Names, NonEmpty
 from .entity_links import EntityLink, entity_link
 from .labels import plural
 from .projection import listing
 from .record_errors import PolicyError, RecordNotFound
-from .record_fields import PublishedAt, RecordId, one_of
+from .record_fields import Notes, PublishedAt, RecordId, one_of
 from .record_saves import Held, Link, linked_saver, row
-from .references import Mention, Mentions
+from .references import Kind, Mention, Mentions
+from .refusal_codes import Code
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Capability, Principal
-from .sensitivity import safe_records
+from .sensitivity import readable_records, reads_whole
 from .ui import counted
-lazy from .resource_records import DocumentationRow
 
 MAX_MANIFEST_ITEMS = 2000
 SYNC = "documentation.sync"
@@ -44,10 +44,10 @@ SYNC = "documentation.sync"
 PROJECT_NOTE_PREFIX = "project-"
 
 
-def document_link(record: DocumentationRecord, *, label: str = "") -> EntityLink:
+def document_link(doc_id: str, title: str) -> EntityLink:
     """A document by its title, its id on hover."""
 
-    return replace(entity_link("document", record.doc_id, label=label or record.title), title=record.doc_id)
+    return replace(entity_link("document", doc_id, label=title), title=doc_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,7 +99,11 @@ def related_documents(
     groups = [
         Mentions(plural(str(label)), found)
         for value, label in DocumentationRecord.DocType.choices
-        if (found := tuple(Mention(document_link(record)) for record in rest if record.doc_type == value))
+        if (
+            found := tuple(
+                Mention(document_link(record.doc_id, record.title)) for record in rest if record.doc_type == value
+            )
+        )
     ]
     return RelatedDocuments(
         groups=tuple(groups),
@@ -108,7 +112,7 @@ def related_documents(
             for project in sorted(projects.values(), key=lambda project: project.name.lower())
             if project.slug not in said
         ),
-        sources=tuple(document_link(record, label=record.obsidian_path) for record in own),
+        sources=tuple(document_link(record.doc_id, record.obsidian_path) for record in own),
     )
 
 
@@ -290,14 +294,54 @@ class DocumentationCommand:
     ] = ()
 
 
+class DocumentationRow(TypedDict):
+    """One documentation pointer; a path or note it may not show is blank."""
+
+    doc_id: DocId
+    title: DocumentationTitle
+    doc_type: DocType
+    system: Annotated[str, Describe("The system or service it is about; empty for none.")]
+    environment: DocEnvironment
+    status: DocStatus
+    sensitivity: DocSensitivity
+    obsidian_path: ObsidianPath
+    github_path: GithubPath
+    external_url: ExternalUrl
+    last_reviewed: LastReviewed
+    published_at: PublishedAt
+    notes: Notes
+    updated_at: UpdatedAt
+
+
+class DocumentationLinks(TypedDict):
+    """The records a documentation pointer is linked to."""
+
+    projects: LinkedProjects
+    assets: LinkedAssets
+    expense_ids: RecordedExpenses
+
+
+class DocumentationItem(DocumentationRow):
+    """One documentation pointer with the records it is linked to."""
+
+    url: PageUrl
+    relationships: DocumentationLinks
+
+
 # What a doc too sensitive to share leaves blank: where it lives and its notes.
 _WITHHELD = ("obsidian_path", "github_path", "external_url", "notes")
 
 
-def serialize_documentation(record: DocumentationRecord, *, relationships: bool = True) -> dict[str, Any]:
-    withheld = {} if record.is_safe_for_ai_export else dict.fromkeys(_WITHHELD, "")
+def serialize_documentation(
+    record: DocumentationRecord, *, relationships: bool = True, principal: Principal | None = None
+) -> dict[str, Any]:
+    """``record`` as ``principal`` may read it; None is an AI-facing surface's reader."""
+
+    shown = record.is_safe_for_ai_export or reads_whole(principal)
+    withheld = {} if shown else dict.fromkeys(_WITHHELD, "")
     fields = row(record, DocumentationRow, system=record.system_service, **withheld)
     if relationships:
+        fields["url"] = entity_link(Kind.DOCUMENT, record.doc_id).url
         fields["relationships"] = {
             "projects": list(record.related_projects.order_by("slug").values_list("slug", flat=True)),
             "assets": list(record.related_assets.order_by("slug").values_list("slug", flat=True)),
@@ -306,13 +350,14 @@ def serialize_documentation(record: DocumentationRecord, *, relationships: bool 
     return fields
 
 
-def list_documentation(*, status: str | None = None, query: str | None = None, limit: int = 50) -> dict[str, Any]:
-    """The documentation records any reader may see, by the domain's own
-    sensitivity rule: a restricted record is never listed."""
+def list_documentation(
+    *, status: str | None = None, query: str | None = None, limit: int = 50, principal: Principal | None = None
+) -> dict[str, Any]:
+    """The documentation records ``principal`` may read (``sensitivity``)."""
 
     return listing(
-        safe_records(),
-        partial(serialize_documentation, relationships=False),
+        readable_records(principal),
+        partial(serialize_documentation, relationships=False, principal=principal),
         search=("doc_id", "title", "system_service"),
         status=status,
         query=query,
@@ -321,16 +366,16 @@ def list_documentation(*, status: str | None = None, query: str | None = None, l
     )
 
 
-def get_documentation(doc_id: str) -> dict[str, Any]:
-    """One documentation record any reader may see, by its doc ID, with the
-    records it is linked to; a restricted one is answered as none, as the list
+def get_documentation(doc_id: str, *, principal: Principal | None = None) -> dict[str, Any]:
+    """One documentation record ``principal`` may read, by its doc ID, with the
+    records it is linked to; one it may not is answered as none, as the list
     leaves it out."""
 
     try:
-        record = safe_records().get(doc_id=doc_id)
+        record = readable_records(principal).get(doc_id=doc_id)
     except DocumentationRecord.DoesNotExist as exc:
         raise RecordNotFound("No documentation record has that doc ID.") from exc
-    return serialize_documentation(record)
+    return serialize_documentation(record, principal=principal)
 
 
 save_documentation = linked_saver(
@@ -385,7 +430,7 @@ def sync_documentation(
         raise PolicyError("Every manifest record must be a JSON object.")
     problems = validate_manifest_data(manifest)
     if problems:
-        return refuse("invalid_input", f"{counted(len(problems), 'record')} refused. Nothing was synced.", problems)
+        return refuse(Code.INVALID_INPUT, f"{counted(len(problems), 'record')} refused. Nothing was synced.", problems)
     if prune_orphans and not confirm_prune:
         raise PolicyError("confirm_prune must be true when prune_orphans is true")
 

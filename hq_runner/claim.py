@@ -1,14 +1,9 @@
 """A claim, read from the bridge's answer, and what it binds the worker to: a
-run of one procedure, or a scan of the source the procedures come from.
+run of one procedure, or a scan of their source.
 
-What runs is decided here and only here: the procedure the claim names, at the
-revision it was reviewed at, as this worker resolves it (``procedures``), on
-the machines its runner connections reach (``connections``). The project comes
-from the worker's own configuration, the playbook's path inside it from the
-procedure's record, and the hosts and extra-vars from the run's input as HQ
-validated and approved it, and the login each machine is reached through from
-the privilege its procedure's record names; nothing in a claim names a
-module, a callback, a connection setting or an Ansible option.
+What runs is decided here alone, from the worker's own configuration and the
+procedure's record; nothing in a claim names a module, a callback, a connection
+setting or an Ansible option.
 """
 
 import re

@@ -16,17 +16,16 @@ from django.test import TestCase, override_settings
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.core.models import AgentAccess
+from hq.platform.core.testing import AGENT
 
 from ..approvals import ApprovalError, ApproveCommand, approve
 from ..capabilities import execute_capability
 from ..controller import claim_next_operation
-from ..security import Capability, Principal
 from .test_approvals import GATED_KIND, POLICY_KEY, an_operator, declare_policy, reconcile_payload
 
 HELPER = "hq.platform.application.agent_access.paused_interfaces"
 PAUSED = frozenset({"mcp", "api"})
 RUNNING = frozenset()
-AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 
 
 def _mcp_allowed() -> bool:
@@ -152,14 +151,14 @@ class OneAdmissionTests(TestCase):
 
     def test_a_new_brake_reaches_the_machine_api_with_its_own_code(self):
         from ..agent_access import AgentRefusal
+        from ..refusal_codes import Code
 
-        blocked = AgentRefusal("example_blocked", "This agent is blocked.")
+        blocked = AgentRefusal(Code.AGENT_BLOCKED, "This agent is blocked.")
         with (
             _serving(),
-            patch.dict("hq.platform.application.refusal_status.REFUSAL_STATUS", example_blocked=403),
             patch("hq.platform.application.agent_access.refusal", return_value=blocked),
         ):
             response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}")
 
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["error"], {"code": "example_blocked", "message": "This agent is blocked."})
+        self.assertEqual(response.json()["error"], {"code": "agent_blocked", "message": "This agent is blocked."})

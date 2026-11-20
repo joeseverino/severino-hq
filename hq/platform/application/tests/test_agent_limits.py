@@ -2,7 +2,8 @@
 
 from django.test import SimpleTestCase, override_settings
 
-from ..agent_limits import RATE_LIMITED, TOO_MANY_CALLS, Limited, Limits, Slot
+from ..agent_limits import Limited, Limits, Slot
+from ..refusal_codes import Code
 
 
 class Clock:
@@ -25,7 +26,7 @@ class RateTests(SimpleTestCase):
         refused = self.limits.take("example-agent")
 
         self.assertIsInstance(refused, Limited)
-        self.assertEqual(refused.code, RATE_LIMITED)
+        self.assertEqual(refused.code, Code.RATE_LIMITED)
         self.assertGreaterEqual(refused.retry_after, 1)
         self.clock.now += refused.retry_after
         self.assertIsNone(self.limits.take("example-agent"))
@@ -67,7 +68,7 @@ class AtOnceTests(SimpleTestCase):
 
         refused = self.limits.occupy("example-agent")
 
-        self.assertEqual(refused.code, TOO_MANY_CALLS)
+        self.assertEqual(refused.code, Code.TOO_MANY_CALLS)
         self.assertGreaterEqual(refused.retry_after, 1)
         with first:
             pass
@@ -77,7 +78,7 @@ class AtOnceTests(SimpleTestCase):
         for actor in ("example-a", "example-a", "example-b"):
             self.assertIsInstance(self.limits.occupy(actor), Slot)
 
-        self.assertEqual(self.limits.occupy("example-c").code, TOO_MANY_CALLS)
+        self.assertEqual(self.limits.occupy("example-c").code, Code.TOO_MANY_CALLS)
 
     def test_a_call_given_back_twice_frees_one_place(self):
         slot = self.limits.occupy("example-agent")
@@ -89,7 +90,7 @@ class AtOnceTests(SimpleTestCase):
 
         self.assertIsInstance(self.limits.occupy("example-agent"), Slot)
         self.assertIsInstance(held, Slot)
-        self.assertEqual(self.limits.occupy("example-agent").code, TOO_MANY_CALLS)
+        self.assertEqual(self.limits.occupy("example-agent").code, Code.TOO_MANY_CALLS)
 
     def test_an_agent_with_nothing_in_flight_holds_nothing(self):
         with self.limits.occupy("example-agent"):
