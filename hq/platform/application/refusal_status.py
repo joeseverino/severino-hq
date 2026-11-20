@@ -149,19 +149,6 @@ class Refusal:
     retry_after: int | None = None
 
     def __post_init__(self) -> None:
-        # A plugin's handler answers a code as text. One the table does not
-        # hold is a defect in that plugin, and a client can key on no code it
-        # was never told of, so it is answered as the failure it is. The code
-        # stays in the log.
-        if self.code not in Code:
-            logger.error("Refusal code %s has no status.", _loggable(self.code), extra={"event": "refusal.unlisted"})
-            for name, value in (
-                ("code", Code.OPERATION_FAILED),
-                ("message", "This request could not be executed."),
-                ("details", None),
-            ):
-                object.__setattr__(self, name, value)
-        object.__setattr__(self, "code", Code(self.code))
         # The API document declares the wait only where a code says "later".
         if not self.code.waits:
             object.__setattr__(self, "retry_after", None)
@@ -218,12 +205,20 @@ def refusal_of(outcome: dict[str, Any] | Exception, *, name: str = "", principal
 
     if isinstance(outcome, dict):
         error = outcome.get("error") or {}
-        return Refusal(
-            error.get("code", Code.OPERATION_FAILED),
-            error.get("message", f"{name or 'This request'} could not be executed."),
-            error.get("details"),
-            error.get("retry_after"),
-        )
+        code = error.get("code", Code.OPERATION_FAILED)
+        if code in Code:
+            return Refusal(
+                Code(code),
+                error.get("message", f"{name or 'This request'} could not be executed."),
+                error.get("details"),
+                error.get("retry_after"),
+            )
+        # A plugin's handler answers its code as text. One the table does not
+        # hold is a defect in that plugin, and a client can key on no code it
+        # was never told of, so it is answered as the failure it is. The code
+        # stays in the log.
+        logger.error("Refusal code %s has no status.", _loggable(code), extra={"event": "refusal.unlisted"})
+        return Refusal(Code.OPERATION_FAILED, "This request could not be executed.")
     refusal = _mapped(outcome, name)
     if principal is not None and isinstance(outcome, (AuthorizationError, RefusedHold)):
         record_denial(

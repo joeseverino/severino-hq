@@ -12,6 +12,7 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.platform.application.plugin_testing import offering
 from hq.platform.application.record_errors import RecordNotFound
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.security import AuthorizationError, Capability, Principal, is_interactive
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.sentinel import (
@@ -393,7 +394,7 @@ def admitting(verifier, seen=None):
         except AuthorizationError as exc:
             return Unadmitted(exc.code, exc.reason, verified=True)
         except ValueError:
-            return Unadmitted("invalid_token", "The access token was not accepted.", verified=False)
+            return Unadmitted(Code.INVALID_TOKEN, "The access token was not accepted.", verified=False)
 
     return admit
 

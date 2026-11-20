@@ -26,6 +26,7 @@ from hq.platform.application.labels import field_label
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin, page_context
 from hq.platform.application.payload_words import value_words
 from hq.platform.application.references import Kind
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.refusal_status import refuse
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
@@ -542,10 +543,10 @@ class CertificateDownloadView(View):
         resource = get_object_or_404(ManagedResource, key=key)
         certificate_pem = resource.status.get("certificate_pem", "")
         if resource.kind != CERTIFICATE_KIND or not certificate_pem:
-            return refusal_response(refuse("not_found", "No verified certificate to download."))
+            return refusal_response(refuse(Code.NOT_FOUND, "No verified certificate to download."))
         if "PRIVATE KEY-----" in certificate_pem:
             # HQ stored something it should never have: its fault, never the asker's.
-            return refusal_response(refuse("operation_failed", "The certificate file contains a private key."))
+            return refusal_response(refuse(Code.OPERATION_FAILED, "The certificate file contains a private key."))
         response = HttpResponse(certificate_pem, content_type="application/x-pem-file")
         response["Content-Disposition"] = f'attachment; filename="{resource.key}-public.pem"'
         return response
