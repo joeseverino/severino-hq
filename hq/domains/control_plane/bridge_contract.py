@@ -30,12 +30,6 @@ lazy from .observations.contract import member_names, schema_nodes
 
 # What the bridge alone defines, written by hand.
 BASE_PATH = Path(__file__).with_name("bridge_base.json")
-# The joined document, written for the controller's generator.
-CONTRACT_PATH = Path(settings.BASE_DIR) / "controller" / "api" / "hq-controller.openapi.json"
-# The connections document's schema, written for the same generator.
-CONNECTIONS_PATH = Path(settings.BASE_DIR) / "controller" / "api" / "hq-connections.openapi.json"
-# The shapes a vault item is projected into, written for the secret renderer.
-SHAPES_PATH = Path(settings.BASE_DIR) / "hq" / "config" / "controller-connections.json"
 # The name the contract's own references resolve against.
 CONTRACT_URI = "urn:hq:controller-bridge"
 _REFERENCE = "#/components/schemas/"
@@ -89,12 +83,17 @@ def render(document: dict[str, Any]) -> str:
 
 
 def emitted() -> dict[Path, str]:
-    """Every file written from the registry, with its content."""
+    """Every file written from the registry, with its content.
 
+    Each path is named only here, so no Python reads a fact back from a file
+    it writes: the controller's generator and the secret renderer read them.
+    """
+
+    root = Path(settings.BASE_DIR)
     return {
-        CONTRACT_PATH: render(contract()),
-        CONNECTIONS_PATH: render(connections_document()),
-        SHAPES_PATH: render(renderer_registry()),
+        root / "controller/api/hq-controller.openapi.json": render(contract()),
+        root / "controller/api/hq-connections.openapi.json": render(connections_document()),
+        root / "hq/config/controller-connections.json": render(renderer_registry()),
     }
 
 
