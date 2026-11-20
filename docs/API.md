@@ -177,8 +177,8 @@ A held call's `approval.id` reads where it stands at
 queued, and once done the call's `answer`, as a task's `result` reads it
 ([below](#held-changes-as-mcp-tasks)). A playbook's run reads at
 `GET /v2/resources/runs/<operation_id>/` by the `operation.id` its answer
-carried, and lists at `/v2/resources/runs/` by `playbook`, `machine`,
-`correlation` and `state`.
+carried. Runs list with HQ's jobs at `/v2/resources/work/`, by `kind` (a
+playbook's command), `host`, `correlation` and `state`.
 
 - Each is a read under the caller's own `read` grant.
 - A hold is its asker's alone (`approvals.own_held_request`, as a task is): another

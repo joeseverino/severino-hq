@@ -12,38 +12,44 @@ from typing import Annotated, Any, Literal, TypedDict
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
 from django.utils import timezone
-from pydantic import Field, create_model
 
 from hq.domains.jobs.models import Job, JobState
 
-from .automation_manifest import DottedName
-from .automation_runs import CORRELATION_LONGEST, CORRELATION_PATTERN
-from .command_fields import RequiredText
+from .automation_runs import CORRELATION_CHARACTER, CORRELATION_LONGEST
 from .describe import Describe, listed
 from .integration_specs import ListFilter, ListRead, ListSort, ResourceSpec
 from .managed_records import AskedAt
 from .projection import iso, page_of
 from .record_errors import RecordNotFound
-from .resources import BoundedQuery, SearchText, one_of
+from .resources import BoundedQuery, SearchText
 from .security import Capability
 from .tone import Tone
 from .ui import ended
 from .work_runs import (
     WorkRun,
+    asked_with,
     hydrated,
-    listed_runs,
     on_hosts,
     operation_of,
+    run_correlations,
     run_hosts,
     run_of,
-    run_rows,
     work,
     work_kinds,
 )
 
 RUNS = "runs"
-# Names sent comma-separated: a kind of work, or a machine.
-_NAMES = r"^[A-Za-z0-9_.:-]{1,253}(?:,[A-Za-z0-9_.:-]{1,253})*$"
+
+
+def _several(character: str, longest: int) -> str:
+    """The pattern of values sent comma-separated, each of ``character`` and up to ``longest`` of them."""
+
+    one = f"{character}{{1,{longest}}}"
+    return f"^{one}(?:,{one})*$"
+
+
+# A kind of work, or a machine.
+_NAMES = _several("[A-Za-z0-9_.:-]", 253)
 
 
 class RunTask(TypedDict):
@@ -113,20 +119,16 @@ class _Evidence(TypedDict):
     matched: Annotated[int, Describe("How many names it found serving the certificate it checked for.")]
 
 
-class RunRow(_Work):
+class RunRecord(_Work, _Evidence):
+    """One run whole: what Jobs says of it, and its evidence."""
+
     operation_id: Annotated[
         str, Describe("The run's id: the `operation.id` its command answered, which a read of one names.")
     ]
-    playbook: Annotated[
-        str, Describe("The id of the playbook it runs, which the `playbook` filter takes; empty for a scan.")
-    ]
+    playbook: Annotated[str, Describe("The id of the playbook it runs; empty for a scan.")]
     capability: Annotated[
         str, Describe("The command it was asked for through, by name: a playbook's, or the scan's refresh.")
     ]
-
-
-class RunRecord(RunRow, _Evidence):
-    """One run whole: its row and its evidence."""
 
     reason: Annotated[str, Describe("Why its asker asked for it; empty when they gave no reason.")]
 
@@ -139,42 +141,6 @@ class WorkItem(_Work, _Evidence):
     kind: Annotated[
         str, Describe("What the `kind` filter names it by: a job's kind, or the command a run was asked through.")
     ]
-
-
-RunQuery = create_model(
-    "RunQuery",
-    __base__=BoundedQuery,
-    playbook=(
-        DottedName | None,
-        Field(
-            default=None, max_length=200, description="Only the runs of the playbook with this id; absent, every one."
-        ),
-    ),
-    machine=(
-        RequiredText | None,
-        Field(
-            default=None,
-            max_length=253,
-            description="Only the runs on the machine with this name, as `machines` names it; absent, every machine.",
-        ),
-    ),
-    correlation=(
-        RequiredText | None,
-        Field(
-            default=None,
-            max_length=CORRELATION_LONGEST,
-            pattern=CORRELATION_PATTERN,
-            description="Only the runs asked for with this correlation id; absent, every run.",
-        ),
-    ),
-    state=(
-        one_of(JobState.values) | None,
-        Field(default=None, description="Only the runs in this state, as Jobs shows it; absent, every state."),
-    ),
-)
-
-# Newest first, the order Jobs lists work in.
-_ORDER = ("-created_at",)
 
 
 def _work(run: WorkRun) -> dict[str, Any]:
@@ -195,15 +161,6 @@ def _work(run: WorkRun) -> dict[str, Any]:
         # Only an ended run's, so two reads of the same run answer alike.
         "duration_seconds": run.duration if run.finished else None,
         "stated": list(run.evidence.stated),
-    }
-
-
-def _row(run: WorkRun) -> dict[str, Any]:
-    return {
-        **_work(run),
-        "operation_id": run.id,
-        "playbook": operation_of(run.kind),
-        "capability": run.kind,
     }
 
 
@@ -234,23 +191,6 @@ def _item(run: WorkRun) -> dict[str, Any]:
     }
 
 
-def list_runs(
-    *,
-    playbook: str | None = None,
-    machine: str | None = None,
-    correlation: str | None = None,
-    state: str | None = None,
-    limit: int = 50,
-) -> dict[str, Any]:
-    """The runs that match, newest first, a page at a time."""
-
-    found = listed_runs(
-        playbook=playbook or "", host=machine or "", correlation=correlation or "", state=(state,) if state else ()
-    )
-    page = page_of(found, limit, order=_ORDER)
-    return {**page, "items": [_row(run) for run in run_rows(page["items"])]}
-
-
 def get_run(run_id: str) -> dict[str, Any]:
     """One run or scan by its operation id."""
 
@@ -261,7 +201,14 @@ def get_run(run_id: str) -> dict[str, Any]:
     if found is None:
         raise RecordNotFound("No run of a playbook or scan of its source has that id.")
     run, operation = found
-    return {**_row(run), **_evidence(run), "reason": operation.reason}
+    return {
+        **_work(run),
+        **_evidence(run),
+        "operation_id": run.id,
+        "playbook": operation_of(run.kind),
+        "capability": run.kind,
+        "reason": operation.reason,
+    }
 
 
 def list_work(*, query: str | None = None, limit: int = 50) -> dict[str, Any]:
@@ -347,6 +294,13 @@ def resources() -> tuple[ResourceSpec, ...]:
                     ListFilter(
                         "host", "Host", lambda: [(host, host) for host in run_hosts()], pattern=_NAMES, narrows=on_hosts
                     ),
+                    ListFilter(
+                        "correlation",
+                        "Correlation",
+                        lambda: [(said, said) for said in run_correlations()],
+                        pattern=_several(CORRELATION_CHARACTER, CORRELATION_LONGEST),
+                        narrows=asked_with,
+                    ),
                 ),
                 counted=False,
             ),
@@ -361,7 +315,6 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Every run of a playbook, and every scan of their source: its machines, who asked and approved it, "
             "its state and each task's outcome.",
             Capability.READ,
-            listing=ListRead(list_runs, RunQuery, RunRow),
             detail_handler=get_run,
             identifier="operation_id",
             web_route="jobs:list",

@@ -22,7 +22,7 @@ from hq.domains.jobs.models import LAPSE as JOB_LAPSE, Job, JobState
 lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 
 from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
-from .automation_runs import capability_name, resource_key, run_title
+from .automation_runs import capability_name, run_title
 from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
 from .projection import Combined, read_once
@@ -344,34 +344,6 @@ def _kinds() -> list[WorkKind]:
     return sorted(latest.values(), key=lambda found: found.title.casefold())
 
 
-def listed_runs(
-    *,
-    playbook: str = "",
-    host: str = "",
-    correlation: str = "",
-    state: tuple[str, ...] = (),
-    now: datetime | None = None,
-) -> QuerySet:
-    """The runs of a playbook and the scans of their source that match, each
-    annotated with how it is seen and what it is called, for ``run_rows``.
-
-    ``playbook`` is a procedure's id, ``host`` a machine's canonical name,
-    ``correlation`` the id its asker sent, and ``state`` a ``JobState`` value
-    as seen; each left empty keeps every run.
-    """
-
-    found = seen_as_runs(OperationRequest.objects.filter(action__in=_LISTED).select_related("resource"), now)
-    if playbook:
-        found = found.filter(resource__key=resource_key(playbook))
-    if host:
-        found = found.filter(pk__in=OperationHost.objects.filter(host=host).values("operation"))
-    if correlation:
-        found = found.filter(input__correlation=correlation)
-    if state:
-        found = found.filter(seen__in=state)
-    return found
-
-
 def seen_as_runs(operations: QuerySet, now: datetime | None = None) -> QuerySet:
     """``operations`` with the state each is seen in (``run_seen_state``) and
     what each is called, as ``run_rows`` reads them."""
@@ -438,6 +410,20 @@ def run_hosts() -> list[str]:
     """Each machine a run has acted on, by its canonical name, A to Z: a scan acts on none."""
 
     return list(OperationHost.objects.order_by("host").values_list("host", flat=True).distinct())
+
+
+def asked_with(correlations: Iterable[str]) -> Q:
+    """The runs asked for with any of ``correlations``, by subquery as
+    ``on_hosts`` reads: a job carries none."""
+
+    return Q(pk__in=OperationRequest.objects.filter(input__correlation__in=list(correlations)).values("pk"))
+
+
+def run_correlations() -> list[str]:
+    """Each correlation id a run was asked with, A to Z."""
+
+    said = OperationRequest.objects.filter(action__in=_LISTED).values_list("input__correlation", flat=True)
+    return sorted({str(each) for each in said.distinct() if each})
 
 
 def hydrated(rows: Iterable[Sequence[Any]]) -> list[WorkRun]:

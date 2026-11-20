@@ -100,6 +100,12 @@ class RecordTypeTests(TestCase):
             f"zone:{identifiers['domains'][0]}",
         ]
         identifiers["service.paths"] = identifiers["services"][:2]
+        # A run lists among the work, by the id a read of one takes.
+        identifiers["runs"] = [
+            item["id"]
+            for item in list_resource("work", {}, principal=READER, fields=[WHOLE_RECORD])["items"]
+            if item["source"] == "run"
+        ][:3]
         # The agenda lists every source's events; a read of one is of your own.
         identifiers["calendar"] = [str(uid) for uid in Entry.objects.values_list("uid", flat=True)[:3]]
         # A held request is read by its asker alone, so the reader asks one.

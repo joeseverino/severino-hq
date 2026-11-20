@@ -1,6 +1,5 @@
-"""A playbook's runs are read by the operation id an answer carried, or listed
-by playbook, machine, correlation id and state, under the reader's own read
-grant, showing what Jobs shows of each run and nothing more."""
+"""A playbook's run is read by the operation id an answer carried, under the
+reader's own read grant, showing what Jobs shows of it and nothing more."""
 
 from django.test import TestCase
 
@@ -10,47 +9,44 @@ from hq.platform.core.testing import AGENT, MCP_READER
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..record_errors import RecordNotFound
-from ..resources import get_resource, list_resource
+from ..resources import get_resource
 from ..security import AuthorizationError, Capability, Principal
-from .procedures import APP, DB, RESTART, Supply, approved_run, manifest, run_payload
+from .procedures import APP, RESTART, Supply, approved_run, manifest, run_payload
 
 # A grant that reads the calendar and nothing of the estate.
 UNREAD = Principal("example-calendar", "mcp", frozenset({Capability.READ_CALENDAR}))
 WORKER = "example-worker"
-LOGS = "example.service_logs"
 RUNS = "runs"
 
 
-class RunReadTestCase(TestCase):
+class ReadOneRunTests(TestCase):
     def setUp(self):
-        self.supply = Supply(self, manifest(), manifest(id=LOGS, effect="read", retry="safe"))
+        self.supply = Supply(self, manifest())
 
-    def asked(self, *hosts, correlation="", key="example-run"):
+    def asked(self, *hosts, correlation=""):
         answer = approved_run(
             self,
             run_payload(*hosts, correlation=correlation),
             principal=AGENT,
-            key=key,
+            key="example-run",
             name=f"automation.{RESTART}.run",
         )
         return answer["operation"]["id"]
 
-    def finish(self, operation_id, *events, success=True):
+    def finish(self, operation_id, *events):
         claim_next_operation(WORKER, capabilities=(("automation.operation", "run"),))
         operation = OperationRequest.objects.get(pk=operation_id)
         report_operation(
             operation_id,
             ControllerReport(
-                success=success,
+                success=True,
                 observed_generation=operation.input["generation"],
-                message="Restarted." if success else "It stayed down.",
+                message="Restarted.",
                 events=list(events),
             ),
             controller_id=WORKER,
         )
 
-
-class ReadOneRunTests(RunReadTestCase):
     def test_a_run_is_read_by_the_operation_id_its_answer_carried(self):
         operation_id = self.asked(APP, correlation="example-investigation-7")
         task = {"host": APP, "task": "Restart the service", "outcome": "changed", "message": "Restarted."}
@@ -129,47 +125,3 @@ class ReadOneRunTests(RunReadTestCase):
 
         with self.assertRaises(AuthorizationError):
             get_resource(RUNS, operation_id, principal=UNREAD)
-        with self.assertRaises(AuthorizationError):
-            list_resource(RUNS, {}, principal=UNREAD)
-
-
-class ListRunsTests(RunReadTestCase):
-    def ids(self, query):
-        return [item["operation_id"] for item in list_resource(RUNS, query, principal=MCP_READER)["items"]]
-
-    def test_runs_are_listed_by_playbook_machine_correlation_and_state(self):
-        first = self.asked(APP, correlation="example-first", key="example-first")
-        self.finish(first, success=False)
-        second = self.asked(DB, correlation="example-second", key="example-second")
-
-        self.assertEqual(self.ids({}), [second, first])
-        self.assertEqual(self.ids({"playbook": RESTART}), [second, first])
-        self.assertEqual(self.ids({"playbook": LOGS}), [])
-        self.assertEqual(self.ids({"machine": APP}), [first])
-        self.assertEqual(self.ids({"correlation": "example-second"}), [second])
-        self.assertEqual(self.ids({"state": "failed"}), [first])
-        self.assertEqual(self.ids({"state": "queued", "machine": DB}), [second])
-
-    def test_every_run_is_reached_page_by_page(self):
-        first = self.asked(APP, key="example-first")
-        self.finish(first)
-        second = self.asked(APP, key="example-second")
-
-        page = list_resource(RUNS, {"limit": 1}, principal=MCP_READER)
-        after = list_resource(RUNS, {"limit": 1, "page": page["next"]}, principal=MCP_READER)
-
-        self.assertEqual([item["operation_id"] for item in page["items"] + after["items"]], [second, first])
-        self.assertIsNone(after["next"])
-
-    def test_a_filter_it_does_not_take_is_refused_naming_it(self):
-        from ..resources import InvalidResourceInput
-
-        for query in (
-            {"state": "example-state"},
-            {"host": APP},
-            {"playbook": "not a playbook"},
-            {"correlation": "a b"},
-        ):
-            with self.subTest(query=query), self.assertRaises(InvalidResourceInput) as refused:
-                list_resource(RUNS, query, principal=MCP_READER)
-            self.assertEqual(refused.exception.details["errors"][0]["loc"][0], next(iter(query)))

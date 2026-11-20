@@ -25,10 +25,14 @@ SCANS = "playbook_scans"
 
 
 class PlaybookRow(TypedDict):
-    playbook: Annotated[str, Describe("The playbook's id, which a read of one and the `runs` filter `playbook` take.")]
+    playbook: Annotated[str, Describe("The playbook's id, which a read of one takes.")]
     title: Annotated[str, Describe("Its name in HQ, as its Run page is headed.")]
     capability: Annotated[
-        str, Describe("The command that runs it, by name. Its schema says what it takes, and its notes what it does.")
+        str,
+        Describe(
+            "The command that runs it, by name, which `work` lists its runs by as `kind`. Its schema says what it "
+            "takes, and its notes what it does."
+        ),
     ]
     effect: Annotated[
         PlaybookEffect,

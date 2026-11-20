@@ -1537,8 +1537,8 @@
           "type": "string"
         }
       },
-      "OperationIdIdentifier": {
-        "description": "The record's `operation_id`, as each item of the list carries it.",
+      "OperationIdLookup": {
+        "description": "The `operation_id` to read it for.",
         "in": "path",
         "name": "identifier",
         "required": true,
@@ -2088,9 +2088,6 @@
               "finished_at",
               "duration_seconds",
               "stated",
-              "operation_id",
-              "playbook",
-              "capability",
               "effect",
               "attempts",
               "worker",
@@ -2107,43 +2104,10 @@
               "affected.domain",
               "affected.fingerprint_sha256",
               "matched",
-              "reason",
-              "*"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
-      "RunRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
-              "url",
-              "title",
-              "state",
-              "state_label",
-              "tone",
-              "headline",
-              "hosts",
-              "by",
-              "approved_by",
-              "correlation",
-              "created_at",
-              "started_at",
-              "finished_at",
-              "duration_seconds",
-              "stated",
               "operation_id",
               "playbook",
               "capability",
+              "reason",
               "*"
             ],
             "type": "string"
@@ -21763,7 +21727,7 @@
         "additionalProperties": false,
         "properties": {
           "capability": {
-            "description": "The command that runs it, by name. Its schema says what it takes, and its notes what it does.",
+            "description": "The command that runs it, by name, which `work` lists its runs by as `kind`. Its schema says what it takes, and its notes what it does.",
             "type": "string"
           },
           "effect": {
@@ -21776,7 +21740,7 @@
             "type": "string"
           },
           "playbook": {
-            "description": "The playbook's id, which a read of one and the `runs` filter `playbook` take.",
+            "description": "The playbook's id, which a read of one takes.",
             "type": "string"
           },
           "reachable": {
@@ -26397,7 +26361,7 @@
       },
       "RunRecord": {
         "additionalProperties": false,
-        "description": "One run whole: its row and its evidence.",
+        "description": "One run whole: what Jobs says of it, and its evidence.",
         "properties": {
           "affected": {
             "$ref": "#/components/schemas/_Evidence/properties/affected"
@@ -26412,7 +26376,8 @@
             "$ref": "#/components/schemas/_Work/properties/by"
           },
           "capability": {
-            "$ref": "#/components/schemas/RunRow/properties/capability"
+            "description": "The command it was asked for through, by name: a playbook's, or the scan's refresh.",
+            "type": "string"
           },
           "correlation": {
             "$ref": "#/components/schemas/_Work/properties/correlation"
@@ -26448,10 +26413,12 @@
             "$ref": "#/components/schemas/_Evidence/properties/matched"
           },
           "operation_id": {
-            "$ref": "#/components/schemas/RunRow/properties/operation_id"
+            "description": "The run's id: the `operation.id` its command answered, which a read of one names.",
+            "type": "string"
           },
           "playbook": {
-            "$ref": "#/components/schemas/RunRow/properties/playbook"
+            "description": "The id of the playbook it runs; empty for a scan.",
+            "type": "string"
           },
           "reason": {
             "description": "Why its asker asked for it; empty when they gave no reason.",
@@ -26498,9 +26465,6 @@
           "finished_at",
           "duration_seconds",
           "stated",
-          "operation_id",
-          "playbook",
-          "capability",
           "effect",
           "attempts",
           "worker",
@@ -26509,13 +26473,16 @@
           "expected",
           "affected",
           "matched",
+          "operation_id",
+          "playbook",
+          "capability",
           "reason"
         ],
         "type": "object"
       },
       "RunRecordPartial": {
         "additionalProperties": false,
-        "description": "One run whole: its row and its evidence.",
+        "description": "One run whole: what Jobs says of it, and its evidence.",
         "properties": {
           "affected": {
             "$ref": "#/components/schemas/_EvidencePartial/properties/affected"
@@ -26530,7 +26497,7 @@
             "$ref": "#/components/schemas/_WorkPartial/properties/by"
           },
           "capability": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/capability"
+            "$ref": "#/components/schemas/RunRecord/properties/capability"
           },
           "correlation": {
             "$ref": "#/components/schemas/_WorkPartial/properties/correlation"
@@ -26566,10 +26533,10 @@
             "$ref": "#/components/schemas/_EvidencePartial/properties/matched"
           },
           "operation_id": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/operation_id"
+            "$ref": "#/components/schemas/RunRecord/properties/operation_id"
           },
           "playbook": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/playbook"
+            "$ref": "#/components/schemas/RunRecord/properties/playbook"
           },
           "reason": {
             "$ref": "#/components/schemas/RunRecord/properties/reason"
@@ -26616,179 +26583,6 @@
           "ok",
           "data"
         ],
-        "type": "object"
-      },
-      "RunRow": {
-        "additionalProperties": false,
-        "properties": {
-          "approved_by": {
-            "$ref": "#/components/schemas/_Work/properties/approved_by"
-          },
-          "by": {
-            "$ref": "#/components/schemas/_Work/properties/by"
-          },
-          "capability": {
-            "description": "The command it was asked for through, by name: a playbook's, or the scan's refresh.",
-            "type": "string"
-          },
-          "correlation": {
-            "$ref": "#/components/schemas/_Work/properties/correlation"
-          },
-          "created_at": {
-            "$ref": "#/components/schemas/_Work/properties/created_at"
-          },
-          "duration_seconds": {
-            "$ref": "#/components/schemas/_Work/properties/duration_seconds"
-          },
-          "finished_at": {
-            "$ref": "#/components/schemas/_Work/properties/finished_at"
-          },
-          "headline": {
-            "$ref": "#/components/schemas/_Work/properties/headline"
-          },
-          "hosts": {
-            "$ref": "#/components/schemas/_Work/properties/hosts"
-          },
-          "operation_id": {
-            "description": "The run's id: the `operation.id` its command answered, which a read of one names.",
-            "type": "string"
-          },
-          "playbook": {
-            "description": "The id of the playbook it runs, which the `playbook` filter takes; empty for a scan.",
-            "type": "string"
-          },
-          "started_at": {
-            "$ref": "#/components/schemas/_Work/properties/started_at"
-          },
-          "state": {
-            "$ref": "#/components/schemas/_Work/properties/state"
-          },
-          "state_label": {
-            "$ref": "#/components/schemas/_Work/properties/state_label"
-          },
-          "stated": {
-            "$ref": "#/components/schemas/_Work/properties/stated"
-          },
-          "title": {
-            "$ref": "#/components/schemas/_Work/properties/title"
-          },
-          "tone": {
-            "$ref": "#/components/schemas/_Work/properties/tone"
-          },
-          "url": {
-            "$ref": "#/components/schemas/_Work/properties/url"
-          }
-        },
-        "required": [
-          "url",
-          "title",
-          "state",
-          "state_label",
-          "tone",
-          "headline",
-          "hosts",
-          "by",
-          "approved_by",
-          "correlation",
-          "created_at",
-          "started_at",
-          "finished_at",
-          "duration_seconds",
-          "stated",
-          "operation_id",
-          "playbook",
-          "capability"
-        ],
-        "type": "object"
-      },
-      "RunRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "$ref": "#/components/schemas/RunRowPartial"
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
-        "required": [
-          "ok",
-          "data"
-        ],
-        "type": "object"
-      },
-      "RunRowPartial": {
-        "additionalProperties": false,
-        "properties": {
-          "approved_by": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/approved_by"
-          },
-          "by": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/by"
-          },
-          "capability": {
-            "$ref": "#/components/schemas/RunRow/properties/capability"
-          },
-          "correlation": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/correlation"
-          },
-          "created_at": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/created_at"
-          },
-          "duration_seconds": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/duration_seconds"
-          },
-          "finished_at": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/finished_at"
-          },
-          "headline": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/headline"
-          },
-          "hosts": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/hosts"
-          },
-          "operation_id": {
-            "$ref": "#/components/schemas/RunRow/properties/operation_id"
-          },
-          "playbook": {
-            "$ref": "#/components/schemas/RunRow/properties/playbook"
-          },
-          "started_at": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/started_at"
-          },
-          "state": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/state"
-          },
-          "state_label": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/state_label"
-          },
-          "stated": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/stated"
-          },
-          "title": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/title"
-          },
-          "tone": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/tone"
-          },
-          "url": {
-            "$ref": "#/components/schemas/_WorkPartial/properties/url"
-          }
-        },
         "type": "object"
       },
       "RunTask": {
@@ -41399,161 +41193,13 @@
         "x-hq-resource": "request.path"
       }
     },
-    "/api/v2/resources/runs/": {
-      "get": {
-        "description": "Every run of a playbook, and every scan of their source: its machines, who asked and approved it, its state and each task's outcome.",
-        "operationId": "listRunsV2",
-        "parameters": [
-          {
-            "description": "Only the runs of the playbook with this id; absent, every one.",
-            "explode": true,
-            "in": "query",
-            "name": "playbook",
-            "required": false,
-            "schema": {
-              "maxLength": 200,
-              "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$",
-              "type": "string"
-            },
-            "style": "form"
-          },
-          {
-            "description": "Only the runs on the machine with this name, as `machines` names it; absent, every machine.",
-            "explode": true,
-            "in": "query",
-            "name": "machine",
-            "required": false,
-            "schema": {
-              "maxLength": 253,
-              "minLength": 1,
-              "type": "string"
-            },
-            "style": "form"
-          },
-          {
-            "description": "Only the runs asked for with this correlation id; absent, every run.",
-            "explode": true,
-            "in": "query",
-            "name": "correlation",
-            "required": false,
-            "schema": {
-              "maxLength": 200,
-              "minLength": 1,
-              "pattern": "^[!-~]*$",
-              "type": "string"
-            },
-            "style": "form"
-          },
-          {
-            "description": "Only the runs in this state, as Jobs shows it; absent, every state.",
-            "explode": true,
-            "in": "query",
-            "name": "state",
-            "required": false,
-            "schema": {
-              "enum": [
-                "queued",
-                "running",
-                "succeeded",
-                "failed",
-                "lost"
-              ],
-              "type": "string"
-            },
-            "style": "form"
-          },
-          {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/PageNumber"
-          },
-          {
-            "$ref": "#/components/parameters/RunRowPageFields"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunRowPageSuccess"
-                }
-              }
-            },
-            "description": "Success.",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/CacheControl"
-              }
-            },
-            "links": {
-              "getRunsV2": {
-                "operationId": "getRunsV2",
-                "parameters": {
-                  "path.identifier": "$response.body#/data/items/0/operation_id"
-                }
-              },
-              "listRunsV2": {
-                "operationId": "listRunsV2",
-                "parameters": {
-                  "query.correlation": "$request.query.correlation",
-                  "query.fields": "$request.query.fields",
-                  "query.limit": "$request.query.limit",
-                  "query.machine": "$request.query.machine",
-                  "query.page": "$response.body#/data/next",
-                  "query.playbook": "$request.query.playbook",
-                  "query.state": "$request.query.state"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidInput"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/ResourceReadNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearer": [
-              "read"
-            ]
-          }
-        ],
-        "summary": "Playbook runs: the list",
-        "tags": [
-          "hq.jobs"
-        ],
-        "x-hq-resource": "runs"
-      }
-    },
     "/api/v2/resources/runs/{identifier}/": {
       "get": {
-        "description": "One of the records Playbook runs lists, found by its `operation_id`.",
+        "description": "Every run of a playbook, and every scan of their source: its machines, who asked and approved it, its state and each task's outcome.",
         "operationId": "getRunsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/OperationIdIdentifier"
+            "$ref": "#/components/parameters/OperationIdLookup"
           },
           {
             "$ref": "#/components/parameters/RunRecordFields"
@@ -42100,6 +41746,20 @@
             "style": "form"
           },
           {
+            "description": "Only the records whose correlation is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "correlation",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^[!-+\\--~]{1,200}(?:,[!-+\\--~]{1,200})*$",
+              "title": "Correlation",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
             "description": "The order the records come in; absent, the best match first for a search, else failed first.",
             "explode": true,
             "in": "query",
@@ -42152,6 +41812,7 @@
               "listWorkV2": {
                 "operationId": "listWorkV2",
                 "parameters": {
+                  "query.correlation": "$request.query.correlation",
                   "query.fields": "$request.query.fields",
                   "query.host": "$request.query.host",
                   "query.kind": "$request.query.kind",
@@ -42295,7 +41956,6 @@
                 "readings",
                 "receipts",
                 "request.path",
-                "runs",
                 "search",
                 "services",
                 "tailnet",

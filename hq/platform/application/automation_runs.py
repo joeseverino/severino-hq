@@ -147,9 +147,11 @@ type Hosts = Annotated[
 # What a run's hosts are titled wherever a person reads them, as every page
 # names them: on the field's own use, since an alias's title names the alias.
 MACHINES = Field(title="Machines")
-# The longest correlation id a run keeps, and the pattern of one: printable, no spaces.
+# The longest correlation id a run keeps, and a character of one: printable,
+# no spaces, and no comma, which separates the ids Jobs is filtered by.
 CORRELATION_LONGEST = 200
-CORRELATION_PATTERN = r"^[!-~]*$"
+CORRELATION_CHARACTER = r"[!-+\--~]"
+CORRELATION_PATTERN = rf"^{CORRELATION_CHARACTER}*$"
 type Correlation = Annotated[
     StrictStr,
     Field(max_length=CORRELATION_LONGEST, pattern=CORRELATION_PATTERN),
