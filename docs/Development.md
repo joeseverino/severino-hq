@@ -603,7 +603,7 @@ outside the modules run through `apart`:
   reports ok.
 - A walk that stays Python runs through `apart(walk, *args)`
   (`hq/platform/application/tests/apart.py`), in a process that exits; the
-  walk takes and answers JSON. `setting_overrides.overridden` is one.
+  walk takes and answers JSON. `django_printers` is one.
 
 Each is a walk to `tree.is_walk`, an ast-grep command line included, so the
 test carries the `tree` tag.

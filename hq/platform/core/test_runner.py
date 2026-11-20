@@ -28,6 +28,7 @@ lazy from django.contrib.auth import get_user_model
 lazy from django.core.management.base import BaseCommand
 lazy from django.db.backends.sqlite3.creation import DatabaseCreation
 lazy from django.test import TransactionTestCase
+lazy from django.test.utils import override_settings
 
 from hq.config.imports import lazily
 from hq.config.sandbox import shared_tempdir
@@ -164,6 +165,26 @@ def commands_from_the_shell() -> None:
     BaseCommand.execute = _execute
 
 
+def overrides_of_declared_settings() -> None:
+    """In this process, a test overrides only a setting HQ declares: one
+    removed or misspelled would change nothing, and the test relying on it
+    would pass for another reason."""
+
+    # override_settings and TestCase.settings both enter through enable.
+    enable = override_settings.enable
+    if getattr(enable, "declared_only", False):
+        return
+
+    def _enable(self):
+        undeclared = sorted(name for name in self.options if not hasattr(settings, name))
+        if undeclared:
+            raise AttributeError(f"No setting is declared to override: {', '.join(undeclared)}")
+        enable(self)
+
+    _enable.declared_only = True
+    override_settings.enable = _enable
+
+
 # Outside the checkout. Hypothesis caches constants it finds in every module it
 # can import, installed extensions included, and a cache in the tree is text
 # the host must never carry. Outside the run's own temporary directory too, so
@@ -219,6 +240,7 @@ def prepare_this_process() -> None:
     default_people_to_operator()
     flush_through_the_audit_guard()
     commands_from_the_shell()
+    overrides_of_declared_settings()
     bind_test_arrangement()
     hypothesis_profiles()
 
