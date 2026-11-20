@@ -6,7 +6,7 @@
 #USAGE flag "--days <n>" default="90" help="Days until expiry"
 #USAGE flag "--expires <date>" help="Expiry as YYYY-MM-DD; overrides --days"
 #USAGE flag "--allow-ip <cidr>" var=#true help="Accept the token only from this range; repeatable"
-#USAGE flag "--permissions <file>" help="Permission list (default: tools/cloudflare-observer-permissions.txt)"
+#USAGE flag "--permissions <file>" help="Permission list file (default: what the readings need)"
 #USAGE flag "--list-groups" help="Print permission group names and scopes, then exit"
 #USAGE flag "--store <ref>" help="Create the token and store it at op://<vault>/<item>/<field>"
 

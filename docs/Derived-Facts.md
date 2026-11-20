@@ -923,11 +923,10 @@ the operator grants it. The API's name stands beside it where the two differ
 (Cloudflare's dashboard says `D1 Edit` for the API's `D1 Write`). Each table
 cites the provider's documentation it follows. The registry refuses a
 permission written as text, and a source test refuses one spelled anywhere
-outside the tables. `tools/cloudflare-observer-permissions.txt` and
-`tools/tailscale-observer-scopes.txt` hold the API name of every reading's
-`requires` plus the reads in `hq.domains.control_plane.credential_reads` that
-are not readings yet, as the minting tasks resolve them; a test keeps them
-equal. Minting is in [Secrets](Secrets.md#minting-observer-credentials).
+outside the tables. The minting tasks ask for the API name of every
+member `observer_permissions` in `hq.domains.control_plane.credential_reads`
+returns: each reading's `requires` plus the reads that are not readings yet.
+Minting is in [Secrets](Secrets.md#minting-observer-credentials).
 
 ### What a credential can see
 
