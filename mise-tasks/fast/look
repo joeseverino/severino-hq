@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="fast's look at the catalog entries the stylesheets and templates a change touched reach, each held to every layout check in WebKit: mise run fast"
+#MISE description="fast's look at the catalog entries the stylesheets and templates a change touched reach, each surveyed with script and without in WebKit: mise run fast"
 #MISE hide=true
 #MISE extends="django"
 #MISE tags=["fast", "heavy"]
@@ -35,5 +35,11 @@ if [ "$#" -eq 0 ]; then
     echo "fast:look: no catalog entry is left to look at"
     exit 0
 fi
-# The look's own mise runs read the checkout's config alone.
-exec env -u MISE_ENV mise run dev:look --rule every_layout_check_holds --widths 320,1280 --engine webkit "$@"
+# Surveyed as the catalog's two sweeps judge an entry: once its script has
+# run (its folds and rows open, its tables at every width) and as the server
+# drew it (its popovers shown). The look's own mise runs read the checkout's
+# config alone.
+status=0
+env -u MISE_ENV mise run dev:look --rule survey --widths 320,1280 --engine webkit "$@" || status=$?
+env -u MISE_ENV mise run dev:look --rule survey --no-script --widths 320,1280 --engine webkit "$@" || status=$?
+exit "${status}"
