@@ -882,9 +882,12 @@ LOGGING = {
         "json": {"()": "hq.platform.core.logging.JsonFormatter"},
     },
     "handlers": {
+        # The level is the handler's as well as the root's, so a logger that
+        # keeps a level of its own below it still prints nothing quieter.
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "json",
+            "level": SEVERINO_LOG_LEVEL,
         },
     },
     "root": {"handlers": ["console"], "level": SEVERINO_LOG_LEVEL},
