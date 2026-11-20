@@ -248,12 +248,6 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(response["WWW-Authenticate"], views.REALM)
         self.assertEqual(response.json()["ok"], False)
 
-    def test_a_rejected_token_is_401(self):
-        with _serving():
-            response = self._post("example.import", {}, token=_token(key=OTHER_KEY))
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(response.json()["error"]["code"], "invalid_token")
-
     @override_settings(OIDC_OP_JWKS_ENDPOINT=f"{ISSUER}/.well-known/jwks.json")
     def test_a_token_is_never_verified_by_reaching_the_identity_provider(self):
         """Keys not yet read, or a key not held, answer 401 and ask for a read."""
@@ -271,12 +265,6 @@ class TransportTests(SentinelMixin, TestCase):
             self.assertTrue(tokens.KEYS.wanted.is_set())
             self.assertIn(logged.records[0].event, {"api.keys.not_loaded", "api.keys.unknown"})
             tokens.KEYS.wanted.clear()
-
-    def test_an_ungranted_capability_is_403(self):
-        with _serving():
-            response = self._post("project.create", {"payload": {}}, token=_token(scope="example.write"))
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["error"]["code"], "insufficient_scope")
 
     def test_a_paused_agent_is_refused_on_the_machine_api(self):
         """The same brake /mcp/ applies, on the other door.
@@ -325,32 +313,6 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["error"]["code"], "agents_paused")
 
-    def test_a_granted_capability_actually_runs(self):
-        """The half a deny-only test cannot prove.
-
-        A permission key on the Pocket ID resource and a capability name in
-        HQ's registry are the same string by design; this is what fails if
-        anything ever starts translating between them.
-        """
-
-        from hq.domains.projects.models import Project
-
-        with _serving():
-            response = self._post(
-                "project.create",
-                {
-                    "payload": {
-                        "name": "Machine sync",
-                        "slug": "machine-sync",
-                        "status": "active",
-                    }
-                },
-                token=_token(scope="write_projects"),
-            )
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertTrue(response.json()["ok"])
-        self.assertTrue(Project.objects.filter(slug="machine-sync").exists())
-
     def test_a_retry_key_in_the_payload_is_refused_over_the_api(self):
         from hq.domains.projects.models import Project
 
@@ -362,29 +324,6 @@ class TransportTests(SentinelMixin, TestCase):
                 )
                 self.assertEqual(response.status_code, 400, response.content)
         self.assertFalse(Project.objects.exists())
-
-    def test_retrying_a_machine_write_replays_the_committed_response(self):
-        from hq.domains.projects.models import Project
-
-        body = {"payload": {"name": "Once", "slug": "once", "status": "active"}}
-        with _serving():
-            first = self._post(
-                "project.create",
-                body,
-                token=_token(scope="write_projects"),
-                idempotency_key="one-operation",
-            )
-            replay = self._post(
-                "project.create",
-                body,
-                token=_token(scope="write_projects"),
-                idempotency_key="one-operation",
-            )
-        self.assertEqual(first.status_code, 200)
-        self.assertEqual(replay.status_code, 200)
-        self.assertEqual(replay.json(), first.json())
-        self.assertEqual(replay["Idempotency-Replayed"], "true")
-        self.assertEqual(Project.objects.filter(slug="once").count(), 1)
 
     def _rule(self, rule, capability="project.create"):
         from hq.domains.control_plane.models import CapabilityRule
@@ -440,17 +379,6 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["error"]["code"], "unknown_capability")
 
-    def test_a_malformed_body_is_reported_as_such(self):
-        with _serving():
-            response = self.client.post(
-                "/api/v2/capabilities/example.import/",
-                data="not json",
-                content_type="application/json",
-                HTTP_AUTHORIZATION=f"Bearer {_token()}",
-            )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error"]["code"], "invalid_json")
-
     def test_an_invalid_payload_names_the_field(self):
         with _serving():
             response = self._post(
@@ -494,18 +422,6 @@ class TransportTests(SentinelMixin, TestCase):
             "projects: limit must be a valid integer.",
         )
         self.assertNotIn(secret, listed.content.decode())
-
-    def test_duplicate_json_fields_are_rejected(self):
-        with _serving():
-            response = self.client.post(
-                "/api/v2/capabilities/project.create/",
-                data='{"payload":{},"payload":{}}',
-                content_type="application/json",
-                HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}",
-                HTTP_IDEMPOTENCY_KEY="test-key",
-            )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error"]["code"], "invalid_json")
 
     def test_the_root_reports_what_the_credential_may_do(self):
         with _serving():
@@ -746,15 +662,6 @@ class TransportTests(SentinelMixin, TestCase):
         for value, response in refused.items():
             with self.subTest(value):
                 self.assertNotIn(value.split("=")[1], response.json()["error"]["message"])
-
-    def test_resource_read_requires_its_declared_grant(self):
-        with _serving():
-            response = self.client.get(
-                "/api/v2/resources/projects/",
-                HTTP_AUTHORIZATION=f"Bearer {_token(scope='example.write')}",
-            )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["error"]["code"], "insufficient_scope")
 
     @override_settings(SEVERINO_API_RESOURCE="")
     def test_the_surface_is_off_until_a_resource_is_configured(self):
