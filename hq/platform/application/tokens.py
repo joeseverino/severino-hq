@@ -179,8 +179,6 @@ def verify(token: str) -> dict[str, Any]:
     signed by the same key. `aud` is what stops it being accepted here.
     """
 
-    if not is_configured():
-        raise TokenError("The machine API is not configured.")
     return decode(
         token,
         signing_key(token),
