@@ -304,6 +304,7 @@ textarea:focus { border-color: var(--accent-2); }
    cascade layer: `@view-transition` is a rule about the document. Skipped
    whole for a reader who asks for less motion, and by a browser that does not
    know the rule. */
+/* stylelint-disable rule-nesting-at-rule-required-list -- a transition is the document's, outside every layer */
 @media (prefers-reduced-motion: no-preference) {
   @view-transition { navigation: auto; }
   .site-header { view-transition-name: site-header; }
@@ -312,3 +313,4 @@ textarea:focus { border-color: var(--accent-2); }
   ::view-transition-old(root),
   ::view-transition-new(root) { animation-duration: 120ms; }
 }
+/* stylelint-enable rule-nesting-at-rule-required-list */

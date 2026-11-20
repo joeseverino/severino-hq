@@ -70,11 +70,20 @@ const capsuleRadius = {
 // An open popover is one floating panel, drawn by base.css's `:popover-open`
 // rule, so no other rule casts the shadow of a panel over the page.
 const floatingShadow = { "box-shadow": ["/var\\(--shadow-pop\\)/"] };
+// A file a rule fetches arrives after the page is drawn and moves what it
+// lands beside, past the moment the browser gate measures (`_DRAWN`). A face,
+// a @font-face's `src`, is the one fetch `document.fonts` reports, so the gate
+// waits for it.
+const fetched = { "/^(?!src$)/": ["/\\burl\\(/i"] };
+// What only a screen reader hears is clipped by `.visually-hidden`
+// (cadence.css) alone, so a change to how it is clipped is made once.
+const readerClip = { "clip-path": ["/inset\\(\\s*50%\\s*\\)/"] };
 // One list holds every disallowed value, so its message tells an auto grid, a
-// cut and a measure from the rest. Every sheet's list holds the capsule's, and
-// every sheet's but base.css's the floating panel's.
+// cut and a measure from the rest. Every sheet's list holds the capsule's, the
+// fetch's and the reader's clip, and every sheet's but base.css's the floating
+// panel's.
 const disallowedValues = (keys, { floating = true } = {}) => [
-  { ...keys, ...flowGrid, ...capsuleRadius, ...(floating ? floatingShadow : {}) },
+  { ...keys, ...flowGrid, ...capsuleRadius, ...fetched, ...readerClip, ...(floating ? floatingShadow : {}) },
   {
     message: (property, value) =>
       matches(paletteTone, property) && new RegExp(paletteTone["/^.+$/"][0].slice(1, -1)).test(value)
@@ -89,7 +98,11 @@ const disallowedValues = (keys, { floating = true } = {}) => [
         ? `"${property}: ${value}" cuts text outside cuts.css: move the whole rule to static/css/app/cuts.css, since a selector is styled in one sheet (test_a_selector_is_styled_in_one_place); a box that clips something other than text says why in a disable comment`
         : matches(readingMeasure, property)
           ? `"${property}: ${value}" stops text at a reading measure: prose fills the card or section it sits in (docs/Design.md); a cap that sizes something other than prose says why in a disable comment`
-          : `Disallowed value "${value}" for property "${property}"`,
+          : /\burl\(/i.test(value)
+            ? `"${property}: ${value}" fetches a file: a sheet fetches only a face, in @font-face's src`
+            : property === "clip-path"
+              ? `"${property}: ${value}" hides text for a screen reader: write the \`visually-hidden\` class`
+              : `Disallowed value "${value}" for property "${property}"`,
   },
 ];
 
@@ -140,11 +153,13 @@ const mediaFeatures = (names) => [
 ];
 // How wide a box in a table is, its own or its tracks', is the table
 // primitive's: an open row holds every box in it to its cell (surfaces.css),
-// and a page that sizes one inside a table reopens what that closes. A
+// and a page that sizes one inside a table reopens what that closes. So is
+// how far a cell's line holds out, bounded by its column's share (`--hold`,
+// tables.css): a page's nowrap there widens the table past its box. A
 // selector reaches inside a table through `.data-table` and a combinator, a
 // cell, or the line beneath a row.
 const inTable = "(\\.data-table(?![-\\w])[^,]*[\\s>+~]|(^|[\\s>+~(,])(td|th)(?![-\\w])|\\.row-(detail|columns)(?![-\\w]))";
-const boxWidth = ["/^(min-|max-)?(width|inline-size)$/", "flex", "flex-basis", "/^grid(-template)?(-columns)?$/"];
+const tableHeld = ["/^(min-|max-)?(width|inline-size)$/", "flex", "flex-basis", "/^grid(-template)?(-columns)?$/", "white-space", "text-wrap-mode"];
 
 // A primitive looks one way, drawn in the sheets that draw it, so a page
 // built from it looks like every other (`hq/restyled-primitive`). Each is
@@ -237,6 +252,11 @@ export default {
     // A browser drops a rule whose selector is invalid (a `:has()` inside
     // another) without an error, so the rule silently matches nothing.
     "selector-no-invalid": true,
+    // An unlayered rule beats every layer at any specificity, so nothing in
+    // `components` could override it but another unlayered rule.
+    "rule-nesting-at-rule-required-list": ["layer"],
+    // A sheet another one imports is fetched once its parent arrives (`fetched`).
+    "at-rule-disallowed-list": ["import"],
     // A selector's rule is written once per file and at-rule block. The test
     // beside StyleContractTests holds it across sheets and `@layer` blocks.
     "no-duplicate-selectors": true,
@@ -276,7 +296,7 @@ export default {
     "rule-selector-property-disallowed-list": [
       // The first key a selector matches decides, so a table's selector is
       // held to the kicker's rule too.
-      { [`/${inTable}/`]: [...boxWidth, ...caseProperties], ...caseOutsideKicker },
+      { [`/${inTable}/`]: [...tableHeld, ...caseProperties], ...caseOutsideKicker },
       { message: (selector, property) => (caseProperties.includes(property) ? caseMessage(selector, property) : `Disallowed property "${property}" for selector "${selector}"`) },
     ],
     "selector-disallowed-list": selectorRule([], () => childInIsMessage),
@@ -335,6 +355,8 @@ export default {
         "function-disallowed-list": [`/^(${colorFunctions}|color-mix)$/i`],
         "property-disallowed-list": disallowedProperties([...caseProperties, "font-family"]),
         "rule-selector-property-disallowed-list": null,
+        // Unlayered, to outrank the layers the viewer declares after HQ's (its header).
+        "rule-nesting-at-rule-required-list": null,
         "declaration-property-value-disallowed-list": disallowedValues({
           "/(^|-)font-size$/": ["/^[\\d.]/"],
           ...spacingLiteral,

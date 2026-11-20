@@ -7,7 +7,7 @@ from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import elements
-from hq.platform.core.stylesheets import DIRECTORY, SHEETS, STATIC, sheet_paths, stylesheet
+from hq.platform.core.stylesheets import DIRECTORY, SHEETS, STATIC, sheet_paths
 
 LAYER_ORDER = re.compile(r"@layer\s+([\w\s,.-]+);")
 LAYER_BLOCK = re.compile(r"@layer\s+([\w.-]+)\s*\{")
@@ -23,7 +23,6 @@ SCROLL_STATE_QUERY = re.compile(r"([a-zA-Z_][\w-]*)\s+scroll-state\(")
 SCROLL_STATE = re.compile(r"\bscroll-state\b")
 # A rule with no rule nested in it: its selector and its declarations.
 RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")
-CELL = re.compile(r"(?<![\w.#-])(?:td|th)(?![\w-])")
 NOWRAP = re.compile(r"white-space\s*:\s*nowrap")
 WRAPS = re.compile(r"white-space\s*:\s*(?:normal|pre-wrap|pre-line|break-spaces)|text-wrap-mode\s*:\s*wrap")
 # A selector whose subject is a control: a `.btn` or a `button`, last in it.
@@ -31,12 +30,6 @@ BUTTON = re.compile(r"(?:\.btn\b|(?<![\w.#-])button\b)[^\s>+~,]*\)?\s*(?:,|$)")
 CLIPPED = re.compile(r"overflow(?:-x)?\s*:\s*(?:hidden|clip)")
 # The push button's rule (page.css).
 PUSH_BUTTON = ".btn, :where(button:not([class]))"
-# The one-pixel clip that keeps text for a screen reader alone.
-CLIP_RECIPE = re.compile(r"clip-path\s*:\s*inset\(50%\)")
-# The sheets the table primitive is drawn in (``table_region``'s rules).
-TABLE_PRIMITIVES = frozenset({"base.css", "cuts.css", "figures.css", "tables.css", "surfaces.css"})
-FONT_FACE = re.compile(r"@font-face\s*\{[^{}]*\}")
-FETCHED = re.compile(r"\burl\(|@import\b")
 
 
 def _uncommented(css: str) -> str:
@@ -133,27 +126,6 @@ class SheetTests(SimpleTestCase):
             (["scroll-state(stuck: bottom)"], []),
         )
 
-    def test_only_the_table_primitives_hold_a_cells_line(self):
-        """How wide a cell's line holds out is bounded by its column's share of
-        the region (`--hold`, tables.css), so the holds of a table never sum
-        past its box. A page's own nowrap on cell content holds out unbounded
-        and widens the table past it; a page's width there is refused by
-        `lint:css`. A nowrap that clips is a cut, bounded by its box, and
-        stays allowed."""
-
-        found = []
-        for path in sheet_paths():
-            if path.name in TABLE_PRIMITIVES:
-                continue
-            for selector, body in RULE.findall(_uncommented(path.read_text(encoding="utf-8"))):
-                if not CELL.search(selector):
-                    continue
-                unbounded = NOWRAP.search(body) and not CLIPPED.search(body)
-                if unbounded:
-                    found.append(f"{path.name}: {' '.join(selector.split())}")
-
-        self.assertEqual(found, [], "a cell's line is held only by the table primitives")
-
     def test_a_controls_label_keeps_its_line_from_the_button_rule_alone(self):
         """A label wrapped onto two or three lines reads as several controls
         and leaves the buttons beside it uneven. The button rule holds every
@@ -186,31 +158,6 @@ class SheetTests(SimpleTestCase):
         self.assertEqual(held, ["page.css"], "the button rule keeps a control's label on one line")
         self.assertEqual(restated, [], "a control's line is held by the button rule alone")
         self.assertEqual(wrapped, [], "a control's label keeps its line; its column gives way")
-
-    def test_text_for_a_screen_reader_alone_is_hidden_by_the_one_class(self):
-        """What only a screen reader hears is `.visually-hidden`
-        (cadence.css), never the same recipe restated under another selector,
-        so a change to how it is clipped is made once."""
-
-        found = [
-            " ".join(selector.split())
-            for selector, body in RULE.findall(_uncommented(stylesheet()))
-            if CLIP_RECIPE.search(body) and selector.strip() != ".visually-hidden"
-        ]
-        self.assertEqual(found, [])
-
-    def test_a_sheet_fetches_nothing_but_its_faces(self):
-        """An image or sheet a rule fetches arrives after the page is drawn and
-        moves what it lands beside, past the moment the browser gate measures
-        (`_DRAWN`). A face is the one fetch `document.fonts` reports, so the
-        gate waits for it."""
-
-        found = []
-        for path in sorted((STATIC / "css").rglob("*.css")):
-            css = FONT_FACE.sub(" ", _uncommented(path.read_text(encoding="utf-8")))
-            found += [f"{path.relative_to(STATIC)}: {match.group()}" for match in FETCHED.finditer(css)]
-
-        self.assertEqual(found, [], "a sheet fetches only a face, in @font-face")
 
 
 class LinkedSheetTests(TestCase):
