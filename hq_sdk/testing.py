@@ -9,7 +9,6 @@ from hq.domains.jobs.testing import held_jobs
 from hq.platform.application.demo import demo_scope
 from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.markup_testing import (
-    Element,
     all_elements,
     elements,
     hrefs,
@@ -26,7 +25,6 @@ from hq.platform.application.plugin_testing import (
     holding,
     providers_derived_again,
     sibling,
-    undefined_style_classes,
 )
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import OutboundInRequest
@@ -80,7 +78,6 @@ def plain(text: str | bytes) -> str:
 
 __all__ = [
     "ComposedPluginTestCase",
-    "Element",
     "OutboundInRequest",
     "all_elements",
     "audit_writer",
@@ -99,7 +96,6 @@ __all__ = [
     "sibling",
     "text",
     "texts",
-    "undefined_style_classes",
     "with_class",
     "within",
 ]

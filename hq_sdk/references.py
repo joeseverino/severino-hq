@@ -8,28 +8,20 @@ helpers: docs/Plugins.md, References.
 
 from hq.platform.application.references import (
     CERTIFICATE,
-    Mention,
-    Mentions,
     Referable,
     ReferenceField,
-    ReferencePickerMixin,
     as_stored,
     dangling,
     reference_of,
-    referenced_by,
     referenced_by_row,
 )
 
 __all__ = [
     "CERTIFICATE",
-    "Mention",
-    "Mentions",
     "Referable",
     "ReferenceField",
-    "ReferencePickerMixin",
     "as_stored",
     "dangling",
     "reference_of",
-    "referenced_by",
     "referenced_by_row",
 ]

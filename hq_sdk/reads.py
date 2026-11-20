@@ -10,16 +10,8 @@ from typing import Any
 
 from hq.platform.application import derivations as _derivations
 
-# present is the instant the others compare against; a derivation that asks one
-# of the others is derived again at the moment its answer would change.
-from hq.platform.application.derivations import (
-    passed,
-    present,
-    reached,
-    since,
-    today,
-    whole,
-)
+# A derivation that asks one of these is derived again at the moment its answer would change.
+from hq.platform.application.derivations import reached, today, whole
 
 # A reading's state (current, due, stale or never) and the cadence it is judged by.
 from hq.platform.application.freshness import Freshness, ReadCadence, freshness
@@ -51,11 +43,8 @@ __all__ = [
     "day_span",
     "derivation",
     "freshness",
-    "passed",
-    "present",
     "reached",
     "read_once",
-    "since",
     "today",
     "whole",
 ]

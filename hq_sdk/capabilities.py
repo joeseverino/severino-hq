@@ -5,14 +5,13 @@ A command is a frozen dataclass or a TypedDict: HQ closes it to the fields it na
 
 from hq.platform.application.capabilities import (
     CapabilitySpec,
-    capability_spec,
     command_spec,
     describe_capabilities,
     execute_capability,
 )
 from hq.platform.application.command_fields import Choices, Describe, Names, NonEmpty, Refers, RequiredText
 from hq.platform.application.contracts import Effect
-from hq.platform.application.integration_specs import ON_ITS_PAGE, CommandAbout, CommandFact, Kept, keeps
+from hq.platform.application.integration_specs import Kept, keeps
 from hq.platform.application.record_errors import InputError, RecordNotFound
 from hq.platform.application.record_saves import as_sent, written
 from hq.platform.application.records import KEPT
@@ -29,13 +28,10 @@ from hq.platform.core.web_refusals import refusal_response, refused
 
 __all__ = [
     "KEPT",
-    "ON_ITS_PAGE",
     "AuthorizationError",
     "Capability",
     "CapabilitySpec",
     "Choices",
-    "CommandAbout",
-    "CommandFact",
     "Describe",
     "Effect",
     "InputError",
@@ -47,7 +43,6 @@ __all__ = [
     "Refers",
     "RequiredText",
     "as_sent",
-    "capability_spec",
     "cli_principal",
     "command_spec",
     "describe_capabilities",

@@ -16,7 +16,6 @@ from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import replace
 from datetime import date, timedelta
 from functools import partial
-from pathlib import Path
 from typing import Any
 from unittest import mock
 
@@ -26,11 +25,9 @@ lazy from django.template.defaulttags import IfNode
 lazy from django.template.library import TagHelperNode
 lazy from django.utils import timezone
 
-lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.templatetags import table_tags
 
 from .finding_model import Finding
-from .lists import split_list
 from .plugins import (
     DERIVED_PROVIDERS,
     PLUGIN_API_VERSION,
@@ -49,50 +46,6 @@ lazy from .web_writes import RETRY_KEY_FIELD, new_key
 # Deliberately not a name any real extension would take. A synthetic sibling
 # that collided with a real id would silently displace it.
 SIBLING_PREFIX = "example."
-
-
-def stylesheet_selectors(css: str) -> list[str]:
-    """Every selector of a stylesheet, each rule's comma-separated list split.
-
-    Only text ahead of a ``{`` is read, so a number, a ``url()`` or a custom
-    property value never passes for a class."""
-
-    rules = re.findall(r"([^{};]+)\{", re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL))
-    return [
-        selector
-        for rule in rules
-        for selector in split_list(re.sub(r"\[[^\]]*\]|url\([^)]*\)|\"[^\"]*\"|'[^']*'", "", rule))
-    ]
-
-
-def selector_classes(selector: str) -> list[str]:
-    """The class names a selector writes, in order."""
-
-    return re.findall(r"\.([a-zA-Z_][\w-]*)", selector)
-
-
-def undefined_style_classes(template_root: str | Path) -> list[str]:
-    """Class names an extension's templates use that the host does not define.
-
-    An invented class renders unstyled with no error, and the host's own check
-    cannot see templates in another repository, so this runs from the
-    extension's suite against the host's real bundle, as
-    ``assertEqual(undefined_style_classes(templates), [])``. Returns sorted
-    "template.html: .name" strings so a failure names the file.
-    """
-    defined = {name for selector in stylesheet_selectors(stylesheet()) for name in selector_classes(selector)}
-    offenders = set()
-    for template in sorted(Path(template_root).rglob("*.html")):
-        text = template.read_text(encoding="utf-8")
-        for attribute in re.findall(r'class="([^"]*)"', text):
-            # Interpolated values are decided at render time; the pieces that
-            # make them up are checked where they are defined instead.
-            if "{{" in attribute or "{%" in attribute:
-                continue
-            for name in attribute.split():
-                if name not in defined:
-                    offenders.add(f"{template.name}: .{name}")
-    return sorted(offenders)
 
 
 _OPEN, _CLOSE = "\x00region\x00", "\x00/region\x00"

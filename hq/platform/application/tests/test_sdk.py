@@ -3,8 +3,6 @@ import inspect
 import pkgutil
 from annotationlib import Format
 from dataclasses import dataclass
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, TestCase
@@ -78,19 +76,6 @@ class SdkContractTests(SimpleTestCase):
                 for qualified, routine in _routines(f"{info.name}.{export}", getattr(module, export)):
                     gaps += _untyped(qualified, routine)
         self.assertEqual(gaps, [])
-
-    def test_style_validation_reads_the_host_bundle_after_package_moves(self):
-        from hq_sdk.testing import undefined_style_classes
-
-        with TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "example.html").write_text(
-                '<div class="hq-sdk-intentionally-undefined-class"></div>', encoding="utf-8"
-            )
-            self.assertEqual(
-                undefined_style_classes(root),
-                ["example.html: .hq-sdk-intentionally-undefined-class"],
-            )
 
     def test_a_command_with_a_pydantic_config_of_its_own_is_refused_where_it_is_declared(self):
         """Such a config holds over the one HQ closes a command with, so even

@@ -8,14 +8,13 @@ from unittest import mock
 
 from django.template import engines
 from django.template.loader import render_to_string
-from django.test import RequestFactory, SimpleTestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase
 
 from hq.platform.application import plugin_validation as validation
 from hq.platform.application.plugin_validation import template_violations
 from hq.platform.core import template_contract
 from hq_sdk.money import money
 from hq_sdk.pages import PageAction, PageDialog, page_context
-from hq_sdk.site import host
 from hq_sdk.testing import plain
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -242,7 +241,3 @@ class TextHelperTests(SimpleTestCase):
         self.assertEqual(plain(b"2&nbsp;weeks 2&#160;days 2\xc2\xa0hours"), "2 weeks 2 days 2 hours")
         self.assertEqual(plain(money(-5)), "\u2212$5.00")
         self.assertEqual(plain(b"\xe2\x88\x92&#8288;$5"), "\u2212$5")
-
-    @override_settings(SEVERINO_SITE_HOST="hq.example.com")
-    def test_the_site_host_is_the_deployments(self):
-        self.assertEqual(host(), "hq.example.com")

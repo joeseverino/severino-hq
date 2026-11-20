@@ -7,10 +7,9 @@ from hq.platform.application.cadence_chart import (
     CadenceWeek,
 )
 from hq.platform.application.card_items import Insight, Kpi, ListRow, Timeline, TimelineItem
-from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, Trend
+from hq.platform.application.drawings import AllocationBar, Share, Trend
 from hq.platform.application.labels import dotted
 from hq.platform.application.moments import (
-    ago,
     span,
     when,
     when_day,
@@ -28,8 +27,6 @@ from hq.platform.application.ui import (
     ChartSeries,
     DomainOverview,
     LinePoint,
-    PageNavigation,
-    PageSection,
     PlannedDay,
     PlanNote,
     StackedBarChart,
@@ -54,14 +51,10 @@ __all__ = [
     "ChartCategory",
     "ChartSeries",
     "DomainOverview",
-    "Dot",
-    "Dots",
     "Insight",
     "Kpi",
     "LinePoint",
     "ListRow",
-    "PageNavigation",
-    "PageSection",
     "PathChart",
     "PathMarker",
     "PathScale",
@@ -76,7 +69,6 @@ __all__ = [
     "Tone",
     "Trend",
     "WeekPlan",
-    "ago",
     "counted",
     "dotted",
     "ended",
