@@ -42,6 +42,18 @@ def search_lines(value: Any) -> Iterator[str]:
             yield text
 
 
+def looked_up(instance: Model, lookup: str) -> Any:
+    """The value a lookup such as ``item__institution__name`` reaches from
+    ``instance``, each step a field of its model; None past an empty relation."""
+
+    value: Any = instance
+    for name in lookup.split("__"):
+        if value is None:
+            return None
+        value = getattr(value, value._meta.get_field(name).name)
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class SearchDefinition:
     scope: str
@@ -58,10 +70,12 @@ class SearchDefinition:
     def object_id(self, instance: Model) -> str:
         return str(getattr(instance, self.identifier_field))
 
-    # The names are a plugin's declaration, never checked against its model,
-    # and the default timestamp names a field a model may not have.
+    # Each name is a lookup on the model, as the index without FTS5 filters by
+    # it, so the body reads it through the model's fields too: a name that is
+    # no field (a property) fails here, under either backend. The default
+    # timestamp names a field a model may not have.
     def body(self, instance: Model) -> str:
-        return "\n".join(line for field in self.fields for line in search_lines(getattr(instance, field, None)))
+        return "\n".join(line for field in self.fields for line in search_lines(looked_up(instance, field)))
 
     def title(self, instance: Model) -> str:
         return str(getattr(instance, self.title_field)) if self.title_field else str(instance)
