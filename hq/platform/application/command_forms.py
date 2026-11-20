@@ -4,7 +4,6 @@ from collections.abc import Mapping
 from typing import Any, ClassVar, override
 
 from django import forms
-from django.core.exceptions import ValidationError
 from django.core.validators import MaxLengthValidator, MaxValueValidator, MinLengthValidator, MinValueValidator
 from django.utils.datastructures import MultiValueDict
 
@@ -13,7 +12,7 @@ from .command_fields import ACCEPTS, among_now, for_agents, is_upload, named_rec
 from .command_targets import CommandTargetOption
 from .contracts import Effect
 from .describe import meanings
-from .forms import LinesField, ReadAt, UploadField
+from .forms import ListField, ReadAt, UploadField
 from .integration_specs import IDEMPOTENCY_FIELD, capability_schema, command_schema
 from .json_schemas import LOCAL, fields as whole_fields, labeled_choices
 from .labels import field_label
@@ -23,37 +22,6 @@ from .web_writes import RETRY_KEY_FIELD
 
 # What a choice of records offers when there are none to choose.
 NOTHING_TO_CHOOSE = "Nothing to choose from yet"
-
-
-class PrimitiveListField(LinesField):
-    """One JSON primitive per line, preserving the schema's item type."""
-
-    widget = forms.Textarea(attrs={"rows": 4, "spellcheck": "false", "class": "code"})
-
-    def __init__(self, *args, item_type: str = "string", **kwargs):
-        self.item_type = item_type
-        super().__init__(*args, **kwargs)
-
-    @override
-    def to_python(self, value):
-        lines = [line.strip() for line in str(value or "").splitlines() if line.strip()]
-        if self.item_type == "integer":
-            try:
-                return [int(line) for line in lines]
-            except ValueError as exc:
-                raise ValidationError("Enter one whole number per line.") from exc
-        if self.item_type == "number":
-            try:
-                return [float(line) for line in lines]
-            except ValueError as exc:
-                raise ValidationError("Enter one number per line.") from exc
-        if self.item_type == "boolean":
-            values = {"true": True, "false": False}
-            try:
-                return [values[line.casefold()] for line in lines]
-            except KeyError as exc:
-                raise ValidationError("Enter true or false, one per line.") from exc
-        return lines
 
 
 def _one_type(schema: dict[str, Any]) -> dict[str, Any]:
@@ -210,7 +178,7 @@ def _field_for_schema(
                 **options,
             )
         if item_type in {"string", "integer", "number", "boolean"}:
-            return PrimitiveListField(item_type=item_type, **options)
+            return ListField(item_type=item_type, **options)
         return JSONText(**options)
     if kind == "object":
         return JSONText(**options)
@@ -221,8 +189,12 @@ def _field_for_schema(
     if effective.get("format") == "partial-time":
         return forms.TimeField(widget=forms.TimeInput(attrs={"type": "time"}), **options)
 
-    if effective.get("format") == "textarea":
-        widget: forms.Widget = forms.Textarea(attrs={"rows": 4})
+    if effective.get("format") == "textarea" or effective.get("contentMediaType"):
+        # A document of a media type (a policy, a PEM file) is typed as itself.
+        typed = _TYPED if effective.get("contentMediaType") else {}
+        # A value written but never read back, a key, is never drawn back either.
+        textarea = SecretTextarea if effective.get("writeOnly") else forms.Textarea
+        widget: forms.Widget = textarea(attrs={"rows": 4, **typed})
     else:
         # A value of a declared shape is typed as itself, never prose or a
         # remembered entry, and the schema's first example shows the shape.
@@ -240,6 +212,18 @@ def _field_for_schema(
 
 
 _TYPED = {"spellcheck": "false", "autocomplete": "off"}
+
+
+class SecretTextarea(forms.Textarea):
+    """A textarea that never renders a value back, like a password input.
+
+    A form re-shown after an error would otherwise put the submitted key back
+    into the page: into its HTML, the browser's cache and its history.
+    """
+
+    @override
+    def format_value(self, value):
+        return None
 
 
 def _drawn_only[F: forms.Field](field: F) -> F:
@@ -318,7 +302,7 @@ class CapabilityCommandForm(forms.Form):
 
         super().__init__(*args, **kwargs)
         for name in self.record_names:
-            self._hold(self.fields[name], self.initial.get(name), (held_names or {}).get(name, ""))
+            holding(self.fields[name], self.initial.get(name), (held_names or {}).get(name, ""))
         leave_off_unoffered(
             self, [name for name in self.record_names if referred(self.payload_schema[name]) is not None]
         )
@@ -330,21 +314,15 @@ class CapabilityCommandForm(forms.Form):
         repeated = sorted(
             name
             for name in self.data
-            if name in allowed and name != "csrfmiddlewaretoken" and len(self.data.getlist(name)) > 1
+            if name in allowed
+            and name != "csrfmiddlewaretoken"
+            and len(self.data.getlist(name)) > 1
+            and not (name in self.fields and getattr(self.fields[name].widget, "allow_multiple_selected", False))
         )
         self.submission_errors = (
             *(ended(f"Unknown field: {name}") for name in unknown),
             *(ended(f"Repeated field: {name}") for name in repeated),
         )
-
-    @staticmethod
-    def _hold(field: forms.ChoiceField, held: Any, named: str) -> None:
-        """Offer what the record holds even when its source no longer lists it,
-        so saving the form unchanged keeps it."""
-
-        values = held if isinstance(held, (list, tuple)) else [held]
-        kept = [str(value) for value in values if value not in (None, "")]
-        field.choices = keeping_held(field.choices, [(value, named or value) for value in kept])
 
     @override
     def clean(self):
@@ -377,6 +355,15 @@ class CapabilityCommandForm(forms.Form):
         return value
 
 
+def holding(field: forms.ChoiceField, held: Any, named: str = "") -> None:
+    """Offer what the record holds even when its source no longer lists it,
+    so saving the form unchanged keeps it."""
+
+    values = held if isinstance(held, (list, tuple)) else [held]
+    kept = [str(value) for value in values if value not in (None, "")]
+    field.choices = keeping_held(field.choices, [(value, named or value) for value in kept])
+
+
 def grouped_choices(options: tuple[CommandTargetOption, ...]) -> tuple:
     """The choices under the type each is, where they are of more than one."""
 
@@ -392,18 +379,28 @@ def _title(used: Mapping[str, Any]) -> dict[str, Any]:
     return {"title": used["title"]} if "title" in used else {}
 
 
-def _own_controls(
-    spec: CapabilitySpec,
+def schema_fields(
     schema: dict[str, Any],
-    properties: Mapping[str, dict[str, Any]],
+    properties: Mapping[str, dict[str, Any]] | None = None,
     *,
-    required: frozenset[str],
-    offered: Mapping[str, tuple[CommandTargetOption, ...] | None],
-    nested: dict,
+    required: frozenset[str] | None = None,
+    offered: Mapping[str, tuple[CommandTargetOption, ...] | None] | None = None,
+    said: Mapping[str, str] | None = None,
+    nested: dict | None = None,
 ) -> dict[str, forms.Field]:
-    """The fields a command's own properties are drawn as, a closed object's as its fields."""
+    """The fields an object's schema is drawn as, a closed object's as its fields.
 
-    said = meanings(spec.command_type)
+    ``properties`` are the ones drawn (every one by default), ``offered`` the
+    records each field that names them chooses from, ``said`` what each field
+    means where that differs from its description, and ``nested`` gains what
+    each closed object holds.
+    """
+
+    properties = whole_fields(schema) if properties is None else properties
+    required = frozenset(schema.get("required", ())) if required is None else required
+    offered = offered or {}
+    said = said or {}
+    nested = {} if nested is None else nested
     # A field is labeled from its name or the title its own use declares: the
     # title a shared alias's definition carries names the alias, for a viewer
     # offering its branches (``json_schemas``), never this field.
@@ -414,15 +411,15 @@ def _own_controls(
         # A value that may be none, of a named type (a time of day), is that type or null.
         arms = [
             {
-                key: said
-                for key, said in definitions.get(arm.get("$ref", "").removeprefix(LOCAL), arm).items()
+                key: value
+                for key, value in definitions.get(arm.get("$ref", "").removeprefix(LOCAL), arm).items()
                 if key not in {"title", "description"}
             }
             for arm in whole.get("anyOf", ())
         ]
         field = {**whole, "anyOf": arms} if arms else whole
         if name not in offered and _is_closed(field):
-            fields |= _inside(name, field, schema.get("$defs", {}), required=name in required, nested=nested)
+            fields |= _inside(name, field, definitions, required=name in required, nested=nested)
             continue
         fields[name] = _field_for_schema(
             name,
@@ -474,7 +471,9 @@ def command_form_class(
             allowed = frozenset(answer())
             offered[name] = tuple(option for option in listed if option.value in allowed)
     nested: dict[str, tuple[tuple[str, bool], ...]] = {}
-    controls = _own_controls(spec, schema, properties, required=required, offered=offered, nested=nested)
+    controls = schema_fields(
+        schema, properties, required=required, offered=offered, said=meanings(spec.command_type), nested=nested
+    )
     if fields is None:
         controls = _command_page_controls(spec, controls, target_options)
     if spec.effect.rank >= Effect.INFRASTRUCTURE_CHANGE.rank:

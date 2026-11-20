@@ -6,9 +6,15 @@ should not have to rediscover that ``FileField`` binds exactly one upload.
 """
 
 import base64
-from typing import Any, override
+from typing import Any, ClassVar, override
 
 from django import forms
+from django.utils.datastructures import MultiValueDict
+lazy from django.utils.html import format_html, format_html_join
+
+lazy from hq.platform.core.templatetags.value_tags import breakable
+
+from .ui import button_classes
 
 
 class MultipleFileInput(forms.FileInput):
@@ -91,14 +97,159 @@ class SuffixedInput(forms.TextInput):
         return context
 
 
-class LinesField(forms.Field):
-    """A list edited as one item per line."""
+class ListWidget(forms.Widget):
+    """One input per item, with a row to add and a control to remove.
+
+    In a textarea nothing says where one item ends, and editing the middle of
+    eight lines is text editing rather than a choice. Rows post under one name
+    and are read back with `getlist`, so the field receives a list and no parsing
+    rule lives in two places. Without scripting, rows still edit and the spare
+    row still adds; only adding and removing more needs JavaScript.
+    """
+
+    # Read by a form that refuses a field posted twice: this one posts a row each.
+    allow_multiple_selected = True
+
+    # ``{value: note}`` for values HQ can see for itself. A machine's addresses
+    # are the case this exists for: half of them are the only record there is
+    # (nothing reports a printer's address) and half repeat a reading from the
+    # tailnet. Presented identically, the field invites somebody to correct HQ
+    # about something HQ is watching, and gives no way to tell which is which.
+    notes: ClassVar[dict[str, str]] = {}
 
     @override
-    def prepare_value(self, value):
+    def value_from_datadict(self, data, files, name):
+        if isinstance(data, MultiValueDict):
+            return [item for item in data.getlist(name) if str(item).strip()]
+        return data.get(name)
+
+    @override
+    def format_value(self, value):
         if isinstance(value, (list, tuple)):
-            return "\n".join(str(item) for item in value)
-        return value
+            return [str(item) for item in value if str(item).strip()]
+        if value in (None, ""):
+            return []
+        return [line.strip() for line in str(value).splitlines() if line.strip()]
+
+    def _row(self, name: str, item: str, named: str):
+        """One value, editable unless HQ is the one that found it.
+
+        A value carrying a note is one a sweep reports, a fact HQ holds whether
+        or not this field does, so it cannot be removed here. It posts as a
+        hidden input, so a save keeps what it did not ask about.
+        """
+
+        note = self.notes.get(item, "")
+        if note:
+            return format_html(
+                '<div class="name-list-row name-list-row-observed">'
+                '<input type="hidden" name="{}" value="{}">'
+                '<span class="name-list-observed">{}</span>'
+                '<span class="name-list-note">{}</span>'
+                "</div>",
+                name,
+                item,
+                breakable(item),
+                breakable(note),
+            )
+        return format_html(
+            '<div class="name-list-row">'
+            '<input type="text" name="{}" value="{}" spellcheck="false"'
+            ' autocapitalize="off" autocorrect="off"{}>'
+            '<button type="button" class="{}" data-name-list-remove'
+            ' aria-label="Remove {}">Remove</button>'
+            "</div>",
+            name,
+            item,
+            named,
+            button_classes("ghost"),
+            item,
+        )
+
+    @override
+    def render(self, name, value, attrs=None, renderer=None):
+        # What HQ found first, what only this field records underneath it. The
+        # observed one is the address the machine actually answers at on the
+        # network everything reaches it over; the typed ones are the exceptions
+        # nothing reports. Sorted so read-only rows never sit between inputs
+        # and the blank row for adding one stays with the rest.
+        values = sorted(self.format_value(value), key=lambda item: item not in self.notes)
+        # Each row is named by the field's label (templates/django/forms/field.html
+        # gives it the id) and described by what the field describes itself with.
+        own = (attrs or {}).get("id")
+        named = format_html(
+            "{}{}",
+            format_html(' aria-labelledby="{}_label"', own) if own else "",
+            format_html(' aria-describedby="{}"', attrs["aria-describedby"])
+            if attrs and attrs.get("aria-describedby")
+            else "",
+        )
+        rows = format_html_join("", "{}", ((self._row(name, item, named),) for item in values))
+        # Always one empty row, so adding an item needs no script and no
+        # thinking about where the cursor goes.
+        blank = format_html(
+            '<div class="name-list-row">'
+            '<input type="text" name="{}" value="" spellcheck="false"'
+            ' autocapitalize="off" autocorrect="off"{}>'
+            "</div>",
+            name,
+            named,
+        )
+        # A row added by the script takes its Remove button from the template,
+        # so the button primitive's markup is drawn here alone.
+        return format_html(
+            '<div class="name-list" data-name-list>{}{}'
+            '<button type="button" class="{} name-list-add" data-name-list-add>'
+            "Add another</button>"
+            '<template data-name-list-remover><button type="button" class="{}" data-name-list-remove>'
+            "Remove</button></template></div>",
+            rows,
+            blank,
+            button_classes(),
+            button_classes("ghost"),
+        )
+
+
+# How a typed row is read as its item, and what a row that is not one is told.
+_ITEMS = {
+    "integer": (int, "Enter a whole number in each row."),
+    "number": (float, "Enter a number in each row."),
+    "boolean": (lambda item: {"true": True, "false": False}[item.casefold()], "Enter true or false in each row."),
+}
+
+
+class ListField(forms.Field):
+    """A list of JSON primitives of one type, an item to a row."""
+
+    widget = ListWidget
+
+    def __init__(self, *args: Any, item_type: str = "string", **kwargs: Any) -> None:
+        self.item_type = item_type
+        super().__init__(*args, **kwargs)
+
+    @override
+    def to_python(self, value: Any) -> list[Any]:
+        if isinstance(value, (list, tuple)):
+            items = [str(item).strip() for item in value]
+        else:
+            # Commas as well as newlines: a value written as text is usually
+            # arriving from somewhere that comma-separates it, and silently
+            # keeping "a.example.com, b.example.com" as one item would be a
+            # bad surprise.
+            items = (value or "").replace(",", "\n").splitlines()
+        items = [item.strip() for item in items if item.strip()]
+        if self.item_type not in _ITEMS:
+            return items
+        read, refusal = _ITEMS[self.item_type]
+        try:
+            return [read(item) for item in items]
+        except (KeyError, ValueError) as exc:
+            raise forms.ValidationError(refusal) from exc
+
+    @override
+    def validate(self, value: list[Any]) -> None:
+        if self.required and not value:
+            raise forms.ValidationError(self.error_messages["required"], code="required")
 
 
 class ReadAt(forms.CharField):

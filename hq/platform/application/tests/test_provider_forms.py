@@ -30,35 +30,8 @@ PROXY = {
 }
 
 
-class GeneratedFieldTests(TestCase):
-    """Each pydantic annotation becomes the input that collects it."""
-
-    def test_a_literal_becomes_a_choice_the_operator_cannot_get_wrong(self):
-        form = spec_form_class("npm.proxy_host")()
-
-        self.assertEqual(
-            [value for value, _ in form.fields["forward_scheme"].choices],
-            ["http", "https"],
-        )
-
-    def test_bounds_come_from_the_model(self):
-        field = spec_form_class("npm.proxy_host")().fields["forward_port"]
-
-        self.assertEqual((field.min_value, field.max_value), (1, 65535))
-
-    def test_a_list_field_accepts_one_name_per_line(self):
-        form = spec_form_class("npm.proxy_host")(PROXY)
-
-        self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.spec["domain_names"], ["app.example.com", "www.example.com"])
-
-    def test_a_checkbox_is_never_required(self):
-        """required=True on a BooleanField means "must be ticked", which is wrong.
-
-        Every optional flag would have to be turned on before the form would
-        submit, including the ones whose model default is False.
-        """
-        self.assertFalse(spec_form_class("npm.proxy_host")().fields["websocket"].required)
+class ValidationOwnershipTests(TestCase):
+    """The model decides what is valid. The form only collects it."""
 
     def test_an_omitted_optional_falls_back_to_the_model_default(self):
         """Sent as None it would be rejected; restated here it could drift."""
@@ -78,16 +51,6 @@ class GeneratedFieldTests(TestCase):
 
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.spec["ttl"], 1)
-
-
-class ValidationOwnershipTests(TestCase):
-    """The model decides what is valid. The form only collects it."""
-
-    def test_a_pattern_on_the_model_is_enforced_by_the_form(self):
-        form = spec_form_class("tls.certificate")({"certificate_name": "Not A Name"})
-
-        self.assertFalse(form.is_valid())
-        self.assertIn("certificate_name", form.errors)
 
     def test_a_model_rule_no_widget_could_express_is_still_enforced(self):
         """`extra="forbid"` and cross-field rules live only in pydantic.

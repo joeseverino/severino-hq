@@ -229,3 +229,21 @@ class CapabilityCommandFormTests(SimpleTestCase):
 
         self.assertEqual(derived.label, "Purchase date")
         self.assertEqual(declared.label, "TTL in seconds")
+
+    def test_a_list_is_posted_a_row_an_item_and_read_back_as_its_item_type(self):
+        from typing import Annotated
+
+        from django.utils.datastructures import MultiValueDict
+        from pydantic import Field
+
+        from hq.platform.application.integration_specs import CapabilitySpec
+
+        @dataclass(frozen=True, slots=True)
+        class ExampleCommand:
+            ports: list[Annotated[int, Field(le=65535)]]
+
+        spec = CapabilitySpec("example.ports.set", "Set them.", "remote_write", "example.write", ExampleCommand, dict)
+        form = command_form_class(spec, fields=("ports",))(MultiValueDict({"ports": ["80", "443", ""]}))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.command_payload["ports"], [80, 443])

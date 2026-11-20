@@ -3,168 +3,27 @@
 ``control_plane.providers`` declares each provider once, as a pydantic model,
 and the API's JSON Schema, the controller's contract, write validation and this
 form all derive from it, so a new provider gets a create-and-edit page with
-nothing written here. The form only renders (``clean`` asks ``validate_spec``)
-and names no provider: a field built from its annotation is never dropped.
+nothing written here. The form is drawn from the published schema as every
+command's is (``command_forms.schema_fields``), only renders (``clean`` asks
+``validate_spec``) and names no provider.
 """
 
 import logging
-import types
-import typing
 from typing import Any, ClassVar, override
 
 from django import forms
-from django.core.exceptions import ValidationError
-from django.core.validators import RegexValidator
-from django.utils.datastructures import MultiValueDict
 from pydantic import ValidationError as SpecError
-lazy from django.utils.html import format_html, format_html_join
 
 from hq.domains.control_plane.provider_spec import NameContext, ProviderSpec
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
-lazy from hq.platform.core.templatetags.value_tags import breakable
 
-from .forms import LinesField, ReadAt
+from .command_forms import holding, schema_fields
+from .command_targets import CommandTargetOption
+from .describe import meanings
+from .forms import ListWidget, ReadAt
 from .plugins import import_reference
-from .references import keeping_held
-from .ui import button_classes
 
-# Constraint attributes carried by annotated-types objects in a pydantic field's
-# metadata. Read by name rather than by isinstance so a constraint class this
-# does not import still contributes what it has.
 logger = logging.getLogger("severino.providers")
-
-_CONSTRAINTS = ("min_length", "max_length", "ge", "le", "pattern")
-
-
-class NameListWidget(forms.Widget):
-    """One input per name, with a row to add and a control to remove.
-
-    In a textarea nothing says where one name ends, and editing the middle of
-    eight lines is text editing rather than a choice. Rows post under one name
-    and are read back with `getlist`, so the field receives a list and no parsing
-    rule lives in two places. Without scripting, rows still edit and the spare
-    row still adds; only adding and removing more needs JavaScript.
-    """
-
-    @override
-    def value_from_datadict(self, data, files, name):
-        if isinstance(data, MultiValueDict):
-            return [item for item in data.getlist(name) if str(item).strip()]
-        return data.get(name)
-
-    @override
-    def format_value(self, value):
-        if isinstance(value, (list, tuple)):
-            return [str(item) for item in value if str(item).strip()]
-        if value in (None, ""):
-            return []
-        return [line.strip() for line in str(value).splitlines() if line.strip()]
-
-    # ``{value: note}`` for values HQ can see for itself. A machine's addresses
-    # are the case this exists for: half of them are the only record there is
-    # (nothing reports a printer's address) and half repeat a reading from the
-    # tailnet. Presented identically, the field invites somebody to correct HQ
-    # about something HQ is watching, and gives no way to tell which is which.
-    notes: ClassVar[dict[str, str]] = {}
-
-    def _row(self, name: str, item: str, named: str):
-        """One value, editable unless HQ is the one that found it.
-
-        A value carrying a note is one a sweep reports, a fact HQ holds whether
-        or not this field does, so it cannot be removed here. It posts as a
-        hidden input, so a save keeps what it did not ask about.
-        """
-
-        note = self.notes.get(item, "")
-        if note:
-            return format_html(
-                '<div class="name-list-row name-list-row-observed">'
-                '<input type="hidden" name="{}" value="{}">'
-                '<span class="name-list-observed">{}</span>'
-                '<span class="name-list-note">{}</span>'
-                "</div>",
-                name,
-                item,
-                breakable(item),
-                breakable(note),
-            )
-        return format_html(
-            '<div class="name-list-row">'
-            '<input type="text" name="{}" value="{}" spellcheck="false"'
-            ' autocapitalize="off" autocorrect="off"{}>'
-            '<button type="button" class="{}" data-name-list-remove'
-            ' aria-label="Remove {}">Remove</button>'
-            "</div>",
-            name,
-            item,
-            named,
-            button_classes("ghost"),
-            item,
-        )
-
-    @override
-    def render(self, name, value, attrs=None, renderer=None):
-        # What HQ found first, what only this field records underneath it. The
-        # observed one is the address the machine actually answers at on the
-        # network everything reaches it over; the typed ones are the exceptions
-        # nothing reports. Sorted so read-only rows never sit between inputs
-        # and the blank row for adding one stays with the rest.
-        values = sorted(self.format_value(value), key=lambda item: item not in self.notes)
-        # Each row is named by the field's label (templates/django/forms/field.html
-        # gives it the id) and described by what the field describes itself with.
-        own = (attrs or {}).get("id")
-        named = format_html(
-            "{}{}",
-            format_html(' aria-labelledby="{}_label"', own) if own else "",
-            format_html(' aria-describedby="{}"', attrs["aria-describedby"])
-            if attrs and attrs.get("aria-describedby")
-            else "",
-        )
-        rows = format_html_join("", "{}", ((self._row(name, item, named),) for item in values))
-        # Always one empty row, so adding a name needs no script and no
-        # thinking about where the cursor goes.
-        blank = format_html(
-            '<div class="name-list-row">'
-            '<input type="text" name="{}" value="" spellcheck="false"'
-            ' autocapitalize="off" autocorrect="off"{}>'
-            "</div>",
-            name,
-            named,
-        )
-        # A row added by the script takes its Remove button from the template,
-        # so the button primitive's markup is drawn here alone.
-        return format_html(
-            '<div class="name-list" data-name-list>{}{}'
-            '<button type="button" class="{} name-list-add" data-name-list-add>'
-            "Add another</button>"
-            '<template data-name-list-remover><button type="button" class="{}" data-name-list-remove>'
-            "Remove</button></template></div>",
-            rows,
-            blank,
-            button_classes(),
-            button_classes("ghost"),
-        )
-
-
-class NameList(LinesField):
-    """A list of names, one field per name."""
-
-    widget = NameListWidget
-
-    @override
-    def to_python(self, value: Any) -> list[str]:
-        if isinstance(value, (list, tuple)):
-            return [str(item).strip() for item in value if str(item).strip()]
-        # Commas as well as newlines: the value is usually arriving from
-        # somewhere that comma-separates it, and silently keeping
-        # "a.example.com, b.example.com" as one name would be a bad surprise.
-        text = (value or "").replace(",", "\n")
-        return [line.strip() for line in text.splitlines() if line.strip()]
-
-    @override
-    def validate(self, value: list[str]) -> None:
-        if self.required and not value:
-            raise ValidationError(self.error_messages["required"], code="required")
 
 
 class ResourceIdentityForm(forms.Form):
@@ -199,32 +58,14 @@ class ProviderSpecForm(forms.Form):
     # The model's own fields, so the form can tell a default from an answer.
     provider_fields: ClassVar[dict] = {}
 
-    # The fields whose options come from live readings, and whether the form
-    # edits a record that exists: each such field holds its value as an option.
+    # The fields whose options come from live readings: each holds its value as an option.
     live_names: ClassVar[tuple[str, ...]] = ()
-    editing: ClassVar[bool] = False
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         for name in self.live_names:
             field = self.fields[name]
-            self._hold(field, self.initial.get(name, field.initial))
-
-    def _hold(self, field: forms.ChoiceField, held: Any) -> None:
-        """Offer the value the record holds, whatever the live readings say.
-
-        A reading can lag the record or miss it altogether (no controller has
-        reported yet), and a menu without the held value shows nothing chosen
-        or posts its first option: a change nobody asked for. An edit with
-        nothing held starts blank for the same reason.
-        """
-
-        values = held if isinstance(held, (list, tuple)) else [held]
-        kept = [str(value) for value in values if value not in (None, "")]
-        field.choices = keeping_held(field.choices, [(value, value) for value in kept])
-        blank = any(value == "" for value, _label in field.choices)
-        if self.editing and not kept and not blank and not isinstance(field, forms.MultipleChoiceField):
-            field.choices = [("", "Choose one…" if field.required else "None"), *field.choices]
+            holding(field, self.initial.get(name, field.initial))
 
     def _is_routine(self, field) -> bool:
         """Whether this field is still just a default nobody chose.
@@ -322,10 +163,14 @@ def spec_form_class(
 
     provider = PROVIDERS[kind]
     context = context or NameContext()
-    fields = {name: _field_for(field) for name, field in provider.spec_type.model_fields.items()}
-    live = {name: options for name, options in _live(provider, provider.choices, context).items() if name in fields}
-    for name, options in live.items():
-        fields[name] = _offered(fields[name], options)
+    schema = provider.schema()
+    # A live reading (a ``(value, label)`` pair each) is offered as the records it names.
+    live = {
+        name: tuple(CommandTargetOption(str(value), str(label)) for value, label in options)
+        for name, options in _live(provider, provider.choices, context).items()
+        if name in schema.get("properties", {})
+    }
+    fields = schema_fields(schema, offered=live, said=meanings(provider.spec_type))
     for name, effect in provider.change_effects:
         if name in fields:
             fields[name].change_effect = effect
@@ -336,7 +181,7 @@ def spec_form_class(
     # useful moment to fail.
     for name, notes in _live(provider, provider.notes).items():
         field = fields.get(name)
-        if field is not None and isinstance(field.widget, NameListWidget):
+        if field is not None and isinstance(field.widget, ListWidget):
             field.widget.notes = notes
 
     if lock_identity:
@@ -357,99 +202,8 @@ def spec_form_class(
             "advanced_names": provider.advanced_fields,
             "provider_fields": dict(provider.spec_type.model_fields),
             "live_names": tuple(live),
-            "editing": lock_identity,
             **fields,
         },
-    )
-
-
-def _offered(original: forms.Field, options: tuple[tuple[str, str], ...]) -> forms.ChoiceField:
-    """A field offered as a menu of what exists rather than typed.
-
-    An empty list means the thing this field has to name does not exist yet,
-    or has not been read, and the help says so beside the empty menu.
-    """
-
-    many = isinstance(original, NameList)
-    field_class = forms.MultipleChoiceField if many else forms.ChoiceField
-    empty = "" if options else "Nothing to choose from yet."
-    return field_class(
-        choices=options,
-        required=original.required,
-        label=original.label,
-        initial=original.initial,
-        widget=forms.CheckboxSelectMultiple if many else None,
-        help_text=" ".join(part for part in (original.help_text, empty) if part),
-    )
-
-
-def _optional_inner(annotation: Any) -> Any:
-    """``int | None`` is a union, not an int.
-
-    An optional integer must render as an integer input that submits nothing
-    when blank. Rendered as text, an empty submission sends "", which a model
-    that accepts an integer or None rejects.
-    """
-
-    if typing.get_origin(annotation) in (typing.Union, types.UnionType):
-        named = [argument for argument in typing.get_args(annotation) if argument is not type(None)]
-        if len(named) == 1:
-            return named[0]
-    return annotation
-
-
-def _field_for(field: Any) -> forms.Field:
-    """One pydantic field, as the input that best collects it."""
-
-    annotation = _optional_inner(field.annotation)
-    origin = typing.get_origin(annotation)
-    limits = _limits(field.metadata)
-    required = field.is_required()
-    options: dict[str, Any] = {"required": required}
-    # ``field.default`` is a sentinel for a field declared with default_factory,
-    # and rendering it put the literal string "PydanticUndefined" in the box.
-    # get_default runs the factory, which is the actual default.
-    default = field.get_default(call_default_factory=True) if not required else None
-    if default not in (None, ""):
-        options["initial"] = default
-    if field.description:
-        options["help_text"] = field.description
-    # The model's own title, so a field is labeled by the question it asks
-    # rather than by the variable that holds the answer. Django would otherwise
-    # prettify the attribute name (`topology_ref` as "Topology ref").
-    if field.title:
-        options["label"] = field.title
-
-    if origin is typing.Literal:
-        return forms.ChoiceField(
-            choices=[(value, value) for value in typing.get_args(annotation)],
-            **options,
-        )
-    if origin is list:
-        return NameList(**options)
-    if origin is dict:
-        # Written as JSON and read back as a mapping, so the model checks a
-        # mapping rather than refusing the text it was typed as.
-        return forms.JSONField(**options)
-    if annotation is bool:
-        # A checkbox is never "required": unchecked is a valid answer, and
-        # Django reads required=True on a BooleanField as "must be ticked".
-        return forms.BooleanField(**{**options, "required": False})
-    if annotation is int:
-        return forms.IntegerField(min_value=limits.get("ge"), max_value=limits.get("le"), **options)
-    return forms.CharField(
-        min_length=limits.get("min_length"),
-        max_length=limits.get("max_length"),
-        validators=([RegexValidator(limits["pattern"])] if limits.get("pattern") else []),
-        # A string the model puts no ceiling on is one that can be long, and a
-        # long value in a one-line box is unreadable and unusable: an access
-        # policy or a compose file arrived as three thousand characters scrolling
-        # past a slot two inches wide. Where a length is declared, the model is
-        # saying it is short, and a single line is right.
-        widget=None
-        if limits.get("max_length")
-        else forms.Textarea(attrs={"rows": 18, "spellcheck": "false", "class": "code"}),
-        **options,
     )
 
 
@@ -471,16 +225,6 @@ def _live(provider: ProviderSpec, reference: str, *args: Any) -> dict[str, Any]:
             "The live lookup %s of %s failed.", reference, provider.kind, extra={"event": "providers.lookup.failed"}
         )
         return {}
-
-
-def _limits(metadata: Any) -> dict[str, Any]:
-    found: dict[str, Any] = {}
-    for constraint in metadata or ():
-        for attribute in _CONSTRAINTS:
-            value = getattr(constraint, attribute, None)
-            if value is not None:
-                found[attribute] = value
-    return found
 
 
 def _reported(exc: Exception) -> tuple[tuple[str, str], ...]:

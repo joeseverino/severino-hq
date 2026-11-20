@@ -120,6 +120,7 @@ class NPMProxyHostSpec(ProviderModel):
         default="",
         title="Extra nginx configuration",
         description="Passed through as-is. Usually blank.",
+        json_schema_extra={"contentMediaType": "text/x-nginx-conf"},
     )
     hsts_enabled: Annotated[bool, Describe("", api="Whether the proxy sends Strict-Transport-Security.")] = False
     hsts_subdomains: Annotated[bool, Describe("", api="Whether that header covers every subdomain.")] = False

@@ -457,7 +457,8 @@ def labeled_choices(schema: Mapping[str, Any]) -> list[tuple[Any, str]] | None:
     """Each value ``schema`` allows with its label, its own name where
     ``choices`` gave none, or None for a value not limited to a set."""
 
-    values = schema.get("enum")
+    # A value fixed to one (``const``) is a choice of that one.
+    values = schema.get("enum") or ([schema["const"]] if "const" in schema else None)
     if not values:
         return None
     labels = schema.get(LABELS, {})

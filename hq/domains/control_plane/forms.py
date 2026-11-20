@@ -8,7 +8,7 @@ from django import forms
 from django.utils.html import format_html
 
 from hq.platform.application.asks import APPLIES_SHORTLY
-from hq.platform.application.forms import ChoiceCards, ReadAt, SuffixedInput
+from hq.platform.application.forms import ChoiceCards, ListField, ReadAt, SuffixedInput
 from hq.platform.application.mail_policy import (
     DMARC_TAGS,
     SPF_DEFAULTS,
@@ -20,7 +20,7 @@ from hq.platform.application.mail_policy import (
     compose_spf,
     parse_spf,
 )
-from hq.platform.application.provider_forms import NameList, ResourceIdentityForm
+from hq.platform.application.provider_forms import ResourceIdentityForm
 from hq.platform.application.ui import counted
 from hq.platform.core.templatetags.value_tags import breakable
 
@@ -79,7 +79,7 @@ class MailSendersForm(MailPolicyForm):
     record = "SPF"
     verb = "Save senders"
 
-    rule = NameList(label="Allowed senders", required=False)
+    rule = ListField(label="Allowed senders", required=False)
     default = forms.ChoiceField(
         label="All other senders",
         choices=[(choice.value, choice.label) for choice in SPF_DEFAULTS],

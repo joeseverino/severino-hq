@@ -137,7 +137,7 @@ class HeldValueTests(TestCase):
             ):
                 form = spec_form_class(kind)()
                 for name in names:
-                    self.assertIn("Nothing to choose from yet", form.fields[name].help_text, name)
+                    self.assertIn("Nothing to choose from yet", form[name].as_field_group(), name)
 
 
 def _as_posted(page: str) -> dict[str, list[str]]:
