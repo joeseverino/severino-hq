@@ -94,13 +94,20 @@ class ListItemsComeFromTheSerializerTests(SimpleTestCase):
         with a serializer names that serializer too."""
 
         serializers = _serializers()
+        named = {
+            (path, function.name): {node.id for node in ast.walk(function) if isinstance(node, ast.Name)}
+            for path, function in _functions("")
+        }
         held, drifted = set(), []
-        for path, function in _functions("list_"):
-            names = {node.id for node in ast.walk(function) if isinstance(node, ast.Name)}
+        for (path, name), names in named.items():
+            if not name.startswith("list_"):
+                continue
+            # A row a helper of its module builds names what that helper names.
+            names = names.union(*(named.get((path, called), set()) for called in names))
             for model in names & serializers.keys():
-                held.add(function.name)
+                held.add(name)
                 if serializers[model] not in names:
-                    drifted.append(f"{path.name}::{function.name} builds {model} items without {serializers[model]}")
+                    drifted.append(f"{path.name}::{name} builds {model} items without {serializers[model]}")
 
         self.assertEqual(drifted, [])
         self.assertLessEqual(
