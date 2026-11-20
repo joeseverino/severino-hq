@@ -41,6 +41,8 @@ AMONG = "x-hq-among"
 REFERS = "x-hq-reference"
 # The JSON Schema extension a field holding a file carries.
 UPLOAD = "x-hq-upload"
+# The media types an upload takes, which a file picker offers.
+ACCEPTS = "x-hq-accepts"
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,13 +89,13 @@ class Choices:
     The form offers only these, and the command refuses any other as it is
     validated, before anything else is done with it."""
 
-    options: tuple[tuple[str, str], ...]
+    options: tuple[tuple[Any, str], ...]
 
     def __init__(self, options: Iterable[tuple[Any, Any]]) -> None:
-        object.__setattr__(self, "options", tuple((str(value), str(label)) for value, label in options))
+        object.__setattr__(self, "options", tuple((value, str(label)) for value, label in options))
 
     def __get_pydantic_core_schema__(self, source: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        allowed = frozenset(value for value, _label in self.options)
+        allowed = frozenset(str(value) for value, _label in self.options)
         # Worded as pydantic words a Literal's refusal, which input_errors says as "must be one of".
         expected = " or ".join(", ".join(repr(value) for value, _label in self.options).rsplit(", ", 1))
 
@@ -205,10 +207,13 @@ def _marker[T](hint: Any, marker: type[T]) -> T | None:
 class Upload:
     """A field that is a file, sent in JSON as its ``name``, ``content_type``
     and base64 ``content``: the form offers a file to pick and sends it so
-    (``forms.file_as_sent``)."""
+    (``forms.file_as_sent``). ``accepts`` names the media types it takes,
+    which the form's picker offers."""
+
+    accepts: tuple[str, ...] = ()
 
     def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
-        return {**handler(schema), UPLOAD: True}
+        return {**handler(schema), UPLOAD: True, **({ACCEPTS: sorted(self.accepts)} if self.accepts else {})}
 
 
 _ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")

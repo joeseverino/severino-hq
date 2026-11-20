@@ -526,7 +526,9 @@ out while its own page still shows it. The title states
 what is wrong, with its count where it stands for several; the body says what
 it means. A domain whose items are also decided together on one page of its
 own names it in `PluginIntegration.attention_url`, and the Needs you page's
-heading for the domain links there.
+heading for the domain links there. A page of its own draws the entries
+`plugin_attention_items` gathers as the queue:
+`{% include "partials/_work_queue.html" with items=entries|queue_entries only %}`.
 
 An item's `key` (else its eyebrow and title) is what the queue knows it by:
 its row and its dismissal. Two of one provider's items under one key are one
@@ -557,8 +559,8 @@ the extension's own pages say which setting is missing and where its guide
 is. It is never a readiness failure, so an install without production's
 secrets, such as a development one, still answers ready.
 
-Supply the help the shared card shows ([Design](Design.md), "A card says what
-is wrong and holds what fixes it"):
+Supply the help the shared card shows (`partials/_work_queue.html` in
+[Shared UI](Shared-UI.md#each-parts-rules)):
 
 | Field | For |
 | --- | --- |
@@ -871,7 +873,7 @@ rather than silently ignored the day the frame stops rendering it.
 A data table is declared through the table tags, so its shape is in the HTML on
 first paint. `{% table_region "Label" %}…{% endtable_region %}` wraps it in the box it
 fits, which takes the label as its name only when it scrolls. The region derives the width its columns leave at, by rank,
-from what each column holds ([Design](Design.md)). It draws the empty state in
+from what each column holds (`table_region` in [Shared UI](Shared-UI.md#each-parts-rules)). It draws the empty state in
 place of tables with no row beneath their heads; an `{% if %}` around the
 region says what is missing in the page's own words.
 
@@ -954,10 +956,14 @@ address gets a query, and `{% with_query url name=value as named %}` is its
 template form: `hq plugin check` refuses a query added by hand. It retires
 `{% table_heading %}`'s `gutter` option too: the region keeps the gutter in
 the column that names each row wherever a row can hold anything back.
+`PLUGIN_API_VERSION` 20 retires `{% stack_list %}`, `{% dot_list %}`,
+`{% prose_list %}`, `{% link_chips %}` and `{% title_meta %}`: `{% list
+kind=... %}` draws every list, and the classes `code-list` and `address-list`
+are its `codes` and `labeled` kinds.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
-([Design](Design.md)). Its classes (`notice`, `notice-*`) are the host's, so
+(`notice` in [Shared UI](Shared-UI.md#each-parts-rules)). Its classes (`notice`, `notice-*`) are the host's, so
 `hq plugin check` refuses one written by hand.
 
 A `TableListMixin` list declares the same through `TableColumn(kind=)`, its
@@ -1000,8 +1006,11 @@ sentence at its status. A form view whose write is a service call of
 its own inherits `hq_sdk.writes`' mixins, which run it once under the same key.
 A service refuses in words the person reads by raising
 `hq_sdk.capabilities.InputError(sentence)`, a sentence the extension wrote
-(`PLUGIN_API_VERSION` 13); any other exception's text stays in the log, and
-the person reads that the capability could not be executed.
+(`PLUGIN_API_VERSION` 13), and a record the call names that is not there by
+raising `hq_sdk.capabilities.RecordNotFound(sentence)`, answered `not_found`
+(`PLUGIN_API_VERSION` 20). Neither sentence names what the caller sent. Any
+other exception's text stays in the log, and the person reads that the
+capability could not be executed.
 A test that posts a form without opening its page first sends
 `hq_sdk.testing.form_keyed(data)`.
 
@@ -1015,7 +1024,7 @@ Extension templates supply domain content; HQ owns layout, tokens, responsive
 rules, accessibility states and visual change. A class, partial or hook an
 extension needs and this contract lacks belongs in HQ first; copying host CSS
 or markup into an extension is a contract failure. The rules the classes follow are
-in [Design](Design.md).
+each part's, in [Shared UI](Shared-UI.md#each-parts-rules), and those across parts are in [Design](Design.md).
 
 What the host writes for a value is pinned by example in
 `hq/platform/application/tests/test_sdk_text.py`: `span`, `when`, `when_day`,

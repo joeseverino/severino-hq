@@ -288,6 +288,24 @@ class TemplatePieceTests(SimpleTestCase):
 
         self.assertEqual(plain_words.shown(template), [(1, "Show all of this row"), (1, "Show less of this row")])
 
+    def test_changed_files_are_read_only_where_the_whole_run_reads(self):
+        """A changed file the whole run leaves out (outside its tree, vendored, generated) is read by
+        neither Vale nor the pieces, and a template the pieces never read is still Vale's."""
+
+        read = {
+            "hq/example.py": True,
+            "README.md": True,
+            "static/js/vendor/example.js": False,
+            "controller/example.gen.go": False,
+            ".github/workflows/example.yml": False,
+            "var/example.py": False,
+        }
+        for path, whole in read.items():
+            with self.subTest(path):
+                self.assertEqual(plain_words.within(Path(path), plain_words.TREE), whole)
+        self.assertTrue(plain_words.within(Path("static/example.html"), plain_words.TREE))
+        self.assertFalse(plain_words.within(Path("static/example.html"), plain_words.WHOLE))
+
     def test_a_path_that_is_gone_fails_rather_than_passing(self):
         with self.assertRaises(FileNotFoundError):
             plain_words.document([Path("templates/no-such-page.html")])

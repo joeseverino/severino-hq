@@ -32,6 +32,7 @@ class ExpenseRow(TypedDict):
     """One expense; each related record by its slug or id, or null."""
 
     id: Annotated[int, Describe("The expense's id, which its page and the records linked to it name it by.")]
+    label: Annotated[str, Describe("What the expense is called wherever it is named: who was paid, and for what.")]
     date: expenses.ExpenseDate
     vendor: expenses.ExpenseVendor
     item: expenses.ExpenseItem

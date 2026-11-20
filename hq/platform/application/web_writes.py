@@ -25,6 +25,8 @@ from . import capabilities
 from .capabilities import Ran, as_documented, run_capability
 from .forms import file_as_sent
 from .idempotency import KEY, answered
+from .integration_specs import command_schema
+from .json_schemas import fields as whole_fields
 from .security import agent_subject, web_principal
 lazy from .records import records_for
 
@@ -132,8 +134,20 @@ def form_payload(form: BaseForm, command: type) -> dict[str, Any]:
     lost = [name for name in form.changed_data if name in form.cleaned_data and name not in takes]
     if lost:
         raise ImproperlyConfigured(f"{command.__name__} takes no {', '.join(lost)}, which {type(form).__name__} sends.")
-    sent = {name: _as_sent(value) for name, value in form.cleaned_data.items() if name in takes}
+    # A field left blank that the command cannot hold empty (an amount) is
+    # left out, as a caller leaves it out: it takes its default, or an update keeps it.
+    nullable = {name for name, field in whole_fields(command_schema(command)).items() if _takes_null(field)}
+    sent = {
+        name: _as_sent(value)
+        for name, value in form.cleaned_data.items()
+        if name in takes and (value is not None or name in nullable)
+    }
     return json.loads(json.dumps(sent, cls=DjangoJSONEncoder))
+
+
+def _takes_null(field: dict[str, Any]) -> bool:
+    arms = field.get("anyOf", [field])
+    return any(arm.get("type") == "null" or not {"type", "$ref", "enum"} & arm.keys() for arm in arms)
 
 
 def _as_sent(value: Any) -> Any:

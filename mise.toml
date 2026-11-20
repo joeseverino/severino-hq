@@ -91,6 +91,9 @@ typos = "1.52.2"
 # Structural rules over the source, in tools/lint/ast-grep/ (lint:ast-grep), and the
 # counts Ruff has no rule for (audit:ast).
 ast-grep = "0.51.3"
+# Hands the linters that read a file at a time only the files a change touched
+# (hk.pkl, the hk task template).
+"aqua:jdx/hk" = "2.12.0"
 yq = "4.54.3"
 jq = "1.8.2"
 uv = "0.13.9"
@@ -194,12 +197,18 @@ env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "
 # files): django's env, the command its task names in `vars.command`, which
 # checks unless --fix, and the sources every such command reads with the file
 # it writes, `vars.writes`. A task that reads more names its whole `sources`,
-# since a task's list replaces its template's.
+# since a task's list replaces its template's. tools/tests/test_drift_sources.py
+# holds each list, the test modules it leaves out included, to what the run
+# opens.
 [task_templates.drift]
 env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_TEMPLATE_CACHE = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 tags = ["fast", "derived"]
 sources = [
   "**/*.py",
+  # Django never imports a test module to answer a command.
+  "!**/tests/**",
+  "!**/test_*.py",
+  "!**/tests.py",
   "{{ vars.writes }}",
   "hq/domains/control_plane/bridge_base.json",
   "hq/domains/docs_index/schema.json",
@@ -214,6 +223,19 @@ sources = [
 outputs = []
 usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
 run = 'uv run python manage.py {{ vars.command }} $([ "${usage_fix:-}" = true ] || echo --check)'
+
+# A quick gate whose linter reads a file at a time, as hk runs it (hk.pkl):
+# handed files, as fast hands each the files a change touched, the step
+# `vars.step` reads those its glob matches, and `<step>-whole` the whole tree
+# when one of them is a file it names; handed none, `<step>-whole` reads the
+# whole tree. hk.pkl says what each reads, so mise selects it on any change.
+[task_templates.hk]
+tags = ["fast"]
+sources = ["**/*"]
+outputs = []
+# A task's usage is added to this one: a gate whose tool fixes declares --fix.
+usage = 'arg "[files]..." var=#true help="Only these, as fast hands it the files a change touched; none reads the whole tree"'
+run = 'eval "set -- ${usage_files:-}"; mode=$([ "${usage_fix:-}" = true ] && echo --fix || echo --check); if [ "$#" -gt 0 ]; then exec hk check "$mode" --no-stage -S {{ vars.step }} -S {{ vars.step }}-whole -- "$@"; else exec hk check "$mode" --no-stage -S {{ vars.step }}-whole --all; fi'
 
 # ------------------------------------------------------------------ heavy
 # A task that loads the machine takes the heavy turn: mise's task lock
@@ -417,6 +439,7 @@ sources = [
   "README.md",
   "_typos.toml",
   "entrypoint.sh",
+  "hk.pkl",
   "manage.py",
   "mise.fast.toml",
   "mise.lock",

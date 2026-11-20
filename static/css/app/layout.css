@@ -3,14 +3,14 @@
 
 @layer components {
 
-/* ── Section cards / two-col ────────────────────────────────────── */
+/* ── The layout part's kinds ({% layout %}) and section cards ───── */
 
 /* Two columns at most: a track is never narrower than half the row, so four
    cards pair up 2+2 instead of leaving one orphaned, and below two 320px
    tracks it is one column with no breakpoint. A card is as tall as what it
    holds: stretched to a taller neighbor, a short card is mostly empty frame,
    which reads worse than a card that is honestly short. */
-/* stylelint-disable-next-line declaration-property-value-disallowed-list -- a pair, like beside like, at most two to a row; an hq_sdk class extensions write */
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- a pair, like beside like, at most two to a row; the layout part's pair, {% layout kind="pair" %} */
 .two-col { container: pair / inline-size; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(320px, (100% - var(--layout-gap)) / 2)), 1fr)); gap: var(--layout-gap); align-items: start; margin: 0 0 var(--stack-gap); }
 
 /* A main panel with a companion. Unlike two equal siblings, the companion is

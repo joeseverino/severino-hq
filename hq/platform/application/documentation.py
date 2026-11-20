@@ -280,7 +280,7 @@ class DocumentationCommand:
     obsidian_path: ObsidianPath = ""
     github_path: Annotated[GithubPath, Field(title="GitHub path")] = ""
     external_url: ExternalUrl = ""
-    last_reviewed: LastReviewed = None
+    last_reviewed: Annotated[LastReviewed, Field(title="Last changed")] = None
     published_at: PublishedAt = None
     notes: DocNotes = ""
     related_projects: Annotated[tuple[str, ...], Names("projects"), Describe("The projects this doc covers.")] = ()

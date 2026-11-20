@@ -6,7 +6,7 @@
   {% endif %}
 {% endbutton_row %}
 
-<div class="section-flow">
+{% layout %}
 {% section "Message" %}
   {% facts %}
     {% fact "Name" value=submission.name %}
@@ -36,5 +36,5 @@
   {% include "partials/_form.html" with form=form verb="Save note" gap=gap %}
 {% endsection %}
 {% endif %}
-</div>
+{% endlayout %}
 {% endblock %}

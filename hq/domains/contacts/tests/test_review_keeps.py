@@ -4,6 +4,7 @@ as every update does: it needs only the message it reviews."""
 from django.test import SimpleTestCase, TestCase
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.provider_adapters.cloudflare import ContactReview
 from hq.platform.application.capabilities import capability_registry, execute_capability
 from hq.platform.application.contact_submissions import ASSIGNEE_LENGTH, REVIEW
 from hq.platform.application.integration_specs import capability_schema
@@ -47,8 +48,10 @@ class AReviewKeepsWhatItWasNotSentTests(TestCase):
 
 
 class TheReviewSchemaTests(SimpleTestCase):
-    def test_a_review_requires_nothing_and_says_how_long_an_assignee_may_be(self):
+    def test_a_review_requires_nothing_and_says_how_long_its_assignee_and_notes_may_be(self):
         schema = capability_schema(capability_registry()[REVIEW])
+        applied = ContactReview.model_json_schema()["properties"]
 
         self.assertNotIn("required", schema)
         self.assertEqual(fields(schema)["assigned_to"]["maxLength"], ASSIGNEE_LENGTH)
+        self.assertEqual(fields(schema)["admin_notes"].get("maxLength"), applied["admin_notes"]["maxLength"])

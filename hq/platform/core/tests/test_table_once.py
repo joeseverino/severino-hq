@@ -1,5 +1,5 @@
 """A table region writes each cell of a row once, and the bytes a row and a
-page with no rows draw hold to their budgets (docs/Design.md, Opening a row
+page with no rows draw hold to their budgets (``table_region``'s rules, Opening a row
 moves no column)."""
 
 import re
@@ -89,7 +89,7 @@ class RowWrittenOnceTests(SimpleTestCase):
             '<tr id="row-{n}"><td><strong><a href="/example/{n}/">example-{n}</a></strong>'
             '<br><code>192.0.2.{n}:8080</code><span class="muted narrow-more"><br>Reached at example-host</span>'
             '<div class="row-below" data-label="Changes"><ul class="dot-list"><li>A record</li></ul></div></td>'
-            '<td>{{% line_list reads as read list="dot-list" %}}<li>{{{{ read }}}} <span class="muted row-more">2</span>'
+            '<td>{{% line_list reads as read kind="dots" %}}<li>{{{{ read }}}} <span class="muted row-more">2</span>'
             "</li>{{% endline_list %}}</td>"
             '<td><a href="/example/host/">example-host</a></td>'
             '<td><span class="toned tone-good">Working</span><span class="muted row-more"><br>Full access</span></td>'

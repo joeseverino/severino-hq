@@ -9,13 +9,13 @@
         {% for note in notes %}
         <tr>
           <td>{% present note.slug %}<code>{{ note.slug }}</code>{% endpresent %}</td>
-          <td>{% if note.entries %}{% dot_list %}{% for entry in note.entries %}<li>{{ entry }}</li>{% endfor %}{% enddot_list %}{% else %}{% muted %}Not looked up{% endmuted %}{% endif %}</td>
+          <td>{% if note.entries %}{% list kind="dots" %}{% for entry in note.entries %}<li>{{ entry }}</li>{% endfor %}{% endlist %}{% else %}{% muted %}Not looked up{% endmuted %}{% endif %}</td>
           <td>{% include "partials/_ask.html" with ask=note.lookup %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   {% endtable_region %}
-  {% prose_list numbered=True %}<li>An example note is looked up in the registry.</li><li>Its entries are listed beside it.</li>{% endprose_list %}
+  {% list kind="prose" numbered=True %}<li>An example note is looked up in the registry.</li><li>Its entries are listed beside it.</li>{% endlist %}
 {% endsection %}
 {% endblock %}

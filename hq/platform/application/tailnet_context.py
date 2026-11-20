@@ -18,11 +18,13 @@ from .credential_sight import READABLE, Sight, credential_sight
 from .entity_links import EntityLink, entity_link
 from .finding_model import Finding
 from .findings import estate_findings, serialize_finding
+from .integration_specs import ListRead, ResourceSpec
 from .json_schemas import as_written
 from .policy_links import PolicyName, PolicyNames, tagged
 from .projection import complete, projection_scope
+from .resources import EmptyQuery
 from .routes import reverse
-from .security import Principal
+from .security import Capability, Principal
 from .tailnet import (
     NEW_DEVICES,
     RESOLVES_THROUGH,
@@ -288,3 +290,18 @@ def get_tailnet(*, principal: Principal) -> dict[str, Any]:
 
     found = tailnet_context(principal=principal).as_dict()
     return complete([found])
+
+
+def resources() -> tuple[ResourceSpec, ...]:
+    return (
+        ResourceSpec(
+            "tailnet",
+            "Tailnet",
+            "The tailnet policy: settings, grants, shell rules, groups, tags and their machines, "
+            "services, app connectors, tests, problems and read failures.",
+            Capability.READ,
+            listing=ListRead(get_tailnet, EmptyQuery, Tailnet),
+            web_route="control_plane:tailnet",
+            pass_principal=True,
+        ),
+    )

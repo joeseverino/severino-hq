@@ -28,15 +28,13 @@ A `records` declaration yields:
 
 Its web views take `RecordFormMixin` (create, update) and `RecordDeleteMixin`
 from `hq/platform/application/writes.py` and name only their model. The form
-is the command's fields, each drawn from the model's column of that name
-(`records.record_form`), so a field added to the command and the model is on
-the form with no form of its own to edit. A label is the column's
-`verbose_name`, or the command field's title where it declares one, and a
-help text the command field's `Describe`. A column whose kind draws the wrong
-control (a short column written in sentences) is named in the declaration's
-`controls` with a `Control`. What a column
-cannot say (a file's control and the check of what it holds) goes on a
-`ModelForm` the declaration names as `form`, which lists no fields.
+is the create command's own (`command_forms.command_form_class`), the one the
+command's page draws, opened on a record as its update keeps it, so a field
+added to the command is on the form with no form of its own to edit. A label
+is the field's name, or its title where the command declares one, a help text
+its `Describe`, and its limits and choices are what the command's schema
+states, the model column's included. A short text written in sentences says
+so with `format: textarea` on its command field.
 
 The form sends its values to the domain's create or update capability
 through `run_posted`, as every other door does, and the save runs the model's

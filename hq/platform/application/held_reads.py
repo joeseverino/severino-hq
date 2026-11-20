@@ -4,6 +4,7 @@ One read for every door: the API's record route, MCP's ``get_resource`` and
 ``hq://approvals/{id}``, and the MCP task a held call becomes, which says the
 same standing as a task's state. Only the caller that asked reads a request
 (``approvals.own_held_request``); another caller's reads as an id nothing holds.
+The commands that decide or withdraw one are declared here too, on the same domain.
 """
 
 from dataclasses import dataclass
@@ -12,9 +13,10 @@ from typing import Annotated, Any
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 
 from . import approval_review, approvals
+from .contracts import Effect
 from .describe import Describe
 from .held_answer import HELD, HeldRequest, applying
-from .integration_specs import ResourceSpec
+from .integration_specs import CapabilitySpec, ResourceSpec
 from .record_errors import RecordNotFound
 from .refusal_status import refusal_of, refuse
 from .resource_operations import serialize_operation
@@ -116,5 +118,59 @@ def resources() -> tuple[ResourceSpec, ...]:
             identifier="id",
             pass_principal=True,
             record_type=HeldRequestRecord,
+        ),
+    )
+
+
+def capabilities() -> tuple[CapabilitySpec, ...]:
+    return (
+        # A person's decision on a change a credential asked for. Held only in the
+        # browser (security.HELD_ONLY_AT), so no credential decides one.
+        CapabilitySpec(
+            approvals.APPROVE,
+            "Agree to a change an agent asked for, and apply exactly what it asked.",
+            Effect.REMOTE_WRITE,
+            Capability.DECIDE_APPROVALS,
+            approvals.ApproveCommand,
+            approvals.answered(approvals.approve),
+            execution_notes=(
+                "Refuse a request already decided or expired, and one you asked for yourself.",
+                "Refuse when what it changes moved on after it was asked for.",
+                "Run the held call once, recorded under both the asker and the approver.",
+            ),
+            label="Approve a held change",
+            verb="Approve",
+            reached_from="action_items",
+        ),
+        CapabilitySpec(
+            approvals.REJECT,
+            "Refuse a change an agent asked for, so its request has an answer.",
+            Effect.REMOTE_WRITE,
+            Capability.DECIDE_APPROVALS,
+            approvals.RejectCommand,
+            approvals.answered(approvals.reject),
+            execution_notes=("Record the refusal, who made it and the note, and apply nothing.",),
+            label="Reject a held change",
+            verb="Reject",
+            reached_from="action_items",
+        ),
+        # The asker's own way out of a request it no longer wants. Its own
+        # request only, so any caller that asked may: a person decides nothing here.
+        CapabilitySpec(
+            approvals.WITHDRAW,
+            "Take back a change you asked for that still waits for approval, so no operator is asked to decide it. "
+            "Send the `approval.id` its held answer carried.",
+            Effect.REMOTE_WRITE,
+            Capability.READ,
+            approvals.WithdrawCommand,
+            approvals.answered(approvals.withdraw),
+            execution_notes=(
+                "Find the request among the ones you asked for, and refuse any other.",
+                "Refuse a request already decided or expired.",
+                "Mark it withdrawn, apply nothing, and stop counting it against how many you may hold.",
+            ),
+            label="Withdraw a held change",
+            verb="Withdraw",
+            subject_resource="approvals",
         ),
     )

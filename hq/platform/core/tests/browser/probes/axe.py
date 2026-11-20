@@ -3,7 +3,7 @@
 from functools import cache
 from pathlib import Path
 
-from hq.platform.core.tests.browser.probes import Check
+from hq.platform.core.tests.browser.probes import Check, Example, Plant
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.probes.palette import _COLOR, _PAINTED_BY
 from hq.platform.core.tests.browser.probes.settle import settled
@@ -131,10 +131,70 @@ def rules_read(left_out=()):
     return (axe_probe(), [None, TAGS, [*LEFT_OUT, *left_out], SELECTORS["vendored"]])
 
 
+_FAINT = "color: #c8c8c8; background: #fff"
+
+# What axe must find: text too faint to read, a button with no name and a
+# field with no label, on a page headed as every page is. axe is evaluated as
+# every probe is, so a page whose policy admits only its own nonced scripts
+# still runs it, and an engine with script off still settles it.
+_PLANTED = f"""<h1>Example heading</h1>
+<p class="example-faint" style="{_FAINT}">Example words too faint to read</p>
+<button type="button" class="example-unnamed"></button>
+<input type="text" name="example" class="example-unlabeled">"""
+
+
+def _inactive(disabled=True):
+    """Faint ink inside a control disabled or aria-disabled, which WCAG leaves
+    out of contrast (``disabled``) or puts in play, beside text that clears
+    4.5:1, plain and faded by an opacity."""
+
+    return f"""<button type="button" class="example-disabled"{" disabled" if disabled else ""} style="{_FAINT}">Example control not in play</button>
+<span class="example-dead-end"{' aria-disabled="true"' if disabled else ""} style="{_FAINT}; opacity: .35">Example end of a range</span>
+<p class="example-clear" style="color: #333; background: #fff">Example words that read</p>
+<p class="example-faded-clear" style="color: #333; background: #fff; opacity: .9">Example words faded that still read</p>"""
+
+
 # The survey checks these probes answer (`probes/__init__.py`), each read only
 # when it runs: a tree without the lint tools (the image, the composed suite's
 # copy) names them all the same.
 CHECKS = {
-    "axe": Check(rules_read, reader_sees="a part a screen reader or the keyboard cannot use"),
-    "contrast": Check(contrast_read, palette=True, reader_sees="text too faint to read"),
+    "axe": Check(
+        rules_read,
+        reader_sees="a part a screen reader or the keyboard cannot use",
+        plants=tuple(
+            Plant(
+                _PLANTED,
+                scripted=scripted,
+                finds=("button-name: button.example-unnamed", "label: input.example-unlabeled"),
+            )
+            for scripted in (False, True)
+        ),
+    ),
+    "contrast": Check(
+        contrast_read,
+        palette=True,
+        reader_sees="text too faint to read",
+        plants=(
+            *(Plant(_PLANTED, scripted=scripted, finds=("p.example-faint",)) for scripted in (False, True)),
+            # The faint ink is held once its control is in play.
+            Plant(_inactive(disabled=False), finds=("button.example-disabled", "span.example-dead-end")),
+            # A link a reader can follow is in play however faint it is drawn,
+            # and its ink clears 4.5:1 only before the fade.
+            Plant(
+                '<p style="background: #fff"><a class="example-faded" href="#example" '
+                'style="color: #595959; opacity: .62">Example day gone by</a></p>',
+                finds=("a.example-faded",),
+            ),
+            # Ink the color of its ground, and one faint character, which axe
+            # leaves to a person: a reader sees nothing and a smudge.
+            Plant(
+                '<p class="example-unseen" style="color: #fff; background: #fff">Example words drawn in their ground</p>'
+                '<p style="background: #fff"><span class="example-lone" style="color: #c8c8c8">x</span></p>',
+                finds=("p.example-unseen", "span.example-lone"),
+            ),
+        ),
+        # WCAG leaves out an inactive component, and nothing else: text that
+        # clears 4.5:1 passes, faded or not.
+        clear=(Example(_inactive()),),
+    ),
 }

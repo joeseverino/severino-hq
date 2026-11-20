@@ -93,7 +93,9 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 .page-head .page-actions { position: relative; margin-left: auto; display: flex; flex-wrap: wrap; gap: var(--space-4); flex: 0 1 auto; justify-content: flex-end; min-width: 0; }
 .page-head .page-actions > * { white-space: nowrap; }
 /* A run of short things on one line (links, values, figures): one separator
-   for all of them, drawn here, so no list writes its own commas or gaps. */
+   for all of them, drawn here, so no list writes its own commas or gaps. A
+   run inside a line of text (a summary, a statement) is a span of spans, the
+   same run in phrasing content where a list is not allowed. */
 /* A run of links wraps onto lines a target tall (`--target-min`), so a link is never pressed for the one above it; in a table the row keeps its height, and a cell spaces its own links (figures.css). */
 .dot-list:has(a):not(td *) { line-height: var(--target-min); }
 /* The dot stands in the gap before its part, so where the run wraps, the dot
@@ -105,7 +107,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- clips the dot before a part that opens a line, never a part */
   overflow-x: clip;
 }
-.dot-list > li + *::before {
+.dot-list > * + *::before {
   content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
   text-align: center; color: var(--muted-2); text-decoration: none;
 }

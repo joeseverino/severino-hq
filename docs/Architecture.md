@@ -149,9 +149,9 @@ one queue. Each item carries its finding's `steps`, `no_help_reason` and
 findings stay out of the queue; the contributing domain decides whether a
 reading needs a decision.
 
-The dashboard and the full queue share one row partial and one steps
-renderer (`_resolution_workflow.html`). A press keeps its action URL, method
-and CSRF protection; drawing one neither runs it nor grants authority.
+The dashboard and the full queue share one row partial, whose steps are a
+`{% steps numbered=True %}` list of `_operator_step.html`. A press keeps its
+action URL, method and CSRF protection; drawing one neither runs it nor grants authority.
 
 Every item HQ raises carries help. `Finding.steps` holds it, each step one of
 three kinds told apart by `kind` (`finding_steps.Step`):
@@ -535,7 +535,7 @@ costs nobody:
 The request that asks answers at once, in one shape for both
 (`hq.platform.application.asks`): how the work stands and, while it is live, a
 status resource, with 202. `partials/_ask.html` draws the control and one
-script behavior follows it ([Design](Design.md), "Asked-for work is an ask").
+script behavior follows it (`partials/_ask.html` in [Shared UI](Shared-UI.md#each-parts-rules)).
 
 The interpreter holds the rule (`hq/platform/core/outbound.py`). Python raises
 an audit event whenever any library opens a connection, resolves a name,

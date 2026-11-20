@@ -31,7 +31,7 @@
   .filter-bar, .insight-grid,
   .form,
   .topology-workspace,
-  .posture-repos, .route) {
+  .posture-repos) {
     border: var(--surface-border, 1px solid var(--line));
     border-inline-start: var(--surface-edge, var(--surface-border, 1px solid var(--line)));
     border-radius: var(--surface-radius, var(--radius));

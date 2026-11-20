@@ -334,7 +334,7 @@ On an 8 GB Apple silicon machine:
 | Run | Takes |
 | --- | --- |
 | `mise run test <label>` | a few seconds |
-| `mise run lint:prose` | about five seconds |
+| `mise run lint:prose` | about six seconds; under a second on one file |
 | `mise run lint` | about a minute |
 | `mise run fast` | one to two minutes |
 
@@ -443,6 +443,28 @@ shell gate also runs when a path the change touched is one
 no glob can say. `mise run --tag fast --affected --affected-base <ref>
 --affected-json` names each gate it would pick and why, running none. A lint gate that reaches the network, or whose check
 fast makes another way, is left untagged.
+
+A gate whose linter reads one file at a time (`lint:ruff`, `lint:ast-grep`,
+`lint:spelling`, `lint:prose`) runs through hk, as `hk.pkl` declares it, and
+fast hands it the files the change touched: its step reads those its glob
+matches, and its `-whole` step reads the whole tree when one of them is a file
+that step names (the tool's config, the pins). Run alone, with no files, as
+the Lint job runs it, it reads the whole tree. A gate that answers a question
+about the whole (the import contracts, the types, the derived files) keeps
+its whole input, and one whose run never reads a test module leaves the tests
+out of its sources, so an edit inside a test selects none of them.
+
+A change to a stylesheet under `static/css/app/` or a template selects
+`fast:look`, which runs in the heavy turn beside the tests and holds the
+component catalog entries the change reaches to every layout check, in
+WebKit at 320 and 1280 pixels: `mise run dev:look --rule
+every_layout_check_holds catalog:<path>` for each such file. A template
+reaches each entry whose page draws it; a sheet reaches each entry whose
+markup holds a class or data attribute named by a rule a changed line lies in
+(`hq/platform/core/tests/look_reach.py`), and every entry when such a rule names
+neither (an element, `:root`, a token). A file that reaches no entry is
+named in the look's output, never skipped unsaid. A Python-only change
+selects no look, and the whole catalog stays CI's Browser job.
 
 A test module that a `test:*` task runs by its label in a dependency group's
 environment (`uv run --group fuzz`), which the tests' environment lacks, is
@@ -907,17 +929,20 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
    a push to its forge, since these refs publish nothing. fast's default base is resolved here too, from this
    checkout's chain of passed trees, which is also synced there,
    so it selects what it would select here. A run that may compose (the
-   composed suite, fast, perf, and a look that runs perf) sends the extension
-   checkout `HQ_LOCAL_PYTHONPATH` names the same way, to the clone of the same
-   name beside HQ's there, with `HQ_LOCAL_PLUGINS`, and the set is picked
-   there from what was sent; one that cannot send it runs here.
+   composed suite, fast, perf, and a look that runs perf) picks the set here,
+   as a run here would, and sends the extension tree it picked the same way,
+   to the clone of the same name as the checkout `HQ_LOCAL_PYTHONPATH` names,
+   beside HQ's there, with `HQ_LOCAL_PLUGINS`. The tree sent composes it there
+   as it stands, never picking again; one that cannot send it runs here.
 2. There, the run takes the first free worktree of this checkout's under
    `~/.cache/hq-gates` (the checkout is keyed by its machine and path), held
    with `flock` until the run ends, so two runs at once never share one and
    each tree a checkout sends finds the environment and caches the last one
    warmed. The worktree is reset to the commit sent, everything an earlier
    run left that git tracks or does not ignore removed, and the pushed refs
-   are deleted. A new one holds the files `.worktreeinclude` names as that
+   are deleted. Its HEAD is then this checkout's HEAD, with the rest of the
+   tree as uncommitted work, so a step that reads HEAD (a look's
+   `catalog:<sheet>`) reads the change it would read here. A new one holds the files `.worktreeinclude` names as that
    checkout has them. A file under `var/` that an argument names (a `--eval`
    probe) is staged before the run and laid in. A worktree untouched for a
    day is removed as the next run starts.
@@ -1017,7 +1042,11 @@ nothing.
 A check is declared once, beside its probe: an entry of its probe module's
 `CHECKS` (`hq/platform/core/tests/browser/probes/__init__.py` says what an
 entry holds), which the survey collects from every module there, so a new check lands as
-its `CHECKS` entry, never an edit to `survey.py`.
+its `CHECKS` entry, never an edit to `survey.py`. The entry carries its own
+examples, markup it must find (`plants`, each with the findings it expects)
+and markup it must pass (`clear`), and one test walks them all in each engine
+(`hq/platform/core/tests/browser/plants.py`), so a check needs no test of its
+own.
 
 A check selects markup only through `SELECTORS`, and
 `hq/platform/core/tests/test_browser_selectors.py` fails on a selector no
@@ -1197,8 +1226,8 @@ line names how many processes looked. A share that ends early fails the
 run, naming its pages. `--deep` stays one process.
 
 A component catalog entry (`part/notice-error`, `table/figures`, every key of
-`CATALOG`, which `hq/platform/core/tests/browser/catalog/` gathers from its
-families' modules) is drawn by the
+`CATALOG`, which `hq/platform/core/tests/browser/catalog/` gathers from each
+`Part`'s examples and its families' modules) is drawn by the
 catalog gate's own `catalog.page`, so a look and that gate never
 draw an entry apart. `gallery` is every entry on one page, each in a region
 named for it under its name, after a map of its families, each part in a

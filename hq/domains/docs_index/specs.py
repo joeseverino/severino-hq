@@ -1,15 +1,46 @@
-"""The documentation resource, declared on its domain in application/domains.py."""
+"""The documentation's commands and resource, declared on its domain in application/domains.py."""
 
 from pydantic import Field, create_model
 
 from hq.platform.application import documentation
-from hq.platform.application.integration_specs import ListRead, ResourceSpec
+from hq.platform.application.contracts import Effect
+from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from hq.platform.application.resource_records import DocumentationItem, DocumentationRow
 from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
+from hq.platform.application.sync import HQSyncCommand, execute_hq_sync
 
 from .models import DocumentationRecord
+
+
+def capabilities() -> tuple[CapabilitySpec, ...]:
+    return (
+        CapabilitySpec(
+            "hq.sync",
+            "Bring HQ's list of docs up to date from the vault.",
+            Effect.REMOTE_WRITE,
+            # Documentation authority alone, so an account allowed to sync docs
+            # needs no control-plane authority.
+            Capability.SYNC_DOCUMENTATION,
+            HQSyncCommand,
+            execute_hq_sync,
+            subject_resource="documentation",
+            label="Update docs from the vault",
+        ),
+        CapabilitySpec(
+            documentation.SYNC,
+            "Bring HQ's list of docs up to date from a vault export.",
+            Effect.REMOTE_WRITE,
+            Capability.SYNC_DOCUMENTATION,
+            documentation.DocumentationSyncCommand,
+            documentation.execute_documentation_sync,
+            subject_resource="documentation",
+            label="Update docs from an export",
+            verb="Update docs",
+        ),
+    )
+
 
 DocumentationQuery = create_model(
     "DocumentationQuery",

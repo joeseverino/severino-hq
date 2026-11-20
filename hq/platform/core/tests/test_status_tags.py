@@ -73,7 +73,7 @@ class StatusPillTests(SimpleTestCase):
         declared with its tone, and its pill says it in the model's label."""
 
         from hq.domains.assets.models import Asset
-        from hq.domains.contacts.forms import SubmissionStatus
+        from hq.domains.control_plane.provider_adapters.cloudflare import SubmissionStatus
         from hq.platform.core.models import AuditLog
 
         for state, label, tone in (

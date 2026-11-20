@@ -55,8 +55,8 @@ const readingMeasure = {
   "/^--([\\w-]*-)?measure(-[\\w-]*)?$/": ["/./"],
   "/^max-(width|inline-size)$/": ["/(?<![-\\w.])[\\d.]+ch\\b/"],
 };
-// A run of sibling sections or cards is drawn by the flow (`.section-flow`,
-// docs/Design.md "Sibling sections flow"), so no declaration lays out an
+// A run of sibling sections or cards is drawn by the layout part (`{% layout %}`,
+// its rules in docs/Shared-UI.md), so no declaration lays out an
 // auto-fit or auto-fill grid. A part that lays out something else inside
 // itself (a form's fields, a band's cells) says so in a disable comment.
 const autoGrid = /\brepeat\(\s*auto-(fit|fill)\b/i;
@@ -82,7 +82,7 @@ const disallowedValues = (keys, { floating = true } = {}) => [
         : matches(floatingShadow, property) && /--shadow-pop/.test(value)
         ? `"${property}: ${value}" draws a floating panel of its own: an open popover is the panel base.css's \`:popover-open\` rule draws, so lay it out and leave its frame`
         : autoGrid.test(value)
-        ? `"${property}: ${value}" lays out its own auto-fit grid: a run of sibling sections or cards is the flow (\`.section-flow\`, docs/Design.md); a part that lays out something else inside itself says so in a disable comment`
+        ? `"${property}: ${value}" lays out its own auto-fit grid: a run of sibling sections or cards is the layout part (\`{% layout %}\`, docs/Shared-UI.md); a part that lays out something else inside itself says so in a disable comment`
         : matches(capsuleRadius, property)
         ? `"${property}: ${value}" rounds a corner with a literal: a capsule's ends are var(--radius-pill), a card's corners var(--radius) or var(--radius-sm)`
         : matches(cutText, property)
@@ -149,7 +149,7 @@ const boxWidth = ["/^(min-|max-)?(width|inline-size)$/", "flex", "flex-basis", "
 // A primitive looks one way, drawn in the sheets that draw it, so a page
 // built from it looks like every other (`hq/restyled-primitive`). Each is
 // the classes that name it, a table its own elements too, and those sheets.
-// The table's are where it is drawn (docs/Design.md, "A table fits its box"),
+// The table's are where it is drawn (`table_region`'s rules, docs/Shared-UI.md),
 // and its parts are what its rules tell a cell's parts apart by.
 const primitives = [
   {
@@ -158,7 +158,7 @@ const primitives = [
     names: String.raw`(?:\.(?:data-table|row-detail|row-columns)(?![-\w])|(?<![-\w.#])(?:table|caption|thead|tbody|tfoot|tr|td|th)(?![-\w]))`,
     sheets: ["base", "cuts", "figures", "tables", "surfaces"],
     parts: [
-      "btn", "button-words", "cell-clamp", "cell-controls", "cell-detail", "cell-line", "cell-part", "cell-short", "cell-whole", "cut", "external-link", "is-expanded", "line-list", "line-rest", "line-run", "muted",
+      "btn", "button-words", "cell-clamp", "cell-controls", "cell-detail", "cell-line", "cell-part", "cell-short", "cell-whole", "code-list", "cut", "external-link", "is-expanded", "line-list", "line-rest", "line-run", "muted",
       "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
       "row-editor", "row-expand", "row-fold", "row-less", "row-more", "select-column", "stack-list", "strut", "table-clamp", "table-scroll", "tag", "token", "visually-hidden", "whole",
     ],

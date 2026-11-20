@@ -1,7 +1,0 @@
-{% comment %}
-The line of facts on a page's title line, drawn by {% title_meta %} from the
-template a view names as its page_aside:
-{% title_meta %}<li>{% status "Online" tone="good" %}</li><li><code>example-host</code></li>{% endtitle_meta %}.
-Its parts are <li> elements, a dot between each and each wrapping whole, so
-no line opens on a dot. Its options are its Part's (title_tags).
-{% endcomment %}{% load title_tags %}<ul class="page-title-meta dot-list"{{ data }}>{{ content|title_parts }}</ul>

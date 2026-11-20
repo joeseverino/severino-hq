@@ -183,7 +183,7 @@ class ServiceReachTests(TestCase):
                 (path,) = select(body, "data-exposure")
                 (row,) = (item for item in select(listed, "data-exposure") if hostname in item.attrs["title"])
 
-                steps = [item.words for item in with_class(body, "hop-label")]
+                steps = [item.words for item in with_class(body, "ladder-kind")]
 
                 self.assertEqual((header.words, header.attrs["title"]), (reach.label, reach.detail))
                 # The network the path crosses is called what the audience calls it.

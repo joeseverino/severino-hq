@@ -70,6 +70,29 @@ class FixedFirstTests(SimpleTestCase):
             self.assertIn(f"{fast.REWROTE} {derived}", closing)
 
 
+class HandedFilesTests(SimpleTestCase):
+    def test_only_a_gate_that_reads_a_file_at_a_time_is_handed_the_changed_files(self):
+        listed = {
+            "example:files": {"file": None, "usage": 'arg "[files]..." var=#true\nflag "--fix"'},
+            "example:whole": {"file": None, "usage": 'flag "--fix"'},
+        }
+        gates = ("example:files", "example:whole")
+        with (
+            mock.patch.object(fast, "quick_tasks", return_value=listed),
+            mock.patch.object(fast, "stage_tokens", return_value=0),
+        ):
+            checked = fast.quick_command(gates, "auto", ["hq/example.py"])
+            fixing = fast.handed("example:files", ["hq/example.py"])
+            heavy = fast.run_command(gates, [], [], "auto", ["static/example.css"], "example-base")
+
+        self.assertEqual(checked[-4:], ["example:files", "hq/example.py", ":::", "example:whole"])
+        self.assertEqual(fixing, ["example:files", "hq/example.py"])
+        # A gate in the heavy turn is handed them too, and told the base they changed from.
+        self.assertIn(f"{fast.BASE}=example-base", heavy)
+        at = heavy.index("example:files")
+        self.assertEqual(heavy[at : at + 4], ["example:files", "static/example.css", ":::", "example:whole"])
+
+
 @tag("source")
 class SelectableTests(SimpleTestCase):
     def test_every_gate_fast_may_run_is_selected_by_what_it_reads(self):
@@ -105,3 +128,37 @@ class SelectableTests(SimpleTestCase):
                     if not matched(PurePath(relative), task["sources"])
                 ]
                 self.assertFalse(missed, f"{name} runs {', '.join(missed)}, which its sources leave out: add each")
+
+    def test_an_edit_inside_a_test_body_selects_no_gate_that_never_reads_a_test(self):
+        """Each gate whose sources leave the test modules out is still selected by a module it reads."""
+
+        from tests.mise_tasks import matched
+
+        leaf = PurePath("hq/platform/mcp/tests/test_answer_defaults.py")
+        read = {
+            "lint:deploycheck": "hq/config/settings.py",
+            "test:migrations": "hq/domains/jobs/models.py",
+            "lint:sdk-breaking": "hq_sdk/ui.py",
+            "lint:deptry": "hq/platform/mcp/server.py",
+            "lint:drift-api-document": "hq/platform/api/views.py",
+            "lint:drift-bridge-contract": "hq/domains/jobs/models.py",
+            "lint:drift-shared-ui-reference": "hq_sdk/ui.py",
+        }
+        listed = mise_tasks()
+        for name, path in read.items():
+            with self.subTest(name):
+                sources = listed[name]["sources"]
+                self.assertTrue(matched(PurePath(path), sources), f"{name} is not selected by {path}, which it reads")
+                self.assertFalse(matched(leaf, sources), f"{name} is selected by {leaf}, which it never reads")
+
+    def test_only_a_file_a_page_draws_selects_the_look(self):
+        """fast's browser look runs on a change to a sheet or a template, and
+        never on a change to Python alone."""
+
+        from tests.mise_tasks import matched
+
+        sources = mise_tasks()["fast:look"]["sources"]
+        for path in ("static/css/app/figures.css", "templates/partials/_chart_legend.html"):
+            self.assertTrue(matched(PurePath(path), sources), path)
+        for path in ("hq/platform/core/templatetags/part_tags.py", "static/js/app.js"):
+            self.assertFalse(matched(PurePath(path), sources), path)

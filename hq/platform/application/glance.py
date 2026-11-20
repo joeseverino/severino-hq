@@ -27,7 +27,7 @@ from .answer_fields import CallMessage
 from .asks import FAILED, QUEUED, REFRESHING, RUNNING, Ask, Asked, AskedAnswer, Standing
 from .cadence import ask
 from .card_items import Kpi
-from .command_fields import Describe
+from .command_fields import Describe, stored_in
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
 from .contracts import Effect
 from .freshness import DASHBOARD_GLANCE, freshness
@@ -278,19 +278,28 @@ _LONGITUDE = r"[+-]?(?:180(?:\.0+)?|(?:1[0-7][0-9]|[1-9]?[0-9])(?:\.[0-9]+)?)"
 POINT = rf"^\s*(?:{_LATITUDE}\s*,\s*{_LONGITUDE}\s*)?$"
 
 
-def _as_point(value: Any) -> Any:
+def _as_point(value: str) -> str:
     """A point sent as text, as latitude,longitude each to four places, or
     empty for none; anything else is refused as its type is validated."""
 
-    if not isinstance(value, str) or not value.strip():
-        return value.strip() if isinstance(value, str) else value
+    if not value.strip():
+        return ""
     latitude, longitude = _coordinates().validate_python([part.strip() for part in value.split(",")])
     return f"{latitude:.4f},{longitude:.4f}"
+
+
+def _a_point(value: str) -> str:
+    """``value`` as it was sent, once it reads as a point: the column's rules
+    hold what was sent, and the save stores it as ``_as_point`` writes it."""
+
+    _as_point(value)
+    return value
 
 
 DASHBOARD_SETTINGS = "dashboard.settings.update"
 
 
+@stored_in(DashboardConfiguration)
 @dataclass(frozen=True, slots=True)
 class DashboardSettingsCommand:
     """Where the weather is read for, and what the glance strip calls its panels."""
@@ -299,12 +308,16 @@ class DashboardSettingsCommand:
         str,
         # The schema says the form; the parser refuses outside it, naming the
         # coordinate that is wrong, which a pattern's refusal cannot.
-        Field(json_schema_extra={"pattern": POINT}),
-        AfterValidator(_as_point),
-        Describe("Where the weather is read for, as latitude,longitude."),
+        Field(title="Weather location", json_schema_extra={"pattern": POINT}),
+        AfterValidator(_a_point),
+        Describe("Where the weather is read for, as latitude, longitude; blank hides it."),
     ] = ""
-    weather_label: Annotated[str, Describe("What the weather panel calls that place.")] = ""
-    infrastructure_label: Annotated[str, Describe("What the infrastructure panel is called.")] = ""
+    weather_label: Annotated[
+        str, Field(title="Name for the weather card"), Describe("", api="What the weather panel calls that place.")
+    ] = ""
+    infrastructure_label: Annotated[
+        str, Field(title="Name for the machine card"), Describe("", api="What the infrastructure panel is called.")
+    ] = ""
 
 
 class DashboardSettingsSaved(TypedDict):
@@ -318,9 +331,9 @@ class DashboardSettingsSaved(TypedDict):
 def save_dashboard_settings(command: DashboardSettingsCommand, *, principal: Principal) -> DashboardSettingsSaved:
     del principal
     configuration = DashboardConfiguration.objects.select_for_update().filter(pk=1).first() or DashboardConfiguration()
-    configuration.weather_point = command.weather_point
-    configuration.weather_label = command.weather_label.strip()[:40] or "Weather"
-    configuration.infrastructure_label = command.infrastructure_label.strip()[:40] or "Homelab"
+    configuration.weather_point = _as_point(command.weather_point)
+    configuration.weather_label = command.weather_label.strip() or "Weather"
+    configuration.infrastructure_label = command.infrastructure_label.strip() or "Homelab"
     configuration.audit_said = "Dashboard settings saved"
     configuration.save()
     return {"ok": True, "message": "Dashboard settings saved."}

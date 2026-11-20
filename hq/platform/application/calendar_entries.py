@@ -208,8 +208,8 @@ type CalendarEntryInterval = Annotated[
     Describe("How far apart its times are, in what it repeats by: 2 with weekly is every other week."),
 ]
 type CalendarEntryWeekdays = Annotated[
-    Sequence[Annotated[int, Field(ge=month_lengths.MONDAY, le=month_lengths.SUNDAY)]],
-    Describe("For one that repeats weekly, the days of the week it falls on, Monday as 0.", api="Empty otherwise."),
+    Sequence[Annotated[int, Choices((int(day), month_lengths.day_abbr[day]) for day in month_lengths.Day)]],
+    Describe("For one that repeats weekly, the days of the week it falls on.", api="Monday as 0. Empty otherwise."),
 ]
 type CalendarEntryRepeatUntil = Annotated[
     date | None, Describe("The last day it repeats.", api="Null for no last day.")
@@ -227,7 +227,12 @@ type ClockTime = Annotated[
     time,
     AfterValidator(_of_the_clock),
     WithJsonSchema(
-        {"type": "string", "pattern": r"^(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9](?:\.[0-9]{1,6})?)?$"}
+        {
+            "type": "string",
+            # RFC 3339's time without an offset, which its ``time`` format requires.
+            "format": "partial-time",
+            "pattern": r"^(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9](?:\.[0-9]{1,6})?)?$",
+        }
     ),
     Describe("A time of day, as the clock on the wall reads it."),
 ]
@@ -242,16 +247,18 @@ class EntryCommand:
     """One entry, as every surface states it."""
 
     title: CalendarEntryTitle
-    starts_on: CalendarEntryStartsOn
-    ends_on: CalendarEntryEndsOn = None
-    starts_at: Annotated[ClockTime | None, Describe("The time it starts; blank for all day.")] = None
-    ends_at: Annotated[ClockTime | None, Describe("The time it ends.")] = None
+    starts_on: Annotated[CalendarEntryStartsOn, Field(title="Day")]
+    ends_on: Annotated[CalendarEntryEndsOn, Field(title="Until day")] = None
+    starts_at: Annotated[ClockTime | None, Field(title="From"), Describe("The time it starts; blank for all day.")] = (
+        None
+    )
+    ends_at: Annotated[ClockTime | None, Field(title="To"), Describe("The time it ends.")] = None
     location: CalendarEntryLocation = ""
     notes: Notes = ""
     repeat: CalendarEntryRepeat = ""
-    interval: CalendarEntryInterval = 1
-    weekdays: CalendarEntryWeekdays = ()
-    repeat_until: CalendarEntryRepeatUntil = None
+    interval: Annotated[CalendarEntryInterval, Field(title="Every")] = 1
+    weekdays: Annotated[CalendarEntryWeekdays, Field(title="On")] = ()
+    repeat_until: Annotated[CalendarEntryRepeatUntil, Field(title="Stop repeating after")] = None
     about: CalendarEntryAbout = ""
 
 

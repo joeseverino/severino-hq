@@ -36,7 +36,8 @@ from hq.platform.application.moments import (
 from hq.platform.application.money import money as _money
 from hq.platform.application.printable import admitted
 from hq.platform.application.ui import MISSING, counted as _counted, measured as _measured, no_value
-from hq.platform.core.template_parts import Option, Part, SlotsNode, slotted
+from hq.platform.core.part_examples import tags
+from hq.platform.core.template_parts import Option, Part, SlotsNode, answers, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
 from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
@@ -114,7 +115,7 @@ def dot():
     after the first part. A no-break space holds it to that part and the line
     may break only after it, so no line starts with a dot or holds one alone;
     a reader hears the two parts. A run of whole parts that is a list of its
-    own is ``{% dot_list %}``; Python joins text as ``labels.dotted`` does."""
+    own is ``{% list kind="dots" %}``; Python joins text as ``labels.dotted`` does."""
     return mark_safe(DOT_MARKUP)  # noqa: S308 - HQ's own literal markup
 
 
@@ -377,7 +378,7 @@ def _is_this_page(context, url: str) -> bool:
     return not parts.netloc and unquote(parts.path) == request.path
 
 
-@register.simple_tag(takes_context=True)
+@answers(register, takes_context=True)
 def is_this_page(context, url):
     """``{% is_this_page url as here %}``: whether ``url`` is the view being
     drawn, its path and its query: a control that would only lead there is
@@ -466,6 +467,13 @@ def _cell_line_frame(_name: str, given: dict) -> dict:
 
 CELL_LINE = Part(
     name="cell_line",
+    rules="""
+    A fact in a cell with a quiet line under it (a name over its kind, a change over its risk) is `{%
+    cell_line %}`. Its words alone are `{% cell_line text=... url=... %}`. Markup is its block, its
+    second line after `{% detail %}`: `{% cell_line %}{% entity link %}{% detail %}Docker host{%
+    endcell_line %}`. The part draws that line on its own, so no page writes a break or styles a line
+    of its own. No template writes a `<br>`: `hand-drawn-line-break` refuses one, in an extension too.
+    """,
     classes=("cell-line", "cell-detail"),
     partial="partials/_cell_line.html",
     parts=("content", "detail"),
@@ -473,7 +481,7 @@ CELL_LINE = Part(
         "A fact in a table cell as a line of its own, and the words said quietly on the line under it: "
         "given `text=` it encloses nothing, its words a link to `url=`; a line of markup is its block, "
         "its second line after `{% detail %}`. A second line that is a status, code or a link is a "
-        "`{% stack_list %}` item."
+        "`{% list %}` item."
     ),
     options={
         "text": Option(about="Its words, which make it one tag with no end."),
@@ -651,7 +659,7 @@ def named_links(text):
     return _named_links(text)
 
 
-@register.simple_tag(takes_context=True)
+@answers(register, takes_context=True)
 def problems_about(context, url=""):
     """The open problems about the thing at ``url``, by default the page this
     is drawn on, for ``partials/_problems.html``. One read of a stored answer,
@@ -674,7 +682,7 @@ def not_urgent(problems):
     return [item for item in problems or () if item.get("status") != "serious"]
 
 
-@register.simple_tag
+@answers(register)
 def rendered_copy() -> datetime | None:
     """When this saved copy of HQ was saved (``SEVERINO_RENDERED_COPY``), which
     is the moment it was rendered; None for a running HQ."""
@@ -721,10 +729,20 @@ slotted(
     library=register,
     part=Part(
         name="dot",
+        rules="""
+        A dot between two parts of a line is `{% dot %}` and a link's onward arrow `{% arrow %}`, each
+        written straight after its part. A no-break space joins the mark to that part and a reader never
+        hears it, so no line starts with a mark or holds one alone. A run of whole parts is `{% list
+        kind="dots" %}`; any other mark is the text of an `aria-hidden` element. Text built in Python
+        joins its parts with `dotted(...)` (`hq_sdk.ui`), which holds each dot to the part before it, and
+        `breakable` draws that dot as this tag does; markup built in Python joins with
+        `dotted_html(...)`. *Gate:* `test_template_separators`, which follows every branch and include
+        before each held mark, over the host's templates and an extension's.
+        """,
         about="The middle dot between two parts of one line, written straight after the first.",
         function=dot,
         public=True,
-        example="{{ count }}{% dot %}{{ age }}",
+        example=tags.DOT,
     ),
 )
 slotted(
@@ -744,7 +762,7 @@ slotted(
         about="One thing named, as the link builder answered for it: a link to its page, or its name.",
         function=entity,
         public=True,
-        example='{% entity "machine"|entity_of:name %}',
+        example=tags.ENTITY,
     ),
 )
 slotted(
@@ -754,7 +772,7 @@ slotted(
         about="The link for the reference a record holds, for `{% entity %}`, or none the viewer may not see.",
         function=reference,
         public=True,
-        example='{% reference expense "paid_from" as account %}{% entity account %}',
+        example=tags.REFERENCE,
     ),
 )
 slotted(
@@ -765,7 +783,7 @@ slotted(
         partial="partials/_related.html",
         function=referenced_by,
         public=True,
-        example='{% referenced_by "machine" machine.name %}',
+        example=tags.REFERENCED_BY,
     ),
 )
 # The template contract reads a tag's declaration from what it wraps.
@@ -774,5 +792,5 @@ present_tag.__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's at
     about="What it encloses, drawn only when the value is there, else the mark for a missing value.",
     function=present,
     public=True,
-    example="{% present repo.release %}<code>{{ repo.release }}</code>{% endpresent %}",
+    example=tags.PRESENT,
 )

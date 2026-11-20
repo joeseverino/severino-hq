@@ -19,26 +19,26 @@ holds nothing beneath and names its urgency to a screen reader only, since
 the box it is drawn in is in its tone: its title opens the page that shows it
 whole.
 {% endcomment %}
-{% for entry in items %}{% with item=entry|decision %}{% remedies item.actions as shown %}{% triage item sorts=triage as away %}
+{% for entry in items %}{% with item=entry|decision %}{% remedies item.actions as shown %}{% triage item sorts=triage|default:False as away %}
 <tr{% if triage %} id="{{ item.anchor }}"{% endif %} data-attention-item{% if folded %} data-folded="{{ folded }}"{% endif %}>
   <td class="row-gutter">
-    <div class="row-line">{% if glance %}<a class="cell-prose" href="{{ item.page }}" data-attention-title>{{ item.label|breakable }}</a>{% elif item.href and not here %}<a class="cell-prose" href="{{ item.href }}" data-attention-title>{{ item.label|breakable }}</a>{% else %}<span class="cell-prose" data-attention-title>{{ item.label|breakable }}</span>{% endif %}{% if not item.aside %} {% include "partials/_urgency_pill.html" with item=item mark=True quiet=glance only %}{% endif %}</div>{% if not item.aside %}{% include "partials/_urgency_pill.html#panel" with item=item only %}{% endif %}
+    <div class="row-line">{% if glance %}<a class="cell-prose" href="{{ item.page }}" data-attention-title>{{ item.label|breakable }}</a>{% elif item.href and not here %}<a class="cell-prose" href="{{ item.href }}" data-attention-title>{{ item.label|breakable }}</a>{% else %}<span class="cell-prose" data-attention-title>{{ item.label|breakable }}</span>{% endif %}{% if not item.aside %} {% include "partials/_urgency_pill.html" with item=item mark=True quiet=glance|default:False only %}{% endif %}</div>{% if not item.aside %}{% include "partials/_urgency_pill.html#panel" with item=item only %}{% endif %}
     {% if not item.aside %}
       {% if item.detail and not dense %}{% muted element="p" css="cell-prose cell-whole" data_attention_detail=True %}{{ item.detail|breakable }}{% endmuted %}{% endif %}
       {% if item.since or item.late or not grouped %}
-      {% dot_list muted=True %}
+      {% list kind="dots" muted=True %}
         {% if not grouped %}<li>{{ item.source|breakable }}</li>{% endif %}
         {% if item.since %}<li>Since {{ item.since|when:"day" }}</li>{% endif %}
         {% if item.late %}<li>{% include "partials/_reading_age.html" with reading=item.late.reading only %}</li><li>{{ item.late.every|breakable }}</li>{% endif %}
-      {% enddot_list %}
+      {% endlist %}
       {% endif %}
       {% if glance %}{% elif item.facts or item.advice or item.steps or item.reason or item.links or item.detail and dense %}
       <div class="row-below">
         {% if item.detail and dense %}<p data-attention-detail>{{ item.detail|breakable }}</p>{% endif %}
         {% comment %}What was read that shows a problem (application.decisions): each label once, with every value it was given.{% endcomment %}
-        {% if item.facts %}{% facts %}{% for fact in item.facts %}{% fact fact.label %}{% dot_list %}{% for value in fact.values %}<li>{% if value.url %}{% entity value.url|outside label=value.text %}{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}{% enddot_list %}{% endfact %}{% endfor %}{% endfacts %}{% endif %}
+        {% if item.facts %}{% facts %}{% for fact in item.facts %}{% fact fact.label %}{% list kind="dots" %}{% for value in fact.values %}<li>{% if value.url %}{% entity value.url|outside label=value.text %}{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}{% endlist %}{% endfact %}{% endfor %}{% endfacts %}{% endif %}
         {% if item.advice %}<p>{{ item.advice|breakable }}</p>{% endif %}
-        {% include "partials/_resolution_workflow.html" with steps=item.steps only %}
+        {% if item.steps %}{% steps numbered=True %}{% for step in item.steps %}{% include "partials/_operator_step.html" %}{% endfor %}{% endsteps %}{% endif %}
         {% if item.reason %}<p class="attention-reason">{{ item.reason|breakable }}</p>{% endif %}
         {% if item.links %}<ul class="attention-links">{% for link in item.links %}<li>{% with icon=link|link_icon %}{% if icon %}{% button link.label link.url look="ghost glyph" icon=icon data_tip=link.label %}{% else %}<a href="{{ link.url }}">{{ link.label|breakable }}</a>{% endif %}{% endwith %}</li>{% endfor %}</ul>{% endif %}
       </div>

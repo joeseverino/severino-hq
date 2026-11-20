@@ -1,6 +1,6 @@
 {% comment %}Runtime contributors own names, figures, windows, and visuals. Each overview is a tile that stands on its own, its head inside its frame, as many to a row as fit.{% endcomment %}
 {% if dashboard_highlights %}
-<div class="section-flow">
+{% layout %}
   {% for section in dashboard_highlights %}
     {% firstof section.overview.url section.cards.0.url as overview_url %}
     {% section section.label more_label="View "|add:section.label more_url=overview_url %}
@@ -8,5 +8,5 @@
     {% aside %}{% if section.overview.period %}<span class="count">{{ section.overview.period|breakable }}</span>{% endif %}
     {% endsection %}
   {% endfor %}
-</div>
+{% endlayout %}
 {% endif %}

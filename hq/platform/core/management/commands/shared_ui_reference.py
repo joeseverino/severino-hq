@@ -10,10 +10,12 @@ HEAD = """# Shared UI
 
 What an extension's templates may use of the host's: the frames and their
 blocks, the public partials and what each reads, the host tags and filters,
-and the classes and `data-` hooks. Written by `manage.py shared_ui_reference`
-from the host's templates (`hq.platform.core.template_contract`); a test
-fails when this file falls behind. The rules around it are in
-[Plugins](Plugins.md#shared-ui-contract).
+and the classes and `data-` hooks. Then each part's rules, the host's own
+parts' too, as its `Part` declares them (`rules`). Written by `manage.py
+shared_ui_reference` from the host's templates
+(`hq.platform.core.template_contract`); a test fails when this file falls
+behind. The rules around it are in [Plugins](Plugins.md#shared-ui-contract),
+and those that hold across parts in [Design](Design.md).
 
 """
 

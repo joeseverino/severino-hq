@@ -9,6 +9,7 @@ from django.views.generic import DetailView, ListView
 
 from hq.platform.application.capabilities import capability_words, command_spec
 from hq.platform.application.certificates import UPLOAD as CERTIFICATE_UPLOAD
+from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.conditions import DRIFTED, holding
 from hq.platform.application.contracts import Effect
 from hq.platform.application.doors import NOBODY
@@ -55,10 +56,10 @@ from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.whereabouts import whereabouts
 from hq.platform.application.work_runs import run_rows
+from hq.platform.core.templatetags.action_tags import POST_FORM_ID
 from hq.platform.core.web_refusals import refusal_response, refused
 lazy from hq.platform.application.page_relations import for_container
 
-from .forms import RemovalReasonForm
 from .models import ApprovalRequest, ManagedResource, OperationRequest
 from .provider_adapters.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
@@ -72,6 +73,16 @@ def _web_operation(request, resource, action) -> dict[str, Any]:
     return execute_posted(
         request, ACTION_CAPABILITY[action], {"reason": request.POST.get("reason", "").strip()}, target=resource.key
     )
+
+
+def _removal_reason():
+    """Why a record is removed, as its removal takes it. The confirmation
+    button posts through the page's shared form (``POST_FORM_ID``), so the
+    field joins that form by its ``form`` attribute."""
+
+    form = command_form_class(command_spec(REMOVAL_CAPABILITY), fields=("reason",))()
+    form.fields["reason"].widget.attrs["form"] = POST_FORM_ID
+    return form
 
 
 def _json(value: Any) -> str:
@@ -197,7 +208,7 @@ class ResourceRemoveView(View):
                 "forget": forget,
                 "holds_records": bool(PROVIDERS[resource.kind].contains),
                 # The reason travels with the press, so it is asked only beside it.
-                "removal_reason": RemovalReasonForm() if removal is not None else None,
+                "removal_reason": _removal_reason() if removal is not None else None,
                 "confirm": {
                     "action": removal,
                     "cancel_url": resource.get_absolute_url(),

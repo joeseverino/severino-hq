@@ -15,6 +15,7 @@ from hq.platform.application.markup_testing import select
 from hq.platform.core.template_contract import parts
 from hq.platform.core.template_parts import Part
 from hq.platform.core.tests.browser.catalog import CATALOG, default_name
+from hq.platform.core.tests.browser.catalog.common import alone
 
 # Words a page gives, drawn as markup only where a part fails to escape them.
 HOSTILE = "<i data-hostile></i>"
@@ -25,7 +26,7 @@ def _tags() -> list[Part]:
 
 
 def _opening(part: Part) -> re.Match[str]:
-    found = re.search(r"\{%\s*" + re.escape(part.name) + r"(?=[\s%])(.*?)%\}", part.example, re.DOTALL)
+    found = re.search(r"\{%\s*" + re.escape(part.name) + r"(?=[\s%])(.*?)%\}", part.default().template, re.DOTALL)
     assert found, f"{part.name}'s example writes its tag"
     return found
 
@@ -40,7 +41,8 @@ def _written(part: Part, bits: list[str]) -> str:
     """Its example, the part's opening tag giving ``bits`` instead."""
 
     opening = _opening(part)
-    return f"{part.example[: opening.start()]}{{% {' '.join((part.name, *bits))} %}}{part.example[opening.end() :]}"
+    example = part.default().template
+    return f"{example[: opening.start()]}{{% {' '.join((part.name, *bits))} %}}{example[opening.end() :]}"
 
 
 def _without(part: Part, name: str) -> list[str]:
@@ -50,7 +52,7 @@ def _without(part: Part, name: str) -> list[str]:
 def _drawn(part: Part, bits: list[str]) -> str:
     entry = CATALOG[default_name(part)]
     given = replace(entry, template=_written(part, bits), context={**entry.context, "hostile": HOSTILE})
-    return given.part(default_name(part))
+    return alone(given, default_name(part))
 
 
 class EveryPartTests(SimpleTestCase):

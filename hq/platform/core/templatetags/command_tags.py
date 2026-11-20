@@ -3,6 +3,7 @@ to know about it."""
 
 from django import template
 
+from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Option, Part, slotted
 
 register = template.Library()
@@ -11,6 +12,14 @@ register = template.Library()
 slotted(
     Part(
         name="command",
+        rules="""
+        Text to paste somewhere else is `{% command %}`, its Copy button in the code's corner. A command
+        is `{% command text=... %}`, one tag with no end. A block of code (a container's compose change)
+        is `{% command id=... %}` holding its code, then `{% title %}` (where it goes, over the code), `{%
+        detail %}` (the words under it) and `{% notes %}` (`<li>`s, drawn as a stack list), in that order.
+        The code wraps rather than scrolls, so a long path stays on screen; with no code the notes stand
+        alone.
+        """,
         example='{% command text="example-cli status" %}',
         classes=("command", "command-code", "operator-command"),
         partial="partials/_command.html",
@@ -25,6 +34,7 @@ slotted(
             "id": Option(about="The anchor a link to it names."),
         },
         bare_with="text",
+        states=tags.COMMAND_STATES,
     ),
     library=register,
 )

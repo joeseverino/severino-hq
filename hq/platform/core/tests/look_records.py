@@ -11,21 +11,18 @@ and past them a record's page of each route those and the pages they lead
 to link to, for a template none of those draws;
 a page's templates are the test client's record of what
 it rendered. The component catalog's entries are drawn as its gate draws
-them, each only once a question reaches it, their templates heard as Django's
-test rendering announces each.
+them, once a question reaches past every page (look_reach.drawings).
 """
 
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import ExitStack
-from functools import partial
 from html import unescape
 from types import TracebackType
 from typing import Any, Self
 from urllib.parse import urljoin, urlsplit
 
 from django.conf import settings
-from django.test.signals import template_rendered
 from django.urls import Resolver404, resolve
 
 from hq.platform.core.tests.browser.estate import fragments_of, navigation, owner_client
@@ -33,7 +30,7 @@ from hq.platform.core.tests.task import Drawn
 lazy from hq.platform.core.example_estate import REQUEST
 
 # Imported only once a template is looked for past the estate's links.
-lazy from hq.platform.core.tests.browser import catalog
+lazy from hq.platform.core.tests import look_reach
 
 _HREF = re.compile(r'\shref="([^"#]+)')
 
@@ -49,7 +46,6 @@ class EstatePages:
         self._crawl = self._crawling()
         self._at: dict[str, tuple[Drawn, list[str]] | None] = {}
         self._parts: dict[tuple[object, ...], Any] = {}
-        self._entries: dict[str, Drawn] = {}
         self._followed: list[str] = []
         self._follow = self._following()
 
@@ -99,10 +95,8 @@ class EstatePages:
         return drawn[0] if drawn else None
 
     def entries(self) -> Iterator[tuple[str, Drawn]]:
-        for name, entry in catalog.CATALOG.items():
-            if name not in self._entries:
-                self._entries[name] = Drawn(_rendered(partial(entry.page, name)))
-            yield name, self._entries[name]
+        for name, drawing in look_reach.drawings().items():
+            yield name, Drawn(drawing.templates)
 
     def linked(self) -> Iterator[str]:
         # What an earlier question read first, then the rest as it is read.
@@ -141,23 +135,6 @@ class EstatePages:
             yield address
             if page := self._draw(address):
                 yield from dict.fromkeys(filter(None, map(_record_address, page[1])))
-
-
-def _rendered(draw: Callable[[], object]) -> frozenset[str]:
-    """Every template ``draw`` renders by name, as Django's test rendering announces each."""
-
-    drawn: set[str] = set()
-
-    def heard(sender: Any, template: Any, **_: Any) -> None:
-        if template.name:
-            drawn.add(template.name)
-
-    template_rendered.connect(heard)
-    try:
-        draw()
-    finally:
-        template_rendered.disconnect(heard)
-    return frozenset(drawn)
 
 
 def _templates(response: Any) -> set[str]:

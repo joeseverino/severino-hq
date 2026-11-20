@@ -17,6 +17,7 @@ from hq.platform.core.models import AuditLog
 lazy from hq.platform.application.routes import reverse
 lazy from hq.platform.application.url_query import with_query
 
+from . import record_saves
 from .action_links import read_now_link
 from .cadence import forced_reads
 from .connection_catalog import (
@@ -35,13 +36,7 @@ from .connection_setup import ProviderSetup, guide_url, setups
 from .connections import connection_rows
 from .credential_mint import CredentialFix, credential_fixes
 from .credential_sight import PART_SOURCE, ProviderSight, Sight, fed_kinds, sight_by_connection
-from .derived_reads import (
-    serialize_check,
-    serialize_measurement,
-    serialize_path,
-    serialize_provider_sight,
-    serialize_sight,
-)
+from .derived_reads import serialize_check, serialize_measurement, serialize_path, tally
 from .entity_links import entity_link
 from .freshness import freshness
 from .json_schemas import as_written
@@ -62,8 +57,8 @@ from .workflow_contracts import ActionLink
 lazy from . import domains
 lazy from .connection_records import (
     ConnectionStandingRecord,
-    CredentialFixPart,
     CredentialSightPart,
+    LastActivityPart,
     ReadPart,
     SeenPart,
 )
@@ -207,50 +202,29 @@ class ConnectionRow:
     def as_dict(self) -> ConnectionStandingRecord:
         # Every ability and every sight is under ``reads`` or ``changes``, the
         # lists the page draws, so no client rebuilds them from the parts.
-        connection, instance, sight = self.connection, self.instance, self.sight
-        return {
-            "id": instance.id,
-            "label": instance.label,
-            "kind": instance.kind,
-            "status": instance.status,
-            "status_label": instance.status_label,
-            "detail": instance.detail,
-            "endpoint": instance.endpoint or None,
-            "observed_at": _moment(instance.observed_at),
-            "scopes_known": instance.scopes_known,
-            "granted_scopes": list(instance.granted_scopes),
-            "credential_model": None if instance.credential_model == UNKNOWN_CREDENTIAL else instance.credential_model,
-            "lifecycle": connection.lifecycle,
-            "authority": connection.authority,
-            "targets": [as_written(link) for link in instance.targets],
-            "dependencies": [as_written(link) for link in instance.dependencies],
-            "facts": [as_written(fact) for fact in instance.facts],
-            "controller_id": instance.controller_id or None,
-            "actions": [as_written(action) for action in connection.actions],
-            "reads": [_read(read) for read in self.reads],
-            "changes": [serialize_ability(state) for state in self.changes],
-            "family": self.group.spec.name,
-            "family_label": self.group.spec.label,
-            "used_for": self.used_for or None,
-            "open_problems": self.problems,
-            "secret_store": self.group.spec.secret_store or None,
-            "connection_ref": self.instance.connection_ref or None,
-            "reach": self.reach.as_dict() if self.reach is not None else None,
-            "sight": _sight(sight) if sight is not None else None,
-            "would_also_see": list(self.more_scope),
-            "credential_fix": _fix(self.fix) if self.fix is not None else None,
-            "last_activity": (
-                {
-                    "summary": self.last_event.summary,
-                    "created_at": self.last_event.created_at.isoformat(),
-                    "audit_id": self.last_event.pk,
-                }
-                if self.last_event is not None
-                else None
-            ),
-            "read_now": as_written(self.read_now) if self.read_now else None,
-            "read_requested_at": _moment(self.read_requested_at),
-        }
+        connection, instance, sight, event = self.connection, self.instance, self.sight, self.last_event
+        return record_saves.row(
+            instance,
+            ConnectionStandingRecord,
+            credential_model=None if instance.credential_model == UNKNOWN_CREDENTIAL else instance.credential_model,
+            lifecycle=connection.lifecycle,
+            authority=connection.authority,
+            actions=connection.actions,
+            reads=[_read(read) for read in self.reads],
+            changes=[serialize_ability(state) for state in self.changes],
+            family=self.group.spec.name,
+            family_label=self.group.spec.label,
+            used_for=self.used_for,
+            open_problems=self.problems,
+            secret_store=self.group.spec.secret_store,
+            reach=self.reach.as_dict() if self.reach is not None else None,
+            sight=_sight(sight) if sight is not None else None,
+            would_also_see=self.more_scope,
+            credential_fix=self.fix,
+            last_activity=record_saves.row(event, LastActivityPart, audit_id=event.pk) if event is not None else None,
+            read_now=self.read_now,
+            read_requested_at=self.read_requested_at,
+        )
 
 
 def _moment(value: datetime | None) -> str | None:
@@ -258,9 +232,7 @@ def _moment(value: datetime | None) -> str | None:
 
 
 def _sight(sight: ProviderSight) -> CredentialSightPart:
-    found = serialize_provider_sight(sight)
-    del found["sights"]
-    return found
+    return record_saves.row(sight, CredentialSightPart, tally=tally(sight))
 
 
 def _read(read: Read) -> ReadPart:
@@ -273,20 +245,7 @@ def _read(read: Read) -> ReadPart:
 
 def _seen(sight: Sight) -> SeenPart:
     aged = freshness(sight.kind, sight.observed_at)
-    return {**serialize_sight(sight), "freshness": aged.state, "freshness_label": aged.label}
-
-
-def _fix(fix: CredentialFix) -> CredentialFixPart:
-    return {
-        "missing": list(fix.missing),
-        "unseen": list(fix.unseen),
-        "refused": fix.refused or None,
-        "expires_at": _moment(fix.expires_at),
-        "expiring": fix.expiring,
-        "expired": fix.expired,
-        "permissions": list(fix.permissions),
-        "steps": [as_written(step) for step in fix.steps],
-    }
+    return record_saves.row(sight, SeenPart, freshness=aged.state, freshness_label=aged.label)
 
 
 @dataclass(frozen=True, slots=True)

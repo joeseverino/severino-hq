@@ -7,7 +7,7 @@ the API reference. A result that only says work was queued draws nothing:
 that work stands in its own row.
 {% endcomment %}
 {% if result %}
-<div class="section-flow">
+{% layout %}
 {% section "Done" id="command-result" %}
   {% if result.replayed %}{% notice tone="info" %}<p>This was already done earlier. Nothing ran again.</p>{% endnotice %}{% endif %}
   {% comment %}
@@ -28,7 +28,7 @@ that work stands in its own row.
   {% if return_url %}{% button "Back" return_url look="compact" %}{% endif %}
   {% if resource_url %}{% button resource_open resource_url look="compact ghost" %}{% endif %}
 {% endsection %}
-</div>
+{% endlayout %}
 {% endif %}
 {% endblock %}
 
@@ -79,7 +79,7 @@ What the command says of itself, under the form, in one flow: how it has
 gone (its latest runs, wide, so first) and the facts of what it is.
 {% endcomment %}
 {% if about %}
-<div class="section-flow">
+{% layout %}
 {% include "partials/_page_sections.html" with sections=about.sections spans_row=True %}
 {% if about.facts %}
 {% section about.label id="command-about" %}
@@ -89,6 +89,6 @@ gone (its latest runs, wide, so first) and the facts of what it is.
 {% endsection %}
 {% endif %}
 {% include "partials/_page_sections.html" with sections=about.sections spans_row=False %}
-</div>
+{% endlayout %}
 {% endif %}
 {% endblock %}

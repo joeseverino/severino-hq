@@ -2,35 +2,35 @@
 words on its button, Save changes on one that exists, Cancel back, and each
 field's help the command's meaning."""
 
-from dataclasses import dataclass, replace
 from datetime import date
-from typing import Annotated
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import FieldError, ImproperlyConfigured
-from django.forms import ModelForm, Textarea
+from django.core.exceptions import ImproperlyConfigured
+from django.forms import ModelForm
 from django.test import TestCase
 from django.urls import reverse
 from django.views.generic import CreateView
-from pydantic import Field
 
 from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.describe import meanings
-from hq.platform.application.domains import records_of
 from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.routes import routed
+from hq.platform.application.writes import CommandFormPage, RecordFormMixin
 
-# Each page that makes a record from its form, and the command it makes it by.
-CREATES = (
-    ("assets:create", "asset.create"),
-    ("expenses:create", "expense.create"),
-    ("projects:create", "project.create"),
-    ("docs_index:create", "documentation.create"),
-    ("calendar:entry_new", "calendar.entry.create"),
-    ("receipts:create", "receipt.upload"),
-)
+
+def creates() -> dict[str, str]:
+    """Each page that makes a record from its form, by route, with the command it makes it by."""
+
+    return {
+        route.name: route.view().creates
+        for route in routed()
+        if isinstance(route.view, type)
+        and issubclass(route.view, CreateView)
+        and issubclass(route.view, (RecordFormMixin, CommandFormPage))
+    }
 
 
 def submits(page) -> list[str]:
@@ -55,27 +55,33 @@ class RecordFormTests(TestCase):
         self.client.force_login(self.user)
 
     def test_a_new_record_is_made_by_its_create_command_words(self):
-        for route, capability in CREATES:
+        pages = creates()
+        self.assertTrue(pages, "no page makes a record from its form")
+        for route, capability in pages.items():
             with self.subTest(route=route):
                 page = self.client.get(reverse(route))
+                spec = capability_registry()[capability]
 
-                self.assertEqual(submits(page), [capability_registry()[capability].words()])
+                # Its words, or a mode of them its declaration names.
+                (said,) = submits(page)
+                self.assertIn(said, {spec.words(), *dict(spec.variants).values()})
                 self.assertEqual(len(cancels(page)), 1)
                 self.assertTrue(cancels(page)[0])
 
     def test_a_field_says_what_its_command_says_of_it(self):
-        for route, capability in CREATES:
+        for route, capability in creates().items():
             with self.subTest(route=route):
                 page = self.client.get(reverse(route))
                 form = page.context["form"]
-                written = {*(form._meta.help_texts or {})} | {
-                    name for name, field in form.declared_fields.items() if field.help_text
-                }
 
                 said = meanings(capability_registry()[capability].command_type)
-                shown = {name: help_of(page, name) for name in said if name in form.fields and name not in written}
+                shown = {name: help_of(page, name) for name in said if name in form.fields}
                 self.assertTrue(shown)
-                self.assertEqual(shown, {name: said[name] for name in shown})
+                # A choice with nothing to choose says so after it.
+                self.assertEqual(
+                    {name: words[: len(said[name])] for name, words in shown.items()},
+                    {name: said[name] for name in shown},
+                )
 
     def test_a_record_that_exists_is_saved_as_changes_and_cancelled_back_to_itself(self):
         project = Project.objects.create(name="Example project", slug="example-project")
@@ -86,48 +92,8 @@ class RecordFormTests(TestCase):
         self.assertEqual(cancels(page), [project.get_absolute_url()])
 
 
-@dataclass(frozen=True, slots=True)
-class TakesAWarranty:
-    item_name: str
-    warranty_date: date | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class TakesWhatNoColumnHolds:
-    item_name: str
-    nowhere: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class TitlesItsName:
-    item_name: Annotated[str, Field(title="Example title")]
-
-
-class ListsItsOwnFields(ModelForm):
-    class Meta:
-        fields = ("item_name",)
-
-
-def declared(command: type):
-    return replace(records_of("assets"), command=f"{__name__}:{command.__name__}")
-
-
 class DerivedRecordFormTests(TestCase):
-    """A record's form is its command's fields, each drawn from the model's column."""
-
-    def test_a_field_the_command_takes_is_on_the_form_in_its_columns_control(self):
-        from hq.platform.application.records import record_form
-
-        form = record_form(declared(TakesAWarranty))()
-
-        self.assertEqual(list(form.fields), ["item_name", "warranty_date"])
-        self.assertEqual(form.fields["warranty_date"].widget.input_type, "date")
-
-    def test_a_field_no_column_holds_is_refused_as_the_form_is_built(self):
-        from hq.platform.application.records import record_form
-
-        with self.assertRaises(FieldError):
-            record_form(declared(TakesWhatNoColumnHolds))
+    """A record's form is its command's fields, and what it posts is saved."""
 
     def test_a_field_posted_on_the_form_is_saved(self):
         user = get_user_model().objects.create_superuser("example-saver", "saver@example.test", "x" * 20)
@@ -149,12 +115,6 @@ class DerivedRecordFormTests(TestCase):
 
         self.assertEqual(Asset.objects.get(item_name="Example asset").warranty_date, date(2030, 1, 31))
 
-    def test_a_form_beneath_it_that_lists_fields_of_its_own_is_refused(self):
-        from hq.platform.application.records import record_form
-
-        with self.assertRaises(ImproperlyConfigured):
-            record_form(replace(records_of("assets"), form=f"{__name__}:ListsItsOwnFields"))
-
     def test_a_record_view_that_names_a_form_of_its_own_is_refused_as_it_is_declared(self):
         from hq.platform.application.writes import RecordFormMixin
 
@@ -171,16 +131,3 @@ class DerivedRecordFormTests(TestCase):
         )
 
         self.assertTrue(Project.objects.filter(slug="example-padded").exists())
-
-    def test_a_column_its_declaration_names_as_lines_is_drawn_as_lines(self):
-        from hq.platform.application.record_declaration import Control
-        from hq.platform.application.records import record_form
-
-        records = replace(declared(TakesAWarranty), controls=(("item_name", Control.LINES),))
-
-        self.assertIsInstance(record_form(records)().fields["item_name"].widget, Textarea)
-
-    def test_a_fields_title_on_its_command_is_its_label_on_the_form(self):
-        from hq.platform.application.records import record_form
-
-        self.assertEqual(record_form(declared(TitlesItsName))().fields["item_name"].label, "Example title")

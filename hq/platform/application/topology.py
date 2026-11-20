@@ -68,9 +68,12 @@ from .topology_model import (
     gate_covers,
     newest_stamp,
 )
+lazy from . import derived_reads
 lazy from .adoption import manages_through
 lazy from .facts import kinds_read
 lazy from .hq_self import serving
+lazy from .integration_specs import ResourceSpec
+lazy from .resource_records import RelationshipsRecord
 lazy from .topology_estate import add_estate
 
 
@@ -655,3 +658,19 @@ def topology(*, principal: Principal, **narrowing: object) -> TopologyAnswer:
         )
     projection, trace = apply_trace(projection, focus, direction=query["direction"], depth=query["depth"])
     return serialize_topology(projection, lens=selected, trace=trace)
+
+
+def resources() -> tuple[ResourceSpec, ...]:
+    return (
+        ResourceSpec(
+            "relationships",
+            "Relationships",
+            "One machine, service, domain or record and everything related to it.",
+            Capability.READ,
+            detail_handler=derived_reads.get_relationships,
+            identifier="node",
+            web_route="control_plane:topology",
+            pass_principal=True,
+            record_type=RelationshipsRecord,
+        ),
+    )

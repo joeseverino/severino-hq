@@ -1,0 +1,27 @@
+#!/bin/sh
+#MISE description="fast's look at the catalog entries the stylesheets and templates a change touched reach, each held to every layout check in WebKit: mise run fast"
+#MISE hide=true
+#MISE tags=["fast", "heavy"]
+#MISE sources=["static/css/app/*.css", "templates/**/*.html"]
+#MISE outputs=[]
+#USAGE arg "[files]..." var=#true help="The files the change touched, as fast hands them: each stylesheet and template among them is looked at as catalog:<path> (hq/platform/core/tests/look_reach.py); handed none, nothing is, since the whole catalog is CI's Browser job"
+
+# In fast's share of the heavy turn, beside its tests (tools/gate/fast.py,
+# heavy_gates), at the narrowest and widest widths the catalog's gate judges
+# an entry at (widths.SPARSE_WIDTHS), in the engine HQ is read in. fast sets
+# HQ_FAST_BASE, the ref each sheet's change is read from.
+set -eu
+# mise hands the words over shell-quoted, one word each.
+eval "set -- ${usage_files:-}"
+for path do
+    shift
+    case "${path}" in
+        *.css | *.html) set -- "$@" "catalog:${path}" ;;
+    esac
+done
+if [ "$#" -eq 0 ]; then
+    echo "fast:look: no stylesheet or template was handed, so no entry is looked at"
+    exit 0
+fi
+# The look's own mise runs read the checkout's config alone.
+exec env -u MISE_ENV mise run dev:look --rule every_layout_check_holds --widths 320,1280 --engine webkit "$@"

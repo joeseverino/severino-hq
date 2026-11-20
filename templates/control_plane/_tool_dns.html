@@ -1,4 +1,4 @@
-<div class="section-flow">
+{% layout %}
   {% section "Name lookup" %}
     {% words "lookup.name.read" as verb %}
     {% include "partials/_form.html" with form=lookups|dictkey:"lookup.name.read" method="get" verb=verb only %}
@@ -69,4 +69,4 @@
       {% endif %}
     {% endwith %}
   {% endsection %}
-</div>
+{% endlayout %}

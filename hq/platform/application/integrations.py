@@ -22,8 +22,6 @@ from .json_schemas import fields
 from .search_contracts import SearchDefinition
 from .ui import ended
 lazy from . import automation_adoption, automation_runs, outbound_work, plugins
-lazy from .core_capabilities import CORE_CAPABILITY_SPECS
-lazy from .core_resources import core_resource_specs
 lazy from .domains import host_specs
 lazy from .plugins import plugin_capability_specs, plugin_search_definitions
 lazy from .records import capability_specs as record_capability_specs
@@ -311,13 +309,12 @@ def compile_integration_graph(
 # moves the commands, and each process builds its graph anew at its next ask.
 @lru_cache(maxsize=1)
 def _compiled_integration_graph(generation: str) -> IntegrationGraph:
-    fixed = (
-        *CORE_CAPABILITY_SPECS,
-        *record_capability_specs(),
-        *host_specs("capabilities"),
-        *plugin_capability_specs(),
-        *outbound_work.capability_specs(),
-    )
+    host = (*record_capability_specs(), *host_specs("capabilities"))
+    # HQ's own command says what it is in words of its own; only an
+    # extension's falls back to the words of its name.
+    if unnamed := sorted(spec.name for spec in host if not spec.label):
+        raise IntegrationGraphError([IntegrationViolation("unlabeled_command", f"Give {', '.join(unnamed)} a label.")])
+    fixed = (*host, *plugin_capability_specs(), *outbound_work.capability_specs())
     # Only the procedures move with an adoption, which is what lets
     # ``held_graph`` answer every other command without reading the catalog.
     if taken := sorted(spec.name for spec in fixed if automation_runs.runs_procedure(spec.name)):
@@ -351,7 +348,7 @@ def _compiled_integration_graph(generation: str) -> IntegrationGraph:
         )
     return compile_integration_graph(
         capabilities=capabilities,
-        resources=(*core_resource_specs(), *host_specs("resources"), *plugins.plugin_resource_specs()),
+        resources=(*host_specs("resources"), *plugins.plugin_resource_specs()),
         connections=(*host_specs("connections"), *plugins.plugin_connection_specs()),
         search=plugin_search_definitions(),
     )

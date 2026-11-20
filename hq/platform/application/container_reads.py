@@ -9,12 +9,15 @@ what it would take to change it. Nothing here derives a fact.
 from collections.abc import Callable
 from typing import Any
 
-from .json_schemas import as_written
+from .integration_specs import ListRead, ResourceSpec, typed_keys
 from .projection import projection_scope, window
 from .record_errors import RecordNotFound
+from .resources import BoundedQuery
+from .security import Capability
 lazy from .containers import containers
 lazy from .derived_reads import serialize_measurement
-lazy from .resource_records import ContainerRecord, RepositoryPart, UpgradeRecord, UsagePart
+lazy from .record_saves import row
+lazy from .resource_records import ContainerRecord, ContainerRow, RepositoryPart, UpgradeRecord, UpgradeRow, UsagePart
 lazy from .upgrades import plans
 
 
@@ -189,14 +192,15 @@ def serialize_plan(plan: Any) -> UpgradeRecord:
     def advisories(items):
         return [{key: item.get(key, "") for key in ("id", "severity", "summary", "url")} for item in items]
 
-    return {
-        "address": plan.container.address,
-        "viable": plan.viable,
-        "risk": plan.risk,
-        "change": plan.change,
+    ends = {
         "from": {"tag": plan.container.standing.tag, "digest": plan.container.standing.digest},
         "to": {"tag": plan.target_tag, "digest": plan.target_digest},
-        "release": (
+    }
+    return row(
+        plan,
+        UpgradeRecord,
+        address=plan.container.address,
+        release=(
             {
                 "tag": plan.release.get("tag", ""),
                 "url": plan.release.get("url", ""),
@@ -205,15 +209,11 @@ def serialize_plan(plan: Any) -> UpgradeRecord:
             if plan.release
             else None
         ),
-        "fixes": advisories(plan.fixes),
-        "introduces": advisories(plan.introduces),
-        "stateful": plan.stateful,
-        "data": [dict(mount) for mount in plan.data],
-        "verified_by": list(plan.verified_by),
-        "blockers": [as_written(item) for item in plan.blockers],
-        "not_automatic": [as_written(item) for item in plan.not_automatic],
-        "steps": [as_written(step) for step in plan.steps],
-    }
+        fixes=advisories(plan.fixes),
+        introduces=advisories(plan.introduces),
+        data=[dict(mount) for mount in plan.data],
+        **ends,
+    )
 
 
 def list_upgrades(*, limit: int = 50) -> dict[str, Any]:
@@ -224,3 +224,32 @@ def list_upgrades(*, limit: int = 50) -> dict[str, Any]:
 
 def get_upgrade(address: str) -> dict[str, Any]:
     return _one(plans, address, serialize_plan)
+
+
+def resources() -> tuple[ResourceSpec, ...]:
+    return (
+        ResourceSpec(
+            "containers",
+            "Containers",
+            "Every running container: its image and whether it is current and safe, its runtime, "
+            "memory and CPU, and its posture.",
+            Capability.READ,
+            listing=ListRead(list_containers, BoundedQuery, ContainerRecord, fields=typed_keys(ContainerRow)),
+            detail_handler=get_container,
+            identifier="address",
+            web_route="control_plane:containers",
+            record_type=ContainerRecord,
+        ),
+        ResourceSpec(
+            "upgrades",
+            "Upgrades",
+            "Every running container with a newer release: target digest, fixes, data, verification, "
+            "blockers and steps. Read-only.",
+            Capability.READ,
+            listing=ListRead(list_upgrades, BoundedQuery, UpgradeRecord, fields=typed_keys(UpgradeRow)),
+            detail_handler=get_upgrade,
+            identifier="address",
+            web_route="control_plane:containers",
+            record_type=UpgradeRecord,
+        ),
+    )

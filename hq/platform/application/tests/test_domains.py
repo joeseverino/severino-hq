@@ -55,15 +55,12 @@ class DomainRegistryTests(SimpleTestCase):
             for mount in descriptor.mounts:
                 self.assertNotIn(f'"{mount.urlconf}"', urls_source)
 
-    def test_record_commands_and_permissions_are_derived_not_listed(self):
-        """A record domain's verbs and permissions exist only as its declaration."""
-        from ..core_capabilities import CORE_CAPABILITY_SPECS
+    def test_record_permissions_are_derived_not_listed(self):
+        """A record domain's permissions exist only as its declaration; a verb
+        written by hand as well fails the graph's duplicate check."""
         from ..security import Capability
 
-        records = host_records()
-        verbs = {f"{r.noun}.{verb}" for r in records for verb in ("create", "upsert", "update", "delete")}
-        permissions = {p for r in records for p in (r.write, r.delete)}
-        self.assertEqual({spec.name for spec in CORE_CAPABILITY_SPECS} & verbs, set())
+        permissions = {p for r in host_records() for p in (r.write, r.delete)}
         self.assertEqual({member.value for member in Capability} & permissions, set())
 
 

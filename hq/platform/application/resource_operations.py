@@ -13,6 +13,7 @@ from typing import Annotated, Any, Literal, TypedDict, cast
 
 from django.db import transaction
 from django.db.models import QuerySet
+from pydantic import Field
 
 from hq.domains.control_plane.desired_state import advance_dependents
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
@@ -30,7 +31,7 @@ from .adoption import (
 from .answer_fields import CallMessage
 from .asks import Asked, AskedAnswer, Standing
 from .cadence import ask, swept
-from .command_fields import Describe
+from .command_fields import Describe, stored_in
 from .conditions import DRIFTED, PROBLEMS, holding
 from .doors import NOBODY
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
@@ -70,9 +71,10 @@ lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_al
 lazy from .work_runs import WorkRun, run_rows, seen_as_runs, shown_result, standing_of
 
 
+@stored_in(OperationRequest)
 @dataclass(frozen=True, slots=True)
 class OperationCommand:
-    reason: Annotated[str, Describe("Why it is done, kept with the operation it queues.")] = ""
+    reason: Annotated[str, Field(title="Why"), Describe("Why it is done, kept with the operation it queues.")] = ""
 
 
 class OperationItem(TypedDict):

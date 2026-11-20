@@ -8,7 +8,7 @@ drop rank and its sort control, and ``{% row_toggle %}`` draws the disclosure
 of a row in a table with no headings to say where its gutter is.
 ``{% row_select %}`` draws a row's tick-box under the heading that selects
 every row, and ``{% row_state %}`` says how a row stands among the others. Which columns
-show is the browser's to say (docs/Design.md, A table fits its box).
+show is the browser's to say (``TABLE_REGION``'s rules).
 """
 
 import inspect
@@ -23,8 +23,8 @@ from django.utils.safestring import SafeString, mark_safe
 from django.utils.text import slugify
 
 from hq.platform.application.describe import Describe
-from hq.platform.application.page_parts import html_attributes
-from hq.platform.application.tables import TableColumn, check_drop, column_kind, ranked
+from hq.platform.application.tables import check_drop, column_kind
+from hq.platform.core.part_examples import tags
 from hq.platform.core.table_cells import (
     Cells,
     LineEntry,
@@ -32,8 +32,7 @@ from hq.platform.core.table_cells import (
     Position,
     Span,
 )
-from hq.platform.core.template_parts import Part, slotted
-lazy from hq.platform.application import history
+from hq.platform.core.template_parts import Example, Part, slotted
 
 register = template.Library()
 
@@ -129,11 +128,27 @@ _LINE_FRAME = f"<template data-open-line>{_open_line(1, '', [('', '<span data-ro
 
 @register.simple_block_tag
 def open_line(content):
-    """``{% open_line %}value{% endopen_line %}``: an open line holding one
-    unlabeled entry, the frame a script clones for a row that comes to hold
-    something beneath it once drawn (ask.js), setting the label and width."""
+    """An open line holding one unlabeled entry (``OPEN_LINE``'s rules)."""
 
     return mark_safe(_open_line(1, "", [("", content)]))  # noqa: S308 - the body is rendered template output, escaped there
+
+
+# The template contract reads a tag's declaration from what it wraps.
+OPEN_LINE = register.tags["open_line"].__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
+    name="open_line",
+    rules="""
+    The line a row opens to that a script adds is `{% open_line %}value{% endopen_line %}`, the line
+    the region draws, so it is the same part: a frame the script clones for a row that comes to hold
+    something beneath it once drawn (ask.js), setting the label and width.
+    """,
+    about="The line a row opens to, holding one entry, as a frame a script clones for a row.",
+    # The frame an ask clones for the row it stands in, as `_ask.html` draws it.
+    example=(
+        '{% table_region "Example lines" %}<table class="data-table"><tbody><tr><td>example-01</td></tr>'
+        '<template data-example>{% open_line %}<span class="row-below" data-label="Example">An example note.</span>'
+        "{% endopen_line %}</template></tbody></table>{% endtable_region %}"
+    ),
+)
 
 
 def _unnamed(roles: list[tuple[int, str]]) -> list[tuple[int, str]]:
@@ -242,22 +257,7 @@ def _region(
     filtered: Annotated[bool, Describe("Its own search narrows it, so no rows says nothing matches.")] = False,
     clear: Annotated[str, Describe("The way back from that search.")] = "",
 ) -> dict[str, Any]:
-    """The region a table sits in: the box it fits, named by ``label``.
-
-    A table fits its region by letting ranked columns go (docs/Design.md, A
-    table fits its box). A
-    ``compare`` table sets two values side by side in each row, after the
-    row's name. Only a ``pane`` (a box of its own height) and a ``chart``'s
-    table scroll in it, and each is a stop for the keyboard. A chart's table
-    is read whole in the chart's own order, so no heading sorts it.
-
-    Tables with no row are drawn as the one empty state instead
-    (docs/Design.md, Nothing empty takes space): ``empty`` says what is
-    missing, with what would fill it as ``remedy`` (a ``label`` and a
-    ``url``) or ``action_url`` and ``action_label``. A list its own
-    ``filtered`` search emptied says so instead, with the way back at
-    ``clear``.
-    """
+    """The region a table sits in, named by ``label`` (``TABLE_REGION``'s rules)."""
 
     classes = [
         *([css] if css else []),
@@ -301,8 +301,7 @@ class RegionNode(template.Node):
         content = mark_cells(self.nodelist.render(context), sorts=not region["chart"])
         if content is None:
             # A table with no rows would draw its headings over nothing, so the
-            # region says it has nothing instead (docs/Design.md, Nothing empty
-            # takes space).
+            # region says it has nothing instead.
             if "remedy" in self.options:
                 region = _region(label, **options, remedy=self.options["remedy"].resolve(context))
             return render_to_string("partials/_empty_state.html", region["empty"])
@@ -311,9 +310,7 @@ class RegionNode(template.Node):
         # (its section, its card) already has its place in the page's outline,
         # often by the same name. A region that never scrolls is no stop.
         # A table whose rows open an editor ({% row_editor %}) is a region of
-        # the page's own (docs/Design.md, A read is a fragment), found by its
-        # id in the page that answers it, so an editor opens, saves and closes
-        # in place.
+        # the page's own, found by its id in the page that answers it.
         edits = "data-row-edit" in content
         return format_html(
             '<div class="table-scroll{}"{}{}{}>{}</div>',
@@ -349,6 +346,227 @@ TABLE_REGION = table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  #
         "The box a table fits, which draws what follows from its headings, and, with no rows, the one empty "
         "state in its place."
     ),
+    rules="""
+    **A table fits its box, at every width.** No screen width is asked anywhere in the table
+    primitive, and nothing is measured: a table is laid out by the browser's automatic table layout,
+    the same with script and without, so every cell stands under its column's heading and a column is
+    one width down the table. No width is computed in Python. A column whose values keep their line
+    (a status, a figure, a row's controls, a date) is as wide as its widest (`inline-size: 1px` on its
+    heading), and the columns that wrap share the rest as the browser shares it. Each column's share
+    is its region's width over one more than the count of columns it shows (`--share`, tables.css,
+    over the count the region writes, `data-columns`: its headings, or in a table with none its widest
+    row; a column with nothing in any row, one ranked to leave at the region's width, or a `wide-only`
+    one in a narrow box, is not counted), the one more kept for what a column asks past its share, and
+    no column asks more than its share to hold a value whole, so the columns together never ask more
+    than the region. A value longer than a line of words (`data-long` on its cell and heading,
+    `table_cells`), whatever its kind, wraps at its words in a line of `--row-words`, or its share
+    where that is less, so no column of words is set a word to a line while its neighbor sits empty. A
+    status, a figure or what a row's controls say that long shares the room as words do; a row's
+    controls stay as narrow as their line. A long value is held to its third line (below); a heading's
+    words wrap as a cell's do. *Gate:* the survey's `room unshared`, which fails a cell squeezed below
+    what it needs while another column holds the room it lacks, counting each share itself.
+
+    The region turns a table's ranks (`table_heading drop=`) into at most four levels from the widest
+    (`data-drop`, `table_cells`): its first rank leaves while the region is narrower than 64rem, its
+    next below 56rem, then 48rem and 40rem, by four container-query rules written once in tables.css,
+    and any rank past the fourth leaves with it. So a narrow box holds only the columns a row keeps.
+    Nothing is measured, so a column may leave a box that could still hold it. What leaves shows on
+    the row's open line. The gates fail a table that runs past its card.
+
+    A table whose headings rank no column has its ranks derived by the region (`table_cells`), by the
+    rule `ranked` follows, and lets them go only at the narrowest widths: its far column at the widest
+    of them and its nearest below 40rem, so it keeps every column until a narrow box and a
+    hand-written table needs no rank of its own to fit a phone. A column holding a button stands,
+    since a cell held back holds none. This is the column-priority pattern of jQuery Mobile's and
+    Tablesaw's column toggle (six priorities, each shown from a set width, the columns with none
+    persisting) rather than their reflow mode, which stacks each cell under its label: at every width
+    a table is a table, its naming column and the columns it keeps side by side under their headings.
+    Below 36rem the table is in a narrow box (below).
+
+    What is marked `narrow-only` shows in a narrow box alone: a few words in the cell that names the
+    row, standing in for the columns that left (the audit log's action under its name). What is
+    marked `wide-only` leaves a narrow box outright, held for no toggle, since what it says is on a
+    page of its own.
+
+    A table of marks (`data-marks` on the table: one row a thing, one column a period, a mark in each
+    cell, as the cadence matrix is) centers every heading but the names over its column, and its
+    cells stand closer in a narrow box and where it shares a row with a chart
+    (`data-marks="compact"`). Its older periods are `wide-only`, so a narrow box keeps the newest
+    three.
+
+    The region marks each body cell that says nothing (`data-blank`) and every cell of a column blank
+    in every row (`data-blank-column`), which is not drawn. Each body cell carries its column's kind
+    (`data-kind`), so a figure aligns under its heading on fixed digit widths and a value is cut by
+    its kind, with nothing written on the cell by hand.
+
+    Since a table fits, its region is no scroll box and its heading pins under the page's chrome (a
+    scroll box in either axis would pin it to the region). Only a region declared a pane, or a
+    chart's (`chart=True`), scrolls, and pins its heading to its own edge. A region that scrolls takes
+    focus, named by its table's label so the stop says what it holds, as the focusable scroll box of
+    the usual responsive-table pattern is; a region that fits is a plain box. The stop is a `group`
+    where that pattern writes `region`, so it is no landmark: the section or card around a table is
+    one already, often by the same name. *Gates:*
+    `test_a_region_that_scrolls_is_a_stop_named_for_its_table`,
+    `test_a_section_and_the_table_in_it_are_one_landmark`. A pane (`pane=True`) is as tall as its rows
+    up to a fixed reading height, as the map's ledger is, and scrolls past it. A table is never
+    swiped through: in a narrow box its ranked columns have left. A column of words every row must
+    show, such as what a change sets (its After; its Before is spare and leaves first), is a
+    `key-col`, which takes no rank and never leaves, nor does the closing figure of a table that marks
+    none: a table whose kept columns cannot stand at a phone's width declares too many keys.
+
+    A key/value table (row headers, no `thead`) sizes its label column to its longest label.
+
+    Every row is ruled from the next, a row group's heading included; only the table's last row and a
+    row whose open line follows it draw no rule, since the card's edge or the open line ends them. A
+    row's open line holds what left the row: its list of columns (`.row-columns`) is drawn only while
+    one of its entries is, so a row with nothing gone opens to its controls alone and no empty box.
+    *Gates:* the survey's `rows unruled` and `empty panels`.
+
+    **A narrow box keeps its rows under their headings.** Below 36rem of its region (the
+    `table-region` container query in tables.css) every column a row can spare has left for the row's
+    open line, and what stands is the naming column, each `key-col` (or the closing figure), a row's
+    state (its pills, or any column under a heading of kind `status` that declares no rank), a field
+    it fills in and its controls, each under its heading. A heading of kind `status` that declares a
+    rank is one of a row's secondary checks: it leaves at that rank, whatever its cells hold, and no
+    later than the table's last ranked column, so a row's own state is declared with no rank and its
+    checks with one. Below every rank's width (20rem) the state goes to the open line last; a key
+    never does, and a pill there is as wide as its words up to its column's share, wraps between them
+    past it, and is never narrower than its longest word. A name's least width is its longest word, so
+    another column gives way before a name breaks inside one; a hash or key with no break in it may
+    break anywhere (cuts.css).
+
+    A table cell cannot take a line of its own, so a narrow table whose rows hold labeled controls
+    (below 48rem where a row holds four, which ask a line of their own sooner) is a grid of its
+    columns' tracks instead, each row a subgrid of them: the headings, the cells under them, the open
+    line and a group's heading keep their place and their roles (table, row, column header, cell, in
+    WebKit and Chromium), and the heading still pins. A row's labeled controls take its last line, on
+    a line of their own from where its name starts, in every row alike, the row's pad under them,
+    wrapping only between whole controls. A row of icon controls (a star, the order arrows) keeps them
+    at its end on its first line. *Gates:* the survey's `tables` (each cell a row shows stands under
+    its column's heading, and no row draws a column's label), `rows unruled` (a row's bottom edge is
+    ruled, whichever cell draws it), `overlaps` (what two boxes draw never crosses) and `row state
+    kept` (a key, a state or a field never leaves early).
+
+    **Opening a row moves no column.** An open row keeps its cells as they were, but for a clamp,
+    which it releases in place, and, in a narrow box, its `narrow-more` parts, which it shows in
+    place, each on a line of its own that asks its column for no width. What it holds back stands on
+    the line drawn after it (`tr.row-detail`), whose content asks its columns for no width: the blocks
+    the server moves there, then an entry for each cell that holds something back, under its column's
+    name. So every column keeps its edges and every other row its height. *Gate:*
+    `test_opening_a_row_moves_no_column_and_no_other_row`.
+
+    The server writes each cell once. The browser's table layout cannot set a cell on a line beneath
+    its row, so tables.js copies what the row holds back onto that line as the row first opens (or as
+    it arrives drawn open), from the one frame the region draws (`template[data-open-line]`): each
+    cell of a ranked column, shown where its column has left (`data-drop`), and each cell holding a
+    part only the open line shows (`row-more`, `line-rest`), shown always, what the row's line already
+    shows of it only once its column has left (`data-row-shows`). A copy draws no id twice. A cell
+    held back holds no control, which a copy would draw twice: the region refuses one, so a button
+    stands in place or moves whole (`row-below`). A row's open line a script adds is
+    `{% open_line %}`. *Gates:*
+    `test_table_once.py`: `test_a_row_writes_each_cell_once`, `test_a_cell_held_back_holds_no_control`,
+    and the byte budgets `ROW_BYTES` and `CHROME_BYTES`.
+
+    - A `row-below` block, which the row's line never shows, and the row's editor are moved into a
+      line the server draws after the row (`tr.row-detail`, `table_tags._detail_row`), shown while the
+      row is open: the blocks first, then each labeled block under its label. A row holding a block
+      says so on its `tr` (`data-below`), which shows its toggle.
+    - A table whose line is the rest of what a row says and does (`data-line="flat"` on the table)
+      draws it flat: one column on no panel, the buttons of its parts side by side, and on a phone
+      each the line's width, one to a line.
+    - The browser's find does not reach into a closed row: what it holds back is not drawn until the
+      row opens.
+    - A part that reads differently on the row's line and on the line beneath asks where it stands
+      (`@container style(--cell: line)`, or `open`), which the table primitive sets on its cells, and
+      never names the table: an ask's note says its word alone on the row's line and its sentence
+      beneath.
+
+    A row's opening is its only disclosure. What is shown only once a row is open is marked
+    `.row-more` (a word, a list item), or `.row-below` for a block, which opens on the line beneath
+    the row at the table's width. The face that stands in for it while closed is `.row-less`. Never a
+    `<details>` inside a cell.
+
+    **A table is laid out before any script runs.** Nothing is measured to lay a table out:
+    `tables.js` only sorts, selects and opens rows, and loads deferred (*Gate:*
+    `test_the_table_script_lays_nothing_out`). No table is drawn by hand, an extension's included:
+    ast-grep's `hand-drawn-table` refuses a table outside its region, in the host and through the
+    plugin check in every extension, and the host's suite reads every installed extension's templates
+    for a heading, a region or a drop rank written by hand. *Gates:* `hand-drawn-table`,
+    `test_every_table_is_declared_through_the_tags`.
+
+    A long value in a cell (a line past `table_cells.LONG`) wraps, and in a narrow box is held to its
+    third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole value where its row
+    opens; a wide box holds it whole. The name a row is read by is never held, nor is a row with no
+    toggle (a table with no headings, a fold's head), so their values wrap whole, and no cell carries
+    its value again as a title. Only words are held: each part of words in it (`data-cell`) is clamped
+    on its own, so a pill or a toggle beside them stays whole, and a cell holding such parts is the
+    clamp itself, with no box drawn around them. A value of words of 32 characters at most
+    (`table_cells.SHORT`: an address and its port, a host, a project's name) is one box (`cell-short`,
+    the value's own list where it is one) as wide as the value up to its column's share, and as wide
+    as its column where that is more, so its column holds it whole while the table is laid out as
+    one, and past its share it wraps inside its box. Its column still asks for the value whole
+    (`calc-size` holds only the share as its floor), so room the table has past every column's needs
+    goes to it; a longer one wraps at its words in a line of `--row-words`, or its share where that is
+    less, as a long one does; a longer identifier and a row's own name break anywhere their column
+    lacks room; a pill and prose break only inside a word wider than their column, a pill longer than
+    its column wrapping inside its one box. A status, a figure, a date or a control is never cut: its
+    column is as wide as it is.
+
+    An identifier the row is read by, in a row of many columns (a container's image), is
+    `code.cell-whole`, and what a row's buttons decide (a queue row's detail) is a `cell-whole` the
+    clamp never holds. A value told in several parts marks each `cell-part`.
+
+    What each part of a cell is decides how it wraps, and the region marks it (`data-cell`,
+    `table_tags.mark_cells`). The stylesheet keys its cuts, holds and wraps on that mark, never on a
+    page's class or a cell's tags. The bold a cell leads with, or its leading link's, is the row's
+    `name`; free text (a message, a record's words) is declared `cell-data` and marked `data`; what a
+    row means in words is declared `cell-prose`. A context line is `{% muted %}`. A table written
+    later sets as every other does by writing those, and `lint:css` refuses a table primitive rule
+    that tells a cell's part by anything else. Free text breaks a run with no seam in it (a link, a
+    digest) wherever it must, so it never holds its column wider than its box. An identifier in a
+    prose column waits for the open row (`row-more`) rather than holding that column at its cap.
+
+    A run of links longer than the count its template declares folds behind "+N", and a stacked list
+    longer than four shows three and "+N more". A row that holds anything back gets one toggle that
+    lifts every cut and opens every fold in it.
+
+    An open row and the line beneath it hold every box in them to its cell, in one rule of the table
+    primitive (`surfaces.css`). No box asks for a width of its own or grows wider than what holds it,
+    and a chip is a box, its padding inside that width. So nothing there runs past or over a cell at
+    any width, whatever a page's own rule says, and no page sizes a box inside a table. `lint:css`
+    refuses a width, an inline size, a flex basis or a grid's columns on a selector that reaches
+    inside one (`.data-table` and a combinator, a cell, `.row-detail`, `.row-columns`). Only the table
+    primitive's sheets may set them (`base.css`, `cuts.css`, `figures.css`, `tables.css`,
+    `surfaces.css`). *Gates:* `cells` and `cell labels` in the layout survey, read with rows open by
+    `dev:look --expand`; `lint:css`.
+
+    An intrinsic size (`max-content`, `min-content`) goes on an element inside a cell, never on the
+    `td`. Chromium ignores it on a table cell and WebKit does not, so the two engines would size the
+    column differently.
+
+    An identifier short enough to hold its line is never broken while every column stands; once
+    columns leave for the open line, where it is drawn whole, its seams are where it breaks. The row's
+    own name, free text, a preview and a context line wrap as they always do. *Gate:* `broken
+    identifiers` in the layout survey,
+    `test_an_identifier_in_a_table_is_whole_while_a_column_can_leave`.
+
+    A box set in a line that cuts what it holds (an inline block whose overflow is not visible) takes
+    its bottom edge as its baseline, so its words ride above the line's. So it is set by its top
+    (`vertical-align: top`).
+
+    A pill is as wide as its words wherever it stands, in a cell alone or beside words, and is one
+    box: a pill longer than its column wraps inside its own paint, never into two pills. *Gates:* the
+    survey's `pills in pieces`, `a_table_fits_its_box_at_every_width`,
+    `test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split`, the survey's `sideways`, and the
+    page crawl, which fails any `.data-table` outside `.table-scroll`.
+
+    A region whose tables hold no row draws the one empty state (`partials/_empty_state.html`) in their
+    place, so no page draws headings over nothing. Its `empty=` says what is missing in the page's
+    words, with `remedy=` (or `action_url=` and `action_label=`). `filtered=` with `clear=` says its
+    filter emptied it, with the way back. A table whose rows open an editor (`{% row_editor %}`) is a
+    region of the page's own (`data-fragment`, its id from its label), so an editor opens, saves and
+    closes in place.
+    """,
     function=_region,
     public=True,
     example=(
@@ -388,18 +606,7 @@ def table_heading(
     title: Annotated[str, Describe("Its `title`.")] = "",
     select_all: Annotated[bool, Describe("The tick-box that selects every row.")] = False,
 ) -> dict[str, Any]:
-    """One column heading.
-
-    ``drop`` is the order a table too wide for its region lets the column go
-    in, 1 first, the rightmost of a rank first; a ``key-col`` is kept at
-    every width. ``sort`` names the field a
-    server-sorted list orders this column by (``descending`` when its reverse is
-    not ``-field``). Any other column that says something sorts the rows
-    already on the page, whose region keeps the control only where it holds
-    two rows to sort; a column of controls, or one named for assistive
-    technology alone, has nothing to put in order. ``local_sort=False`` keeps
-    a table's own order, such as a page of a list its server orders.
-    """
+    """One column heading (its Part's rules)."""
 
     if sort and local_sort:
         raise ValueError(f"Column {label!r} sorts on the server or on the page, not both.")
@@ -430,51 +637,9 @@ def row_group(
     href: Annotated[str, Describe("The page its rows are dealt with on together, which its name links to.")] = "",
     attention: Annotated[bool, Describe("A group a reader should weigh before the rest.")] = False,
 ) -> dict[str, Any]:
-    """The heading row of one group of a table's rows, first in that group's
-    ``tbody``: its name and, given one, how many rows it holds. It spans every
-    column, which its region counts from the table's headings, and its name
-    keeps the edge of the rows' names. ``folds`` is the row's id when the group
-    starts folded away: its rows name it in ``data-folded``, and its toggle
-    stands in the rows' gutter. ``href`` is the page the group's rows are
-    dealt with on together, which its name links to. ``attention`` marks a
-    group a reader should weigh before the rest, such as a change that lets a
-    record do more, whose words beside its name say why."""
+    """The heading row of one group of a table's rows (its Part's rules)."""
 
     return {"label": label, "count": count, "folds": folds, "href": href, "attention": attention}
-
-
-@register.inclusion_tag("partials/_history_table.html", takes_context=True)
-def history_table(context: Any, label: str, groups: Any, *, hide_who: bool = False) -> dict[str, Any]:
-    """A table of audit events, each drawn by the row the audit log draws
-    (``partials/_history_row.html``): ``groups`` is a sequence of
-    ``history.HistoryGroup``. ``hide_who`` leaves out who did each, for a
-    reader who may not read the audit log."""
-
-    columns = ranked(
-        tuple(
-            TableColumn(heading, css=css)
-            for heading, css in history.COLUMNS
-            if not (hide_who and heading == history.WHO)
-        )
-    )
-    return {
-        "request": context.get("request"),
-        "label": label,
-        "groups": groups,
-        "columns": columns,
-        "hide_who": hide_who,
-    }
-
-
-@register.simple_tag
-def history_row_attributes(row: Any, folds: str = "") -> SafeString:
-    """The ``tr`` attributes of a line of history (``_history_row.html``): a
-    row in a group folded away (``folds``), or under its event, is folded
-    under it; an event that changed things holds the fold."""
-
-    if folds or row.under:
-        return html_attributes({"data-folded": folds or row.under})
-    return html_attributes({"id": row.fold, "data-folds": True}) if row.grouped else SafeString("")
 
 
 def row_actions(
@@ -485,20 +650,7 @@ def row_actions(
     mark: Annotated[Any, Describe("A `RowMark` the reader keeps on the row's record, first of its controls.")] = None,
     order: Annotated[Any, Describe("A `RowOrder` that moves the row in an order the reader keeps.")] = None,
 ) -> dict[str, Any]:
-    """The cell that ends a row with what can be done to its record: each of
-    ``actions`` (a ``PageAction``, as a ``ListRow``'s are) a compact control
-    drawn by ``_page_action.html``, so a row's buttons look like every other
-    and only a destructive one differs. Under a heading of kind ``control``
-    (``css="actions-col"``), so the region sizes the column to what it holds.
-    ``gap``, an ``adoption.WriteGap``, stands in for every action when the
-    connection cannot make the change. Every control stands in the cell, and
-    they wrap between them only where the row has no room. ``put_away``, a
-    POST ``PageAction`` such as the queue's Dismiss, is the reader's own way to
-    set the row aside: the last of its buttons, drawn as they are.
-    ``mark`` (a ``RowMark``, such as a favorite's star) and ``order`` (a
-    ``RowOrder``) come first, the star last of the two, so a row's own
-    arrangement is a column the table sizes and counts, never a part of the
-    cell that names the row."""
+    """The cell that ends a row with what can be done to its record (``ROW_ACTIONS``'s rules)."""
 
     return {
         "actions": tuple(actions or ()),
@@ -517,89 +669,77 @@ def data_table(table: Annotated[Any, Describe("A `DataTable`: its columns and it
 
 
 def row_toggle() -> dict[str, Any]:
-    """The toggle that opens a row to all it holds, last in the cell that names
-    the row, in a table with no headings; in a table with headings the region
-    draws it. The stylesheet shows it only where
-    the row has something hidden."""
+    """The toggle a row of a table with no headings opens by (its Part's rules)."""
 
     return {}
 
 
 def row_select(pk: Any) -> dict[str, Any]:
-    """The cell that holds a row's tick-box, first in a row under the heading
-    that selects every row (``select_all=True``), keyed by ``pk``. A row with
-    no key keeps the cell empty, so its columns stay under their headings."""
+    """The cell that holds a row's tick-box, keyed by ``pk`` (its Part's rules)."""
 
     return {"pk": pk}
 
 
-@register.simple_tag
-def row_state(*, emphasized: bool = False) -> str:
-    """How a row stands among the others, written in its ``tr``:
-    ``emphasized`` for one that asks to be read first, such as a message not
-    yet read, whose row is tinted and whose links weigh more."""
+def row_state(
+    *, emphasized: Annotated[bool, Describe("A row that asks to be read first, a message not yet read.")] = False
+) -> SafeString:
+    """How a row stands among the others, written in its ``tr`` (its Part's rules)."""
 
-    return mark_safe(" data-emphasized") if emphasized else ""
-
-
-# How many of a line list's parts show on its row, wrapping with its column
-# as any value's words do; the whole run shows on the row's open line.
-LINE_LEAD = 3
+    return mark_safe(" data-emphasized") if emphasized else SafeString("")
 
 
-class LineListNode(template.Node):
-    def __init__(self, nodelist: Any, values: Any, name: str, list_class: Any) -> None:
-        self.nodelist = nodelist
-        self.values = values
-        self.name = name
-        self.list_class = list_class
-
-    def _parts(self, context: Any, values: list[Any]) -> str:
-        drawn = []
-        for value in values:
-            with context.push(**{self.name: value}):
-                drawn.append(self.nodelist.render(context))
-        return "".join(drawn)
-
-    def render(self, context: Any) -> str:
-        values = [value for value in self.values.resolve(context) or () if value not in (None, "")]
-        if not values:
-            return ""
-        css = str(self.list_class.resolve(context)) if self.list_class else ""
-        lead, rest = values[:LINE_LEAD], values[LINE_LEAD:]
-        # Parts already rendered and escaped by their own template.
-        parts = mark_safe(self._parts(context, lead))  # noqa: S308 - rendered and escaped already
-        tail = mark_safe(self._parts(context, rest))  # noqa: S308 - rendered and escaped already
-        # The rest shows only on the row's open line (table_cells._HELD).
-        if css:
-            more = format_html('<li class="line-rest"><ul class="{} line-run">{}</ul></li>', css, tail) if rest else ""
-            return format_html('<ul class="{} line-list">{}{}</ul>', css, parts, more)
-        more = format_html('<span class="line-rest"><span class="line-run">{}</span></span>', tail) if rest else ""
-        return format_html('<span class="line-list">{}{}</span>', parts, more)
-
-
-@register.tag("line_list")
-def line_list(parser: Any, token: Any) -> LineListNode:
-    """``{% line_list row.tech_list as name %}{% status name chip=True %}{% endline_list %}``:
-    a run of short parts in a cell, each drawn by the body: the first
-    ``LINE_LEAD`` on the row, wrapping with its column, and the whole run on
-    the row's open line, which the row offers once it holds more.
-    ``list="dot-list"`` draws it as that list, the body drawing each ``li``."""
-
-    bits = token.split_contents()
-    if len(bits) not in (4, 5) or bits[2] != "as":
-        raise template.TemplateSyntaxError('line_list takes values "as" name, then optionally list="<class>"')
-    options = token_kwargs(bits[4:], parser)
-    if len(options) != len(bits[4:]) or set(options) - {"list"}:
-        raise template.TemplateSyntaxError('line_list takes one option, list="<class>"')
-    nodelist = parser.parse(("endline_list",))
-    parser.delete_first_token()
-    return LineListNode(nodelist, parser.compile_filter(bits[1]), bits[3], options.get("list"))
+slotted(
+    Part(
+        name="row_state",
+        rules="""
+        What a table's rows are to each other is an option of its parts, never a class of the page's:
+        rows selected together are `{% row_select %}`'s, a change's before and after is
+        `{% change_table %}`, and a row that asks to be read first says so in its `tr` with
+        `{% row_state emphasized=True %}`: its cells are tinted and its links weigh more.
+        """,
+        about="How a row stands among the others, written in its `tr`: one that asks to be read first.",
+        function=row_state,
+        public=True,
+        # A row not read yet among rows that are, its links weighed and its cells tinted.
+        example=Example(
+            '{% section "Example messages 2" %}{% table_region "Example messages 2" %}<table class="data-table">'
+            '<thead><tr>{% table_heading "From" "identifier" %}{% table_heading "Message" %}</tr></thead><tbody>'
+            "{% for row in rows %}<tr{% row_state emphasized=row.2 %}><td>{{ row.0 }}</td>"
+            '<td><a href="#">{{ row.1 }}</a></td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}',
+            {
+                "rows": (
+                    ("example-01", "An example message not read yet.", True),
+                    ("example-02", "An example read.", False),
+                )
+            },
+        ),
+    ),
+    library=register,
+)
 
 
 slotted(
     Part(
         name="table_heading",
+        rules="""
+        Each column that may leave has a rank, 1 first (`drop=N`). A list's ranks are derived by
+        `ranked`: `optional-col` first, then from the far end. It never ranks the column that names the
+        row, one marked `key-col`, or the closing figure of a table that marks none; the region turns
+        the ranks into the widths each leaves at.
+
+        **Every table sorts.** A list its server sorts has links in its headings (`sort=`). Every other
+        heading has the same control, looking the same, drawn as a button, which the region keeps only
+        where the table holds two rows to put in order, counted across its groups. A column of controls
+        and a heading named for assistive technology alone have nothing to order, and
+        `local_sort=False` keeps a table's own order, as a list page does with the one page of its
+        server's order it holds and a change table does with a change. `tables.js` sorts the rows on
+        the page: ascending, descending, then as they came. Amounts, dates and lengths of time sort as
+        what they are; a cell may say its own value with `data-sort`. Sections keep their own rows.
+        *Gate:* `test_any_table_sorts_by_a_heading`.
+
+        Rows selected together (`data-selectable-table`) start with a column of tick-boxes: the heading
+        that selects every row (`select_all=True`), then each row's `{% row_select row.pk %}`.
+        """,
         classes=("sort-indicator", "table-sort-link"),
         about="One column heading of a table: its kind, the rank it leaves by and its sort control.",
         partial="partials/_table_heading.html",
@@ -616,6 +756,15 @@ slotted(
 slotted(
     Part(
         name="row_group",
+        rules="""
+        Rows that belong to sections share one table as a `tbody` per group, headed by
+        `{% row_group label count %}`, which spans every column the headings declare. They are never
+        two tables kept aligned by hand.
+
+        Rows that belong under one row name it (`data-folded`) and show while it is open
+        (`data-folds`, its toggle in the same gutter as the row toggle); with no script they all show.
+        A group folded away is `row_group ... folds=<id>`, its rows naming that id.
+        """,
         classes=("row-group",),
         about="The heading row of one group of a table's rows, first in its `tbody`: its name and how many rows.",
         partial="partials/_row_group.html",
@@ -630,20 +779,46 @@ slotted(
 )
 ROW_ACTIONS = Part(
     name="row_actions",
+    rules="""
+    A row reads from its first line: the toggle stands there, so every cell is set at the top, and no
+    page sets its table's cells otherwise. What can be done to a row's record ends the row as
+    `{% row_actions actions %}`, under a heading of kind `control`. Each is a `PageAction` drawn as a
+    compact control with its middle on the first line's. A page never draws a button in a cell
+    (*Gate:* the `hand-drawn-row-actions` rule). A row's controls stand side by side on one line,
+    which their column asks for, and the words beside them wrap first; in a narrow box they take the
+    row's last line. Every row's controls end on one edge, and each draws its edge of its own but the
+    last, which is quiet only when it sets the row aside (`put_away`, a button). A cell of the row's
+    actions is a control whatever its heading says. A sentence in a control cell (what a write gap
+    links) is long, so it keeps a measure of `--row-words` as any long value does.
+
+    **A row's controls stand in the row.** The rows' actions, or a column of kind `control`, stand at
+    every width in the row, every one in the row's cell, with its order and mark, side by side on one
+    line, all one size. A label keeps one line, uncut. A field a reader fills in (a select) is the
+    row's value, so a column holding one never leaves, and in a cell it fills its cell and gives way
+    with its column. The reader's way to set a row aside (`put_away=`, the queue's Dismiss) is the
+    last of its buttons, drawn quiet; alone on a row's line its words start at the name's edge.
+    *Gates:* the survey's `row actions beside squeezed words`, and `test_row_controls.py`.
+
+    A row's own arrangement (a favorite's star, the pair that moves it) is no part of the cell that
+    names the row: `mark=` and `order=` draw it first in the row's controls column, the star last of
+    the two, a `RowMark` and a `RowOrder` (`application.pages`), so the table sizes and counts it and
+    the name keeps its column's whole line.
+    """,
     about="The cell that ends a row with what can be done to its record, each a compact control.",
     partial="partials/_row_actions.html",
     function=row_actions,
     public=True,
-    example=(
-        '{% table_region "Example actions" %}<table class="data-table"><tbody><tr><td>{{ row.name }}</td>'
-        "{% row_actions row.actions %}</tr></tbody></table>{% endtable_region %}"
-    ),
+    example=tags.ROW_ACTIONS,
     public_classes=("row-actions",),
+    states=tags.ROW_ACTIONS_STATES,
 )
 slotted(ROW_ACTIONS, library=register)
 slotted(
     Part(
         name="row_select",
+        rules="""
+        A cell of fixed width, so selecting moves nothing. A row with no key keeps the cell empty.
+        """,
         example=(
             '{% table_region "Example selections" %}<table class="data-table" data-selectable-table><thead><tr>'
             '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" "identifier" %}'
@@ -664,22 +839,36 @@ slotted(
         partial="partials/_data_table.html",
         function=data_table,
         public=True,
-        example="{% data_table table %}",
+        example=tags.DATA_TABLE,
     ),
     library=register,
 )
 slotted(
     Part(
         name="row_toggle",
+        rules="""
+        Every row that can open has its toggle drawn by the server. A table with headings whose rows can
+        hold anything back (a column that leaves, by its rank or the region's, a long value a narrow box
+        clamps, a part only the open line shows, a block moved there, an editor or a fold) keeps the
+        gutter in the column that names each row: the region marks that column's cells `row-gutter` and
+        draws each row's toggle last in its cell, so no table can hide a value without the way to read
+        it whole. A toggle written by hand in a table with headings is refused. Only a table with no
+        headings draws its own (`{% row_toggle %}`), last in its cell, outside the cell's clamp and its
+        copy. It shows only where opening the row shows something now: a cell whose column has left, a
+        `narrow-more` part in a narrow box, a `row-below` part, a part the row never shows, a clamp in a
+        narrow box, or a fold. A wide box clamps nothing, so a row owes no toggle there for a long
+        value.
+
+        The toggle stands in a gutter that every row of the table keeps while any row opens, so names
+        share one edge whether or not a given row opens. The gutter follows from the server's markup and
+        the box's width alone.
+        """,
         classes=("row-expand",),
         about="The toggle that opens a row to all it holds, last in the cell that names it, in a table with no headings.",
         partial="partials/_row_toggle.html",
         function=row_toggle,
         public=True,
-        example=(
-            '{% table_region "Example toggles" %}<table class="data-table"><tbody><tr>'
-            "<td>{{ row.name }}{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}"
-        ),
+        example=tags.ROW_TOGGLE,
     ),
     library=register,
 )

@@ -19,6 +19,7 @@ from django.utils.safestring import mark_safe
 
 from hq.platform.application.describe import Describe
 from hq.platform.application.tone import Tone
+from hq.platform.core.part_examples import tags
 lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capabilities import capability_words
@@ -26,7 +27,7 @@ lazy from hq.platform.application.dashboard import gathered_rows
 lazy from hq.platform.application.page_parts import html_attributes
 lazy from hq.platform.application.pages import PageAction, offered_now
 lazy from hq.platform.application.ui import button_classes
-lazy from hq.platform.core.template_parts import Part, slotted
+lazy from hq.platform.core.template_parts import Example, Part, answers, slotted
 lazy from hq.platform.core.templatetags.value_tags import (
     OUTSIDE_LINK,
     _request,
@@ -49,7 +50,7 @@ def row_value(item):
     return action_items.row_value(item)
 
 
-@register.simple_tag
+@answers(register)
 def triage(item=None, *, sorts=True, family="", url=""):
     """``{% triage item sorts=triage as away %}``: the reader's own way to sort
     a queue row, Dismiss, or Restore once it is dismissed, posting the row's
@@ -88,9 +89,9 @@ def urgency(status):
 
 @register.filter
 def queue_entries(entries):
-    """Keep the SDK attention include on the queue's single projection."""
+    """The entries ``plugin_attention_items`` gathers as the queue's rows."""
 
-    return gathered_rows({"source_id": "", **entry} for entry in entries)
+    return gathered_rows(entries)
 
 
 @register.filter
@@ -101,7 +102,7 @@ def workflow_action(action):
     return PageAction.of(action)
 
 
-@register.simple_tag(takes_context=True)
+@answers(register, takes_context=True)
 def remedies(context, actions):
     """``{% remedies actions as shown %}``: the actions a page draws, each as a
     page action. A remedy is a way somewhere else, so one that leads only to
@@ -319,7 +320,7 @@ def _ranked(actions):
     ]
 
 
-@register.simple_tag(takes_context=True)
+@answers(register, takes_context=True)
 def head_split(context, actions):
     """``{% head_split page.actions as split %}``: ``head_actions`` with as
     many beside the title as the page names (``page_beside``), two where it
@@ -367,28 +368,28 @@ def words(
     return capability_words(capability, variant)
 
 
-@register.simple_tag
+@answers(register)
 def waiting():
     """``{% waiting %}``: what asked-for work says while it waits its turn."""
 
     return asks.WAITING
 
 
-@register.simple_tag
+@answers(register)
 def refreshing():
     """``{% refreshing %}``: what a reading says while it is fetched again."""
 
     return asks.REFRESHING
 
 
-@register.simple_tag
+@answers(register)
 def refreshed():
     """``{% refreshed %}``: what a reading says once it is in."""
 
     return asks.REFRESHED
 
 
-@register.simple_tag
+@answers(register)
 def newer_reading():
     """``{% newer_reading %}``: what a page says of a newer reading it could
     not draw in place, before the link that loads it."""
@@ -396,17 +397,18 @@ def newer_reading():
     return asks.NEWER_READING
 
 
-@register.simple_tag
+@answers(register)
 def show_newer():
     """``{% show_newer %}``: the link that loads a newer reading."""
 
     return asks.SHOW_NEWER
 
 
-@register.simple_tag
-def ask_button(ask, extra=""):
-    """The button of an ``application.asks.Ask``: a posting ``button`` the page's
-    script may answer in place. Busy is ``aria-disabled``, which keeps focus."""
+def ask_button(
+    ask: Annotated[Any, Describe("The `application.asks.Ask` it asks for.")],
+    extra: Annotated[str, Describe("Looks it takes beside the ask's own.")] = "",
+):
+    """The button of an ask (its Part's rules)."""
 
     attributes = {
         "name": ask.name,
@@ -444,13 +446,43 @@ def link_icon(link):
 slotted(
     Part(
         name="button",
+        rules="""
+        Primary for the one thing a page is for; default for the rest; `ghost` for link-like actions that
+        sit inline; `danger` in red text on the same surface as its neighbors, loud only in its
+        confirmation; `compact` for one that stands in a row, a list or a head, a line tall; `glyph` for a
+        square that holds a glyph or an `icon` alone (a row's order and mark, a page's links on a queue
+        row with `ghost`), its words heard and unseen; `link` for one among words, drawn as a link; `menu`
+        for a row of a menu; `bar` for a control of the site header's bar, on the bar's ground. `link` and
+        `menu` draw no box, so `button_classes` drops a look that paints one beside them, and a
+        destructive row keeps only its red.
+
+        Every control that looks like a button is `{% button label url look="primary compact" %}`, the
+        one writer of `.btn` (`ui.button_classes` for Python's parts): a link, with `outside=True` one out
+        of HQ drawn as `{% outside_link %}` draws it, with an `offer` one that posts, with `submit=True`
+        its form's own, and with neither and no url one a script acts on (`data_*`, `popovertarget`,
+        `command`). Its words may open with an `icon`, close with a `count` or end with an `arrow`. A post
+        is only ever an offer's: a `PageAction` from `PageAction.command`, which is None for a reader who
+        may not run the command, or a `RowOrder`'s or `RowMark`'s press, so a page has no way to draw a
+        press its reader would be refused. `_page_action.html` draws one; a confirmation's is
+        `PageAction.command(..., confirms=True)`, loud where it destroys. A toggle that posts is a button
+        with `post` and `pressed`; the calendar's sources are a list of them, each in its series color
+        (`partials/_calendar_sources.html`).
+
+        The push button is `.btn`, and a `<button>` with no class of its own; a button with a class (a
+        menu row, a toggle, a close mark) starts from nothing painted (`base.css`) and draws itself, so no
+        rule takes the push button's look back off. A label keeps its line, from the button rule alone
+        (`page.css`); only a tight table lets one wrap. A label too long for a phone is shortened where it
+        is declared. A control drawn smaller than a target asks for its area with `hit=True`. *Gate:*
+        `test_a_controls_label_keeps_its_line_from_the_button_rule_alone`, and the
+        `action-intent-names-no-value` ast-grep rule.
+        """,
         about=(
             "Every control that looks like a button: a link, a post through the page's one shared form, its "
             "form's own, or one a script acts on."
         ),
         function=button,
         public=True,
-        example='{% button restart.label offer=restart look="primary" %}',
+        example=tags.BUTTON,
     ),
     library=register,
 )
@@ -461,6 +493,23 @@ slotted(
         function=words,
         public=True,
         example='Press {% words "agent.access.set" %}.',
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="ask_button",
+        about="The button of an ask: a posting `button` the page's script may answer in place.",
+        rules="""
+        An ask's button is drawn by `partials/_ask.html` alone, around its note. While its work is live it
+        is `aria-disabled`, which keeps its focus, and its title says what the work said, where a cell
+        shows only its word.
+        """,
+        function=ask_button,
+        example=Example(
+            "{% ask_button ask %}",
+            lambda: {"ask": Ask("Read example", "/example/read/", title="Read the example again.")},
+        ),
     ),
     library=register,
 )

@@ -6,11 +6,10 @@ drawing of the form (``hq.platform.application.web_writes``), so the form sent
 twice acts once.
 
 ``{% row_editor %}``: a form that edits one row of a table, opened under that
-row (docs/Design.md, A row's editor opens under it).
+row (its Part's rules).
 
 ``form|asks_one_question``: whether a form is one line of words to fill, which
-partials/_form.html draws on its button's line (docs/Design.md, A form that
-asks one question).
+partials/_form.html draws on its button's line (its Part's rules).
 """
 
 import copy
@@ -24,6 +23,7 @@ from django.utils.text import slugify
 
 from hq.platform.application.describe import Describe
 from hq.platform.application.url_query import with_query
+from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Part, slotted
 lazy from hq.platform.application.web_writes import RETRY_KEY_FIELD, new_key
 
@@ -123,12 +123,26 @@ slotted(
 slotted(
     Part(
         name="row_editor",
+        rules="""
+        **A row's editor opens under it.** A row edited on the page holds `{% row_editor form key
+        label=... action=... verb=... field=value %}` in a cell: a link to the page with that row's
+        editor open (`?edit=<key>`, the other query kept). On that page the region moves the form
+        (`.row-editor`) into the line beneath the row and draws the row open, its toggle saying so, and
+        with no script that line shows, since no toggle can open it. The view declares one form for the
+        table, drawn for the open row alone. It holds the values the cell gives by field name, or what
+        was sent when it is bound. Its ids carry the row's key, so none is drawn twice. A region that
+        holds an editor's link is a region of the page (`data-fragment`, its id from its label). So with
+        script the link, the form and its Cancel are answered there through `fragment.js`'s own paths.
+        The form posts `next`, the page with the editor closed. *Gate:*
+        `hq/platform/core/tests/test_row_editor.py`.
+        """,
         classes=("row-editor",),
         about="The way into a row's editor, and the editor itself under the row where the page's address opens it.",
         partial="partials/_row_editor.html",
         function=row_editor,
         public=True,
-        example='{% row_editor form row.pk label="Edit" action=row.edit_url verb="Save" %}',
+        example=tags.ROW_EDITOR,
+        states=tags.ROW_EDITOR_STATES,
     ),
     library=register,
 )

@@ -198,7 +198,7 @@ const hqFragment = (() => {
   const notice = (tone) =>
     document.querySelector(`template[data-notice="${tone}"]`).content.firstElementChild.cloneNode(true);
   // One line, the same everywhere a part could not be had, and the link that
-  // offers where it can (its frame, _notice_frames.html).
+  // offers where it can (its frame, scripts/fragment.html#notices).
   const explain = (region, text, link) => {
     const line = link
       ? document.querySelector('template[data-notice-link="warning"]').content.firstElementChild.cloneNode(true)

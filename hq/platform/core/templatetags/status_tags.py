@@ -264,6 +264,30 @@ def status(
 slotted(
     Part(
         name="status",
+        rules="""
+        **A state is a pill drawn by `{% status %}`.** `{% status row.state %}` (`hq_sdk.ui.status_pill`
+        from Python) says the state in sentence case (`labels.sentence`), whatever its source wrote:
+        Docker's "exited" reads "Exited" beside a model's "Done". Its color is one of the four tones
+        (`good`, `attention`, `serious`, `neutral`), never a word of its own: `tone` takes a `Tone`, and a
+        subject's state is a `Toned` member that carries its words and its tone (a machine's
+        `MachineState`, a model's stored status declared as `TonedChoices`, `ARCHIVED = "archived",
+        Tone.NEUTRAL, "Archived"`). Any other word is refused where it is drawn. Several parts are one
+        label (`{% status "HQ expects" desired tone="serious" %}`); `href`, `title`, `tip`, `css` and
+        `data_*` say the rest. No template or module writes a pill by hand. With `chip=True` it is one of
+        a record's names (a technology, a domain, a role) as a neutral chip, said as written and taking no
+        tone, so no template writes a `.tag` by hand. With `pill=False` it is the state's words in its
+        tone, as a headline or a line of text says a state. The sentence that says what a state means
+        takes the same tone beside it. A record's title line is "Working · Matches HQ's config.", both
+        green, as parts of one `.dot-list`, so the sentence shares the state's line where it fits and
+        wraps under it where it does not. With `icon=` beside `pill=False` a mark (`partials/_icon.html`)
+        leads those words in their tone. So a table cell says its state by its mark as well as its
+        color, as a container's standing does ("1 serious" after a shield). With `ink="context"` only the
+        mark is toned ("Up to date"). A first word holding a digit, a version, is said as written. A cell
+        that is a state carries its tone (`Cell(word, tone=...)`) and is drawn by it. *Catalog:*
+        `status/icon`. *Gates:* the `status-pill-built-by-status-pill` ast-grep rule and
+        `test_status_tags.py`, which reads every template root for a hand-written pill or a state's tone
+        written as a class.
+        """,
         about="One short state, drawn in its tone and said in sentence case, the one way a page draws a state.",
         function=status,
         public=True,

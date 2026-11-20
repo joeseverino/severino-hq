@@ -39,5 +39,5 @@ how many links it has, how it stands and the way to its own page.
     {% button "Dependents" item.inbound_url look="ghost compact" %}
     {% button "Dependencies" item.outbound_url look="ghost compact" %}
   </span></div>
-{% aside %}{% if item.node.status_label or item.link.url %}{% dot_list %}{% if item.node.status_label %}<li>{% status item.node.status_label tone=item.node.status %}</li>{% endif %}{% if item.link.url %}<li>{% entity item.link label="Open" %}</li>{% endif %}{% enddot_list %}{% endif %}
+{% aside %}{% if item.node.status_label or item.link.url %}{% list kind="dots" %}{% if item.node.status_label %}<li>{% status item.node.status_label tone=item.node.status %}</li>{% endif %}{% if item.link.url %}<li>{% entity item.link label="Open" %}</li>{% endif %}{% endlist %}{% endif %}
 {% endsection %}

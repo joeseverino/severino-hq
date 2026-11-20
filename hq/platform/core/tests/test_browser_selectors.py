@@ -18,6 +18,7 @@ from hq.platform.application.page_parts import SectionPart
 from hq.platform.application.tests.reads import reads
 from hq.platform.application.ui import BUTTON_LOOKS, button_classes
 from hq.platform.core.stylesheets import stylesheet
+from hq.platform.core.template_contract import parts
 from hq.platform.core.templatetags.part_tags import SectionNode
 from hq.platform.core.tests.browser.selectors import SELECTORS
 
@@ -115,7 +116,7 @@ def markup() -> tuple[set[str], set[str], str]:
             classes.update(value.split())
     # The notice tag writes its class in code too: each tone a script clones
     # is drawn by the tag in the frames the pages carry.
-    frames = engines["django"].get_template("partials/_notice_frames.html").render({"saved_copy": True})
+    frames = engines["django"].get_template("scripts/fragment.html#notices").render({"saved_copy": True})
     text.append(frames)
     for value in re.findall(r'\bclass="([^"]*)"', frames):
         classes.update(value.split())
@@ -129,6 +130,9 @@ def markup() -> tuple[set[str], set[str], str]:
         # `classes`), its interpolations aside.
         for value in re.findall(r'\bclasses = f?"([\w\s{}-]*)"', source):
             classes.update(re.sub(r"\{\w*\}", " ", value).split())
+    # A part's own classes are drawn by its partial or its shape, which the
+    # page-class check holds to every one it declares.
+    classes.update(*(part.owned() for part in parts()))
     # A button's class and looks are written in code: each one it can draw.
     classes.update(button_classes(" ".join(BUTTON_LOOKS)).split())
     # A table's marks are written in code too: each attribute `table_cells`

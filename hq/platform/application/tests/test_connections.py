@@ -756,7 +756,7 @@ class OutwardLinkChoiceTests(TestCase):
     def test_choosing_narrows_the_panel(self):
         from ..outward_links import outward_links
 
-        self.client.post(reverse("dashboard_links"), form_keyed({"href": "https://portainer.example"}))
+        self.client.post(reverse("dashboard_links"), form_keyed({"keys": "https://portainer.example"}))
         offered, curated = outward_links(self.user)
 
         self.assertTrue(curated)
@@ -768,8 +768,8 @@ class OutwardLinkChoiceTests(TestCase):
 
         from ..outward_links import outward_links
 
-        self.client.post(reverse("dashboard_links"), form_keyed({"href": "https://portainer.example"}))
-        self.client.post(reverse("dashboard_links"), form_keyed({"href": "/health/ready/"}))
+        self.client.post(reverse("dashboard_links"), form_keyed({"keys": "https://portainer.example"}))
+        self.client.post(reverse("dashboard_links"), form_keyed({"keys": "/health/ready/"}))
         offered, _ = outward_links(self.user)
 
         self.assertEqual([item["href"] for item in offered], ["/health/ready/"])

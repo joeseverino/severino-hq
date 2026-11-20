@@ -1,8 +1,9 @@
-"""Each lint:drift-* gate's sources match every file of this checkout its run reads, so no change to
-one of them can leave the gate unrun: mise's --affected, which fast selects by, reads only sources.
+"""Each lint:drift-* gate's sources, and READ_HELD's, match every file of this checkout its run reads,
+so no change to one of them can leave the gate unrun, and a test module they leave out is one no run
+reads: mise's --affected, which fast selects by, reads only sources.
 
 Each gate runs as mise runs it with reads/ on PYTHONPATH, whose sitecustomize logs every file
-each Python process the gate starts opens to read; the drift gates are all Python."""
+each Python process the gate starts opens to read; each of these gates is Python alone."""
 
 import os
 import subprocess
@@ -17,6 +18,8 @@ from django.test import SimpleTestCase, tag
 from tests.mise_tasks import ROOT, matched, mise_tasks
 
 DRIFT = "lint:drift-"
+# The other quick gates whose run is Python alone and whose sources leave the test modules out.
+READ_HELD = ("lint:deploycheck", "lint:sdk-breaking", "test:migrations")
 READS = Path(__file__).resolve().parent / "reads"
 
 
@@ -69,7 +72,7 @@ class DriftSourcesTests(SimpleTestCase):
     @override
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.tasks = {name: task for name, task in mise_tasks().items() if name.startswith(DRIFT)}
+        cls.tasks = {name: task for name, task in mise_tasks().items() if name.startswith(DRIFT) or name in READ_HELD}
         # Side by side: each run's outcome and reads stay its own, and the
         # whole takes as long as the slowest gate rather than their sum.
         with ThreadPoolExecutor(max_workers=len(cls.tasks) or 1) as pool:

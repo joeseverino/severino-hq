@@ -18,6 +18,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.views.generic.edit import BaseUpdateView
 
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.tests.test_browser_derived_fixtures import _Fill
 
 from ..routes import routed
@@ -99,7 +100,7 @@ class RefusedEditTests(TestCase):
                 shown = self.client.get(url)
                 self.assertEqual(shown.status_code, 200)
                 with mock.patch.object(model, "clean", _refuse):
-                    refused = self.client.post(url, _edited(shown.context["form"]))
-                self.assertEqual(refused.status_code, 200)
-                self.assertIn(REFUSAL, refused.context["form"].non_field_errors())
+                    refused = self.client.post(url, form_keyed(_edited(shown.context["form"])))
+                self.assertEqual(refused.status_code, 400)
+                self.assertTrue(refused.context["form"].non_field_errors())
                 self.assertEqual(refused.context["page"], shown.context["page"])

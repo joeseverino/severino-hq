@@ -1,6 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-<div class="section-flow">
+{% layout %}
 {% card label="Writeup or page" %}{% facts %}
   {% if item.topic %}{% fact "Description" value=item.topic %}{% endif %}
   {% if item.tag_list %}{% fact "Tags" %}{% for t in item.tag_list %}{% status t chip=True %}{% endfor %}{% endfact %}{% endif %}
@@ -25,5 +25,5 @@
 {% if item.notes %}{% section "Notes" %}<p>{{ item.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 
 {% include "partials/_related.html" with groups=related %}
-</div>
+{% endlayout %}
 {% endblock %}

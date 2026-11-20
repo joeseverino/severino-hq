@@ -124,7 +124,7 @@ class PinCapabilityTests(TestCase):
         self.client.post(
             reverse("control_plane:service_move", args=["two.example.test"]), form_keyed({"direction": "up"})
         )
-        self.client.post(reverse("dashboard_links"), form_keyed({"href": []}))
+        self.client.post(reverse("dashboard_links"), form_keyed({"keys": []}))
 
         self.assertEqual(list(ordered(self.user, DOMAIN)), ["example.com"])
         self.assertEqual(list(ordered(self.user, SERVICE)), ["two.example.test", "one.example.test"])

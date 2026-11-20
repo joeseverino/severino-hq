@@ -374,16 +374,10 @@ class Chart:
         return self.plot_left / self.width * 100
 
     @property
-    def legend(self) -> tuple[tuple[int, str], ...]:
-        """Each series' place in the palette and the name its legend shows."""
-
-        return tuple((series.slot, series.label) for series in self.series)
-
-    @property
     def legend_keys(self) -> tuple[LegendKey, ...]:
-        """Each series as its legend's key."""
+        """Each series as its legend's key, in its place in the palette."""
 
-        return tuple(LegendKey(mark=f"swatch-key series-{slot}", label=label) for slot, label in self.legend)
+        return tuple(LegendKey(mark=f"swatch-key series-{series.slot}", label=series.label) for series in self.series)
 
     @property
     def table_headings(self) -> tuple[str, ...]:

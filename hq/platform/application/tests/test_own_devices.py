@@ -91,13 +91,13 @@ class DeviceControlTests(TestCase):
         return self.client.post(reverse("own_device"), form_keyed(fields), follow=True)
 
     def test_the_page_registers_and_removes_the_signed_in_persons_device(self):
-        self._post(client_id=PHONE, registered="1")
+        self._post(__target=PHONE, registered="true")
         self.assertEqual(list(OwnDevice.objects.values_list("user", "client_id")), [(self.person.pk, PHONE)])
 
-        self._post(client_id=PHONE, registered="0")
+        self._post(__target=PHONE, registered="false")
         self.assertFalse(OwnDevice.objects.exists())
 
-    def test_a_form_missing_its_state_or_client_changes_nothing(self):
-        self.assertEqual(self.client.post(reverse("own_device"), form_keyed({"client_id": PHONE})).status_code, 400)
-        self.assertEqual(self.client.post(reverse("own_device"), form_keyed({"registered": "1"})).status_code, 400)
+    def test_a_form_missing_its_state_or_client_registers_nothing(self):
+        self.assertEqual(self.client.post(reverse("own_device"), form_keyed({"registered": "true"})).status_code, 400)
+        self._post(__target=PHONE)
         self.assertFalse(OwnDevice.objects.exists())

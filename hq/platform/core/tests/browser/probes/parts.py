@@ -2,7 +2,7 @@
 
 from hq.platform.core.included_parts import CHART, MODAL
 from hq.platform.core.templatetags.ladder_tags import CHECK_RUNG
-from hq.platform.core.tests.browser.probes import Check
+from hq.platform.core.tests.browser.probes import Check, Example, Plant
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 
@@ -294,10 +294,28 @@ UNDRAWN = """(drawings) => {
   return {read: read.length, found};
 }"""
 
+# Whether a box scrolls wider than it shows, which a plant's premise asks.
+_WIDENED = """(box) => document.querySelector(box).scrollWidth > document.querySelector(box).clientWidth
+  ? [] : [`${box} scrolls no wider than it shows`]"""
+
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
     "control labels": Check(
-        (SPILLED_LABELS, SELECTORS["control"]), reader_sees="a control's label spilling out of its box"
+        (SPILLED_LABELS, SELECTORS["control"]),
+        reader_sees="a control's label spilling out of its box",
+        # The hit area a glyph smaller than a target hangs beside itself
+        # widens what it scrolls, never what it says; a word wider than its
+        # control spills.
+        plants=(
+            Plant(
+                '<button type="button" class="example-glyph" data-hit aria-label="Example favorite" '
+                'style="inline-size: 1rem; block-size: 1rem; padding: 0">★</button> '
+                '<button type="button" class="example-word" style="inline-size: 2rem; white-space: nowrap">'
+                "example label</button>",
+                premise=(_WIDENED, "main .example-glyph"),
+                finds=("button.example-word",),
+            ),
+        ),
     ),
     "cell labels": Check(
         (SPILLED_LABELS, SELECTORS["cell_content"]), table=True, reader_sees="a cell's words spilling out of their box"
@@ -306,6 +324,19 @@ CHECKS = {
         (DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]]),
         reader_sees="a dialog nothing on the page opens",
         part=MODAL,
+        # Each opener the modal contract allows: a link the page's wiring
+        # intercepts, a control that names its dialog, and the platform's own
+        # invoker, bare.
+        clear=(
+            Example(
+                '<a href="/" data-modal-open="example-link">Link</a>'
+                '{% include "partials/_modal.html" with id="example-link" title="Example" %}'
+                '<a href="/" aria-haspopup="dialog" aria-controls="modal-example-named">Named</a>'
+                '{% include "partials/_modal.html" with id="example-named" title="Example" %}'
+                '<button type="button" command="show-modal" commandfor="modal-example-invoker">Invoker</button>'
+                '{% include "partials/_modal.html" with id="example-invoker" title="Example" %}'
+            ),
+        ),
     ),
     "links at rest": Check(
         (LINKS_AT_REST, [SELECTORS["link"], SELECTORS["vendored"]]),

@@ -1,31 +1,5 @@
-{% comment %}
-  One renderer for every registry-driven band on a detail page.
-
-  A section is a heading, columns, rows of cells and an optional action, and
-  nothing here knows what any of them mean. That is the point: a page grows a
-  band because a resolver produced one, so adding what HQ knows next is a
-  function and a registry entry rather than an edit to a template.
-
-  Shared rather than copied. Two pages rendering the same dataclass from two
-  templates drift the moment one gains a column, and the difference shows up as
-  one page quietly missing what the other shows.
-
-  Its table is drawn by {% data_table %}. A section whose rows are the
-  latest of more links to the rest from its heading (`more_url`).
-  A section of audit events (`history`) is drawn by {% history_table %}, as
-  the audit log draws its rows.
-
-  Expects: `sections`: an iterable of ServiceSection; `spans_row`, True for
-  the ones that take a flow's whole row, False for the short ones. A page
-  draws the first ahead of its short sections and the second among them, so
-  its flow paints in the order it reads (docs/Design.md, "Sibling sections
-  flow").
-{% endcomment %}
+{% comment %}Each of `sections` (ServiceSection) whose `spans_row` is the one given (its Part's rules).{% endcomment %}
 {% for section in sections %}{% if section.spans_row == spans_row %}
-{% comment %}
-Folded, the heading is the toggle and its count says what is behind it. A
-separate "Show all" under the heading reads as a control belonging to nothing.
-{% endcomment %}
 {% section section.label id=section.id count=section.count fold=section.folded more_label=section.more_label more_url=section.more_url %}
   {% if section.history %}
   {% history_table section.label section.groups hide_who=section.hide_who %}

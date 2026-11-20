@@ -40,8 +40,11 @@ KINDS = (DOMAIN, SERVICE, DASHBOARD_LINK)
 _KIND_NAMES = {DOMAIN: "Domain", SERVICE: "Service", DASHBOARD_LINK: "Dashboard link"}
 # The type of thing a pin is of, which a command refuses any other value for.
 _KIND = Annotated[str, Choices((kind, _KIND_NAMES[kind]) for kind in KINDS), Field(title="Type")]
+# A key as long as its pin's column holds.
+_KEY_LENGTH = Pin._meta.get_field("target_key").max_length
+_KEY = Field(max_length=_KEY_LENGTH)
 # A key with something in it: a blank one names nothing to pin.
-_NAMED = Field(pattern=r"\S")
+_NAMED = Field(pattern=r"\S", max_length=_KEY_LENGTH)
 
 # The capabilities a person keeps their pins through.
 PIN = "pin.toggle"
@@ -66,7 +69,9 @@ class MoveCommand:
 @dataclass(frozen=True, slots=True)
 class ChooseCommand:
     kind: Annotated[_KIND, Describe("What type of pins to set.")]
-    keys: Annotated[list[str], Describe("Every pin of that type, in order.")] = field(default_factory=list)
+    keys: Annotated[
+        list[Annotated[str, _KEY]], Field(title="Pinned"), Describe("", api="Every pin of that type, in order.")
+    ] = field(default_factory=list)
 
 
 def _key(target_kind: str, key: Any) -> str:

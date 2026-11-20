@@ -24,7 +24,7 @@ go across it, which a route down its start cannot. A card says only what the ban
 above does not: the band names the commit, the machine, the container's
 uptime and how the request came.
 {% endcomment %}
-<div class="section-flow">
+{% layout %}
 {% if machine %}
 {% section "Runs on" id="hq-where" %}
   {% include "partials/_problems.html#rest" with rest=hq.problems_in.where|not_urgent only %}
@@ -33,13 +33,13 @@ uptime and how the request came.
     {% fact "Container" %}<a href="{{ container.url }}">{{ container.running.name|breakable }}</a>{% endfact %}
     {% fact "Health" %}{{ runtime.health|default:container.running.check.said|default:container.running.status|capfirst|breakable }}{% if runtime %}{% dot %}{{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}{% endfact %}
     {% with posture=container.posture %}
-    {% fact "How it is run" %}{% stack_list %}<li>{{ posture.met|breakable }} of {{ posture.measured|counted:"check met,checks met" }}</li>{% for result in posture.unmet %}<li>{% muted %}{{ result.check.unmet|breakable }}{% endmuted %}</li>{% endfor %}{% endstack_list %}{% endfact %}
+    {% fact "How it is run" %}{% list %}<li>{{ posture.met|breakable }} of {{ posture.measured|counted:"check met,checks met" }}</li>{% for result in posture.unmet %}<li>{% muted %}{{ result.check.unmet|breakable }}{% endmuted %}</li>{% endfor %}{% endlist %}{% endfact %}
     {% endwith %}
     {% endwith %}{% else %}
     {% fact "Container" %}{% include "partials/_empty_state.html" with message="No container HQ reads is known to be HQ's." inline=True %}{% endfact %}
     {% endif %}
     {% if work.services %}
-    {% fact "Kept running by" %}{% stack_list %}{% for job in work.services %}<li>{% include "partials/_unit.html" with title=job.title unit=job.name only %}{% if job.last_run %} {% muted %}since {{ job.last_run|when:"ago" }}{% endmuted %}{% endif %}</li>{% endfor %}{% endstack_list %}{% endfact %}
+    {% fact "Kept running by" %}{% list %}{% for job in work.services %}<li>{% include "core/hq.html#unit" with title=job.title unit=job.name only %}{% if job.last_run %} {% muted %}since {{ job.last_run|when:"ago" }}{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endfact %}
     {% endif %}
   {% endfacts %}
 {% endsection %}
@@ -48,7 +48,7 @@ uptime and how the request came.
 {% section "Reached through" id="hq-reach" %}
   {% include "partials/_example_connection.html" with notice=True %}
   {% include "partials/_problems.html#rest" with rest=hq.problems_in.reach|not_urgent only %}
-  {% include "partials/_path_hops.html" with route=found.route label="Request path" %}
+  {% include "core/_connection_panel.html#route" with route=found.route only %}
   {% if found.findings %}{% include "partials/_work_queue.html" with items=found.finding_rows grouped=True here=True dense=True only %}{% endif %}
 {% endsection %}
 {% endwith %}{% endif %}
@@ -60,7 +60,7 @@ uptime and how the request came.
         {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7"|breakable:"," }}</code> production runs <code>{{ release.deployed|slice:":7"|breakable }}</code>
         {% elif release.behind is False %}In production: <code>{{ release.head|slice:":7"|breakable }}</code>
         {% else %}{% muted %}Not read{% endmuted %}{% endif %}
-      </span>{% detail %}{% dot_list %}<li>{% entity repository.url|outside label=repository.name %}</li><li>{% include "partials/_reading_age.html" with reading=repository.reading only %}</li>{% enddot_list %}{% endfact %}
+      </span>{% detail %}{% list kind="dots" %}<li>{% entity repository.url|outside label=repository.name %}</li><li>{% include "partials/_reading_age.html" with reading=repository.reading only %}</li>{% endlist %}{% endfact %}
     {% endwith %}{% endif %}
     {% if release.image %}
     {% fact "Image" %}
@@ -73,13 +73,13 @@ uptime and how the request came.
     {% fact "Extensions" %}{% for name, version in release.extensions %}{{ name|breakable }} {% muted %}{{ version|breakable }}{% endmuted %}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% include "partials/_empty_state.html" with message="None composed into this build" inline=True %}{% endfor %}{% endfact %}
   {% endfacts %}
 {% endsection %}
-</div>
+{% endlayout %}
 
 {% comment %}
 Each closing section is a table of four columns or more, so each takes its
 row in the flow.
 {% endcomment %}
-<div class="section-flow">
+{% layout %}
 {% section "Jobs" id="hq-work" %}
   {% if work.unread %}
     {% muted element="p" %}{{ work.unread|breakable }}{% endmuted %}
@@ -90,7 +90,7 @@ row in the flow.
         <tbody>
           {% for job in work.jobs %}
             <tr>
-              <td>{% include "partials/_unit.html" with title=job.title unit=job.name only %}</td>
+              <td>{% include "core/hq.html#unit" with title=job.title unit=job.name only %}</td>
               <td>{% present job.runs %}{% if job.runs_unit %}<code>{{ job.runs|breakable }}</code>{% else %}{{ job.runs|breakable }}{% endif %}{% endpresent %}</td>
               <td>{{ job.last_run|when:"ago" }}</td>
               <td>{% status job.result tone=job.tone %}</td>
@@ -158,7 +158,7 @@ row in the flow.
           <tr>
             <td>
               {{ row.label|breakable }}
-              {% stack_list %}{% for reason in row.reasons %}<li>{% muted %}{{ reason|breakable }}{% endmuted %}</li>{% empty %}{% if row.remedy %}<li>{% muted %}{{ row.remedy|breakable }}{% endmuted %}</li>{% elif row.error and not row.read %}<li>{% muted %}{{ row.error|breakable }}{% endmuted %}</li>{% endif %}{% endfor %}{% endstack_list %}
+              {% list %}{% for reason in row.reasons %}<li>{% muted %}{{ reason|breakable }}{% endmuted %}</li>{% empty %}{% if row.remedy %}<li>{% muted %}{{ row.remedy|breakable }}{% endmuted %}</li>{% elif row.error and not row.read %}<li>{% muted %}{{ row.error|breakable }}{% endmuted %}</li>{% endif %}{% endfor %}{% endlist %}
             </td>
             <td>{% if row.stale %}<strong>Out of date</strong>{% elif row.read and row.state == "readable" %}{{ row.state_label|breakable }}{% else %}<strong>{{ row.state_label|breakable }}</strong>{% endif %}</td>
             <td>{% comment %}
@@ -176,6 +176,10 @@ row in the flow.
   {% if sight.unconnected %}{% muted element="p" %}Not connected: {{ sight.unconnected|join:", "|breakable:"." }} <a href="{% url 'control_plane:connections' %}">Connections</a>{% endmuted %}{% endif %}
 {% endsection %}
 {% endif %}
-</div>
+{% endlayout %}
 {% endwith %}
 {% endblock %}
+{% comment %}
+A systemd unit as a person reads it: its unit file's title, with its name
+beneath, its escapes decoded; the name alone when it has no title.
+{% endcomment %}{% partialdef unit %}{% if title %}{% list %}<li>{{ title|breakable }}</li><li><code>{{ unit|breakable }}</code></li>{% endlist %}{% else %}<code>{{ unit|breakable }}</code>{% endif %}{% endpartialdef %}

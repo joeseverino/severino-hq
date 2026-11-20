@@ -3,7 +3,7 @@ and the one call that registers it (``slotted``)."""
 
 import inspect
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from functools import wraps
 from itertools import chain
@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, Union, get_args, get_origin, get_typ
 
 from django import template
 from django.template.base import token_kwargs
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeData, mark_safe
 
 from hq.platform.application.describe import Describe
 
@@ -111,6 +111,41 @@ def _read_options(function: Callable) -> tuple[dict[str, Option], dict[str, Opti
 type Shape = Callable[[str, dict], dict]
 
 
+@dataclass(frozen=True)
+class Example:
+    """A part as a template writes it, with what it is given: one state of
+    it, which the component catalog draws on a page of its own and the
+    survey holds. A part with no ``name`` and no ``template`` is its include.
+
+    ``context`` is what the template is drawn with, or a function that
+    builds it when the catalog is drawn, for values a module cannot build as
+    it loads. ``premise`` is what the example must draw to stand for its
+    state, as a probe and its argument returning what falls short of it,
+    which the survey finds: a value meant to wrap that fits on one line holds
+    nothing the survey could find wrong. ``heads_the_page`` says the part is
+    a page's own head; any other is drawn under one, as every HQ page is.
+    ``frame`` says the part is the page frame's own, which base.html draws
+    beside the page's main rather than in it, ``"before"`` or ``"after"``, so
+    it is drawn there, beside a main that holds a page head alone; ``"main"``
+    is the main itself. ``address`` is the address the part is drawn at, for
+    a part that reads its request (a page's query, or the row its address
+    opens), and ``settings`` those it is drawn under, for a part only some
+    deployments draw."""
+
+    template: str = ""
+    context: Mapping[str, Any] | Callable[[], Mapping[str, Any]] = field(default_factory=dict)
+    premise: tuple[str, Any] | None = None
+    heads_the_page: bool = False
+    frame: Literal["", "before", "after", "main"] = ""
+    address: str = ""
+    settings: Mapping[str, Any] = field(default_factory=dict)
+
+    def given(self) -> dict[str, Any]:
+        """What the template is drawn with."""
+
+        return dict(self.context() if callable(self.context) else self.context)
+
+
 @dataclass(frozen=True, kw_only=True)
 class Part:
     """A shared part, declared once: what it is, the partial that draws it,
@@ -121,7 +156,13 @@ class Part:
     parameters in the template contract, its row in docs/Shared-UI.md, the
     check of what a page gave, who may write a class) is read from here.
     ``public`` tags are an extension's to write too. Every part shows itself
-    written in ``example``, which its default catalog entry draws.
+    written in ``example`` (a template, or an ``Example`` with what it is
+    given), its default catalog entry, and in each of its ``states``, an
+    entry of the state's name, so a new option or state of a part is an
+    example on its declaration. ``rules``
+    is what a page drawing it holds to past what ``about`` says, in Markdown,
+    which docs/Shared-UI.md states under the part's name; docs/Design.md
+    holds only what holds across parts.
 
     A tag drawn by a Python ``function`` (a simple tag, or with a
     ``partial`` an inclusion tag) takes the options its signature declares,
@@ -130,6 +171,7 @@ class Part:
 
     name: str
     about: str
+    rules: str = ""
     partial: str = ""
     function: Callable | None = None
     parts: tuple[str, ...] = ("content",)
@@ -139,7 +181,8 @@ class Part:
     # The option that, given, makes the tag stand alone, enclosing nothing.
     bare_with: str = ""
     public: bool = False
-    example: str = ""
+    example: Example | str = ""
+    states: Mapping[str, Example] = field(default_factory=dict)
     shape: Shape | None = None
     # The classes the partial writes that are this part's alone, and those of
     # its own any template, an extension's too, may write beside it.
@@ -154,12 +197,12 @@ class Part:
     def __post_init__(self) -> None:
         if not (self.name or self.partial):
             raise ValueError("A part with no tag names the partial a template includes.")
-        if not (self.name or self.example):
-            object.__setattr__(self, "example", f'{{% include "{self.partial}" %}}')
         if not self.about:
             raise ValueError(f"The part {self.name or self.partial} says what it is.")
-        if not self.example:
+        if not self.default().template:
             raise ValueError(f"The part {self.name} shows itself written, as its default entry draws it.")
+        if unwritten := [state for state, each in self.states.items() if not (state and each.template)]:
+            raise ValueError(f"Each state of the part {self.name or self.partial} is named and written: {unwritten}")
         if self.function is not None:
             if self.ordered or self.options or self.data or self.shape:
                 raise ValueError(f"The tag {self.name} takes what its function's signature declares.")
@@ -184,6 +227,15 @@ class Part:
             ]
         )
         object.__setattr__(self, "__signature__", signature)
+
+    def default(self) -> Example:
+        """How a page writes it, with what it is given: its ``example``, a
+        part with no tag its include where the example writes nothing."""
+
+        example = self.example if isinstance(self.example, Example) else Example(self.example)
+        if self.name or example.template:
+            return example
+        return replace(example, template=f'{{% include "{self.partial}" %}}')
 
     def files(self) -> tuple[str, ...]:
         """The templates that draw it: its partial's file, then its pieces."""
@@ -296,3 +348,31 @@ def slotted(part: Part, *, library: template.Library) -> None:
     # The template contract reads a tag's declaration from what it wraps.
     compile_.__wrapped__ = part  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
     library.tag(part.name, compile_)
+
+
+def answers(library: template.Library, *, takes_context: bool = False) -> Callable[[Callable], Callable]:
+    """Register the function as a tag that answers a value (a word, a record, a
+    choice), written `as` a name or drawn as text, never markup: a piece of
+    markup is a Part's, and a tag that answers some is refused as it draws.
+    Every host tag is a Part or one of these (``template_contract.parts``)."""
+
+    def register(function: Callable) -> Callable:
+        @wraps(function)
+        def answered(*args, **kwargs):
+            value = function(*args, **kwargs)
+            if isinstance(value, SafeData):
+                raise TypeError(f"The tag {function.__name__} answers a value; markup is drawn by a Part.")
+            return value
+
+        library.simple_tag(answered, takes_context=takes_context, name=function.__name__)
+        library.tags[function.__name__].answers = True  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
+        return function
+
+    return register
+
+
+def included(partial: str, about: str, *classes: str, **declared) -> Part:
+    """A part with no tag, which a template includes as ``partials/_<partial>.html``,
+    writing ``classes``."""
+
+    return Part(name="", partial=f"partials/_{partial}.html", about=about, classes=classes, **declared)

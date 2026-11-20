@@ -1,0 +1,5 @@
+{% comment %}
+How a page lays out a run of its sections, drawn by {% layout %}: {% layout kind="pair" %}{% section "A" %}...{% endsection %}{% section "B" %}...{% endsection %}{% endlayout %}.
+Its kind is one class layout.css lays out (layout_tags.layout_frame); aside=True
+draws it as an <aside>, a split's companion.
+{% endcomment %}{% if not content %}{% elif aside %}<aside class="{{ css }}"{{ attributes }}>{{ content|safe }}</aside>{% else %}<div class="{{ css }}"{{ attributes }}>{{ content|safe }}</div>{% endif %}

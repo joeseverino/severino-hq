@@ -65,6 +65,7 @@ FILTERS = (
     "money",
     "or_empty",
     "outside",
+    "queue_entries",
     "readout",
     "record",
     "span",
@@ -81,18 +82,15 @@ LIBRARIES = ("static",)
 # missing from both is the host's to add, never the extension's to invent.
 CLASSES = (
     "actions-col",
-    "address-list",
     "cell-data",
     "cell-part",
     "cell-whole",
-    "code-list",
     "compact",
     "compact-table",
     "count",
     "danger",
     "data-table",
     "date-col",
-    "domain-charts",
     "errors",
     "eyebrow",
     "finding",
@@ -114,9 +112,7 @@ CLASSES = (
     "row-gutter",
     "row-less",
     "row-more",
-    "section-flow",
     "section-foot",
-    "split",
     "subtle-link",
     "swatch",
     "swatch-key",
@@ -126,7 +122,6 @@ CLASSES = (
     "tone-good",
     "tone-neutral",
     "tone-serious",
-    "two-col",
     "visually-hidden",
     "whole",
     "wide-only",
@@ -291,27 +286,36 @@ class _Reads:
             optional = guarded or defaulted or name in guards
             self.found[name] = self.found.get(name, False) or not optional
 
-    def walk(self, nodelist: Iterable[Any], bound: set[str], guards: frozenset[str]) -> None:
+    def walk(self, nodelist: Iterable[Any], bound: set[str], guards: frozenset[str]) -> set[str]:
+        """Note what the nodes read, and answer what is bound after them."""
+
         bound = set(bound)
         for node in nodelist:
-            self._node(node, bound, guards)
+            bound |= self._node(node, bound, guards)
             for binding in ("target_var", "asvar", "var_name"):
                 name = getattr(node, binding, None)
                 if isinstance(name, str) and name:
                     bound.add(name)
+        return bound
 
-    def _node(self, node: Any, bound: set[str], guards: frozenset[str]) -> None:
+    def _node(self, node: Any, bound: set[str], guards: frozenset[str]) -> set[str]:
+        """Note what the node reads, and answer what it binds for the nodes after it."""
+
         if isinstance(node, CommentNode):
-            return
+            return set()
         if isinstance(node, ForNode):
             self.note(node.sequence, bound, guards)
             self.walk(node.nodelist_loop, bound | set(node.loopvars) | {"forloop"}, guards)
             self.walk(node.nodelist_empty, bound, guards)
         elif isinstance(node, IfNode):
+            branches = []
             for condition, branch in node.conditions_nodelists:
                 names = frozenset(name for name, _ in _expression_names(condition))
                 self.note(condition, bound, guards, guarded=True)
-                self.walk(branch, bound, guards | names)
+                branches.append(self.walk(branch, bound, guards | names))
+            # What every branch binds, an else among them, is bound after it.
+            if node.conditions_nodelists[-1][0] is None:
+                return set.intersection(*branches)
         elif isinstance(node, PresentNode):
             # What its body reads of the value is read only when it is there.
             names = frozenset(name for name, _ in _expression_names(node.value))
@@ -329,6 +333,7 @@ class _Reads:
             self.walk(node.nodelist, bound, guards)
         else:
             self._generic(node, bound, guards)
+        return set()
 
     def _include(self, node: Any, bound: set[str], guards: frozenset[str]) -> None:
         self.note(node.template, bound, guards)
@@ -459,14 +464,39 @@ def _part(compile_function: Any) -> Part | None:
     return target if isinstance(target, Part) else None
 
 
+def undeclared(engine: Any, every: Iterable[Part]) -> list[str]:
+    """Each host tag that is no part and answers no value (``answers``), and
+    each of the host's partials no part draws: a piece of markup drawn by
+    neither is one no rule, option or example holds."""
+
+    tags = (
+        f"{{% {name} %}}"
+        for path, library in zip(engine.builtins, engine.template_builtins, strict=True)
+        if path.startswith("hq.")
+        for name, compile_function in library.tags.items()
+        if not (_part(compile_function) or getattr(compile_function, "answers", False))
+    )
+    files = {name for part in every for name in part.files()}
+    partials = (
+        name
+        for path in sorted((ROOT / "templates" / "partials").glob("*.html"))
+        if (name := f"partials/{path.name}") not in files
+    )
+    return [*tags, *partials]
+
+
 def parts() -> tuple[Part, ...]:
     """Every shared part: each tag's, read from what it wraps, and each a
     template includes by path. A class or a piece is one part's own, so two
-    declaring it is refused here, where every reader of a part's classes reads them."""
+    declaring it is refused here, where every reader of a part's classes reads
+    them, as is a host tag or partial that is no part's (``undeclared``)."""
 
-    tags, _ = _libraries(_engine())
+    engine = _engine()
+    tags, _ = _libraries(engine)
     found = (*(part for compile_function in tags.values() if (part := _part(compile_function))), *PARTS)
     every = tuple({id(part): part for part in found}.values())
+    if missing := undeclared(engine, every):
+        raise ValueError(f"Every host tag and partial is a part's, or a tag `answers` a value: {', '.join(missing)}.")
     owners: dict[str, list[str]] = {}
     for part in every:
         for word in (*part.owned(), *part.pieces):
@@ -491,7 +521,7 @@ def _tag(compile_function: Any, part: Part) -> dict[str, Any]:
         "parameters": _tag_parameters(compile_function),
         "parts": list(part.parts[1:]),
         "about": part.about,
-        "example": part.example,
+        "example": part.default().template,
         "data": part.data,
         "ordered": list(part.ordered),
         "options": {
@@ -571,6 +601,17 @@ def _checked(names: Iterable[str], present: Any, what: str) -> list[str]:
     return sorted(names)
 
 
+def _rules() -> dict[str, dict[str, Any]]:
+    """Each part's rules by the name a page writes it by, its tag or its
+    partial, and whether an extension may draw it."""
+
+    return {
+        part.name or part.partial: {"public": part.public, "rules": inspect.cleandoc(part.rules)}
+        for part in parts()
+        if part.rules
+    }
+
+
 def describe() -> dict[str, Any]:
     """The template contract, derived from the host's templates, tags and assets,
     as plain JSON data in name order, so docs/Plugins.md's tables keep one order."""
@@ -589,6 +630,7 @@ def describe() -> dict[str, Any]:
         "classes": _checked(public_classes(), defined.__contains__, "classes"),
         "hooks": _checked(HOOKS, lambda hook: _read_by(scripts, hook), "hooks"),
         "styled": _checked(STYLED, lambda hook: f"[{hook}]" in sheets, "styled attributes"),
+        "rules": _rules(),
     }
     plain: dict[str, Any] = json.loads(json.dumps(contract, sort_keys=True))
     return plain
@@ -690,5 +732,9 @@ def markdown(templates: dict[str, Any]) -> str:
         "| Rule | Drawn by hand | Write instead |",
         "| --- | --- | --- |",
         *(f"| `{rule['id']}` | {_cell(rule['message'])} | {_cell(rule['note'])} |" for rule in hand_drawn_rules()),
+        "",
+        "## Each part's rules",
     ]
+    for name, rules in templates["rules"].items():
+        lines += ["", f"### {name}" + ("" if rules["public"] else " (host only)"), "", rules["rules"]]
     return "\n".join(lines) + "\n"

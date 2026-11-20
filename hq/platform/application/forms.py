@@ -52,7 +52,7 @@ class MultipleFileField(forms.FileField):
 
 class ChoiceCards(forms.RadioSelect):
     """One answer of a few, each a card that says what choosing it does
-    (docs/Design.md, "A choice that has a consequence says it").
+    (its widget's Part in ``included_parts``).
 
     ``described`` maps each value to its consequence, which the card's radio
     names as its description, so the answer's name stays its few words.
@@ -122,9 +122,14 @@ def file_as_sent(upload: Any) -> dict[str, str]:
 
 
 class UploadField(forms.FileField):
-    """A file a person picks, for a command field that takes a file as JSON."""
+    """A file a person picks, for a command field that takes a file as JSON.
+
+    A form opened on a record holding a file names it as its initial, which
+    the control shows and links (its ``url``), and which keeps the field
+    filled: none is sent unless another is picked.
+    """
 
     @override
     def clean(self, data: Any, initial: Any = None) -> dict[str, str] | None:
         upload = super().clean(data, initial)
-        return file_as_sent(upload) if upload else None
+        return file_as_sent(upload) if upload and upload is not initial else None

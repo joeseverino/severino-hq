@@ -12,19 +12,9 @@
 ["lint:ruff"]
 description = "Ruff lints the Python and holds it to its format"
 hide = true
-tags = ["fast"]
-sources = [
-  "**/*.py",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-]
-outputs = []
-usage = 'flag "--fix" help="Write the fixes and format Ruff makes instead of checking: fast runs it first"'
-run = 'if [ "${usage_fix:-}" = true ]; then uv run ruff check --fix-only --quiet . && uv run ruff format --quiet .; else uv run ruff check . && uv run ruff format --check .; fi'
+extends = "hk"
+vars = { step = "ruff" }
+usage = 'flag "--fix" help="Write the fixes the tool makes instead of checking: fast runs it first"'
 
 ["lint:mypy"]
 description = "mypy type-checks the seams pyproject.toml names and the browser test package's calls, then every source module for code its types rule out"
@@ -50,36 +40,22 @@ run = [
 ["lint:ast-grep"]
 description = "ast-grep holds every Python module to the structural rules in tools/lint/ast-grep/rules, each over the scope its rule declares (code HQ runs: hq, hq_sdk and tools less their tests; test code: tests/, test_*.py, testing.py and *_testing.py; or every module), and each rule to its own cases"
 hide = true
-tags = ["fast"]
-sources = [
-  "**/*.py",
-  "**/templates/**/*.html",
-  "tools/lint/ast-grep/**",
-  "pyproject.toml",
-  "uv.lock",
-  "mise.toml",
-  "mise.lock",
-  "mise-tasks/*.toml",
-  "tools/pipeline/toolchain.env",
-]
-outputs = []
-usage = 'flag "--fix" help="Write what each rule that carries a fix: rewrites instead of checking: fast runs it first"'
-# The scan reads the whole repository, since each rule's files: and ignores:
-# say which modules it holds. A rule's cases (rule-tests/) prove it refuses
-# what it is for before its scan is trusted to find nothing, and the template
-# rules' snapshots hold what each fix writes. A suppression no match needs any
-# more fails, so each is removed as its page moves.
-run = 'if [ "${usage_fix:-}" = true ]; then ast-grep scan -c tools/lint/ast-grep/sgconfig.yml --update-all . >/dev/null; else ast-grep test -c tools/lint/ast-grep/sgconfig.yml --skip-snapshot-tests && ast-grep test -c tools/lint/ast-grep/sgconfig.yml --filter "^hand-drawn-" && ast-grep scan -c tools/lint/ast-grep/sgconfig.yml --error=unused-suppression .; fi'
+extends = "hk"
+vars = { step = "ast-grep" }
+usage = 'flag "--fix" help="Write the fixes the tool makes instead of checking: fast runs it first"'
 
 ["lint:spelling"]
 description = "typos holds every file of the checkout to American English and its spelling, as _typos.toml says"
 hide = true
-tags = ["fast"]
-sources = ["**/*"]
-outputs = []
-# No fix mode: a correction can rename an identifier in one file and not
-# where it is used.
-run = "typos"
+extends = "hk"
+vars = { step = "spelling" }
+
+["lint:prose"]
+description = "Vale holds the wording to tools/lint/vale's swaps: no em dash, and the one name a page gives each thing, in place of HQ's own words or a retired label"
+hide = true
+extends = "hk"
+vars = { step = "prose" }
+depends = ["setup:lint-tools"]
 
 ["lint:openapi"]
 description = "Both OpenAPI descriptions pass specification lint"
@@ -114,8 +90,19 @@ tags = ["fast"]
 sources = [
   "hq/**/*.py",
   "hq_sdk/**/*.py",
+  "!**/tests/**",
+  "!**/test_*.py",
+  "!**/tests.py",
   "tools/sdk_breaking.py",
   "tools/pipeline/plugin_identity.py",
+  "tools/pipeline/__init__.py",
+  "tools/__init__.py",
+  "tools/gate/__init__.py",
+  "tools/gate/chain.py",
+  "tools/gate/tree.py",
+  "tools/gate/verdict.py",
+  "hq/platform/core/tests/__init__.py",
+  "hq/platform/core/tests/task.py",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -137,6 +124,7 @@ sources = [
   "hq/**/*.py",
   "hq_sdk/**/*.py",
   "hq_runner/**/*.py",
+  "!**/tests/**",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -249,6 +237,12 @@ hide = true
 tags = ["fast"]
 sources = [
   "**/*.py",
+  "!**/tests/**",
+  "!**/test_*.py",
+  "!**/tests.py",
+  "hq/domains/control_plane/bridge_base.json",
+  "hq/domains/docs_index/schema.json",
+  "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -383,6 +377,9 @@ hide = true
 extends = "drift"
 sources = [
   "**/*.py",
+  "!**/tests/**",
+  "!**/test_*.py",
+  "!**/tests.py",
   "docs/Shared-UI.md",
   "hq/domains/control_plane/bridge_base.json",
   "hq/domains/docs_index/schema.json",
@@ -420,6 +417,9 @@ hide = true
 extends = "drift"
 sources = [
   "**/*.py",
+  "!**/tests/**",
+  "!**/test_*.py",
+  "!**/tests.py",
   "hq/domains/control_plane/bridge_base.json",
   "hq/domains/docs_index/schema.json",
   "controller/api/**",

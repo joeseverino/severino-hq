@@ -19,13 +19,16 @@ from hq.domains.control_plane.providers import PROVIDERS, read_spec
 
 from .containers import Running, container_watchers
 from .hq_self import hq_hostnames, hq_machine, scoped_served_at
+from .integration_specs import ListRead, ResourceSpec, typed_keys
 from .locate import Machines, host_of, index_of, observed_answers, points_at_host
 from .machine_aliases import same_machine
+from .resources import BoundedQuery
+from .security import Capability
 from .services import CONTAINER_KIND
 from .tailnet import TAILNET_KIND
 from .tailnet_presence import Presence, tailnet_presence
 from .tone import Tone, Toned
-lazy from . import connections, readings
+lazy from . import connections, derived_reads, readings
 lazy from .connections import connection_rows
 lazy from .entity_links import entity_link
 lazy from .facts import Subject, snapshots_of
@@ -34,6 +37,7 @@ lazy from .machine_roles import role_context, roles_of
 lazy from .moments import moment, when_day
 lazy from .projection import read_once
 lazy from .reach import network_of
+lazy from .resource_records import MachineRecord, MachineRow
 lazy from .service_facets import connected_kinds
 lazy from .whereabouts import locate, whereabouts
 
@@ -656,3 +660,19 @@ def container_context(host: str, name: str) -> dict[str, object]:
         "running": running,
         "serves": tuple(sorted(item for item in serves if item)),
     }
+
+
+def resources() -> tuple[ResourceSpec, ...]:
+    return (
+        ResourceSpec(
+            "machines",
+            "Machines",
+            "Every machine anything reported, its roles, addresses and what runs on it.",
+            Capability.READ,
+            listing=ListRead(derived_reads.list_machines, BoundedQuery, MachineRecord, fields=typed_keys(MachineRow)),
+            detail_handler=derived_reads.get_machine,
+            identifier="name",
+            web_route="control_plane:machines",
+            record_type=MachineRecord,
+        ),
+    )

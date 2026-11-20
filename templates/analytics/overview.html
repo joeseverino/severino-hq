@@ -13,14 +13,14 @@
   {% if latest %}
     {% card element="div" %}{% facts layout="band" size="large" items=kpis label="Traffic" %}{% endcard %}
 
-    <div class="section-flow">
+    {% layout %}
       {% for panel in breakdowns %}
         {% section panel.label %}
           {% if panel.rows %}{% include "partials/_share_list.html" with rows=panel.rows only %}{% endif %}
         {% empty %}No data in this window.
         {% endsection %}
       {% endfor %}
-    </div>
+    {% endlayout %}
 
     {% section "Page speed" %}
       {% if vitals_measured %}

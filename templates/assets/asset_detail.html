@@ -1,6 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-<div class="section-flow">
+{% layout %}
 {% card label="Asset" %}{% facts %}
   {% if thing %}{% fact "This is" %}<span class="prose">{{ thing.kind_label|breakable }} {% entity thing %}</span>{% endfact %}{% endif %}
   {% if domain %}{% fact "Domain page" %}{% entity domain %}{% endfact %}{% endif %}
@@ -19,5 +19,5 @@
 {% endfacts %}{% endcard %}
 {% if asset.notes %}{% section "Notes" %}<p>{{ asset.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 {% include "partials/_related.html" with groups=related %}
-</div>
+{% endlayout %}
 {% endblock %}

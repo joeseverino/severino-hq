@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, UpdateView
 
 from hq.domains.expenses.models import Expense
+from hq.platform.application.plugin_testing import form_keyed
 
 from ..domains import host_records, load
 from ..expenses import ExpenseCommand, save_expense
@@ -37,17 +38,19 @@ class OneRuleTests(TestCase):
         with mock.patch.object(Expense, "clean", _refuse_vendor):
             response = self.client.post(
                 reverse("expenses:create"),
-                {
-                    "date": "2026-07-25",
-                    "vendor": "V",
-                    "item": "I",
-                    "category": "miscellaneous",
-                    "total_cost": "1.00",
-                    "business_use_percentage": "100",
-                },
+                form_keyed(
+                    {
+                        "date": "2026-07-25",
+                        "vendor": "V",
+                        "item": "I",
+                        "category": "miscellaneous",
+                        "total_cost": "1.00",
+                        "business_use_percentage": "100",
+                    }
+                ),
             )
-            self.assertEqual(response.status_code, 200)
-            self.assertIn("Refused by the model.", response.context["form"].errors["vendor"])
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("vendor", " ".join(response.context["form"].non_field_errors()))
             with self.assertRaises(ValidationError) as caught:
                 save_expense(
                     ExpenseCommand(date=date(2026, 7, 25), vendor="V", item="I"),

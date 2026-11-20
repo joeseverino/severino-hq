@@ -45,7 +45,9 @@ def item_name(item: dict[str, Any]) -> str:
 
 def _option(item: dict[str, Any], value: str) -> CommandTargetOption:
     name = item_name(item)
-    label = dotted(name, value) if name and name != value else value
+    # A record known by its number is named by what it is called alone: the
+    # number tells a person nothing.
+    label = name if name and value.isdecimal() else dotted(name, value) if name and name != value else value
     kind = item.get("kind")
     group = kind_label(kind) if isinstance(kind, str) and kind.strip() else ""
     return CommandTargetOption(value, label, group)

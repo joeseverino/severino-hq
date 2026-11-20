@@ -375,12 +375,11 @@ ignore = [".claude/worktrees"]
 # held to its reach alone, by tools/lint/mypy-reach.toml's pass.
 files = [
     "hq/platform/application/security.py",
-    "hq/platform/application/integration_specs.py",
     "hq/platform/application/plugins.py",
     "hq/platform/application/outbound_work.py",
     "hq/platform/application/capabilities.py",
     "hq/platform/application/resources.py",
-    "hq/platform/application/core_resources.py",
+    "hq/platform/application/*_specs.py",
     "hq/platform/application/sensitivity.py",
     "hq/platform/application/domains.py",
     "hq/platform/application/records.py",

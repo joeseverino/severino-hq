@@ -232,6 +232,17 @@ class Hop:
         return _HOP_ICONS.get(self.step, "")
 
     @property
+    def standing(self) -> str:
+        """How the stop stands on a route: as its check does, unavailable where
+        HQ could not read it, and "" where no check reads it."""
+
+        if self.check is not None:
+            return self.check.state
+        if self.unread or (self.certificate is not None and self.certificate.unread):
+            return Standing.UNAVAILABLE
+        return ""
+
+    @property
     def phrase(self) -> str:
         """An observed hop as a sentence fragment: its relation, and where a
         redirect sends it."""

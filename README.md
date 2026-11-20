@@ -141,7 +141,7 @@ gates in full.
 | [API](docs/API.md) | the machine API: tokens, routes, errors, safe retries |
 | [Plugins](docs/Plugins.md) | the extension contract, admission and composition |
 | [New Domain](docs/New-Domain.md) | adding a host domain, and the tests that hold its rules |
-| [Design](docs/Design.md) | the UI's primitives and rules |
+| [Design](docs/Design.md) | the UI's rules that hold across parts |
 | [Development](docs/Development.md) | setup, gates, browser checks, repository layout |
 | [AI and HQ](docs/AI.md) | how agents build HQ, and how they operate it |
 | [Dependencies](docs/Dependencies.md) | where every pin lives and how to move one |

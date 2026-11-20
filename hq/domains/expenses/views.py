@@ -17,7 +17,7 @@ from hq.platform.application.labels import dotted
 from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.projection import years_of
-from hq.platform.application.references import ReferencePickerMixin, referenced_by_row, resolve_many
+from hq.platform.application.references import referenced_by_row, resolve_many
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
@@ -140,7 +140,7 @@ class ExpenseDetailView(PageMixin, DetailView):
 FORM_PAGE = {"form_note": "Deductible estimate = cost × business use. Updated when you save."}
 
 
-class ExpenseCreateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, CreateView):
+class ExpenseCreateView(ExpensePage, RecordFormMixin, CreateView):
     page_title = "New expense"
     extra_context = FORM_PAGE
 
@@ -155,7 +155,7 @@ class ExpenseCreateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, Crea
         return initial
 
 
-class ExpenseUpdateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, UpdateView):
+class ExpenseUpdateView(ExpensePage, RecordFormMixin, UpdateView):
     page_title = "Edit expense"
     extra_context = FORM_PAGE
 

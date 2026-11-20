@@ -1,4 +1,5 @@
-"""What docs/Design.md tells an extension author to write is what the public contract allows."""
+"""What docs/Design.md and each public part's rules tell an extension author to write is what the public
+contract allows."""
 
 import re
 from pathlib import Path
@@ -14,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[4]
 @tag("source")
 class DesignGuideTests(SimpleTestCase):
     def test_every_template_filter_the_guide_shows_is_public_or_djangos(self):
-        guide = (ROOT / "docs" / "Design.md").read_text()
+        rules = (part.rules for part in template_contract.parts() if part.public)
+        guide = "\n".join(((ROOT / "docs" / "Design.md").read_text(), *rules))
         shown = set(re.findall(r"`[^`\n]*?\|([a-z_]+)", guide))
         self.assertTrue(shown)
         outside = shown - set(template_contract.FILTERS) - set(django_filters.filters)

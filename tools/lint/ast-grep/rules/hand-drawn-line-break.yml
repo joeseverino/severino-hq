@@ -8,7 +8,7 @@ id: hand-drawn-line-break
 language: html
 severity: error
 message: A line broken by hand with <br>, where the cell line or the stack list part draws the lines.
-note: Write {% cell_line %}first line{% detail %}quiet second line{% endcell_line %}, or {% stack_list %}<li>...</li><li>...</li>{% endstack_list %} for lines read down.
+note: Write {% cell_line %}first line{% detail %}quiet second line{% endcell_line %}, or {% list %}<li>...</li><li>...</li>{% endlist %} for lines read down.
 files:
   - "**/templates/**/*.html"
 rule:

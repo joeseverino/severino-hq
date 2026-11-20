@@ -5,6 +5,8 @@ from functools import partial
 from typing import Annotated, Any
 lazy from urllib.parse import urlsplit
 
+from pydantic import Field
+
 from hq.domains.content.models import ContentItem
 lazy from hq.domains.content.specs import ContentRow
 
@@ -22,7 +24,11 @@ _STATUS = one_of(ContentItem.Status.values)
 type ContentTitle = Annotated[str, Describe("What it is called.")]
 type ContentType = Annotated[_TYPE, Describe("What form it takes.")]
 type ContentStatus = Annotated[_STATUS, Describe("How far along it is.")]
-type ContentTopic = Annotated[str, Describe("What it is about, in a few words.", api="Empty when not recorded.")]
+type ContentTopic = Annotated[
+    str,
+    Field(json_schema_extra={"format": "textarea"}),
+    Describe("What it is about, in a few words.", api="Empty when not recorded."),
+]
 
 
 def published_on(urls) -> EntityLink | None:
@@ -49,7 +55,7 @@ class ContentCommand:
     slug: Annotated[str, Describe("Its address in HQ; blank derives one from the title.")] = ""
     content_type: ContentType = ContentItem.Type.ARTICLE
     status: ContentStatus = ContentItem.Status.DRAFT
-    topic: ContentTopic = ""
+    topic: Annotated[ContentTopic, Field(title="Description")] = ""
     tags: Annotated[str, Describe("Tags, separated by commas.")] = ""
     published_url: PublishedUrl = ""
     published_at: PublishedAt = None

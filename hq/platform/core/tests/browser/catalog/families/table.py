@@ -1,7 +1,7 @@
 """The catalog's tables: a data table in each option and state its parts give it."""
 
 from hq.platform.application.pages import PageAction
-from hq.platform.core.tests.browser.catalog.common import Entry
+from hq.platform.core.template_parts import Example
 
 # Each drawn heading of a table of the page named ``label``: the premise of an
 # entry whose column of that name holds nothing, so is drawn nowhere.
@@ -15,7 +15,7 @@ ENTRIES = {
     # no class on a cell; the sort control on a table of rows and none on a
     # table of one; each row's toggle in the cell that names it, shown on a
     # row that holds something back.
-    "table/figures": Entry(
+    "table/figures": Example(
         '{% section "Example costs" %}{% table_region "Example costs" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Name" %}{% table_heading "Count" "numeric" %}{% table_heading "Cost" "numeric" %}'
         "</tr></thead><tbody><tr><td>example-01</td><td>3</td><td>$1,204.50</td></tr>"
@@ -23,7 +23,7 @@ ENTRIES = {
         "<tfoot><tr><td>Total</td><td>15</td><td>$1,212.50</td></tr></tfoot></table>"
         "{% endtable_region %}{% endsection %}"
     ),
-    "table/sorts": Entry(
+    "table/sorts": Example(
         '{% section "Example hosts 5" %}{% table_region "Example hosts 5" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Name" %}{% table_heading "State" "status" %}'
         '{% table_heading "Actions" "control" hidden=True %}</tr></thead>'
@@ -37,7 +37,7 @@ ENTRIES = {
     ),
     # A region whose tables hold no row: what is missing and what fills it,
     # then a list its own filter emptied, with the way back.
-    "table/empty": Entry(
+    "table/empty": Example(
         '{% section "Example hosts 6" %}{% table_region "Example hosts 6" empty="No example hosts yet." '
         'action_url="#" action_label="Add an example host" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Name" %}{% table_heading "State" "status" %}</tr></thead><tbody></tbody></table>'
@@ -47,7 +47,7 @@ ENTRIES = {
         '{% table_heading "Name" %}{% table_heading "State" "status" %}</tr></thead><tbody></tbody></table>'
         "{% endtable_region %}{% endsection %}"
     ),
-    "table/gutter": Entry(
+    "table/gutter": Example(
         '{% section "Example records 5" %}{% table_region "Example records 5" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Name" "identifier" %}{% table_heading "Note" %}</tr></thead><tbody>'
         "<tr><td><strong>example-01</strong></td><td>An example note"
@@ -57,7 +57,7 @@ ENTRIES = {
     ),
     # A fact on one line ({% cell_line text=... lines=1 %}), as Jobs says who asked for
     # each run; a cut of one is measured, and opened, by tables.js.
-    "table/one-line": Entry(
+    "table/one-line": Example(
         '{% section "Example runs 2" %}{% table_region "Example runs 2" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Run" "identifier" %}{% table_heading "Asked by" %}</tr></thead><tbody>'
         '<tr><td><strong>example-01</strong></td><td>{% cell_line text="example-owner, on the web" lines=1 %}</td></tr>'
@@ -67,7 +67,7 @@ ENTRIES = {
     # A row's actions ({% row_actions %}): a POST and a destructive link side
     # by side, a link alone, one refused, and a row whose note takes several
     # lines, each set on its row's first line.
-    "table/row-actions": Entry(
+    "table/row-actions": Example(
         '{% section "Example messages" %}{% table_region "Example messages" %}<table class="data-table"><thead><tr>'
         '{% table_heading "From" "identifier" %}{% table_heading "Note" %}'
         '{% table_heading "Actions" css="actions-col" hidden=True %}</tr></thead><tbody>'
@@ -102,7 +102,7 @@ ENTRIES = {
     # offer several actions with long labels beside words that wrap: the
     # actions keep their line while the region has room and wrap between
     # them where it has not.
-    "table/many-actions": Entry(
+    "table/many-actions": Example(
         '{% section "Example findings" %}{% table_region "Example findings" %}<table class="data-table"><tbody>'
         "{% for row in rows %}<tr><td><strong>{{ row.0 }}</strong><p>{{ row.1 }}</p></td>"
         "{% row_actions row.2 %}</tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}",
@@ -124,7 +124,7 @@ ENTRIES = {
     # Values set side by side ({% table_region compare=True %}): each row's
     # field, then its two values sharing the room evenly, one long enough to
     # wrap.
-    "table/compare": Entry(
+    "table/compare": Example(
         '{% section "Example changes 2" %}{% table_region "Example changes 2" compare=True %}'
         '<table class="data-table compact-table"><thead><tr>{% table_heading "Field" "identifier" %}'
         '{% table_heading "Before" %}{% table_heading "After" %}</tr></thead><tbody>'
@@ -132,19 +132,10 @@ ENTRIES = {
         "<tr><th>example_note</th><td>An example note long enough to take two lines on a phone.</td>"
         "<td>Another example note.</td></tr></tbody></table>{% endtable_region %}{% endsection %}"
     ),
-    # A row that asks to be read first ({% row_state emphasized=True %}) among
-    # rows that do not, its links weighed and its cells tinted.
-    "table/emphasized": Entry(
-        '{% section "Example messages 2" %}{% table_region "Example messages 2" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "From" "identifier" %}{% table_heading "Message" %}</tr></thead><tbody>'
-        "{% for row in rows %}<tr{% row_state emphasized=row.2 %}><td>{{ row.0 }}</td>"
-        '<td><a href="#">{{ row.1 }}</a></td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}',
-        {"rows": (("example-01", "An example message not read yet.", True), ("example-02", "An example read.", False))},
-    ),
     # A table whose rows are selected together: the heading that selects
     # every row, then each row's tick-box ({% row_select %}), and a row with
     # no key whose cell stays empty.
-    "table/selectable": Entry(
+    "table/selectable": Example(
         '{% section "Example assets" %}{% table_region "Example assets" %}'
         '<table class="data-table" data-selectable-table><thead><tr>'
         '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" "identifier" %}'
@@ -153,28 +144,11 @@ ENTRIES = {
         '<td>{% status "Online" tone="good" %}</td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}',
         {"rows": ((1, "example-01"), (2, "example-02"), (None, "example-03"))},
     ),
-    # A run of parts in a cell ({% line_list %}): four that all show, two,
-    # and nine. With script the parts past the first three show as far as
-    # their line has room and the row opens for the rest; without it, as
-    # here, the rest wrap on lines of their own beneath the first three.
-    "table/line-list": Entry(
-        '{% section "Example stacks" %}{% table_region "Example stacks" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" "identifier" %}{% table_heading "Parts" %}</tr></thead><tbody>'
-        "{% for row in rows %}<tr><td>{{ row.0 }}</td><td>{% line_list row.1 as part %}{% status part chip=True %}"
-        "{% endline_list %}</td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}",
-        {
-            "rows": (
-                ("example-01", ("Debian", "systemd", "Caddy", "Tailscale")),
-                ("example-02", ("Django", "SQLite")),
-                ("example-03", tuple(f"example-part-{at:02}" for at in range(1, 10))),
-            )
-        },
-    ),
     # Identifiers beside sentences, as a service's path draws its steps: an
     # address with a port, a host name and a list of networks, in tables with
     # ranked columns to let go, so a narrow box lets a column leave before it
     # breaks a name at its seams.
-    "table/identifiers": Entry(
+    "table/identifiers": Example(
         '{% section "Example steps" %}{% table_region "Example steps" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Step" %}{% table_heading "Name" "identifier" %}'
         '{% table_heading "State" "status" %}{% table_heading "Since" drop=3 %}{% table_heading "Impact" drop=2 %}'
@@ -205,7 +179,7 @@ ENTRIES = {
     # of short words: the server marks the dashes' column blank and it is not
     # drawn, the marks are, and no short word is split however its column's
     # width rounds.
-    "table/blank-column": Entry(
+    "table/blank-column": Example(
         '{% section "Example runbooks" %}{% table_region "Example runbooks" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Title" %}{% table_heading "Type" %}{% table_heading "Nothing" %}'
         '{% table_heading "Runs" %}{% table_heading "Note" %}</tr></thead><tbody>'
@@ -220,7 +194,3 @@ ENTRIES = {
         premise=(_HEADINGS_DRAWN, "Nothing"),
     ),
 }
-
-# What each part's default entry, its Part.example, is given (catalog.default_name).
-_FIRST = ENTRIES["table/row-actions"].context["rows"][0]
-ENTRIES |= {"part/row-actions": Entry(context={"row": {"name": _FIRST[0], "actions": _FIRST[2]}})}

@@ -5,11 +5,11 @@ finished is only when it ran, and one that did not is marked. The run covers
 every opted-in repository, so "Not run yet" is said only of one that is opted
 in. The page's Update dependencies control refreshes this fact.
 {% endcomment %}
-{% stack_list %}{% if run %}
+{% list %}{% if run %}
   <li><span data-updates-run="{{ run.outcome }}">
   {% if run.outcome == "ok" %}Last ran {{ run.started_at|when:"ago" }}
   {% else %}{% if run.outcome == "handed_off" %}Started{% else %}Last run{% endif %} {{ run.started_at|when:"ago" }} {% status run.seen.label tone=run.tone %}{% endif %}</span></li>
 {% elif project.dependency_updates %}
   <li><span data-updates-run="">Not run yet</span></li>
 {% endif %}
-{% if asked %}<li>{% muted data_run_requested=True %}Run requested {{ asked|when:"ago" }}{% endmuted %}</li>{% endif %}{% endstack_list %}
+{% if asked %}<li>{% muted data_run_requested=True %}Run requested {{ asked|when:"ago" }}{% endmuted %}</li>{% endif %}{% endlist %}

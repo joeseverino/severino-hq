@@ -1,4 +1,4 @@
-"""A row's editor opens under its row (docs/Design.md, A row's editor opens under it)."""
+"""A row's editor opens under its row (``row_editor``'s rules)."""
 
 from collections import Counter
 

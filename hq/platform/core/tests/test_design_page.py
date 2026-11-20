@@ -21,6 +21,7 @@ from hq.platform.application.markup_testing import all_elements, elements, selec
 from hq.platform.core import design_gallery
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.browser import catalog
+from hq.platform.core.tests.browser.catalog.common import alone
 
 # The most the gallery the image ships may weigh as a browser receives it
 # (core.compression), in bytes, sent whole with every visit to the page: it
@@ -91,7 +92,7 @@ class DesignPageTests(TestCase):
         def focused(html):
             return [element.tag for element in all_elements(html) if "autofocus" in element.attrs]
 
-        self.assertEqual(focused(catalog.CATALOG["form/filter-bar"].part("form/filter-bar")), ["input"])
+        self.assertEqual(focused(alone(catalog.CATALOG["form/filter-bar"], "form/filter-bar")), ["input"])
         self.assertEqual(focused(self.gallery), [])
 
     def test_no_example_form_sends_a_press_anywhere(self):
@@ -105,7 +106,7 @@ class DesignPageTests(TestCase):
                 if name in element.attrs and not (name == "method" and element.attrs[name] == "dialog")
             ]
 
-        drawn = {name: entry.part(name) for name, entry in catalog.CATALOG.items() if not entry.frame}
+        drawn = {name: alone(entry, name) for name, entry in catalog.CATALOG.items() if not entry.frame}
         self.assertTrue([name for name, html in drawn.items() if sends(html)])
         self.assertEqual(sends(self.gallery), [])
         forms = [element for element in all_elements(self.gallery) if element.tag == "form"]

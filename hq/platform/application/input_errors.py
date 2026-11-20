@@ -15,6 +15,8 @@ from typing import Any, get_args
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError as DjangoValidationError
 from pydantic_core.core_schema import ErrorType
 
+from hq.platform.core.rules import RULE
+
 from .record_errors import NOT_FOUND
 from .ui import ended
 
@@ -179,6 +181,8 @@ def _pydantic_reason(error: Mapping[str, Any], context: Mapping[str, Any]) -> st
 
 def _django_reason(error: DjangoValidationError) -> str:
     code = error.code or ""
+    if code == RULE:
+        return f"is refused: {str(error.message).removesuffix('.')}"
     if code in _DJANGO_REASONS:
         return _DJANGO_REASONS[code]
     limit = (error.params or {}).get("limit_value")

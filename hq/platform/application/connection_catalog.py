@@ -32,13 +32,13 @@ from .contracts import SCOPE_NAME, endpoint_has_private_parts
 from .derivations import present
 from .freshness import freshness, last_read
 from .integrations import held_graph
-from .json_schemas import as_written
 from .moments import ago
 from .projection import read_once
 from .security import Principal
 from .tone import Tone
 lazy from .connection_records import AbilityPart
 lazy from .entity_links import entity_link, link_url
+lazy from .record_saves import row
 
 # The family the controller observes on HQ's behalf. It leads every inventory
 # because it is the one the page is about; the gateways beside it are the
@@ -482,16 +482,5 @@ def _connection_view(
 
 
 def serialize_ability(state: ConnectionAbilityState) -> AbilityPart:
-    return {
-        "name": state.ability.name,
-        "label": state.ability.label,
-        "effect": state.ability.effect,
-        "required_scopes": list(state.ability.required_scopes),
-        "grant": state.ability.grant or None,
-        "evidence": state.evidence,
-        "available": state.available,
-        "missing_scopes": list(state.missing_scopes),
-        "capability": state.ability.capability or None,
-        "subject_resource": state.ability.subject_resource or None,
-        "action": as_written(state.action) if state.action else None,
-    }
+    given = {"evidence": state.evidence, "available": state.available, "action": state.action}
+    return row(state.ability, AbilityPart, missing_scopes=state.missing_scopes, **given)

@@ -21,8 +21,8 @@ vars.labels = "hq.platform.core.tests.browser --pattern '[!_]*.py'"
 
 # A second engine, so a break WebKit happens not to show still fails, over
 # the narrow set that says it: every shared part, the example estate at a phone
-# and a laptop (`estate.SECOND_OPINION_AT`), and the layout shifts only Chromium
-# records (`probes/shifts.py`).
+# and a laptop (`estate.SECOND_OPINION_AT`), every check's own examples
+# (`plants.py`), and the layout shifts only Chromium records (`probes/shifts.py`).
 # `mise run browser` leaves this leg to CI.
 ["browser:chromium"]
 description = "The second-engine set in Chromium: a CI leg, which mise run browser leaves out"
@@ -34,5 +34,6 @@ vars.labels = """\
   hq.platform.core.tests.browser.catalog.layout.CatalogLayoutTests \
   hq.platform.core.tests.browser.catalog.layout.ScriptedCatalogLayoutTests \
   hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests \
+  hq.platform.core.tests.browser.plants.CheckExampleTests \
   hq.platform.core.tests.browser.components.ComponentLayoutTests.test_opening_every_row_a_reader_can_open_moves_nothing_they_did_not_ask_for \
   hq.platform.core.tests.browser.components.ComponentLayoutTests.test_the_face_arriving_late_is_the_gates_move_under_a_fixed_clock"""

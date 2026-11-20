@@ -6,14 +6,14 @@ region is a fragment (static/js/fragment.js): paging, checking a source and
 opening a day ask this page for the `calendar` part and take it in place.
 {% endcomment %}
 {% partialdef calendar inline %}
-<div class="split" id="calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace">
+{% layout kind="split" id="calendar" data_fragment=True data_fragment_name="calendar" data_fragment_links=True data_fragment_history="replace" %}
   {% section moment=calendar.month when="month" id="calendar-month" %}
     {% include "partials/_month_grid.html" %}
   {% aside %}
     {% include "partials/_calendar_nav.html" with unit="month" previous=previous_url today=today_url current=calendar.is_current next=next_url hotkeys=True only %}
   {% endsection %}
 
-  <aside class="section-flow">
+  {% layout aside=True %}
     {% if day %}
       {% section day.name moment=day.day when="day" id="day-panel" %}
         {% if entry %}
@@ -51,7 +51,7 @@ opening a day ask this page for the `calendar` part and take it in place.
         {% if group %}{% section group %}{% include "partials/_calendar_sources.html" %}{% endsection %}{% else %}{% include "partials/_calendar_sources.html" %}{% endif %}
       {% endfor %}
     {% endsection %}
-  </aside>
-</div>
+  {% endlayout %}
+{% endlayout %}
 {% endpartialdef %}
 {% endblock %}

@@ -17,7 +17,7 @@ class PathChartTests(SimpleTestCase):
             segments=(PathSegment("M 1 2 L 3 4", 2, tooltip),),
             markers=(PathMarker(1, 2, "Start"),),
             scale=PathScale(10.5, 20.5, 30.5, "100 m"),
-            legend=((2, "An ordered band"),),
+            bands=((2, "An ordered band"),),
             width=400,
             height=200,
             note="An example reading.",

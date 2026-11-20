@@ -35,7 +35,7 @@ from .integration_specs import Kept, command_adapter, keeps
 from .labels import lower_first
 from .projection import keyset_page, read_once
 from .record_errors import PolicyError
-from .record_saves import Held, as_sent, found, held, written
+from .record_saves import Held, as_sent, found, held, row, written
 from .security import Principal
 from .tone import Tone, Toned
 lazy from .asks import APPLIES_SHORTLY
@@ -269,23 +269,15 @@ def suggest_key(kind: str, spec: dict[str, Any]) -> str:
 
 def serialize_resource(resource: ManagedResource) -> ManagedResourceItem:
     provider = PROVIDERS.get(resource.kind)
-    health = resource_health(resource)
-    return {
-        "id": str(resource.id),
-        "key": resource.key,
-        "kind": resource.kind,
-        "enabled": resource.enabled,
-        "generation": resource.generation,
-        "observed_generation": resource.observed_generation,
-        "in_sync": resource.generation == resource.observed_generation,
-        "health": health,
-        "public_effect": provider.public_effect if provider else False,
-        "spec": shown_spec(resource.kind, resource.spec),
-        "status": serialize_public_status(resource.status),
-        "conditions": resource.conditions,
-        "last_observed_at": (resource.last_observed_at.isoformat() if resource.last_observed_at else None),
-        "updated_at": resource.updated_at.isoformat(),
-    }
+    return row(
+        resource,
+        ManagedResourceItem,
+        in_sync=resource.generation == resource.observed_generation,
+        health=resource_health(resource),
+        public_effect=provider.public_effect if provider else False,
+        spec=shown_spec(resource.kind, resource.spec),
+        status=serialize_public_status(resource.status),
+    )
 
 
 def serialize_public_status(status: dict[str, Any]) -> dict[str, Any]:

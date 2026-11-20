@@ -19,11 +19,13 @@ from hq.platform.core.models import LinkedAccount
 
 from .asks import AskedAnswer, Standing, asked_read, read_standing
 from .command_fields import Describe
+from .contracts import Effect
 from .freshness import RETRY_AFTER, freshness
+from .integration_specs import CapabilitySpec
 from .linked_accounts import GITHUB
 from .record_errors import RecordNotFound
-from .security import Principal
-lazy from .cadence import ask, asked_at
+from .security import Capability, Principal
+lazy from .cadence import CONTROLLER_REFRESH, ask, asked_at
 lazy from .capabilities import command_spec
 lazy from .moments import moment
 
@@ -145,3 +147,25 @@ def request_read(command: ProfileReadCommand, *, principal: Principal) -> Profil
     at = ask(reads=(KIND,), activity=True)
     said = command_spec(READ_NOW).requested(f"@{command.login}")
     return {**asked_read((KIND,), at, message=said).answer(), "login": command.login}
+
+
+def capabilities() -> tuple[CapabilitySpec, ...]:
+    return (
+        CapabilitySpec(
+            READ_NOW,
+            "Ask HQ to read a user's GitHub profile now.",
+            Effect.INFRASTRUCTURE_CHANGE,
+            # A public lookup that spends GitHub's allowance, and a wake of the
+            # controller, as Refresh is.
+            (Capability.LOOK_UP_PUBLIC_RECORDS, Capability.MANAGE_INFRASTRUCTURE),
+            ProfileReadCommand,
+            request_read,
+            execution_notes=(
+                "Refuse a login no sign-in names.",
+                "Ask for the profile reading now; the controller reads GitHub with its own credentials.",
+            ),
+            label="Refresh a GitHub profile",
+            reached_from="watching",
+            verb=CONTROLLER_REFRESH.words(),
+        ),
+    )

@@ -23,6 +23,9 @@ ignores:
   - "**/testing.py"
   - "**/*_testing.py"
   - "hq/**/templatetags/**"
+  # A part's catalog example is a template, drawing the part inside the page
+  # markup around it; no page receives it.
+  - "hq/platform/core/part_examples/**"
   # The provider form's name list is a form widget, which Django renders from
   # Python; its remove control is a button like every other.
   - "hq/platform/application/provider_forms.py"

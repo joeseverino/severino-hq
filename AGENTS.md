@@ -158,8 +158,11 @@ architecture test, a glob) fails when its path matches nothing.
 
 ## Frontend quality bar
 
-Read [Design](docs/Design.md), the primitives a page is built from, before
-adding UI; grow a primitive rather than styling a page.
+A change to a shared part reads and edits its `Part` declaration, whose
+`rules` [Shared UI](docs/Shared-UI.md#each-parts-rules) states under its name
+and whose `example` and `states` the component catalog draws;
+[Design](docs/Design.md) holds what holds across parts. Grow a primitive rather
+than styling a page.
 
 - Server-render useful HTML first; JavaScript progressively enhances working
   links and forms.

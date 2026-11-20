@@ -6,6 +6,7 @@ from django import template
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.page_parts import html_attributes
+from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Option, Part, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
 
@@ -61,11 +62,17 @@ def muted_frame(_name: str, given: dict) -> dict:
 
 MUTED = Part(
     name="muted",
+    rules="""
+    Words in the muted voice that name nothing (a context line beside a value, a sentence under it)
+    are `{% muted %}...{% endmuted %}`, a line among other words, or a paragraph with `element="p"`;
+    `css` adds the classes of where it stands (`narrow-more`, `row-more`, `cell-part`). What names a
+    value (`.fact-label`, a tile's label, a `<dt>`) is the same voice, drawn by its own part.
+    """,
     classes=("muted",),
     partial="partials/_muted.html",
     about=(
         "Words said quietly beside what they are about: a context line, a sentence under a value. "
-        "A cell or a list item holds it; a run of parts said quietly is `{% dot_list muted=True %}`."
+        'A cell or a list item holds it; a run of parts said quietly is `{% list kind="dots" muted=True %}`.'
     ),
     options={
         "element": Option(
@@ -82,17 +89,30 @@ MUTED = Part(
     public=True,
     example='{% muted element="p" %}A sentence under it.{% endmuted %}',
     shape=muted_frame,
+    states=tags.MUTED_STATES,
 )
 slotted(MUTED, library=register)
 slotted(
     library=register,
     part=Part(
         name="steps",
+        rules="""
+        A list of short steps (`{% steps %}`) is read down its columns, so its columns end within a step
+        of each other. Each step is `{% step icon=... %}`: its icon, then what it says; `tone` colors the
+        icon by how a check stands, `done` draws a finished step quiet, and `title` is its tooltip. Steps
+        done in order are `{% steps numbered=True %}`: read down wider columns, as many as fit up to
+        three, so a short run fills a wide frame; each step's number stands where its icon would be, so
+        its steps take no icon. A step an operator takes on their own machine (a `Run`) or in words (a
+        `Do`), each with its notes, is `partials/_operator_step.html` given `step`: HQ offers it and never
+        runs it, and it carries no secret.
+        """,
         example='{% steps %}{% step icon="check-circle" tone="good" %}Example check holds.{% endstep %}{% endsteps %}',
         classes=("is-numbered", "step-list"),
         partial="partials/_steps.html",
+        pieces=("partials/_operator_step.html",),
         about="A list of short steps or checks, each a `{% step %}`, read down its columns.",
         options={"numbered": Option(about="Steps done in order: one column, each its number in place of its icon.")},
+        states=tags.STEPS_STATES,
     ),
 )
 slotted(
@@ -115,29 +135,11 @@ slotted(
 slotted(
     library=register,
     part=Part(
-        name="prose_list",
-        classes=("prose-list",),
-        partial="partials/_prose_list.html",
-        about="A list of sentences, each an `<li>` marked as the browser marks it.",
-        options={"numbered": Option(about="Each numbered, for items read in order.")},
-        public=True,
-        example="{% prose_list %}<li>A sentence.</li>{% endprose_list %}",
-    ),
-)
-slotted(
-    library=register,
-    part=Part(
-        name="link_chips",
-        example='{% link_chips %}<li><a href="/example/">Example page</a></li>{% endlink_chips %}',
-        classes=("link-chips",),
-        partial="partials/_link_chips.html",
-        about="A row of places to go, each `<li>` one link drawn as a chip of its own.",
-    ),
-)
-slotted(
-    library=register,
-    part=Part(
         name="button_row",
+        rules="""
+        A row of buttons that stands on its own (a confirmation's, a card's decisions, a page's way on) is
+        `{% button_row %}`, which a form's closing row draws through too.
+        """,
         classes=("form-actions",),
         public_classes=("save-bar",),
         partial="partials/_button_row.html",
@@ -151,7 +153,12 @@ slotted(
     library=register,
     part=Part(
         name="page_main",
-        example="{% page_main %}<h1>Example page</h1><p>An example line.</p>{% endpage_main %}",
+        rules="""
+        base.html draws every page's content in it, and the component catalog draws each of its entries
+        in the same part, so an entry stands where a page's content does. It is the host's frame; an
+        extension's page is drawn in it and never writes it.
+        """,
+        example=tags.PAGE_MAIN,
         classes=("content", "page-print-footer"),
         partial="partials/_page_main.html",
         about="The content column every page and each catalog entry is drawn in, a region answered in place.",
@@ -162,6 +169,26 @@ slotted(
     library=register,
     part=Part(
         name="card",
+        rules="""
+        `{% card css="example" heading="example-heading" %}...{% endcard %}` frames what it encloses. It
+        draws a section unless `element=` names an article, figure, details or div. `heading` is its
+        heading's id, or `label` its name when it has no heading, and `busy` marks it while its content
+        is still coming. `alone` makes it the whole of a page that stands outside the page frame (the
+        sign-in): centered at a dialog's width, a picture leading it over its own title, and an action
+        alone on its line the card's width. Each `data_*` option is a
+        `data-` attribute (True draws it bare). A state of the card is a `data_*` option the stylesheet
+        reads, never a class written inside an `{% if %}`. No template writes `class="card"` itself
+        (`test_only_the_tag_draws_a_card`). A card is never wider than the column or track it is placed in
+        (`.card { min-inline-size: 0 }`), so on a phone what it holds wraps inside it. A card holding only
+        a table region (a thing's problems, the dashboard's short queue) has no inset at its sides, so the
+        table's rows reach them as a section's do (`:has()` in surfaces.css decides; a page picks
+        nothing).
+
+        A band draws no box of its own: a box is the card around it (`{% card element="div" %}`). A card
+        holding the band alone is its frame and nothing more: its facts keep their own padding and draw
+        their edges as every band does. A card holding nothing but a line of facts is a strip of counts,
+        with a narrower inset and its words a size under its values.
+        """,
         partial="partials/_card.html",
         about="The frame a page's content is grouped in; a titled part of a page is a `{% section %}`.",
         options={
@@ -182,5 +209,6 @@ slotted(
         public=True,
         example='{% card label="Hosts" %}<p>Body</p>{% endcard %}',
         shape=card_frame,
+        states=tags.CARD_STATES,
     ),
 )

@@ -112,7 +112,7 @@ class DocumentTests(SimpleTestCase):
                 self.assertFalse(tag.get("description") and tag["description"] in said)
 
     def test_each_resource_and_capability_is_tagged_with_the_domain_it_belongs_to(self):
-        """Its declaring domain, else the domain of its page, else of its subject; else none."""
+        """Its declaring domain, else the domain of its page, else of its subject."""
 
         tags = Tags(resource_registry(), capability_registry())
         self.assertEqual(tags.of_resource("projects"), "hq.projects")
@@ -120,8 +120,6 @@ class DocumentTests(SimpleTestCase):
         self.assertEqual(tags.of_resource("search"), "hq.search")
         self.assertEqual(tags.of_capability("project.create"), "hq.projects")
         self.assertEqual(tags.of_capability("infrastructure.zone.adopt"), "hq.zones")
-        # Held only in the browser, so never in the document: no domain's to place.
-        self.assertIsNone(tags.of_capability("approval.approve"))
         declaring = next(domain for domain in all_domains() if domain.integration.capabilities)
         declared = next(iter(declaring.integration.capabilities())).name
         self.assertEqual(tags.of_capability(declared), declaring.id)

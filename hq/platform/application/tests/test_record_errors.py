@@ -19,9 +19,10 @@ from hq.domains.receipts.models import Receipt
 from hq.platform.application.tests.reads import reads
 
 from .. import approvals
-from ..capabilities import execute_capability
+from ..capabilities import capability_registry, execute_capability
+from ..integration_specs import TARGET_KINDS, kept_by
 from ..record_errors import HostRefusal
-from ..security import OPERATOR_CAPABILITIES, Principal
+from ..security import Principal, operator_capabilities
 from .refusal_text import check, checked
 
 # Distinctive enough that finding it in a message can only mean it was echoed.
@@ -31,7 +32,7 @@ SENT_ID = 7_340_219
 
 
 def operator() -> Principal:
-    return Principal("operator", "cli", OPERATOR_CAPABILITIES)
+    return Principal("operator", "cli", operator_capabilities())
 
 
 class RecordRefusalTests(TestCase):
@@ -47,17 +48,14 @@ class RecordRefusalTests(TestCase):
         return result["error"]
 
     def test_a_missing_record_is_not_found_and_names_nothing_sent(self):
+        # Each write that keeps what it is not sent of its record reads that record first.
         cases = {
-            "project.update": ({"name": "Renamed"}, SENT),
-            "project.delete": ({"confirm": SENT}, SENT),
-            "asset.update": ({"item_name": "Renamed"}, SENT),
-            "content.update": ({"title": "Renamed"}, SENT),
-            "calendar.entry.update": ({"title": "Renamed", "starts_on": "2026-10-20"}, SENT_UID),
-            "documentation.update": ({"doc_id": "rb-renamed", "title": "Renamed"}, SENT),
-            "expense.update": ({"date": "2026-10-20", "vendor": "Example", "item": "Disk"}, SENT_ID),
-            "receipt.update": ({"vendor": "Example"}, SENT_ID),
+            name: ({}, SENT_UID if TARGET_KINDS[spec.target_kind].coerce is str else SENT_ID)
+            for name, spec in capability_registry().items()
+            if kept_by(spec)
         }
-        for name, (payload, target) in cases.items():
+        self.assertTrue(cases, "no command keeps its record")
+        for name, (payload, target) in {**cases, "project.delete": ({"confirm": SENT}, SENT)}.items():
             with self.subTest(name):
                 error = self.refused(name, payload, target=target)
                 self.assertEqual(error["code"], "not_found")

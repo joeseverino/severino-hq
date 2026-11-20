@@ -1,12 +1,5 @@
-"""The DNS tool's two lookups, each a form that asks rather than writes, the
-one question that starts publishing a service, the two policies a
-domain's mail page publishes, a machine's identity, and why a record is
-removed.
-
-Each lookup field's name is the one its capability's command takes, which
-``application.toolkit`` names for the tab and the view reads from the query
-string, so a lookup's address is a link anyone can build.
-"""
+"""The one question that starts publishing a service, the two policies a
+domain's mail page publishes, and a machine's identity."""
 
 from collections.abc import Mapping
 from typing import ClassVar
@@ -16,7 +9,6 @@ from django.utils.html import format_html
 
 from hq.platform.application.asks import APPLIES_SHORTLY
 from hq.platform.application.forms import ChoiceCards, ReadAt, SuffixedInput
-from hq.platform.application.lookup import LOOK_UP_ADDRESS, LOOK_UP_NAME
 from hq.platform.application.mail_policy import (
     DMARC_TAGS,
     SPF_DEFAULTS,
@@ -30,48 +22,9 @@ from hq.platform.application.mail_policy import (
 )
 from hq.platform.application.provider_forms import NameList, ResourceIdentityForm
 from hq.platform.application.ui import counted
-from hq.platform.core.templatetags.action_tags import POST_FORM_ID
 from hq.platform.core.templatetags.value_tags import breakable
 
 from .names import is_hostname, normalized_hostname
-
-# A value typed to be looked up, never prose or a remembered entry.
-_TYPED = {"spellcheck": "false", "autocomplete": "off"}
-
-
-class LookupForm(forms.Form):
-    """One lookup on the tools page: the tab it answers on, and what it asks."""
-
-    # Both lookups stand on one page, so each names its own ids.
-    ids: ClassVar[str]
-
-    tab = forms.CharField(widget=forms.HiddenInput)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, auto_id=f"{self.ids}-%s", **kwargs)
-
-
-class NameLookupForm(LookupForm):
-    ids = "name-lookup"
-
-    name = forms.CharField(
-        label="Hostname",
-        required=False,
-        widget=forms.TextInput(attrs={**_TYPED, "placeholder": "example.com"}),
-    )
-
-
-class AddressLookupForm(LookupForm):
-    ids = "address-lookup"
-
-    address = forms.CharField(
-        label="IP address",
-        required=False,
-        widget=forms.TextInput(attrs={**_TYPED, "placeholder": "1.1.1.1"}),
-    )
-
-
-LOOKUP_FORMS: dict[str, type[LookupForm]] = {LOOK_UP_NAME: NameLookupForm, LOOK_UP_ADDRESS: AddressLookupForm}
 
 
 class ServiceStartForm(forms.Form):
@@ -193,21 +146,6 @@ class MailFailuresForm(MailPolicyForm):
         return compose_dmarc(
             {**self.record_tags, **{key: "" if value is None else str(value) for key, value in given.items()}}
         )
-
-
-class RemovalReasonForm(forms.Form):
-    """Why a record is removed, saved with the removal. The confirmation
-    button posts through the page's shared form (``POST_FORM_ID``), so the
-    field joins that form by its ``form`` attribute rather than standing in
-    a form of its own."""
-
-    reason = forms.CharField(
-        required=False,
-        max_length=300,
-        label="Why (optional)",
-        help_text="Saved with the removal and in the audit log.",
-        widget=forms.TextInput(attrs={"form": POST_FORM_ID}),
-    )
 
 
 class MachineIdentityForm(ResourceIdentityForm):

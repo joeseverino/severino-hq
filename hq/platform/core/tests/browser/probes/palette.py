@@ -1,6 +1,6 @@
 """Probes of color: field and button edges, the fills a theme paints, and the tokens that paint them."""
 
-from hq.platform.core.tests.browser.probes import Check
+from hq.platform.core.tests.browser.probes import Check, Plant
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, settled
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -338,6 +338,15 @@ CHECKS = {
         reader_sees="a field whose edge is too faint to find",
     ),
     "button edges": Check(
-        (BUTTON_EDGES, SELECTORS["pressed"]), palette=True, reader_sees="a button whose edge is too faint to find"
+        (BUTTON_EDGES, SELECTORS["pressed"]),
+        palette=True,
+        reader_sees="a button whose edge is too faint to find",
+        # A pressed control is never edged as a field is.
+        plants=(
+            Plant(
+                '<button class="example-edged" style="border: 1px solid var(--field-line)">Example</button>',
+                finds=("button.example-edged wears a field's edge",),
+            ),
+        ),
     ),
 }

@@ -3,10 +3,11 @@
 import json
 
 from hq.platform.core.templatetags.table_tags import TABLE_REGION
-from hq.platform.core.tests.browser.probes import Check
+from hq.platform.core.tests.browser.probes import Check, Example, Plant
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, PAINTED_PART
 from hq.platform.core.tests.browser.probes.shifts import PROBE_MOVES
 from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE
 
 CELLS = (
     "() => {"
@@ -779,6 +780,38 @@ FOLDED_ROWS_SHOWN = (
 }"""
 )
 
+# What a row's open line holds starts where the row's words do, never left of
+# them under its toggle: a row set in (in a group, under its family) keeps its
+# open line in its own column.
+OPEN_LINES_OUTDENTED = (
+    "() => {"
+    + DESCRIBE
+    + """
+  const found = new Set();
+  for (const line of document.querySelectorAll('main table.data-table > tbody > tr.row-detail')) {
+    const row = line.previousElementSibling;
+    const words = row?.querySelector(':scope > td:has(> [data-row-toggle])');
+    if (!words || !line.checkVisibility()) continue;
+    const column = words.getBoundingClientRect().left + parseFloat(getComputedStyle(words).paddingInlineStart);
+    for (const part of line.querySelectorAll(':scope > td > *')) {
+      const left = part.getBoundingClientRect().left;
+      if (part.checkVisibility() && left < column - 1) {
+        found.add(`${describe(part)} starts ${Math.round(column - left)}px left of its row's words: ${row.innerText.trim().replace(/\\s+/g, ' ').slice(0, 40)}`);
+      }
+    }
+  }
+  return [...found];
+}"""
+)
+
+# A row whose words hold a block for its open line, set in as far as `inset`.
+_OPEN_LINE_TABLE = (
+    '{{% table_region "Open lines" %}}<table class="data-table"><thead><tr>'
+    '{{% table_heading "Item" %}}{{% table_heading "State" "status" %}}</tr></thead><tbody>'
+    '<tr><td class="row-gutter"{inset}>Example item<p class="row-below">Example note under the item.</p></td>'
+    '<td><span class="pill">Up</span></td></tr></tbody></table>{{% endtable_region %}}'
+)
+
 # Nothing reaches past the content's side gutter: drawn there, it touches the
 # edge of the screen. `text` also holds every line of text to the box that
 # holds it.
@@ -939,7 +972,7 @@ _CUT = (
 )
 _CHIP = "chip-" + "-".join(["example-unit-name-long-enough-to-be-cut"] * 4) + ".timer"
 _NOTE = '<td><span style="display: inline-block; inline-size: 30rem">A note wider than a phone</span></td>'
-CUT_TABLE = (
+_CUT_TABLE = (
     '{% load value_tags %}{% table_region "Cuts" %}<table class="data-table"><thead><tr>'
     '{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" css="key-col" %}'
     "</tr></thead><tbody>"
@@ -965,7 +998,7 @@ CUT_TABLE = (
 
 # Two rows whose open line draws nothing (their state has not left): one the
 # region clamps, which opening releases in place, and one with a short value.
-CLAMP_TABLE = (
+_CLAMP_TABLE = (
     '{% table_region "Clamps" %}<table class="data-table"><thead><tr>'
     '{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "State" "status" %}'
     "</tr></thead><tbody>"
@@ -978,11 +1011,11 @@ CLAMP_TABLE = (
 
 # The chip's name is a value the page prints, as a template's is: a literal is
 # already safe, so `breakable` would pass it as plain words, which wrap.
-CUT_VALUES = {"chip": _CHIP}
+_CUT_VALUES = {"chip": _CHIP}
 
 # A panel shown from a cell, as an item's origin is: a key and a source too
 # long for the cell, which the panel has the room to show whole.
-POPOVER_IN_A_CELL = """{% load value_tags %}
+_POPOVER_IN_A_CELL = """{% load value_tags %}
 {% table_region "Origins" %}<table class="data-table"><thead><tr>
 {% table_heading "Item" %}{% table_heading "Urgency" %}</tr></thead><tbody>
 <tr><td class="row-gutter">Example item</td><td><span class="pill">Urgent</span>
@@ -990,10 +1023,27 @@ POPOVER_IN_A_CELL = """{% load value_tags %}
 {% fact "From" value=source %}{% fact "Key" %}<code>{{ key|breakable }}</code>{% endfact %}{% endfacts %}</div></div></td></tr>
 </tbody></table>{% endtable_region %}"""
 
-POPOVER_VALUES = {
+_POPOVER_VALUES = {
     "key": "example.approvals:approval:d7f2b3ed-186d-402a-9c5e-1f0b2a3c4d5e",
     "source": "an-example-source-with-a-deliberately-long-name",
 }
+
+# A shown popover, as a reader shows one.
+_SHOW_POPOVER = "() => document.querySelector('main [popover]').showPopover()"
+
+# Every row's toggle pressed.
+_OPEN_EVERY_ROW = "() => document.querySelectorAll('main [data-row-toggle]').forEach((toggle) => toggle.click())"
+# Every row's toggle pressed, and then the plain row saying it holds a part below.
+_OPEN_EVERY_ROW_AND_SAY_BELOW = """() => {
+  document.querySelectorAll('main [data-row-toggle]').forEach((toggle) => toggle.click());
+  document.querySelector('main tr[data-probe="plain"]').setAttribute('data-below', '');
+}"""
+
+# How many rows stand open, against how many should.
+_EXPANDED = """(open) => {
+  const opened = document.querySelectorAll('main tr.is-expanded').length;
+  return opened === open ? [] : [`${opened} rows open, not ${open}`];
+}"""
 
 ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-detail])')].map((row) => ({
   probe: row.dataset.probe,
@@ -1008,7 +1058,22 @@ ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-det
 # of the layout and of its tables (`TABLE_LAYOUT`), in each state a reader can
 # draw the rows in: as drawn, with their folds open, and opened.
 CHECKS = {
-    "cells": Check(CELLS, table=True, reader_sees="a cell's content running out of its cell"),
+    "cells": Check(
+        CELLS,
+        table=True,
+        reader_sees="a cell's content running out of its cell",
+        # A shown popover is drawn in the top layer, over the page, wherever
+        # its markup sits; a box drawn in the cell still runs past it.
+        plants=(
+            Plant(
+                '<table style="width: 200px; table-layout: fixed"><tr><td>'
+                '<div class="example-popover" popover="manual" style="inline-size: 600px">example-popover</div>'
+                '<div class="example-box" style="inline-size: 600px">example-box</div></td></tr></table>',
+                setup="() => document.querySelector('main [popover]').showPopover()",
+                finds=("div.example-box",),
+            ),
+        ),
+    ),
     "tables": Check(
         TABLES,
         table=True,
@@ -1041,12 +1106,66 @@ CHECKS = {
         STATE_LEFT, table=True, reader_sees="a row's state, key or field gone with a column a narrow box let go"
     ),
     "cut and closed": Check(
-        (CUT_AND_CLOSED, SELECTORS["unseen"]), table=True, reader_sees="a cut value with no way to read it whole"
+        (CUT_AND_CLOSED, SELECTORS["unseen"]),
+        table=True,
+        reader_sees="a cut value with no way to read it whole",
+        # Touch has no hover, so in a narrow box only an opening row shows a
+        # cut value whole, where a wide box also shows a titled one on hover;
+        # a cut that draws no ellipsis is found at any width.
+        plants=(
+            Plant(
+                _CUT_TABLE,
+                width=PHONE_SCREEN[0],
+                scripted=True,
+                values=_CUT_VALUES,
+                finds=('"untitled', '"titled', '"clamped', '"inline', '"unmarked'),
+            ),
+            Plant(
+                _CUT_TABLE,
+                width=1280,
+                scripted=True,
+                values=_CUT_VALUES,
+                finds=('"untitled', '"clamped', '"inline', '"unmarked'),
+            ),
+        ),
+        # A panel shown from a cell is no part of the column, so what it
+        # holds reads whole however narrow the cell.
+        clear=tuple(
+            Example(_POPOVER_IN_A_CELL, width=width, scripted=True, values=_POPOVER_VALUES, setup=_SHOW_POPOVER)
+            for width in (PHONE_SCREEN[0], WIDE)
+        ),
     ),
     "cut when open": Check(
         (CUT_WHEN_OPEN, SELECTORS["unseen"]), table=True, reader_sees="a value still cut in its opened row"
     ),
-    "opens nothing": Check(OPENS_NOTHING, table=True, reader_sees="a row's toggle that opens nothing"),
+    "opens nothing": Check(
+        OPENS_NOTHING,
+        table=True,
+        reader_sees="a row's toggle that opens nothing",
+        # In a narrow box an open row that holds a clamp shows its value whole
+        # in place, so its toggle opens something though its line draws
+        # nothing; a row that says it holds a part below shows its toggle at
+        # any width, and over an empty line it opens nothing.
+        plants=(
+            Plant(
+                _CLAMP_TABLE,
+                width=PHONE_SCREEN[0],
+                scripted=True,
+                setup=_OPEN_EVERY_ROW_AND_SAY_BELOW,
+                premise=(_EXPANDED, 2),
+                finds=("opens a line with nothing drawn",),
+            ),
+        ),
+        clear=(
+            Example(
+                _CLAMP_TABLE,
+                width=PHONE_SCREEN[0],
+                scripted=True,
+                setup=_OPEN_EVERY_ROW,
+                premise=(_EXPANDED, 2),
+            ),
+        ),
+    ),
     "table promises": Check(
         (TABLE_PROMISES, SELECTORS["table_scroll"]),
         reader_sees="a table's heading row scrolling away, or a cell across its row stopping short",
@@ -1059,6 +1178,20 @@ CHECKS = {
     ),
     "folded rows stay folded": Check(
         FOLDED_ROWS_SHOWN, table=True, scripted=True, reader_sees="a folded row drawn while its group is closed"
+    ),
+    "open lines outdented": Check(
+        OPEN_LINES_OUTDENTED,
+        table=True,
+        reader_sees="what an opened row holds starting left of the row's own words",
+        plants=(
+            Plant(
+                _OPEN_LINE_TABLE.format(inset=' style="padding-inline-start: 60px"'),
+                scripted=True,
+                setup=_OPEN_EVERY_ROW,
+                finds=("left of its row's words",),
+            ),
+        ),
+        clear=(Example(_OPEN_LINE_TABLE.format(inset=""), scripted=True, setup=_OPEN_EVERY_ROW),),
     ),
     # Every box and every line of text, not only a card's or code's.
     "gutter": Check((PAST_THE_GUTTER, ["*", True]), reader_sees="content past the page's gutter"),

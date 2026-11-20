@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, NotRequired, TypedDict
 
+from pydantic import Field, create_model
+
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS, connection_credential
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
@@ -18,6 +20,7 @@ from hq.domains.control_plane.providers import PROVIDERS, observer_abilities, re
 lazy from hq.domains.control_plane.names import normalized_hostname
 
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion, WebRoute
+from .cadence import CONTROLLER_REFRESH
 from .connection_catalog import CONTROLLER_CONNECTIONS
 
 # Declared next to the domains that emit them, so a gateway can import the
@@ -36,16 +39,22 @@ from .connection_setup import guide_url
 from .contracts import Effect
 from .describe import Describe, listed
 from .entity_links import entity_link
+from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
 from .integration_validation import required_capability_names
 from .integrations import held_graph
 from .moments import ago
+from .resources import BoundedQuery, EmptyQuery, one_of
 from .security import Capability, Principal
 from .tone import Tone
 from .ui import ended
-lazy from . import machines
+from .visit_refresh import VISIT_REFRESH, VisitRefreshCommand, request_visit_refresh
+lazy from . import connection_context, derived_reads, machines
+lazy from .connection_records import ConnectionStandingRecord, ConnectionStandingRow, CredentialRecord, CredentialRow
 lazy from .infrastructure import enabled_resources
 lazy from .locate import index_of
 lazy from .projection import read_once
+lazy from .resource_records import HopRow, ReadingItem, ReadingRecord, ReadingRow
+lazy from .resource_refusals import READINGS
 
 
 @dataclass(frozen=True, slots=True)
@@ -547,3 +556,90 @@ def reachable_through(provider: str) -> tuple[tuple[str, str], ...]:
         for name in connection.reaches:
             seen.setdefault(name, connection.connection_ref)
     return tuple(sorted(seen.items()))
+
+
+def capabilities() -> tuple[CapabilitySpec, ...]:
+    return (
+        CapabilitySpec(
+            VISIT_REFRESH,
+            "Ask again for the readings one page is made of, where they are due.",
+            Effect.INFRASTRUCTURE_CHANGE,
+            Capability.MANAGE_INFRASTRUCTURE,
+            VisitRefreshCommand,
+            request_visit_refresh,
+            execution_notes=(
+                "Find what the page is made of from what it is about; the request names no reading or connection.",
+                "Ask only for what is due, read on a schedule, and read without logging in to a machine.",
+                "Ask nothing while no controller will come to read it.",
+            ),
+            label="Read a page again",
+            reached_from="control_plane:connections",
+        ),
+        CONTROLLER_REFRESH,
+    )
+
+
+ReadingQuery = create_model(
+    "ReadingQuery",
+    __base__=BoundedQuery,
+    provider=(
+        one_of(sorted({spec.provider for spec in OBSERVATIONS.values()})) | None,
+        Field(default=None, description="Only the readings from this service; absent, every service's."),
+    ),
+)
+
+
+def resources() -> tuple[ResourceSpec, ...]:
+    return (
+        ResourceSpec(
+            "request.path",
+            "Request path",
+            "How the calling request reached HQ, hop by hop, and the request standard's checks decided at each.",
+            Capability.READ,
+            listing=ListRead(derived_reads.list_request_path, EmptyQuery, HopRow),
+            web_route="connection",
+            pass_principal=True,
+        ),
+        ResourceSpec(
+            READINGS,
+            "Readings",
+            "Each type of reading, when it was last read, and the records it holds.",
+            Capability.READ,
+            listing=ListRead(derived_reads.list_readings, ReadingQuery, ReadingItem, fields=typed_keys(ReadingRow)),
+            detail_handler=derived_reads.get_reading,
+            identifier="kind",
+            web_route="control_plane:connections",
+            record_type=ReadingRecord,
+        ),
+        ResourceSpec(
+            "credentials",
+            "Credential access",
+            "What each connection's credential can read, and what it would need to read more.",
+            Capability.READ,
+            listing=ListRead(
+                derived_reads.list_credentials, EmptyQuery, CredentialRecord, fields=typed_keys(CredentialRow)
+            ),
+            detail_handler=derived_reads.get_credential,
+            identifier="provider",
+            web_route="control_plane:connections",
+            record_type=CredentialRecord,
+        ),
+        ResourceSpec(
+            "connections",
+            "Connection status",
+            "Each connection with what its credential sees, how fresh each reading is, what "
+            "was refused and the fix. It also gives the counts, the security posture and HQ's path.",
+            Capability.READ,
+            listing=ListRead(
+                connection_context.list_connection_standing,
+                EmptyQuery,
+                ConnectionStandingRecord,
+                fields=typed_keys(ConnectionStandingRow),
+            ),
+            detail_handler=connection_context.get_connection_standing,
+            identifier="connection_ref",
+            web_route="control_plane:connections",
+            pass_principal=True,
+            record_type=ConnectionStandingRecord,
+        ),
+    )

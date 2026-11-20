@@ -195,6 +195,7 @@ class TemplateRecordTests(SimpleTestCase):
             .from_string(
                 "{% if why %}{{ why }}{% endif %}{{ message }}{% for item in items %}{{ item }}{% endfor %}"
                 '{{ label|default:"" }}{% with total=items|length %}{{ total }}{% endwith %}'
+                '{% if why %}{% firstof why as said %}{% else %}{% firstof "" as said %}{% endif %}{{ said }}'
             )
             .template.nodelist
         )

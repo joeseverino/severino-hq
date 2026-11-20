@@ -10,13 +10,13 @@
 <div data-search-results>
 {% if q %}
   {% if discovery_sections %}
-  <div class="section-flow">
+  {% layout %}
     {% for section in discovery_sections %}
     {% section section.label count=section.rows|length %}
       {% include "partials/_record_list.html" with rows=section.rows label=section.label whole_rows=True only %}
     {% endsection %}
     {% endfor %}
-  </div>
+  {% endlayout %}
   {% endif %}
 
   {% comment %}Drawn in the results, so a new search brings its own groups.{% endcomment %}

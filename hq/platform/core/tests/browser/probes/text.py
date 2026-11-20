@@ -1,6 +1,8 @@
 """Probes of running text: broken words, text that overlaps and text past its clamp."""
 
-from hq.platform.core.tests.browser.probes import Check
+from decimal import Decimal
+
+from hq.platform.core.tests.browser.probes import Check, Plant
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, LINES, PAINTED_PART, TEXT_SHOWN
 from hq.platform.core.tests.browser.selectors import SELECTORS
 
@@ -777,36 +779,232 @@ BROKEN_PARAGRAPHS = (
 }"""
 )
 
+# A run of monospace words in a box of its own, as a value's line draws one.
+_MONO = "margin: 0; padding: 0; font: 16px/1.5 monospace"
+
+# A chip as wide as its cell holds, the cell's line short of what the chip's
+# padding asks.
+_FIT_THE_CHIP = """() => {
+  const chip = document.querySelector('main table span');
+  const words = document.createRange();
+  words.selectNodeContents(chip.firstChild);
+  chip.closest('table').style.cssText = `table-layout: fixed; inline-size: ${words.getBoundingClientRect().width + 4}px`;
+}"""
+
+# Lines laid over one another in the page, in an open menu's one panel, and
+# under the panel.
+_LINE = '<p style="position: fixed; top: {}; left: 40px; margin: 0">example {}</p>'
+_LINES_OVER_ONE_ANOTHER = (
+    _LINE.format("300px", "covered")
+    + '<div data-menu><div popover="manual">'
+    + "".join(
+        _LINE.format(top, words) for top, words in (("300px", "covering"), ("400px", "first"), ("400px", "second"))
+    )
+    + "</div></div>"
+    + _LINE.format("500px", "clashed")
+    + _LINE.format("500px", "under")
+)
+
+# Words in cells of a value's lines, each line ending as its room does: after
+# a link's mark (``::after``), a wrapping list's gap, a word held whole, a
+# padded block's edge; and one a balanced rag ends short of its room.
+_LINE_ENDS = (
+    '<style>.example-marked::after { content: "____"; }</style><table class="data-table"><tbody><tr>'
+    + "".join(
+        f'<td><dd style="{_MONO}; inline-size: {room}">{words}</dd></td>'
+        for words, room in (
+            ('<a class="example-marked" href="#">aaaa</a> bb', "10ch"),
+            (
+                (
+                    '<ul style="display: flex; flex-wrap: wrap; gap: 0 4ch; margin: 0; padding: 0; list-style: none">'
+                    "<li>cccc</li><li>dddd</li></ul>"
+                ),
+                "10ch",
+            ),
+            ('eeee <span style="white-space: nowrap">ff gggg</span>', "10ch"),
+            ('<div style="padding-inline-end: 8ch">hhhh iiii jjjj</div>', "20ch"),
+            ("example aaaa bbbb cccc dddd", "24ch; text-wrap: balance"),
+        )
+    )
+    + "</tr></tbody></table>"
+)
+
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
     "broken paragraphs": Check(
         (BROKEN_PARAGRAPHS, SELECTORS["broken_paragraph"]), reader_sees="a line of text split off its paragraph"
     ),
     "broken words": Check(
-        (BROKEN_WORDS, SELECTORS["identifier"]), table=True, reader_sees="a word split across the lines of a cell"
+        (BROKEN_WORDS, SELECTORS["identifier"]),
+        table=True,
+        reader_sees="a word split across the lines of a cell",
+        plants=(
+            # A run is measured against the box it lays out in: a digest that
+            # fits its cell but not the padded chip in it breaks wherever the
+            # column is, while a word that would fit its line, broken anyway,
+            # is found.
+            Plant(
+                '<table><tr><td style="padding: 0"><span style="display: block; font-family: monospace; '
+                'overflow-wrap: anywhere; padding: 0 10px">0123456789abcdef0123456789abcdef</span></td></tr></table>'
+                '<table><tr><td><span style="display: block; font-family: monospace; word-break: break-all; '
+                'inline-size: 10ch">an exampleword</span></td></tr></table>',
+                setup=_FIT_THE_CHIP,
+                finds=("example",),
+            ),
+            # An identifier wider than its line breaks at its seam and then
+            # wherever it must, though the seam leaves its last part a text
+            # node of its own: the run is the identifier. A plain word broken
+            # in the same line is found.
+            Plant(
+                '<table style="table-layout: fixed; inline-size: 6ch">'
+                '<tr><td style="padding: 0; overflow-wrap: anywhere"><span class="token">plant:<span class="seam">'
+                "</span>somewhere</span></td></tr>"
+                '<tr><td style="padding: 0; overflow-wrap: anywhere">everywhere</td></tr></table>',
+                finds=('"everywhere"',),
+            ),
+            # In the line beneath an open row a value left less of the line
+            # than its label takes breaks a word the whole line holds, which
+            # is found: the row shows a value whole. A word longer than the
+            # whole line breaks where it must.
+            Plant(
+                '<table><tr><td><button aria-expanded="true"></button></td></tr><tr data-row-detail><td>'
+                '<dl style="display: grid; grid-template-columns: 7rem 4ch; inline-size: 20rem; margin: 0; '
+                'overflow-wrap: anywhere">'
+                + "".join(
+                    f'<dt>Label</dt><dd style="margin: 0">{word}</dd>' for word in ("Unrecognized", "Example" * 12)
+                )
+                + "</dl></td></tr></table>",
+                finds=('"Unrecognized"',),
+            ),
+        ),
     ),
     "words broken in text": Check(
-        (BROKEN_WORDS_IN_TEXT, IDENTIFIER), reader_sees="a word or a number split across lines"
+        (BROKEN_WORDS_IN_TEXT, IDENTIFIER),
+        reader_sees="a word or a number split across lines",
+        plants=(
+            # In a box narrower than any amount, every amount HQ writes stays
+            # one unit, while a sign written loose before its currency mark
+            # ends a line.
+            Plant(
+                "{% load value_tags %}"
+                '<p class="example-written" style="{{ box }}">{{ owed|money }} {{ five|money:"whole" }}</p>'
+                '<p class="example-loose" style="{{ box }}">\u2212$1,243.52</p>',
+                values={
+                    "owed": Decimal("-1243.52"),
+                    "five": Decimal(-5),
+                    # Only the breaks the text itself allows: none forced past them.
+                    "box": "inline-size: 1ch; overflow-wrap: normal; word-break: normal",
+                },
+                finds=("example-loose",),
+            ),
+            # A digest in a sentence is wider than its line, so it breaks
+            # inside the letters it holds and that is no broken word, while a
+            # word of the same sentence broken in its box is found.
+            Plant(
+                "".join(
+                    f'<p class="example-{name}" style="inline-size: 12ch; word-break: normal; '
+                    f'overflow-wrap: anywhere">Names the account {words}</p>'
+                    for name, words in (("digest", "abcdefghijklmnop1" * 8), ("word", "examplelongerthanitsline"))
+                ),
+                finds=("example-word",),
+            ),
+        ),
     ),
     "lines opening on a stray": Check(
         (STRAYS_OPENING_A_LINE, [SELECTORS["unseen"], IDENTIFIER]),
         reader_sees="a line opening on a lone separator, a mark, or a word cut from its number",
+        plants=(
+            # A slash standing between two words reads as a separator when a
+            # line opens on it; a path ("/api") opening a line is a value.
+            Plant(
+                "".join(
+                    f'<dd style="{_MONO}; inline-size: 13ch; text-wrap: wrap">{words}</dd>'
+                    for words in ("example cccc /dddd", "example aaaa / bbbb")
+                ),
+                finds=('"/ bbbb"',),
+            ),
+            # A mark inside a wrapping identifier is part of the value.
+            Plant(
+                "".join(
+                    f'<span{name} style="display: block; inline-size: 1ch; {_MONO}; overflow-wrap: anywhere; '
+                    f'white-space: normal">{words}</span>'
+                    for words, name in (("c-d", ""), ("a-b", ' class="token"'))
+                ),
+                finds=('holds "-"',),
+            ),
+        ),
     ),
     "broken identifiers": Check(
         (BROKEN_TOKENS, [SELECTORS["cell_token"], SELECTORS["wraps_in_a_cell"]]),
         table=True,
         reader_sees="a name broken across lines while its table had a column to let go",
+        # A short name its table holds on its line (`nowrap`) and something
+        # inside breaks anyway is found; one its table lets break at its
+        # seams, in a box too narrow to hold it, is not.
+        plants=(
+            Plant(
+                '<table class="data-table" style="table-layout: fixed; inline-size: 12ch"><tbody><tr>'
+                + "".join(
+                    '<td style="padding: 0; overflow-wrap: anywhere"><div class="cell-short" style="display: inline">'
+                    f'<span class="token" style="white-space: {hold}"><span style="white-space: normal">{name}</span>'
+                    "</span></div></td>"
+                    for name, hold in (("example-held-name", "nowrap"), ("example-free-name", "normal"))
+                )
+                + "</tr></tbody></table>",
+                finds=('"example-held-name"',),
+            ),
+        ),
     ),
     "overlapping text": Check(
-        (OVERLAPPING_TEXT, SELECTORS["floating"]), reader_sees="lines of text drawn over each other"
+        (OVERLAPPING_TEXT, SELECTORS["floating"]),
+        reader_sees="lines of text drawn over each other",
+        # An open menu's panel covers the page's text on purpose; two lines
+        # drawn over each other in the page, or in the one panel, still
+        # overlap.
+        plants=(
+            Plant(
+                _LINES_OVER_ONE_ANOTHER,
+                setup="() => document.querySelector('main [popover]').showPopover()",
+                finds=('"example clashed"', '"example first"'),
+            ),
+        ),
     ),
     "touching text": Check(
         (TOUCHING_TEXT, [SELECTORS["floating"], SELECTORS["identifier"]]),
         reader_sees="two runs of text touching, read as one word",
+        # A heading and its status as items of a flex row lose the space
+        # between them in the markup and read as one word; the same pair with
+        # a space drawn between them, and a name ``breakable`` split into
+        # boxes at its seams, are each one run of words. Two marks each
+        # centered in a button of its own, a gap between the buttons, stand
+        # apart.
+        plants=(
+            Plant(
+                "{% load value_tags %}<style>.example-seams .token > * { display: inline-block; }"
+                ".example-buttons :is(a, span) { display: grid; place-items: center; inline-size: 28px; "
+                "block-size: 28px; font-size: 20px; }</style>"
+                '<div style="display: flex; align-items: baseline"><h2 style="margin: 0">Example heading</h2> '
+                "<span>Example touching</span></div>"
+                '<div><h2 style="display: inline-block; margin: 0">Example spaced</h2> '
+                '<span style="display: inline-block">Example status</span></div>'
+                '<p class="example-seams">{{ host|breakable }}</p>'
+                '<nav class="example-buttons" style="display: flex; gap: 4px"><a href="#">x</a><a href="#">y</a></nav>',
+                values={"host": "status.example-host-name.example.com"},
+                finds=('"Example heading"',),
+            ),
+        ),
     ),
     "chips off their paint": Check(
         (CHIPS_PAST_THEIR_PAINT, [SELECTORS["chip"], SELECTORS["unseen"]]),
         reader_sees="a chip's words spilling off the box it paints",
+        plants=(
+            Plant(
+                '{% load value_tags %}<p><code style="display: inline-block; inline-size: 4ch; block-size: 1lh; '
+                'background: #eee">{{ words|breakable }}</code></p>',
+                values={"words": "Example overrun"},
+                finds=("code",),
+            ),
+        ),
     ),
     "past the clamp": Check(PAST_THE_CLAMP, reader_sees="a line drawn past the last line its box shows"),
     "cut decisions": Check(
@@ -820,5 +1018,11 @@ CHECKS = {
     "row words to the end of their line": Check(
         (LINES_SHORT_OF_THEIR_ROOM, SELECTORS["unseen"]),
         reader_sees="a row's words broken onto a new line while their line had room",
+        # A link's mark drawn after its words takes its line's room, as a
+        # wrapping list's gap does between its items, so the word that would
+        # not fit beside either starts the next line rightly, and a line laid
+        # in a padded block ends at that block's edge; a line a balanced rag
+        # ends short of its room is found.
+        plants=(Plant(_LINE_ENDS, finds=('breaks before "exam',)),),
     ),
 }

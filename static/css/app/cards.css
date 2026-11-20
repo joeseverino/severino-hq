@@ -147,43 +147,43 @@
    be: a short run of them fills a wide frame rather than stacking down its
    start. */
 .step-list.is-numbered { columns: 22rem 3; counter-reset: step; }
-/* A step that holds a table's region takes the frame's whole width, so its
-   steps read down one column and the table keeps its columns. */
-.step-list.is-numbered:has(.table-scroll) { columns: auto; }
-.step-list.is-numbered:has(.table-scroll) > li > div { flex: 1; min-inline-size: 0; }
+/* Steps that hold a table's region or a command, and a step that stands
+   alone, take the frame's whole width, one step to a row, so a table keeps its
+   columns and a command its line. */
+.step-list.is-numbered:has(.table-scroll, .command, > li:only-child) { columns: auto; }
+.step-list.is-numbered:has(.table-scroll, .command, > li:only-child) > li > div { flex: 1; min-inline-size: 0; }
 .step-list.is-numbered > li { gap: var(--space-3); counter-increment: step; }
 .step-list.is-numbered > li:last-child { padding-bottom: 0; }
 .step-list.is-numbered > li::before { content: counter(step) "."; min-inline-size: 1.5em; color: var(--muted); font-weight: 650; font-variant-numeric: tabular-nums; }
+/* One step stands alone, with no number. */
+.step-list.is-numbered > li:only-child::before { content: none; }
+/* Steps that pair a label with its command (partials/_operator_step.html) are
+   one grid the steps share: the labels one column, as wide as the longest up
+   to two fifths of the row, the commands the next, each note and any step in
+   words across both. They sit close, as a command's chip has its own room. In
+   a narrow box each command goes under its label, and so does one whose label
+   names an identifier (`breakable`'s token), which needs the row's whole width
+   to read whole. */
+.step-list.is-numbered:has(> li > div > strong + .command) {
+  display: grid; grid-template-columns: [number] auto [label] fit-content(40%) [command] minmax(0, 1fr) [end];
+  gap: var(--space-2) var(--space-3); container: steps / inline-size;
+  & > li { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: baseline; row-gap: var(--space-1); padding-bottom: 0; }
+  & > li > div { display: contents; }
+  & > li > div > * { grid-column: label / end; min-inline-size: 0; }
+  & > li > div > strong:has(+ .command) { grid-column: label; }
+  & > li > div > strong + .command { grid-column: command; margin: 0 0 0 var(--space-3); }
+  & > li > div > :is(strong:has(+ .command):has(.token), strong:has(.token) + .command) { grid-column: label / end; margin-inline-start: 0; }
+  @container steps (width < 28rem) {
+    & > li > div > :is(strong:has(+ .command), strong + .command) { grid-column: label / end; margin-inline-start: 0; }
+  }
+}
+.step-list.is-numbered:has(> li > div > strong + .command):has(> li:only-child) { grid-template-columns: [label] fit-content(40%) [command] minmax(0, 1fr) [end]; }
 .step-list .command { margin-top: var(--space-2); }
 .step-list li.is-done { color: var(--muted); }
 .step-list li.is-done .band-icon { background: var(--surface-2); color: var(--muted); }
 .step-list li:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }
 .step-list a { font-weight: 600; }
 .step-list .muted { display: block; margin-top: var(--space-1); }
-
-/* A card's steps (partials/_resolution_workflow.html): one stands alone,
-   several are numbered, and long ones fold under "Steps". */
-/* Each step's label beside its command, the commands starting on one line; a
-   label takes at most two fifths of the row and wraps inside it. A command
-   too long for the room beside its label goes under it with the row's whole
-   width, so a path is not folded into a strip. A step's number
-   is its label's, since a list laid out this way draws no markers. */
-.resolution-workflow {
-  margin: var(--space-3) 0 0;
-  display: grid; gap: var(--space-2);
-  font-size: var(--text-sm); color: var(--ink-2); counter-reset: step;
-}
-.resolution-workflow > li { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-6); counter-increment: step; }
-/* A short label (a repository, a machine) is a column its command lines up
-   beside; a label that is a whole instruction takes the line, and its command
-   goes under it. */
-.resolution-workflow > li > strong { flex: 0 1 auto; min-width: min(40%, 11rem); max-width: 100%; }
-.resolution-workflow > li > .command { flex: 0 1 auto; }
-.resolution-workflow > li > :not(strong, .command),
-.resolution-workflow > li > .command:first-child { flex-basis: 100%; }
-ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
-.resolution-workflow li > strong { color: var(--ink); font-weight: 650; }
-.resolution-workflow li > p { margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
 
 /* A card that folds hangs its disclosure mark (surfaces.css) in its padding,
    so its title starts at the edge every other card's heading starts at. The

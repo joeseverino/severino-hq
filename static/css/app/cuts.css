@@ -219,7 +219,7 @@
 /* A line that is a label, not prose: cut with an ellipsis, whole on hover. */
 .one-line { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 
-/* A run of short parts in a cell (`line_list`, table_tags): its first parts
+/* A run of short parts in a cell (`line_list`, list_tags): its first parts
    wrap with their column as words do, and the rest (`line-rest`) shows only
    on the row's open line (tables.css), where the run stands whole. */
 .line-list { display: flex; flex-wrap: wrap; align-items: baseline; row-gap: var(--space-1); }

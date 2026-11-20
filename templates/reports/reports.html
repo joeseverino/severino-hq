@@ -9,13 +9,13 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
 {% endcomment %}
 {% if expenses_by_category.rows %}
 {% with shown_year=year|stringformat:"s" %}
-<div class="two-col">
+{% layout kind="pair" %}
   {% section "Expenses by category, "|add:shown_year %}{% data_table expenses_by_category %}{% endsection %}
 
   {% section "Largest expenses, "|add:shown_year %}
     {% include "partials/_record_list.html" with rows=largest_expenses %}
   {% endsection %}
-</div>
+{% endlayout %}
 {% endwith %}
 {% endif %}
 
@@ -24,12 +24,12 @@ Small readings share rows: each is a few lines, and a card across the page
 would be mostly empty card. The exports, longer than any of them, take the
 row after, their facts across it. A reading with nothing in it is not drawn.
 {% endcomment %}
-<div class="section-flow">
+{% layout %}
   {% if status_groups %}
   {% section "By status" %}
     {% facts %}
       {% for group in status_groups %}
-        {% fact group.label %}{% dot_list %}{% for status in group.counts %}<li><a href="{{ status.url }}">{{ status.label|breakable }} {{ status.count|breakable }}</a></li>{% endfor %}{% enddot_list %}{% endfact %}
+        {% fact group.label %}{% list kind="dots" %}{% for status in group.counts %}<li><a href="{{ status.url }}">{{ status.label|breakable }} {{ status.count|breakable }}</a></li>{% endfor %}{% endlist %}{% endfact %}
       {% endfor %}
     {% endfacts %}
   {% endsection %}
@@ -40,15 +40,15 @@ row after, their facts across it. A reading with nothing in it is not drawn.
     {% include "partials/_record_list.html" with rows=assets_by_category %}
   {% endsection %}
   {% endif %}
-</div>
+{% endlayout %}
 
 {% comment %}Each export once, by what it holds, its files beside it: a list on a card, not a wall of buttons.{% endcomment %}
 {% section "Exports" lede="Leaves out secrets, sensitive text and receipts." %}
   {% facts %}
     {% url 'reports:expenses_csv' as expenses_csv %}{% url 'reports:assets_csv' as assets_csv %}{% url 'reports:year_summary_json' as summary_json %}{% url 'reports:year_summary_md' as summary_md %}
-    {% fact "Expenses" %}{% dot_list %}<li><a href="{% with_query expenses_csv year=year %}">{{ year|breakable }} CSV</a></li><li><a href="{{ expenses_csv }}">All years CSV</a></li>{% enddot_list %}{% endfact %}
-    {% fact "Assets" %}{% dot_list %}<li><a href="{% with_query assets_csv year=year %}">{{ year|breakable }} CSV</a></li><li><a href="{{ assets_csv }}">All years CSV</a></li>{% enddot_list %}{% endfact %}
-    {% fact "Year summary" %}{% dot_list %}<li><a href="{% with_query summary_json year=year %}">{{ year|breakable }} JSON</a></li><li><a href="{% with_query summary_md year=year %}">{{ year|breakable }} Markdown</a></li>{% enddot_list %}{% endfact %}
+    {% fact "Expenses" %}{% list kind="dots" %}<li><a href="{% with_query expenses_csv year=year %}">{{ year|breakable }} CSV</a></li><li><a href="{{ expenses_csv }}">All years CSV</a></li>{% endlist %}{% endfact %}
+    {% fact "Assets" %}{% list kind="dots" %}<li><a href="{% with_query assets_csv year=year %}">{{ year|breakable }} CSV</a></li><li><a href="{{ assets_csv }}">All years CSV</a></li>{% endlist %}{% endfact %}
+    {% fact "Year summary" %}{% list kind="dots" %}<li><a href="{% with_query summary_json year=year %}">{{ year|breakable }} JSON</a></li><li><a href="{% with_query summary_md year=year %}">{{ year|breakable }} Markdown</a></li>{% endlist %}{% endfact %}
     {% fact "Writeups and pages" %}<a href="{% url 'reports:content_csv' %}">CSV</a>{% endfact %}
     {% fact "Projects" %}<a href="{% url 'reports:projects_csv' %}">CSV</a>{% endfact %}
     {% fact "Documents" %}<a href="{% url 'reports:documentation_csv' %}">CSV</a>{% endfact %}

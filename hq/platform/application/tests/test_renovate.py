@@ -17,6 +17,7 @@ from hq.platform.application.tests.test_pipeline import ROOT, WORKFLOWS, every_s
     ".github/renovate.json",
     ".github/workflows/renovate.yml",
     "deploy/renovate/config.json",
+    "hk.pkl",
     "mise.toml",
     "static/vendor/scalar/UPSTREAM",
     "tools/pipeline/toolchain.env",

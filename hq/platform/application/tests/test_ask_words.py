@@ -8,6 +8,7 @@ from hq.platform.application import asks
 from hq.platform.application.asks import FAILED, IDLE, QUEUED, Standing
 from hq.platform.application.markup_testing import Element, all_elements
 from hq.platform.core.tests.browser.catalog import CATALOG
+from hq.platform.core.tests.browser.catalog.common import drawn
 
 
 def _bare(said: str) -> str:
@@ -71,7 +72,7 @@ class CatalogAskWordsTests(TestCase):
     def test_no_ask_in_the_catalog_says_one_thing_twice(self):
         checked = 0
         for name, entry in CATALOG.items():
-            found = all_elements(entry.drawn(name))
+            found = all_elements(drawn(entry, name))
             for control in (element for element in found if "data-ask" in element.attrs):
                 checked += 1
                 with self.subTest(entry=name):
@@ -94,7 +95,7 @@ class CatalogAskWordsTests(TestCase):
         # holds the class the script writes, and no rule colors a state.
         toned = 0
         for name, entry in CATALOG.items():
-            found = all_elements(entry.drawn(name))
+            found = all_elements(drawn(entry, name))
             for control in (element for element in found if "data-ask" in element.attrs):
                 if control.attrs.get("data-ask-state", "idle") == IDLE:
                     continue

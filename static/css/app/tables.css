@@ -35,8 +35,10 @@
   --heading-height: calc(var(--heading-line) + 2 * var(--row-pad));
   /* The room the row toggle stands in, at the start of the naming cell. */
   --row-gutter: calc(2 * var(--row-edge) + 1.5rem);
-  /* A row's tick-box, which a row of one cell across the table steps past. */
+  /* A row's tick-box. */
   --tick-box: 16px;
+  /* What stands before a row's first cell of words, at the table's start: the tick-boxes' column where rows are selected (below). A row of one cell across the table, and an open line, start past it. */
+  --row-lead: 0px;
   /* A column's share of its region while every column stands: the region's width over one more than the table's count of columns, read from its headings, less a cell's padding. The one more is kept for what a column asks past its share (a state's line). What a value holds whole, or the line a long one keeps, is never more than that share, so the table's columns together never ask more than their region. */
   --columns: 1;
   /* Whether its box is narrow enough that a held value wraps (below), its own and never a table's around it. */
@@ -179,22 +181,25 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .switch .scope-chip > [aria-hidden] { color: var(--accent); }
 .switch p { margin: var(--space-3) 0 0; }
 /* A row's controls (`{% row_actions %}`, or a cell of a column of kind `control`) stand side by side on one line, so their column is as wide as they are and the words beside them wrap first. They end at the row's end, in every row whatever its set, on the row's first line where the table has headings (below where it has none). A control stands taller than a line of words by twice `--control-rise`, which its cell takes out of its padding, so a row holding one is as tall as a row of words. */
-.data-table > tbody > tr > [data-kind="control"] {
+.data-table > tbody > tr > [data-kind="control"]:not(.select-column) {
   --control-rise: max(0px, (var(--control-compact) - 1lh) / 2); white-space: nowrap; text-align: end;
   & > :is(.btn, form) { vertical-align: top; }
   & > * + * { margin-inline-start: var(--space-4); }
   /* What a control cell says beside its controls wraps as words do, on a line of its own: a note, or the sentence linked to the setup a change needs (`_write_gap.html`), which is a link and no control's label. */
   & > :is(.muted, p, [data-write-gap]) { display: block; margin: 0; white-space: normal; }
+  /* That sentence is long, so its cell keeps the measure a long value keeps. */
+  &:has(> [data-write-gap]) { box-sizing: content-box; min-inline-size: min(var(--row-words), var(--share)); }
   &:has(> :is(.btn, form, [data-ask])) { padding-block: calc(var(--row-pad) - var(--control-rise)); }
   /* An ask's cell keeps the line its note stands on under its controls (below). */
   &:has(> [data-ask]) { padding-block-end: calc(var(--row-pad) + 1lh); }
 }
 .data-table:not(:has(> thead)) > tbody > tr > [data-kind="control"] { vertical-align: middle; } /* A table with no headings is a list of rows that each say one thing (the queue's items): no column's first line to keep level with, so a row's controls stand at the middle of the words they act on. */
-.data-table > * > tr > .select-column { inline-size: 1px; text-align: center; padding-inline: var(--space-4); }
-/* The tick-boxes' column is their box and its padding, in every engine, whose own margins around a checkbox differ. */
+/* The tick-boxes' column is their box and the room beside it, no row control, so each box stands centered under the heading's; its width the table's `--row-lead`, in every engine, whose own margins around a checkbox differ. */
+.data-table:has(> * > tr > .select-column) { --row-lead: calc(var(--tick-box) + 2 * var(--space-4)); }
+.data-table > * > tr > .select-column { inline-size: var(--row-lead); text-align: center; padding-inline: 0; }
 .data-table > * > tr > .select-column > input { margin-inline: 0; }
 /* A row of one cell spans the tick-boxes' column too, and what it says starts where the names beside the tick-boxes do. */
-.data-table[data-selectable-table] > tbody > tr:not(.row-detail) > td[colspan]:only-child > :first-child { margin-inline-start: calc(var(--tick-box) + 2 * var(--space-4)); }
+.data-table:has(> * > tr > .select-column) > tbody > tr:not(.row-detail) > td[colspan]:only-child > :first-child { margin-inline-start: var(--row-lead); }
 /* A row with nothing to press gives its words the room the cell's padding would keep. */
 .data-table td.row-actions:not(:has(> *)) { padding-inline: 0; }
 /* What an ask says stands under its controls, out of their flow, as wide as the cell, so a press moves nothing (partials/_ask.html). */
@@ -392,8 +397,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .data-table > tbody > tr.row-detail { display: none; }
 /* An open row's line is drawn only where it holds something at this width: a block moved there whole, an entry shown at every width, or a column that has left (above), so a row opened narrow and widened draws no empty line. */
 .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > :not(.row-columns), > td > .row-columns > :not([data-drop]:not([data-holds]))) { display: table-row; }
-/* It starts at the row's edge under the toggle, so what it holds has the row's whole width. */
-.data-table .row-detail > td { --cell: open; padding-block: 0 var(--row-pad); padding-inline-start: var(--row-edge); }
+/* It starts where its row's words do, past the tick-boxes' column and the toggle, so nothing it holds sits left of them. */
+.data-table .row-detail > td { --cell: open; padding-block: 0 var(--row-pad); padding-inline-start: calc(var(--row-lead) + var(--row-inset, var(--cell-pad))); }
 /* What it holds asks its columns for no width, so opening a row moves no column. */
 .row-detail > td > * { contain: inline-size; margin-block: 0 var(--row-pad); }
 .row-detail > td > :last-child { margin-block-end: 0; }
@@ -425,8 +430,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   /* The last row showing ends the table, as the last row does. */
   .data-table > tbody:last-of-type > tr:has(~ tr[data-folded]):not(:has(~ tr:not([data-folded]:not([data-open])))) > * { border-bottom: 0; }
 }
-/* Rows folded under a row rather than a group's heading are set in under it. */
-.data-table > tbody:not(:has(> .row-group[data-folds])) > tr[data-folded] > td.row-gutter,
-.data-table > tbody:not(:has(> .row-group[data-folds])) > tr[data-folded] + .row-detail > td { padding-inline-start: calc(var(--row-edge) + var(--space-10)); }
+/* Rows folded under a row rather than a group's heading are set in under it, their open lines with them. */
+.data-table > tbody:not(:has(> .row-group[data-folds])) > tr[data-folded],
+.data-table > tbody:not(:has(> .row-group[data-folds])) > tr[data-folded] + .row-detail { --row-inset: calc(var(--row-edge) + var(--space-10)); }
 
 }

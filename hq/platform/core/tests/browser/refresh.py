@@ -14,6 +14,7 @@ import json
 from typing import override
 from urllib.parse import urlsplit
 
+from hq.platform.application.markup_testing import within
 from hq.platform.core.tests.browser.estate import ExampleEstateGate
 from hq.platform.core.tests.browser.probes.settle import SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -79,15 +80,19 @@ _BUSY = "() => !!document.querySelector('[data-ask][aria-busy=\"true\"]')"
 _IDLE = "() => !document.querySelector('[data-ask][aria-busy=\"true\"]')"
 
 
-def _head_asks(pages):
-    """The estate's pages whose head holds an ask, read from what the server drew."""
+def _head_asks(paths, pages):
+    """The estate's pages whose own head holds an ask among its actions,
+    read from what the server drew. A head an example draws in a shadow root
+    (the Design page's gallery) is the example's, never the page's."""
 
-    found = []
-    for (path, part), body in pages.items():
-        head = str(body).partition('<header class="page-head">')[2].partition("</header>")[0]
-        if not part and "data-ask-button" in head:
-            found.append(path)
-    return found
+    return [
+        path
+        for path in paths
+        if any(
+            "data-ask-button" in element.attrs and not element.shadowed
+            for element in within(pages[path, ""], "class", "page-actions")
+        )
+    ]
 
 
 class PressedRefreshBrowserTests(ExampleEstateGate):
@@ -136,7 +141,7 @@ class PressedRefreshBrowserTests(ExampleEstateGate):
         pressing.click()
 
     def test_pressing_a_heads_ask_moves_nothing_and_draws_the_reading_in_place(self):
-        pages = _head_asks(self.pages)
+        pages = _head_asks(self.navigation, self.pages)
         self.assertGreater(len(pages), 1, "the estate drew almost no head with an ask")
         for path in pages:
             for width in LANDS_AT:

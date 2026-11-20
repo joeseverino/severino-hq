@@ -63,7 +63,7 @@ class TheApiAgreesTests(TestCase):
     def test_kinds_takes_every_value_its_schema_allows_and_refuses_the_rest(self):
         import re
 
-        from hq.platform.application.core_resources import InfrastructureResourceQuery
+        from hq.platform.application.infrastructure_specs import InfrastructureResourceQuery
 
         pattern = InfrastructureResourceQuery.model_json_schema()["properties"]["kinds"]["anyOf"][0]["pattern"]
         listed = sorted(PROVIDERS)

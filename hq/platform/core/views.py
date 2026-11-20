@@ -4,6 +4,7 @@ import re
 from typing import Any, ClassVar, override
 lazy from datetime import timedelta
 
+from django import forms
 from django.conf import settings
 from django.contrib.auth.views import LoginView
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
@@ -26,8 +27,10 @@ from hq.platform.application.agent_access import REMOVE_AGENT, SET_AGENT_ACCESS,
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.appearance import SET_THEME
 from hq.platform.application.avatars import avatar_of
+from hq.platform.application.capabilities import command_spec
 from hq.platform.application.card_items import ListRow
 from hq.platform.application.command_center import command_center
+from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.demo import DEMO_SESSION_KEY, SET_DEMO
 from hq.platform.application.denials import COALESCE_WINDOW, LABEL as DENIAL_LABEL
 from hq.platform.application.moments import moment
@@ -51,7 +54,6 @@ lazy from hq.platform.application.visit_refresh import worth_asking
 lazy from hq.platform.mcp import listing
 
 from . import design_gallery
-from .forms import OwnDeviceForm, PolicyForm
 from .models import AuditLog
 from .write_bounds import Bound, RowCap, writes
 lazy from .network import client_ip
@@ -210,17 +212,23 @@ class AgentDeviceView(View):
         return redirect(safe_next(request, fallback=reverse("agent_policy")))
 
 
+def own_device_form(*args, **kwargs):
+    """The device command's own form: the client is its target, and
+    registering is its switch's on side."""
+
+    return command_form_class(command_spec(SET_OWN_DEVICE))(*args, auto_id="device-%s", **kwargs)
+
+
 class OwnDeviceView(View):
     """Register or remove one of the signed-in person's own devices. The form sends a state."""
 
     runs = (SET_OWN_DEVICE,)
 
     def post(self, request):
-        requested = request.POST.get("registered")
-        client_id = request.POST.get("client_id", "")
-        if requested not in {"0", "1"} or not client_id.strip():
-            return HttpResponseBadRequest("registered must be 0 or 1, for a client_id")
-        result = execute_posted(request, SET_OWN_DEVICE, {"registered": requested == "1"}, target=client_id)
+        form = own_device_form(request.POST)
+        if not form.is_valid():
+            return HttpResponseBadRequest("registered must be true or false, for a client")
+        result = execute_posted(request, SET_OWN_DEVICE, form.command_payload, target=form.cleaned_data["__target"])
         # Said beside the form it came from, which keeps what was typed.
         refused(request, result)
         return redirect(safe_next(request, fallback=reverse("agent_policy")))
@@ -286,8 +294,8 @@ def device_actions(device: agent_activity.DeviceRow, here: str) -> tuple[PageAct
 def own_device_actions(device, here: str) -> tuple[PageAction, ...]:
     """Removing one of the signed-in person's own devices, from its row."""
 
-    target = {"client_id": device.client_id, "next": here}
-    return _offered(_set(SET_OWN_DEVICE, "off", target, "registered", "0"))
+    target = {"__target": device.client_id, "next": here}
+    return _offered(_set(SET_OWN_DEVICE, "off", target, "registered", "false"))
 
 
 class ThemeView(View):
@@ -385,9 +393,12 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["devices"] = [(device, own_device_actions(device, here)) for device in devices_of(self.request.user)]
         context["access_action"] = access_action(agent_access.agents_paused())
         if runs_here(SET_OWN_DEVICE):
-            context["device_form"] = OwnDeviceForm()
+            context["device_form"] = own_device_form(initial={"next": here})
+            context["device_choices"] = (("true", command_spec(SET_OWN_DEVICE).words("on")),)
         if context["rules_settable"]:
-            context.setdefault("form", PolicyForm())
+            # The rules post as the selects their cells draw, so the form holds
+            # no field: it carries what was wrong with a save, said over the tables.
+            context.setdefault("form", forms.Form())
         context["awaiting_count"] = len(awaiting_ids())
         context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
         return context
@@ -406,7 +417,7 @@ class AgentPolicyView(PageMixin, TemplateView):
         return policy
 
     def post(self, request):
-        form = PolicyForm(request.POST)
+        form = forms.Form(request.POST)
         form.is_valid()
         result = execute_posted(
             request, capability_policy.SET_POLICY, {"rules": capability_policy.submitted_rules(request.POST)}

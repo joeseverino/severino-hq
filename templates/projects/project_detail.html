@@ -9,5 +9,5 @@
 {% if project.security_notes %}{% section "Security notes" %}<p>{{ project.security_notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 {% if project.notes %}{% section "Notes" %}<p>{{ project.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 
-<div class="section-flow">{% include "partials/_related.html" with groups=related %}</div>
+{% layout %}{% include "partials/_related.html" with groups=related %}{% endlayout %}
 {% endblock %}

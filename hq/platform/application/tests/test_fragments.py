@@ -69,7 +69,7 @@ class PagePartTests(TestCase):
 
     def test_saving_the_links_is_answered_with_the_links(self):
         response = self.client.post(
-            reverse("dashboard_links"), {"href": []}, headers={"X-Fragment": "links"}, follow=True
+            reverse("dashboard_links"), {"keys": []}, headers={"X-Fragment": "links"}, follow=True
         )
 
         self.assertEqual(response.status_code, 200)

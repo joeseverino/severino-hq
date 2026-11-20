@@ -25,7 +25,7 @@ from .standards import CheckResult, Measurement
 lazy from . import connections, dashboard, estate, machines, request_context
 lazy from .action_items import filter_items
 lazy from .command_center import estate_search
-lazy from .connection_records import CredentialRecord, SightPart
+lazy from .connection_records import CredentialRecord, TallyPart
 lazy from .credential_sight import credential_sight, sight
 lazy from .entity_links import entity_link
 lazy from .estate import estate_reading
@@ -33,21 +33,25 @@ lazy from .hq_self import serving
 lazy from .infrastructure import enabled_resources
 lazy from .machine_context import header_addresses
 lazy from .paths import path_to
+lazy from .record_saves import row
 lazy from .relationships import readout_records, relationships_for
 lazy from .request_path import request_path, serialize_request_path
 lazy from .resource_records import (
     CheckPart,
+    DnsRecordPart,
     DomainRecord,
     DomainRow,
     HopRow,
     JoinedReadingPart,
     MachineRecord,
     MeasurementPart,
+    ObservedPart,
     PathRecord,
     PresencePart,
     ReadingItem,
     ReadingRecord,
     RelationshipsRecord,
+    RoutePart,
 )
 lazy from .search import global_search
 lazy from .service_list import services_by_zone
@@ -112,66 +116,20 @@ def list_action_items(
 def _presence(presence: Any) -> PresencePart | None:
     if presence is None:
         return None
-    return {
-        "online": presence.online,
-        "last_seen": presence.last_seen or None,
-        "tailnet_name": presence.tailnet_name,
-        "dns_name": presence.dns_name,
-        "tailnet_address": presence.tailnet_address,
-        "lan_address": tailnet_sightings().lan_address(presence),
-        "os": presence.os,
-        "client_version": presence.client_version,
-        "update_available": presence.update_available,
-        "key_expires": presence.key_expires or None,
-        "authorized": presence.authorized,
-        "tags": list(presence.tags),
-        "advertised_routes": list(presence.advertised_routes),
-        "enabled_routes": list(presence.enabled_routes),
-        "offers_exit_node": presence.offers_exit_node,
-        "exit_node_approved": presence.exit_node_approved,
-        "ssh_enabled": presence.ssh_enabled,
-        "blocks_incoming": presence.blocks_incoming,
-        "observed_at": _moment(presence.observed_at),
-    }
+    return row(presence, PresencePart, lan_address=tailnet_sightings().lan_address(presence))
 
 
 def serialize_machine(machine: Any) -> MachineRecord:
-    return {
-        "name": machine.name,
-        "node": f"machine:{machine.name}",
-        "url": machine.url,
-        "state": machine.state.label,
-        "role": machine.role,
-        "roles": [{"id": role.id, "label": role.label} for role in machine.roles],
-        "declaration": machine.declaration,
-        "aliases": list(machine.aliases),
-        "addresses": list(machine.addresses),
-        "header_addresses": [
+    return row(
+        machine,
+        MachineRecord,
+        node=f"machine:{machine.name}",
+        state=machine.state.label,
+        header_addresses=[
             {"label": kind, "address": address, "holder": holder} for kind, address, holder in header_addresses(machine)
         ],
-        "hostnames": list(machine.hostnames),
-        "runs_hq": machine.runs_hq,
-        "containers_visible": machine.containers_visible,
-        "hq_hostnames": list(machine.hq_hostnames),
-        "reached_by": list(machine.reached_by),
-        "opened_by": list(machine.opened_by),
-        "unanswered": list(machine.unanswered),
-        "resources": list(machine.resources),
-        "containers": [
-            {
-                "name": item.name,
-                "stack": item.stack,
-                "image": item.image,
-                "state": item.state,
-                "status": item.status,
-                "published": item.published,
-                "watcher": item.watcher,
-                "observed_at": _moment(item.observed_at),
-            }
-            for item in machine.containers
-        ],
-        "presence": _presence(machine.presence),
-    }
+        presence=_presence(machine.presence),
+    )
 
 
 def list_machines(*, limit: int = 50) -> dict[str, Any]:
@@ -244,35 +202,8 @@ def get_domain(name: str) -> DomainRecord:
         if found is None or context is None:
             raise RecordNotFound("No domain has that name.")
         zone = context.zone
-        return {
-            **found,
-            "connection_ref": zone.connection_ref,
-            "reachable": zone.reachable,
-            "observed_at": _moment(zone.observed_at),
-            "records": [
-                {
-                    "name": record.name,
-                    "record_type": record.record_type,
-                    "value": record.value,
-                    "proxied": record.proxied,
-                    "ttl": record.ttl,
-                    "declaration": record.resource_key,
-                    "observed_only": record.observed_only,
-                }
-                for record in zone.listed
-            ],
-            "insights": [
-                {
-                    "label": insight.label,
-                    "value": insight.value,
-                    "detail": insight.detail,
-                    "url": insight.url,
-                    "concern": insight.concern,
-                    "notice": insight.notice,
-                }
-                for insight in zone.insights
-            ],
-        }
+        records = [row(record, DnsRecordPart, declaration=record.resource_key) for record in zone.listed]
+        return row(zone, DomainRecord, records=records, **found)
 
 
 # ----- Relationships ----------------------------------------------------------
@@ -315,27 +246,11 @@ def serialize_hop(hop: Any) -> HopRow:
     """One hop as every adapter returns it; a hop walked for a request adds
     what the request showed there and the checks decided there."""
 
-    found: HopRow = {
-        "step": hop.step,
-        "label": hop.label,
-        "name": hop.name,
-        "link": as_written(hop.link) if hop.link else None,
-        "detail": hop.detail,
-        "source": as_written(hop.source) if hop.source else None,
-        "certificate": as_written(hop.certificate) if hop.certificate else None,
-        "unread": hop.unread,
-        "overlays": [
-            {"relation": relation, "link": as_written(link) if link else None} for relation, link in hop.overlays
-        ],
-    }
+    overlays = [{"relation": relation, "link": as_written(link) if link else None} for relation, link in hop.overlays]
     if hop.check is None:
-        return found
-    return {
-        **found,
-        "check": as_written(hop.check),
-        "evidence": [as_written(item) for item in hop.evidence],
-        "layers": [serialize_check(result) for result in hop.checks],
-    }
+        return row(hop, HopRow, overlays=overlays)
+    layers = [serialize_check(result) for result in hop.checks]
+    return row(hop, HopRow, overlays=overlays, check=hop.check, evidence=hop.evidence, layers=layers)
 
 
 def serialize_check(result: CheckResult) -> CheckPart:
@@ -363,43 +278,19 @@ def serialize_check(result: CheckResult) -> CheckPart:
 def serialize_measurement(found: Measurement) -> MeasurementPart:
     """One subject against a standard, as the API answers it."""
 
-    return {
-        "met": found.met,
-        "measured": found.measured,
-        "unread": found.unread,
-        "checks": [serialize_check(result) for result in found.results],
-    }
+    return row(found, MeasurementPart, checks=[serialize_check(result) for result in found.results])
 
 
 def serialize_path(path: Any) -> PathRecord:
     """A request path as every adapter returns it."""
 
-    return {
-        "hostname": path.hostname,
-        "line": path.line,
-        "redirects_to": path.redirects_to,
-        "machine": path.machine,
-        "unread": list(path.gaps),
-        "observed": [
-            {
-                "relation": hop.label,
-                "name": hop.name,
-                "link": as_written(hop.link) if hop.link else None,
-                "detail": hop.detail,
-                "source": as_written(hop.source) if hop.source else None,
-            }
-            for hop in path.observed
-        ],
-        "routes": [
-            {
-                "via": route.via,
-                "port": route.port,
-                "line": route.line,
-                "hops": [serialize_hop(hop) for hop in route.hops],
-            }
-            for route in path.routes
-        ],
-    }
+    return row(
+        path,
+        PathRecord,
+        unread=path.gaps,
+        observed=[row(hop, ObservedPart, relation=hop.label) for hop in path.observed],
+        routes=[row(route, RoutePart, hops=[serialize_hop(hop) for hop in route.hops]) for route in path.routes],
+    )
 
 
 def get_path(hostname: str) -> PathRecord:
@@ -480,33 +371,14 @@ def get_reading(kind: str) -> ReadingRecord:
 # ----- Credentials ------------------------------------------------------------
 
 
+def tally(found: Any) -> list[TallyPart]:
+    """How many of what one service's credential reads are in each state."""
+
+    return [{"count": count, "state": label} for count, label in found.tally]
+
+
 def serialize_provider_sight(found: Any) -> CredentialRecord:
-    return {
-        "provider": found.provider,
-        "label": found.label,
-        "credential_refusal": found.credential_refusal,
-        "manages": list(found.manages),
-        "tally": [{"count": count, "state": label} for count, label in found.tally],
-        "sights": [serialize_sight(item) for item in found.sights],
-    }
-
-
-def serialize_sight(item: Any) -> SightPart:
-    return {
-        "kind": item.kind,
-        "label": item.label,
-        "source": item.source,
-        "state": item.state,
-        "state_label": item.state_label,
-        "records": item.records,
-        "observed_at": _moment(item.observed_at),
-        "error": item.error,
-        "requires": item.requires,
-        "refusal": item.refusal,
-        "permissions": list(item.permissions),
-        "parts": [as_written(part) for part in item.parts],
-        "remedy": item.remedy,
-    }
+    return row(found, CredentialRecord, tally=tally(found))
 
 
 def list_credentials() -> dict[str, Any]:

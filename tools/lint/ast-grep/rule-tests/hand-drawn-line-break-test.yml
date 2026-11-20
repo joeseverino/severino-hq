@@ -1,7 +1,7 @@
 id: hand-drawn-line-break
 valid:
   - '{% cell_line %}{% entity link %}{% detail %}Docker host{% endcell_line %}'
-  - '{% stack_list %}<li>{% status state %}</li><li>{% muted %}since {{ since }}{% endmuted %}</li>{% endstack_list %}'
+  - '{% list %}<li>{% status state %}</li><li>{% muted %}since {{ since }}{% endmuted %}</li>{% endlist %}'
   - '<abbr title="Border">br</abbr>'
   - '<span class="brand">{{ name }}</span>'
 invalid:

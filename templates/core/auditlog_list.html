@@ -7,7 +7,7 @@ another source dated (a deploy, a container start), or a run of like moments
 read as one (`burst`, history.RUN), its moments folded beneath it, drawn by
 the one row every table of history draws (partials/_history_row.html).
 {% endcomment %}
-{% block row_attributes %}{% history_row_attributes row %}{% endblock %}
+{% block row_attributes %}{{ row.attributes }}{% endblock %}
 {% comment %}The row of the rest is one cell across the table, so it holds no tick-box and spans that column too.{% endcomment %}
 {% block row_select %}{% if not row.rest %}{{ block.super }}{% endif %}{% endblock %}
 {% block row %}{% include "partials/_history_row.html" with across=table.columns|length|add:table.selectable %}{% endblock %}

@@ -4,6 +4,7 @@ Receipt files are stored OUTSIDE the app and are never exposed via the public
 media URL. The ``ReceiptFileView`` streams the file only to authenticated users.
 """
 
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import override
@@ -41,7 +42,6 @@ from .validation import (
     ALLOWED_RECEIPT_CONTENT_TYPES,
     INLINE_SAFE_CONTENT_TYPES,
     PICTURE_CONTENT_TYPES,
-    is_new_upload,
 )
 
 RECEIPTS_TRAIL = (("Receipts", reverse_lazy("receipts:list")),)
@@ -239,7 +239,7 @@ class ReceiptFormPage(CommandFormPage, ReceiptPage, CapabilityFormMixin):
 
     @override
     def capability(self, form):
-        if not self.adding and is_new_upload(form.cleaned_data.get("file")):
+        if not self.adding and form.cleaned_data.get("file") is not None:
             return REPLACE
         return super().capability(form)
 
@@ -260,6 +260,29 @@ class ReceiptCreateView(ReceiptFormPage, CreateView):
 
 class ReceiptUpdateView(ReceiptFormPage, UpdateView):
     page_title = "Edit receipt"
+
+    @override
+    def get_initial(self):
+        """The file it holds, named and linked as HQ serves it: its storage is never served."""
+
+        initial = super().get_initial()
+        if self.object.file:
+            initial["file"] = _StoredFile(
+                self.object.original_filename or Path(self.object.file.name).name,
+                reverse("receipts:file", args=[self.object.pk]),
+            )
+        return initial
+
+
+@dataclass(frozen=True, slots=True)
+class _StoredFile:
+    """A receipt's file as its form's control names and links it."""
+
+    name: str
+    url: str
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class ReceiptDeleteView(ReceiptPage, RecordDeleteMixin, DeleteView):

@@ -1,6 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-<div class="section-flow">
+{% layout %}
 {% card label="Expense" %}{% facts %}
   {% fact "Cost" %}{{ expense.total_cost|money }}{% endfact %}
   {% fact "Business use" %}{{ expense.business_use_percentage|measured:"%" }}{% endfact %}
@@ -22,5 +22,5 @@
   {% section "Receipts" remedy_label="Upload one" remedy_url=upload_url %}{% empty %}No receipts.{% endsection %}
 {% endif %}
 {% include "partials/_related.html" with groups=related %}
-</div>
+{% endlayout %}
 {% endblock %}

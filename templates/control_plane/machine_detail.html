@@ -20,7 +20,7 @@
 Its latest runs, under how it is doing and above what it holds: what was
 last done to it is read before its parts.
 {% endcomment %}
-{% if runs %}<div class="section-flow">{% include "partials/_page_sections.html" with sections=runs spans_row=True %}</div>{% endif %}
+{% layout %}{% include "partials/_page_sections.html" with sections=runs spans_row=True %}{% endlayout %}
 
 {% if machine.containers or unused_images %}
   {% comment %}
@@ -28,7 +28,7 @@ last done to it is read before its parts.
   under it. How they stand is the band at the top of the page.
   {% endcomment %}
 {% section "Containers" %}
-  {% if unused_images %}{% dot_list %}<li>{% status unused_images|length|counted:"unused image,unused images"|add:"," unused_size "can be freed" tone="attention" pill=False %}</li>{% enddot_list %}{% endif %}
+  {% if unused_images %}{% list kind="dots" %}<li>{% status unused_images|length|counted:"unused image,unused images"|add:"," unused_size "can be freed" tone="attention" pill=False %}</li>{% endlist %}{% endif %}
   {% if unused_images %}{% command text="ssh "|add:machine.name|add:' "sudo docker image prune -a"' %}{% endif %}
   {% include "partials/_problems.html#rest" with rest=problems_in.containers %}
   {% if machine.containers %}{% include "control_plane/_container_rows.html" with containers=machine.on_show label="Shown containers" %}{% endif %}
@@ -57,7 +57,11 @@ last done to it is read before its parts.
   How it relates comes last, under that flow: it is far taller than a card
   of a record or two, so it never shares their row.
 {% endcomment %}
-<div class="section-flow">
+{% partialdef short %}
+{% include "partials/_page_sections.html" with spans_row=False %}
+{% referenced_by "machine" machine.name %}
+{% endpartialdef %}
+{% layout %}
 {% include "partials/_page_sections.html" with spans_row=True %}
 {% if machine.presence %}
 {% section "Tailnet" %}
@@ -70,7 +74,7 @@ last done to it is read before its parts.
     together in one place rather than crowding the top of the page. One
     per line, each beside its network; a list, so on a row of its own.
     {% endcomment %}
-    {% fact "Addresses" %}{% if labeled_addresses %}<ul class="address-list">{% for label, address in labeled_addresses %}<li><span>{{ label|breakable }}</span> <code>{{ address|breakable }}</code></li>{% endfor %}</ul>{% endif %}{% endfact %}
+    {% fact "Addresses" %}{% list kind="labeled" %}{% for label, address in labeled_addresses %}<li><span>{{ label|breakable }}</span> <code>{{ address|breakable }}</code></li>{% endfor %}{% endlist %}{% endfact %}
     {% fact "Device" %}{% entity device_link %}{% endfact %}
     {% if magic_dns_link %}{% fact "MagicDNS" %}{% entity magic_dns_link code=True %}{% endfact %}{% endif %}
     {% fact "State" %}{% if machine.presence.online %}Connected{% else %}Not connected{% if machine.state_since %}, last seen {{ machine.state_since|breakable }}{% endif %}{% endif %}{% endfact %}
@@ -103,7 +107,7 @@ last done to it is read before its parts.
     {% if machine.presence.advertised_routes or machine.presence.offers_exit_node %}
       {% fact "Exit node" %}{% if not machine.presence.offers_exit_node %}Not offered{% elif machine.presence.exit_node_approved %}Offered and approved{% else %}<strong>Offered, not approved</strong>{% endif %}{% endfact %}
       {% fact "Routes" %}
-        {% stack_list %}{% for route in machine.presence.advertised_routes %}<li><code>{{ route|breakable }}</code>{% if route in machine.presence.enabled_routes %} approved{% else %} <strong>not approved</strong>{% endif %}</li>{% empty %}<li>None advertised</li>{% endfor %}{% endstack_list %}
+        {% list %}{% for route in machine.presence.advertised_routes %}<li><code>{{ route|breakable }}</code>{% if route in machine.presence.enabled_routes %} approved{% else %} <strong>not approved</strong>{% endif %}</li>{% empty %}<li>None advertised</li>{% endfor %}{% endlist %}
         {% comment %}
         The verb where the fact is. Approval takes the whole advertised
         set, so there is one control rather than one per route, and it
@@ -134,9 +138,12 @@ last done to it is read before its parts.
     {% url 'control_plane:tailnet' as tailnet_url %}{% with_query tailnet_url source=asked.source target=asked.target as asked_url %}{% button "Policy test" asked_url modal="whatif" %}
   {% endif %}
 {% endsection %}
-</div>
-<div class="section-flow">
-
+{% else %}
+{% partial short %}
+{% endif %}
+{% endlayout %}
+{% if machine.presence %}
+{% layout %}
   {% if machine.presence.peered %}
     {% comment %}
     The peering, stated rather than implied. This reading comes from the daemon
@@ -165,11 +172,9 @@ last done to it is read before its parts.
       {% endfacts %}
     {% endsection %}
   {% endif %}
+{% partial short %}
+{% endlayout %}
 {% endif %}
-
-{% include "partials/_page_sections.html" with spans_row=False %}
-{% referenced_by "machine" machine.name %}
-</div>
 {% include "partials/_relationships.html" %}
 
 {% if device_names %}
