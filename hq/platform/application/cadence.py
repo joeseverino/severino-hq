@@ -51,7 +51,8 @@ from .contracts import Effect
 from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import CapabilitySpec, requested
 from .moments import duration
-from .record_errors import NOT_FOUND, Sentence
+from .record_errors import Sentence
+from .refusal_codes import Code
 from .security import Capability, Principal
 from .tone import Tone
 from .ui import ended
@@ -636,7 +637,7 @@ def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
     if len(named) > 1:
         raise ValidationError(dict.fromkeys(named, "Name one of connection_ref, kind or every_connection."))
     if ref and not connection_providers(ref):
-        raise ValidationError({"connection_ref": ValidationError("No such connection.", code=NOT_FOUND)})
+        raise ValidationError({"connection_ref": ValidationError("No such connection.", code=Code.NOT_FOUND)})
     return (ref, kind) if named else None
 
 

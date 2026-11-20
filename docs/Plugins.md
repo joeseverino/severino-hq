@@ -596,8 +596,8 @@ the keyword being the one its `target_kind` binds (`current_slug`,
 leaves it out and is never handed it.
 
 A handler refuses with one of the host's error codes, the ones the API
-reference lists on each operation (`REFUSAL_STATUS` in
-`hq/platform/application/refusal_status.py`); any other code is answered as
+reference lists on each operation (`Code` in
+`hq/platform/application/refusal_codes.py`); any other code is answered as
 `operation_failed`.
 
 Fields that shape the Command Center form:

@@ -9,6 +9,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.platform.application import denials
+from hq.platform.application.refusal_codes import Code
 from hq.platform.core.audit import ROUTINE_EVENTS, prune_routine, record_event
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import operator
@@ -121,7 +122,7 @@ class AllowedTests(TestCase):
 
     def test_a_coalesced_refusal_counts_every_call(self):
         for _ in range(3):
-            denials.record_denial(interface="mcp", reason="invalid_credential", source="192.0.2.7", authenticated=False)
+            denials.record_denial(interface="mcp", reason=Code.INVALID_TOKEN, source="192.0.2.7", authenticated=False)
 
         row = AuditLog.objects.get(action=AuditLog.Action.DENIED)
         self.assertEqual(row.metadata["count"], 3)

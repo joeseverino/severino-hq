@@ -10,6 +10,7 @@ lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.contrib.auth.models import AnonymousUser
 lazy from django.http import HttpRequest
 
+from .refusal_codes import Code
 from .titled import Titled
 lazy from . import roles
 lazy from .domains import host_records
@@ -190,7 +191,7 @@ def has_a_person(principal: Principal) -> bool:
 class AuthorizationError(PermissionError):
     """Refused for want of a capability. Its message is written for the caller."""
 
-    code = "forbidden"
+    code = Code.FORBIDDEN
 
     def __init__(self, reason: str = "", *args: object) -> None:
         super().__init__(reason, *args)
@@ -206,7 +207,7 @@ class InsufficientScope(AuthorizationError):
     plain ``AuthorizationError`` or a ``PolicyDenied``.
     """
 
-    code = "insufficient_scope"
+    code = Code.INSUFFICIENT_SCOPE
 
     def __init__(self, reason: str, scope: str) -> None:
         super().__init__(reason)
@@ -216,7 +217,7 @@ class InsufficientScope(AuthorizationError):
 class PolicyDenied(AuthorizationError):
     """Refused by operator policy rather than a missing grant."""
 
-    code = "denied_by_policy"
+    code = Code.DENIED_BY_POLICY
 
 
 def record_permissions(kind: str) -> frozenset[str]:

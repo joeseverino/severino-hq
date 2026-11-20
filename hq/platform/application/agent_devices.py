@@ -20,6 +20,7 @@ from hq.platform.core.models import AgentDevice, AgentIdentity
 from . import tailnet, tailscaled
 from .command_fields import Describe
 from .record_errors import RecordNotFound
+from .refusal_codes import Code
 from .security import AGENT_SURFACES, AuthorizationError, Principal, person
 lazy from .agent_registry import TOUCH_INTERVAL
 lazy from .hq_self import site_url
@@ -32,15 +33,6 @@ APPROVE_AGENT_DEVICE = "agent.device_approval.set"
 BLOCK_AGENT_DEVICE = "agent.device_block.set"
 
 
-class Unplaced(StrEnum):
-    """Why the tailnet could not place a call: the refusal code each door answers."""
-
-    # tailscaled holds no device at the address: loopback, the LAN, or an address no peer has.
-    NO_DEVICE = "device_unknown"
-    # tailscaled did not answer, so HQ cannot say who sent the call.
-    UNANSWERED = "tailnet_unavailable"
-
-
 @dataclass(frozen=True, slots=True)
 class Placement:
     """Where HQ places one call: on a device; nowhere, in a deployment with no
@@ -48,7 +40,7 @@ class Placement:
     says why, ``detail`` the daemon's own words)."""
 
     device: tailnet.Device | None = None
-    refused: Unplaced | None = None
+    refused: Code | None = None
     detail: str = ""
 
     @property
@@ -73,9 +65,9 @@ def place(address: str) -> Placement:
         found = tailscaled.whois(address)
     except tailscaled.Unavailable as exc:
         logger.warning("tailscaled did not place a call: %s", exc, extra={"event": "agents.device.unanswered"})
-        return Placement(refused=Unplaced.UNANSWERED, detail=str(exc))
+        return Placement(refused=Code.TAILNET_UNAVAILABLE, detail=str(exc))
     if found is None or not found.node_id:
-        return Placement(refused=Unplaced.NO_DEVICE)
+        return Placement(refused=Code.DEVICE_UNKNOWN)
     return Placement(found)
 
 
@@ -117,7 +109,7 @@ class DeviceStanding(StrEnum):
     UNPLACED = "unplaced"
     APPROVED = "approved"
     AWAITING = "awaiting"
-    # Refused at admission: the tailnet could not place the call (``Unplaced``).
+    # Refused at admission: the tailnet could not place the call (``Placement.refused``).
     UNPLACEABLE = "unplaceable"
     BLOCKED = "blocked"
 

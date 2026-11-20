@@ -20,6 +20,7 @@ lazy from mcp.shared.exceptions import MCPError
 from hq.config.networks import is_loopback
 from hq.platform.application.capabilities import adapter_refusal
 from hq.platform.application.lists import split_list
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.refusal_status import refusal_of, refuse
 from hq.platform.application.security import Principal, cli_principal
 from hq.platform.core import strict_json
@@ -41,20 +42,20 @@ def _request(text: str) -> tuple[Any, dict[str, Any]] | dict[str, Any]:
     try:
         request = strict_json.loads(text)
     except ValueError:
-        return refuse("invalid_json", "The request is not valid JSON.")
+        return refuse(Code.INVALID_JSON, "The request is not valid JSON.")
     if not isinstance(request, dict):
-        return refuse("invalid_json", "The request must be a JSON object.")
+        return refuse(Code.INVALID_JSON, "The request must be a JSON object.")
     unknown = request.keys() - FIELDS
     if unknown:
-        return refuse("invalid_input", f"Unknown request fields: {', '.join(sorted(unknown))}.")
+        return refuse(Code.INVALID_INPUT, f"Unknown request fields: {', '.join(sorted(unknown))}.")
     if not isinstance(request.get("tool"), str):
-        return refuse("invalid_input", 'The request needs a string "tool".')
+        return refuse(Code.INVALID_INPUT, 'The request needs a string "tool".')
     arguments = request.get("arguments", {})
     if not isinstance(arguments, dict):
-        return refuse("invalid_input", '"arguments" must be a JSON object.')
+        return refuse(Code.INVALID_INPUT, '"arguments" must be a JSON object.')
     tool = mcp.tools.get(request["tool"])
     if tool is None:
-        return refuse("invalid_input", f"Unknown tool: {request['tool']}")
+        return refuse(Code.INVALID_INPUT, f"Unknown tool: {request['tool']}")
     return tool, arguments
 
 
@@ -127,7 +128,7 @@ def answered_as(text: str, principal: Principal) -> Any:
         try:
             result = async_to_sync(call)()
         except MCPError as exc:
-            return refuse("invalid_input", str(exc))
+            return refuse(Code.INVALID_INPUT, str(exc))
     return result.structured_content
 
 

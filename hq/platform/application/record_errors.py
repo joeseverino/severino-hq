@@ -8,6 +8,7 @@ an adapter answers with (``RefusalTextTests``).
 
 from typing import ClassVar
 
+from .refusal_codes import Code
 lazy from .refusal_status import RefusalDetails
 
 # A sentence HQ wrote. To the type checker a ``str``; to the refusal test a
@@ -15,16 +16,11 @@ lazy from .refusal_status import RefusalDetails
 # held to be one, so a refusal may be built from it.
 Sentence = str
 
-# The code of a refusal for a record that is not there. A field's
-# ``ValidationError`` carries it where the field names a record (a model's
-# reference column), so the call is answered as ``RecordNotFound`` is.
-NOT_FOUND = "not_found"
-
 
 class HostRefusal(Exception):
     """A refusal whose ``reason`` every adapter may show as it stands."""
 
-    code: ClassVar[str]
+    code: ClassVar[Code]
 
     def __init__(self, reason: Sentence, *, details: RefusalDetails | None = None) -> None:
         super().__init__(reason)
@@ -36,28 +32,28 @@ class HostRefusal(Exception):
 class RecordNotFound(HostRefusal, LookupError):
     """The record the request names does not exist, or the caller cannot see it."""
 
-    code = NOT_FOUND
+    code = Code.NOT_FOUND
 
 
 class RecordConflict(HostRefusal):
     """The write would clash with a record that already exists or has moved on."""
 
-    code = "conflict"
+    code = Code.CONFLICT
 
 
 class PolicyError(HostRefusal, ValueError):
     """The request is valid in shape, and HQ's settings or the record's state refuse it."""
 
-    code = "precondition"
+    code = Code.PRECONDITION
 
 
 class CertificateError(HostRefusal, ValueError):
     """The uploaded material is not a usable certificate and key pair."""
 
-    code = "invalid_material"
+    code = Code.INVALID_MATERIAL
 
 
 class InputError(HostRefusal, ValueError):
     """A value of the right type that HQ cannot act on, said in the host's words."""
 
-    code = "invalid_input"
+    code = Code.INVALID_INPUT

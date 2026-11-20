@@ -17,6 +17,7 @@ from jwt import PyJWK, PyJWKClient
 from . import own_devices
 from .linked_accounts import sign_in_subject
 from .own_devices import REGISTERED
+from .refusal_codes import Code
 from .security import (
     AuthorizationError,
     Principal,
@@ -62,8 +63,6 @@ class ClientReason(Exception):
     has nothing to say publicly.
     """
 
-    code = "error"
-
     def __init__(self, reason: str = "", *args: object) -> None:
         super().__init__(reason, *args)
         self.reason = reason
@@ -72,7 +71,7 @@ class ClientReason(Exception):
 class TokenError(ClientReason):
     """A presented token is absent, malformed, expired, or not addressed to HQ."""
 
-    code = "invalid_token"
+    code = Code.INVALID_TOKEN
 
 
 # Seconds between reads of the identity provider's key set, and the least

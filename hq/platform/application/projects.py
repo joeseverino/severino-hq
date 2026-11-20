@@ -34,6 +34,7 @@ from .record_errors import RecordConflict, RecordNotFound
 from .record_fields import Notes, PublishedUrl, Slug, one_of
 from .record_links import linked
 from .record_saves import Held, held, linked_saver, row, saved_type
+from .refusal_codes import Code
 from .refusal_status import RefusalEnvelope, refusal_of, refuse
 from .security import Principal
 from .standards import Standing
@@ -436,7 +437,7 @@ def set_dependency_updates(
     project = held(Project, _PROJECT, {"slug": current_slug}, expected_updated_at)
     refused = _updates_refusal(project, enabling=command.dependency_updates)
     if refused:
-        return refuse("precondition", refused)
+        return refuse(Code.PRECONDITION, refused)
     if project.dependency_updates != command.dependency_updates:
         project.dependency_updates = command.dependency_updates
         project.full_clean()

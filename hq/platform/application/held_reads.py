@@ -18,6 +18,7 @@ from .describe import Describe
 from .held_answer import HELD, HeldRequest, applying
 from .integration_specs import CapabilitySpec, ResourceSpec
 from .record_errors import RecordNotFound
+from .refusal_codes import Code
 from .refusal_status import refusal_of, refuse
 from .resource_operations import serialize_operation
 from .security import Capability, Principal
@@ -82,7 +83,7 @@ def standing(held: ApprovalRequest) -> HoldStanding:
     if operation.state == OperationRequest.State.SUCCEEDED:
         return HoldStanding(answered, "It was approved in HQ, and it is applied.", operation)
     failed = refuse(
-        "operation_failed",
+        Code.OPERATION_FAILED,
         "This change was approved in HQ, but applying it failed. `details` holds the operation.",
         answered,
     )

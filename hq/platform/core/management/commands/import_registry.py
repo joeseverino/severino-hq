@@ -14,6 +14,7 @@ from typing import override
 from django.core.management.base import BaseCommand, CommandError
 
 from hq.platform.application.capabilities import execute_capability
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.security import cli_principal
 from hq.platform.application.ui import counted
@@ -66,7 +67,7 @@ class Command(BaseCommand):
             self.stdout.write(json.dumps(result, default=str))
         if not result["ok"]:
             refusal = refusal_of(result)
-            if not options["json"] and refusal.code == "invalid_input":
+            if not options["json"] and refusal.code == Code.INVALID_INPUT:
                 self._problems(refusal.details)
             raise CommandError(refusal.message)
         if options["json"]:

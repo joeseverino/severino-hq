@@ -26,7 +26,8 @@ from .integration_specs import command_adapter
 from .projects import ProjectCommand
 from .record_declaration import Records
 from .record_errors import RecordConflict, RecordNotFound
-from .refusal_status import NOT_FOUND, RefusalEnvelope, refuse
+from .refusal_codes import Code
+from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
 from .stored_columns import laid_over
 from .ui import counted, ended
@@ -90,17 +91,15 @@ class _Planned:
 # answers, in the order a document's refusal takes the first one it holds: the
 # document itself, a record it names that is not stored, or the stored record
 # it lays over (one it creates lacks what creating one needs).
-INVALID = "invalid_input"
-UNMET = "precondition"
-CAUSES = (INVALID, NOT_FOUND, UNMET, RecordConflict.code)
+CAUSES = (Code.INVALID_INPUT, Code.NOT_FOUND, Code.PRECONDITION, RecordConflict.code)
 
 # One error of a record: its cause and its words.
-type _Error = tuple[str, str]
+type _Error = tuple[Code, str]
 
 
 @dataclass(frozen=True, slots=True)
 class _Problem:
-    cause: str
+    cause: Code
     detail: dict[str, Any]
 
 
@@ -149,7 +148,7 @@ def _existing(kind: Records, records: list[Any]) -> dict[str, Any]:
 def _slug_errors(slug: str, seen: set[str]) -> list[_Error]:
     """A record's slug errors; records the slug as seen."""
 
-    errors = [(INVALID, "slug appears twice in this document.")] if slug in seen else []
+    errors = [(Code.INVALID_INPUT, "slug appears twice in this document.")] if slug in seen else []
     seen.add(slug)
     return errors
 
@@ -179,7 +178,10 @@ def _command(kind: Records, values: dict[str, Any]) -> tuple[Any, list[_Error]]:
         return command_adapter(load(kind.command)).validate_python(values), []
     except PydanticValidationError as exc:
         return None, [
-            (UNMET, f"{'.'.join(str(part) for part in error['loc']) or 'record'}: {error['msg']}; {lacking}")
+            (
+                Code.PRECONDITION,
+                f"{'.'.join(str(part) for part in error['loc']) or 'record'}: {error['msg']}; {lacking}",
+            )
             for error in exc.errors()
         ]
 
@@ -244,7 +246,7 @@ def _model_errors(kind: Records, command: Any, known_projects: set[str]) -> list
     if missing:
         errors.append(
             (
-                NOT_FOUND,
+                Code.NOT_FOUND,
                 ended(
                     f"{counted(len(missing), 'related project not found', 'related projects not found')}: "
                     f"{', '.join(missing)}"
@@ -262,7 +264,7 @@ def _said(exc: DjangoValidationError) -> list[_Error]:
     """Each error of a model's validation, a reference to nothing stored told from an invalid value."""
 
     return [
-        (NOT_FOUND if error.code == NOT_FOUND else INVALID, f"{name}: {message}")
+        (Code.NOT_FOUND if error.code == Code.NOT_FOUND else Code.INVALID_INPUT, f"{name}: {message}")
         for name, errors in exc.error_dict.items()
         for error in errors
         for message in error.messages
@@ -278,7 +280,9 @@ def _apply(planned: _Planned, principal: Principal) -> None:
     try:
         result = load(planned.kind.upsert)(planned.command, principal=principal)
     except DjangoValidationError as exc:
-        errors = _said(exc) if hasattr(exc, "error_dict") else [(INVALID, message) for message in exc.messages]
+        errors = (
+            _said(exc) if hasattr(exc, "error_dict") else [(Code.INVALID_INPUT, message) for message in exc.messages]
+        )
         raise _Refused(_problem(planned.kind.noun, planned.index, planned.slug, *errors)) from exc
     except (RecordNotFound, RecordConflict) as exc:
         raise _Refused(_problem(planned.kind.noun, planned.index, planned.slug, (exc.code, str(exc)))) from exc
@@ -345,7 +349,7 @@ def import_registry(command: HQImportCommand, *, principal: Principal) -> HqImpo
     total = len(command.projects) + len(command.assets)
     if total > MAX_IMPORT_RECORDS:
         limit = f"The document holds {counted(total, 'record')}; the limit is {MAX_IMPORT_RECORDS}."
-        return _refused(limit, [_problem("document", 0, "", (INVALID, limit))])
+        return _refused(limit, [_problem("document", 0, "", (Code.INVALID_INPUT, limit))])
 
     problems: list[_Problem] = []
     projects = _plan_kind(_PROJECT, command.projects, problems, set())

@@ -30,6 +30,7 @@ from .contracts import Effect
 from .derivations import holds_until
 from .held_answer import HELD, ApprovalApplied, ApprovalRejected, HeldCall, serialize_approval
 from .record_errors import PolicyError, RecordNotFound
+from .refusal_codes import Code
 from .refusal_status import refusal_of, refuse
 from .sealing import Sealed, sealer
 from .security import (
@@ -103,13 +104,13 @@ class RefusedHold(ApprovalError):
     the exception's string form, under `code`.
     """
 
-    code = "refused_hold"
+    code = Code.REFUSED_HOLD
 
 
 class TooManyPendingApprovals(RefusedHold):
     """One actor is holding more outstanding requests than it may."""
 
-    code = "too_many_pending_approvals"
+    code = Code.TOO_MANY_PENDING_APPROVALS
 
 
 class UnreadableSubject(RefusedHold):
@@ -120,7 +121,7 @@ class UnreadableSubject(RefusedHold):
     person" into "runs whenever the read comes back empty".
     """
 
-    code = "approval_subject_unreadable"
+    code = Code.APPROVAL_SUBJECT_UNREADABLE
 
 
 @dataclass(frozen=True, slots=True)
@@ -454,17 +455,17 @@ def own_held_request(approval_id: str, *, principal: Principal) -> ApprovalReque
 # How a request that ran nothing ended, as the refusal its caller is answered with.
 _UNAPPLIED = {
     ApprovalRequest.State.EXPIRED: (
-        "expired",
+        Code.EXPIRED,
         "This request expired before it was decided, so nothing was written. Ask again if you still need the change.",
     ),
     ApprovalRequest.State.STALE: (
-        "stale",
+        Code.STALE,
         (
             "What this change acts on changed after you asked, so nothing was written. "
             "Ask again if you still need the change."
         ),
     ),
-    ApprovalRequest.State.WITHDRAWN: ("withdrawn", "You withdrew this request, so nothing was written."),
+    ApprovalRequest.State.WITHDRAWN: (Code.WITHDRAWN, "You withdrew this request, so nothing was written."),
 }
 
 
@@ -487,7 +488,7 @@ def outcome(held: ApprovalRequest) -> dict[str, Any] | None:
     if state == ApprovalRequest.State.REJECTED:
         note = held.decision_note.strip()
         said = f"An operator declined this change in HQ: {note}" if note else "An operator declined this change in HQ."
-        return refuse("declined", said)
+        return refuse(Code.DECLINED, said)
     code, said = _UNAPPLIED[state]
     return refuse(code, said)
 

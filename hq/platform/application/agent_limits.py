@@ -15,10 +15,9 @@ from types import TracebackType
 
 from django.conf import settings
 
+from .refusal_codes import Code
 from .refusal_status import Refusal
 
-RATE_LIMITED = "rate_limited"
-TOO_MANY_CALLS = "too_many_calls"
 # A stream frees when its client lets it go or its token expires, so a client
 # past its streams is told to wait longer than for a call.
 STREAM_RETRY_AFTER = 60
@@ -29,7 +28,7 @@ class Limited:
     """A call refused for how much its agent asks: a code a client keys on, a
     sentence for it, and the whole seconds after which asking again can succeed."""
 
-    code: str
+    code: Code
     reason: str
     retry_after: int
 
@@ -83,7 +82,7 @@ class Limits:
             full_again = max(self._full_again.get(actor, now), now) + spacing
             wait = full_again - now - depth
             if wait > 0:
-                return Limited(RATE_LIMITED, _rate_reason(wait), math.ceil(wait))
+                return Limited(Code.RATE_LIMITED, _rate_reason(wait), math.ceil(wait))
             self._full_again[actor] = full_again
             self._forget_recovered(now)
         return None
@@ -94,12 +93,12 @@ class Limits:
         with self._lock:
             if self._overall >= settings.SEVERINO_AGENT_CALLS_AT_ONCE_OVERALL:
                 return Limited(
-                    TOO_MANY_CALLS, "HQ is answering all the agent calls it takes at once. Retry shortly.", 1
+                    Code.TOO_MANY_CALLS, "HQ is answering all the agent calls it takes at once. Retry shortly.", 1
                 )
             running = self._running.get(actor, 0)
             if running >= settings.SEVERINO_AGENT_CALLS_AT_ONCE:
                 return Limited(
-                    TOO_MANY_CALLS, f"This agent already has {running} calls in flight. Retry when one answers.", 1
+                    Code.TOO_MANY_CALLS, f"This agent already has {running} calls in flight. Retry when one answers.", 1
                 )
             self._running[actor] = running + 1
             self._overall += 1
@@ -116,7 +115,7 @@ class Limits:
             listening = self._listening.get(actor, 0)
             if listening >= settings.SEVERINO_AGENT_STREAMS_AT_ONCE:
                 return Limited(
-                    TOO_MANY_CALLS,
+                    Code.TOO_MANY_CALLS,
                     f"This agent already has {listening} listen streams open. Retry when one closes.",
                     STREAM_RETRY_AFTER,
                 )

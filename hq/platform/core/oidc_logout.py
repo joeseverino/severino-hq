@@ -16,6 +16,7 @@ from django.views.decorators.http import require_POST
 
 from hq.platform.application import tokens
 from hq.platform.application.capabilities import run_capability
+from hq.platform.application.refusal_codes import Door, answered_by
 from hq.platform.application.security import internal_principal
 from hq.platform.application.sessions import SIGN_OUT
 
@@ -71,6 +72,6 @@ def backchannel_logout(request):
     logger.warning("A logout token was not acted on: %s.", code, extra={"event": "auth.logout.rejected"})
     # A jti that is no retry key, or one already spent on another subject, is the
     # token's fault; anything else is HQ's, which the provider retries.
-    if code in ("invalid_idempotency_key", "idempotency_conflict"):
+    if code in answered_by(Door.RETRY_KEY):
         return HttpResponseBadRequest("The logout token was not accepted.")
     return HttpResponseServerError("The logout could not be completed.")

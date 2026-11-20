@@ -27,6 +27,7 @@ from .describe import Describe
 from .integration_specs import CapabilitySpec, requested
 from .projection import read_once
 from .record_errors import RecordNotFound
+from .refusal_codes import Code
 from .refusal_status import RefusalEnvelope, refuse
 from .security import WAITING_INTERFACES, Principal, internal_principal, person_of
 from .ui import ended
@@ -276,7 +277,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> W
 
     reason = _refusal(work, subject)
     if reason:
-        return cast(RefusalEnvelope, refuse("precondition", reason))
+        return cast(RefusalEnvelope, refuse(Code.PRECONDITION, reason))
     waited = principal.interface in WAITING_INTERFACES
     try:
         job = (run if waited else start)(
@@ -297,7 +298,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> W
         return {**_job_asked(job, requested(work.words, subject)), "started": True, "job": str(job.pk)}
     standing = standing_of(job_run(job))
     if standing.state == FAILED:
-        return cast(RefusalEnvelope, refuse("work_failed", standing.note or ended(standing.label)))
+        return cast(RefusalEnvelope, refuse(Code.WORK_FAILED, standing.note or ended(standing.label)))
     return {**_job_asked(job, standing.note), "started": True, "job": str(job.pk), "result": job.result}
 
 

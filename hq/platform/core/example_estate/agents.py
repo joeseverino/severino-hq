@@ -18,7 +18,6 @@ from hq.domains.control_plane.models import CapabilityRule, ManagedResource
 from hq.platform.application import (
     agent_access,
     agent_admission,
-    agent_devices,
     agent_limits,
     agent_registry,
     denials,
@@ -28,12 +27,13 @@ from hq.platform.application import (
 )
 from hq.platform.application.agent_access import SET_AGENT_BLOCK
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
-from hq.platform.application.agent_limits import RATE_LIMITED, Slot
+from hq.platform.application.agent_limits import Slot
 from hq.platform.application.approvals import is_held
 from hq.platform.application.capabilities import command_spec, run_capability
 from hq.platform.application.capability_policy import SET_POLICY, set_rule
 from hq.platform.application.linked_accounts import sign_in_subject
 from hq.platform.application.own_devices import SET_OWN_DEVICE
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.security import (
     API_INTERFACE,
     MCP_INTERFACE,
@@ -200,10 +200,10 @@ def lately(owner=None):
     # Refused for its rate: a minute of refusals, written as the one row that counts them.
     counted = {"created_at": now() - timedelta(minutes=14), "metadata": {denials.COUNT: RATE_LIMITED_TIMES}}
     with stamped(lambda _obj, _action, _type: counted), doors.mcp():
-        denials.record_denial(interface=MCP_INTERFACE, reason=RATE_LIMITED, actor=ASSISTANT)
+        denials.record_denial(interface=MCP_INTERFACE, reason=Code.RATE_LIMITED, actor=ASSISTANT)
     if owner is not None:
         # Stopped at its admission: the tailnet placed it on no device.
-        unplaced = agent_access.unplaced(agent_devices.Unplaced.NO_DEVICE)
+        unplaced = agent_access.unplaced(Code.DEVICE_UNKNOWN)
         stopped = agent_admission.Stopped(token_principal(_assistant_claims(), MCP_INTERFACE), unplaced)
         with _on(now() - timedelta(minutes=30)), doors.mcp():
             refused = agent_admission.refused(stopped, source=UNPLACED_AT)

@@ -53,6 +53,7 @@ from .integrations import held_graph, integration_graph
 from .labels import human_label
 from .projection import QueryRefusal
 from .record_errors import PolicyError
+from .refusal_codes import Code
 from .refusal_status import Refusal, next_call, refusal_of, refuse, refused
 from .sealing import Sealed, sealer
 from .security import (
@@ -317,7 +318,7 @@ def _named_run(
     if spec is None:
         return Ran(
             refuse(
-                "unknown_capability",
+                Code.UNKNOWN_CAPABILITY,
                 f"Unknown capability {name!r}. describe_capabilities lists the ones you may run.",
                 {"next": next_call("describe_capabilities")},
             )
@@ -333,7 +334,7 @@ def _named_run(
             key_in_payload=key_in_payload,
         )
     except InvalidIdempotencyKey as exc:
-        return Ran(refuse("invalid_idempotency_key", exc.reason))
+        return Ran(refuse(Code.INVALID_IDEMPOTENCY_KEY, exc.reason))
     except Exception as exc:  # noqa: BLE001 - every other failure is answered in the one refusal shape
         return Ran(adapter_refusal(name, exc, principal=principal))
 
@@ -373,7 +374,7 @@ def _authorized_run(
         where = f"payload.{IDEMPOTENCY_FIELD}" if key_in_payload else f"{IDEMPOTENCY_HEADER} header"
         return Ran(
             refuse(
-                "idempotency_key_required",
+                Code.IDEMPOTENCY_KEY_REQUIRED,
                 f"A capability that changes something needs an idempotency key. Send a new {where}, "
                 "and the same one when you retry this change.",
                 {"field": where.removesuffix(" header")},
@@ -407,7 +408,7 @@ def _authorized_run(
             actor=agent_subject(principal),
         )
     except IdempotencyConflict as exc:
-        return Ran(refuse("idempotency_conflict", exc.reason))
+        return Ran(refuse(Code.IDEMPOTENCY_CONFLICT, exc.reason))
 
 
 def key_required(effect: Effect, principal: Principal) -> bool:
@@ -497,13 +498,13 @@ def _target_refusal(
 
     if spec.target_kind and target is None:
         return refuse(
-            "target_required",
+            Code.TARGET_REQUIRED,
             f"{spec.name} requires a target: send the record it acts on as target.",
             {"field": "target"},
         )
     if not spec.target_kind and target is not None:
         return refuse(
-            "target_not_allowed",
+            Code.TARGET_NOT_ALLOWED,
             f"{spec.name} does not accept a target: send the call without one.",
             {"field": "target"},
         )

@@ -609,8 +609,8 @@ person holds it. Granting it to the client in the identity provider and signing
 in again gets the call through. The 403's `WWW-Authenticate` repeats it as
 `scope` (RFC 6750 section 3.1). A permission the person's role lacks, or one no
 token can hold, stays `forbidden`. Branch on the status; the code says which
-cause. A code has one status wherever it is answered. `CODES` in
-`hq/platform/application/refusal_status.py` declares each code once, with what
+cause. A code has one status wherever it is answered. `Code` in
+`hq/platform/application/refusal_codes.py` declares each code once, with what
 it means, its status, the doors that can answer it and whether it waits, and
 every list of codes is derived from it. Each operation's response for a status
 lists the codes it answers there as its `code` field's `const` or `enum`. A

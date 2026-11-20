@@ -151,14 +151,14 @@ class OneAdmissionTests(TestCase):
 
     def test_a_new_brake_reaches_the_machine_api_with_its_own_code(self):
         from ..agent_access import AgentRefusal
+        from ..refusal_codes import Code
 
-        blocked = AgentRefusal("example_blocked", "This agent is blocked.")
+        blocked = AgentRefusal(Code.AGENT_BLOCKED, "This agent is blocked.")
         with (
             _serving(),
-            patch.dict("hq.platform.application.refusal_status.REFUSAL_STATUS", example_blocked=403),
             patch("hq.platform.application.agent_access.refusal", return_value=blocked),
         ):
             response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}")
 
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["error"], {"code": "example_blocked", "message": "This agent is blocked."})
+        self.assertEqual(response.json()["error"], {"code": "agent_blocked", "message": "This agent is blocked."})

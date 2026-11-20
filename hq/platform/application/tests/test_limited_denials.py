@@ -7,6 +7,7 @@ from django.test import TestCase
 from hq.platform.core.models import AuditLog
 
 from ..denials import COALESCE_WINDOW, record_limited, settle
+from ..refusal_codes import Code
 
 
 class Clock:
@@ -27,7 +28,7 @@ class LimitedDenialTests(TestCase):
 
     def _refuse(self, actor, times):
         for _ in range(times):
-            record_limited(interface="api", reason="rate_limited", actor=actor, source="192.0.2.10")
+            record_limited(interface="api", reason=Code.RATE_LIMITED, actor=actor, source="192.0.2.10")
 
     def test_a_flood_in_one_window_is_one_row_that_is_given_its_count_when_the_agent_is_next_admitted(self):
         self._refuse("example-flood", 5)
@@ -47,7 +48,7 @@ class LimitedDenialTests(TestCase):
 
     def test_each_agent_and_reason_is_counted_apart(self):
         self._refuse("example-one", 2)
-        record_limited(interface="api", reason="too_many_calls", actor="example-one")
+        record_limited(interface="api", reason=Code.TOO_MANY_CALLS, actor="example-one")
         self._refuse("example-other", 1)
 
         self.assertEqual(self._rows("example-one").count(), 2)

@@ -13,6 +13,7 @@ from pydantic import BaseModel, ValidationError
 
 from hq.platform.application import agent_admission
 from hq.platform.application.access import ANYONE
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.refusal_status import refuse
 from hq.platform.application.resources import name_refusal
 from hq.platform.application.security import Principal
@@ -23,8 +24,6 @@ from .identity import caller_address, current_principal
 from .shapes import Requirement, Schema, answer_type, declared, omission_schema, omitted
 
 logger = logging.getLogger("severino.mcp")
-
-CALL_TIMED_OUT = "call_timed_out"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +102,7 @@ class Tool:
             extra={"event": "mcp.call.timed_out", "tool": self.name, "actor": current_principal().actor},
         )
         return refuse(
-            CALL_TIMED_OUT,
+            Code.CALL_TIMED_OUT,
             f"HQ stopped waiting for this call after {seconds} seconds. It may still finish: read "
             "before repeating it, and repeat a change with the same idempotency_key.",
         )

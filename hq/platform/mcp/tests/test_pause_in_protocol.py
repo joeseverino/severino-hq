@@ -93,21 +93,21 @@ class PauseInProtocolTests(TestCase):
 
     def test_a_brake_added_inside_the_refusal_answers_each_call_with_its_own_code(self):
         from hq.platform.application.agent_access import AgentRefusal
+        from hq.platform.application.refusal_codes import Code
 
-        blocked = AgentRefusal("example_blocked", "This agent is blocked.")
+        blocked = AgentRefusal(Code.AGENT_BLOCKED, "This agent is blocked.")
 
         async def steps(post):
             return await post(_call(1))
 
         with (
-            mock.patch.dict("hq.platform.application.refusal_status.REFUSAL_STATUS", example_blocked=403),
             mock.patch("hq.platform.application.agent_access.refusal", return_value=blocked),
             mock.patch(TOOL) as tool,
         ):
             answer = self._session(steps)
 
         tool.assert_not_called()
-        self.assertEqual(answer.json()["result"]["structuredContent"]["error"]["code"], "example_blocked")
+        self.assertEqual(answer.json()["result"]["structuredContent"]["error"]["code"], "agent_blocked")
 
     def test_a_paused_call_is_recorded_by_the_agents_name(self):
         async def steps(post):

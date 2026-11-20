@@ -30,6 +30,7 @@ from .record_errors import PolicyError, RecordNotFound
 from .record_fields import Notes, PublishedAt, RecordId, one_of
 from .record_saves import Held, Link, linked_saver, row
 from .references import Kind, Mention, Mentions
+from .refusal_codes import Code
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Capability, Principal
 from .sensitivity import readable_records, reads_whole
@@ -429,7 +430,7 @@ def sync_documentation(
         raise PolicyError("Every manifest record must be a JSON object.")
     problems = validate_manifest_data(manifest)
     if problems:
-        return refuse("invalid_input", f"{counted(len(problems), 'record')} refused. Nothing was synced.", problems)
+        return refuse(Code.INVALID_INPUT, f"{counted(len(problems), 'record')} refused. Nothing was synced.", problems)
     if prune_orphans and not confirm_prune:
         raise PolicyError("confirm_prune must be true when prune_orphans is true")
 

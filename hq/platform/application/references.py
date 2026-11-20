@@ -25,7 +25,7 @@ from django.utils.text import capfirst
 
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .record_errors import NOT_FOUND
+from .refusal_codes import Code
 from .tone import Tone
 lazy from . import entity_links, security
 lazy from .card_items import ListRow
@@ -239,7 +239,7 @@ class ReferenceField(models.CharField):
             setattr(model_instance, self.name_attname, link.label[: _name_length(self)])
             return value
         if not self._stored(model_instance, value):
-            raise ValidationError(f"HQ has nothing called {value!r} to link this to.", code=NOT_FOUND)
+            raise ValidationError(f"HQ has nothing called {value!r} to link this to.", code=Code.NOT_FOUND)
         return value
 
     @override

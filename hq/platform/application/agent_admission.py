@@ -14,6 +14,7 @@ from .agent_access import AgentRefusal
 from .agent_limits import Limited, Slot
 from .agent_registry import observe
 from .denials import record_denial, record_limited, settle
+from .refusal_codes import Code
 from .security import AuthorizationError, Capability, Principal, agent_subject
 from .tokens import TokenError, token_principal, verify
 
@@ -23,7 +24,7 @@ class Unadmitted:
     """A bearer no principal came of: ``verified`` when the token itself was
     good but grants nothing HQ can use, which is a 403 rather than a 401."""
 
-    code: str
+    code: Code
     reason: str
     verified: bool
 
@@ -68,7 +69,7 @@ def admit(bearer: str, *, interface: str, source: str) -> Principal | Stopped | 
             unadmitted = Unadmitted(exc.code, exc.reason, verified=False)
         except AuthorizationError as exc:
             # RFC 6750's word for a good token that grants too little, on both doors.
-            unadmitted = Unadmitted("insufficient_scope", exc.reason, verified=True)
+            unadmitted = Unadmitted(Code.INSUFFICIENT_SCOPE, exc.reason, verified=True)
         else:
             return admitted(principal, source=source)
     record_denial(interface=interface, reason=unadmitted.code, source=source, authenticated=False)

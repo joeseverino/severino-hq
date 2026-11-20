@@ -18,9 +18,9 @@ from hq.platform.core.audit import Unattributed, emit_line, record_event
 from hq.platform.core.models import AuditLog
 from hq.platform.core.write_bounds import Bound
 
+from .refusal_codes import Code
 from .ui import ended
 lazy from .capabilities import capability_title
-lazy from .refusal_status import why
 
 logger = logging.getLogger("severino.denials")
 
@@ -42,7 +42,7 @@ REFUSED_CREDENTIALS = Bound(
 def record_denial(
     *,
     interface: str,
-    reason: str,
+    reason: Code,
     actor: str = "",
     capability: str = "",
     source: str = "",
@@ -101,7 +101,7 @@ _windows: dict[tuple[str, str, str], _Window] = {}
 _windows_lock = threading.Lock()
 
 
-def record_limited(*, interface: str, reason: str, actor: str, source: str = "", device: str = "") -> None:
+def record_limited(*, interface: str, reason: Code, actor: str, source: str = "", device: str = "") -> None:
     """A refusal for asking too much: one row per agent, door and reason a window, with its count.
 
     The first refusal in a window writes the row and the rest only count, so
@@ -208,14 +208,10 @@ def _recounted(row: AuditLog) -> None:
     emit_line("audit.recounted", {"id": row.pk, COUNT: row.metadata.get(COUNT), LAST_AT: row.metadata.get(LAST_AT)})
 
 
-def _message(reason: str, *, actor: str, capability: str, detail: str) -> str:
-    """The row's sentence: who was refused what, and why in the words its code declares.
-
-    A code the table does not hold leaves the why off, so the row never shows a raw code.
-    """
+def _message(reason: Code, *, actor: str, capability: str, detail: str) -> str:
+    """The row's sentence: who was refused what, and why in the words its code declares."""
 
     who = actor or "An unauthenticated caller"
     what = f" “{capability_title(capability)}”" if capability else ""
-    because = why(reason)
-    said = f"{who} was refused{what}" + (f": {because}" if because else "")
+    said = f"{who} was refused{what}: {reason.said}"
     return f"{ended(said)} {detail}".strip() if detail else said

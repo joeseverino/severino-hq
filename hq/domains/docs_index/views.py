@@ -18,6 +18,7 @@ from hq.platform.application import related
 from hq.platform.application.documentation import SYNC
 from hq.platform.application.labels import dotted
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin, page_context
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.sensitivity import SAFE_SENSITIVITIES
 from hq.platform.application.tables import (
     TableColumn,
@@ -231,7 +232,7 @@ class ManifestImportView(View):
             request, SYNC, {"manifest": data, "update_existing": form.cleaned_data["update_existing"]}
         )
         if refusal := refused(request, result):
-            if refusal.code == "invalid_input" and refusal.details:
+            if refusal.code == Code.INVALID_INPUT and refusal.details:
                 messages.error(request, f"Fix these entries first: {refusal.details}")
             return self.render_form(request, form)
         return redirect("docs_index:list")

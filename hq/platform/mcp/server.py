@@ -29,7 +29,8 @@ from starlette.applications import Starlette
 from hq.platform.application import agent_admission, approvals
 from hq.platform.application.agent_limits import Limited, Slot
 from hq.platform.application.capabilities import adapter_refusal
-from hq.platform.application.refusal_status import LATER_CODES, Refusal, refusal_of
+from hq.platform.application.refusal_codes import LATER_CODES, Code
+from hq.platform.application.refusal_status import Refusal, refusal_of
 from hq.platform.application.security import Principal
 from hq.platform.core.outside_requests import connections_of_its_own
 lazy from hq.platform.application import automation_adoption
@@ -73,11 +74,11 @@ INSTRUCTIONS = "\n\n".join(
             "one for each change and the same one on a retry, so a retry never acts twice."
         ),
         (
-            "While an operator has paused agents, every call answers `error.code` `agents_paused` and does "
-            "nothing. The connection stays open: retry later, without reconnecting. "
+            f"While an operator has paused agents, every call answers `error.code` `{Code.AGENTS_PAUSED}` and "
+            "does nothing. The connection stays open: retry later, without reconnecting. "
             f"{' or '.join(f'`{code}`' for code in sorted(LATER_CODES))} means nothing ran and HQ takes no "
             "more calls from this agent for now: wait `error.retry_after` seconds, then retry. "
-            "`call_timed_out` means HQ stopped waiting, but the call may still finish. Read before you "
+            f"`{Code.CALL_TIMED_OUT}` means HQ stopped waiting, but the call may still finish. Read before you "
             "repeat it, and repeat a change with the same `idempotency_key`."
         ),
         (

@@ -755,15 +755,3 @@ class TheCallerReachesTheToolTests(TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertNotIn('"isError":true', response.text.replace(" ", ""))
         self.assertEqual(seen.get("actor"), "example-agent")
-
-
-class InstructionsTests(SimpleTestCase):
-    def test_the_instructions_name_each_refusal_an_agent_retries(self):
-        from hq.platform.application.agent_access import AGENTS_PAUSED
-        from hq.platform.application.refusal_status import LATER_CODES
-
-        from ..binding import CALL_TIMED_OUT
-
-        for code in (AGENTS_PAUSED.code, *LATER_CODES, CALL_TIMED_OUT):
-            with self.subTest(code=code):
-                self.assertIn(code, mcp.server.instructions or "")

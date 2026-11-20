@@ -16,6 +16,7 @@ from hq.platform.application import agent_access, agent_registry, denials, roles
 from hq.platform.application.linked_accounts import SIGN_IN
 from hq.platform.application.markup_testing import actions, elements, select, text, within
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.refusal_codes import Code
 from hq.platform.application.security import Capability, Principal, agent_grant, agent_grantable, agent_principal
 from hq.platform.application.tokens import DEVICE_SCOPE
 from hq.platform.core.audit import operation_context
@@ -120,7 +121,7 @@ class AgentRowTests(TestCase):
         self.assertIsNone(AgentIdentity.objects.get(client_id=AGENT).blocked_at)
 
     def test_a_refusal_for_calling_too_much_is_on_its_row(self):
-        denials.record_denial(interface="mcp", reason="rate_limited", actor=AGENT)
+        denials.record_denial(interface="mcp", reason=Code.RATE_LIMITED, actor=AGENT)
 
         row = " ".join(element.words for element in within(self.page(), "data-agent", AGENT))
 
@@ -369,7 +370,7 @@ class AgentDeviceTests(TestCase):
 
     def test_an_address_no_device_sent_is_on_the_page_as_refused_with_nothing_to_press(self):
         with operation_context(interface="mcp", actor=AGENT, operation="example"):
-            denials.record_denial(interface="mcp", reason="device_unknown", actor=AGENT, source=UNPLACED_AT)
+            denials.record_denial(interface="mcp", reason=Code.DEVICE_UNKNOWN, actor=AGENT, source=UNPLACED_AT)
 
         page = self.page()
 

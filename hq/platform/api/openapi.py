@@ -33,7 +33,7 @@ from hq.platform.application.integration_specs import (
     typed_keys,
 )
 from hq.platform.application.json_schemas import LOCAL, sent_schema
-from hq.platform.application.refusal_status import LATER_CODES
+from hq.platform.application.refusal_codes import LATER_CODES, Code
 from hq.platform.application.resource_operations import RunAsked
 from hq.platform.application.resources import describe_resources, mask_paths, masked_kind, resource_registry
 from hq.platform.application.run_reads import RUNS
@@ -109,7 +109,7 @@ class _Builder:
     def _responses(
         self,
         view: Any,
-        codes: Iterable[str],
+        codes: Iterable[Code],
         answer: tuple[str, dict[str, Any]] | None,
         held: Any,
         links: dict[str, Any],
@@ -179,7 +179,7 @@ class _Builder:
             response["links"] = links
         return self.component("responses", self.responses, f"{name}{phrase}", response)
 
-    def refusal(self, status: int, codes: list[str]) -> str:
+    def refusal(self, status: int, codes: list[Code]) -> str:
         """The response, and its schema, for refusing at ``status`` with ``codes``, named for them."""
 
         name = refusal_name(status, codes)
@@ -205,12 +205,12 @@ class _Builder:
                 "required": True,
                 "schema": {"type": "string", "const": views.REALM},
             }
-        if "insufficient_scope" in codes:
+        if Code.INSUFFICIENT_SCOPE in codes:
             # One component every 403 that can answer the code shares.
             headers["WWW-Authenticate"] = self.component(
                 "headers",
                 self.headers,
-                _pascal("insufficient_scope") + _pascal("WWW-Authenticate"),
+                _pascal(Code.INSUFFICIENT_SCOPE) + _pascal("WWW-Authenticate"),
                 {
                     "description": (
                         'On `insufficient_scope`: `Bearer` with `error="insufficient_scope"` and `scope`, the '
