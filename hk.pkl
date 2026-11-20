@@ -59,6 +59,17 @@ hooks {
         glob = List("tools/lint/vale/**", "hq/platform/core/plain_words.py", "hq/platform/core/interface_text.py") + toolchain
         check = "uv run python -m hq.platform.core.plain_words --whole"
       }
+      // mise runs a file under mise-tasks/ only when it is executable, and
+      // hides one that is not; each starts with a shebang.
+      ["task-modes"] {
+        glob = List("mise-tasks/**")
+        exclude = List("**/*.toml")
+        check = "hk util check-shebang-scripts-are-executable {{files}}"
+      }
+      ["task-modes-whole"] {
+        glob = toolchain
+        check = "git ls-files -z mise-tasks ':!*.toml' | xargs -0 hk util check-shebang-scripts-are-executable"
+      }
     }
   }
 }
