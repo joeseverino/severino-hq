@@ -503,9 +503,17 @@ class RecordListMixin(PageMixin):
         super().__init_subclass__(**kwargs)
         _names_its_read(cls)
 
+    def list_query(self) -> dict[str, Any]:
+        """The filters of the list's query the page asks with, from its own
+        GET filters; none, the whole list."""
+
+        return {}
+
     def get(self, request: Any, *args: Any, **kwargs: Any) -> Any:
         principal = web_principal(request.user)
-        self.records = every_item(self.resource, principal=principal, fields=list(self.fields) or None)
+        self.records = every_item(
+            self.resource, principal=principal, fields=list(self.fields) or None, query=self.list_query()
+        )
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:

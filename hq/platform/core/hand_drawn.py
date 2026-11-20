@@ -524,9 +524,6 @@ SHAPES = (
         ),
         refuses=("<a href=\"{% url 'example_detail' row.pk %}\">A</a>", '<a href="{{ row.get_absolute_url }}">A</a>'),
         keeps=("<a href=\"{% url 'example:file' row.pk %}\">A</a>", "<a href=\"{% url 'example_list' %}\">A</a>"),
-        drawn_by={
-            "contacts/contact_list.html": "a contact message is a row of the site's store, with no model of HQ's"
-        },
     ),
     Shape(
         name="row-actions",
