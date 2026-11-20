@@ -63,12 +63,23 @@ class ListPageMixin(PageMixin):
             values = [value.strip() for value in self.request.GET.getlist(_SEARCH if name == SEARCH_FIELD else name)]
             if (value := ",".join(value for value in values if value)) and name != "limit":
                 asked[name] = value
+        for name, allowed in self.scope().items():
+            if chosen := [value for value in asked.pop(name, "").split(",") if value in allowed]:
+                asked[name] = ",".join(chosen)
         return asked
 
+    def scope(self) -> dict[str, tuple[str, ...]]:
+        """The values of a filter this page always reads within, each filter
+        by its name: the address chooses among them, the list is read within
+        all of them when it chooses none, and the toolbar offers only them."""
+
+        return {}
+
     def get(self, request: Any, *args: Any, **kwargs: Any) -> Any:
+        scoped = {name: ",".join(allowed) for name, allowed in self.scope().items()}
         try:
             self.collection = list_resource(
-                self.resource, self.list_query(), principal=web_principal(request.user), strict=False
+                self.resource, scoped | self.list_query(), principal=web_principal(request.user), strict=False
             )
         except InvalidResourceInput as exc:
             raise BadRequest(exc.reason) from exc
@@ -95,12 +106,17 @@ class ListPageMixin(PageMixin):
                 raise ImproperlyConfigured(
                     f"Column {column.label!r} sorts by {column.sort!r}, which its list never does."
                 )
-        filters = []
+        filters, scope = [], self.scope()
         for each in listing.filters:
             chosen = set(asked.get(each.name, "").split(",")) - {""}
-            options = [{"value": value, "label": label, "selected": value in chosen} for value, label in each.options()]
-            # A filter with nothing to choose (a year before any record has one) is left out.
-            if options:
+            options = [
+                {"value": value, "label": label, "selected": value in chosen}
+                for value, label in each.options()
+                if each.name not in scope or value in scope[each.name]
+            ]
+            # A filter with nothing to choose (a year before any record has
+            # one, a page scoped to one value) is left out.
+            if len(options) > (each.name in scope):
                 filters.append(
                     {"name": each.name, "label": each.label, "selected_count": len(chosen), "options": options}
                 )

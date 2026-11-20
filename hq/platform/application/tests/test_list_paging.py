@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from unittest import mock
 
+from django.db import transaction
 from django.test import TestCase
 
 from hq.domains.contacts.inbox import Inbox
@@ -174,10 +175,28 @@ class EveryPageNamesTheOnesBesideItTests(TestCase):
                     # One that keeps what the whole list leaves out reads past it.
                     if each.unasked is None:
                         self.assertLessEqual({item[key] for item in kept}, whole)
+            # A toggle keeps the records its example says, and none it leaves out.
             for toggle in read.toggles:
-                with self.subTest(name=name, toggle=toggle.name):
-                    kept = {item[key] for page in walked(name, {toggle.name: True}) for item in page["items"]}
-                    self.assertLessEqual(kept, whole)
+                with self.subTest(name=name, toggle=toggle.name), transaction.atomic():
+                    self.assertIsNotNone(toggle.example, "a toggle carries the example that shows what it keeps")
+                    kept, left = toggle.example()
+                    found = {item[key] for page in walked(name, {toggle.name: True}) for item in page["items"]}
+                    self.assertLessEqual({*kept}, found)
+                    self.assertFalse({*left} & found)
+                    transaction.set_rollback(True)
+
+    def test_every_sort_example_reads_in_its_order(self):
+        for name, spec in resource_registry().items():
+            for sort in spec.listing.sorts if spec.listing else ():
+                if sort.example is None:
+                    continue
+                with self.subTest(name=name, sort=sort.name), transaction.atomic():
+                    made = list(sort.example())
+                    found = [
+                        item[spec.identifier] for page in walked(name, {"sort": sort.name}) for item in page["items"]
+                    ]
+                    self.assertEqual([found_id for found_id in found if found_id in made], made)
+                    transaction.set_rollback(True)
 
 
 class DocumentationStatusPagingTests(TestCase):

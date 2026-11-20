@@ -4,6 +4,7 @@ from typing import Annotated, Literal, TypedDict
 
 from django.db.models import Q
 
+from hq.domains.expenses.models import Expense
 from hq.platform.application import receipts
 from hq.platform.application.answer_fields import PageUrl, UpdatedAt
 from hq.platform.application.contracts import Effect
@@ -65,11 +66,20 @@ class ReceiptQuery(BoundedQuery):
     query: SearchText = None
 
 
+def _unlinked() -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """A receipt matched to nothing, kept, and one that proves an expense, left out."""
+
+    proof = Expense.objects.create(date="2030-01-02", vendor="Example Host", item="Hosting")
+    kept = Receipt.objects.create(vendor="Example Host")
+    return (kept.pk,), (Receipt.objects.create(vendor="Example Host", related_expense=proof).pk,)
+
+
 UNLINKED = ListToggle(
     "unlinked",
     "No expense or asset",
     "True for only the receipts matched to no expense and no asset.",
     Q(related_expense__isnull=True, related_asset__isnull=True),
+    _unlinked,
 )
 
 

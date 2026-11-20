@@ -441,11 +441,13 @@ class ListSort:
     """One order a list is read in: its name in the query's ``sort``, which a
     column's heading links by (``date``, ``-date``), its label, and the
     ordering it stands for (a field or an annotation, ``-`` descending),
-    where that is not the name."""
+    where that is not the name, and an example where the items do not show
+    the order: it makes records and answers their identifiers in it."""
 
     name: str
     label: str
     ordering: tuple[str, ...] = ()
+    example: Callable[[], Iterable[object]] | None = None
 
     def __post_init__(self) -> None:
         if not self.ordering:
@@ -504,12 +506,15 @@ class ListFilter:
 @dataclass(frozen=True, slots=True)
 class ListToggle:
     """A flag a list is narrowed by (``no_receipts=true``): its name, its
-    label, what it keeps in a sentence and as the condition that keeps it."""
+    label, what it keeps in a sentence and as the condition that keeps it,
+    and its example: it makes records and answers the identifiers of those
+    the flag keeps and of those it leaves out."""
 
     name: str
     label: str
     description: str
     keeps: Q
+    example: Callable[[], tuple[Iterable[object], Iterable[object]]] | None = None
 
 
 @dataclass(frozen=True, slots=True)
