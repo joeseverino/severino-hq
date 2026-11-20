@@ -39,6 +39,18 @@ def _undocumented() -> tuple[tuple[str, ...], tuple[str, ...]]:
     return ("bare",), ("sourced",)
 
 
+FILTERS = (
+    ListFilter("status", "Status", ContentItem.Status.choices),
+    ListFilter("content_type", "Type", ContentItem.Type.choices),
+)
+NO_DOCS = ListToggle(
+    "no_docs",
+    "No source document",
+    "True for only the writeups and pages no document names.",
+    Q(related_documentation=None),
+    _undocumented,
+)
+
 # Each order the list is read in, the first where none is asked.
 SORTS = (
     *ListSort.both("-updated_at", "Recently updated", "Least recently updated"),
@@ -93,19 +105,8 @@ def resources() -> tuple[ResourceSpec, ...]:
                 ContentQuery,
                 ContentRow,
                 sorts=SORTS,
-                filters=(
-                    ListFilter("status", "Status", ContentItem.Status.choices),
-                    ListFilter("content_type", "Type", ContentItem.Type.choices),
-                ),
-                toggles=(
-                    ListToggle(
-                        "no_docs",
-                        "No source document",
-                        "True for only the writeups and pages no document names.",
-                        Q(related_documentation=None),
-                        _undocumented,
-                    ),
-                ),
+                filters=FILTERS,
+                toggles=(NO_DOCS,),
             ),
             detail_handler=content.get_content,
             identifier="slug",

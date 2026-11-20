@@ -166,6 +166,10 @@ UPDATES_ON = ListToggle(
     Q(dependency_updates=True),
     _updating,
 )
+FILTERS = (
+    ListFilter("status", "Status", Project.Status.choices),
+    ListFilter("category", "Category", PROJECT_CATEGORY_CHOICES),
+)
 
 # Each order the list is read in, the first where none is asked. Archived
 # projects come last in every one, ranked so by ``list_projects``.
@@ -260,10 +264,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 ProjectQuery,
                 ProjectRow,
                 sorts=SORTS,
-                filters=(
-                    ListFilter("status", "Status", Project.Status.choices),
-                    ListFilter("category", "Category", PROJECT_CATEGORY_CHOICES),
-                ),
+                filters=FILTERS,
                 toggles=(NEEDS_OUTPUT, NO_CONTENT, NO_DOCS, UPDATES_ON),
             ),
             detail_handler=projects.get_project,
