@@ -339,7 +339,7 @@ def _named_run(
         return Ran(adapter_refusal(name, exc, principal=principal))
 
 
-def adapter_refusal(name: str, exc: Exception, *, principal: Principal | None = None) -> dict[str, Any]:
+def adapter_refusal(name: str, exc: Exception, *, principal: Principal | None) -> dict[str, Any]:
     """What an adapter answers for ``exc``, raised running ``name``: a code, and only HQ's own words.
 
     The one policy every adapter applies to an exception it caught, a

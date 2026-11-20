@@ -121,8 +121,8 @@ def command_action(
 ) -> ActionLink:
     """A link that runs a command, in the command's own words.
 
-    The one place an ``ActionLink`` names a capability (an architecture test
-    holds the rest), so its label, effect, address and method come from the
+    The one place an ``ActionLink`` names a capability (its constructor
+    refuses every caller), so its label, effect, address and method come from the
     declaration and cannot drift from it.
     """
 

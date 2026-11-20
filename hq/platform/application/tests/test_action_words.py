@@ -172,8 +172,7 @@ class CallSiteWordsTests(SimpleTestCase):
     """No button, link or toast for a command brings text of its own.
 
     The checks with one fixed answer are ast-grep rules (lint:ast-grep):
-    capability-linked-by-action-links, command-control-says-declared-words
-    and requested-said-by-integration-specs.
+    command-control-says-declared-words and requested-said-by-integration-specs.
     """
 
     def test_no_control_restates_a_declared_word(self):

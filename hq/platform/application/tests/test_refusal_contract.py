@@ -86,6 +86,6 @@ class CapabilityFailureTests(TestCase):
                 self.assertEqual(row.metadata["reason"], raised.code)
 
     def test_a_refusal_mapped_without_its_caller_records_nothing(self):
-        adapter_refusal("example.records.update", AuthorizationError("Not this agent's."))
+        adapter_refusal("example.records.update", AuthorizationError("Not this agent's."), principal=None)
 
         self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.DENIED).exists())
