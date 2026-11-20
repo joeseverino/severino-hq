@@ -1,9 +1,11 @@
 """Who an operation's rows name is whoever started it: a binding opened inside
-cannot replace the actor, and only the host's held changes rebind on purpose."""
+cannot replace the actor, and only a held approval's binding rebinds."""
 
 from django.test import TestCase
 
+from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.application.security import CLI_ACTOR, Principal, cli_principal
+from hq.platform.core.attribution import Rebound, own_operation
 from hq.platform.core.audit import audit_operation, operation_context, record_operation
 from hq.platform.core.models import AuditLog
 
@@ -61,11 +63,19 @@ class ANestedBindingKeepsTheActorTests(TestCase):
         self.assertNotEqual(served.operation_id, outer.operation_id)
         self.assertEqual(served.metadata["actor"], "example-person")
 
-    def test_the_host_rebinds_only_when_it_says_so(self):
+    def test_only_a_held_approval_rebinds(self):
         with (
             audit_operation(operation="example.approve", principal=EXAMPLE_PERSON),
-            audit_operation(operation="example.replay", principal=cli_principal(), rebinds=True),
+            own_operation(ApprovalRequest(), operation="example.replay", principal=cli_principal()),
         ):
             row = _example_row("replayed")
+            with self.assertRaises(Rebound), audit_operation(operation="example.inside", principal=EXAMPLE_PERSON):
+                pass
 
         self.assertEqual((row.metadata["interface"], row.metadata["actor"]), ("cli", CLI_ACTOR))
+        with (
+            audit_operation(operation="example.approve", principal=EXAMPLE_PERSON),
+            self.assertRaises(Rebound),
+            own_operation(OperationRequest(), operation="example.replay", principal=cli_principal()),
+        ):
+            pass

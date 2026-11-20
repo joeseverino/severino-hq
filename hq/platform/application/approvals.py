@@ -518,7 +518,6 @@ def lapse_expired() -> int:
                     _LAPSED_NOTE,
                     operation=LAPSE,
                     principal=principal,
-                    rebinds=True,
                 )
                 lapsed += 1
     return lapsed
@@ -563,9 +562,7 @@ def pending(*, principal: Principal, limit: int | None = 50, capability: str = "
     return waiting
 
 
-def _settle(
-    held: ApprovalRequest, state: str, note: str, *, operation: str, principal: Principal, rebinds: bool = False
-) -> None:
+def _settle(held: ApprovalRequest, state: str, note: str, *, operation: str, principal: Principal) -> None:
     """Record an outcome nobody chose, in a savepoint of its own.
 
     The two callers below go on to raise ``Settled``, which must not leave the
@@ -574,7 +571,7 @@ def _settle(
     decision that cannot be taken.
     """
 
-    with own_operation(held, operation=operation, principal=principal, rebinds=rebinds), transaction.atomic():
+    with own_operation(held, operation=operation, principal=principal), transaction.atomic():
         _record(held, state, decision_note=note)
 
 
@@ -861,7 +858,7 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
         locked = _lock_pending(held)
         # The one binding that runs as someone other than whoever started the
         # operation: the approver agreed, and the change is the requester's.
-        with own_operation(held, operation=spec.name, principal=acting, rebinds=True):
+        with own_operation(held, operation=spec.name, principal=acting):
             result = execute_approved(
                 _seal(Approval(spec, command, locked.target or None, acting, frozenset(held.payload)))
             )

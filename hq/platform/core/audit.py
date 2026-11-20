@@ -217,15 +217,13 @@ def audit_operation(
     principal: object | None = None,
     operation_id: str = "",
     cause: str = "",
-    rebinds: bool = False,
 ) -> Iterator[None]:
     """Attribute an operation to the principal that made it: the one way a
     host service or a plugin binds a principal's interface and actor.
 
     Without a principal the operation is the bound caller's, and with nobody
     bound it is refused, so no operation is written down as nobody's.
-    ``cause`` and ``rebinds`` are ``operation_context``'s, ``rebinds`` for the
-    host's approvals alone: the SDK's ``audit_operation`` takes neither.
+    ``cause`` is ``operation_context``'s.
     """
 
     # A plugin hands whatever principal it holds, or none.
@@ -239,7 +237,6 @@ def audit_operation(
         cause=cause,
         approved_by=getattr(principal, "approved_by", None) or "",
         person=_acted_for(principal),
-        rebinds=rebinds,
     ):
         yield
 

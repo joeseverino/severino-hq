@@ -5,12 +5,13 @@
 """
 
 from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from typing import Any
 from uuid import uuid7
 
+lazy from hq.domains.control_plane.models import ApprovalRequest
 lazy from hq.platform.application import request_context
 lazy from hq.platform.application.security import CLI_ACTOR, CLI_INTERFACE, WEB_INTERFACE
 
@@ -41,6 +42,8 @@ class OperationContext:
 
 
 _operation_context: ContextVar[OperationContext | None] = ContextVar("hq_operation_context", default=None)
+# True only while own_operation opens a held approval's binding.
+_rebinding: ContextVar[bool] = ContextVar("hq_rebinding", default=False)
 
 
 def bound() -> OperationContext | None:
@@ -64,18 +67,16 @@ def operation_context(
     cause: str = "",
     approved_by: str = "",
     person: Callable[[], Any] | None = None,
-    rebinds: bool = False,
 ) -> Iterator[None]:
     """Attach adapter-neutral attribution to audit events in this operation.
 
     Every row inside one operation carries its one id. Once an actor is bound,
     a nested binding naming another is refused, so no code inside can write its
-    rows as someone else's. ``rebinds`` is for the approvals service's held
-    changes alone.
+    rows as someone else's, but a held approval's (``own_operation``).
     """
 
     outer = None if not actor else _operation_context.get()
-    if outer is not None and outer.actor and not rebinds and actor != outer.actor:
+    if outer is not None and outer.actor and not _rebinding.get() and actor != outer.actor:
         raise Rebound(
             f"{operation!r} binds {interface}/{actor or '(nobody)'} inside {outer.operation!r}, "
             f"which {outer.interface}/{outer.actor} started. An operation's rows are its starter's: "
@@ -122,25 +123,36 @@ def own_operation(
     *,
     operation: str = "",
     principal: object | None = None,
-    rebinds: bool = False,
     requester: OperationContext | None = None,
 ) -> AbstractContextManager[None]:
     """The operation every row of ``record``'s life is part of, under its own id.
 
     A ``requester`` (a job's) is bound outermost, since the job's rows are its
-    requester's wherever it runs.
+    requester's wherever it runs. A held approval's binding may name someone
+    other than whoever started the operation around it: an approved change
+    runs as its requester, and a lapse as HQ.
     """
 
     if requester is not None:
         return _door_of_its_own(replace(requester, operation_id=str(record.pk)))
     outer = bound()
-    return audit_operation(
+    binding = audit_operation(
         operation=operation or (outer.operation if outer is not None else ""),
         principal=principal,
         operation_id=str(record.pk),
         cause=made_in(record),
-        rebinds=rebinds,
     )
+    return _rebound(binding) if isinstance(record, ApprovalRequest) else binding
+
+
+@contextmanager
+def _rebound(binding: AbstractContextManager[None]) -> Iterator[None]:
+    """``binding``, opened over whoever is bound; what runs inside it is not."""
+
+    with ExitStack() as stack:
+        with _rebinding.set(True):
+            stack.enter_context(binding)
+        yield
 
 
 @contextmanager
