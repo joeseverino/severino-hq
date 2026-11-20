@@ -11123,6 +11123,7 @@
             "properties": {
               "selected": {
                 "description": "Whether the dashboard shows this machine's telemetry.",
+                "title": "Show on dashboard",
                 "type": "boolean"
               }
             },
@@ -16629,6 +16630,7 @@
               "enabled": {
                 "default": true,
                 "description": "Whether HQ keeps the live record as it expects.",
+                "title": "Managed by HQ",
                 "type": "boolean"
               },
               "key": {
@@ -16826,6 +16828,7 @@
             "properties": {
               "enabled": {
                 "description": "Whether HQ keeps the live record as it expects.",
+                "title": "Managed by HQ",
                 "type": "boolean"
               },
               "key": {
@@ -19935,6 +19938,7 @@
             "type": "integer"
           },
           "advanced_config": {
+            "contentMediaType": "text/x-nginx-conf",
             "default": "",
             "description": "Passed through as-is. Usually blank.",
             "title": "Extra nginx configuration",
@@ -29017,6 +29021,7 @@
             "type": "string"
           },
           "document": {
+            "contentMediaType": "application/hujson",
             "default": "",
             "description": "The tailnet's access policy.",
             "title": "Policy",
