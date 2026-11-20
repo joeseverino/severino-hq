@@ -73,11 +73,7 @@ class Project(TimestampedModel):
     )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.IDEA)
     description = models.TextField(blank=True)
-    technologies_used = models.CharField(
-        max_length=300,
-        blank=True,
-        help_text="Comma-separated list of technologies.",
-    )
+    technologies_used = models.CharField(max_length=300, blank=True)
     repository_url = models.URLField("repository URL", blank=True)
     last_push_at = models.DateTimeField(null=True, blank=True)
     # Whether HQ's dependency update run covers the repository. Set only by the

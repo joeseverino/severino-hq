@@ -33,11 +33,7 @@ class ContentItem(TimestampedModel):
     content_type = models.CharField(max_length=24, choices=Type.choices, default=Type.ARTICLE)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     topic = models.CharField("description", max_length=300, blank=True)
-    tags = models.CharField(
-        max_length=300,
-        blank=True,
-        help_text="Comma-separated tags.",
-    )
+    tags = models.CharField(max_length=300, blank=True)
     published_url = models.URLField("published URL", blank=True)
     published_at = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)

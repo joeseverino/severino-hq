@@ -17,11 +17,7 @@ lazy from .validation import FILE_TYPE_LABELS
 class Receipt(TimestampedModel):
     """A receipt file linked to an expense and/or an asset."""
 
-    file = models.FileField(
-        upload_to=receipt_upload_path,
-        storage=PrivateReceiptStorage(),
-        help_text="PDF or image. Private to signed-in users.",
-    )
+    file = models.FileField(upload_to=receipt_upload_path, storage=PrivateReceiptStorage())
     original_filename = models.CharField(max_length=255, blank=True)
     content_type = models.CharField(max_length=100, blank=True)
     size_bytes = models.PositiveIntegerField(default=0)

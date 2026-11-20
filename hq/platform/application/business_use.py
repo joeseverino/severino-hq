@@ -34,7 +34,7 @@ VALIDATORS = [
 ]
 
 
-def deductible(help_text: str) -> models.GeneratedField:
+def deductible() -> models.GeneratedField:
     """``total_cost`` times the share, in cents, rounded as ``quantize_money``
     rounds, stored by the table so every write path (``update``,
     ``bulk_create``) keeps it current.
@@ -49,7 +49,6 @@ def deductible(help_text: str) -> models.GeneratedField:
         expression=Round(hundredths_of_a_cent / 100.0) / 100.0,
         output_field=models.DecimalField(max_digits=12, decimal_places=2),
         db_persist=True,
-        help_text=help_text,
     )
 
 

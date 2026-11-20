@@ -60,55 +60,26 @@ class DocumentationRecord(TimestampedModel):
         SENSITIVE = "sensitive", "Sensitive"
         RESTRICTED = "restricted", "Restricted"
 
-    doc_id = models.SlugField(
-        "doc ID",
-        max_length=80,
-        unique=True,
-        help_text=("Stable identifier, e.g. 'rb-adguard-001'. Never rename it."),
-    )
+    doc_id = models.SlugField("doc ID", max_length=80, unique=True)
     title = models.CharField(max_length=200)
     doc_type = models.CharField(max_length=32, choices=DocType.choices, default=DocType.RUNBOOK)
-    system_service = models.CharField(
-        max_length=120,
-        blank=True,
-        help_text="System or service the doc is about, e.g. 'AdGuard Home'.",
-    )
+    system_service = models.CharField(max_length=120, blank=True)
     environment = models.CharField(
         max_length=20,
         choices=Environment.choices,
         default=Environment.OTHER,
     )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
-    sensitivity = models.CharField(
-        max_length=20,
-        choices=Sensitivity.choices,
-        default=Sensitivity.INTERNAL,
-        help_text=("Public and internal docs are safe for AI export. Sensitive and restricted are not."),
-    )
+    sensitivity = models.CharField(max_length=20, choices=Sensitivity.choices, default=Sensitivity.INTERNAL)
 
-    obsidian_path = models.CharField(
-        max_length=400,
-        blank=True,
-        help_text="Path inside the Obsidian vault, e.g. 'Infra/DNS/AdGuard Home.md'.",
-    )
-    github_path = models.CharField(
-        max_length=400,
-        blank=True,
-        help_text="Repo-relative path if this doc also lives in a Git repo.",
-    )
+    obsidian_path = models.CharField(max_length=400, blank=True)
+    github_path = models.CharField(max_length=400, blank=True)
     external_url = models.URLField("external URL", blank=True)
 
     # The vault stamps it on every edit of the doc, so it is when the doc last changed.
     last_reviewed = models.DateField("last changed", null=True, blank=True)
-    published_at = models.DateField(
-        null=True,
-        blank=True,
-        help_text="Publication date for public articles. Empty for operational docs.",
-    )
-    notes = models.TextField(
-        blank=True,
-        help_text="Index-level notes only. Do not paste runbook contents here.",
-    )
+    published_at = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
 
     related_projects = models.ManyToManyField("projects.Project", blank=True, related_name="documentation_records")
     related_assets = models.ManyToManyField("assets.Asset", blank=True, related_name="documentation_records")
