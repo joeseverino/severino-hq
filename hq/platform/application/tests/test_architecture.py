@@ -157,19 +157,6 @@ class RequestNeverWaitsTests(SimpleTestCase):
     starts a process or sleeps: the interpreter refuses it (``core.outbound``),
     whichever library the call came through."""
 
-    ROOT = Path(__file__).resolve().parents[4]
-
-    def sources(self):
-        paths = [
-            path
-            for package in ("hq", "hq_sdk")
-            for path in sorted((self.ROOT / package).rglob("*.py"))
-            if "tests" not in path.parts and not path.name.startswith("test")
-        ]
-        self.assertTrue(paths, "no source was found to check")
-        for path in paths:
-            yield path.relative_to(self.ROOT).as_posix(), path.read_text(encoding="utf-8")
-
     def test_every_request_is_served_under_the_rule(self):
         import time
         from unittest import mock
@@ -194,12 +181,6 @@ class RequestNeverWaitsTests(SimpleTestCase):
             self.assertRaises(OutboundInRequest),
         ):
             RequestContextMiddleware(view)(RequestFactory().get("/example/"))
-
-    @tag("source", "tree")
-    def test_only_a_job_leaves_the_request_that_started_it(self):
-        leaving = {relative for relative, source in self.sources() if "off_request" in source}
-
-        self.assertEqual(leaving, {"hq/platform/core/outbound.py", "hq/domains/jobs/runner.py"})
 
 
 @tag("source", "tree")

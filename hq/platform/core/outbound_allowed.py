@@ -1,4 +1,5 @@
-"""Where a request may leave the process, and the only places that enter it.
+"""Where a request may leave the process, the only places that enter it, and
+the one place work leaves the request that started it (a job's own thread).
 
 A protected contract in pyproject.toml lets only those places import this
 module (``lint:imports``), so a new way to wait is a decision made there.
@@ -49,4 +50,12 @@ def allowed(name: str) -> Iterator[None]:
     # A page fetched on a guess asks nothing outside the process.
     speculation.refuse(f"it reaches outside the process ({name})")
     with entered.set(name):
+        yield
+
+
+@contextmanager
+def off_request() -> Iterator[None]:
+    """Mark everything inside as no request's work: a job's own thread."""
+
+    with serving.set(""):
         yield

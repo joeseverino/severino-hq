@@ -58,14 +58,6 @@ def serving(request: Any) -> Iterator[None]:
         yield
 
 
-@contextmanager
-def off_request() -> Iterator[None]:
-    """Mark everything inside as no request's work: a job's own thread."""
-
-    with outbound_allowed.serving.set(""):
-        yield
-
-
 def serving_request() -> str:
     """The request this context is serving ("POST /example/"), or ""."""
 

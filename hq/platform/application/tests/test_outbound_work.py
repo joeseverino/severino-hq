@@ -8,9 +8,7 @@ request that reached it would be refused. The host's own work, offered to
 nobody, is driven through what its units and timer ask for.
 """
 
-import importlib
 import os
-import pkgutil
 import re
 from contextlib import contextmanager
 from dataclasses import replace
@@ -315,19 +313,6 @@ class NothingLiftsTheRuleTests(ComposedExample):
             self.client.get("/examples/inline/")
 
         self.assertEqual(self.registry.asked, [])
-
-    def test_the_sdk_exports_nothing_that_enters_an_exception_or_leaves_a_request(self):
-        import hq_sdk
-
-        lifting = {}
-        for name in (info.name for info in pkgutil.iter_modules(hq_sdk.__path__)):
-            module = importlib.import_module(f"hq_sdk.{name}")
-            for attribute, value in vars(module).items():
-                if getattr(value, "__module__", "") == "hq.platform.core.outbound":
-                    lifting[f"hq_sdk.{name}.{attribute}"] = value
-
-        # The error a refused call raises, for a test to name; nothing else.
-        self.assertEqual(lifting, {"hq_sdk.testing.OutboundInRequest": OutboundInRequest})
 
 
 class DeclarationTests(SimpleTestCase):
