@@ -392,6 +392,18 @@ class DecisionTests(TestCase):
         claimed = claim_next_operation("controller-example", capabilities=((GATED_KIND, "reconcile"),))
         self.assertEqual(claimed["operation"]["id"], str(operation.id))
 
+    def test_a_decided_card_names_its_decider_from_the_audit_row_and_a_waiting_one_nobody(self):
+        from ..approval_review import review
+
+        held, reader = self.held(), an_operator()
+        self.assertFalse(review(held, reader)["decided_by"])
+
+        approve(ApproveCommand(str(held.id)), principal=an_operator("example-approver"))
+
+        held.refresh_from_db()
+        decided = review(held, reader)["decided_by"]
+        self.assertEqual((decided.actor, decided.interface), ("example-approver", "web"))
+
     def test_pausing_agents_holds_the_work_an_agent_queued(self):
         from hq.platform.application.agent_access import AgentAccessCommand, set_agents_paused
 

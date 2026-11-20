@@ -16,11 +16,13 @@ from . import approval_review, approvals
 from .contracts import Effect
 from .describe import Describe
 from .held_answer import HELD, HeldRequest, applying
-from .integration_specs import CapabilitySpec, ResourceSpec
+from .integration_specs import CapabilitySpec, ListRead, ResourceSpec
+from .projection import complete
 from .record_errors import RecordNotFound
 from .refusal_codes import Code
 from .refusal_status import refusal_of, refuse
 from .resource_operations import serialize_operation
+from .resources import EmptyQuery
 from .security import Capability, Principal
 from .ui import ended
 
@@ -28,10 +30,15 @@ from .ui import ended
 UNFINISHED = frozenset({OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED})
 
 
-class HeldRequestRecord(HeldRequest):
-    """A held request you asked for: what it asks, where it stands, and once done what the call answered."""
+class HeldRequestItem(HeldRequest):
+    """A held request as its list names it: what it asks."""
 
     asks: Annotated[str, Describe("What it asks, in the sentence its card in HQ says.")]
+
+
+class HeldRequestRecord(HeldRequestItem):
+    """A held request you asked for: what it asks, where it stands, and once done what the call answered."""
+
     said: Annotated[str, Describe("Where it stands, in a sentence.")]
     done: Annotated[
         bool,
@@ -90,6 +97,16 @@ def standing(held: ApprovalRequest) -> HoldStanding:
     return HoldStanding(failed, "It was approved in HQ, but applying it failed.", operation)
 
 
+def _item(held: ApprovalRequest) -> dict[str, Any]:
+    return {**approvals.serialize_approval(held), "asks": str(approval_review.asked(held))}
+
+
+def list_held(*, principal: Principal) -> dict[str, Any]:
+    """The changes waiting for a person that ``principal`` may read: an agent's own, or every one for a person."""
+
+    return complete([_item(held) for held in approvals.pending(principal=principal)])
+
+
 def get_held(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     """The held request ``principal`` asked for, by its id."""
 
@@ -99,8 +116,7 @@ def get_held(approval_id: str, *, principal: Principal) -> dict[str, Any]:
         raise RecordNotFound("No held request of yours has that id.")
     now = standing(held)
     return {
-        **approvals.serialize_approval(held),
-        "asks": str(approval_review.asked(held)),
+        **_item(held),
         "said": now.said,
         "done": now.answer is not None,
         "operation": str(now.operation.pk) if now.operation is not None else "",
@@ -115,6 +131,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Held requests",
             "A change you asked for that waits for approval, by the `approval.id` its answer carried.",
             Capability.READ,
+            listing=ListRead(list_held, EmptyQuery, HeldRequestItem),
             detail_handler=get_held,
             identifier="id",
             pass_principal=True,

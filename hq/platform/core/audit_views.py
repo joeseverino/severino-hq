@@ -28,6 +28,7 @@ from hq.platform.application.tables import (
     UncountedPaginator,
 )
 from hq.platform.application.url_query import with_query
+lazy from hq.domains.control_plane.models import OperationRequest
 lazy from hq.platform.application.approvals import AUDIT_LABEL, awaiting_ids
 lazy from hq.platform.application.automation_adoption import procedures as adopted_procedures
 lazy from hq.platform.application.automation_sources import adopted_revision, decisions, of_audit_entry, playbook_rows
@@ -363,6 +364,9 @@ class AuditLogDetailView(PageMixin, DetailView):
         if (scan := self.scan) is not None:
             context.update(
                 scan=scan,
+                refreshed_by=history.asked_by(OperationRequest, (operation := scan.proposal.operation,)).get(
+                    str(operation.pk)
+                ),
                 adopted_revision=adopted_revision(),
                 # Each playbook it changes, with Adopt and Reject while it waits.
                 scan_rows=playbook_rows(adopted_procedures(), scan, web_principal(self.request.user), every=False),

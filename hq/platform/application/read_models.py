@@ -102,7 +102,7 @@ def _activity_row(event: AuditLog) -> ActivityRow:
         "object_id": event.object_id,
         "object_repr": event.object_repr,
         "message": event.message,
-        "actor": event.actor_label,
+        "actor": event.who.actor,
         "created_at": _second(event.created_at),
     }
 

@@ -619,6 +619,18 @@ class _Builder:
             field = detail["identifier"]
             identifier = sent_schema(self.resource_specs[name].identifier_type)
             listed = spec["operations"]["list"] is not None
+            taken = _path_parameter(
+                "identifier",
+                identifier,
+                f"The record's `{field}`, as each item of the list carries it."
+                if listed
+                else f"The `{field}` to read it for.",
+            )
+            # Every resource read by one field takes it alike; one whose field
+            # of that name holds another type names its own.
+            named = f"{_pascal(field)}Identifier" if listed else f"{_pascal(field)}Lookup"
+            if self.parameters.get(named, taken) != taken:
+                named = _pascal(name) + named
             # A resource with a list holds the records its summary describes,
             # and this reads one of them; one without is read one at a time,
             # and its summary is already about one.
@@ -632,20 +644,7 @@ class _Builder:
                 description=(
                     f"One of the records {spec['label']} lists, found by its `{field}`." if listed else spec["summary"]
                 ),
-                parameters=[
-                    # Every resource read by one field takes it alike.
-                    self.parameter(
-                        f"{_pascal(field)}Identifier" if listed else f"{_pascal(field)}Lookup",
-                        _path_parameter(
-                            "identifier",
-                            identifier,
-                            f"The record's `{field}`, as each item of the list carries it."
-                            if listed
-                            else f"The `{field}` to read it for.",
-                        ),
-                    ),
-                    self.mask(name, listed=False),
-                ],
+                parameters=[self.parameter(named, taken), self.mask(name, listed=False)],
                 answer=self.record_of(self.resource_specs[name].record_type),
                 links=self.links(resource=name),
                 scopes=spec["required_capabilities"],

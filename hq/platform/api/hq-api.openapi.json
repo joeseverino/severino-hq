@@ -161,6 +161,15 @@
         },
         "style": "form"
       },
+      "ApprovalsIdIdentifier": {
+        "description": "The record's `id`, as each item of the list carries it.",
+        "in": "path",
+        "name": "identifier",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "AssetRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -986,6 +995,38 @@
         },
         "style": "form"
       },
+      "HeldRequestItemPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "id",
+              "capability",
+              "target",
+              "resource_kind",
+              "resource_key",
+              "state",
+              "requested_actor",
+              "requested_interface",
+              "reason",
+              "requested_at",
+              "expires_at",
+              "content_fingerprint",
+              "review_url",
+              "asks",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "HeldRequestRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -1135,15 +1176,6 @@
           "maximum": 9223372036854775807,
           "minimum": 1,
           "type": "integer"
-        }
-      },
-      "IdLookup": {
-        "description": "The `id` to read it for.",
-        "in": "path",
-        "name": "identifier",
-        "required": true,
-        "schema": {
-          "type": "string"
         }
       },
       "IdempotencyKey": {
@@ -14858,6 +14890,151 @@
         ],
         "type": "object"
       },
+      "HeldRequestItem": {
+        "additionalProperties": false,
+        "description": "A held request as its list names it: what it asks.",
+        "properties": {
+          "asks": {
+            "description": "What it asks, in the sentence its card in HQ says.",
+            "type": "string"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/HeldRequest/properties/capability"
+          },
+          "content_fingerprint": {
+            "$ref": "#/components/schemas/HeldRequest/properties/content_fingerprint"
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/HeldRequest/properties/expires_at"
+          },
+          "id": {
+            "$ref": "#/components/schemas/HeldRequest/properties/id"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/HeldRequest/properties/reason"
+          },
+          "requested_actor": {
+            "$ref": "#/components/schemas/HeldRequest/properties/requested_actor"
+          },
+          "requested_at": {
+            "$ref": "#/components/schemas/HeldRequest/properties/requested_at"
+          },
+          "requested_interface": {
+            "$ref": "#/components/schemas/HeldRequest/properties/requested_interface"
+          },
+          "resource_key": {
+            "$ref": "#/components/schemas/HeldRequest/properties/resource_key"
+          },
+          "resource_kind": {
+            "$ref": "#/components/schemas/HeldRequest/properties/resource_kind"
+          },
+          "review_url": {
+            "$ref": "#/components/schemas/HeldRequest/properties/review_url"
+          },
+          "state": {
+            "$ref": "#/components/schemas/HeldRequest/properties/state"
+          },
+          "target": {
+            "$ref": "#/components/schemas/HeldRequest/properties/target"
+          }
+        },
+        "required": [
+          "id",
+          "capability",
+          "target",
+          "resource_kind",
+          "resource_key",
+          "state",
+          "requested_actor",
+          "requested_interface",
+          "reason",
+          "requested_at",
+          "expires_at",
+          "content_fingerprint",
+          "review_url",
+          "asks"
+        ],
+        "type": "object"
+      },
+      "HeldRequestItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/HeldRequestItemPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "HeldRequestItemPartial": {
+        "additionalProperties": false,
+        "description": "A held request as its list names it: what it asks.",
+        "properties": {
+          "asks": {
+            "$ref": "#/components/schemas/HeldRequestItem/properties/asks"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/capability"
+          },
+          "content_fingerprint": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/content_fingerprint"
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/expires_at"
+          },
+          "id": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/id"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/reason"
+          },
+          "requested_actor": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/requested_actor"
+          },
+          "requested_at": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/requested_at"
+          },
+          "requested_interface": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/requested_interface"
+          },
+          "resource_key": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/resource_key"
+          },
+          "resource_kind": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/resource_kind"
+          },
+          "review_url": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/review_url"
+          },
+          "state": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/state"
+          },
+          "target": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/target"
+          }
+        },
+        "type": "object"
+      },
       "HeldRequestPartial": {
         "additionalProperties": false,
         "description": "A call held for approval: what it asks, who asked, and where it is decided.",
@@ -14913,8 +15090,7 @@
             "type": "object"
           },
           "asks": {
-            "description": "What it asks, in the sentence its card in HQ says.",
-            "type": "string"
+            "$ref": "#/components/schemas/HeldRequestItem/properties/asks"
           },
           "capability": {
             "$ref": "#/components/schemas/HeldRequest/properties/capability"
@@ -14998,7 +15174,7 @@
             "$ref": "#/components/schemas/HeldRequestRecord/properties/answer"
           },
           "asks": {
-            "$ref": "#/components/schemas/HeldRequestRecord/properties/asks"
+            "$ref": "#/components/schemas/HeldRequestItemPartial/properties/asks"
           },
           "capability": {
             "$ref": "#/components/schemas/HeldRequestPartial/properties/capability"
@@ -27709,7 +27885,7 @@
         "type": "object"
       },
       "Standing": {
-        "description": "Where one check stands: every word a page says of it is a view of this.",
+        "description": "Where one check stands: every word a page says of it is a view of this.\nIts tone is a rung of a check ladder's: a check that cannot be read is one\nto look at, never a fault.",
         "enum": [
           "met",
           "unmet",
@@ -36314,13 +36490,85 @@
         "x-hq-resource": "analytics"
       }
     },
-    "/api/v2/resources/approvals/{identifier}/": {
+    "/api/v2/resources/approvals/": {
       "get": {
         "description": "A change you asked for that waits for approval, by the `approval.id` its answer carried.",
+        "operationId": "listApprovalsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HeldRequestItemPageFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeldRequestItemPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "getApprovalsV2": {
+                "operationId": "getApprovalsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/id"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Held requests: the list",
+        "tags": [
+          "hq.approvals"
+        ],
+        "x-hq-resource": "approvals"
+      }
+    },
+    "/api/v2/resources/approvals/{identifier}/": {
+      "get": {
+        "description": "One of the records Held requests lists, found by its `id`.",
         "operationId": "getApprovalsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/IdLookup"
+            "$ref": "#/components/parameters/ApprovalsIdIdentifier"
           },
           {
             "$ref": "#/components/parameters/HeldRequestRecordFields"
@@ -40436,6 +40684,7 @@
               "enum": [
                 "action_items",
                 "analytics",
+                "approvals",
                 "assets",
                 "calendar",
                 "connections",

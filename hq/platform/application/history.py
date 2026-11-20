@@ -618,11 +618,12 @@ def _who_did_each(asked: Sequence[Acts], ids: Sequence[frozenset[str]]) -> list[
     return found
 
 
-def asking(model: type, records: Iterable[Any]) -> Acts:
-    """The audit rows that created each of ``records``, of ``model``, under
-    its audit label, read with others' by ``who_did_each``."""
+def asking(model: type, records: Iterable[Any], action: str = AuditLog.Action.CREATED) -> Acts:
+    """The audit rows that created each of ``records`` (or first did
+    ``action`` to it), of ``model``, under its audit label, read with others'
+    by ``who_did_each``."""
 
-    return Acts((audited_labels()[model],), [record.pk for record in records], action=AuditLog.Action.CREATED)
+    return Acts((audited_labels()[model],), [record.pk for record in records], action=action)
 
 
 def asked_by(model: type, records: Iterable[Any]) -> dict[str, Attribution]:
