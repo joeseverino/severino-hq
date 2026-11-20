@@ -9,7 +9,7 @@ A record whose reference names nothing is one finding of its own.
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
-from django.db.models import Count, Q
+from django.db.models import Count
 
 from hq.domains.assets.models import Asset
 from hq.domains.calendars.models import Entry
@@ -19,6 +19,9 @@ from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.platform.application.routes import reverse
 from hq.platform.application.url_query import with_query
+lazy from hq.domains.assets.specs import UNPRICED
+lazy from hq.domains.expenses.specs import NO_RECEIPT
+lazy from hq.domains.receipts.specs import UNLINKED
 
 from . import sections
 from .entity_links import EntityLink, entity_link
@@ -119,11 +122,7 @@ def _unpriced() -> tuple[EntityLink, ...]:
 
     return tuple(
         entity_link("asset", slug, label=name)
-        for name, slug in Asset.objects.filter(
-            Q(status=Asset.Status.ACTIVE) & (Q(purchase_date__isnull=True) | Q(total_cost=0))
-        )
-        .order_by("item_name")
-        .values_list("item_name", "slug")
+        for name, slug in Asset.objects.filter(UNPRICED.keeps).order_by("item_name").values_list("item_name", "slug")
     )
 
 
@@ -227,8 +226,8 @@ RULES: tuple[FindingRule, ...] = (
             counts="With no receipt",
             opens_as="Attach receipts",
             route="expenses:list",
-            query={"no_receipts": "1"},
-            count=lambda: Expense.objects.filter(receipts__isnull=True).distinct().count(),
+            query={NO_RECEIPT.name: "1"},
+            count=lambda: Expense.objects.filter(NO_RECEIPT.keeps).count(),
         ),
         domain="hq.expenses",
         operator_action="Upload the receipt for each expense, or attach one already in HQ.",
@@ -245,8 +244,8 @@ RULES: tuple[FindingRule, ...] = (
             counts="Attached to nothing",
             opens_as="Attach receipts",
             route="receipts:list",
-            query={"unlinked": "1"},
-            count=lambda: Receipt.objects.filter(related_expense__isnull=True, related_asset__isnull=True).count(),
+            query={UNLINKED.name: "1"},
+            count=lambda: Receipt.objects.filter(UNLINKED.keeps).count(),
         ),
         domain="hq.receipts",
         operator_action="Attach each receipt to the expense or asset it proves.",
@@ -262,7 +261,7 @@ RULES: tuple[FindingRule, ...] = (
             counts="With no purchase date or cost",
             opens_as="Fill in details",
             route="assets:list",
-            query={"missing_purchase": "1"},
+            query={UNPRICED.name: "1"},
             named=_unpriced,
             said="Depreciation cannot be calculated without both.",
         ),

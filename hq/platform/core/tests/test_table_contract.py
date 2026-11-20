@@ -12,6 +12,7 @@ from django.urls import reverse
 
 from hq.platform.application import asks
 from hq.platform.application.asks import Ask, Standing
+from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.markup_testing import all_elements, elements, links, select, with_class, within
 from hq.platform.application.plugin_testing import table_problems
 from hq.platform.application.routes import routed
@@ -815,7 +816,7 @@ class ListTableTests(SignedInTestCase):
             if route.name
             and "<" not in route.path
             and isinstance(route.view, type)
-            and issubclass(route.view, TableListMixin)
+            and issubclass(route.view, (TableListMixin, ListPageMixin))
         ]
         self.assertGreater(len(lists), 5, "The walk found almost no lists")
         read = 0

@@ -7,6 +7,8 @@ from django.db import models
 from django.test import SimpleTestCase
 from django.urls import get_resolver
 
+from ..list_pages import ListPageMixin
+from ..resources import resource_registry
 from ..tables import TableColumn, TableListMixin
 
 # A sort is "A–Z", "Oldest", "Lowest": never the direction of the query.
@@ -15,7 +17,7 @@ QUERY_WORDS = re.compile(r"\b(reverse|ascending|descending)\b", re.IGNORECASE)
 
 def _list_views() -> list[type]:
     _ = get_resolver().url_patterns  # every view module is imported once the URLs are
-    found, waiting = [], list(TableListMixin.__subclasses__())
+    found, waiting = [], [*TableListMixin.__subclasses__(), *ListPageMixin.__subclasses__()]
     while waiting:
         view = waiting.pop()
         found.append(view)
@@ -32,10 +34,12 @@ class SortLabelTests(SimpleTestCase):
         self.assertGreater(len(views), 5, "The walk found almost no list views")
         for view in views:
             columns = view.table_columns if isinstance(view.table_columns, tuple) else ()
-            labels = [sort.label for sort in view.table_sorts] + [
-                sort.label for column in columns for sort in column.sorts()
-            ]
-            for label in labels:
+            sorts = (
+                resource_registry()[view.resource].listing.sorts
+                if issubclass(view, ListPageMixin)
+                else [*view.table_sorts, *(sort for column in columns for sort in column.sorts())]
+            )
+            for label in [sort.label for sort in sorts]:
                 with self.subTest(view=view.__name__, label=label):
                     self.assertIsNone(QUERY_WORDS.search(label))
 

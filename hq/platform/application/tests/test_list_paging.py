@@ -212,4 +212,5 @@ class DocumentationStatusPagingTests(TestCase):
         self.assertEqual(status["total"], ROWS)
         self.assertLess(len(status["records"]), ROWS)
         self.assertGreater(len(seen), len(status["records"]))
-        self.assertEqual(seen, [f"rb-example-{n:03d}" for n in range(len(seen))])
+        whole = list_resource("documentation", {"limit": len(seen)}, principal=READER)
+        self.assertEqual(seen, [record["doc_id"] for record in whole["items"]])

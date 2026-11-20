@@ -6018,6 +6018,9 @@
                   "$ref": "#/components/schemas/AssetRowPartial"
                 },
                 "type": "array"
+              },
+              "totals": {
+                "$ref": "#/components/schemas/ListTotals"
               }
             }
           },
@@ -7243,6 +7246,32 @@
           "summary",
           "effect",
           "resource"
+        ],
+        "type": "object"
+      },
+      "CategorySums": {
+        "additionalProperties": false,
+        "description": "What one category of a list's matching records cost.",
+        "properties": {
+          "category": {
+            "description": "The category, as each record's `category` says it.",
+            "type": "string"
+          },
+          "count": {
+            "$ref": "#/components/schemas/CostSums/properties/count"
+          },
+          "deductible": {
+            "$ref": "#/components/schemas/CostSums/properties/deductible"
+          },
+          "total": {
+            "$ref": "#/components/schemas/CostSums/properties/total"
+          }
+        },
+        "required": [
+          "count",
+          "total",
+          "deductible",
+          "category"
         ],
         "type": "object"
       },
@@ -10469,6 +10498,33 @@
         ],
         "type": "object"
       },
+      "CostSums": {
+        "additionalProperties": false,
+        "description": "What a list's matching records cost.",
+        "properties": {
+          "count": {
+            "description": "How many records matched.",
+            "type": "integer"
+          },
+          "deductible": {
+            "description": "An estimate of what of that may be deducted, a decimal string.",
+            "type": "string"
+          },
+          "total": {
+            "description": "What they cost in all, a decimal string with two places.",
+            "examples": [
+              "12.50"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "total",
+          "deductible"
+        ],
+        "type": "object"
+      },
       "Created": {
         "description": "Whether the call created the record, rather than changing one HQ held.",
         "type": "boolean"
@@ -13651,6 +13707,9 @@
                   "$ref": "#/components/schemas/ExpenseRecordPartial"
                 },
                 "type": "array"
+              },
+              "totals": {
+                "$ref": "#/components/schemas/ListTotals"
               }
             }
           },
@@ -17176,6 +17235,35 @@
         },
         "required": [
           "filters"
+        ],
+        "type": "object"
+      },
+      "ListTotals": {
+        "additionalProperties": false,
+        "description": "What a list's matching records cost, whole and by category.",
+        "properties": {
+          "categories": {
+            "description": "What each category cost, the costliest first.",
+            "items": {
+              "$ref": "#/components/schemas/CategorySums"
+            },
+            "type": "array"
+          },
+          "count": {
+            "$ref": "#/components/schemas/CostSums/properties/count"
+          },
+          "deductible": {
+            "$ref": "#/components/schemas/CostSums/properties/deductible"
+          },
+          "total": {
+            "$ref": "#/components/schemas/CostSums/properties/total"
+          }
+        },
+        "required": [
+          "count",
+          "total",
+          "deductible",
+          "categories"
         ],
         "type": "object"
       },
@@ -36624,25 +36712,77 @@
         "operationId": "listAssetsV2",
         "parameters": [
           {
-            "description": "Only the records in this status; absent, every status.",
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
+            "description": "Only the records whose status is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
             "name": "status",
             "required": false,
             "schema": {
-              "enum": [
-                "active",
-                "retired",
-                "sold",
-                "returned",
-                "replaced"
-              ],
+              "maxLength": 2000,
+              "pattern": "^(?:active|retired|sold|returned|replaced)(?:,(?:active|retired|sold|returned|replaced))*$",
+              "title": "Status",
               "type": "string"
             },
             "style": "form"
           },
           {
-            "$ref": "#/components/parameters/SearchText"
+            "description": "Only the records whose category is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:networking|server_hardware|software|subscription|domain|hosting|camera_audio|office|tools|training|other)(?:,(?:networking|server_hardware|software|subscription|domain|hosting|camera_audio|office|tools|training|other))*$",
+              "title": "Category",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the active assets with no purchase date or no cost.",
+            "explode": true,
+            "in": "query",
+            "name": "missing_purchase",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "No date or cost",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else newest purchase.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "-purchase_date",
+                "purchase_date",
+                "item_name",
+                "-item_name",
+                "vendor",
+                "-vendor",
+                "category",
+                "-category",
+                "total_cost",
+                "-total_cost",
+                "business_use_percentage",
+                "-business_use_percentage",
+                "estimated_deductible_amount",
+                "-estimated_deductible_amount",
+                "status",
+                "-status"
+              ],
+              "type": "string"
+            },
+            "style": "form"
           },
           {
             "$ref": "#/components/parameters/PageLimit"
@@ -36693,10 +36833,13 @@
               "listAssetsV2": {
                 "operationId": "listAssetsV2",
                 "parameters": {
+                  "query.category": "$request.query.category",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.missing_purchase": "$request.query.missing_purchase",
                   "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort",
                   "query.status": "$request.query.status"
                 }
               }
@@ -37838,24 +37981,92 @@
         "operationId": "listDocumentationV2",
         "parameters": [
           {
-            "description": "Only the records in this status; absent, every status.",
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
+            "description": "Only the records whose status is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
             "name": "status",
             "required": false,
             "schema": {
-              "enum": [
-                "draft",
-                "active",
-                "deprecated",
-                "archived"
-              ],
+              "maxLength": 2000,
+              "pattern": "^(?:draft|active|deprecated|archived)(?:,(?:draft|active|deprecated|archived))*$",
+              "title": "Status",
               "type": "string"
             },
             "style": "form"
           },
           {
-            "$ref": "#/components/parameters/SearchText"
+            "description": "Only the records whose environment is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "environment",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:homelab|vps|wordpress|cloudflare|tailscale|adguard|unifi|local_mac|other)(?:,(?:homelab|vps|wordpress|cloudflare|tailscale|adguard|unifi|local_mac|other))*$",
+              "title": "Environment",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose type is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "doc_type",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:runbook|architecture_note|deployment_guide|troubleshooting_guide|recovery_procedure|public_article_draft|decision_record|report|queue)(?:,(?:runbook|architecture_note|deployment_guide|troubleshooting_guide|recovery_procedure|public_article_draft|decision_record|report|queue))*$",
+              "title": "Type",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose sensitivity is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "sensitivity",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:public|internal|sensitive|restricted)(?:,(?:public|internal|sensitive|restricted))*$",
+              "title": "Sensitivity",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else recently updated.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "-updated_at",
+                "updated_at",
+                "doc_id",
+                "-doc_id",
+                "title",
+                "-title",
+                "doc_type",
+                "-doc_type",
+                "environment",
+                "-environment",
+                "last_reviewed",
+                "-last_reviewed",
+                "status",
+                "-status",
+                "sensitivity",
+                "-sensitivity"
+              ],
+              "type": "string"
+            },
+            "style": "form"
           },
           {
             "$ref": "#/components/parameters/PageLimit"
@@ -37906,10 +38117,14 @@
               "listDocumentationV2": {
                 "operationId": "listDocumentationV2",
                 "parameters": {
+                  "query.doc_type": "$request.query.doc_type",
+                  "query.environment": "$request.query.environment",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
                   "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
+                  "query.sensitivity": "$request.query.sensitivity",
+                  "query.sort": "$request.query.sort",
                   "query.status": "$request.query.status"
                 }
               }
@@ -38238,38 +38453,71 @@
         "operationId": "listExpensesV2",
         "parameters": [
           {
-            "description": "Only the expenses dated in this year.",
-            "explode": true,
-            "in": "query",
-            "name": "year",
-            "required": false,
-            "schema": {
-              "maximum": 9999,
-              "minimum": 1,
-              "type": "integer"
-            },
-            "style": "form"
+            "$ref": "#/components/parameters/SearchText"
           },
           {
-            "description": "Only the expenses in this category; absent, every category.",
+            "description": "Only the records whose category is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
             "name": "category",
             "required": false,
             "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:hosting|domains|software|hardware|networking|office|education|subscriptions|content_production|consulting_tools|professional_services|miscellaneous)(?:,(?:hosting|domains|software|hardware|networking|office|education|subscriptions|content_production|consulting_tools|professional_services|miscellaneous))*$",
+              "title": "Category",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose year is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "year",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^\\d{1,4}(?:,\\d{1,4})*$",
+              "title": "Year",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the expenses with no receipt.",
+            "explode": true,
+            "in": "query",
+            "name": "no_receipts",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "No receipt",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else newest expense.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
               "enum": [
-                "hosting",
-                "domains",
-                "software",
-                "hardware",
-                "networking",
-                "office",
-                "education",
-                "subscriptions",
-                "content_production",
-                "consulting_tools",
-                "professional_services",
-                "miscellaneous"
+                "-date",
+                "date",
+                "vendor",
+                "-vendor",
+                "item",
+                "-item",
+                "category",
+                "-category",
+                "total_cost",
+                "-total_cost",
+                "business_use_percentage",
+                "-business_use_percentage",
+                "estimated_deductible_amount",
+                "-estimated_deductible_amount"
               ],
               "type": "string"
             },
@@ -38327,7 +38575,10 @@
                   "query.category": "$request.query.category",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.no_receipts": "$request.query.no_receipts",
                   "query.page": "$response.body#/data/next",
+                  "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort",
                   "query.year": "$request.query.year"
                 }
               }

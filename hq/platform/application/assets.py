@@ -88,8 +88,8 @@ def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, A
     )
 
 
-def list_assets(*, status: str | None = None, limit: int = 50) -> dict[str, Any]:
-    return listing(Asset, serialize_asset, status=status, limit=limit)
+def list_assets(*, limit: int = 50) -> dict[str, Any]:
+    return listing(Asset, serialize_asset, limit=limit)
 
 
 def get_asset(slug: str) -> dict[str, Any]:

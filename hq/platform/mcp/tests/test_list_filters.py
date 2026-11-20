@@ -5,6 +5,8 @@ hq.platform.api.tests.test_resource_filters).
 describe_resources lists every kind by its filters and gives one kind's whole
 schema when asked by name."""
 
+import re
+
 from asgiref.sync import async_to_sync
 from django.test import TestCase
 from mcp import Client
@@ -68,11 +70,14 @@ def calls(*asked):
 
 
 def enum_of(schema):
-    """The values a property's schema admits, whether or not it is nullable."""
+    """The values a property's schema admits, whether or not it is nullable,
+    one of them or several comma-separated (``resources.several_of``)."""
 
     for option in (schema, *schema.get("anyOf", ())):
         if "enum" in option:
             return option["enum"]
+        if several := re.fullmatch(r"\^\(\?:(.+?)\)\(\?:,.*", option.get("pattern", "")):
+            return [re.sub(r"\\(.)", r"\1", value) for value in several.group(1).split("|")]
     return None
 
 

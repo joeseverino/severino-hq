@@ -1,11 +1,9 @@
 from typing import override
 
-from django.db.models import Q
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
     DeleteView,
-    ListView,
     TemplateView,
     UpdateView,
 )
@@ -13,44 +11,38 @@ from django.views.generic import (
 from hq.platform.application import related
 from hq.platform.application.assets import managed_domain
 from hq.platform.application.documentation import related_documents
-from hq.platform.application.expenses import cost_totals
+from hq.platform.application.expenses import said_totals
 from hq.platform.application.labels import dotted_html
+from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
 from hq.platform.application.references import reference_of, referenced_by_row
 from hq.platform.application.security import web_principal
-from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
+from hq.platform.application.tables import TableColumn
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.status_tags import status_pill
 
 from .models import ASSET_CATEGORY_CHOICES, PAYMENT_METHOD_CHOICES, Asset
 
 ASSETS_TRAIL = (("Assets", reverse_lazy("assets:list")),)
+_CATEGORIES = dict(ASSET_CATEGORY_CHOICES)
 
 
-class AssetListView(PageMixin, TableListMixin, ListView):
+class AssetListView(ListPageMixin, TemplateView):
+    resource = "assets"
     table_empty = "No assets yet."
-    model = Asset
     template_name = "assets/asset_list.html"
-    paginate_by = 25
     page_title = "Assets"
-    table_search_scope = "assets"
     table_selectable = True
-    table_filters = (
-        TableFilter("status", "Status", "status", Asset.Status.choices),
-        TableFilter("category", "Category", "category", ASSET_CATEGORY_CHOICES),
-    )
     table_columns = (
-        TableColumn("Item", "item_name", "Name A–Z", "Name Z–A"),
-        TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A"),
+        TableColumn("Item", "item_name"),
+        TableColumn("Vendor", "vendor"),
         TableColumn("Category", "category"),
-        TableColumn("Purchased", "purchase_date", "Oldest purchase", "Newest purchase"),
-        TableColumn("Cost", "total_cost", "Lowest cost", "Highest cost", css="key-col"),
-        TableColumn("Business use", "business_use_percentage", "Lowest business use", "Highest business use"),
-        TableColumn("Deductible (est.)", "estimated_deductible_amount", "Lowest deductible", "Highest deductible"),
+        TableColumn("Purchased", "purchase_date"),
+        TableColumn("Cost", "total_cost", css="key-col"),
+        TableColumn("Business use", "business_use_percentage"),
+        TableColumn("Deductible (est.)", "estimated_deductible_amount"),
         TableColumn("Status", "status"),
     )
-    table_toggles = (TableToggle("missing_purchase", "No date or cost"),)
-    table_default_sort = "-purchase_date"
     table_search_placeholder = "Search assets, vendors, serials, and notes…"
 
     @override
@@ -58,16 +50,13 @@ class AssetListView(PageMixin, TableListMixin, ListView):
         return (PageAction.command("asset.create", primary=True),)
 
     @override
-    def get_queryset(self):
-        qs = Asset.objects.all()
-        if self.request.GET.get("missing_purchase"):
-            qs = qs.filter(status=Asset.Status.ACTIVE).filter(Q(purchase_date__isnull=True) | Q(total_cost=0))
-        return self.apply_table_query(qs)
+    def row(self, item):
+        return {**item, "state": Asset.Status(item["status"]), "category_label": _CATEGORIES[item["category"]]}
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["totals"] = cost_totals(self.object_list, narrowed=bool(context["table"]["active_count"]))
+        context["totals"] = said_totals(self.collection["totals"], narrowed=bool(context["table"]["active_count"]))
         return context
 
 

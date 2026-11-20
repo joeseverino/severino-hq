@@ -1,12 +1,12 @@
 """The documentation's commands and resource, declared on its domain in application/domains.py."""
 
-from pydantic import Field, create_model
+from django.db.models import Q
 
 from hq.platform.application import documentation
 from hq.platform.application.contracts import Effect
 from hq.platform.application.documentation import DocumentationItem, DocumentationRow
-from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
-from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, SearchText, one_of
+from hq.platform.application.integration_specs import CapabilitySpec, ListFilter, ListRead, ListSort, ResourceSpec
+from hq.platform.application.resources import BoundedQuery, SearchText
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
 from hq.platform.application.sync import HQSyncCommand, execute_hq_sync
@@ -42,11 +42,33 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
     )
 
 
-DocumentationQuery = create_model(
-    "DocumentationQuery",
-    __base__=BoundedQuery,
-    status=(one_of(DocumentationRecord.Status.values) | None, Field(default=None, description=STATUS_FILTER)),
-    query=(SearchText, None),
+class DocumentationQuery(BoundedQuery):
+    query: SearchText = None
+
+
+# Each order the list is read in, the first where none is asked.
+SORTS = (
+    *ListSort.both("-updated_at", "Recently updated", "Least recently updated"),
+    *ListSort.both("doc_id", "ID"),
+    *ListSort.both("title", "Title"),
+    *ListSort.both("doc_type", "Type"),
+    *ListSort.both("environment", "Environment"),
+    *ListSort.both("last_reviewed", "Oldest change", "Newest change"),
+    *ListSort.both("status", "Status"),
+    *ListSort.both("sensitivity", "Sensitivity"),
+)
+FILTERS = (
+    ListFilter("status", "Status", DocumentationRecord.Status.choices),
+    ListFilter("environment", "Environment", DocumentationRecord.Environment.choices),
+    # Writeups and pages are the Content section's, so the list leaves them
+    # out until a type or a search asks for them.
+    ListFilter(
+        "doc_type",
+        "Type",
+        DocumentationRecord.DocType.choices,
+        unasked=~Q(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT),
+    ),
+    ListFilter("sensitivity", "Sensitivity", DocumentationRecord.Sensitivity.choices),
 )
 
 
@@ -57,7 +79,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Docs",
             "Sensitivity-aware documentation pointers indexed by HQ.",
             Capability.READ,
-            listing=ListRead(documentation.list_documentation, DocumentationQuery, DocumentationRow),
+            listing=ListRead(
+                documentation.list_documentation, DocumentationQuery, DocumentationRow, sorts=SORTS, filters=FILTERS
+            ),
             detail_handler=documentation.get_documentation,
             identifier="doc_id",
             pass_principal=True,

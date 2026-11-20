@@ -3,7 +3,7 @@
 The crowded estate is written by hand, so it holds only the values someone
 thought of; a list nobody wrote rows for lays out on whatever the example
 estate gives it. Here every view in the URLconf that draws its rows through
-``TableListMixin`` gets a page, and its model's rows are derived from the
+``TableListMixin`` or ``ListPageMixin`` gets a page, and its model's rows are derived from the
 model's own fields: text at its ``max_length`` in words that must wrap with an
 identifier and a digest among them, a paragraph for free text, an address as
 long as the field takes, a number at the largest its field and validators allow,
@@ -34,8 +34,10 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 
+from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.markup_testing import elements
 from hq.platform.application.references import ReferenceField
+from hq.platform.application.resources import resource_registry
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableListMixin
 from hq.platform.core import seeds
@@ -347,21 +349,24 @@ class _Fill:
 
 def list_views():
     """Every routed view that draws its rows from a model through TableListMixin,
-    by URL name. An extension's list may draw from its own query instead, and is
+    or from the model its list read searches, its model by URL name. An extension's list may draw from its own query instead, and is
     its own to fill; every host list names its model."""
 
     found = {}
     for route in routed():
         view = route.view
-        if not (isinstance(view, type) and issubclass(view, TableListMixin)):
+        if not (isinstance(view, type) and issubclass(view, (TableListMixin, ListPageMixin))):
             continue
-        if getattr(view, "model", None) is None:
+        model = getattr(view, "model", None)
+        if issubclass(view, ListPageMixin) and (search := resource_registry()[view.resource].search):
+            model = search.model
+        if model is None:
             if view.__module__.startswith("hq."):
                 raise AssertionError(f"{route.name} names no model, so no row can be derived for it")
             continue
         if route.pattern.pattern.regex.groups:
             raise AssertionError(f"{route.name} takes arguments a derived page cannot fill")
-        found[route.name] = view
+        found[route.name] = model
     return found
 
 
@@ -369,8 +374,8 @@ def build_derived_estate(user):
     """Rows for every list, owned by ``user``."""
 
     fill = _Fill(user)
-    for view in list_views().values():
-        fill.rows_for(view.model)
+    for model in list_views().values():
+        fill.rows_for(model)
 
 
 seeds.register("derived", seeds.Seed(build_derived_estate))

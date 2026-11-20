@@ -1,11 +1,9 @@
 from typing import override
 
-from django.db.models import Count
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
     DeleteView,
-    ListView,
     TemplateView,
     UpdateView,
 )
@@ -13,38 +11,35 @@ from django.views.generic import (
 from hq.platform.application import related
 from hq.platform.application.documentation import document_link
 from hq.platform.application.entity_links import entity_link
-from hq.platform.application.expenses import category_figures, cost_totals
+from hq.platform.application.expenses import category_figures, said_totals
 from hq.platform.application.labels import dotted
+from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.moments import stamp_day, when_day
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
-from hq.platform.application.projection import years_of
 from hq.platform.application.references import referenced_by_row, resolve_many
 from hq.platform.application.security import web_principal
-from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
+from hq.platform.application.tables import TableColumn
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 
 from .models import EXPENSE_CATEGORY_CHOICES, Expense
 
 
-class ExpenseListView(PageMixin, TableListMixin, ListView):
+class ExpenseListView(ListPageMixin, TemplateView):
+    resource = "expenses"
     table_empty = "No expenses yet."
-    model = Expense
     template_name = "expenses/expense_list.html"
-    paginate_by = 50
+    page_size = 50
     page_title = "Expenses"
-    table_search_scope = "expenses"
     table_selectable = True
     table_columns = (
-        TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A"),
-        TableColumn("Date", "date", "Oldest expense", "Newest expense", css="date-col"),
-        TableColumn("Item", "item", "Item A–Z", "Item Z–A"),
+        TableColumn("Vendor", "vendor"),
+        TableColumn("Date", "date", css="date-col"),
+        TableColumn("Item", "item"),
         TableColumn("Category", "category"),
-        TableColumn("Cost", "total_cost", "Lowest cost", "Highest cost", css="key-col"),
-        TableColumn("Business use", "business_use_percentage", "Lowest business use", "Highest business use"),
-        TableColumn("Deductible (est.)", "estimated_deductible_amount", "Lowest deductible", "Highest deductible"),
+        TableColumn("Cost", "total_cost", css="key-col"),
+        TableColumn("Business use", "business_use_percentage"),
+        TableColumn("Deductible (est.)", "estimated_deductible_amount"),
     )
-    table_toggles = (TableToggle("no_receipts", "No receipt"),)
-    table_default_sort = "-date"
     table_search_placeholder = "Search vendors, items, purpose, and notes…"
 
     @override
@@ -52,27 +47,12 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
         return (PageAction.command("expense.create", primary=True),)
 
     @override
-    def get_table_filters(self):
-        years = [(year, str(year)) for year in years_of(Expense, "date")]
-        filters = [TableFilter("category", "Category", "category", EXPENSE_CATEGORY_CHOICES)]
-        # A year to choose once an expense has one.
-        if years:
-            filters.append(TableFilter("year", "Year", "date__year", years))
-        return tuple(filters)
-
-    @override
-    def get_queryset(self):
-        qs = Expense.objects.all()
-        if self.request.GET.get("no_receipts"):
-            qs = qs.annotate(receipt_count=Count("receipts")).filter(receipt_count=0)
-        return self.apply_table_query(qs)
-
-    @override
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["totals"] = cost_totals(self.object_list, narrowed=bool(ctx["table"]["active_count"]))
+        totals = self.collection["totals"]
+        ctx["totals"] = said_totals(totals, narrowed=bool(ctx["table"]["active_count"]))
         ctx["by_category"] = category_figures(
-            self.object_list, query=self.request.GET, choices=EXPENSE_CATEGORY_CHOICES
+            totals["categories"], query=self.request.GET, choices=EXPENSE_CATEGORY_CHOICES
         )
         return ctx
 
