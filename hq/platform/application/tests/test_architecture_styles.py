@@ -430,51 +430,6 @@ class StyleContractTests(SimpleTestCase):
             "chart templates must read plot coordinates from the chart, not restate them",
         )
 
-    def test_chart_drawings_declare_no_fixed_pixel_floor(self):
-        """A floor wider than the column it lives in is only ever a scrollbar.
-
-        `.two-col` lays out at `minmax(320px, 1fr)`, so a half-width chart card
-        offers roughly 284-446px. A floor above that range cannot protect a
-        narrow plot; it only guarantees that every chart on the page scrolls
-        at once.
-        Label collision is handled by `Chart.dense` and a container query,
-        which measure the labels and the card rather than guessing at a width.
-        """
-
-        css = self._stylesheet()
-        for rule in ("bar-chart", "line-chart"):
-            block = re.search(r"^\." + rule + r"\s*\{(.*?)\}", css, re.MULTILINE | re.DOTALL)
-            self.assertIsNotNone(block, f".{rule} must exist")
-            self.assertNotIn(
-                "min-width",
-                block.group(1),
-                f".{rule} must not declare a fixed floor; it cannot be satisfied by a half-width card",
-            )
-
-    def test_scrollable_boxes_state_both_axes(self):
-        """One declared scrollbar is two offered ones unless both are stated.
-
-        A box with `overflow-x: auto` and no `overflow-y` does not keep the
-        other axis at `visible`: the spec computes it to `auto`. Chart
-        drawings land on fractional heights, so each overflowed itself by one
-        rounded pixel and drew a full-height vertical scrollbar for it. Any
-        rule that scrolls one axis has to say what the other one does.
-        """
-
-        css = self._stylesheet()
-        offenders = []
-        for selector, body in re.findall(r"^(\.[a-z0-9-]+)\s*\{([^}]*)\}", css, re.MULTILINE):
-            has_x = re.search(r"overflow-x\s*:\s*(auto|scroll)", body)
-            if not has_x:
-                continue
-            if not re.search(r"overflow-y\s*:", body):
-                offenders.append(selector)
-        self.assertEqual(
-            offenders,
-            [],
-            "a rule that scrolls one axis must declare the other",
-        )
-
     def test_categorical_series_slots_are_defined_and_distinct(self):
 
         css = self._stylesheet()

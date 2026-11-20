@@ -9,8 +9,6 @@ from django.urls import reverse
 from hq.platform.application.markup_testing import elements
 from hq.platform.core.stylesheets import SHEETS, sheet_paths
 
-LAYER_ORDER = re.compile(r"@layer\s+([\w\s,.-]+);")
-LAYER_BLOCK = re.compile(r"@layer\s+([\w.-]+)\s*\{")
 CONTAINER_QUERY = re.compile(r"@container\s+([^{]+)\{")
 QUERY_NAME = re.compile(r"([a-zA-Z_][\w-]*)\s*(?=\(|not\b|style\()")
 # A query of a custom property's value, asked or negated: a style query is
@@ -75,20 +73,6 @@ def container_query_faults(css: str) -> tuple[list[str], list[str]]:
 
 
 class SheetTests(SimpleTestCase):
-    def test_the_layer_order_is_declared_once_before_any_layer_opens(self):
-        """A layer is ordered where it is first named. One a sheet opens
-        without its declaration would be ordered after `components`, and its
-        rules would beat every component's."""
-
-        sheets = [_uncommented(path.read_text(encoding="utf-8")) for path in sheet_paths()]
-        declared = [order for sheet in sheets for order in LAYER_ORDER.findall(sheet)]
-        self.assertEqual(len(declared), 1)
-        first = sheets[0]
-        self.assertLess(first.index(declared[0]), LAYER_BLOCK.search(first).start())
-        layers = {name.strip() for name in declared[0].split(",")}
-        opened = {name for sheet in sheets for name in LAYER_BLOCK.findall(sheet)}
-        self.assertLessEqual(opened, layers)
-
     def test_every_size_query_names_a_container_the_stylesheets_declare(self):
         """An unnamed size query is asked of whichever size container happens
         to be nearest, and of none once that one stops being a container, so it

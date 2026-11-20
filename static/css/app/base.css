@@ -144,7 +144,7 @@ a code { color: var(--accent-2); }
 a:hover code { color: var(--accent); text-decoration: underline; }
 /* A command or a file: its lines as written, scrolled inside its block, which
    is never wider than the box it sits in. */
-pre { max-width: 100%; background: var(--code-bg); color: var(--code-ink); padding: var(--space-7) var(--space-8); border-radius: var(--radius); overflow-x: auto; font-size: var(--text-sm); line-height: 1.55; }
+pre { max-width: 100%; background: var(--code-bg); color: var(--code-ink); padding: var(--space-7) var(--space-8); border-radius: var(--radius); overflow: auto; font-size: var(--text-sm); line-height: 1.55; }
 ::selection { background: var(--selection); color: var(--ink); }
 pre ::selection { color: var(--code-ink); }
 
