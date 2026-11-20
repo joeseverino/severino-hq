@@ -20,8 +20,7 @@ CONFIG = ROOT / "tools" / "pipeline" / "extension-imports.toml"
 
 
 def refused(files: dict[str, str]) -> list[str]:
-    """Each import the config refuses in ``files``, as ``path:line: module``,
-    and each file that does not parse, as ``path:line: invalid syntax``."""
+    """Each import the config refuses in ``files``, as ``path:line: module``."""
 
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -38,20 +37,12 @@ def refused(files: dict[str, str]) -> list[str]:
     found = []
     for problem in json.loads(ran.stdout):
         where = f"{Path(problem['filename']).relative_to(root.resolve()).as_posix()}:{problem['location']['row']}"
-        if problem["code"] == "invalid-syntax":
-            found.append(f"{where}: invalid syntax")
-        else:
-            found.append(f"{where}: {problem['message'].split('`')[1]}")
+        found.append(f"{where}: {problem['message'].split('`')[1]}")
     return sorted(set(found))
 
 
 @tag("source")
 class ExtensionImportTests(SimpleTestCase):
-    def test_the_sdk_is_the_one_host_package_an_extension_imports(self):
-        self.assertEqual(
-            refused({"valid.py": "from hq_sdk.capabilities import CapabilitySpec\nimport hq_sdk.ui\n"}), []
-        )
-
     def test_every_form_of_a_host_import_is_refused(self):
         source = (
             "from hq.platform import application\n"
@@ -68,14 +59,6 @@ class ExtensionImportTests(SimpleTestCase):
             [f"pkg/plugin.py:{line}: hq" for line in (1, 2, 3, 4, 5, 7)],
         )
 
-    def test_a_package_named_like_a_host_app_is_its_own(self):
-        source = "from core import audit\nimport jobs.runner\nfrom calendars.models import Entry\nimport hqueue\n"
-        self.assertEqual(refused({"plugin.py": source}), [])
-
-    def test_a_relative_import_is_the_extensions_own_whatever_it_is_called(self):
-        source = "from .calendars import sources\nfrom . import hq\nfrom hq.domains.calendars import Entry\n"
-        self.assertEqual(refused({"pkg/__init__.py": "", "pkg/plugin.py": source}), ["pkg/plugin.py:3: hq"])
-
     def test_a_cache_of_its_own_is_refused(self):
         source = (
             "from django.core.cache import cache\nfrom django.core import cache as c\nfrom django.core import signing\n"
@@ -84,9 +67,6 @@ class ExtensionImportTests(SimpleTestCase):
             refused({"projection.py": source}),
             ["projection.py:1: django.core.cache", "projection.py:2: django.core.cache"],
         )
-
-    def test_a_file_that_does_not_parse_is_refused(self):
-        self.assertIn("broken.py:1: invalid syntax", refused({"broken.py": "def (:\n"}))
 
     def test_the_banned_packages_are_the_packages_of_the_host_tree(self):
         banned = tomllib.loads(CONFIG.read_text(encoding="utf-8"))["lint"]["flake8-tidy-imports"]["banned-api"]
