@@ -10,14 +10,11 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
 from functools import cache
-from typing import Annotated
 from unittest import mock
 
 from django import forms
 from django.test import TestCase
 from django.urls import reverse
-from django.utils.datastructures import MultiValueDict
-from pydantic import TypeAdapter
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_spec import NameContext
@@ -213,26 +210,3 @@ class EditPageTests(TestCase):
         self.assertEqual(posted["host"], ["derived-host"])
         self.assertEqual(response.status_code, 302)
         self.assertEqual(ManagedResource.objects.get().spec["host"], "derived-host")
-
-
-class DefaultRoundTripTests(TestCase):
-    def test_every_default_posted_as_drawn_is_one_the_model_accepts(self):
-        """A field the form draws holding its default must read back as a value
-        the model takes, or no record of its kind can be saved untouched. A
-        withheld kind has no generic form to draw."""
-
-        for kind, provider in PROVIDERS.items():
-            if provider.withheld:
-                continue
-            form_class = spec_form_class(kind)
-            for name, model_field in provider.spec_type.model_fields.items():
-                if model_field.is_required():
-                    continue
-                with self.subTest(kind=kind, field=name):
-                    drawn = f'<form class="form">{form_class()[name]}</form>'
-                    form = form_class(MultiValueDict(_as_posted(drawn)))
-                    form.is_valid()
-                    self.assertNotIn(name, form.errors)
-                    value = form.cleaned_data[name]
-                    if value is not None:
-                        TypeAdapter(Annotated[model_field.annotation, model_field]).validate_python(value)

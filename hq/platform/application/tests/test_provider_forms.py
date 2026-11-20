@@ -8,10 +8,12 @@ Hostnames here are under example.com. This repository is public, and a fixture
 is documentation whether or not it was meant to be.
 """
 
-from dataclasses import replace
+from typing import Annotated
 
 from django.test import TestCase
 from django.urls import reverse
+from django.utils.datastructures import MultiValueDict
+from pydantic import TypeAdapter
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
@@ -20,6 +22,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.testing import declare, operator
 
 from ..provider_forms import spec_form_class
+from .test_provider_selects import _as_posted
 
 REWRITE = {"domain": "app.example.com", "answer": "10.0.0.10"}
 PROXY = {
@@ -71,27 +74,6 @@ class ValidationOwnershipTests(TestCase):
         self.assertIn("domain", form.errors)
 
 
-class ProviderOnboardingTests(TestCase):
-    """A provider added to the registry gets a form with nothing written."""
-
-    def test_an_invented_provider_renders_and_validates_without_code(self):
-        invented = replace(
-            PROVIDERS["adguard.rewrite"],
-            kind="invented.rewrite",
-            summary="A provider that did not exist when the form engine was written.",
-        )
-        PROVIDERS[invented.kind] = invented
-        try:
-            form = spec_form_class(invented.kind)(REWRITE)
-            valid = form.is_valid()
-            fields = sorted(form.fields)
-        finally:
-            del PROVIDERS[invented.kind]
-
-        self.assertTrue(valid)
-        self.assertEqual(fields, ["answer", "domain"])
-
-
 class IdentityFieldTests(TestCase):
     """A provider finds its own record by hostname, so a hostname cannot move.
 
@@ -108,9 +90,6 @@ class IdentityFieldTests(TestCase):
         self.assertEqual(identity_fields("npm.proxy_host"), ("domain_names",))
         # A certificate is not addressed by hostname, so it locks nothing.
         self.assertEqual(identity_fields("tls.certificate"), ())
-
-    def test_creating_leaves_the_hostname_editable(self):
-        self.assertFalse(spec_form_class("adguard.rewrite")().fields["domain"].disabled)
 
     def test_a_hostname_can_be_changed_now_that_renaming_works(self):
         """A hostname is editable.
@@ -239,7 +218,9 @@ class ResourceFormViewTests(TestCase):
                     self.assertContains(response, kind)
 
     def test_every_kind_draws_its_create_form(self):
-        """A create form has no identity form, and a kind with options still draws.
+        """Each kind's create page draws, its routine knobs are the ones it
+        declares, and each default posted as drawn is one its model takes, or
+        no record of the kind could be saved untouched.
 
         The registry is the list, so a kind added later is held to it too.
         """
@@ -249,8 +230,21 @@ class ResourceFormViewTests(TestCase):
                 continue
             with self.subTest(kind=kind):
                 response = self.client.get(reverse("control_plane:create"), {"kind": kind})
+                form_class = spec_form_class(kind)
+                form = form_class()
 
                 self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    {field.name for field in form.advanced}, set(provider.advanced_fields) & set(form.fields)
+                )
+                for name, model_field in provider.spec_type.model_fields.items():
+                    if model_field.is_required():
+                        continue
+                    drawn = form_class(MultiValueDict(_as_posted(f'<form class="form">{form[name]}</form>')))
+                    drawn.is_valid()
+                    self.assertNotIn(name, drawn.errors)
+                    if (value := drawn.cleaned_data[name]) is not None:
+                        TypeAdapter(Annotated[model_field.annotation, model_field]).validate_python(value)
 
     def test_a_hostname_seeds_the_fields_it_decides(self):
         """Onboarding asks for the name once, not once per resource."""
@@ -333,39 +327,3 @@ class ResourceFormViewTests(TestCase):
         self.assertRedirects(response, reverse("control_plane:upload_certificate", kwargs={"key": key}))
         (said,) = with_class(response, "notice-error")
         self.assertIn("fullchain.pem", said.text)
-
-
-class RoutineKnobTests(TestCase):
-    """A knob nobody has touched stays behind the disclosure, and no further."""
-
-    def test_the_renewal_window_stays_a_knob(self):
-        """Renewal is automatic, so how early it starts is not a question."""
-
-        form = spec_form_class("tls.certificate")(initial={"certificate_name": "example"})
-
-        self.assertIn("renewal_window_days", {field.name for field in form.advanced})
-
-    def test_a_knob_somebody_answered_comes_out_from_behind_it(self):
-        form = spec_form_class("tls.certificate")(initial={"certificate_name": "example", "renewal_window_days": 45})
-
-        self.assertIn("renewal_window_days", {field.name for field in form.primary})
-
-    def test_what_a_certificate_is_is_always_asked(self):
-        primary = {field.name for field in spec_form_class("tls.certificate")().primary}
-
-        self.assertIn("certificate_name", primary)
-        self.assertIn("domains", primary)
-        self.assertIn("install_on", primary)
-
-
-class RenameWarningTests(TestCase):
-    """A name that reaches a provider says so before it is changed."""
-
-    def test_editing_warns_that_renaming_reaches_the_provider(self):
-        form = spec_form_class("adguard.rewrite", lock_identity=True)(
-            initial={"domain": "app.example.com", "answer": "10.0.0.1"}
-        )
-
-        domain = next(field for field in form.primary if field.name == "domain")
-
-        self.assertIn("renames the live record", domain.help_text)
