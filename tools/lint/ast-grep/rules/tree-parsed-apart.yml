@@ -20,7 +20,6 @@ files:
   - "**/testing.py"
   - "**/*_testing.py"
 ignores:
-  - "hq/platform/application/tests/tree.py"
   - "hq/platform/application/tests/writers.py"
   - "hq/platform/application/tests/refusal_text.py"
   - "hq/platform/core/tests/django_printers.py"
