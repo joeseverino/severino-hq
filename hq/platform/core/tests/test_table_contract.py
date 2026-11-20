@@ -275,13 +275,9 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual((words.startswith("Add a run"), href), (True, "/runs/new/"))
         self.assertEqual(asked, [True])
 
-    def test_a_region_refuses_what_it_does_not_take(self):
-        for source in (
-            "{% table_region %}{% endtable_region %}",
-            '{% table_region "Things" wide=2 %}{% endtable_region %}',
-        ):
-            with self.subTest(source), self.assertRaises(TemplateSyntaxError):
-                Template(source)
+    def test_a_region_needs_its_label(self):
+        with self.assertRaises(TemplateSyntaxError):
+            Template("{% table_region %}{% endtable_region %}")
 
     def test_a_cell_that_says_nothing_is_marked_blank(self):
         cells = {

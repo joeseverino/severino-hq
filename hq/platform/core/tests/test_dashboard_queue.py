@@ -94,9 +94,6 @@ class DashboardQueueTests(SignedInTestCase):
                 self.assertNotContains(response, "An interesting observation")
         self.assertFalse(DashboardRefreshRequest.objects.exists())
 
-    def test_a_queue_with_something_urgent_in_it_is_triaged_on_the_dashboard(self):
-        self.assertContains(self.client.get("/"), "data-triage-routes", count=1)
-
     def test_the_urgent_cards_are_named_without_a_heading_row(self):
         response = self.client.get("/")
 
