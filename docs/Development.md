@@ -254,8 +254,8 @@ declares the files it reads once, as the `sources` of the task its job runs:
 in `mise-tasks/test.toml` and `browser` in `mise-tasks/browser`. CI's **Legs**
 job runs `tools/pipeline/legs.py`, which asks mise's `--affected` which of
 those tasks the change touches. A changed path that no leg's sources name runs
-every leg, and `test_legs` fails on any tracked file in that state, so a new
-top-level path is placed in the sources of each leg that reads it. Scan,
+every leg, and the job's summary lists it, so a new top-level path is placed in
+the sources of each leg that reads it. Scan,
 Build, Build verify and Composition run on every pull request.
 
 To see what a change would run, against the base it merges into:
