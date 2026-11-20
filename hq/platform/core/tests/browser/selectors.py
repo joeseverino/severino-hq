@@ -47,7 +47,7 @@ SELECTORS = {
     # A table's own rows of records, the lines beneath them left out.
     "own_records": ":scope > tbody > tr:not(.row-detail)",
     # Read inside one row of the queue, so it names nothing above the row's own cell.
-    "decision_dismiss": 'td.row-actions button[name="key"]',
+    "decision_controls": "td.row-actions :is(a, button):not([hidden])",
     "decision_title": "[data-attention-title]",
     "decision_steps": ".step-list",
     # What an item means: never cut.
@@ -95,7 +95,7 @@ SELECTORS = {
     # The dashboard's domain overviews, and the row its calendar leads.
     "highlights": ".section-flow > .section:has(> .section-body > .facts-band.is-lead)",
     "patterns": ".section-flow:has(> #dashboard-calendar) > .section",
-    "glance": ".page-head .facts-band > .fact",
+    "glance": ".page-head [data-glance] > .facts-band > .fact",
     # A control a reader fills in or picks from, whose edge is what shows it.
     "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
     # A link that goes somewhere.

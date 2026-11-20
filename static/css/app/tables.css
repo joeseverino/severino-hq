@@ -110,8 +110,9 @@
 .data-table[data-columns="10"] { --columns: 10; }
 /* A short value's box is no box on the open line, unless it is the value's own list. */
 .cell-short:not(ul, ol) { display: contents; }
-/* A state keeps its line. A short value of words keeps its line up to its share; a longer one (past `table_cells.SHORT`, or a state or figure longer than a line of words, `data-long`) wraps at its words in a line of `--row-words`, or its share where that is less, so no column of words is set a word to a line. */
-.data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) { white-space: nowrap; }
+/* A state keeps its line; one of several parts (`cell-part`) keeps it up to its share, as a short value does, and past it wraps only between them, its one track `fit-content()` of the share (below). A short value of words keeps its line up to its share; a longer one (past `table_cells.SHORT`, or a state or figure longer than a line of words, `data-long`) wraps at its words in a line of `--row-words`, or its share where that is less, so no column of words is set a word to a line. */
+.data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long], :has(.cell-part)) { white-space: nowrap; }
+.data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) > .stack-list:has(.cell-part) { display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; }
 /* The line is the words', so the cell's padding is added to it. */
 .data-table > tbody > tr:not(.row-detail) > :is(td, th):is([data-long], :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]):not([data-blank], :has(> .cell-short))) {
   box-sizing: content-box; min-inline-size: min(var(--row-words), var(--share));
@@ -327,7 +328,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
    and cells and what an open line holds keep the tight end of the spacing
    scale, since a phone's width is the words'. An open row shows its
    `narrow-more` parts in place, each on a line of its own that asks its
-   column for no width, so opening a row moves no column. */
+   column for no width and wraps in it, so opening a row moves no column. */
 .data-table .narrow-only { display: none; }
 @container table-region (width < 36rem) {
   .data-table { --cell-pad: var(--space-4); }
@@ -347,7 +348,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table[data-wide-columns="8"] { --gone-wide: 8; }
   .data-table[data-wide-columns="9"] { --gone-wide: 9; }
   .data-table > tbody > tr:has(> [data-kind] .narrow-more) .row-expand { display: grid; }
-  .data-table > tbody > tr.is-expanded [data-kind] .narrow-more { display: block; contain: inline-size; }
+  .data-table > tbody > tr.is-expanded [data-kind] .narrow-more { display: block; contain: inline-size; white-space: normal; }
   /* A value its clamp holds here (`cell-clamp`, cuts.css) opens its row, which releases it in place. The toggle shows whether or not the value overran its clamp, since no CSS every engine has can tell. */
   .data-table > tbody > tr:has(.cell-clamp) .row-expand { display: grid; }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
@@ -355,8 +356,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* A table cell cannot take a line of its own, so a narrow table whose rows hold labeled controls (any but a glyph), or the narrowest one whose rows hold any, is a grid of its columns' tracks instead, each row a subgrid of them, every cell under its heading (a column that has left takes no track). A row's controls take its last line, from where its name starts, rising past no words, so the row's whole pad stands under them; a control that wraps starts its line there too, and a quiet one opening it stands its pad out (page.css). The table and its rows name their controls again, which weighs these rules above a column's own width and display. */
 .table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] :is(a, button, [role="button"])) { --controls: icons; }
 .table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] :is(a, button, [role="button"]):not(.glyph)) { --controls: labeled; }
-/* A row of four labeled controls asks a line of their own sooner, as a table of more columns lets them leave sooner (above). */
-.table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] > .btn:not(.glyph) ~ .btn:not(.glyph) ~ .btn:not(.glyph) ~ .btn:not(.glyph)) { --controls: crowded; }
+/* A row of three controls, of any look, asks a line of their own sooner, as a table of more columns lets them leave sooner (above). */
+.table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] > .btn ~ .btn ~ .btn) { --controls: crowded; }
 @container table-region ((width < 36rem) and style(--controls: labeled)) or ((width < 48rem) and style(--controls: crowded)) or ((width < 20rem) and style(--controls: icons)) {
   .data-table:has(> tbody > tr > [data-kind="control"] :is(a, button, [role="button"]):not([hidden])) {
     display: grid; grid-template-columns: var(--lead,) [name] minmax(auto, 1fr) repeat(var(--columns), auto);
