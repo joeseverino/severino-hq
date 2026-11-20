@@ -30,8 +30,8 @@ class Lifecycle(TonedChoices):
     UNREPORTED = "unreported", Tone.SERIOUS, "No longer reported"
 
 
-# The states in which the connection works.
-WORKING = frozenset({Lifecycle.READY, Lifecycle.REACHABLE})
+# The states in which the connection works: the ones drawn good.
+WORKING = frozenset(state for state in Lifecycle if state.tone is Tone.GOOD)
 ATTENTION = frozenset(state for state in Lifecycle if state.tone.acted_on)
 
 # The unreported state as other records carry it, with the values they already

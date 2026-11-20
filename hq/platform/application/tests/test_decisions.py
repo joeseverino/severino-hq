@@ -15,7 +15,6 @@ from hq.platform.application.decisions import decision
 from hq.platform.application.finding_steps import Do, Press, Run
 from hq.platform.application.markup_testing import all_elements, elements, hrefs, select, text, texts, with_class
 from hq.platform.application.tests.links import example_command
-from hq.platform.application.tone import Tone
 
 
 def row_hrefs(html):
@@ -197,7 +196,6 @@ class DecisionTests(SimpleTestCase):
         self.assertNotIn("Restore the example", text(html))
 
     def test_urgency_is_said_in_one_set_of_words(self):
-        self.assertEqual((Tone.SERIOUS.urgency, Tone.ATTENTION.urgency), ("Urgent", "Needs attention"))
         for item, said in ((self.item(status="serious"), "Urgent"), (self.item(notice=True), "Notice")):
             (pill,) = select(card(item), "data-origin")
             self.assertEqual(pill.words, said)

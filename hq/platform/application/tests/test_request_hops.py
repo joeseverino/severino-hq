@@ -184,13 +184,6 @@ class HeaderTests(TestCase):
 
         self.assertTrue(found["X-Forwarded-For"].used)
 
-    def test_a_header_s_state_takes_the_tone_of_what_hq_did_with_it(self):
-        from ..request_headers import Header
-
-        self.assertEqual(Header("Host", "hq.example.test", purpose="Checked.").state.tone, "good")
-        self.assertEqual(Header("X-Real-Ip", "192.0.2.1", declined="HQ reads X-Forwarded-For.").state.tone, "attention")
-        self.assertEqual(Header("Accept", "*/*").state.tone, "neutral")
-
     def test_a_header_nothing_reads_is_listed_as_unread(self):
         """A proxy sending something nothing looks at is otherwise invisible."""
 

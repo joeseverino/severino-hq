@@ -69,13 +69,6 @@ class WordTests(SimpleTestCase):
 
         self.assertFalse({state.label for state in Lifecycle} & verbs)
 
-    def test_a_state_is_drawn_good_only_while_it_works(self):
-        from ..connection_lifecycle import WORKING
-
-        for state in Lifecycle:
-            with self.subTest(state):
-                self.assertEqual(state.tone == "good", state in WORKING)
-
     def test_a_domain_is_starred_in_the_word_the_services_list_uses(self):
         for pinned in (True, False):
             with self.subTest(pinned=pinned):
