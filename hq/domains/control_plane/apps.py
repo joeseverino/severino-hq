@@ -51,7 +51,7 @@ class ControlPlaneConfig(AppConfig):
         # An operator's choice that a record stays unmanaged, and its reversal.
         register_audit(NotManaged, "Not managed")
         # Who asked for a held change, who agreed to it and when.
-        register_audit(ApprovalRequest, APPROVAL_AUDIT_LABEL, subject=lambda held: held.resource_key)
+        register_audit(ApprovalRequest, APPROVAL_AUDIT_LABEL, subject=lambda held: held.resource_key, required=True)
         # Who asked for a connection to be read now, and when.
         register_audit(ReadRequest, READ_REQUEST, connection=lambda request: request.connection_ref)
         # Who asked for a dashboard panel to be read now, filed with the other
@@ -60,8 +60,13 @@ class ControlPlaneConfig(AppConfig):
         # What the dashboard shows, and on which machines, under one label.
         register_audit(DashboardConfiguration, DASHBOARD, required=True)
         register_audit(DashboardMachine, DASHBOARD, subject=lambda placement: placement.machine.key, required=True)
-        # What a Refresh found in the automation source, under the source's key.
-        register_audit(SourceProposal, "Playbook scan result", subject=lambda proposal: proposal.operation.resource.key)
+        # What a Refresh found in the automation source, and who rejected it, under the source's key.
+        register_audit(
+            SourceProposal,
+            "Playbook scan result",
+            subject=lambda proposal: proposal.operation.resource.key,
+            required=True,
+        )
         # Which commit of it became the catalog HQ runs from, and who adopted it.
         register_audit(AdoptedCatalog, "Adopted playbooks", subject=_source_key)
         # An operator's rule for what one agent may run.

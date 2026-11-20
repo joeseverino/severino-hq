@@ -628,9 +628,8 @@ class SourceProposal(TimestampedModel):
     # which a run is held to when it is asked (``automation_runs.reached``).
     reaches = models.JSONField(default=list)
     # Set when a person rejects it (``automation_adoption.reject``), so it no
-    # longer waits to be decided.
+    # longer waits to be decided; who did is the audit row that set it.
     rejected_at = models.DateTimeField(null=True, blank=True)
-    rejected_by = models.CharField(max_length=150, blank=True)
     # Each playbook whose change a person rejected on its own, by the key its
     # change is named by, so it stays as adopted and waits no more.
     rejected_playbooks = models.JSONField(default=list, blank=True)
@@ -729,11 +728,7 @@ class ApprovalRequest(TimestampedModel):
     state = models.CharField(max_length=20, choices=State.choices, default=State.PENDING)
     # A request nobody answers lapses, so a click weeks later applies nothing.
     expires_at = models.DateTimeField()
-    # The decider is a name and an interface, not a user row. A foreign key
-    # would answer a question nobody asks: what matters is that a person on the
-    # web surface agreed, and both of those facts are here.
-    decided_actor = models.CharField(max_length=160, blank=True)
-    decided_interface = models.CharField(max_length=32, blank=True)
+    # Who decided is the audit row of the save that settled it.
     decided_at = models.DateTimeField(null=True, blank=True)
     decision_note = models.CharField(max_length=300, blank=True)
     # What the replayed call answered, so the queue can say what approving it
@@ -773,14 +768,6 @@ class ApprovalRequest(TimestampedModel):
                 | (~models.Q(state="pending") & models.Q(decided_at__isnull=False)),
                 name="approval_settled_says_when",
                 violation_error_message="A request has a decision time exactly when it is no longer pending.",
-                field="state",
-            ),
-            Rule(
-                # A person decides an approval or a rejection, and nothing else.
-                condition=(models.Q(state__in=("approved", "rejected")) & ~models.Q(decided_actor=""))
-                | (~models.Q(state__in=("approved", "rejected")) & models.Q(decided_actor="")),
-                name="approval_decision_names_who_decided",
-                violation_error_message="An approval or a rejection names who decided it, and nothing else does.",
                 field="state",
             ),
         ]

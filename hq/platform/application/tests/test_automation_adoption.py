@@ -390,8 +390,6 @@ class RejectTests(AdoptionTestCase):
         return run_capability(REJECT, {"proposal": proposal}, principal=principal, idempotency_key=key).answer
 
     def test_a_person_rejects_a_scan_once_and_it_waits_no_more(self):
-        from hq.domains.control_plane.models import SourceProposal
-
         from ..automation_sources import standing
 
         self.adopt(self.proposed(catalog(procedure("check"))))
@@ -401,8 +399,6 @@ class RejectTests(AdoptionTestCase):
         self.assertTrue(self.reject(newer)["rejected"])
         self.assertFalse(self.reject(newer, key="example-reject-again")["rejected"])
 
-        rejected = SourceProposal.objects.get(pk=newer)
-        self.assertEqual(rejected.rejected_by, OPERATOR.actor)
         self.assertIsNone(standing().pending)
         self.assertEqual(self.adopted(), [FIRST])
 

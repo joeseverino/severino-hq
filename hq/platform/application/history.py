@@ -580,11 +580,13 @@ def who_did(object_types: Iterable[str], ids: Iterable[object], *, action: str =
 @dataclass(frozen=True)
 class Acts:
     """The records ``ids`` names, of any of ``object_types``, whose first audit
-    row (of ``action``, given one) says who did each (``who_did``)."""
+    row (of ``action``, and changing the field ``changed``, given either) says
+    who did each (``who_did``)."""
 
     object_types: tuple[str, ...]
     ids: Iterable[object]
     action: str = ""
+    changed: str = ""
 
 
 def who_did_each(*asked: Acts) -> list[dict[str, Attribution]]:
@@ -594,7 +596,11 @@ def who_did_each(*asked: Acts) -> list[dict[str, Attribution]]:
     the same are answered by that one query (``read_once``)."""
 
     wanted = [frozenset(str(one) for one in acts.ids) for acts in asked]
-    key = repr(tuple((acts.object_types, sorted(ids), acts.action) for acts, ids in zip(asked, wanted, strict=True)))
+    key = repr(
+        tuple(
+            (acts.object_types, sorted(ids), acts.action, acts.changed) for acts, ids in zip(asked, wanted, strict=True)
+        )
+    )
     found = read_once(f"history.who_did_each:{key}", lambda: _who_did_each(asked, wanted))
     return [dict(each) for each in found]
 
@@ -605,7 +611,11 @@ def _who_did_each(asked: Sequence[Acts], ids: Sequence[frozenset[str]]) -> list[
         # Asked about no record it still asks, so a page costs the same
         # whether it names none or many.
         condition = Q(object_type__in=acts.object_types) & (Q(object_id__in=wanted) if wanted else Q(pk__lt=0))
-        each.append((place, condition & Q(action=acts.action) if acts.action else condition))
+        if acts.action:
+            condition &= Q(action=acts.action)
+        if acts.changed:
+            condition &= Q(metadata__changes__has_key=acts.changed)
+        each.append((place, condition))
     found: list[dict[str, Attribution]] = [{} for _ in asked]
     rows = AuditLog.objects.filter(Q(*(condition for _place, condition in each), _connector=Q.OR))
     asks = Case(*(When(condition, then=Value(place)) for place, condition in each), default=Value(-1))
@@ -618,12 +628,13 @@ def _who_did_each(asked: Sequence[Acts], ids: Sequence[frozenset[str]]) -> list[
     return found
 
 
-def asking(model: type, records: Iterable[Any], action: str = AuditLog.Action.CREATED) -> Acts:
-    """The audit rows that created each of ``records`` (or first did
-    ``action`` to it), of ``model``, under its audit label, read with others'
-    by ``who_did_each``."""
+def asking(model: type, records: Iterable[Any], *, changed: str = "") -> Acts:
+    """The audit rows that created each of ``records`` (or first changed its
+    field ``changed``: a decision's), of ``model``, under its audit label,
+    read with others' by ``who_did_each``."""
 
-    return Acts((audited_labels()[model],), [record.pk for record in records], action=action)
+    action = AuditLog.Action.UPDATED if changed else AuditLog.Action.CREATED
+    return Acts((audited_labels()[model],), [record.pk for record in records], action, changed)
 
 
 def asked_by(model: type, records: Iterable[Any]) -> dict[str, Attribution]:

@@ -881,8 +881,7 @@ def reject(command: RejectProposal, *, principal: Principal) -> Rejected:
         proposal.save(update_fields=("rejected_playbooks", "updated_at"))
     else:
         proposal.rejected_at = timezone.now()
-        proposal.rejected_by = principal.actor
-        proposal.save(update_fields=("rejected_at", "rejected_by", "updated_at"))
+        proposal.save(update_fields=("rejected_at", "updated_at"))
     return {"ok": True, "rejected": True, "message": "Rejected."}
 
 

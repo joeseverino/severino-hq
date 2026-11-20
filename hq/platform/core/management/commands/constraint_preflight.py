@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import ClassVar, override
 
 from django.apps import apps
+from django.core.exceptions import FieldError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import DEFAULT_DB_ALIAS, connection, connections, models
 from django.db.migrations.executor import MigrationExecutor
@@ -84,10 +85,10 @@ def checks() -> Iterator[ConstraintCheck]:
             if not _adds_a_check(operation):
                 continue
             try:
-                model = apps.get_model(app, operation.model_name)
-            except LookupError:  # noqa: S112 - a model a later migration removed has no table to count
+                check = _check(app, name, position, operation, apps.get_model(app, operation.model_name), editor)
+            except LookupError, FieldError:  # noqa: S112 - a model or field a later migration removed has nothing to count
                 continue
-            yield _check(app, name, position, operation, model, editor)
+            yield check
 
 
 @dataclass(frozen=True, slots=True)

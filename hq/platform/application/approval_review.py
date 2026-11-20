@@ -11,7 +11,6 @@ from typing import Any
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 lazy from hq.domains.control_plane.providers import PROVIDERS
-lazy from hq.platform.core.models import AuditLog
 
 from .approvals import COMPARED, DECLARATIONS, NO_OFFER, WARNINGS, offers, shown_by
 from .contracts import Effect
@@ -406,12 +405,10 @@ def review(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
     decisions it offers them (``approvals.offers``)."""
 
     shown, warnings = marked(preview(held), _warnings(held))
-    # A held request is saved again only as it settles, so its first update
-    # is who decided it.
-    asker, decider = who_did_each(
-        asking(ApprovalRequest, (held,)), asking(ApprovalRequest, (held,), AuditLog.Action.UPDATED)
-    )
+    asker, settler = who_did_each(asking(ApprovalRequest, (held,)), asking(ApprovalRequest, (held,), changed="state"))
     who = asker.get(str(held.pk), NOBODY)
+    # Whoever settled an approval or a rejection decided it; any other end
+    # (lapsed, superseded, withdrawn) nobody decided.
     decided = held.state in (ApprovalRequest.State.APPROVED, ApprovalRequest.State.REJECTED)
     # Its heading names whoever its audit row says asked.
     sentence = replace(asked(held, shown), actor=who.actor) if who else asked(held, shown)
@@ -421,7 +418,7 @@ def review(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
     return {
         "held": held,
         "who": who,
-        "decided_by": decider.get(str(held.pk), NOBODY) if decided else NOBODY,
+        "decided_by": settler.get(str(held.pk), NOBODY) if decided else NOBODY,
         "tone": Tone.ATTENTION if held.state == ApprovalRequest.State.PENDING else "",
         # A settled request offers nothing, and its aside says how it ended.
         "offer": offers(principal, (held,))[held.pk] if held.state == ApprovalRequest.State.PENDING else NO_OFFER,

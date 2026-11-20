@@ -278,7 +278,6 @@ class DeviceActsAsItsPersonTests(TestCase):
 
         held.refresh_from_db()
         self.assertEqual(held.state, ApprovalRequest.State.APPROVED)
-        self.assertEqual(held.decided_actor, "example-phone")
 
     def test_a_device_whose_person_never_signed_in_keeps_nothing_of_anyones(self):
         from hq.platform.application.security import person

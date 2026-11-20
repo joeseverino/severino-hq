@@ -321,13 +321,11 @@ class PlaybooksPageTests(TestCase):
         newest = self.newest()
         response = self.client.post(_reject(newest.pk), _sent())
         self.assertRedirects(response, reverse("control_plane:playbooks"), fetch_redirect_response=False)
-        newest.refresh_from_db()
-        self.assertEqual(newest.rejected_by, self.owner.get_username())
         html = self.page()
         self.assertNotIn(_scan_page(newest), {element.attrs.get("href") for element in _head(html)})
         self.assertFalse({path for path in _posts(html) if path.endswith(("/adopt/", "/reject/"))})
         scan = self.page(_scan_page(newest))
-        self.assertIn("Rejected by", text(scan))
+        self.assertIn(f"Rejected by {self.owner.get_username()}", text(scan))
         self.assertFalse({path for path in _posts(scan) if path.endswith(("/adopt/", "/reject/"))})
 
     def test_adopt_all_makes_the_proposal_the_catalog(self):

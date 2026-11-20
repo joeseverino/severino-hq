@@ -592,11 +592,10 @@ def _lock_pending(held: ApprovalRequest) -> ApprovalRequest:
     return locked
 
 
-def _record(row: ApprovalRequest, state: str, *, decider: Principal | None = None, **fields: Any) -> None:
-    """Write a decision: its state, when, who (when a person decided) and the fields it sets."""
+def _record(row: ApprovalRequest, state: str, **fields: Any) -> None:
+    """Write a decision: its state, when, and the fields it sets. Who took it
+    is its audit row's (``approval_review.review``)."""
 
-    if decider is not None:
-        fields = {"decided_actor": decider.actor, "decided_interface": decider.interface, **fields}
     row.state = state
     row.decided_at = timezone.now()
     for name, value in fields.items():
@@ -862,7 +861,7 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
             result = execute_approved(
                 _seal(Approval(spec, command, locked.target or None, acting, frozenset(held.payload)))
             )
-        _record(locked, ApprovalRequest.State.APPROVED, decider=principal, result=result)
+        _record(locked, ApprovalRequest.State.APPROVED, result=result)
     return {"ok": True, "approved": str(locked.id), "result": result, "message": "Approved and applied."}
 
 
@@ -915,7 +914,7 @@ def reject(command: RejectCommand, *, principal: Principal) -> ApprovalRejected:
     require_decidable(principal, held, REJECT)
     with own_operation(held, operation=REJECT, principal=principal), transaction.atomic():
         locked = _lock_pending(held)
-        _record(locked, ApprovalRequest.State.REJECTED, decider=principal, decision_note=command.note.strip()[:300])
+        _record(locked, ApprovalRequest.State.REJECTED, decision_note=command.note.strip()[:300])
     return {"ok": True, "rejected": str(locked.id), "message": "Rejected. Nothing was applied."}
 
 

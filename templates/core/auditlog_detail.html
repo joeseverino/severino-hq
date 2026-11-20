@@ -18,7 +18,7 @@
       {% fact "Commit read" %}{{ scan.revision|breakable }} on {{ scan.proposal.branch|breakable }}{% if scan.proposal.committer %} from {{ scan.proposal.committer|breakable }}{% endif %}{% endfact %}
       {% fact "Commit adopted" value=adopted_revision|or_empty %}
       {% if scan.proposal.rejected_at %}
-        {% fact "Rejected by" value=scan.proposal.rejected_by|or_empty %}
+        {% fact "Rejected by" value=rejected_by.words|or_empty %}
         {% fact "Rejected" %}{{ scan.proposal.rejected_at|when:"exact" }}{% endfact %}
       {% endif %}
     {% endif %}
