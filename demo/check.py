@@ -531,14 +531,14 @@ class DemoSiteTests(unittest.TestCase):
         with sync_playwright() as playwright:
             browser = _engine(playwright).launch()
             page = browser.new_page()
-            errors, elsewhere = [], []
+            errors, made = [], {}
             at = [""]
             uncaught = Uncaught(page, lambda: at[0])
             page.on("console", lambda message: message.type == "error" and errors.append(f"{at[0]}: {message.text}"))
-            page.on("request", lambda request: request.url.startswith(self.origin) or elsewhere.append(request.url))
-            # A request cut off is one a page asked for and threw away: the
-            # page demo-theme.js leaves for an address's saved copy asks for none.
-            page.on("requestfailed", lambda request: errors.append(f"{at[0]}: {request.url} {request.failure}"))
+            page.on("request", lambda request: made.setdefault(request, at[0]))
+            # A request cut off is one this page asked for and threw away, not one the next visit
+            # cut: the page demo-theme.js leaves for an address's saved copy asks for none.
+            page.on("requestfailed", lambda r: made[r] == at[0] and errors.append(f"{at[0]}: {r.url} {r.failure}"))
             # Every address with a query is opened through the one saved-copy
             # lookup in demo-theme.js, so one of them stands for all.
             queried = min(json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))["variants"])
@@ -555,7 +555,7 @@ class DemoSiteTests(unittest.TestCase):
             errors += uncaught.so_far()
             browser.close()
         self.assertEqual(errors[:20], [])
-        self.assertEqual(elsewhere, [])
+        self.assertEqual([request.url for request in made if not request.url.startswith(self.origin)], [])
 
     def test_the_about_links_lead_to_demo_pages_files_in_the_repository_or_its_author(self):
         # The dialog's links and the corner control's own address, which is
