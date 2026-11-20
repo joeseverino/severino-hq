@@ -113,6 +113,14 @@ NODE_KINDS: Mapping[str, NodeKind] = {
 }
 
 
+def page_url(kind: str, identity: str) -> str:
+    """The HQ page of the thing of ``kind`` named ``identity``, as ``NODE_KINDS``
+    declares it; "" for a kind with none. Raises ``KeyError`` for a kind it lacks."""
+
+    node = NODE_KINDS[kind]
+    return node.page(identity) if node.page and identity else ""
+
+
 def record_name(kind: str, spec: Mapping[str, Any], key: str = "", *, leads: bool = True) -> str:
     """The name a record stands for, from its settings; its key when it has none.
 
@@ -253,11 +261,10 @@ def entity_link(
     identity = str(identity or "")
     node = NODE_KINDS.get(kind)
     if node is not None:
-        url = node.page(identity) if node.page and identity else ""
         named = _NAMED.get(kind, str)(identity)
         return EntityLink(
             label=label or named,
-            url=url,
+            url=page_url(kind, identity),
             kind=kind,
             kind_label=kind_label(kind),
             title=identity if named != identity else "",
@@ -282,7 +289,7 @@ def entity_link(
             named = _record_label(identity)
             return EntityLink(
                 label=label or named,
-                url=NODE_KINDS["resource"].page(identity) if identity else "",
+                url=page_url(Kind.RESOURCE, identity),
                 kind=kind,
                 kind_label=kind_label(kind),
                 title=identity if named != identity else "",
@@ -306,7 +313,7 @@ def container_link(host: str, name: str, watcher: str = "") -> EntityLink:
 
     if watcher:
         return entity_link("resource", watcher, label=name)
-    page = NODE_KINDS["machine"].page(host) if host and name else ""
+    page = page_url(Kind.MACHINE, host) if name else ""
     return EntityLink(
         label=name,
         url=f"{page}#container-{slugify(name)}" if page else "",
@@ -363,10 +370,7 @@ def node_link(node: Any) -> EntityLink:
     external.
     """
 
-    kind = NODE_KINDS.get(node.kind)
-    url = node.url
-    if not url and kind is not None and kind.page is not None and node.label:
-        url = kind.page(node.label)
+    url = node.url or (page_url(node.kind, node.label) if node.kind in NODE_KINDS else "")
     # A declaration is named by its provider's label, not "Resource".
     registry_kind = node.kind_key
     named = registry_kind if registry_kind in PROVIDERS or registry_kind in OBSERVATIONS else node.kind

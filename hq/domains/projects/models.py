@@ -3,12 +3,12 @@
 from typing import override
 
 from django.db import models
-from django.urls import reverse
 
 from hq.platform.application.lists import split_list
-from hq.platform.application.references import Referable
+from hq.platform.application.references import Kind, Referable
 from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.core.models import TimestampedModel, free_slug
+lazy from hq.platform.application.entity_links import page_url
 
 PROJECT_CATEGORY_CHOICES = [
     ("wordpress_security", "WordPress security"),
@@ -110,7 +110,7 @@ class Project(TimestampedModel):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self) -> str:
-        return reverse("projects:detail", args=[self.slug])
+        return page_url(Kind.PROJECT, self.slug)
 
     @property
     def state(self) -> Project.Status:

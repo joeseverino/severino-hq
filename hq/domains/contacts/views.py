@@ -25,9 +25,11 @@ from hq.platform.application.contact_submissions import (
     change_gap,
     find_submission,
 )
+from hq.platform.application.entity_links import page_url
 from hq.platform.application.labels import dotted
 from hq.platform.application.moments import moment, when
 from hq.platform.application.pages import PageAction, RecordListMixin, RecordPageMixin, page_context, runs_here
+from hq.platform.application.references import Kind
 from hq.platform.application.security import Capability, safe_next
 from hq.platform.application.ui import counted
 from hq.platform.application.url_query import with_query
@@ -249,7 +251,7 @@ def contact_delete(request, pk: int):
     if request.method == "POST":
         result = execute_posted(request, DELETE, {"confirm": str(pk)}, target=pk)
         if refused(request, result):
-            return redirect("contacts:detail", pk=pk)
+            return redirect(page_url(Kind.MESSAGE, str(pk)))
         return redirect("contacts:list")
 
     return render(
@@ -259,7 +261,7 @@ def contact_delete(request, pk: int):
             "submission": submission,
             "confirm": {
                 "action": PageAction.command(DELETE, pk, confirms=True),
-                "cancel_url": reverse("contacts:detail", args=[pk]),
+                "cancel_url": page_url(Kind.MESSAGE, str(pk)),
                 "gap": change_gap(),
             },
             **page_context(
@@ -267,7 +269,7 @@ def contact_delete(request, pk: int):
                 dotted(_sent(submission), f"{submission.get('name', '')} ({submission.get('email', '')})"),
                 trail=(
                     ("Messages", reverse("contacts:list")),
-                    (f"Message #{pk}", reverse("contacts:detail", args=[pk])),
+                    (f"Message #{pk}", page_url(Kind.MESSAGE, str(pk))),
                 ),
             ),
         },

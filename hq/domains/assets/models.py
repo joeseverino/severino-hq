@@ -4,12 +4,12 @@ from decimal import Decimal
 from typing import override
 
 from django.db import models
-from django.urls import reverse
 
 from hq.platform.application import business_use
-from hq.platform.application.references import CERTIFICATE, Referable, ReferenceField
+from hq.platform.application.references import CERTIFICATE, Kind, Referable, ReferenceField
 from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.core.models import TimestampedModel, free_slug
+lazy from hq.platform.application.entity_links import page_url
 lazy from hq.platform.application.moments import when_day
 
 PAYMENT_METHOD_CHOICES = [
@@ -98,7 +98,7 @@ class Asset(TimestampedModel):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self) -> str:
-        return reverse("assets:detail", args=[self.slug])
+        return page_url(Kind.ASSET, self.slug)
 
     @property
     def state(self) -> Asset.Status:

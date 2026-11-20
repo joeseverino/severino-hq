@@ -33,10 +33,12 @@ from hq.platform.application.command_center import command_center
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.demo import DEMO_SESSION_KEY, SET_DEMO
 from hq.platform.application.denials import COALESCE_WINDOW, LABEL as DENIAL_LABEL
+from hq.platform.application.entity_links import entity_link
 from hq.platform.application.moments import moment
 from hq.platform.application.own_devices import SET_OWN_DEVICE, devices_of
 from hq.platform.application.pages import PageAction, PageMixin, runs_here
 from hq.platform.application.projection import projection_scope
+from hq.platform.application.references import Kind
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.search import global_search
 from hq.platform.application.security import Capability, agent_grantable, safe_next, web_principal
@@ -555,8 +557,7 @@ class SearchView(PageMixin, TemplateView):
                     "label": "Messages",
                     "rows": [
                         ListRow(
-                            title=item["name"],
-                            url=reverse("contacts:detail", args=[item["id"]]),
+                            link=entity_link(Kind.MESSAGE, str(item["id"]), label=item["name"]),
                             detail=capfirst(item.get("status") or ""),
                             at=moment(item.get("created_at")),
                         )

@@ -30,8 +30,10 @@ from hq.platform.application.labels import dotted
 from hq.platform.application.moments import span, when_day
 from hq.platform.application.record_errors import Sentence
 from hq.platform.application.routes import reverse
+lazy from hq.platform.application.entity_links import page_url
 lazy from hq.platform.application.expiry import days_until
 lazy from hq.platform.application.moments import moment
+lazy from hq.platform.application.references import Kind
 
 from .glance_shapes import GlanceObservation
 from .names import in_zone
@@ -720,7 +722,7 @@ def named_page(route: str, resource: Any, field: str) -> str:
             return reverse(route, args=[value])
         except NoReverseMatch:  # noqa: S110 - a value no route takes falls back to the detail page
             pass
-    return reverse("control_plane:detail", kwargs={"key": resource.key})
+    return page_url(Kind.RESOURCE, resource.key)
 
 
 def key_from(text: Any) -> str:

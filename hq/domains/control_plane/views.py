@@ -14,7 +14,7 @@ from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.conditions import DRIFTED, holding
 from hq.platform.application.contracts import Effect
 from hq.platform.application.doors import NOBODY
-from hq.platform.application.entity_links import kind_label, record_name, web_url
+from hq.platform.application.entity_links import kind_label, page_url, record_name, web_url
 from hq.platform.application.history import asked_by
 from hq.platform.application.infrastructure import (
     serialize_resource,
@@ -232,10 +232,10 @@ class ResourceRemoveView(View):
         resource = get_object_or_404(ManagedResource, key=key)
         result = _web_operation(request, resource, OperationRequest.Action.DELETE)
         if refused(request, result):
-            return redirect("control_plane:detail", key=key)
+            return redirect(page_url(Kind.RESOURCE, key))
         if "forgotten" in result:
             return redirect("control_plane:list")
-        return redirect("control_plane:detail", key=key)
+        return redirect(page_url(Kind.RESOURCE, key))
 
 
 class InfrastructureListView(RecordListMixin, TemplateView):
@@ -514,7 +514,7 @@ class OperationView(View):
         # the fact the verb answers (a machine's routes, a service's
         # container) and send `next`. Validated through the shared helper, so
         # the field cannot become an open redirect.
-        destination = safe_next(request, fallback=reverse("control_plane:detail", kwargs={"key": key}))
+        destination = safe_next(request, fallback=page_url(Kind.RESOURCE, key))
         refused(request, _web_operation(request, resource, self.action))
         return redirect(destination)
 

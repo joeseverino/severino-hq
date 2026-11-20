@@ -19,7 +19,7 @@ from django.views.generic import TemplateView
 
 from hq.domains.control_plane.forms import MailFailuresForm, MailPolicyForm, MailSendersForm
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.application.entity_links import entity_link
+from hq.platform.application.entity_links import entity_link, page_url
 from hq.platform.application.inventory import inventory_state
 from hq.platform.application.mail_policy import mail_overview, parse_spf
 from hq.platform.application.pages import PageAction, RecordPageMixin, page_context
@@ -110,7 +110,7 @@ class ZoneIndexView(View):
         zones = zone_catalog(pinned=pinned(request.user, DOMAIN))
         managed = [zone for zone in zones if zone.managed]
         if managed:
-            return redirect("zones:detail", zone=managed[0].zone)
+            return redirect(page_url(Kind.ZONE, managed[0].zone))
         return render(
             request,
             "control_plane/zone_index.html",
@@ -349,4 +349,4 @@ class ZoneAdoptView(View):
 
     def post(self, request, zone):
         refused(request, execute_posted(request, ADOPT_ZONE, {"zone": zone, "token": request.POST.get("token", "")}))
-        return redirect("zones:detail", zone=zone)
+        return redirect(page_url(Kind.ZONE, zone))

@@ -19,7 +19,7 @@ from hq.platform.application import related
 from hq.platform.application.action_links import capability_action_link
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import related_documents
-from hq.platform.application.entity_links import web_url
+from hq.platform.application.entity_links import page_url, web_url
 from hq.platform.application.moments import moment
 from hq.platform.application.pages import PageAction, PageBadge, PageMixin, RecordPageMixin
 from hq.platform.application.projects import (
@@ -30,6 +30,7 @@ from hq.platform.application.projects import (
     repository_key,
 )
 from hq.platform.application.record_errors import Sentence
+from hq.platform.application.references import Kind
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import (
     TableColumn,
@@ -162,7 +163,7 @@ class ProjectUpdatesRunView(AskMixin, View):
 
     @override
     def back(self) -> str:
-        return reverse("projects:detail", args=[self.kwargs["slug"]])
+        return page_url(Kind.PROJECT, self.kwargs["slug"])
 
 
 class ProjectPage(PageMixin):

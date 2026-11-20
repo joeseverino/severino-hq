@@ -10,13 +10,14 @@ from django.views.generic import TemplateView
 
 from hq.platform.application.adoption import ADOPT, ADOPT_SERVICE, unmanaged_services
 from hq.platform.application.connections import machines_once
-from hq.platform.application.entity_links import entity_link
+from hq.platform.application.entity_links import entity_link, page_url
 from hq.platform.application.exposure import OPEN
 from hq.platform.application.exposure_fixes import gate_links
 from hq.platform.application.hq_self import LABEL as HQ_LABEL, hq_service
 from hq.platform.application.inventory import inventory_state
 from hq.platform.application.labels import sentence
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin, RowMark, RowOrder, page_context
+from hq.platform.application.references import Kind
 from hq.platform.application.resource_capabilities import (
     LIFECYCLE_VERBS,
     resource_capabilities,
@@ -155,7 +156,7 @@ class ServiceDetailView(RecordPageMixin, TemplateView):
 
         canonical = alias_target(kwargs["hostname"])
         if canonical:
-            return redirect("control_plane:service", hostname=canonical)
+            return redirect(page_url(Kind.SERVICE, canonical))
         return super().get(request, *args, **kwargs)
 
     @cached_property
@@ -229,7 +230,7 @@ class ServiceDetailView(RecordPageMixin, TemplateView):
                 PageAction.command(ADOPT, {"kind": CONTAINER_KIND, "token": container.token}, variant=CONTAINER_KIND)
             )
         if self.service.zone_key:
-            actions.append(PageAction("Domain", reverse("zones:detail", args=[self.service.zone_key])))
+            actions.append(PageAction("Domain", page_url(Kind.ZONE, self.service.zone_key)))
         return tuple(actions)
 
     @override
@@ -272,7 +273,7 @@ class ServiceStartView(View):
         form = ServiceStartForm(request.GET)
         if not form.is_valid():
             return self._page(request, form, status=400)
-        return redirect("control_plane:service", hostname=form.cleaned_data["hostname"])
+        return redirect(page_url(Kind.SERVICE, form.cleaned_data["hostname"]))
 
     def _page(self, request, form, status=200):
         return render(
