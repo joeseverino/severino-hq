@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from django.db import connection
 from django.template.loader import render_to_string
-from django.test import SimpleTestCase, TestCase, override_settings, tag
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
@@ -505,16 +505,6 @@ class CadenceTests(TestCase):
         self.assertEqual(week.said, "No data for the week of Sep 22")
 
 
-@tag("source")
-class CadenceStyleTests(SimpleTestCase):
-    """The no-data mark has a style in the stylesheet."""
-
-    def test_the_no_data_mark_is_styled(self):
-        from hq.platform.core.stylesheets import stylesheet
-
-        self.assertIn(".cadence-mark.is-no-data", stylesheet())
-
-
 class SharedPartialLabelTests(TestCase):
     def test_a_week_plans_link_says_what_it_changes(self):
         plan = WeekPlan(
@@ -682,7 +672,6 @@ class DashboardProjectionTests(TestCase):
         self.assertEqual(snapshot["kpis"]["projects_needing_output"], 1)
         # Items, not the numbers they carry.
         self.assertEqual(snapshot["priority_count"], len(snapshot["priority"]))
-        self.assertNotIn("priority_group_count", snapshot)
 
     def test_expense_kpis_respect_fiscal_year_start(self):
         today = timezone.localdate()

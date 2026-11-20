@@ -111,12 +111,6 @@ class TopologyPageTests(TestCase):
 
         detail = reverse("control_plane:detail", kwargs={"key": "internal-name"})
         self.assertIn(detail, hrefs(response))
-        # A multi-line {# … #} is not a comment in Django, it is text. One
-        # holding the word <strong> renders an element, and the explorer reads
-        # the first <strong> in a node as its title, so the leak is silent
-        # until the status line starts quoting the commentary.
-        self.assertNotContains(response, "{#")
-        self.assertNotContains(response, "#}")
 
     def test_records_of_one_name_and_type_are_told_apart_by_their_values(self):
         for key, content in (

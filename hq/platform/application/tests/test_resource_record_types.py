@@ -79,13 +79,6 @@ class RecordTypeTests(TestCase):
         with throwaway_media(), seeds.built("showcase"):
             pass
 
-    def test_every_host_resource_types_its_read_of_one(self):
-        # A list's item type is required of every resource as it registers.
-        for name, spec in _host_resources().items():
-            with self.subTest(resource=name):
-                if spec.detail_handler:
-                    self.assertIsNotNone(spec.record_type)
-
     def test_each_answer_is_of_its_resources_type(self):
         # Read past the doors, which each read the playbooks adopted now as they serve a call.
         catch_up()

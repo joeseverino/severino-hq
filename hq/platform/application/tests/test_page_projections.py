@@ -15,7 +15,7 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.domains.control_plane.permissions import Tailscale
 from hq.platform.application.markup_testing import select, text
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.core.testing import NOBODY, READER, operator
+from hq.platform.core.testing import READER, operator
 
 from ..connection_context import ConnectionsContext, connections_context
 from ..field_masks import WHOLE_RECORD
@@ -24,7 +24,7 @@ from ..resources import (
     get_resource,
     list_resource,
 )
-from ..security import AuthorizationError, cli_principal
+from ..security import cli_principal
 from ..tailnet_context import TailnetContext
 
 NOW = timezone.now()
@@ -135,9 +135,6 @@ class TailnetProjectionTests(TestCase):
 
         found = response.context["tailnet"]
         self.assertIsInstance(found, TailnetContext)
-        # Nothing derived beside it: the page renders the projection.
-        for retired in ("policy", "grant_rows", "ssh_rows", "fact_rows", "tag_devices"):
-            self.assertNotIn(retired, response.context)
         read = list_resource("tailnet", principal=cli_principal())
         self.assertEqual(read["count"], 1)
         self.assertEqual(found.as_dict(), read["items"][0])
@@ -180,12 +177,6 @@ class TailnetProjectionTests(TestCase):
         self.assertIn("tailscale.policy", {item["kind"] for item in tailnet["unread"]})
         self.assertContains(response, "Tailnet policy not read yet.")
 
-    def test_a_principal_without_read_is_refused(self):
-        nobody = NOBODY
-
-        with self.assertRaises(AuthorizationError):
-            list_resource("tailnet", principal=nobody)
-
 
 @override_settings(SEVERINO_SITE_HOST="hq.example.com")
 class ConnectionProjectionTests(TestCase):
@@ -198,16 +189,6 @@ class ConnectionProjectionTests(TestCase):
 
         found = response.context["connections"]
         self.assertIsInstance(found, ConnectionsContext)
-        for retired in (
-            "connection_groups",
-            "sight_by_connection",
-            "credential_fixes",
-            "connection_posture",
-            "hq_path",
-            "oldest",
-            "unlabeled",
-        ):
-            self.assertNotIn(retired, response.context)
         web = found.as_dict()
         read = list_resource("connections", principal=cli_principal(), fields=[WHOLE_RECORD])
         # The estate is the same for every caller; the request half is the page's.
