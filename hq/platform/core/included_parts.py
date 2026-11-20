@@ -149,24 +149,26 @@ WORK_QUEUE = _part(
 
     - its first line (`row-line`): the title and, only when it is urgent, the word "Urgent" after it
       in its tone (the words are `decisions.URGENCY`; a row that needs attention carries no mark, its
-      word kept for a screen reader). The title states what is wrong and links to the thing it is
-      about. It is what a reader presses, so it leads; a domain's heading, a family's name and their
-      counts read below it;
-    - one line of what it means;
-    - quiet under it, since when, where its owner knows (`Insight(since=...)`), and never a guess, and
-      how old the reading it is drawn from is (`Insight(observed_at=...)`). An out-of-date reading
-      never asserts a live condition: its owner says what was read, in the past tense, as a notice.
-      These are words under the title, not a column: most rows have neither;
+      word kept for a screen reader), then what it means (`row-gist`), quiet. The title states what is
+      wrong and links to the thing it is about. It is what a reader presses, so it leads; a domain's
+      heading, a family's name and their counts read below it. What it means is one line cut at its
+      end, on the title's line where both fit and on its own where not, and opening the row releases
+      it in place, so every row holding one offers its toggle. A held request's meaning says what is
+      asked; its buttons decide on the whole of it, one press of the toggle or its title away;
+    - quiet under it, once out of date, how old the reading it is drawn from is
+      (`Insight(observed_at=...)`). An out-of-date reading never asserts a live condition: its owner
+      says what was read, in the past tense, as a notice. These are words under the title, not a
+      column: most rows have none. Since when (`Insight(since=...)`) is said in the origin panel, never
+      on the row;
     - buttons: the owner's actions, the first step that can be taken now when the owner offered none,
       and the check that reads again. At most one is primary. Where the reader sorts their own queue,
       Dismiss or Restore is the last of them (`row_actions put_away=`).
 
-    Closed, a row is those one or two lines. Everything taller is the row's `row-below`, opened by its
-    toggle into the line beneath, from the title's edge to the table's. A row toggles only where
-    opening it shows something more, and with no script every row shows all of it. The line beneath
-    holds, in order:
+    Closed, a row is one line where its words fit. Everything taller is the row's `row-below`, opened
+    by its toggle into the line beneath, from the title's edge to the table's. A row toggles only where
+    opening it shows something more, or releases a cut meaning, and with no script every row shows all
+    of it. The line beneath holds, in order:
 
-    - what it means in full;
     - what was read that shows it (`Insight(facts=...)`), each label once with its values beside it;
     - what to do, where a command or an instruction is a step, one standing alone and several
       numbered. A command is `{% command text=... %}`;
@@ -194,8 +196,8 @@ WORK_QUEUE = _part(
     A queue of three or fewer is read on the dashboard, under the greeting, as the queue's own rows
     (`glance`), under no heading of their own. A longer one is a count and a link to its page, except
     the held requests, which are read there first at any length. There a row is its title, what it
-    means, its age and its buttons, holding nothing beneath; its title opens the row on the page that
-    shows the rest, steps included, or a held request's own page.
+    means and its buttons, holding nothing beneath; its title opens the row on the page that shows the
+    rest, steps included, or a held request's own page.
 
     **An item is open until its owner stops raising it.** Nobody closes one by looking at it. What a
     reader can do with one they are not acting on is dismiss it. It leaves their queue and their
@@ -639,11 +641,6 @@ PARTS = (
         stays in the problems' place above the page. The status at the top counts them by urgency ("1
         urgent · 1 needs attention") and links to the first, and a figure in the summary band takes the
         tone of its part's problems.
-
-        Problems drawn inside a section of a page about something else (a machine's containers, a
-        container's checks, the request's path) are the queue row's dense form (`dense`): what it means
-        comes first in the line beneath, so the row is its title, its marks and its buttons, and the
-        section's own content stays what it is about.
         """,
         example=records.PROBLEMS,
         states=records.PROBLEMS_STATES,

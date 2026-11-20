@@ -496,8 +496,8 @@ TABLE_REGION = table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  #
     column is as wide as it is.
 
     An identifier the row is read by, in a row of many columns (a container's image), is
-    `code.cell-whole`, and what a row's buttons decide (a queue row's detail) is a `cell-whole` the
-    clamp never holds. A value told in several parts marks each `cell-part`.
+    `code.cell-whole`, which the clamp never holds. A value told in several parts marks each
+    `cell-part`.
 
     What each part of a cell is decides how it wraps, and the region marks it (`data-cell`,
     `table_tags.mark_cells`). The stylesheet keys its cuts, holds and wraps on that mark, never on a

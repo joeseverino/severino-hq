@@ -82,8 +82,8 @@
    wide box holds it whole, so its row owes no toggle for it. Only words are
    held: each part of words in it (`data-cell`) is clamped on its own, so a
    mark or a toggle beside them stays whole, and a cell of no such part is
-   clamped whole. A part the row is read by (`cell-whole`: what its buttons
-   decide) is never held. WebKit lays a value's boxes out past the clamp, so
+   clamped whole. An identifier the row is read by (`cell-whole`) is never
+   held. WebKit lays a value's boxes out past the clamp, so
    the box holds three lines too. A column's copy on the open line is whole,
    so nothing there is clamped. */
 @container table-region (width < 36rem) {

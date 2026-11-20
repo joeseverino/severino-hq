@@ -193,7 +193,7 @@ PROBLEMS = Example(
 
 
 PROBLEMS_STATES = {
-    # A thing's problems inside one of its sections: the queue row's dense form,
+    # A thing's problems inside one of its sections: the queue's rows,
     # one line each, then the section's own table.
     "dense": Example(
         '{% section "Example containers" %}{% include "partials/_problems.html#rest" with rest=rest %}'

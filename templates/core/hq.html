@@ -49,7 +49,7 @@ uptime and how the request came.
   {% include "partials/_example_connection.html" with notice=True %}
   {% include "partials/_problems.html#rest" with rest=hq.problems_in.reach|not_urgent only %}
   {% include "core/_connection_panel.html#route" with route=found.route only %}
-  {% if found.findings %}{% include "partials/_work_queue.html" with items=found.finding_rows grouped=True here=True dense=True only %}{% endif %}
+  {% if found.findings %}{% include "partials/_work_queue.html" with items=found.finding_rows grouped=True here=True only %}{% endif %}
 {% endsection %}
 {% endwith %}{% endif %}
 {% section "Release" id="hq-release" %}
