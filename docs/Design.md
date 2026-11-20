@@ -15,13 +15,14 @@ holds what holds across parts: [Rules](#rules) and [Held by eye](#held-by-eye),
 what no gate measures. A part's own rules are on its `Part` declaration
 (`rules`), stated under its name in [Shared UI](Shared-UI.md#each-parts-rules).
 
-The stylesheet is the sheets `hq/platform/core/stylesheets.py` lists, each
-one responsibility under the file-size ceiling (`SEVERINO_FILE_LINE_LIMIT`), linked in that order. The
+The stylesheet is every sheet in `static/css/app`, each one responsibility
+under the file-size ceiling (`SEVERINO_FILE_LINE_LIMIT`), linked in the order
+`hq/platform/core/stylesheets.py` gives, any it leaves out last. The
 first declares the cascade layers (`tokens`, `base`, `components`, `fit`)
 and the rest fill them; `fit` holds what a table lets go as its region
-narrows, so it outranks any component's own display. Inside a layer a later sheet wins a tie, so a sheet is added
-to the list where its rules belong in the cascade, and every check of the
-stylesheet reads it through that list.
+narrows, so it outranks any component's own display. Inside a layer a later sheet wins a tie, so a sheet is named
+in that order where its rules belong in the cascade, and every check of the
+stylesheet reads it through `SHEETS`.
 
 **Browsers.** HQ's floor is the current and the previous release of each
 engine: Safari (on the Mac and on iOS), Chromium and Firefox, read from

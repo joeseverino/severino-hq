@@ -7,7 +7,7 @@ from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import elements
-from hq.platform.core.stylesheets import DIRECTORY, SHEETS, STATIC, sheet_paths
+from hq.platform.core.stylesheets import SHEETS, sheet_paths
 
 LAYER_ORDER = re.compile(r"@layer\s+([\w\s,.-]+);")
 LAYER_BLOCK = re.compile(r"@layer\s+([\w.-]+)\s*\{")
@@ -75,15 +75,6 @@ def container_query_faults(css: str) -> tuple[list[str], list[str]]:
 
 
 class SheetTests(SimpleTestCase):
-    def test_every_sheet_in_the_directory_is_linked(self):
-        """A sheet left out of the list is never linked, and every check of the
-        stylesheet reads past it."""
-
-        written = {path.relative_to(STATIC).as_posix() for path in (STATIC / DIRECTORY).glob("*.css")}
-
-        self.assertEqual(written, set(SHEETS))
-        self.assertEqual(len(SHEETS), len(set(SHEETS)))
-
     def test_the_layer_order_is_declared_once_before_any_layer_opens(self):
         """A layer is ordered where it is first named. One a sheet opens
         without its declaration would be ordered after `components`, and its
