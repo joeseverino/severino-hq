@@ -7,12 +7,12 @@ these (``bridge_registry``), so a setting's name, whether it is required and
 whether it is secret are stated here and nowhere else.
 """
 
-from collections.abc import Mapping
 from typing import Any
 
 from django.conf import settings
 
 from .provider_spec import ConnectionShape, Setting
+lazy from .connection_kinds import SHAPES
 
 ACME: ConnectionShape = ConnectionShape(
     "acme",
@@ -24,7 +24,7 @@ ACME: ConnectionShape = ConnectionShape(
 API_TOKEN: ConnectionShape = ConnectionShape(
     "api_token",
     (
-        Setting("API_TOKEN", item_field="credential", secret=True),
+        Setting("API_TOKEN", item_field="credential"),
         Setting("URL", label="website"),
     ),
 )
@@ -40,7 +40,7 @@ GITHUB_APP: ConnectionShape = ConnectionShape(
 LOGIN: ConnectionShape = ConnectionShape(
     "login",
     (
-        Setting("PASSWORD", item_field="password", secret=True),
+        Setting("PASSWORD", item_field="password"),
         Setting("URL", url=0),
         Setting("USERNAME", item_field="username"),
     ),
@@ -49,12 +49,12 @@ OAUTH_CLIENT: ConnectionShape = ConnectionShape(
     "oauth_client",
     (
         Setting("CLIENT_ID", item_field="username"),
-        Setting("CLIENT_SECRET", item_field="credential", secret=True),
+        Setting("CLIENT_SECRET", item_field="credential"),
     ),
 )
 SERVICE_ACCOUNT: ConnectionShape = ConnectionShape(
     "service_account",
-    (Setting("API_TOKEN", item_field="credential", secret=True),),
+    (Setting("API_TOKEN", item_field="credential"),),
 )
 SSH_TRANSPORT: ConnectionShape = ConnectionShape(
     "ssh_transport",
@@ -75,20 +75,6 @@ SSH_TRANSPORT: ConnectionShape = ConnectionShape(
     # A transport is a way in to a machine; what is read through it says so.
     default_provider="ssh",
 )
-
-
-def _shapes(*shapes: ConnectionShape) -> Mapping[str, ConnectionShape]:
-    found: dict[str, ConnectionShape] = {}
-    for shape in shapes:
-        if shape.name in found:
-            raise ValueError(f"Two connection shapes are named {shape.name!r}.")
-        found[shape.name] = shape
-    return frozendict(dict(sorted(found.items())))
-
-
-# Every shape, by name. ``acme`` belongs to no provider: it is the certificate
-# authority account the TLS provider issues through.
-SHAPES = _shapes(ACME, API_TOKEN, GITHUB_APP, LOGIN, OAUTH_CLIENT, SERVICE_ACCOUNT, SSH_TRANSPORT)
 
 
 def _entry(setting: Setting) -> dict[str, Any]:

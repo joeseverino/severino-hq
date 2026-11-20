@@ -5,11 +5,23 @@ from collections.abc import Mapping
 from hq.platform.application.connection_contracts import UNKNOWN_CREDENTIAL
 
 from .provider_adapters import CONNECTIONS
-from .provider_spec import ConnectionKind
+from .provider_spec import ConnectionKind, ConnectionShape
 
 # Every connection provider, declared by the provider module that uses it and
 # gathered from the admitted set, so a provider cannot be admitted without one.
 CONNECTION_KINDS: Mapping[str, ConnectionKind] = frozendict(CONNECTIONS)
+
+
+def _shapes() -> Mapping[str, ConnectionShape]:
+    found: dict[str, ConnectionShape] = {}
+    for kind in CONNECTION_KINDS.values():
+        if found.setdefault(kind.shape.name, kind.shape) is not kind.shape:
+            raise ValueError(f"Two connection shapes are named {kind.shape.name!r}.")
+    return frozendict(dict(sorted(found.items())))
+
+
+# Every shape a connection arrives in, by name.
+SHAPES = _shapes()
 
 # The two facts most callers want, derived so neither can name a provider the
 # other does not.

@@ -17,7 +17,7 @@ from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.ui import ended
 
 from . import provider_spec
-from .connection_shapes import SHAPES
+from .connection_kinds import SHAPES
 from .observations import OBSERVATIONS
 from .provider_adapters import ADMITTED, CONNECTIONS
 from .provider_adapters.contracts import FAILURES, REFUSALS
@@ -64,16 +64,21 @@ def go_name(value: str) -> str:
     return "".join(_CASING.get(word, capfirst(word)) for word in re.split(r"[._]", value.lower()) if word)
 
 
-def _enumeration(description: str, values: Iterable[str], prefix: str, *, blank: str = "") -> dict[str, Any]:
-    """A closed list of names, with the controller's constant for each."""
+def _enum(description: str, values: list[str], constants: list[str]) -> dict[str, Any]:
+    """A closed list of names, with the controller's constant for each.
 
+    The generator keeps one value per constant and drops the rest, so each
+    value has a constant of its own.
+    """
+
+    if len(constants) != len(values) or len(set(constants)) != len(constants):
+        raise ValueError(f"Each value of {values} needs its own controller constant, not {constants}.")
+    return {"type": "string", "description": description, "enum": values, "x-enum-varnames": constants}
+
+
+def _enumeration(description: str, values: Iterable[str], prefix: str, *, blank: str = "") -> dict[str, Any]:
     listed = list(values)
-    return {
-        "type": "string",
-        "description": description,
-        "enum": listed,
-        "x-enum-varnames": [(prefix + go_name(value)) if value else blank for value in listed],
-    }
+    return _enum(description, listed, [(prefix + go_name(value)) if value else blank for value in listed])
 
 
 def swept_kinds() -> list[str]:
@@ -191,14 +196,9 @@ def components(
 
 def _shared(value: SharedValue) -> dict[str, dict[str, Any]]:
     if isinstance(value.schema, tuple):
-        return {
-            value.name: {
-                "type": "string",
-                "description": value.description,
-                "enum": list(value.schema),
-                "x-enum-varnames": list(value.varnames) or [value.name + go_name(item) for item in value.schema],
-            }
-        }
+        if not value.varnames:
+            return {value.name: _enumeration(value.description, value.schema, value.name)}
+        return {value.name: _enum(value.description, list(value.schema), list(value.varnames))}
     found = components(value.name, value.schema, mode=value.mode, description=value.description)
     for field, target in value.refs:
         found[value.name]["properties"][field] = {"$ref": REFERENCE + target}
