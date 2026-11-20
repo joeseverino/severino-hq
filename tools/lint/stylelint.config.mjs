@@ -122,7 +122,7 @@ const unspokenContent = { "/^content$/": [`/^\\s*(["'])(?:(?!\\1).)+\\1\\s*$/`, 
 // so no rule picks a tone's palette itself: the button's destructive look,
 // which is no state, is the one other reader.
 const paletteTone = {
-  "/^.+$/": ["/var\\(--(ok|warn|danger)(?![-\\w])|var\\(--tone-(positive|caution|critical|severe|info|neutral|special)-/"],
+  "/^.+$/": ["/var\\(--(ok|warn|danger|attn)(?![-\\w])|var\\(--tone-(positive|caution|critical|severe|info|neutral|special)-/"],
 };
 // What every component sheet holds its values to; the button's sheet leaves out
 // the tones' palette.

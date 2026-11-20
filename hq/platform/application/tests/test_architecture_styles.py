@@ -510,17 +510,6 @@ class StyleContractTests(SimpleTestCase):
             with self.subTest(theme=theme):
                 self.assertEqual(len(values), len(set(values)), "series slots must be distinct")
 
-    def test_series_fills_use_categorical_slots_not_status_colors(self):
-
-        css = self._stylesheet()
-        reserved = {"--danger", "--warn", "--ok", "--attn"}
-        for rule in re.findall(r"\.series-\d+\s*\{([^}]*)\}", css):
-            used = set(re.findall(r"var\(\s*(--[a-z0-9-]+)", rule))
-            self.assertFalse(
-                used & reserved,
-                f"status colors are reserved and must not encode a series: {used & reserved}",
-            )
-
 
 def defined_classes() -> set[str]:
     """Every class a stylesheet HQ serves defines: the bundle every page
