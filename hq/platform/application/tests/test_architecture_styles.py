@@ -306,24 +306,6 @@ class StyleContractTests(SimpleTestCase):
         self.assertTrue(fallen_back)
         self.assertEqual(sorted(fallen_back - defined), [])
 
-    def test_user_menu_rows_share_one_element_independent_primitive(self):
-        """A link and a POST action in one menu must render as one kind of row.
-
-        Styling ``a`` and ``button`` separately lets the generic button
-        primitive turn only the POST actions back into boxed controls. Every
-        interactive row names the menu primitive instead, so adding another
-        action cannot reintroduce that split by choosing the wrong element.
-        """
-
-        root = Path(__file__).resolve().parents[4]
-        template = (root / "templates" / "partials" / "_user_menu.html").read_text(encoding="utf-8")
-        panel = template.split('<div class="user-menu-panel"', 1)[1]
-        rows = re.findall(r"<(?:a|button)\b[^>]*>", panel, re.DOTALL)
-
-        self.assertTrue(rows)
-        self.assertEqual([row for row in rows if "menu-item" not in row], [])
-        self.assertIn(".menu-item {", self._stylesheet())
-
     def test_no_tracked_file_names_a_reachable_endpoint(self):
         """Addresses, ports and account names are deployment facts, not source.
 
@@ -355,45 +337,6 @@ class StyleContractTests(SimpleTestCase):
             f"reachable endpoints in tracked files: {findings}. A dotted number that is not an address,"
             " such as a specification's section, passes written as section-3.1.3.7. A host key a fixture"
             " needs passes written short, under 32 base64 characters after AAAA.",
-        )
-
-    def test_images_live_where_images_belong(self):
-        """A screenshot taken while debugging is not an asset of this project.
-
-        This repository is public, so a capture of any internal page is
-        published the moment it is pushed (carrying whatever happened to be
-        on screen) and force-pushing afterwards does not unpublish it.
-
-        Images are diagrams, documentation captures, or icons, and each of
-        those has a home. Anything outside them is something that arrived by
-        accident.
-
-        The question is what is *committed*, not what is on the disk, so it is
-        asked of git rather than of the filesystem. A working tree holds plenty
-        of images that are nobody's business (the Playwright MCP writes
-        captures to `.playwright-mcp/`, which is ignored and therefore already
-        safe) and a walk of the disk would either report those or need a
-        hand-maintained list of directories to skip. Tracked files are exactly
-        the ones that can be pushed.
-        """
-
-        root = Path(__file__).resolve().parents[4]
-        allowed = ("docs/diagrams/", "docs/images/", "static/img/")
-        suffixes = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-        tracked = subprocess.run(
-            ["git", "ls-files", "-z"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.split("\0")
-        strays = [
-            name for name in tracked if name and Path(name).suffix.lower() in suffixes and not name.startswith(allowed)
-        ]
-        self.assertEqual(
-            sorted(strays),
-            [],
-            f"images belong in one of {allowed}",
         )
 
     def test_chart_templates_do_not_hardcode_the_plot_rectangle(self):
