@@ -17,8 +17,10 @@
 # Start makes the run of mise it belongs to a holder of the VM, and marks the VM
 # as one of ours when it boots it; a VM up before that (started by hand, or
 # Docker without colima, as in CI) is never stopped. Stop ends its run's hold,
-# and stops the VM once no live run holds it and nothing else uses it: no
-# running container, no docker or buildx client. So a task that runs another
+# and stops the VM once no live run holds it and its daemon runs no container.
+# It asks only this VM's holders and daemon, never the machine's process list,
+# where a docker client of anything else would keep the VM up for good, and
+# a client of its own runs inside a holder. So a task that runs another
 # with `mise run` keeps the VM between them, and a run waiting for the heavy
 # turn keeps it for when its turn comes.
 #
@@ -108,10 +110,6 @@ stop() {
     fi
     if [ -n "$(docker ps -q 2>/dev/null || true)" ]; then
         echo "image:docker: colima's VM stays up for the containers docker ps lists" >&2
-        return 0
-    fi
-    if pgrep -x docker >/dev/null || pgrep -x docker-buildx >/dev/null; then
-        echo "image:docker: colima's VM stays up for a docker client still running" >&2
         return 0
     fi
     echo "image:docker: stopping colima's VM" >&2
