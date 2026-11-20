@@ -305,10 +305,10 @@ def compile_integration_graph(
     return IntegrationGraph(capability_index, resource_index, connection_index, search_index)
 
 
-# One graph at a time, keyed by the adopted catalog's digest: an adoption
-# moves the commands, and each process builds its graph anew at its next ask.
+# One graph at a time, keyed by the composition and the adopted catalog's
+# digest: either moves the commands, and the graph is built anew at its next ask.
 @lru_cache(maxsize=1)
-def _compiled_integration_graph(generation: str) -> IntegrationGraph:
+def _compiled_integration_graph(_composition: plugins.Composition, generation: str) -> IntegrationGraph:
     host = (*record_capability_specs(), *host_specs("capabilities"))
     # HQ's own command says what it is in words of its own; only an
     # extension's falls back to the words of its name.
@@ -360,7 +360,7 @@ _GRAPH_OVERRIDE: ContextVar[IntegrationGraph | None] = ContextVar("integration_g
 def integration_graph() -> IntegrationGraph:
     """The graph at the catalog adopted now, which a request reads once."""
 
-    return _GRAPH_OVERRIDE.get() or _compiled_integration_graph(automation_adoption.generation())
+    return _GRAPH_OVERRIDE.get() or _compiled_integration_graph(plugins.composition(), automation_adoption.generation())
 
 
 def held_graph() -> IntegrationGraph:
@@ -369,8 +369,4 @@ def held_graph() -> IntegrationGraph:
     the procedures' namespace (``automation_runs.runs_procedure``), are the
     same at every generation, so only those are read from it."""
 
-    return _GRAPH_OVERRIDE.get() or _compiled_integration_graph(automation_adoption.held())
-
-
-def clear_integration_graph_cache() -> None:
-    _compiled_integration_graph.cache_clear()
+    return _GRAPH_OVERRIDE.get() or _compiled_integration_graph(plugins.composition(), automation_adoption.held())

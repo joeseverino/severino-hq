@@ -2,7 +2,6 @@
 on its ResourceSpec, the whole record a detail read or ``fields`` away."""
 
 from typing import TypedDict
-from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase
@@ -12,6 +11,7 @@ from hq.platform.core.example_estate.testing import throwaway_media
 
 from ..integration_specs import ListRead
 from ..integrations import integration_graph
+from ..plugin_testing import offering
 from ..resources import (
     EmptyQuery,
     ResourceSpec,
@@ -96,7 +96,7 @@ class ListFieldRegistrationTests(SimpleTestCase):
             invalid = ResourceSpec("example.records", "Records", "Example records.", "example.read", listing)
             with (
                 self.subTest(fields=fields),
-                mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(invalid,)),
+                offering(resources=(invalid,)),
                 self.assertRaisesRegex(ImproperlyConfigured, "fields"),
             ):
                 integration_graph()

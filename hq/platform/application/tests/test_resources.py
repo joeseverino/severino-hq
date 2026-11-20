@@ -1,7 +1,6 @@
 """Contract tests for HQ's shared read-resource registry."""
 
 from typing import Any, NotRequired, TypedDict
-from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase
@@ -13,7 +12,7 @@ from hq.platform.core.testing import NOBODY, OPERATOR, READER, declare
 from ..command_center import command_center
 from ..integration_specs import ListRead
 from ..integrations import integration_graph
-from ..plugins import plugin_resource_specs
+from ..plugin_testing import offering
 from ..report_testing import bridged
 from ..resources import (
     EmptyQuery,
@@ -59,11 +58,7 @@ class ResourceExecutionTests(TestCase):
             listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, _ExampleRecord),
             web_route="missing:list",
         )
-        installed = plugin_resource_specs()
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_resource_specs",
-            return_value=(*installed, plugin),
-        ):
+        with offering(resources=(plugin,)):
             outcome = command_center("example.records", principal=OPERATOR)
 
         self.assertEqual(outcome["resources"][0].url, "")
@@ -223,10 +218,7 @@ NESTED = ResourceSpec(
 
 class FieldMaskTests(TestCase):
     def setUp(self):
-        installed = plugin_resource_specs()
-        patcher = mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(*installed, NESTED))
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        self.enterContext(offering(resources=(NESTED,)))
 
     def get(self, *fields):
         return get_resource("example.nested", "example", principal=READER, fields=list(fields))
@@ -294,10 +286,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             listing=ListRead(_no_rows, EmptyQuery, _ExampleRecord),
         )
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_resource_specs",
-                return_value=(duplicate,),
-            ),
+            offering(resources=(duplicate,)),
             self.assertRaisesRegex(ImproperlyConfigured, "Duplicate resource name"),
         ):
             integration_graph()
@@ -321,7 +310,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             )
             with (
                 self.subTest(query=query.__name__),
-                mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(spec,)),
+                offering(resources=(spec,)),
                 self.assertRaisesRegex(ImproperlyConfigured, "may not declare 'fields'"),
             ):
                 integration_graph()
@@ -340,7 +329,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             listing=ListRead(lambda **_: {"items": [], "count": 0}, Open, _ExampleRecord),
         )
         with (
-            mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(spec,)),
+            offering(resources=(spec,)),
             self.assertRaisesRegex(ImproperlyConfigured, "must refuse a filter it does not declare"),
         ):
             integration_graph()
@@ -354,11 +343,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, _ExampleRecord),
             web_route="example:records:list",
         )
-        installed = plugin_resource_specs()
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_resource_specs",
-            return_value=(*installed, nested),
-        ):
+        with offering(resources=(nested,)):
             self.assertIn(nested, integration_graph().resources.values())
 
 

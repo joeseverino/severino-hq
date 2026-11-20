@@ -93,10 +93,6 @@ def operation_registry(generation: str | None = None) -> OperationRegistry:
     return _registry(automation_adoption.generation() if generation is None else generation)
 
 
-def clear_operation_registry_cache() -> None:
-    _registry.cache_clear()
-
-
 # The variant of a playbook's run command that runs it again as it ran.
 AGAIN = "again"
 HERE = "here"

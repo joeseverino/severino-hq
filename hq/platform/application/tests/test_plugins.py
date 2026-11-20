@@ -32,7 +32,6 @@ from ..plugins import (
     PluginIntegration,
     PluginManifest,
     answered_by,
-    clear_plugin_composition_cache,
     describe_plugins,
     installed_integrations,
     installed_plugins,
@@ -132,9 +131,6 @@ VALID = PluginManifest(
 
 
 class PluginContractTests(TestCase):
-    def tearDown(self):
-        clear_plugin_composition_cache()
-
     def assertRefused(self, field, pattern=".", **overrides):
         """The manifest ``overrides`` make is refused where it is built, naming the plugin and ``field``."""
 
@@ -147,7 +143,6 @@ class PluginContractTests(TestCase):
         self.assertIn(field, str(refused.exception))
 
     def load(self, manifest=VALID):
-        clear_plugin_composition_cache()
         env = mock.patch.dict(
             os.environ,
             {
@@ -166,7 +161,6 @@ class PluginContractTests(TestCase):
 
     def test_empty_allowlist_is_the_secure_default(self):
         with mock.patch.dict(os.environ, {"SEVERINO_HQ_PLUGINS": ""}):
-            clear_plugin_composition_cache()
             self.assertEqual(installed_plugins(), ())
 
     def test_the_host_source_never_names_an_installed_extension(self):
@@ -262,7 +256,6 @@ class PluginContractTests(TestCase):
             installed_plugins()
 
     def test_duplicate_ids_fail_closed(self):
-        clear_plugin_composition_cache()
         with (
             mock.patch.dict(
                 os.environ,
@@ -288,7 +281,6 @@ class PluginContractTests(TestCase):
             url_prefix="records/",
             urlconf="example_second.urls",
         )
-        clear_plugin_composition_cache()
         with (
             mock.patch.dict(
                 os.environ,
@@ -314,7 +306,6 @@ class PluginContractTests(TestCase):
             url_prefix="records/archive/",
             urlconf="example_second.urls",
         )
-        clear_plugin_composition_cache()
         with (
             mock.patch.dict(
                 os.environ,
@@ -392,7 +383,6 @@ class PluginContractTests(TestCase):
         self.assertIn("#notes", hrefs(page_navigation))
 
     def test_production_plugin_without_admission_lock_fails_closed(self):
-        clear_plugin_composition_cache()
         with (
             mock.patch.dict(
                 os.environ,
@@ -437,7 +427,6 @@ class PluginContractTests(TestCase):
                 lock,
             )
             lock.flush()
-            clear_plugin_composition_cache()
             with (
                 mock.patch.dict(
                     os.environ,
@@ -486,7 +475,6 @@ class PluginContractTests(TestCase):
                 lock,
             )
             lock.flush()
-            clear_plugin_composition_cache()
             with (
                 mock.patch.dict(
                     os.environ,
@@ -670,9 +658,6 @@ class ComposedPluginTestKitTests(TestCase):
     Per-repo CI loads one extension. Anything that composes across them is
     otherwise only tested alone.
     """
-
-    def tearDown(self):
-        clear_plugin_composition_cache()
 
     def case(self, **attributes):
         from ..plugin_testing import ComposedPluginTestCase

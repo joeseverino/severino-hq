@@ -1,5 +1,6 @@
 """Synthetic ``example.*`` procedures and machines, supplied as an adopted catalog and HQ's facts would be."""
 
+from itertools import count
 from typing import Annotated, Any
 from unittest.mock import patch
 
@@ -11,7 +12,6 @@ from hq.platform.application.contracts import Closed
 from ..automation_manifest import OperationManifest
 from ..cadence import note_automation
 from ..machines import Machine
-from ..plugins import clear_plugin_composition_cache
 
 REVISION = "0123456789abcdef0123456789abcdef01234567"
 NEXT_REVISION = "89abcdef0123456789abcdef0123456789abcdef"
@@ -19,6 +19,7 @@ RESTART = "example.service_restart"
 RESTART_RUN = f"automation.{RESTART}.run"
 RESTART_KEY = "automation-example-service_restart"
 APP, DB, EDGE = "app.example.com", "db.example.com", "edge.example.com"
+_SUPPLIES = count()
 
 
 class ServiceRestart(Closed):
@@ -58,11 +59,12 @@ class Supply:
         # Only a test that may write has a worker to note; one that may not runs nothing.
         if test.databases:
             note_automation()
-        self.manifests = manifests
+        self(*manifests)
         self.machines: tuple[Machine, ...] = (Machine(APP), Machine(DB), Machine(EDGE))
         self.reaches: frozenset[tuple[str, str]] | None = None
         for patcher in (
-            patch("hq.platform.application.automation_adoption.generation", return_value="supplied"),
+            patch("hq.platform.application.automation_adoption.generation", side_effect=lambda: self.generation),
+            patch("hq.platform.application.automation_adoption.held", side_effect=lambda: self.generation),
             patch(
                 "hq.platform.application.automation_adoption.manifests", side_effect=lambda _generation: self.manifests
             ),
@@ -73,12 +75,11 @@ class Supply:
         ):
             patcher.start()
             test.addCleanup(patcher.stop)
-        test.addCleanup(clear_plugin_composition_cache)
-        clear_plugin_composition_cache()
 
     def __call__(self, *manifests: OperationManifest) -> None:
-        self.manifests = manifests
-        clear_plugin_composition_cache()
+        # Each supply a catalog of its own, as each adoption is, so what is
+        # derived per catalog is derived again.
+        self.manifests, self.generation = manifests, f"supplied {next(_SUPPLIES)}"
 
     def know(self, *machines: Machine) -> None:
         self.machines = machines

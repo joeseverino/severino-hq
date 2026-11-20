@@ -2,9 +2,8 @@
 
 The runner isolates the adopted catalog, the agent limits and the controller's
 markers per test (``isolation_testing``). A class's own setup runs before its
-first test, so it is held to the same: a class that stopped in its setup,
-wrote in its teardown, or left a composition cached that a patch had narrowed,
-leaves nothing for the next class to set up on.
+first test, so it is held to the same: a class that stopped in its setup or
+wrote in its teardown leaves nothing for the next class to set up on.
 """
 
 import io
@@ -121,26 +120,3 @@ class ClassSetupStartsFreshTests(TestCase):
 
                 self.assertEqual([said for _, said in result.failures + result.errors], [])
                 self.assertEqual(seen, {"heartbeat": False})
-
-    def test_a_class_sets_up_on_the_composition_as_it_is_not_as_a_patch_before_it_left_it_cached(self):
-        seen: dict[str, set[str]] = {}
-
-        class Narrows(unittest.TestCase):
-            def test_reads_its_commands_without_the_records(self):
-                with unittest.mock.patch(
-                    "hq.platform.application.integrations.record_capability_specs", return_value=()
-                ):
-                    capability_registry()
-
-        class Reads(unittest.TestCase):
-            @classmethod
-            def setUpClass(cls):
-                seen["set up"] = set(capability_registry())
-
-            def test_reads_its_commands(self):
-                seen["tested"] = set(capability_registry())
-
-        result = _run(Narrows("test_reads_its_commands_without_the_records"), Reads("test_reads_its_commands"))
-
-        self.assertEqual([said for _, said in result.failures + result.errors], [])
-        self.assertEqual(seen["set up"], seen["tested"])

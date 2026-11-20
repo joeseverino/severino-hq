@@ -15,7 +15,7 @@ from unittest import mock
 from django.conf import settings
 
 from hq.config.sandbox import MARKERS
-lazy from hq.platform.application import agent_limits, automation_adoption, plugins
+lazy from hq.platform.application import agent_limits, automation_adoption, derivations
 
 if TYPE_CHECKING:
     from hq.platform.application.agent_limits import Limits
@@ -165,8 +165,9 @@ def _hold_markers(held: dict[str, tuple[bytes, int]]) -> None:
 
 
 def fresh() -> None:
-    """Leave this process as a new one starts: the composition read again, no
-    catalog adopted, a new set of agent limits and no controller's markers.
+    """Leave this process as a new one starts: no catalog adopted, as the
+    rolled back database holds none, no question remembered, a new set of agent
+    limits and no controller's markers.
 
     The suite calls it before each class sets up (``run_report.ClassTimedSuite``),
     the one point every class passes whatever the class before it did: its
@@ -176,15 +177,15 @@ def fresh() -> None:
     from.
     """
 
-    plugins.clear_plugin_composition_cache()
     automation_adoption.forget()
+    derivations.forget()
     agent_limits.LIMITS = agent_limits.Limits()
     _hold_markers({})
 
 
 class CompositionIsolation:
-    """Make process caches, and the agent limits and the controller's markers
-    every request shares, obey the same per-test isolation as the database.
+    """Make the adopted catalog and remembered questions, and the agent limits
+    and the controller's markers every request shares, obey the same per-test isolation as the database.
 
     The limits and markers are isolated as ``setUpTestData`` rows are: each
     class sets up on a fresh process (``fresh``), and each of its tests gets a
@@ -198,8 +199,8 @@ class CompositionIsolation:
     _class_markers: dict[str, tuple[bytes, int]] | None = None
 
     def startTest(self, test):
-        plugins.clear_plugin_composition_cache()
         automation_adoption.forget()
+        derivations.forget()
         if type(test) is not self._class:
             # The first of its class: what the set holds is what its setup left.
             self._class, self._class_limits = type(test), agent_limits.LIMITS

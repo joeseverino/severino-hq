@@ -12,7 +12,7 @@ from annotationlib import Format
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from functools import cache
+from functools import cache, lru_cache
 from typing import Annotated, Any, NotRequired, cast
 
 from django.core.exceptions import ImproperlyConfigured
@@ -32,7 +32,7 @@ from .refusal_status import RefusalEnvelope, refuse
 from .security import WAITING_INTERFACES, Principal, internal_principal, person_of
 from .ui import ended
 lazy from .domains import host_specs
-lazy from .plugins import plugin_outbound_work
+lazy from .plugins import Composition, composition, plugin_outbound_work
 lazy from .routes import reverse
 lazy from .work_runs import job_run, standing_of
 
@@ -137,8 +137,8 @@ def validate(work: object) -> OutboundWork:
     return work
 
 
-@cache
-def _declared() -> dict[str, OutboundWork]:
+@lru_cache(maxsize=1)
+def _declared(_composition: Composition) -> dict[str, OutboundWork]:
     declared: dict[str, OutboundWork] = {}
     # The host's domains declare theirs as an extension does, so neither can
     # take a name the other holds.
@@ -158,7 +158,7 @@ def _host() -> frozenset[str]:
 def declared_work() -> dict[str, OutboundWork]:
     """Every piece of outbound work the composition declares, by name."""
 
-    return _declared()
+    return _declared(composition())
 
 
 def host_work() -> tuple[OutboundWork, ...]:
@@ -178,11 +178,6 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
     """The capability each piece of offered work is asked for through."""
 
     return tuple(capability_for(work) for work in declared_work().values() if work.offered)
-
-
-def clear_outbound_work_cache() -> None:
-    _declared.cache_clear()
-    _host.cache_clear()
 
 
 def capability_for(work: OutboundWork) -> CapabilitySpec:

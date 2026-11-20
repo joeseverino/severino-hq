@@ -21,7 +21,7 @@ from hq.platform.core.testing import operator
 from .. import domains
 from ..capabilities import execute_capability
 from ..domains import DomainDescriptor, Mount, domain_navigation, load
-from ..integrations import clear_integration_graph_cache, integration_graph
+from ..integrations import _compiled_integration_graph, integration_graph
 from ..plugins import NavigationItem, PluginIntegration
 from ..record_declaration import Records
 from ..records import counts
@@ -50,7 +50,7 @@ WIDGETS = DomainDescriptor(
 
 def _forget() -> None:
     domains.host_domains.cache_clear()
-    clear_integration_graph_cache()
+    _compiled_integration_graph.cache_clear()
     importlib.reload(urls)
     clear_url_caches()
 

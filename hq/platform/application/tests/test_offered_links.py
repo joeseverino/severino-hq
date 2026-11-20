@@ -14,7 +14,6 @@ from hq.config.urls import urlpatterns as root_urlpatterns
 from hq.platform.application import request_context, roles, routes
 from hq.platform.application.domains import domain_navigation
 from hq.platform.application.pages import Page, PageAction, authorizes_itself, page_refusal
-from hq.platform.application.plugins import clear_plugin_composition_cache
 from hq.platform.application.routes import routed
 from hq.platform.application.security import web_principal
 from hq.platform.core.context_processors import nav
@@ -64,9 +63,7 @@ class OfferedAsServedTests(TestCase):
             },
         )
         composed.start()
-        self.addCleanup(clear_plugin_composition_cache)
         self.addCleanup(composed.stop)
-        clear_plugin_composition_cache()
         self.people = [_person(role or "nobody", role) for role in (*roles.Role.values, "")]
 
     def test_each_nav_item_is_offered_exactly_when_its_page_opens(self):

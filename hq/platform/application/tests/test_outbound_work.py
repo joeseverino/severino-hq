@@ -43,8 +43,7 @@ from hq.platform.application.contracts import Effect
 from hq.platform.application.integration_specs import requested
 from hq.platform.application.markup_testing import elements
 from hq.platform.application.outbound_work import OutboundWork, capability_for, due, validate
-from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.plugins import PluginIntegration, clear_plugin_composition_cache
+from hq.platform.application.plugin_testing import form_keyed, installed, sibling
 from hq.platform.application.security import Principal, cli_principal, internal_principal
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
@@ -114,9 +113,7 @@ class ComposedExample(TestCase):
             },
         )
         composed.start()
-        self.addCleanup(clear_plugin_composition_cache)
         self.addCleanup(composed.stop)
-        clear_plugin_composition_cache()
 
         self.registry = Registry()
         reading = mock.patch.object(registry, "read", self.registry.read)
@@ -368,11 +365,8 @@ class DeclarationTests(SimpleTestCase):
     def test_two_declarations_of_one_name_fail(self):
         from hq.platform.application import outbound_work
 
-        integration = PluginIntegration(outbound=lambda: (self.work(), self.work()))
-        outbound_work.clear_outbound_work_cache()
-        self.addCleanup(outbound_work.clear_outbound_work_cache)
         with (
-            mock.patch("hq.platform.application.plugins.installed_integrations", return_value=((None, integration),)),
+            offering_work(self.work(), self.work()),
             self.assertRaisesMessage(ImproperlyConfigured, "Duplicate outbound work"),
         ):
             outbound_work.declared_work()
@@ -381,11 +375,8 @@ class DeclarationTests(SimpleTestCase):
         from hq.platform.application import outbound_work
         from hq.platform.application.projects import REFRESH
 
-        integration = PluginIntegration(outbound=lambda: (self.work(name=REFRESH),))
-        outbound_work.clear_outbound_work_cache()
-        self.addCleanup(outbound_work.clear_outbound_work_cache)
         with (
-            mock.patch("hq.platform.application.plugins.installed_integrations", return_value=((None, integration),)),
+            offering_work(self.work(name=REFRESH)),
             self.assertRaisesMessage(ImproperlyConfigured, f"Duplicate outbound work {REFRESH!r}"),
         ):
             outbound_work.declared_work()
@@ -529,12 +520,25 @@ INSTANCE = re.compile(r"^(?:Unit|OnFailure)=severino-hq-job@(?P<name>.+)\.servic
 def host_declares(*works: OutboundWork):
     """The host's own work as ``works``, beside whatever the composition installs."""
 
-    outbound_work.clear_outbound_work_cache()
+    # What the host declares is fixed in a process, so its caches are not keyed on it.
+    _forget_declared()
     try:
         with mock.patch.object(host_work, "outbound", return_value=works):
             yield
     finally:
-        outbound_work.clear_outbound_work_cache()
+        _forget_declared()
+
+
+def _forget_declared() -> None:
+    outbound_work._declared.cache_clear()
+    outbound_work._host.cache_clear()
+
+
+def offering_work(*works: OutboundWork):
+    """An example extension installed for the block, declaring ``works``."""
+
+    manifest, contribution = sibling()
+    return installed((manifest, replace(contribution, outbound=lambda: works)))
 
 
 def own(name="example.work", run=lambda progress, *, subject, principal: {}, every=None) -> OutboundWork:
@@ -576,11 +580,7 @@ class HostWorkTests(TestCase):
 
         from hq.platform.application.projects import REFRESH
 
-        extension = PluginIntegration(outbound=lambda: (own("example.theirs"),))
-        with (
-            host_declares(own()),
-            mock.patch("hq.platform.application.plugins.installed_integrations", return_value=((None, extension),)),
-        ):
+        with host_declares(own()), offering_work(own("example.theirs")):
             self.assertIn("example.theirs", outbound_work.declared_work())
             for name in ("example.other", "example.theirs", REFRESH):
                 with self.subTest(name), self.assertRaisesMessage(ValueError, f"No host work named {name!r}"):

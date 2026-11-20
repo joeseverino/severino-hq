@@ -36,7 +36,6 @@ from .plugins import (
     PLUGIN_API_VERSION,
     PluginIntegration,
     PluginManifest,
-    clear_plugin_composition_cache,
 )
 from .ui import DomainOverview
 lazy from . import pages, plugins
@@ -328,22 +327,18 @@ def installed(*siblings: tuple[PluginManifest, PluginIntegration], alone: bool =
         manifest.id: {"manifest": manifest, "integration": lambda found=integration: found}
         for manifest, integration in siblings
     }
-    # The registry is cached for the process; a sibling appearing or leaving
-    # mid-suite would otherwise be invisible or permanent.
-    clear_plugin_composition_cache()
-    try:
-        with importable(modules), mock.patch.dict(os.environ, environment, clear=False):
-            yield
-    finally:
-        clear_plugin_composition_cache()
+    with importable(modules), mock.patch.dict(os.environ, environment, clear=False):
+        yield
 
 
-def offering(*specs: ConnectionSpec, alone: bool = False) -> AbstractContextManager[None]:
+def offering(*specs: ConnectionSpec, alone: bool = False, **answers: tuple[Any, ...]) -> AbstractContextManager[None]:
     """An example extension installed for the block, offering ``specs`` as its
-    connection families; with ``alone``, the only extension installed."""
+    connection families and answering each field of ``answers`` with its value;
+    with ``alone``, the only extension installed."""
 
     manifest, contribution = sibling(identifier="example.connections", name="Connections")
-    return installed((manifest, replace(contribution, connections=lambda: specs)), alone=alone)
+    provided = {field: (lambda found=found: found) for field, found in {"connections": specs, **answers}.items()}
+    return installed((manifest, replace(contribution, **provided)), alone=alone)
 
 
 class ComposedPluginTestCase:

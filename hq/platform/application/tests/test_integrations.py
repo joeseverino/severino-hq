@@ -1,7 +1,9 @@
 """Contract tests for the one compiled integration graph."""
 
+import os
 from dataclasses import dataclass
 from typing import TypedDict
+from unittest import mock
 
 from django.test import TestCase
 
@@ -15,11 +17,10 @@ from ..integration_specs import ListRead
 from ..integration_testing import override_integration_graph
 from ..integrations import (
     IntegrationGraphError,
-    clear_integration_graph_cache,
+    _compiled_integration_graph,
     compile_integration_graph,
     integration_graph,
 )
-from ..plugins import clear_plugin_composition_cache
 from ..resources import EmptyQuery, ResourceSpec, describe_resources
 from ..search_contracts import SearchDefinition
 from ..security import Capability, Principal
@@ -43,9 +44,6 @@ def execute_targeted(command, *, principal, current_slug):
 
 
 class IntegrationGraphTests(TestCase):
-    def tearDown(self):
-        clear_integration_graph_cache()
-
     def test_compilation_is_query_free_and_immutable(self):
         with self.assertNumQueries(0):
             graph = integration_graph()
@@ -55,19 +53,25 @@ class IntegrationGraphTests(TestCase):
         self.assertIsInstance(graph.connections, frozendict)
         self.assertIsInstance(graph.search, frozendict)
 
-    def test_the_composed_graph_is_compiled_once_until_explicitly_cleared(self):
-        first = integration_graph()
+    def test_the_composed_graph_is_compiled_once(self):
+        self.assertIs(integration_graph(), integration_graph())
 
-        self.assertIs(integration_graph(), first)
-        clear_integration_graph_cache()
-        self.assertIsNot(integration_graph(), first)
+    def test_the_graph_follows_the_installed_set_with_nothing_cleared(self):
+        """The graph is keyed on what the composition is read from: an
+        extension installed is in the next graph, and gone once it is not."""
 
-    def test_clearing_plugin_composition_also_clears_the_derived_graph(self):
-        first = integration_graph()
-
-        clear_plugin_composition_cache()
-
-        self.assertIsNot(integration_graph(), first)
+        installed = os.environ.get("SEVERINO_HQ_PLUGINS", "")
+        example = "tests.fixtures.example_hq_plugin"
+        environment = {
+            "SEVERINO_HQ_PLUGINS": ",".join(part for part in (installed, f"{example}.plugin:plugin") if part),
+            # A fixture has no signed approval to be admitted by.
+            "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
+        }
+        lookup = "example.lookup.run"
+        self.assertNotIn(lookup, integration_graph().capabilities)
+        with mock.patch.dict(os.environ, environment):
+            self.assertIn(lookup, integration_graph().capabilities)
+        self.assertNotIn(lookup, integration_graph().capabilities)
 
     def test_no_command_but_an_adopted_procedure_is_named_as_one(self):
         from dataclasses import replace
@@ -81,7 +85,7 @@ class IntegrationGraphTests(TestCase):
             patch("hq.platform.application.integrations.record_capability_specs", return_value=(*specs, squatter)),
             self.assertRaises(IntegrationGraphError) as raised,
         ):
-            clear_integration_graph_cache()
+            _compiled_integration_graph.cache_clear()
             integration_graph()
 
         self.assertEqual([v.code for v in raised.exception.violations], ["capability_in_procedure_namespace"])

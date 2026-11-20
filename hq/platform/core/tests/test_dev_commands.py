@@ -12,7 +12,6 @@ from django.test import SimpleTestCase, TestCase, modify_settings, override_sett
 from django.urls import clear_url_caches, reverse
 
 from hq.config import urls
-from hq.platform.application.plugins import clear_plugin_composition_cache
 from hq.platform.core.testing import operator
 
 EXAMPLE = "tests.fixtures.example_hq_plugin"
@@ -64,7 +63,6 @@ class RoutesTests(SimpleTestCase):
 
 
 def _remount() -> None:
-    clear_plugin_composition_cache()
     importlib.reload(urls)
     clear_url_caches()
 
