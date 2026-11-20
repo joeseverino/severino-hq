@@ -16,6 +16,12 @@ from tools.gate.tree import working_tree
 
 
 class RunThereTests(SimpleTestCase):
+    def test_a_negated_flag_arrives_distinct_from_an_omitted_one(self):
+        spec = {"flags": [{"name": "perf", "long": ["perf"], "negate": "--no-perf"}], "args": []}
+        self.assertEqual(remote.words(spec, {"perf": "false"}), ["--no-perf"])
+        self.assertEqual(remote.words(spec, {"perf": "true"}), ["--perf"])
+        self.assertEqual(remote.words(spec, {}), [])
+
     def test_an_argument_holding_a_space_arrives_whole(self):
         typed = ["--operation", "POST /api/v2/capabilities/example.write/", "api/docs"]
         sent = remote.Sent("tree", "commit", "head", typed, "example-run", None, "", [])
