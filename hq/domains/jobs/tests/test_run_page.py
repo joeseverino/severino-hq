@@ -54,12 +54,20 @@ class RunPageTests(TestCase):
         return response.content.decode()
 
     def test_every_list_of_runs_links_each_run_to_its_page(self):
-        from hq.platform.application.work_runs import RUN as LISTED_RUN, hydrated, recent_runs, runs_on, work_rows
+        from hq.platform.application.resources import list_resource
+        from hq.platform.application.security import web_principal
+        from hq.platform.application.work_runs import RUN as LISTED_RUN, recent_runs, runs_on
 
+        page = list_resource("work", {"limit": 40}, principal=web_principal(self.owner))["items"]
         for where, url, section, runs in (
-            ("jobs", reverse("jobs:list"), "", [row for row in hydrated(work_rows()[:40]) if row.source == LISTED_RUN]),
-            ("machine", reverse("control_plane:machine", kwargs={"name": MACHINE}), "runs", runs_on(MACHINE)),
-            ("playbook", reverse("command", args=[RUN]), "runs", recent_runs(CACHE_FLUSH)),
+            ("jobs", reverse("jobs:list"), "", [row["id"] for row in page if row["source"] == LISTED_RUN]),
+            (
+                "machine",
+                reverse("control_plane:machine", kwargs={"name": MACHINE}),
+                "runs",
+                [row.id for row in runs_on(MACHINE)],
+            ),
+            ("playbook", reverse("command", args=[RUN]), "runs", [row.id for row in recent_runs(CACHE_FLUSH)]),
         ):
             with self.subTest(page=where):
                 html = self.page(url)
@@ -67,7 +75,7 @@ class RunPageTests(TestCase):
                 hrefs = {element.attrs.get("href") for element in drawn if element.tag == "a"}
                 self.assertTrue(runs)
                 for run in runs:
-                    self.assertIn(run_page(run.id), hrefs)
+                    self.assertIn(run_page(run), hrefs)
 
     def test_a_finished_run_s_page_links_its_machines_and_playbook(self):
         run = OperationRequest.objects.filter(
@@ -215,12 +223,12 @@ class RunHereTests(TestCase):
         """Each run of a playbook still adopted, whose title is the same now as when it was asked."""
 
         from hq.platform.application.automation_adoption import playbook_titles
-        from hq.platform.application.work_runs import RUN as LISTED_RUN, hydrated, scan_title, work_rows
+        from hq.platform.application.work_runs import RUN as LISTED_RUN, hydrated, scan_title, work
         from hq.platform.core.models import AuditLog
 
         titled = {*playbook_titles().values(), scan_title()}
         listed = {
-            row.id: row.title for row in hydrated(work_rows()) if row.source == LISTED_RUN and row.title in titled
+            row.id: row.title for row in hydrated(work().kept()) if row.source == LISTED_RUN and row.title in titled
         }
         asked = dict(
             AuditLog.objects.filter(object_id__in=listed, action=AuditLog.Action.CREATED).values_list(

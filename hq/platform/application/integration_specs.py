@@ -473,8 +473,9 @@ class ListFilter:
     """One field a list is narrowed by to any of several values, sent
     comma-separated (``status=active,idea``): its name, its label, the values
     it takes with their words, or what reads them where they are the records'
-    own (a year), and the lookup it narrows by where that is not its name. One
-    whose values are read declares the ``pattern`` each is held to.
+    own (a year), and the lookup it narrows by where that is not its name, or
+    the condition the values asked keep a row by where no one lookup says it.
+    One whose values are read declares the ``pattern`` each is held to.
     ``unasked`` is what the list keeps while neither it nor a search is asked."""
 
     name: str
@@ -483,6 +484,7 @@ class ListFilter:
     lookup: str = ""
     pattern: str = ""
     unasked: Q | None = None
+    narrows: Callable[[list[str]], Q] | None = None
 
     def __post_init__(self) -> None:
         if not self.lookup:
@@ -508,13 +510,15 @@ class ListToggle:
     """A flag a list is narrowed by (``no_receipts=true``): its name, its
     label, what it keeps in a sentence and as the condition that keeps it,
     and its example: it makes records and answers the identifiers of those
-    the flag keeps and of those it leaves out."""
+    the flag keeps and of those it leaves out. ``unasked`` is what the list
+    keeps while the flag is off, for a flag that brings rows back."""
 
     name: str
     label: str
     description: str
     keeps: Q
     example: Callable[[], tuple[Iterable[object], Iterable[object]]] | None = None
+    unasked: Q | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -561,12 +565,15 @@ class ListRead:
         kept = Q()
         for each in self.filters:
             if values := asked.get(each.name):
-                kept &= Q(**{f"{each.lookup}__in": values.split(",")})
+                chosen = values.split(",")
+                kept &= each.narrows(chosen) if each.narrows else Q(**{f"{each.lookup}__in": chosen})
             elif each.unasked is not None and not searched:
                 kept &= each.unasked
         for toggle in self.toggles:
             if asked.get(toggle.name):
                 kept &= toggle.keeps
+            elif toggle.unasked is not None:
+                kept &= toggle.unasked
         return kept
 
 
@@ -595,9 +602,9 @@ def _asked_by(read: ListRead) -> type[BaseModel]:
     }
     if read.sorts:
         names = tuple(sort.name for sort in read.sorts)
-        words = (
+        words = ended(
             "The order the records come in; absent, the best match first for a search, else "
-            f"{lower_first(read.sorts[0].label)}."
+            f"{lower_first(read.sorts[0].label)}"
         )
         choice: Any = Literal[names]
         asked[SORT_FIELD] = (Annotated[choice | None, Field(description=words)], None)

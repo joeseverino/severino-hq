@@ -125,7 +125,8 @@ class ListPageMixin(PageMixin):
             for toggle in listing.toggles
         ]
         query = self.request.GET.get(_SEARCH, "")
-        relevance = [("", "Relevance")] if query.strip() else []
+        # A list that searches its own way keeps its order when searched.
+        relevance = [("", "Relevance")] if query.strip() and self.spec.search else []
         default = listing.sorts[0].name if listing.sorts and not relevance else ""
         model = self.spec.search.model if self.spec.search else None
         return {

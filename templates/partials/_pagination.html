@@ -19,7 +19,7 @@
   {% else %}
     {% muted %}<span aria-hidden="true">←</span>&nbsp;Prev{% endmuted %}
   {% endif %}
-  {% muted %}Page {{ page_obj.number|breakable }}{% if paginator.counted is not False %} of {{ paginator.num_pages|breakable }}{% endif %}{% endmuted %}
+  {% muted %}Page {{ page_obj.number|breakable }} of {{ paginator.num_pages|breakable }}{% endmuted %}
   {% if page_obj.has_next %}
     <a data-hit href="{% querystring page=page_obj.next_page_number %}">Next{% arrow %}</a>
   {% else %}

@@ -25,9 +25,10 @@ from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
 from .automation_runs import capability_name, resource_key, run_title
 from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
+from .projection import Combined, read_once
 from .tone import Tone, Toned
 lazy from .automation_adoption import playbook_titles
-lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
+lazy from .automation_sources import REFRESH, capability_specs
 lazy from .cadence import automation_standing
 lazy from .entity_links import entity_link
 lazy from .history import Acts, asked_by, asking, who_did_each
@@ -76,16 +77,8 @@ UNENDED = frozenset({OperationState.QUEUED, OperationState.CLAIMED})
 # A kind of work whose latest run ended so is one to look at.
 ENDED_BADLY = (JobState.FAILED, JobState.LOST)
 
-# The orders the list can be read in, each with a stable tie-break.
-NEWEST, OLDEST, BY_STATE, BY_TITLE, FAILED_FIRST = "-created_at", "created_at", "state", "title", "failed"
-ORDERS = {
-    NEWEST: ("-created_at", "-id"),
-    OLDEST: ("created_at", "id"),
-    BY_STATE: ("seen", "-created_at", "-id"),
-    BY_TITLE: ("title", "-created_at", "-id"),
-    # The latest run of each kind that ended badly leads, then the newest.
-    FAILED_FIRST: ("lead", "-created_at", "-id"),
-}
+# Newest first, with a stable tie-break.
+NEWEST = ("-created_at", "-id")
 # How many runs a machine's or an operation's page shows.
 RECENT = 10
 
@@ -214,15 +207,6 @@ def operation_of(kind: str) -> str:
     return kind[len(start) : -len(end)] if kind.startswith(start) and kind.endswith(end) else ""
 
 
-@dataclass(frozen=True, slots=True)
-class _Asked:
-    state: tuple[str, ...]
-    kind: tuple[str, ...]
-    host: tuple[str, ...]
-    search: str
-    leads: bool
-
-
 # What each side of the union selects, in its order.
 _COLUMNS = ("source", "id", "seen", "created_at", "title", "lead")
 
@@ -278,15 +262,6 @@ def _run_kind() -> Case:
     return _scanned(REFRESH, Concat(Value(start), KT("input__operation"), Value(end), output_field=CharField()))
 
 
-def _kind_key(kind: str) -> str:
-    """The key of the record the work of ``kind`` is queued on, or "" for a kind no run is."""
-
-    if kind == REFRESH:
-        return SOURCE_KEY
-    procedure = operation_of(kind)
-    return resource_key(procedure) if procedure else ""
-
-
 def _jobs_latest() -> Exists:
     """Where a job is its kind's latest run."""
 
@@ -302,12 +277,9 @@ def _runs_latest() -> Exists:
     return ~Exists(later)
 
 
-def _lead(latest: Exists, *, leads: bool) -> Case | Value:
-    """0 where the row is its kind's latest run and it ended badly, else 1;
-    1 for every row of a list in another order."""
+def _lead(latest: Exists) -> Case:
+    """0 where the row is its kind's latest run and it ended badly, else 1."""
 
-    if not leads:
-        return Value(1, output_field=IntegerField())
     return Case(When(latest & Q(seen__in=ENDED_BADLY), then=Value(0)), default=Value(1), output_field=IntegerField())
 
 
@@ -317,65 +289,43 @@ def _rows(rows: QuerySet, source: Source) -> QuerySet:
     return rows.annotate(source=Value(source, output_field=CharField())).values_list(*_COLUMNS).order_by()
 
 
-def _jobs(now: datetime, asked: _Asked) -> QuerySet:
+def work(search: str = "") -> Combined:
+    """Every job and run as ``_COLUMNS`` rows, those whose words hold
+    ``search``, each part narrowed by ``seen`` (a ``JobState`` value as seen)
+    and ``kind`` (a job's kind or a run's command name) and cut in the
+    database; ``hydrated`` turns a page of it into ``WorkRun`` rows."""
+
+    now = timezone.now()
     jobs = Job.objects.annotate(seen=job_seen_state(now), title=_job_title())
-    if asked.host:
-        # A job acts on no machine.
-        return _rows(jobs.annotate(lead=Value(1)).none(), JOB)
-    if asked.state:
-        jobs = jobs.filter(seen__in=asked.state)
-    if asked.kind:
-        jobs = jobs.filter(kind__in=asked.kind)
-    if asked.search:
-        jobs = jobs.filter(Q(label__icontains=asked.search) | Q(note__icontains=asked.search))
-    return _rows(jobs.annotate(lead=_lead(_jobs_latest(), leads=asked.leads)), JOB)
-
-
-def _runs(now: datetime, asked: _Asked) -> QuerySet:
-    runs = seen_as_runs(OperationRequest.objects.filter(action__in=_LISTED), now)
-    if asked.state:
-        runs = runs.filter(seen__in=asked.state)
-    if asked.kind:
-        runs = runs.filter(resource__key__in=[key for kind in asked.kind if (key := _kind_key(kind))])
-    if asked.host:
-        # By subquery, so a run on two of the machines asked for is one row,
-        # and a scan, which acts on no machine, is none.
-        runs = runs.filter(pk__in=OperationHost.objects.filter(host__in=asked.host).values("operation"))
-    if asked.search:
-        runs = runs.annotate(operation=KT("input__operation"), said=KT("result__message")).filter(
-            Q(operation__icontains=asked.search) | Q(title__icontains=asked.search) | Q(said__icontains=asked.search)
+    runs = seen_as_runs(OperationRequest.objects.filter(action__in=_LISTED), now).annotate(kind=_run_kind())
+    if search:
+        jobs = jobs.filter(Q(label__icontains=search) | Q(note__icontains=search))
+        runs = runs.annotate(procedure=KT("input__operation"), said=KT("result__message")).filter(
+            Q(procedure__icontains=search) | Q(title__icontains=search) | Q(said__icontains=search)
         )
-    return _rows(runs.annotate(lead=_lead(_runs_latest(), leads=asked.leads)), RUN)
+    return Combined(
+        (_rows(jobs.annotate(lead=_lead(_jobs_latest())), JOB), _rows(runs.annotate(lead=_lead(_runs_latest())), RUN))
+    )
 
 
-def work_rows(
-    *,
-    state: tuple[str, ...] = (),
-    kind: tuple[str, ...] = (),
-    host: tuple[str, ...] = (),
-    search: str = "",
-    order: str = NEWEST,
-    now: datetime | None = None,
-) -> QuerySet:
-    """Every job and run that matches, as ``_COLUMNS`` rows in ``order``: a
-    queryset a paginator counts and slices in the database.
+def on_hosts(hosts: Iterable[str]) -> Q:
+    """The work that acted on any of the machines ``hosts`` names, by their
+    canonical names: by subquery, so a run on two of them is one row. A job
+    acts on none, and its id is never a run's."""
 
-    Each filter keeps what matches any of its values: ``state`` a ``JobState``
-    value as seen, ``kind`` a job's kind or a run's command name, ``host`` a
-    machine's canonical name (a job acts on none). ``hydrated`` turns a page
-    of it into ``WorkRun`` rows.
-    """
-
-    now = now or timezone.now()
-    asked = _Asked(state, kind, host, search, leads=order == FAILED_FIRST)
-    return _jobs(now, asked).union(_runs(now, asked), all=True).order_by(*ORDERS[order])
+    return Q(pk__in=OperationHost.objects.filter(host__in=hosts).values("operation"))
 
 
-def work_kinds(*, now: datetime | None = None) -> list[WorkKind]:
+def work_kinds() -> list[WorkKind]:
     """Each kind of work that has run, by its latest run, A to Z by what it is
-    called: what the list is filtered by, and what failed on its last run."""
+    called: what the list is filtered by, and what failed on its last run,
+    read once for a page that asks both."""
 
-    now = now or timezone.now()
+    return read_once("work_runs.kinds", _kinds)
+
+
+def _kinds() -> list[WorkKind]:
+    now = timezone.now()
     jobs = (
         Job.objects.annotate(seen=job_seen_state(now), title=_job_title(), named=F("kind"))
         .filter(_jobs_latest())
@@ -680,10 +630,10 @@ def _seconds(start: datetime | None, end: datetime | None) -> float | None:
 def runs_on(host: str, limit: int = RECENT) -> list[WorkRun]:
     """The latest runs that acted on the machine ``host``, newest first."""
 
-    return hydrated(work_rows(host=(host,))[:limit])
+    return hydrated(work().kept(on_hosts((host,))).order_by(*NEWEST)[:limit])
 
 
 def recent_runs(operation_id: str, limit: int = RECENT) -> list[WorkRun]:
     """The latest runs of the procedure ``operation_id``, newest first."""
 
-    return hydrated(work_rows(kind=(capability_name(operation_id),))[:limit])
+    return hydrated(work().kept(Q(kind=capability_name(operation_id))).order_by(*NEWEST)[:limit])

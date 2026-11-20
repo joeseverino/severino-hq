@@ -632,10 +632,11 @@ class _Builder:
                 else f"The `{field}` to read it for.",
             )
             # Every resource read by one field takes it alike; one whose field
-            # of that name holds another type names its own.
+            # of that name holds another type takes the first of that type, or
+            # names its own.
             named = f"{_pascal(field)}Identifier" if listed else f"{_pascal(field)}Lookup"
             if self.parameters.get(named, taken) != taken:
-                named = _pascal(name) + named
+                named = next((key for key, held in self.parameters.items() if held == taken), _pascal(name) + named)
             # A resource with a list holds the records its summary describes,
             # and this reads one of them; one without is read one at a time,
             # and its summary is already about one.

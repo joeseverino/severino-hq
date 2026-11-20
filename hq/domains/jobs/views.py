@@ -5,19 +5,23 @@ from typing import override
 
 from django.http import Http404, JsonResponse
 from django.urls import reverse, reverse_lazy
-from django.views.generic import DetailView, ListView, TemplateView, View
+from django.utils import timezone
+from django.views.generic import DetailView, TemplateView, View
 
-from hq.platform.application.pages import PageAction, PageBadge, PageMixin, RecordPageMixin, RouteNamed
+from hq.platform.application.list_pages import ListPageMixin
+from hq.platform.application.pages import PageAction, PageBadge, RecordPageMixin, RouteNamed
 from hq.platform.application.security import web_principal
-from hq.platform.application.tables import Projected, TableColumn, TableFilter, TableListMixin, TableQuery, TableSort
+from hq.platform.application.tables import TableColumn
 from hq.platform.application.tone import Tone
 lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import AskMixin
-lazy from hq.platform.application.automation_runs import AGAIN, cancel_action, listed_with_actions
+lazy from hq.platform.application.automation_runs import AGAIN, cancel_action
 lazy from hq.platform.application.capabilities import capability_spec
 lazy from hq.platform.application.labels import lower_first
+lazy from hq.platform.application.moments import moment
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
 lazy from hq.platform.application.run_pages import run_context
+lazy from hq.platform.application.work_runs import RUN, operation_of
 
 from .models import Job, JobState
 
@@ -25,16 +29,16 @@ from .models import Job, JobState
 NOTICE_TONES = {Tone.SERIOUS: "error", Tone.ATTENTION: "warning"}
 
 
-class JobListView(PageMixin, TableListMixin, ListView):
+class JobListView(ListPageMixin, TemplateView):
     """All the work HQ started, its own jobs and the automation runs it
-    queued, as one list through the host's table contract (``work_runs``)."""
+    queued, as one list: the ``work`` list read."""
 
-    table_empty = "No jobs yet."
-
-    # The rows are the projection's; a job is what an estate fills it with.
+    resource = "work"
+    # The rows are the read's; a job is what an estate fills it with.
     model = Job
+    table_empty = "No jobs yet."
     template_name = "jobs/job_list.html"
-    paginate_by = 40
+    page_size = 40
     page_title = "Background jobs"
     table_search_placeholder = "Search jobs and results…"
     table_columns = (
@@ -46,59 +50,31 @@ class JobListView(PageMixin, TableListMixin, ListView):
         TableColumn("Requested by", kind="prose"),
         TableColumn("", css="actions-col"),
     )
-    # Each sort's value is the projection's order, which reads it.
-    table_sorts = (
-        TableSort(work_runs.FAILED_FIRST, "Failed first", work_runs.FAILED_FIRST),
-        TableSort(work_runs.NEWEST, "Newest first", work_runs.NEWEST),
-        TableSort(work_runs.OLDEST, "Oldest first", work_runs.OLDEST),
-        TableSort(work_runs.BY_TITLE, "Job A–Z", work_runs.BY_TITLE),
-        TableSort(work_runs.BY_STATE, "State", work_runs.BY_STATE),
-    )
-    table_default_sort = work_runs.FAILED_FIRST
 
     @override
     def get_page_actions(self):
         # What a job changed is recorded there.
         return (PageAction("Audit log", reverse("core:audit_list")),)
 
-    @cached_property
-    def kinds(self) -> list[work_runs.WorkKind]:
-        """Each kind of work by its latest run: the Job filter's options and what failed last."""
-
-        return work_runs.work_kinds()
-
     @override
-    def get_table_filters(self):
-        # Kinds are strings extensions and procedures choose, so the options
-        # are whatever has actually run rather than a list this app keeps.
-        # A machine is offered by its name where a run acted on it, and a
-        # machine page links here with it chosen.
-        return (
-            TableFilter("state", "State", "state", JobState.choices),
-            TableFilter("kind", "Job", "kind", [(found.kind, found.title) for found in self.kinds]),
-            TableFilter("host", "Host", "host", [(host, host) for host in work_runs.run_hosts()]),
-        )
-
-    @override
-    def get_table_rows(self, query: TableQuery) -> Projected:
-        rows = work_runs.work_rows(
-            state=query.chosen("state"),
-            kind=query.chosen("kind"),
-            host=query.chosen("host"),
-            search=query.search,
-            order=query.sort,
-        )
+    def row(self, item):
+        # A run nothing has started ends with its Cancel button, for a reader who may cancel it.
         principal = web_principal(self.request.user)
-        return Projected(rows, lambda page: listed_with_actions(work_runs.hydrated(page), principal))
+        action = item["source"] == RUN and cancel_action(
+            item["id"], operation_of(item["kind"]), item["state"], item["effect"], principal
+        )
+        # The read says an ended run's duration only, so a page drawn now says how long one has run so far.
+        if item["state"] == JobState.RUNNING and (started := moment(item["started_at"])):
+            item = {**item, "duration_seconds": (timezone.now() - started).total_seconds()}
+        return {**item, "actions": (action,) if action else ()}
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # What failed or stopped on its last run, which a later run of the same work has not got past,
         # each state's work under its own word when both are there.
-        ended = {
-            state: [found.title for found in self.kinds if found.state == state] for state in work_runs.ENDED_BADLY
-        }
+        kinds = work_runs.work_kinds()
+        ended = {state: [found.title for found in kinds if found.state == state] for state in work_runs.ENDED_BADLY}
         context["ended_badly"] = [(JobState(state).label, titles) for state, titles in ended.items() if titles]
         if context["ended_badly"]:
             (first, _), *rest = context["ended_badly"]

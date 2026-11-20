@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
 
 from django.conf import settings
 from django.db.models import FETCH_PEERS, FETCH_RAISE, Q, QuerySet
@@ -21,7 +21,9 @@ lazy from django.utils import timezone
 
 from .record_errors import RecordNotFound
 lazy from .search import apply_search
-lazy from .security import Principal
+
+if TYPE_CHECKING:
+    from .security import Principal
 
 # The most rows any single read will return, whatever a caller asks for.
 #
@@ -289,13 +291,36 @@ def _ordered(rows: QuerySet, order: tuple[str, ...]) -> QuerySet:
     return rows.order_by(*order)
 
 
+@dataclass(frozen=True, slots=True)
+class Combined:
+    """Rows of several models read as one list (jobs and runs): each part a
+    ``values_list`` of the same columns, whose annotations name every lookup
+    the list narrows by. A union cannot be filtered once it is joined, so each
+    part is narrowed first."""
+
+    parts: tuple[QuerySet, ...]
+
+    def kept(self, keeps: Q | None = None) -> QuerySet:
+        """The parts' rows that ``keeps`` keeps, as one queryset to order and cut."""
+
+        first, *rest = (part.filter(keeps or Q()).order_by() for part in self.parts)
+        return first.union(*rest, all=True)
+
+
 def page_of(
-    rows: QuerySet | Sequence[Any], limit: int, *, order: tuple[str, ...] = (), maximum: int = MAX_PAGE_SIZE
+    rows: QuerySet | Combined | Sequence[Any],
+    limit: int,
+    *,
+    order: tuple[str, ...] = (),
+    maximum: int = MAX_PAGE_SIZE,
+    then: Callable[[QuerySet], QuerySet] | None = None,
 ) -> dict[str, Any]:
-    """One page of a list read: a queryset, the rows its search finds, in the
-    order its caller asked for, else the best match first, else the one its
-    list declares first, else ``order``; or a list derived whole on every
-    read, in its own order. ``maximum`` is a page's ceiling where its list
+    """One page of a list read: a queryset or a combined one, the rows its
+    search finds, in the order its caller asked for, else the best match
+    first, else the one its list declares first, else ``order``; or a list
+    derived whole on every read, in its own order. ``then`` narrows the rows
+    the filters and toggles kept by what depends on them all (one row per
+    operation of those kept). ``maximum`` is a page's ceiling where its list
     declares its own; an uncounted list reads one row past its page to learn
     whether more follow, and counts nothing."""
 
@@ -303,8 +328,13 @@ def page_of(
     start = (scope.page - 1) * size
     total: int | None
     summed: dict[str, Any] = {}
-    if isinstance(rows, QuerySet):
+    if isinstance(rows, Combined):
+        rows = rows.kept(scope.keeps)
+    elif isinstance(rows, QuerySet):
         rows = rows.filter(scope.keeps)
+    if isinstance(rows, QuerySet):
+        if then is not None:
+            rows = then(rows)
         if scope.search is not None:
             rows = apply_search(
                 rows, scope=scope.search.scope, query=scope.search.text, principal=scope.search.principal

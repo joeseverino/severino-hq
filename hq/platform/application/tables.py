@@ -3,10 +3,9 @@
 import shlex
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import FieldDoesNotExist
-from django.core.paginator import EmptyPage, Page, Paginator
 from django.db import models
 from django.db.models import Model, Q, QuerySet
 
@@ -449,55 +448,3 @@ class TableListMixin:
         context = super().get_context_data(**kwargs)
         context["table"] = self.table_context()
         return context
-
-
-class UncountedPage(Page):
-    """A page that knows whether another follows without knowing how many."""
-
-    def __init__(self, object_list: list[Any], number: int, paginator: UncountedPaginator, *, more: bool):
-        super().__init__(object_list, number, paginator)
-        self.more = more
-
-    @override
-    def has_next(self) -> bool:
-        return self.more
-
-    @override
-    def next_page_number(self) -> int:
-        return self.number + 1
-
-    @override
-    def previous_page_number(self) -> int:
-        return max(1, self.number - 1)
-
-    @override
-    def start_index(self) -> int:
-        return (self.paginator.per_page * (self.number - 1)) + 1 if self.object_list else 0
-
-    @override
-    def end_index(self) -> int:
-        return (self.paginator.per_page * (self.number - 1)) + len(self.object_list)
-
-
-class UncountedPaginator(Paginator):
-    """Pages through a list too long to count on every load.
-
-    A page reads one row past its end to learn whether another follows, so the
-    pages say "Page 3", never "of 1,262", and no load counts the whole set.
-    """
-
-    # The pages partial leaves out the total where there is none.
-    counted = False
-
-    @override
-    def validate_number(self, number: Any) -> int:
-        return self._validate_number(number, float("inf"))
-
-    @override
-    def page(self, number: Any) -> UncountedPage:
-        number = self.validate_number(number)
-        bottom = (number - 1) * self.per_page
-        rows = list(self.object_list[bottom : bottom + self.per_page + 1])
-        if not rows and number > 1:
-            raise EmptyPage(self.error_messages["no_results"])
-        return UncountedPage(rows[: self.per_page], number, self, more=len(rows) > self.per_page)

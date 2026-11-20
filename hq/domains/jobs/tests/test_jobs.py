@@ -352,8 +352,8 @@ class JobIdTests(TestCase):
         self.assertEqual(sorted(made), made)
 
 
-class JobListOrderTests(TestCase):
-    """What failed on its last run leads the list and is named above it."""
+class EndedBadlyTests(TestCase):
+    """What failed on its last run is named above the list."""
 
     def setUp(self):
         operator(self.client, "owner", email="owner@example.test")
@@ -365,19 +365,15 @@ class JobListOrderTests(TestCase):
             Job.objects.filter(pk=job.pk).update(created_at=now - timedelta(hours=hours_ago))
             return job
 
-        self.recovered = ran("example.sync", "Sync the example", Job.State.FAILED, 5)
+        ran("example.sync", "Sync the example", Job.State.FAILED, 5)
         ran("example.sync", "Sync the example", Job.State.SUCCEEDED, 1)
-        self.failed = ran("example.read", "Read the example", Job.State.FAILED, 3)
-        self.lost = ran("example.index", "Index the example", Job.State.LOST, 4)
-        self.newest = ran("example.other", "Do the other thing", Job.State.SUCCEEDED, 0)
+        ran("example.read", "Read the example", Job.State.FAILED, 3)
+        ran("example.index", "Index the example", Job.State.LOST, 4)
 
-    def test_a_job_that_failed_last_leads_and_a_recovered_one_does_not(self):
+    def test_each_is_named_under_the_state_it_reads_in(self):
         page = self.client.get(reverse("jobs:list"))
 
-        order = [row.id for row in page.context["object_list"]]
-        self.assertEqual(order[:3], [str(self.failed.pk), str(self.lost.pk), str(self.newest.pk)])
-        self.assertGreater(order.index(str(self.recovered.pk)), 2)
-        # Each is named under the state it reads in, and no count says it again.
+        # No count says it again.
         self.assertIn(f"{Job.State.FAILED.label}: Read the example", text(page.content))
         self.assertIn(f"{Job.State.LOST.label}: Index the example", text(page.content))
         self.assertNotIn("1 job", plain(page.content))
@@ -402,11 +398,6 @@ class JobListOrderTests(TestCase):
 
         page = self.client.get(reverse("jobs:list")).content
         self.assertEqual(len(with_class(page, "notice-warning")), 1)
-
-    def test_newest_first_is_still_one_choice_away(self):
-        page = self.client.get(reverse("jobs:list"), {"sort": "-created_at"})
-
-        self.assertEqual(page.context["object_list"][0].id, str(self.newest.pk))
 
     def test_nothing_is_said_when_nothing_failed_last(self):
         Job.objects.exclude(state=Job.State.SUCCEEDED).delete()
@@ -477,19 +468,21 @@ class JobsListRunsTests(TestCase):
         return self.client.get(reverse("jobs:list"), query)
 
     def test_every_run_and_scan_is_listed_beside_the_jobs(self):
-        page = self.listed(sort="-created_at")
-        rows = list(page.context["paginator"].object_list[: page.context["paginator"].count])
+        from hq.platform.application.resources import every_item
+        from hq.platform.application.security import web_principal
+
+        rows = every_item("work", principal=web_principal(self.owner))
 
         self.assertEqual(
-            {row.id for row in rows if row.source == "run"},
+            {row["id"] for row in rows if row["source"] == "run"},
             {str(pk) for pk in (*self.runs().values_list("pk", flat=True), *self.scans().values_list("pk", flat=True))},
         )
         self.assertTrue(self.scans().exists())
-        self.assertTrue(any(row.source == "job" for row in rows))
+        self.assertTrue(any(row["source"] == "job" for row in rows))
 
     def test_a_state_is_drawn_as_a_status_in_its_tone(self):
         page = self.listed(state=Job.State.RUNNING)
-        found = [row for row in page.context["object_list"] if row.source == "run"]
+        found = [row for row in page.context["object_list"] if row["source"] == "run"]
 
         self.assertTrue(found)
         self.assertContains(page, f"tone-{Job.State.RUNNING.tone}")
@@ -500,24 +493,10 @@ class JobsListRunsTests(TestCase):
         page = self.listed(host=MACHINE)
 
         self.assertEqual(
-            {row.id for row in page.context["object_list"]},
+            {row["id"] for row in page.context["object_list"]},
             {str(pk) for pk in self.runs(hosts__host=MACHINE).values_list("pk", flat=True)},
         )
         self.assertContains(page, reverse("control_plane:machine", kwargs={"name": MACHINE}))
-
-    def test_a_procedure_s_runs_are_listed_by_its_command(self):
-        from hq.platform.application.automation_runs import capability_name
-
-        run = self.runs().select_related("resource").first()
-        command = capability_name(run.input["operation"])
-
-        page = self.listed(kind=command)
-
-        self.assertEqual(
-            {row.id for row in page.context["object_list"]},
-            {str(pk) for pk in self.runs(resource=run.resource).values_list("pk", flat=True)},
-        )
-        self.assertIn(command, [option["value"] for option in _filter(page, "kind")["options"]])
 
     def test_a_run_s_evidence_is_in_its_row_s_open_line(self):
         from django.db.models import Q
@@ -535,7 +514,3 @@ class JobsListRunsTests(TestCase):
         for said in (CORRELATION, WORKER, approver.input["approved_by"], task):
             with self.subTest(said=said):
                 self.assertIn(said, text(page))
-
-
-def _filter(page, name):
-    return next(spec for spec in page.context["table"]["filters"] if spec["name"] == name)
