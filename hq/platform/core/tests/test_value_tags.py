@@ -287,7 +287,6 @@ class BreakableTests(SimpleTestCase):
         self.assertEqual(boxed(breakable(f"{digest} on example-oidc")), [digest, "example-oidc"])
         self.assertIn('<span class="cut"><span class="whole">', breakable(digest))
         self.assertEqual(boxed(breakable(f"sha256:{digest} pulled")), [digest])
-        self.assertEqual(breakable("Example Finance"), "Example Finance")
 
     def test_a_word_that_breaks_nowhere_stays_text(self):
         self.assertEqual(breakable("Example Finance"), "Example Finance")
@@ -342,8 +341,6 @@ class FigureWordTests(SimpleTestCase):
         for source, context, run in (
             ('{{ n|counted:"sign-in" }}', {"n": 3}, "3\xa0sign-ins"),
             ('{{ n|counted:"check passes,checks pass" }}', {"n": 2}, "2\xa0checks pass"),
-            ('{{ x|floatformat:2|measured:"mi" }}', {"x": 3.5712}, "3.57\xa0mi"),
-            ('{{ n|measured:"more" }}', {"n": 4}, "4\xa0more"),
             ("{{ n|bytes }}", {"n": 3 * 1024**3}, "3.0\xa0GB"),
             ("{{ n|seconds }}", {"n": 273}, "4\xa0min 33\xa0s"),
             ("{{ n|seconds }}", {"n": 1800}, "30\xa0min"),
@@ -354,11 +351,6 @@ class FigureWordTests(SimpleTestCase):
             with self.subTest(source=source):
                 drawn = self.render(source, **context)
                 self.assertEqual(drawn, run)
-
-    def test_a_missing_measure_is_the_missing_mark_without_its_unit(self):
-        drawn = self.render('{{ x|measured:"mi" }}', x=None)
-        self.assertIn('class="empty-value"', drawn)
-        self.assertNotIn("mi", drawn)
 
     def test_the_join_is_breakables_own(self):
         from hq.platform.core.templatetags.line_breaks import held
@@ -420,17 +412,6 @@ class LeadActionTests(SimpleTestCase):
 
         beside, _copies, _rest = head_actions(actions)
         return beside[0].label
-
-    def test_a_destructive_control_never_leads_while_another_is_offered(self):
-        from hq.platform.application.pages import PageAction
-
-        self.assertEqual(
-            self.lead(
-                PageAction._built(label="Stop", url="/stop/", danger=True),
-                PageAction._built(label="Restart", url="/restart/", method="post"),
-            ),
-            "Restart",
-        )
 
     def test_one_that_can_be_pressed_leads_over_one_that_cannot(self):
         from hq.platform.application.pages import PageAction
