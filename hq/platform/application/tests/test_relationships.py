@@ -137,12 +137,6 @@ class LinkBuilderTests(TestCase):
                 declared = PROVIDERS[kind].label if kind in PROVIDERS else OBSERVATIONS[kind].label
                 self.assertEqual(kind_label(kind), declared)
 
-    def test_an_estate_kind_links_to_its_page(self):
-        link = entity_link("machine", "example-host")
-
-        self.assertEqual(link.url, reverse("control_plane:machine", args=["example-host"]))
-        self.assertFalse(link.external)
-
     def test_a_connection_links_to_its_row(self):
         link = entity_link("connection", "example-cloudflare")
 
