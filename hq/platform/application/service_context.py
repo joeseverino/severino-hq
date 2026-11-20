@@ -17,7 +17,6 @@ lazy from django import urls
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
-from hq.platform.core.models import AuditLog
 lazy from hq.domains.projects.models import Project
 lazy from hq.platform.core.network import split_host_port
 lazy from hq.platform.core.templatetags.value_tags import seconds
@@ -42,6 +41,7 @@ lazy from .path_dependencies import consequence_of
 lazy from .path_model import Route
 lazy from .paths import hq_path
 lazy from .reach import network_of
+lazy from .record_timeline import record_timeline
 lazy from .security import Capability, Principal
 lazy from .service_facets import CERTIFICATE_FACET
 lazy from .services import served_here
@@ -189,17 +189,15 @@ def recent_changes(keys: list[str], *, limit: int, principal: Principal | None =
     machine page asks the same of its declarations. Who did each is shown
     only to a ``principal`` who may read the audit log."""
 
-    if not keys:
-        return None
-    events = list(AuditLog.objects.filter(object_id__in=keys).select_related("user").order_by("-created_at")[:limit])
-    if not events:
+    lines = history.recent(limit=limit, of=record_timeline(*keys))
+    if not lines:
         return None
     return ServiceSection(
         id="activity",
         label="Recent changes",
         columns=tuple(heading for heading, _css in history.COLUMNS),
         records=(),
-        history=tuple(history.entries(events)),
+        history=tuple(lines),
         hide_who=principal is None or not principal.permits(Capability.READ_AUDIT_LOG),
     )
 

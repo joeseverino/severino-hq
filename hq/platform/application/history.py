@@ -548,10 +548,13 @@ def routine() -> Q:
     return kinds & Q(user__isnull=True)
 
 
-def recent(*, limit: int, reads: bool = False, quiet: bool = False) -> list[HistoryLine]:
-    """The newest ``limit`` events, read requests and routine work left out unless asked for."""
+def recent(
+    *, limit: int, reads: bool = False, quiet: bool = False, of: QuerySet[AuditLog] | None = None
+) -> list[HistoryLine]:
+    """The newest ``limit`` events of ``of`` (the whole log by default), read
+    requests and routine work left out unless asked for."""
 
-    rows = AuditLog.objects.select_related("user")
+    rows = (AuditLog.objects.all() if of is None else of).select_related("user")
     if not reads:
         rows = rows.exclude(read_requests())
     if not quiet:
