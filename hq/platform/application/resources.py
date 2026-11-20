@@ -12,6 +12,7 @@ from pydantic import (
     ValidationError,
     with_config,
 )
+from pydantic_core import to_json
 
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion, WebRoute
 from .contracts import Closed
@@ -518,7 +519,9 @@ def get_resource(
     if not spec.detail_handler or not spec.identifier:
         raise undetailed(spec)
     try:
-        parsed: Any = TypeAdapter(spec.identifier_type).validate_python(identifier, strict=strict)
+        # Read as JSON, the form every caller sends it in and a record lists it
+        # in: a strict UUID or day is its text there, and a number never one.
+        parsed: Any = TypeAdapter(spec.identifier_type).validate_json(to_json(identifier), strict=strict)
     except ValidationError as exc:
         raise InvalidResourceInput(name, exc.errors()) from exc
     try:
