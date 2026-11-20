@@ -1,21 +1,7 @@
-"""For an extension's list page: its columns, filters, sorts, and toggles."""
+"""For an extension's list page: one page of its resource's list read, drawn in the columns it declares."""
 
+from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.page_reads import Remedy
-from hq.platform.application.tables import (
-    Projected,
-    TableColumn,
-    TableFilter,
-    TableListMixin,
-    TableSort,
-    TableToggle,
-)
+from hq.platform.application.tables import TableColumn
 
-__all__ = [
-    "Projected",
-    "Remedy",
-    "TableColumn",
-    "TableFilter",
-    "TableListMixin",
-    "TableSort",
-    "TableToggle",
-]
+__all__ = ["ListPageMixin", "Remedy", "TableColumn"]

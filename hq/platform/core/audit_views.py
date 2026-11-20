@@ -102,9 +102,7 @@ class AuditLogListView(ListPageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["awaiting"] = self._awaiting()
-        ids = [item["id"] for item in self.collection["items"]]
-        found = AuditLog.objects.select_related("user").in_bulk(ids)
-        page = [found[pk] for pk in ids]
+        page = self.records(AuditLog.objects.select_related("user"))
         asked = self.list_query()
         if asked.get("events"):
             # What each operation changed is read from the rows its filters keep.

@@ -634,10 +634,10 @@ mise run manage --scratch -- search_hq projects "certificate automation"
 mise run manage --scratch -- rebuild_search_index
 ```
 
-`hq.platform.application.tables.TableListMixin` composes indexed search with
-multi-value filters, workflow toggles, allowlisted ordering and database
-pagination, over a model's queryset or a projection's rows
-(`get_table_rows`, as Jobs lists HQ's jobs and automation runs as one). The browser enhances that GET contract with debounced, cancelable
+`hq.platform.application.list_pages.ListPageMixin` draws a table page from
+one page of its resource's list read, which composes indexed search with
+multi-value filters, toggles, declared sorts and paging by page number, over
+a queryset, a union of several (Jobs) or a list derived whole. The browser enhances that GET contract with debounced, cancelable
 requests; plain links and forms remain the complete fallback.
 
 ## Emit once, derive everywhere

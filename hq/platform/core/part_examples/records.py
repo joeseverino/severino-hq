@@ -20,10 +20,10 @@ lazy from hq.platform.application.finding_model import CHECK_AGAIN, Finding, ope
 lazy from hq.platform.application.finding_steps import Do, Run
 lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
+lazy from hq.platform.application.integration_specs import ListSort
 lazy from hq.platform.application.pages import PageAction
 lazy from hq.platform.application.path_model import Certificate
 lazy from hq.platform.application.relationships import Relationships
-lazy from hq.platform.application.tables import TableSort
 lazy from hq.platform.application.tone import Tone
 lazy from hq.platform.application.topology_model import RelationGroup, Relationship
 
@@ -136,8 +136,8 @@ def _toolbar():
             }
         ],
         "toggles": [{"name": "stale", "label": "Out of date only", "selected": True}],
-        "sorts": (TableSort("name", "Name", "name"), TableSort("-seen", "Last seen", "-seen")),
-        "selected_sort": "_relevance",
+        "sorts": (ListSort("name", "Name"), ListSort("-seen", "Last seen")),
+        "selected_sort": "",
         "active_count": 3,
     }
 

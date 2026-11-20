@@ -71,8 +71,6 @@ type PageNumber = Annotated[
 # What a list's own ``status`` and ``query`` narrow by, wherever a query declares them.
 STATUS_FILTER = "Only the records in this status; absent, every status."
 TEXT_FILTER = "Only the records whose text holds this, ignoring case; absent, every record."
-# A list's ``query`` where it may be left out.
-type TextFilter = Annotated[str | None, Field(description=TEXT_FILTER)]
 # The ``query`` of a kind that declares its search, which looks it up there.
 type SearchText = Annotated[
     str | None,
@@ -81,9 +79,6 @@ type SearchText = Annotated[
         "every record."
     ),
 ]
-# A list's ``status`` where it may be left out and its statuses are not
-# declared as a choice; one that declares them types the field by ``one_of``.
-type StatusFilter = Annotated[str | None, Field(description=STATUS_FILTER)]
 # A ranked list's ``limit``: the deployment-wide ceiling, declared so a caller
 # reads it in the schema and a page past it is refused rather than quietly cut.
 type TopLimit = Annotated[int, Field(ge=1, le=MAX_PAGE_SIZE, description=limit_words(MAX_PAGE_SIZE, paged=False))]

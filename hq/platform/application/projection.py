@@ -15,7 +15,7 @@ from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any, overload
 
 from django.conf import settings
-from django.db.models import FETCH_PEERS, FETCH_RAISE, Q, QuerySet
+from django.db.models import FETCH_PEERS, FETCH_RAISE, Model, Q, QuerySet
 from pydantic import ConfigDict
 lazy from django.utils import timezone
 
@@ -179,8 +179,14 @@ def guarded(queryset: QuerySet) -> QuerySet:
     return queryset.fetch_mode(FETCH_RAISE if settings.SEVERINO_STRICT_FETCH else FETCH_PEERS)
 
 
-def listing(rows, serialize, *, status=None, order: tuple[str, ...] = ("slug",), limit: int = 50) -> dict[str, Any]:
-    """One list read: an optional status, one page.
+def listing(
+    rows: QuerySet[Any] | type[Model],
+    serialize: Callable[[Any], object],
+    *,
+    order: tuple[str, ...] = ("slug",),
+    limit: int = 50,
+) -> dict[str, Any]:
+    """One page of a list read.
 
     Domains differ only in the rows (a model, or a queryset a domain has
     already narrowed or joined), the serializer and the order. Each item is
@@ -189,8 +195,6 @@ def listing(rows, serialize, *, status=None, order: tuple[str, ...] = ("slug",),
     """
 
     qs = guarded(rows if isinstance(rows, QuerySet) else rows.objects.all())
-    if status:
-        qs = qs.filter(status=status)
     page = page_of(qs, limit, order=order)
     return {**page, "items": [serialize(row) for row in page["items"]]}
 

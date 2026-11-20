@@ -169,7 +169,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         if name := self.request.user.first_name:
             greeting = f"{greeting}, {name}"
 
-        # Projected here, not in operating_snapshot(): that snapshot is also the
+        # Shaped here, not in operating_snapshot(): that snapshot is also the
         # MCP payload, and a transport contract must not carry a UI shape.
         content_rows = [
             ListRow(

@@ -2,7 +2,7 @@
 {% comment %}
 A list: the toolbar, the table and its empty state, drawn from the view's
 ListPageMixin, whose rows are its list read's items (each selected by the
-list's `table.identifier`), or a TableListMixin's. The header comes from `table.columns`; a page writes only the
+list's `table.identifier`). The header comes from `table.columns`; a page writes only the
 cells of one row in `{% block row %}`, which renders once per row with `row`
 set. Its rows are one page of a list the server orders, so a heading sorts
 there (`sort=`) or not at all, never on the page. Its first cell stands in the gutter and holds the row's toggle, both drawn by the region wherever a row can hold anything back, and `{% block row_attributes %}` gives its `tr` attributes (a fold's `id` and `data-folds`, a folded row's `data-folded`), and `{% block row_select %}` its tick-box, which a row of one cell across the table leaves out. `{% block summary %}` sits between the toolbar and the table.

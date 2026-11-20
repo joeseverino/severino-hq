@@ -13,7 +13,7 @@ and those that hold across parts in [Design](Design.md).
 | --- | --- | --- |
 | `confirm_page.html` | `consequences` | A destructive action's confirmation: `consequences` says what will happen. |
 | `form_page.html` | nothing | A page that is one form, a record's: its card and `partials/_form.html`, closing with `form_verb` and `cancel_url`; `form_fields` names a template for fields beyond the form's own loop and `form_note` says what saving does, each from the view, so the page fills no block. |
-| `list_page.html` | `foot`, `row` (given `forloop`, `row`), `summary` | A `TableListMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or filter changes, `foot` is its `<tfoot>`. |
+| `list_page.html` | `foot`, `row` (given `forloop`, `row`), `summary` | A `ListPageMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or filter changes, `foot` is its `<tfoot>`. |
 | `page.html` | `page`, `print_footer` | Any page: the head, actions, dialogs and section navigation, drawn from `page`. |
 
 | Partial | Required | Optional | What it is |

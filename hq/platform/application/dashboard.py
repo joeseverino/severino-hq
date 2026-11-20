@@ -85,7 +85,7 @@ def _holds_a_card(cards, overview: DomainOverview | None) -> bool:
 def work_queue() -> list[QueueItem]:
     """The composed queue, flattened for transport, derived once per change.
 
-    Projected from ``domain_attention_items`` rather than assembled here: the
+    Derived from ``domain_attention_items`` rather than assembled here: the
     domains own what needs doing, and this is only the shape it travels in.
     ``url`` rides along so no consumer needs a table to turn an entry back into
     a link. The host's part and each extension's are derived on their own, so

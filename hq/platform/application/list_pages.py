@@ -4,6 +4,7 @@ from math import ceil
 from typing import Any
 
 from django.core.exceptions import BadRequest, ImproperlyConfigured
+from django.db.models import QuerySet
 
 from .integration_specs import SEARCH_FIELD, ListRead, ResourceSpec
 from .page_reads import Remedy
@@ -96,6 +97,17 @@ class ListPageMixin(PageMixin):
 
         return item
 
+    def records(self, rows: QuerySet) -> list[Any]:
+        """The page's records out of ``rows``, in the list's order, read in one
+        query by the list's identifier: for a page that draws each row from its
+        record (a form, a field the item leaves out) rather than from its item."""
+
+        if not (key := self.spec.identifier):
+            raise ImproperlyConfigured(f"{self.resource!r} names no identifier to read its records by.")
+        ids = [str(item[key]) for item in self.collection["items"]]
+        found = {str(pk): record for pk, record in rows.in_bulk(ids, field_name=key).items()}
+        return [found[pk] for pk in ids]
+
     def table(self) -> dict[str, Any]:
         """What the toolbar, the headings and the empty state draw."""
 
@@ -146,9 +158,15 @@ class ListPageMixin(PageMixin):
             "empty": self.table_empty or ended(f"No {self.spec.label.lower()}"),
             "empty_why": self.table_empty_why,
             "empty_remedy": self.table_empty_remedy,
-            "empty_link": None,
+            "empty_link": self.get_table_empty_remedy(),
             "clear": Remedy("Clear filters", "?"),
         }
+
+    def get_table_empty_remedy(self) -> Remedy | None:
+        """What fills this list when it is empty, where the page's derived
+        remedy is not it; None takes the derived one."""
+
+        return None
 
     def pages(self) -> dict[str, Any] | None:
         """The turn to the pages beside this one and where it stands among
