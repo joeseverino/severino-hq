@@ -18,7 +18,7 @@ from django.core.exceptions import ImproperlyConfigured
 lazy from django.utils import timezone
 
 lazy from hq.domains.jobs.models import Job
-lazy from hq.domains.jobs.runner import ALREADY_RUNNING, SCHEDULER, JobConflict, Progress, due as is_due, run, start
+lazy from hq.domains.jobs.runner import ALREADY_RUNNING, SCHEDULER, Progress, due as is_due, run, start
 
 from .asks import FAILED, Ask, Asked, AskedAnswer, Standing
 from .contracts import DOTTED_NAME, Effect
@@ -26,7 +26,7 @@ from .describe import Describe
 from .integration_specs import CapabilitySpec, requested
 from .process_caches import kept
 from .projection import read_once
-from .record_errors import RecordNotFound
+from .record_errors import RecordConflict, RecordNotFound
 from .refusal_codes import Code
 from .refusal_status import RefusalEnvelope, refuse
 from .security import WAITING_INTERFACES, Principal, internal_principal, person_of
@@ -283,7 +283,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> W
             requested_by=person_of(principal),
             request={SUBJECT_FIELD: subject},
         )
-    except JobConflict:
+    except RecordConflict:
         live = Job.objects.filter(kind=work.name, state__in=("queued", "running")).first()
         if live is not None and live.request.get(SUBJECT_FIELD, "") == subject:
             return {**_job_asked(live, ALREADY_RUNNING), "started": False, "job": str(live.pk)}
@@ -357,7 +357,7 @@ def run_for_host(name: str) -> dict[str, Any]:
     work = _host_named(name)
     try:
         job = run_now(work.name, principal=_scheduler())
-    except JobConflict:
+    except RecordConflict:
         return {"name": name, "state": "running", "note": ALREADY_RUNNING}
     return {"name": name, "state": job.state, "note": job_run(job).note, "job": str(job.pk)}
 
@@ -376,7 +376,7 @@ def start_for_host(name: str) -> bool:
             actor=principal.actor,
             request={SUBJECT_FIELD: ""},
         )
-    except JobConflict:
+    except RecordConflict:
         return False
     return True
 

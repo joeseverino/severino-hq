@@ -18,6 +18,7 @@ from django.utils.text import capfirst
 lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.contrib.auth.models import AnonymousUser
 
+from hq.platform.application.record_errors import RecordConflict
 from hq.platform.application.security import CLI_ACTOR, JOB_INTERFACE
 from hq.platform.core.attribution import OperationContext, own_operation
 from hq.platform.core.audit import Outcome, tallied, work_ended
@@ -85,10 +86,6 @@ class Progress:
 ALREADY_RUNNING = "Already running."
 
 
-class JobConflict(RuntimeError):
-    """A live job of this kind already exists."""
-
-
 class Failed(RuntimeError):
     """The work ended without doing what was asked, and this is why.
 
@@ -117,7 +114,7 @@ def _record(kind, label, *, actor, requested_by, request) -> Job:
     except IntegrityError as exc:
         # The one-live-job rule, and only that: any other refusal is itself.
         if Job.objects.filter(kind=kind, state__in=(Job.State.QUEUED, Job.State.RUNNING)).exists():
-            raise JobConflict(ALREADY_RUNNING) from exc
+            raise RecordConflict(ALREADY_RUNNING) from exc
         raise
 
 

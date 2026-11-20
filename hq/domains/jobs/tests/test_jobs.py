@@ -9,12 +9,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.platform.application.markup_testing import text, with_class
+from hq.platform.application.record_errors import RecordConflict
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import SignedInTestCase, operator
 from hq_sdk.testing import plain
 
 from ..models import HEARTBEAT_GRACE, Job
-from ..runner import Failed, JobConflict, Progress, reap, run, start
+from ..runner import Failed, Progress, reap, run, start
 
 
 class JobRunnerTests(TransactionTestCase):
@@ -57,7 +58,7 @@ class JobRunnerTests(TransactionTestCase):
         self.addCleanup(gate.set)
         first = start("test.solo", "First", lambda progress: gate.wait(5) and {})
 
-        with self.assertRaises(JobConflict):
+        with self.assertRaises(RecordConflict):
             start("test.solo", "Second", lambda progress: {})
 
         gate.set()
@@ -283,7 +284,7 @@ class RunOnTheCallingThreadTests(TestCase):
     def test_it_takes_the_same_slot_as_a_started_job(self):
         Job.objects.create(kind="test.inline", label="Already", state=Job.State.RUNNING)
 
-        with self.assertRaises(JobConflict):
+        with self.assertRaises(RecordConflict):
             run("test.inline", "Inline", lambda progress: {})
 
     def test_a_request_may_not_run_a_job_itself(self):

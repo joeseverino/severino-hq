@@ -17,12 +17,13 @@ lazy from django.core.management import call_command
 lazy from hq.domains.content.content_sync import ContentSyncError, sync_content_index
 lazy from hq.domains.control_plane.observations.host import UNIT_KIND
 lazy from hq.domains.jobs import runner
-lazy from hq.domains.jobs.runner import Failed, JobConflict
+lazy from hq.domains.jobs.runner import Failed
 lazy from hq.platform.core.audit import prune_routine, record_operation
 lazy from hq.platform.core.database import optimize
 lazy from hq.platform.core.models import AuditLog
 
 from .outbound_work import OutboundWork
+from .record_errors import RecordConflict
 from .ui import counted
 lazy from . import approvals, outbound_work
 lazy from .automation_adoption import prune_proposals
@@ -102,7 +103,7 @@ def _due(_progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
     for work in outbound_work.due(timezone.now()):
         try:
             ended[work.name] = outbound_work.run_now(work.name, principal=principal).state
-        except JobConflict:
+        except RecordConflict:
             ended[work.name] = "running"
         except ValueError as refused:
             ended[work.name] = f"refused: {refused}"

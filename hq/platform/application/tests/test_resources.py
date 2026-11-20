@@ -13,6 +13,7 @@ from ..command_center import command_center
 from ..integration_specs import ListRead
 from ..integrations import integration_graph
 from ..plugin_testing import offering
+from ..record_errors import RecordNotFound
 from ..report_testing import bridged
 from ..resources import (
     EmptyQuery,
@@ -23,6 +24,9 @@ from ..resources import (
     list_resource,
 )
 from ..security import AuthorizationError, Capability
+
+# Distinctive enough that finding it in a message can only mean it was echoed.
+SENT = "sent-by-the-caller-7f3a"
 
 
 class ResourceExecutionTests(TestCase):
@@ -371,3 +375,27 @@ class TailnetDeviceKeyTests(TestCase):
         from hq.platform.application.infrastructure import suggest_key
 
         self.assertEqual(suggest_key("machine", {"name": "box"}), "box")
+
+
+class MissingRecordReadTests(TestCase):
+    def test_every_host_resource_answers_a_missing_record_as_not_found(self):
+        cases = {
+            "infrastructure": SENT,
+            "services": f"not a host {SENT}",
+            "machines": SENT,
+            "containers": f"{SENT}:{SENT}",
+            "upgrades": f"{SENT}:{SENT}",
+            "domains": f"{SENT}.example",
+            "relationships": f"machine:{SENT}",
+            "service.paths": f"not a host {SENT}",
+            "readings": SENT,
+            "credentials": SENT,
+            "connections": SENT,
+            "contact.submissions": 7_340_219,
+        }
+        for name, identifier in cases.items():
+            with self.subTest(name):
+                with self.assertRaises(RecordNotFound) as refused:
+                    get_resource(name, identifier, principal=OPERATOR, strict=False)
+                self.assertNotIn(SENT, str(refused.exception))
+                self.assertNotIn(str(identifier), str(refused.exception))
