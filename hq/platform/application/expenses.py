@@ -5,7 +5,7 @@ from decimal import Decimal
 from functools import partial
 from typing import Annotated, Any
 
-from django.db.models import Sum
+from django.db.models import Count, QuerySet, Sum
 from pydantic import Field
 
 from hq.domains.expenses.models import DEFAULT_CATEGORY, EXPENSE_CATEGORY_CHOICES, Expense
@@ -69,12 +69,16 @@ type ExpenseAbout = Annotated[
 ]
 
 
+ZERO = Decimal("0.00")
+
+
 @dataclass(frozen=True, slots=True)
 class CostTotals:
     """What a list of costs adds up to, over every row its filters leave."""
 
-    total: Decimal
-    deductible: Decimal
+    total: Decimal = ZERO
+    deductible: Decimal = ZERO
+    count: int = 0
     # A search or a filter is on, so the sums are of what matches.
     narrowed: bool = False
 
@@ -82,36 +86,41 @@ class CostTotals:
         return bool(self.total or self.deductible)
 
 
-def cost_totals(sums: dict[str, Any], *, narrowed: bool) -> CostTotals:
-    """``sums`` is an aggregate's ``total`` and ``deductible``, either None over no rows."""
-
-    zero = Decimal("0.00")
-    return CostTotals(sums.get("total") or zero, sums.get("deductible") or zero, narrowed)
+# Each sum in the database, in the whole cents each row already holds.
+_SUMS = {"count": Count("pk"), "total": Sum("total_cost"), "deductible": Sum("estimated_deductible_amount")}
 
 
-def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTotals, tuple[Kpi, ...]]:
-    """What a list of expenses adds up to, whole and by category, from one statement.
+def _summed(sums: dict[str, Any], narrowed: bool = False) -> CostTotals:
+    return CostTotals(sums["total"] or ZERO, sums["deductible"] or ZERO, sums["count"], narrowed)
 
-    ``rows`` is the list as its filters leave it and ``query`` the request's
-    own, which each category's link keeps. Each category is a figure linking
-    to the list narrowed to it, said only where two or more divide the list,
-    which a list narrowed to one category never is.
-    """
 
-    sums = list(
-        Expense.objects.filter(pk__in=rows.order_by().values("pk"))
-        .order_by()
-        .values("category")
-        .annotate(total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount"))
-    )
-    zero = Decimal("0.00")
-    totals = CostTotals(
-        sum((row["total"] or zero for row in sums), zero),
-        sum((row["deductible"] or zero for row in sums), zero),
-        narrowed,
-    )
-    if len(sums) < 2:
-        return totals, ()
+def _each_once(rows: QuerySet) -> QuerySet:
+    # A filter that joins (a search, a count of receipts) can repeat a row,
+    # so the sums read each row of ``rows`` once.
+    return rows.model.objects.filter(pk__in=rows.order_by().values("pk")).order_by()
+
+
+def cost_totals(rows: QuerySet, *, narrowed: bool = False) -> CostTotals:
+    """What ``rows``, expenses or assets as their filters leave them, add up to."""
+
+    return _summed(_each_once(rows).aggregate(**_SUMS), narrowed)
+
+
+def costs_by_category(rows: QuerySet) -> tuple[tuple[str, CostTotals], ...]:
+    """What each category of ``rows`` (as ``cost_totals`` reads them) adds up to, the costliest first."""
+
+    grouped = _each_once(rows).values("category").annotate(**_SUMS).order_by("-total", "category")
+    return tuple((row["category"], _summed(row)) for row in grouped)
+
+
+def category_figures(rows: QuerySet, *, query, choices) -> tuple[Kpi, ...]:
+    """Each category's total as a figure linking to the list narrowed to it,
+    said only where two or more divide the list, which a list narrowed to one
+    category never is. ``query`` is the request's own, which each link keeps."""
+
+    categories = costs_by_category(rows)
+    if len(categories) < 2:
+        return ()
     labels = dict(choices)
     kept = query.copy()
     kept.pop("page", None)
@@ -120,13 +129,9 @@ def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTota
         kept["category"] = category
         return with_query("", kept)
 
-    return totals, tuple(
-        Kpi(
-            labels.get(row["category"], row["category"]),
-            money(row["total"] or zero, cents=False),
-            url=narrowed_to(row["category"]),
-        )
-        for row in sorted(sums, key=lambda row: row["total"] or zero, reverse=True)
+    return tuple(
+        Kpi(labels.get(category, category), money(totals.total, cents=False), url=narrowed_to(category))
+        for category, totals in categories
     )
 
 

@@ -1,6 +1,6 @@
 from typing import override
 
-from django.db.models import Q, Sum
+from django.db.models import Q
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -67,8 +67,7 @@ class AssetListView(PageMixin, TableListMixin, ListView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        totals = self.object_list.aggregate(total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount"))
-        context["totals"] = cost_totals(totals, narrowed=bool(context["table"]["active_count"]))
+        context["totals"] = cost_totals(self.object_list, narrowed=bool(context["table"]["active_count"]))
         return context
 
 
