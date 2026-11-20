@@ -196,7 +196,6 @@ class DataTable:
     label: str
     columns: tuple[TableColumn, ...]
     rows: tuple[tuple[tuple[Cell, ...], RunEvidence | None, tuple[PageAction, ...]], ...]
-    compact: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "columns", ranked(self.columns))

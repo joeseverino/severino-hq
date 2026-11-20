@@ -126,7 +126,7 @@ ENTRIES = {
     # wrap.
     "table/compare": Example(
         '{% section "Example changes 2" %}{% table_region "Example changes 2" compare=True %}'
-        '<table class="data-table compact-table"><thead><tr>{% table_heading "Field" "identifier" %}'
+        '<table class="data-table"><thead><tr>{% table_heading "Field" "identifier" %}'
         '{% table_heading "Before" %}{% table_heading "After" %}</tr></thead><tbody>'
         "<tr><th>example_name</th><td>example-01</td><td>example-02</td></tr>"
         "<tr><th>example_note</th><td>An example note long enough to take two lines on a phone.</td>"

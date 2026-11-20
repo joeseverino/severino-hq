@@ -15,7 +15,7 @@ The answer to the policy test. The tailnet page answers it alone as its
     they want is to go and change it.
     {% endcomment %}
     {% table_region "Matching rules" %}
-    <table class="data-table compact-table">
+    <table class="data-table">
       <thead><tr>{% table_heading "Rule" "status" %}{% table_heading "Admits" "identifier" %}{% table_heading "To" "identifier" %}</tr></thead>
       <tbody>
         {% for rule in verdict.rules %}
@@ -39,7 +39,7 @@ The answer to the policy test. The tailnet page answers it alone as its
     {% endcomment %}
     {% muted element="p" %}Grant needed to allow it:{% endmuted %}
     {% table_region "Grant needed" %}
-    <table class="data-table compact-table">
+    <table class="data-table">
       <thead><tr>{% table_heading "From" "identifier" %}{% table_heading "To" "identifier" %}{% table_heading "Ports" "identifier" %}</tr></thead>
       <tbody>
         <tr>

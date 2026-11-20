@@ -73,7 +73,6 @@ def _environments(machine) -> ServiceSection | None:
             )
             for record in records
         ),
-        compact=True,
     )
 
 
@@ -198,7 +197,6 @@ def _images(machine) -> ServiceSection | None:
             )
             for record, state in rows
         ),
-        compact=True,
     )
 
 

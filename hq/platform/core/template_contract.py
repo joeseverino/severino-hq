@@ -85,7 +85,6 @@ CLASSES = (
     "cell-part",
     "cell-whole",
     "compact",
-    "compact-table",
     "count",
     "danger",
     "data-table",

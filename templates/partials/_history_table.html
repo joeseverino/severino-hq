@@ -2,7 +2,7 @@
 A table of history, drawn by {% history_table label groups %} (its Part's rules).
 {% endcomment %}
 {% table_region label %}
-  <table class="data-table compact-table">
+  <table class="data-table">
     <thead><tr>{% for column in columns %}{% table_heading column.label css=column.css drop=column.drop local_sort=True %}{% endfor %}</tr></thead>
     {% for group in groups %}
     <tbody>

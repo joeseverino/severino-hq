@@ -1,6 +1,6 @@
 {% comment %}A table drawn whole from its declaration (`tables.DataTable`): a toned cell is a state, a row's run evidence opens under its last cell, and its actions end it.{% endcomment %}
 {% table_region table.label %}
-  <table class="data-table{% if table.compact %} compact-table{% endif %}">
+  <table class="data-table">
     <thead><tr>{% for column in table.columns %}{% table_heading column.label column.kind css=column.css drop=column.drop local_sort=True %}{% endfor %}{% if table.has_actions %}{% table_heading "Actions" css="actions-col" hidden=True %}{% endif %}</tr></thead>
     <tbody>
       {% for cells, below, actions in table.rows %}
