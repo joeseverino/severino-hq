@@ -5,15 +5,17 @@ lazy from datetime import UTC, date, datetime, timedelta
 
 lazy from django.core.paginator import Paginator
 lazy from django.templatetags.static import static
+lazy from django.urls import reverse
 
 from hq.platform.core.part_examples import DRAWN_AT, NARROW, runs
 from hq.platform.core.template_parts import Example
+lazy from hq.platform.application.action_links import read_link
 lazy from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 lazy from hq.platform.application.card_items import Insight, ListRow, Timeline, TimelineItem
 lazy from hq.platform.application.dashboard import finding_rows
 lazy from hq.platform.application.drawings import AllocationBar, Share
 lazy from hq.platform.application.entity_links import EntityLink
-lazy from hq.platform.application.finding_model import Finding
+lazy from hq.platform.application.finding_model import CHECK_AGAIN, Finding, opens
 lazy from hq.platform.application.finding_steps import Do, Run
 lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
@@ -774,7 +776,57 @@ def _opened_problems():
     )
 
 
+def _glance():
+    """The dashboard's short queue: a held request whose meaning outruns its
+    line, with the decisions its reader may take, then two failing runs, each
+    with the page it opens and its check."""
+
+    held_id = "00000000-0000-4000-8000-000000000001"
+    held = Finding(
+        rule="approval",
+        subject=held_id,
+        severity=Tone.ATTENTION,
+        title="example-agent wants to carry out the playbook \u201cUpgrade packages\u201d",
+        explanation="Asked with: machines set to example-host-01, security only set to yes, effect set to "
+        "Changes a live system, and 2 more fields.",
+        held=True,
+    )
+    failing = tuple(
+        Finding(
+            rule="example",
+            subject=name,
+            severity=Tone.SERIOUS,
+            title=f"{name} is failing on main",
+            explanation="Failing job: test",
+            primary=opens("Open run", f"https://github.example/{name}/actions/runs/1"),
+            check=read_link("verify", CHECK_AGAIN, "/findings/"),
+        )
+        for name in ("example-app", "example-site")
+    )
+    asked, *runs = finding_rows("example", "Example", (held, *failing))
+    decisions = [
+        {
+            "name": word,
+            "label": word.capitalize(),
+            "effect": "write",
+            "url": reverse("control_plane:approval_decide", args=(held_id, word)),
+            "method": "POST",
+            "capability": f"approval.{word}",
+            "target": held_id,
+            "reason": "",
+            "recommended": word == "approve",
+        }
+        for word in ("approve", "reject")
+    ]
+    return [{**asked, "actions": decisions}, *runs]
+
+
 WORK_QUEUE_STATES = {
+    # The dashboard's form, each row's meaning on its title's line.
+    "glance": Example(
+        '{% include "partials/_work_queue.html" %}',
+        lambda: {"items": _glance(), "grouped": True, "triage": True, "glance": True},
+    ),
     # Rows opened as the queue page draws them: what each opens onto starts
     # where its title does, commands in one column, a lone step close.
     "opened": Example(
