@@ -93,12 +93,12 @@ _TIGHTER = """(lists) => {
 }"""
 
 
-# A press lands on each target at its middle, and on a fact's lone value link at its label.
+# A press lands on each target at its middle, and on a lone value link at its label, past an open panel's cover.
 _WHOLE = """(facts) => [...document.querySelectorAll(facts)].flatMap((fact) => {
   const label = fact.querySelector('.fact-label'), targets = [...fact.querySelectorAll('a[href], button')].filter((t) => t.checkVisibility());
   const lone = targets.length === 1 && targets[0].matches('.fact-value a') ? [[targets[0], label]] : [];
   const hit = (at) => { at.scrollIntoView({block: 'nearest'}); const box = at.getBoundingClientRect(); return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2); };
-  return [...targets.map((t) => [t, t]), ...lone].filter(([target, at]) => !target.contains(hit(at)))
+  return [...targets.map((t) => [t, t]), ...lone].filter(([target, at]) => { const press = hit(at), panel = press?.closest(':popover-open'); return !target.contains(press) && (!panel || panel.contains(target)); })
     .map(([target, at]) => `${label.textContent.trim()}: a press on ${at === label ? 'its label' : target.textContent.trim()} misses it`);
 })"""
 
