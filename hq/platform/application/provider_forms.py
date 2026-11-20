@@ -17,35 +17,32 @@ from pydantic import ValidationError as SpecError
 from hq.domains.control_plane.provider_spec import NameContext, ProviderSpec
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
 
-from .command_forms import holding, schema_fields
+from .certificates import UploadCertificateCommand
+from .command_forms import command_fields, holding, schema_fields
 from .command_targets import CommandTargetOption
 from .describe import meanings
 from .forms import ListWidget, ReadAt
+from .infrastructure import ManagedResourceCommand
 from .plugins import import_reference
 
 logger = logging.getLogger("severino.providers")
 
 
-class ResourceIdentityForm(forms.Form):
-    """What HQ calls a resource, and whether it reconciles.
+# What HQ calls a resource and whether it reconciles, the declare command's own
+# field: the one part of a resource that is not the provider's business. No
+# identifier: it is the string in the page's address and in every operation and
+# audit entry recorded against the resource, so it is derived once and never
+# asked about again; the readout above the form shows it.
+ResourceIdentityForm = type(
+    "ResourceIdentityForm",
+    (forms.Form,),
+    {**command_fields(ManagedResourceCommand, "enabled"), "expected_updated_at": ReadAt()},
+)
 
-    Separate from the spec form because it is the one part of a resource that
-    is not the provider's business. Two forms, each with one job, beats a
-    generated form that has to remember which of its own fields are not spec.
-    """
-
-    # No identifier field. The identifier is the string in this page's address
-    # and in every operation and audit entry recorded against the resource, so
-    # it must not move. It is derived from the name when the resource is
-    # created and never asked about again, not even as a disabled input; the
-    # readout above the form shows it.
-    enabled = forms.BooleanField(
-        required=False,
-        initial=True,
-        label="Managed by HQ",
-        help_text="Turn off to stop HQ changing it. Nothing is removed.",
-    )
-    expected_updated_at = ReadAt()
+# The two files ``cert-gen`` produced, pasted in, as the upload command takes them.
+CertificateUploadForm = type(
+    "CertificateUploadForm", (forms.Form,), command_fields(UploadCertificateCommand, "fullchain", "private_key")
+)
 
 
 class ProviderSpecForm(forms.Form):
@@ -237,38 +234,3 @@ def _reported(exc: Exception) -> tuple[tuple[str, str], ...]:
         location = ".".join(str(part) for part in item.get("loc", ()))
         reported.append((location, item.get("msg", "Invalid value.")))
     return tuple(reported) or (("", str(exc)),)
-
-
-class SecretTextarea(forms.Textarea):
-    """A textarea that never renders a value back, like a password input.
-
-    A form re-shown after an error would otherwise put the submitted key back
-    into the page: into its HTML, the browser's cache and its history.
-    """
-
-    @override
-    def format_value(self, value):
-        return None
-
-
-class CertificateUploadForm(forms.Form):
-    """The two files ``cert-gen`` produced, pasted in.
-
-    Pasted rather than uploaded because that is what the operator already has:
-    the runbook ends with opening fullchain.pem and copying it into a web form.
-    A file input would be tidier and would mean finding the directory again.
-    """
-
-    fullchain = forms.CharField(
-        label="Certificate",
-        widget=forms.Textarea(attrs={"rows": 8, "spellcheck": "false"}),
-        help_text="The contents of fullchain.pem: the certificate and its CA chain.",
-    )
-    private_key = forms.CharField(
-        label="Private key",
-        widget=SecretTextarea(attrs={"rows": 8, "spellcheck": "false", "autocomplete": "off"}),
-        help_text=(
-            "The contents of the .key file. Encrypted before it is stored, and "
-            "never shown again or returned by any API."
-        ),
-    )

@@ -8,7 +8,9 @@ from django import forms
 from django.utils.html import format_html
 
 from hq.platform.application.asks import APPLIES_SHORTLY
+from hq.platform.application.command_forms import command_fields
 from hq.platform.application.forms import ChoiceCards, ListField, ReadAt, SuffixedInput
+from hq.platform.application.glance import DashboardMachineCommand
 from hq.platform.application.mail_policy import (
     DMARC_TAGS,
     SPF_DEFAULTS,
@@ -148,11 +150,7 @@ class MailFailuresForm(MailPolicyForm):
         )
 
 
-class MachineIdentityForm(ResourceIdentityForm):
-    """A machine's identity, and whether the dashboard header shows it."""
-
-    show_on_dashboard = forms.BooleanField(
-        required=False,
-        label="Show on dashboard",
-        help_text="Its CPU, memory and storage in the dashboard header.",
-    )
+# A machine's identity, and whether the dashboard header shows it.
+MachineIdentityForm = type(
+    "MachineIdentityForm", (ResourceIdentityForm,), command_fields(DashboardMachineCommand, "selected")
+)

@@ -431,6 +431,15 @@ def schema_fields(
     return fields
 
 
+def command_fields(command_type: type, *names: str) -> dict[str, forms.Field]:
+    """The fields ``names`` of a command, drawn from its schema, for a form that
+    posts beside another and so takes them as part of a larger whole."""
+
+    schema = command_schema(command_type)
+    whole = whole_fields(schema)
+    return schema_fields(schema, {name: whole[name] for name in names}, said=meanings(command_type))
+
+
 def command_form_class(
     spec: CapabilitySpec,
     *,

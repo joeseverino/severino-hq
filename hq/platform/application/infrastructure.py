@@ -107,7 +107,9 @@ class ManagedResourceCommand:
     key: ManagedResourceKey
     kind: Annotated[ManagedResourceKind, Field(title="Type")]
     spec: Annotated[ManagedResourceSpec, Field(title="Config")]
-    enabled: Annotated[bool, Describe("Whether HQ keeps the live record as it expects.")] = True
+    enabled: Annotated[
+        bool, Field(title="Managed by HQ"), Describe("Whether HQ keeps the live record as it expects.")
+    ] = True
 
     @classmethod
     def __get_pydantic_json_schema__(cls, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
