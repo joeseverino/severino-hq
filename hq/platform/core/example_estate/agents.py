@@ -254,7 +254,7 @@ def _listen(principal, streams):
     """
 
     with doors.mcp():
-        for _ in range(streams - agent_limits.LIMITS.listening(agent_subject(principal))):
+        for _ in range(streams - agent_limits.limits().listening(agent_subject(principal))):
             held = agent_admission.stream_opened(principal)
             _expect(held, isinstance(held, Slot), "opened")
 

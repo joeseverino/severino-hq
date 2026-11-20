@@ -173,7 +173,7 @@ def _listening(client_id: str, streams: int) -> None:
     """``client_id`` holding ``streams`` listen streams open, as the MCP door holds each."""
 
     for _ in range(streams):
-        held = agent_limits.LIMITS.listen(client_id)
+        held = agent_limits.limits().listen(client_id)
         assert isinstance(held, agent_limits.Slot), held
 
 
@@ -211,7 +211,7 @@ class StreamTests(TestCase):
 
         self.assertEqual(streams.open, streams.cap)
         self.assertTrue(streams.full)
-        refused = agent_limits.LIMITS.listen(AGENT)
+        refused = agent_limits.limits().listen(AGENT)
         self.assertIsInstance(refused, agent_limits.Limited)
         self.assertEqual(refused.code, Code.TOO_MANY_CALLS)
 

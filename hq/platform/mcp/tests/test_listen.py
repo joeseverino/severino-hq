@@ -351,7 +351,7 @@ class ListenStreamTests(TransactionTestCase):
                     listening(application, OTHER, _listen(3)) as other,
                 ):
                     refused, opened = await second.message(), await other.message()
-                    held = agent_limits.LIMITS.listening(AGENT.actor)
+                    held = agent_limits.limits().listening(AGENT.actor)
             return refused, opened, held
 
         refused, opened, held = _run(steps)
@@ -360,4 +360,4 @@ class ListenStreamTests(TransactionTestCase):
         self.assertGreater(refused["error"]["data"]["retry_after"], 0)
         self.assertEqual(opened["method"], ACKNOWLEDGED)
         self.assertEqual(held, 1, "the refused stream holds none of its agent's streams")
-        self.assertEqual(agent_limits.LIMITS.held(), 0, "a closed stream gives its slot back")
+        self.assertEqual(agent_limits.limits().held(), 0, "a closed stream gives its slot back")

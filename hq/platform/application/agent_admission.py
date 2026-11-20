@@ -85,7 +85,7 @@ def admitted(principal: Principal, *, source: str) -> Principal | Stopped:
     token, so every step after the token is the one production takes.
     """
 
-    limited = agent_limits.LIMITS.take(agent_subject(principal))
+    limited = agent_limits.limits().take(agent_subject(principal))
     if limited is not None:
         return Stopped(principal, limited)
     settle(principal.actor)
@@ -146,7 +146,7 @@ def at_once(principal: Principal, *, source: str = "") -> Iterator[Limited | Non
     """One of ``principal``'s calls at once, held for the block; the block is given the
     refusal instead when the agent, or every agent together, has all of them in flight."""
 
-    held = agent_limits.LIMITS.occupy(agent_subject(principal))
+    held = agent_limits.limits().occupy(agent_subject(principal))
     if isinstance(held, Limited):
         record_limited(
             interface=principal.interface,
@@ -165,7 +165,7 @@ def stream_opened(principal: Principal, *, source: str = "") -> Slot | Limited:
     """One of ``principal``'s listen streams, held until the slot is given back,
     or the refusal, recorded, when the agent has all of them open."""
 
-    held = agent_limits.LIMITS.listen(agent_subject(principal))
+    held = agent_limits.limits().listen(agent_subject(principal))
     if isinstance(held, Limited):
         record_limited(
             interface=principal.interface,

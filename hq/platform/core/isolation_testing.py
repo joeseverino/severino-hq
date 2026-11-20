@@ -185,7 +185,7 @@ def fresh() -> None:
 
     automation_adoption.forget()
     derivations.forget()
-    agent_limits.LIMITS = agent_limits.Limits()
+    agent_limits._LIMITS = agent_limits.Limits()
     _hold_markers({})
 
 
@@ -209,11 +209,11 @@ class CompositionIsolation:
         derivations.forget()
         if type(test) is not self._class:
             # The first of its class: what the set holds is what its setup left.
-            self._class, self._class_limits = type(test), agent_limits.LIMITS
+            self._class, self._class_limits = type(test), agent_limits.limits()
             self._class_markers = _markers_held()
         else:
             _hold_markers(self._class_markers or {})
-        agent_limits.LIMITS = _copied(self._class_limits)
+        agent_limits._LIMITS = _copied(self._class_limits)
         return super().startTest(test)
 
 

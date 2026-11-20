@@ -159,7 +159,10 @@ def _rate_reason(wait: float) -> str:
     )
 
 
-# The one set every request in this process shares. It is read as
-# ``agent_limits.LIMITS`` where it is used, never bound by an import, so the
-# fresh set the test runner gives each test is the one the doors use.
-LIMITS = Limits()
+_LIMITS = Limits()
+
+
+def limits() -> Limits:
+    """The one set every request in this process shares, which the test runner renews for each test."""
+
+    return _LIMITS

@@ -215,7 +215,7 @@ def standings(viewer=None) -> list[AgentStanding]:
                 subject=subject,
                 label=str(identity),
                 devices=devices.get(identity.pk, ()),
-                streams=Streams(agent_limits.LIMITS.listening(subject), cap),
+                streams=Streams(agent_limits.limits().listening(subject), cap),
             )
         )
     return found
