@@ -10,6 +10,7 @@ from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.test_pipeline import ROOT, jobs, load, step_tasks, steps, workflow, workflows
 from tests.mise_tasks import mise_tasks
+from tools.gate.check import GATES
 
 # `mise run`, or `mise -C <dir> run`, then its own options and a task, to the
 # end of the line or a closing backtick; `:::` starts the next task. A Python
@@ -115,10 +116,8 @@ NOT_TASK_JOBS = {"proven", "legs", "caches", "compose", "ready", "release"}
 # A second job of a task: a pull request's image, verified from the registry
 # beside its composition, and main's build that writes the layer cache.
 SECOND_JOBS = {"build-verify": "build", "build-cache": "build"}
-
-
-# The tasks CI's gate jobs are named for, each the gates of its job.
-GATE_JOBS = {"lint", "test", "browser", "build", "scan"}
+# The tasks CI's gate jobs are named for: the gates `mise run check` runs.
+GATE_JOBS = set(tasks_named(GATES[2:]))
 
 
 def where_named(path: str, text: str, name: str) -> list[str]:
