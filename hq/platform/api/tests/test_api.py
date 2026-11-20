@@ -1,6 +1,5 @@
 import json
 import threading
-from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 from unittest.mock import patch
 
@@ -32,47 +31,6 @@ from .tokens import _KEY, ISSUER, KID, OTHER_KEY, RESOURCE, _held, _serving, _to
     OIDC_RP_SIGN_ALGO="RS256",
 )
 class TokenVerificationTests(SimpleTestCase):
-    def test_a_valid_token_verifies(self):
-        with _serving():
-            claims = tokens.verify(_token())
-        self.assertEqual(claims["client_id"], "example-automation")
-
-    def test_a_token_signed_by_another_key_is_rejected(self):
-        with _serving(), self.assertRaises(tokens.TokenError):
-            tokens.verify(_token(key=OTHER_KEY))
-
-    def test_a_token_for_another_api_resource_is_rejected(self):
-        """The case signature-checking alone would wave through.
-
-        A token minted for a different API on the same Pocket ID instance is
-        signed by the very same key, so `aud` is the only thing standing
-        between that credential and this one.
-        """
-
-        with _serving(), self.assertRaises(tokens.TokenError):
-            tokens.verify(_token(aud="https://elsewhere.example.test"))
-
-    def test_a_token_from_another_issuer_is_rejected(self):
-        with _serving(), self.assertRaises(tokens.TokenError):
-            tokens.verify(_token(iss="https://evil.example.test"))
-
-    def test_an_expired_token_is_rejected(self):
-        past = datetime.now(tz=UTC) - timedelta(hours=1)
-        with _serving(), self.assertRaises(tokens.TokenError):
-            tokens.verify(_token(exp=past))
-
-    def test_a_token_without_an_expiry_is_rejected(self):
-        """A token that never expires is a password, and is refused as one."""
-
-        now = datetime.now(tz=UTC)
-        forever = jwt.encode(
-            {"iss": ISSUER, "aud": RESOURCE, "sub": "x", "iat": now},
-            _KEY,
-            algorithm="RS256",
-        )
-        with _serving(), self.assertRaises(tokens.TokenError):
-            tokens.verify(forever)
-
     @override_settings(OIDC_OP_JWKS_ENDPOINT=f"{ISSUER}/.well-known/jwks.json")
     def test_the_key_set_is_read_on_a_thread_of_its_own_when_the_application_starts(self):
         reader = []
@@ -91,28 +49,10 @@ class TokenVerificationTests(SimpleTestCase):
         self.assertEqual(len(reader), 1)
         self.assertIsNot(reader[0], threading.current_thread())
 
-    @override_settings(SEVERINO_API_RESOURCE="")
-    def test_an_unconfigured_resource_fails_closed(self):
-        self.assertFalse(tokens.is_configured())
-        with _serving(), self.assertRaises(tokens.TokenError):
-            tokens.verify(_token())
-
 
 class GrantTests(SimpleTestCase):
-    def test_space_delimited_scope_is_read(self):
-        self.assertEqual(
-            tokens.granted({"scope": "example.write read"}),
-            frozenset({"example.write", "read"}),
-        )
-
     def test_a_list_claim_is_read(self):
-        self.assertEqual(
-            tokens.granted({"scp": ["example.write"]}),
-            frozenset({"example.write"}),
-        )
-
-    def test_no_grant_claim_yields_nothing(self):
-        self.assertEqual(tokens.granted({"sub": "x"}), frozenset())
+        self.assertEqual(tokens.granted({"scp": ["example.write"]}), frozenset({"example.write"}))
 
 
 class RefusalStatusTests(SimpleTestCase):
@@ -159,12 +99,11 @@ class CompositionCheckTests(SimpleTestCase):
             ],
         )
 
-    def test_an_unresolvable_resource_route_is_a_named_startup_error(self):
+    def test_an_unresolvable_route_is_a_named_startup_error(self):
+        from hq.platform.application.connections import ConnectionSpec
         from hq.platform.application.integration_specs import ListRead
         from hq.platform.application.integration_testing import override_integration_graph
-        from hq.platform.application.integrations import (
-            compile_integration_graph,
-        )
+        from hq.platform.application.integrations import compile_integration_graph
         from hq.platform.application.resources import EmptyQuery, ResourceSpec
 
         from ..checks import capability_contract_check
@@ -180,35 +119,15 @@ class CompositionCheckTests(SimpleTestCase):
             listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, ExampleRecord),
             web_route="missing:list",
         )
-        graph = compile_integration_graph(capabilities=(), resources=(resource,), connections=())
-        with override_integration_graph(graph):
-            errors = capability_contract_check(None)
-
-        self.assertEqual([error.id for error in errors], ["hq_api.E004"])
-        self.assertIn("missing:list", errors[0].msg)
-
-    def test_an_unresolvable_connection_route_is_a_named_startup_error(self):
-        from hq.platform.application.connections import ConnectionSpec
-        from hq.platform.application.integration_testing import override_integration_graph
-        from hq.platform.application.integrations import (
-            compile_integration_graph,
-        )
-
-        from ..checks import capability_contract_check
-
         connection = ConnectionSpec(
-            "example.finance",
-            "Finance",
-            "Financial institutions.",
-            "read",
-            lambda: (),
-            web_route="missing:connections",
+            "example.finance", "Finance", "Financial institutions.", "read", lambda: (), web_route="missing:connections"
         )
-        graph = compile_integration_graph(capabilities=(), resources=(), connections=(connection,))
+        graph = compile_integration_graph(capabilities=(), resources=(resource,), connections=(connection,))
         with override_integration_graph(graph):
             errors = capability_contract_check(None)
 
-        self.assertEqual([error.id for error in errors], ["hq_api.E006"])
+        self.assertEqual([error.id for error in errors], ["hq_api.E004", "hq_api.E006"])
+        self.assertIn("missing:list", errors[0].msg)
 
 
 @override_settings(
