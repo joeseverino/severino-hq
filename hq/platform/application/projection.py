@@ -149,9 +149,15 @@ def page_size(limit: int, *, maximum: int = MAX_PAGE_SIZE) -> int:
 
 
 @overload
-def iso(value: date, *, timespec: str = ...) -> str: ...
+def iso(value: date, *, timespec: str = ...) -> str:
+    pass
+
+
 @overload
-def iso(value: date | None, *, timespec: str = ...) -> str | None: ...
+def iso(value: date | None, *, timespec: str = ...) -> str | None:
+    pass
+
+
 def iso(value: date | None, *, timespec: str = "auto") -> str | None:
     """A day or instant as a contract renders it, or None when there is none.
 
