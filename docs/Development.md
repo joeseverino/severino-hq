@@ -366,6 +366,10 @@ check.
 
 The tests it selects are:
 
+- when the only Python modules an edit starts from are test modules under
+  `tests/` with no importers, fast runs those modules directly. Tests that
+  read the changed files are still selected. Editing a shared test fixture
+  or base class in a module another imports takes the regular path below;
 - the test modules that ran a function body the change reaches, as the
   record of what each test ran says. `mise run fast:map` makes it: the suite
   fast runs, under coverage.py's C tracer, each class's lines kept under its

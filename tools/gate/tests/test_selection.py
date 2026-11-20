@@ -11,19 +11,31 @@ from django.test import SimpleTestCase, tag
 
 from tools.gate import chain, selection
 
-# An edit inside one test's body, which no other test reads: a module no source names, so none is chosen by it.
-LEAF = "hq/platform/mcp/tests/test_example_leaf.py"
 PROBES = Path("hq/platform/core/tests/test_startup.py")
 
 
 @tag("source")
 class ReaderSelectionTests(SimpleTestCase):
-    def test_a_changed_test_runs_and_no_check_is_selected_by_its_name(self):
-        changed = [Path(LEAF), Path("hq/platform/application/tests/test_architecture_pages.py")]
-        files = [*changed, Path("hq/platform/application/tests/test_architecture.py"), PROBES]
-        modules = sorted(map(selection.module_name, changed))
+    def test_editing_a_test_selects_it_and_any_test_that_imports_its_fixture(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(chain, "ROOT", Path(folder)):
+            root = Path(folder)
+            (root / "tests").mkdir()
+            (root / "tests/__init__.py").touch()
+            shared = Path("tests/test_example.py")
+            other = Path("tests/test_other.py")
+            (root / shared).write_text("def fixture(): return 2")
+            (root / other).write_text("from tests.test_example import fixture\ndef test_other(): assert fixture()")
 
-        self.assertEqual(selection.test_labels(files, set(modules), set())[0], modules)
+            with patch.object(selection.ran, "recorded", side_effect=AssertionError("isolated test read coverage")):
+                labels, _ = selection.selection([str(shared)], [], [shared], "HEAD")
+                self.assertEqual(labels, ["tests.test_example"])
+
+            with (
+                patch.object(selection.ran, "recorded", return_value=None),
+                patch.object(selection, "at_base", return_value={str(shared): "def fixture(): return 1"}),
+            ):
+                labels, _ = selection.selection([str(shared)], [], [shared, other], "HEAD")
+                self.assertEqual(labels, ["tests.test_example", "tests.test_other"])
 
     def test_a_sheet_selects_its_reader_without_consulting_python_coverage(self):
         reader = Path("hq/platform/core/tests/test_look_reach.py")

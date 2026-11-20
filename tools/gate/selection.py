@@ -252,6 +252,9 @@ def reached(
 
     if not started:
         return {}, set()
+    changed_tests = {module_name(p) for p in map(Path, changed) if "tests" in p.parts[:-1] and is_test(p)}
+    if started <= changed_tests and all(importers(files).get(module) == set() for module in started):
+        return {}, started
     every = outlines(files)
     record = ran.recorded()
     since = changed_paths(record.tree, chain.ROOT)[0] if record else []
