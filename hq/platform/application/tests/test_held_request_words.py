@@ -91,8 +91,8 @@ class HeldRequestWordsTests(TestCase):
         self.assertNotIn("True", shown)
 
     def test_its_change_is_shown_beside_its_buttons(self):
-        """The dashboard's card and the queue's row say what Approve decides
-        (the survey's `cut decisions` holds it whole)."""
+        """The dashboard's card and the queue's row say what Approve decides,
+        on the row's first line, whole once the row opens."""
 
         operator(self.client, "reviewer", email="reviewer@example.test")
         (item,) = waiting_for_approval()

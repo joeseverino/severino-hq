@@ -773,7 +773,7 @@ def _opened_problems():
 def _glance():
     """The dashboard's short queue: a held request whose meaning outruns its line, then two failing runs."""
 
-    held = "00000000-0000-4000-8000-000000000001"
+    held, decided = "00000000-0000-4000-8000-000000000001", "control_plane:approval_decide"
     said = "Asked with: machines set to example-host-01, security only set to yes, and 2 more fields."
     asked = Finding("approval", held, "example-agent wants to run a playbook", Tone.ATTENTION, said, held=True)
     run, check = opens("Open run", "https://github.example/runs/1"), read_link("verify", CHECK_AGAIN, "/findings/")
@@ -783,7 +783,7 @@ def _glance():
     ]
     first, *runs = finding_rows("example", "Example", (asked, *failing))
     decide = (
-        command_action(w, f"approval.{w}", reverse("control_plane:approval_decide", args=(held, w)), method="POST")
+        command_action(w, f"approval.{w}", reverse(decided, args=(held, w)), method="POST", recommended=w == "approve")
         for w in ("approve", "reject")
     )
     items = [{**first, "actions": [*map(asdict, decide)]}, *runs]
