@@ -191,10 +191,12 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   /* An ask's cell keeps the line its note stands on under its controls (below). */
   &:has(> [data-ask]) { padding-block-end: calc(var(--row-pad) + 1lh); }
 }
-/* A control never stands on its frame's edge: the first row of a table with no headings keeps its whole pad above it, its words coming down by the control's rise so they stay level, and a table's last row keeps its whole pad below. */
+/* A row's meaning asks its column for no width (cuts.css), so the room a table has past what its columns ask goes to the words, never to a column of controls. */
+.data-table:has(.row-gist) > tbody > tr > [data-kind="control"] { inline-size: 1px; }
+/* A control never stands on its frame's edge: the first row of a table with no headings keeps its whole pad above it, its words coming down by the control's rise so they stay level, and a table's last row keeps its whole pad below, or an ask's the line its note stands on. */
 .data-table:not(:has(> thead)) > tbody:first-of-type > tr:first-child > [data-kind="control"]:has(> :is(.btn, form)) { padding-block-start: var(--row-pad); }
 .data-table:not(:has(> thead)) > tbody:first-of-type > tr:first-child:has(> [data-kind="control"] > :is(.btn, form)) > :not([data-kind="control"]) { padding-block-start: calc(var(--row-pad) + max(0px, (var(--control-compact) - 1lh) / 2)); }
-.data-table > tbody:last-of-type > tr:last-child > [data-kind="control"]:has(> :is(.btn, form)) { padding-block-end: var(--row-pad); }
+.data-table > tbody:last-of-type > tr:last-child > [data-kind="control"]:has(> :is(.btn, form)):not(:has(> [data-ask])) { padding-block-end: var(--row-pad); }
 .data-table:not(:has(> thead)) > tbody > tr > [data-kind="control"] { vertical-align: middle; } /* A table with no headings is a list of rows that each say one thing (the queue's items): no column's first line to keep level with, so a row's controls stand at the middle of the words they act on. */
 /* The tick-boxes' column is their box and the room beside it, no row control, so each box stands centered under the heading's; its width the table's `--row-lead`, in every engine, whose own margins around a checkbox differ. */
 .data-table:has(> * > tr > .select-column) { --row-lead: calc(var(--tick-box) + 2 * var(--space-4)); }
