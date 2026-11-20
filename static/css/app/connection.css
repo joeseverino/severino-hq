@@ -114,7 +114,7 @@ textarea.code {
 }
 .conn-samples { display: inline-flex; align-items: flex-end; gap: var(--space-1); height: 13px; }
 .conn-samples i {
-  width: 3px; background: var(--accent-2); border-radius: 1px;
+  width: 3px; background: var(--accent-2); border-radius: var(--radius-sm);
   height: calc(var(--at) * 1%); min-height: 2px;
 }
 /* A bar the server drew for a sample not yet taken holds its room. */
@@ -125,7 +125,7 @@ textarea.code {
 .conn-peering-frame { container: peering / inline-size; }
 .conn-peering {
   display: grid; grid-template-columns: minmax(min-content, 1fr) auto minmax(min-content, 1fr); gap: var(--space-7); align-items: center;
-  padding: var(--space-7) var(--space-8); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: var(--space-7) var(--space-8); border-radius: var(--radius);
   /* The connection's tone (Connection.tone), the one its status dot is drawn in. */
   border-inline-start: 3px solid var(--tone-mark);
 }
@@ -135,7 +135,7 @@ textarea.code {
 .conn-peer code { font-size: var(--text-xs); }
 .conn-link { display: grid; gap: var(--space-2); justify-items: center; min-width: 120px; }
 .conn-link-line {
-  width: 100%; height: 2px; border-radius: 2px;
+  width: 100%; height: 2px; border-radius: var(--radius-sm);
   background: var(--tone-mark);
 }
 /* The path is drawn in the line's pattern, so its color stays the connection's
@@ -181,14 +181,14 @@ textarea.code {
 /* Checks read down, each a rung in a frame of its own: its tick, then what
    it says, opening to why. */
 .check-ladder { display: grid; gap: var(--space-2); }
-.ladder-rung { border: 1px solid var(--line); border-radius: var(--radius); }
+.ladder-rung { border-radius: var(--radius); }
 .ladder-rung > details > summary {
   display: grid; grid-template-columns: auto minmax(0, 1fr);
   align-items: center; gap: var(--space-5);
   padding: var(--space-4) var(--space-6); cursor: pointer; list-style: none;
 }
 .ladder-mark {
-  width: 17px; height: 17px; border-radius: 50%; flex: none;
+  width: 17px; height: 17px; border-radius: var(--radius-pill); flex: none;
   display: grid; place-items: center; font-size: var(--text-2xs); line-height: 1;
   background: var(--tone-tint); color: var(--tone-mark);
 }
@@ -226,7 +226,7 @@ details[open] > summary .ladder-more::after { transform: rotate(90deg); }
 /* The checks inside a rung are rows of it, not boxes inside it: a tick, the
    statement and its evidence on one line, the sentence when opened. */
 .ladder-body .check-ladder { gap: 0; border-top: 1px solid var(--line-2); }
-.ladder-body .ladder-rung { border: 0; border-bottom: 1px solid var(--line-2); border-radius: 0; }
+.ladder-body .ladder-rung { border-bottom: 1px solid var(--line-2); border-radius: 0; }
 .ladder-body .ladder-rung > details > summary { align-items: baseline; gap: var(--space-4); padding: var(--space-3) 0; }
 .ladder-body .ladder-rung .ladder-statement { font-size: var(--text-xs); }
 .ladder-body .ladder-rung .ladder-body { margin: 0 0 var(--space-3) calc(17px + var(--space-4)); }
@@ -241,7 +241,7 @@ details[open] > summary .ladder-more::after { transform: rotate(90deg); }
   --hop-line: 1.25rem;
   --hop-pad: var(--space-3);
   --tick-y: calc(var(--hop-pad) + var(--hop-line) / 2);
-  position: relative; border: 0; border-radius: 0;
+  position: relative; border-radius: 0;
 }
 /* A stop: its kind, what it is with what HQ read about it, and what opening
    it shows. Every part starts on one line of a set height, so the tick's
@@ -273,7 +273,7 @@ details[open] > summary .ladder-more::after { transform: rotate(90deg); }
    dividers. */
 .check-ladder.is-route > .ladder-rung > details > .ladder-body {
   margin: 0 0 var(--space-4) calc(17px + var(--space-5)); padding: var(--space-5) var(--space-6);
-  border: 1px solid var(--line); border-radius: var(--radius);
+  border-radius: var(--radius);
 }
 /* A narrow one stacks the stop's value and its evidence under its kind, and
    what opening it shows at the end of the kind's line. */

@@ -6,7 +6,7 @@
   /* An account's identity (partials/_identity.html): its picture beside its
      name, handle and words. */
   .identity { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-6) var(--space-9); margin-bottom: var(--stack-gap); }
-  .identity-picture { width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 0 0 3px var(--accent-tint); }
+  .identity-picture { width: 64px; height: 64px; border-radius: var(--radius-pill); outline: 3px solid var(--accent-tint); }
   .identity-words { flex: 1 1 260px; min-width: 0; }
   .identity-words p { margin: 0; }
   .identity-name { font-size: var(--text-xl); font-weight: 650; }
@@ -19,7 +19,7 @@
      short last row leaves no rule stopping halfway across the row above. */
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the grid clips its cells' outer hairlines, not their text; a repository's posture segments, cells of one frame */
   .posture-repos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 32rem), 1fr)); margin: 0 0 var(--space-7); padding: var(--surface-inset, 0); overflow: clip; }
-  .posture-repos li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); box-shadow: -1px 0 0 var(--line-2), 0 1px 0 var(--line-2); }
+  .posture-repos li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); --rules: -1px 0 0 var(--line-2), 0 1px 0 var(--line-2); }
   .posture-repo-name { flex: 0 1 14rem; min-width: 0; display: flex; flex-direction: column; }
   .posture-repo-name a { font-weight: 600; }
   /* The meter is one control, whose tip says what passes and what fails; it
@@ -30,7 +30,7 @@
   /* Fixed segments right after the name, the shared checks first, so one
      check sits in the same column on every row and a gap reads straight
      down the list; the score follows, as wide as it says. */
-  .posture-meter span { flex: 0 1 1.6rem; min-width: 0.4rem; height: 0.6rem; border-radius: 2px; background: var(--line); }
+  .posture-meter span { flex: 0 1 1.6rem; min-width: 0.4rem; height: 0.6rem; border-radius: var(--radius-sm); background: var(--line); }
   .posture-meter .posture-meter-break { flex: 0 0 var(--space-6); background: none; }
   .posture-meter :is(.tone-good, .tone-serious) { background: var(--tone-mark); }
   .posture-score { flex: none; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }

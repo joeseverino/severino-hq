@@ -27,7 +27,7 @@
   column-gap: var(--space-6);
   min-height: 62px;
   padding: var(--space-3) var(--frame-inset, 0);
-  box-shadow: 0 -1px 0 var(--line-2);
+  --rules: 0 -1px 0 var(--line-2);
 }
 .timeline-item time { display: flex; flex-direction: column; align-items: center; font-feature-settings: "tnum"; }
 .timeline-day { color: var(--ink); font-size: var(--text-2xl); font-weight: 650; line-height: 1.1; }
@@ -64,8 +64,7 @@
 .cadence-strip { display: flex; flex-wrap: wrap; gap: var(--space-5); }
 .cadence-week { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); min-width: 34px; }
 .cadence-mark {
-  width: 26px; height: 26px; border-radius: 50%;
-  border: 1.5px solid var(--line);
+  width: 26px; height: 26px; border-radius: var(--radius-pill);
   background: var(--surface-2);
   display: flex; align-items: center; justify-content: center;
   font-size: var(--text-2xs); font-weight: 650; color: var(--muted);
@@ -75,7 +74,7 @@
 /* A period nothing is known about. Dashed and unfilled with the missing-value
    dash inside, so it reads as "no reading" beside a period that was skipped,
    by shape as well as by color. */
-.cadence-mark.is-no-data { background: transparent; border-style: dashed; color: var(--muted-2); }
+.cadence-mark.is-no-data { background: transparent; color: var(--muted-2); }
 .cadence-mark.is-no-data::before { content: "\2013" / ""; }
 .cadence-label { font-size: var(--text-3xs); color: var(--muted-2); white-space: nowrap; }
 .cadence-note { margin: 0; font-size: var(--text-xs); color: var(--muted); line-height: 1.5; }
@@ -86,7 +85,7 @@
    part's own rule (a tight table's wrapping pill, a mark's padding) reopens
    the pixel and lays the text out a letter a line. */
 /* stylelint-disable-next-line declaration-property-value-disallowed-list -- text for a screen reader alone, clipped to a pixel on purpose */
-.visually-hidden { position: absolute !important; inset-block-start: 0 !important; inset-inline-start: 0 !important; width: 1px !important; height: 1px !important; margin: -1px !important; padding: 0 !important; border: 0 !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
+.visually-hidden { position: absolute !important; inset-block-start: 0 !important; inset-inline-start: 0 !important; width: 1px !important; height: 1px !important; margin: -1px !important; padding: 0 !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
 /* Text only a screen reader hears has no lines for a name to hold, and no
    part of it draws a box past the one pixel that clips it. A mark hidden from
    the reader (a dot between parts) is then neither seen nor heard, so it is
@@ -115,7 +114,6 @@
 .chart-tab-input { position: absolute; inset: 0; margin: 0; opacity: 0; pointer-events: none; }
 .chart-tab {
   position: relative;
-  border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   padding: var(--space-2) var(--space-6);
   font-size: var(--text-xs);
@@ -191,7 +189,6 @@
   inline-size: 100%;
   block-size: 6px;
   margin: var(--space-5) 0 var(--space-4);
-  border: 0;
   border-radius: var(--radius-pill);
   color: var(--accent);
   background: var(--surface-2);
@@ -262,8 +259,8 @@
      has to be drawn in ink rather than in a tint. */
   .card, .two-col > section:not(.section), .two-col > div {
     background: none;
-    border: 1px solid var(--print-ink);
-    box-shadow: none;
+    --surface-border: 1px solid var(--print-ink);
+    --surface-shadow: none;
     padding: 10pt 12pt;
     margin: 0 0 8pt;
   }
@@ -313,7 +310,7 @@
     background: none;
     border-bottom: 1pt solid var(--print-ink);
     position: static;
-    box-shadow: none;
+    --rules: none;
   }
   .table-scroll { overflow: visible; }
 

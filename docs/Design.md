@@ -150,7 +150,9 @@ one radius, one background, one shadow, drawn by the single surface rule in
 `css/app/surfaces.css`. A component joins by adding its selector to that rule's list and
 declares only its layout. A surface inside a surface draws no frame and no
 inset: the outer one already says "these belong together". Nesting is handled
-by inheritance, so nobody has to remember it.
+by inheritance, so nobody has to remember it. Every other edge and shadow is
+drawn there too, from one list each; a corner elsewhere is a radius token.
+*Gate:* `lint:css` refuses any other border, shadow or corner.
 
 **Size to content, fit the window.** Layouts are intrinsic: grids fit as many
 columns as their content allows (`repeat(auto-fit, minmax(min(100%, X), 1fr))`),
@@ -257,12 +259,10 @@ opens, closes and dismisses the popover. Inside a menu every control is a plain
 row; a destructive one is only its color.
 
 Every popover open is one floating panel, a menu's, a fact's, the sections
-drawer, a filter bar's folded choices and a table's filter alike: its frame,
-corners, fill and shadow are base.css's `:popover-open` rule, and its own rule
-says only how it is laid out. Closed, a popover is part of the page, so one
-drawn in its row (the header's sections, a filter bar's choices) carries no
-frame to undo. A select's picker is drawn the same. *Gate:* `lint:css` refuses
-a floating panel's shadow anywhere but base.css.
+drawer, a filter bar's folded choices and a table's filter alike: its frame is
+surfaces.css's panel list, and its own rule says only how it is laid out.
+Closed, a popover is part of the page, so one drawn in its row (the header's
+sections, a filter bar's choices) carries no frame to undo.
 
 **One disclosure.** Every `details` shows the same mark,
 turned when open. A section that folds is `{% section fold=True %}`, its

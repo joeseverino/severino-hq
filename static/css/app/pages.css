@@ -58,8 +58,8 @@
 .topology-node {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
   gap: 1px var(--space-3); padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--line); border-left: 3px solid var(--tone-mark);
-  border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-sm);
+  border-left: 3px solid var(--tone-mark);
+  background: var(--surface); --control-lift: var(--shadow-sm);
   cursor: pointer; scroll-margin-top: var(--topology-lane-head);
   transition: border-color 100ms ease, box-shadow 100ms ease, opacity 100ms ease;
 }
@@ -90,7 +90,7 @@
 .topology-node-link { color: inherit; text-decoration: none; }
 .topology-node-link:hover, .topology-node-link:focus-visible { color: var(--accent); text-decoration: underline; }
 
-.topology-node:has(> [aria-current]) { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
+.topology-node:has(> [aria-current]) { border-color: var(--accent); outline: 2px solid var(--accent-tint); }
 .topology-node.is-related { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .topology-node[hidden], .topology-lane[hidden] { display: none; }
 
@@ -109,14 +109,14 @@
    too small to round up visible. */
 .bar-track {
   appearance: none; grid-row: 2; grid-column: 1 / -1; inline-size: 100%; block-size: 4px;
-  border: 0; border-radius: 2px; background: var(--bg-tint);
+  border-radius: var(--radius-sm); background: var(--bg-tint);
 }
 /* Blink sets the bar in the middle half of the grid its meter draws in
    (`::-webkit-meter-inner-element`, rows 1fr 2fr 1fr in its html.css), so
    the bar spans every row. */
-.bar-track::-webkit-meter-bar { grid-row: 1 / -1; block-size: 100%; border: 0; border-radius: inherit; background: transparent; }
-.bar-track::-webkit-meter-optimum-value { min-inline-size: 2px; border-radius: 2px; background: var(--accent-2); }
-.bar-track::-moz-meter-bar { min-inline-size: 2px; border-radius: 2px; background: var(--accent-2); }
+.bar-track::-webkit-meter-bar { grid-row: 1 / -1; block-size: 100%; border-radius: inherit; background: transparent; }
+.bar-track::-webkit-meter-optimum-value { min-inline-size: 2px; border-radius: var(--radius-sm); background: var(--accent-2); }
+.bar-track::-moz-meter-bar { min-inline-size: 2px; border-radius: var(--radius-sm); background: var(--accent-2); }
 .bar-value { font-feature-settings: "tnum"; font-weight: 650; }
 
 /* A long form's closing row: drawn in its place from the first draw, so

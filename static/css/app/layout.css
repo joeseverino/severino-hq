@@ -151,7 +151,7 @@
 .month-day.is-past :is(.month-span, .month-item) { color: var(--ink-3); }
 .month-day.is-past .month-span.is-start { border-left-color: color-mix(in srgb, var(--slot) 62%, var(--surface)); }
 .month-day.is-past .month-mark, .month-day.is-past .month-item::before { opacity: .62; }
-.month-day.is-selected { box-shadow: inset 0 0 0 2px var(--accent); }
+.month-day.is-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* The date and the day's marks share one row, so marks take no height of
    their own and the bars under them stay level across the week; the day
    panel lists every mark. */
@@ -177,10 +177,10 @@
    planned, a ring struck through once missed. Shape carries the state, so the
    source's color stays the only color. */
 .month-item-dot { display: none; }
-.month-mark.is-planned { background: transparent; box-shadow: inset 0 0 0 1.5px var(--slot); }
+.month-mark:is(.is-planned, .is-missed), .month-item.is-planned::before { outline: 1.5px solid var(--slot); outline-offset: -1.5px; }
+.month-mark.is-planned, .month-item.is-planned::before { background: transparent; }
 .month-mark.is-missed {
   background: linear-gradient(135deg, transparent 44%, var(--slot) 44% 56%, transparent 56%);
-  box-shadow: inset 0 0 0 1.5px var(--slot);
   opacity: .6;
 }
 .month-span.is-start { margin-left: 0; border-left: 3px solid var(--slot); border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
@@ -190,7 +190,6 @@
    so no part of one draws past the cut, beyond the day's edge. */
 :is(.month-item > span, .month-span) :is(.token, .whole, .part) { display: contents; }
 .month-item::before { content: "" / ""; --mark-size: 6px; transform: translateY(-1px); }
-.month-item.is-planned::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--slot); }
 .month-item time { color: var(--muted); font-variant-numeric: tabular-nums; }
 .month-item:hover > span { color: var(--accent); }
 /* All day: a filled block in its color, as a one-day bar. */
@@ -217,7 +216,7 @@
   font-size: var(--text-sm);
   text-align: start;
 }
-.calendar-source::before { content: ""; flex: none; width: var(--check); height: var(--check); border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--slot); }
+.calendar-source::before { content: ""; flex: none; width: var(--check); height: var(--check); border-radius: var(--radius-sm); outline: 1.5px solid var(--slot); outline-offset: -1.5px; }
 .calendar-source[aria-pressed="true"]::before { background: var(--slot); }
 .calendar-source:hover { background: var(--bg-tint); }
 .calendar-source[aria-pressed="false"] { color: var(--muted); }
@@ -264,8 +263,8 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-4) 0 var(--space-5);
-  border: 1px solid transparent;
-  border-radius: 9px;
+  border-color: transparent;
+  border-radius: var(--radius);
 }
 .week-plan-day.is-planned { background: var(--surface-2); border-color: var(--line-2); }
 .week-plan-day.is-planned .week-plan-label { color: var(--ink); }
@@ -294,8 +293,6 @@
   place-items: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
   color: var(--muted);
   font-size: var(--text-xl);
   line-height: 1;
@@ -325,15 +322,15 @@
   padding: var(--space-2) var(--space-1) var(--space-2);
   text-align: center;
   vertical-align: top;
-  border: 1px solid transparent;
-  border-radius: 9px;
+  border-color: transparent;
+  border-radius: var(--radius);
 }
 .calendar-date { display: block; color: var(--muted); font-size: var(--text-2xs); line-height: 1; font-weight: 550; font-feature-settings: "tnum"; }
 .calendar-marks { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 10px; margin-top: var(--space-3); }
-.calendar-dot.is-missed { background: transparent; border: 1.5px solid var(--muted-2); }
+.calendar-dot.is-missed { background: transparent; border-color: var(--muted-2); }
 /* A day still ahead is drawn faintly: information, not a verdict. Drawn like a
    miss, every plan would look broken early in the week. */
-.calendar-dot.is-planned { background: transparent; border: 1.5px dashed var(--line-2); }
+.calendar-dot.is-planned { background: transparent; border-color: var(--line-2); }
 /* Trained days are the figure, everything else the ground. */
 .calendar-day.is-done { background: var(--surface-2); border-color: var(--line-2); }
 .calendar-day.is-done .calendar-date { color: var(--ink); font-weight: 650; }
@@ -377,7 +374,7 @@
    the row's gap. */
 .list-rows li:has(> .row-snippet) { row-gap: var(--space-1); }
 /* A match is part of the word it is found in, so it adds no room inside it, and reads in the ink of what it names. */
-.list-rows .row-snippet mark { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--ink); border-radius: 3px; font-weight: 600; }
+.list-rows .row-snippet mark { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--ink); border-radius: var(--radius-sm); font-weight: 600; }
 
 /* Prose list: sentences, where .list-rows carries chips.
    `.row-main` is a flex container, which is right for a row assembled from a

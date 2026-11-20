@@ -16,7 +16,6 @@
 /* The region is the container a table's columns are counted against: a table beside a chart is as narrow as one on a phone. min-width: 0, or a grid or flex ancestor sizes to the table. */
 .table-scroll { container: table-region / inline-size; --controls: none; margin-bottom: var(--space-8); min-width: 0; max-width: 100%; }
 .table-scroll .data-table { margin-bottom: 0; }
-.table-scroll > .data-table { border: 0; border-radius: 0; box-shadow: none; }
 /* A trailing margin inside a padded box is a band of empty card. */
 .table-scroll:last-child { margin-bottom: 0; }
 /* A chart's table is read whole in the chart's order, so it scrolls in its region rather than let a column go; its block axis is stated or it computes to `auto`. */
@@ -45,13 +44,12 @@
   --held-wraps: 0;
   --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-wide, 0) + 1) - 2 * var(--cell-pad));
   inline-size: 100%; border-collapse: collapse;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm);
 }
 /* Every cell is set at the top, where the row's toggle stands, and draws the row's rule beneath it. */
 .data-table th, .data-table td { padding: var(--row-pad) var(--cell-pad); text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: var(--text-sm); overflow-wrap: break-word; }
 .data-table thead th { background: var(--surface-2); font-size: var(--text-xs); line-height: var(--heading-line); color: var(--muted); font-weight: 600; }
 /* The heading sticks under the page's chrome while its rows scroll by; a pane's sticks to the pane's own top. Its fill is opaque, so the rows pass under it. */
-.data-table > thead > tr > th { position: sticky; z-index: 2; inset-block-start: calc(var(--site-header-height) + var(--page-nav-height)); border-bottom: 0; box-shadow: inset 0 -1px 0 var(--line); }
+.data-table > thead > tr > th { position: sticky; z-index: 2; inset-block-start: calc(var(--site-header-height) + var(--page-nav-height)); border-bottom: 0; --rules: inset 0 -1px 0 var(--line); }
 /* A row a link lands on, or a control the keyboard reaches, is scrolled to below the heading that sticks over the rows. */
 .data-table:has(> thead) > tbody :is(tr, a, button, input, select, textarea, summary, [tabindex]) {
   scroll-margin-block-start: calc(var(--page-nav-height) + var(--heading-height));
@@ -84,8 +82,7 @@
 /* A row or group a reader should weigh first (a row's `data-attention`, row_group attention=) is washed in the caution tone, and a group's words beside its name, which say why, are its ink. */
 .data-table tr[data-attention] > * { background: var(--tone-wash); }
 .data-table .row-group[data-attention] .count { color: var(--tone-ink); }
-/* Inside a card the card is the frame, so the table drops its own; a card that holds only a table leaves its top and foot to the table's cells, as its sides are (surfaces.css), so one inset stands between its edge and the words. */
-.card .data-table { border: 0; border-radius: 0; box-shadow: none; }
+/* A card that holds only a table leaves its top and foot to the table's cells, as its sides are (surfaces.css), so one inset stands between its edge and the words. */
 .card:not(.section-body):has(> .table-scroll:only-child) { padding-block: 0; }
 /* A totals row is ruled off and weighted, a conclusion about the rows above; a table is the only way a total lands under its column. */
 .data-table tfoot td {
@@ -143,7 +140,7 @@
 /* A filter is its button and the panel it opens in the top layer, placed against the button (its anchor, below): the scope keeps each panel to its own button. */
 .table-filter-menu { display: grid; anchor-scope: --filter; }
 /* A menu, a toggle and the sort are pressed by their labels, so they wear the Filter button's edge and stand at the control size; only the search wears a field's. The sort's select sits inside that box, so it takes no control height of its own. */
-.table-filter-menu > button, .table-toggle, .table-sort { box-sizing: border-box; block-size: var(--control-size); display: flex; justify-content: center; align-items: center; gap: var(--space-3); padding: 0 var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-sm); color: var(--ink); font-size: var(--text-sm); font-weight: 500; line-height: 1.45; cursor: pointer; transition: border-color .12s ease, background-color .12s ease; }
+.table-filter-menu > button, .table-toggle, .table-sort { box-sizing: border-box; block-size: var(--control-size); display: flex; justify-content: center; align-items: center; gap: var(--space-3); padding: 0 var(--space-4); background: var(--surface); --control-lift: var(--shadow-sm); color: var(--ink); font-size: var(--text-sm); font-weight: 500; line-height: 1.45; cursor: pointer; transition: border-color .12s ease, background-color .12s ease; }
 .table-filter-menu > button:hover, .table-toggle:hover, .table-sort:hover { border-color: var(--line-strong); background-color: var(--surface-2); }
 .table-filter-menu > button { anchor-name: --filter; font-family: inherit; }
 /* HQ's chevron, set in from the end by --chevron-inset: worn by every select and by a filter that opens to its choices, so it reads as a choice, not an action. Declared here, after the filter button's own padding and background, which it must follow in this layer. */
@@ -159,21 +156,21 @@
 /* Hung below its button from the button's left edge; one that would cross the screen's right edge hangs from the button's right edge instead, which the browser decides against the viewport the top layer places it in. */
 .table-filter-options { position-anchor: --filter; inset: auto; top: calc(anchor(bottom) + 4px); left: anchor(left); position-try-fallbacks: flip-inline; margin: 0; min-width: min(220px, anchor-size(width)); max-width: calc(100vw - 32px); max-height: 280px; gap: var(--space-1); }
 .table-filter-options:popover-open { display: grid; }
-.table-filter-options label { display: flex; gap: var(--space-4); align-items: center; padding: var(--space-3); border-radius: 4px; font-size: var(--text-sm); }
+.table-filter-options label { display: flex; gap: var(--space-4); align-items: center; padding: var(--space-3); border-radius: var(--radius-sm); font-size: var(--text-sm); }
 .table-filter-options label:hover { background: var(--surface-2); }
 .filter-count { min-width: 18px; padding: 1px var(--space-2); border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-ink); font-size: var(--text-2xs); text-align: center; }
-.table-sort select { --chevron-inset: 0px; block-size: auto; min-block-size: 0; border: 0; padding-inline-start: 0; background-color: transparent; color: inherit; }
-.table-selection { position: sticky; top: 8px; z-index: 15; display: flex; align-items: center; gap: var(--space-4); margin: 0 0 var(--space-4); padding: var(--space-4) var(--space-5); background: var(--ink); color: var(--surface); border-radius: var(--radius-sm); box-shadow: var(--shadow); }
+.table-sort select { --chevron-inset: 0px; block-size: auto; min-block-size: 0; padding-inline-start: 0; background-color: transparent; color: inherit; }
+.table-selection { position: sticky; top: 8px; z-index: 15; display: flex; align-items: center; gap: var(--space-4); margin: 0 0 var(--space-4); padding: var(--space-4) var(--space-5); background: var(--ink); color: var(--surface); border-color: var(--ink); }
 .table-selection[hidden] { display: none; }
 .table-selection strong { margin-right: auto; font-size: var(--text-sm); }
 main[aria-busy="true"] :is([data-table-results], [data-search-results]) { opacity: .55; transition: opacity 100ms ease; }
 
-.scope-chip { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); text-decoration: none; }
+.scope-chip { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); border-radius: var(--radius-pill); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); text-decoration: none; }
 a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-decoration: none; }
 /* The current choice in a switch: a heavier border, drawn inside so the chip
    keeps its size. The chip is inside its link, which holds the count a chip
    never does. */
-[aria-current] > .scope-chip { color: var(--ink); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+[aria-current] > .scope-chip { color: var(--ink); border-color: var(--accent); outline: 1px solid var(--accent); outline-offset: -2px; }
 /* A switch (`{% switch %}`): links to the same view in a row that wraps, the
    current one marked by its chip. */
 .switch { margin: 0 0 var(--stack-gap); }

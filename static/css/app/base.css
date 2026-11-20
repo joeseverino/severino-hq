@@ -47,7 +47,7 @@ p, li, dd, blockquote, figcaption { text-wrap: pretty; }
 a { color: var(--accent-2); text-decoration: none; }
 /* A button starts from none of the browser's paint: one with a class of its
    own draws itself, and the push button's look is `.btn`'s (page.css). */
-button { margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+button { margin: 0; padding: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
 /* Every control's focus ring, drawn inside its own box as Primer's is: a ring
    outside would be cut by any box above that clips what it holds (a band's
    rim, a day of the month, a scroller), and inside, nothing around it can. */
@@ -57,7 +57,7 @@ button { margin: 0; padding: 0; border: 0; background: none; color: inherit; fon
    underline instead, inside it all the same. */
 :where(p, small, .muted:not(.dot-list), .prose) a:where(:not([class]), .external-link):focus-visible {
   outline: none;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: var(--accent-tint);
   box-decoration-break: clone; -webkit-box-decoration-break: clone;
   text-decoration: underline 2px currentColor;
@@ -84,7 +84,7 @@ a:is(:hover, :focus-visible) { color: var(--accent); text-decoration: underline;
 /* A line a link draws never reaches a box of its own inside it, so whatever
    is inside a link draws the line its link draws. */
 a * { text-decoration: inherit; }
-code { font-family: var(--font-mono); font-size: .88em; background: var(--bg-tint); padding: 1px var(--space-2); border-radius: 4px; color: var(--ink-2); }
+code { font-family: var(--font-mono); font-size: .88em; background: var(--bg-tint); padding: 1px var(--space-2); border-radius: var(--radius-sm); color: var(--ink-2); }
 pre code { background: transparent; padding: 0; color: inherit; }
 /* An identifier (`|breakable`, or code): an address, a path, a key, an image.
    One that fits on its line moves to the next line whole; one longer than its
@@ -156,7 +156,6 @@ pre ::selection { color: var(--code-ink); }
   font-size: var(--text-2xs); font-weight: 600; white-space: nowrap;
   padding: var(--space-1) var(--space-4); border-radius: var(--radius-pill);
   background: var(--bg-tint); color: var(--muted);
-  border: 1px solid var(--line);
 }
 /* The header is one row at every width, and on the narrowest screens there is
    no room for this. Dropped rather than shrunk: the switch in the profile menu
@@ -177,12 +176,12 @@ pre ::selection { color: var(--code-ink); }
   display: inline-flex; align-items: center; gap: var(--space-4);
   min-block-size: var(--target-min);
   padding: var(--space-3) var(--space-7) var(--space-3) var(--space-6);
-  border: 1px solid var(--line); border-radius: var(--radius-pill);
-  background: var(--surface); color: var(--ink-2); box-shadow: var(--shadow);
+  border-radius: var(--radius-pill); --control-lift: var(--shadow);
+  background: var(--surface); color: var(--ink-2);
   font-size: var(--text-xs); font-weight: 600; white-space: nowrap;
 }
-.demo-about:hover { color: var(--accent); text-decoration: none; border-color: var(--accent-2); }
-.demo-about-dot { background: var(--accent-2); box-shadow: 0 0 0 3px var(--accent-tint); }
+.demo-about:hover { color: var(--accent); text-decoration: none; --control-line: var(--accent-2); }
+.demo-about-dot { background: var(--accent-2); outline: 3px solid var(--accent-tint); }
 
 /* ── Header ─────────────────────────────────────────────────────── */
 
@@ -192,7 +191,6 @@ pre ::selection { color: var(--code-ink); }
 .skip-link {
   position: absolute; left: 12px; top: -100px; z-index: 20;
   background: var(--surface); color: var(--ink);
-  border: 1px solid var(--line); border-radius: var(--radius);
   padding: var(--space-5) var(--space-7); font-size: var(--text-sm); font-weight: 600;
   transition: top .12s ease-out;
 }
@@ -207,18 +205,13 @@ pre ::selection { color: var(--code-ink); }
    their row closed (base.html, forms.css). So what the browser gives every
    popover (fixed, framed, painted Canvas) is undone while closed, and `overflow`
    stays visible, since the popover's own `overflow: auto` would make the row a
-   scroll container. Open, every popover is one floating panel; each says only
-   how it is laid out, and the select's picker, which no selector list can hold,
-   is drawn the same below. */
+   scroll container. Open, every popover is one floating panel, framed with
+   the select's picker in surfaces.css; each says only how it is laid out. */
 [popover]:not(:popover-open) {
   position: static; inset: auto; inline-size: auto; block-size: auto;
-  margin: 0; padding: 0; border: 0; background: none; color: inherit; overflow: visible;
+  margin: 0; padding: 0; background: none; color: inherit; overflow: visible;
 }
-:popover-open {
-  padding: var(--space-2); color: inherit;
-  border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--surface); box-shadow: var(--shadow-pop);
-}
+:popover-open { padding: var(--space-2); color: inherit; background: var(--surface); }
 .inline { display: inline-flex; align-items: center; gap: var(--space-3); }
 
 /* ── Layout ─────────────────────────────────────────────────────── */
@@ -234,8 +227,7 @@ input:where([type=text], [type=url], [type=number], [type=password], [type=email
 select,
 textarea {
   padding: var(--space-3) var(--space-5);
-  border: 1px solid var(--field-line);
-  border-radius: var(--radius-sm);
+  --control-line: var(--field-line);
   background: var(--surface);
   color: var(--ink);
   font: inherit;
@@ -269,10 +261,9 @@ select:not([multiple], [size]) { appearance: none; }
   select:not([multiple], [size])::picker-icon { display: none; }
   select:not([multiple], [size])::picker(select) {
     margin-block: var(--space-1); padding: var(--space-2);
-    border: 1px solid var(--line); border-radius: var(--radius);
-    background: var(--surface); color: var(--ink); box-shadow: var(--shadow-pop);
+    background: var(--surface); color: var(--ink);
   }
-  select:not([multiple], [size]) option { gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: 4px; white-space: normal; }
+  select:not([multiple], [size]) option { gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); white-space: normal; }
   select:not([multiple], [size]) option:is(:hover, :focus-visible) { outline: none; background: var(--bg-tint); }
   select:not([multiple], [size]) option:checked { font-weight: 600; }
 }
@@ -283,7 +274,7 @@ input::-webkit-date-and-time-value { text-align: start; }
 input[data-empty]:not(:focus)::-webkit-datetime-edit { -webkit-text-fill-color: transparent; }
 input:where([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=time], [type=datetime-local], [type=search], :not([type])):focus,
 select:focus,
-textarea:focus { border-color: var(--accent-2); }
+textarea:focus { --control-line: var(--accent-2); }
 
 /* Less motion, asked for: nothing moves, decided here once for every
    element, so no part writes its own. An important declaration in this

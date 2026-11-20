@@ -61,15 +61,13 @@ const readingMeasure = {
 // itself (a form's fields, a band's cells) says so in a disable comment.
 const autoGrid = /\brepeat\(\s*auto-(fit|fill)\b/i;
 const flowGrid = { "/./": [`/${autoGrid.source}/i`] };
-// A capsule's ends (a pill, a chip, a tag, a switch, a track) are as round as
-// its box is tall, which is --radius-pill. A corner rounder than the --radius
-// steps, written as a literal, is that fact written again.
-const capsuleRadius = {
-  "/^border(-[a-z]+)*-radius$/": ["/(?<![-\\w.])(\\d{3,}|[1-9]\\d)(\\.\\d+)?px|(?<![-\\w.])[\\d.]+r?em\\b/"],
-};
-// An open popover is one floating panel, drawn by base.css's `:popover-open`
-// rule, so no other rule casts the shadow of a panel over the page.
-const floatingShadow = { "box-shadow": ["/var\\(--shadow-pop\\)/"] };
+// Every edge, shadow and corner is drawn by a list in surfaces.css, so every
+// box rounds the same way; elsewhere a corner, or a property naming one, is a
+// step of the --radius scale (tokens.css).
+const frameProperties = ["border", "border-width", "border-style", "box-shadow"];
+const radiusStep = String.raw`(?:0|var\(--[\w-]*radius[\w-]*(?:,\s*var\(--radius(?:-sm|-pill)?\))?\))`;
+const radiusSteps = { "/^(border(-[a-z]+)*-radius|--[\\w-]*radius[\\w-]*)$/": [`/^${radiusStep}(?:\\s+${radiusStep}){0,3}$|^inherit$/`] };
+const allowedValues = (keys) => [{ "font-display": ["optional"], ...keys }, { message: (property, value) => (/radius/.test(property) ? `"${property}: ${value}" rounds a corner of its own: write var(--radius-sm), var(--radius) or var(--radius-pill)` : `Disallowed value "${value}" for property "${property}"`) }];
 // A file a rule fetches arrives after the page is drawn and moves what it
 // lands beside, past the moment the browser gate measures (`_DRAWN`). A face,
 // a @font-face's `src`, is the one fetch `document.fonts` reports, so the gate
@@ -79,21 +77,16 @@ const fetched = { "/^(?!src$)/": ["/\\burl\\(/i"] };
 // (cadence.css) alone, so a change to how it is clipped is made once.
 const readerClip = { "clip-path": ["/inset\\(\\s*50%\\s*\\)/"] };
 // One list holds every disallowed value, so its message tells an auto grid, a
-// cut and a measure from the rest. Every sheet's list holds the capsule's, the
-// fetch's and the reader's clip, and every sheet's but base.css's the floating
-// panel's.
-const disallowedValues = (keys, { floating = true } = {}) => [
-  { ...keys, ...flowGrid, ...capsuleRadius, ...fetched, ...readerClip, ...(floating ? floatingShadow : {}) },
+// cut and a measure from the rest. Every sheet's list holds the fetch's and
+// the reader's clip.
+const disallowedValues = (keys) => [
+  { ...keys, ...flowGrid, ...fetched, ...readerClip },
   {
     message: (property, value) =>
       matches(paletteTone, property) && new RegExp(paletteTone["/^.+$/"][0].slice(1, -1)).test(value)
         ? `"${property}: ${value}" picks a tone's palette: give the element its state's tone class (\`tone_class\`) and read the role it sets (--tone-mark, --tone-ink, --tone-bg, --tone-tint, --tone-wash, --tone-line)`
-        : matches(floatingShadow, property) && /--shadow-pop/.test(value)
-        ? `"${property}: ${value}" draws a floating panel of its own: an open popover is the panel base.css's \`:popover-open\` rule draws, so lay it out and leave its frame`
         : autoGrid.test(value)
         ? `"${property}: ${value}" lays out its own auto-fit grid: a run of sibling sections or cards is the layout part (\`{% layout %}\`, docs/Shared-UI.md); a part that lays out something else inside itself says so in a disable comment`
-        : matches(capsuleRadius, property)
-        ? `"${property}: ${value}" rounds a corner with a literal: a capsule's ends are var(--radius-pill), a card's corners var(--radius) or var(--radius-sm)`
         : matches(cutText, property)
         ? `"${property}: ${value}" cuts text outside cuts.css: move the whole rule to static/css/app/cuts.css, since a selector is styled in one sheet (test_a_selector_is_styled_in_one_place); a box that clips something other than text says why in a disable comment`
         : matches(readingMeasure, property)
@@ -137,7 +130,7 @@ const caseProperties = ["text-transform", "font-variant-caps"];
 const caseOutsideKicker = { "/^(?!\\.eyebrow$)/": caseProperties };
 const caseMessage = (selector, property) =>
   `"${property}" changes a text's case in "${selector}": capitals are the kicker's, so write the \`eyebrow\` class on what heads a group, or say it in sentence case`;
-const disallowedProperties = (properties) => [properties, { message: (property) => `Disallowed property "${property}"` }];
+const disallowedProperties = (properties) => [properties, { message: (property) => (frameProperties.includes(property) ? `"${property}" draws a frame outside surfaces.css: name the part in its list there` : `Disallowed property "${property}"`) }];
 // A reader who asks for less motion gets it from one rule in base.css, which
 // stops every transition and animation, so a part never writes its own. A
 // part that draws something else in place of a motion says so in a disable
@@ -178,12 +171,12 @@ const primitives = [
       "row-editor", "row-expand", "row-fold", "row-less", "row-more", "select-column", "stack-list", "strut", "table-clamp", "table-scroll", "tag", "token", "visually-hidden", "whole",
     ],
   },
-  { name: "button", classes: "btn", sheets: ["page"] },
+  { name: "button", classes: "btn", sheets: ["page", "surfaces"] },
   { name: "facts", classes: String.raw`facts-(?:list|band)|fact(?:-label|-value|-detail)?`, sheets: ["layout", "figures", "surfaces"] },
   { name: "field", classes: "field", sheets: ["forms"] },
   { name: "section", classes: String.raw`section(?:-[\w-]+)?`, sheets: ["layout", "page", "surfaces"] },
   { name: "stat", classes: String.raw`kpi(?:-[\w-]+)?`, sheets: ["cards", "surfaces"] },
-  { name: "notice", classes: String.raw`notice(?:-(?:attention|error|info|success|warning))?`, sheets: ["routes"] },
+  { name: "notice", classes: String.raw`notice(?:-(?:attention|error|info|success|warning))?`, sheets: ["routes", "surfaces"] },
   { name: "card", classes: "card", sheets: ["layout", "surfaces"] },
 ];
 const [table] = primitives;
@@ -292,7 +285,8 @@ export default {
     // each is shown only if it is ready for the first paint. Its file is
     // preloaded beside the stylesheet so it usually is (StyleContractTests).
     "at-rule-property-required-list": { "font-face": ["font-display"] },
-    "declaration-property-value-allowed-list": { "font-display": ["optional"] },
+    "declaration-property-value-allowed-list": allowedValues(radiusSteps),
+    "property-disallowed-list": disallowedProperties(frameProperties),
     "rule-selector-property-disallowed-list": [
       // The first key a selector matches decides, so a table's selector is
       // held to the kicker's rule too.
@@ -302,6 +296,11 @@ export default {
     "selector-disallowed-list": selectorRule([], () => childInIsMessage),
   },
   overrides: [
+    {
+      // The one sheet that draws a frame.
+      files: [sheet("surfaces")],
+      rules: { "property-disallowed-list": null },
+    },
     {
       // The table primitive sizes what a table holds.
       files: tablePrimitive,
@@ -325,7 +324,7 @@ export default {
       files: [sheet("base")],
       rules: {
         "media-feature-name-disallowed-list": mediaFeatures(["prefers-color-scheme"]),
-        "declaration-property-value-disallowed-list": disallowedValues(everySheet, { floating: false }),
+        "declaration-property-value-disallowed-list": disallowedValues(everySheet),
       },
     },
     {
@@ -337,6 +336,8 @@ export default {
         "function-disallowed-list": null,
         // The tokens set `color-scheme` from the operator's choice.
         "selector-attribute-name-disallowed-list": null,
+        // The tokens declare the --radius scale.
+        "declaration-property-value-allowed-list": allowedValues({}),
         "declaration-property-value-disallowed-list": disallowedValues({ ...literalFontSize, ...spacingLiteral, ...unspokenContent, ...cutText, ...readingMeasure }),
       },
     },
@@ -353,7 +354,7 @@ export default {
       files: [reference],
       rules: {
         "function-disallowed-list": [`/^(${colorFunctions}|color-mix)$/i`],
-        "property-disallowed-list": disallowedProperties([...caseProperties, "font-family"]),
+        "property-disallowed-list": disallowedProperties([...frameProperties, ...caseProperties, "font-family"]),
         "rule-selector-property-disallowed-list": null,
         // Unlayered, to outrank the layers the viewer declares after HQ's (its header).
         "rule-nesting-at-rule-required-list": null,

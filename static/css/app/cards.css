@@ -13,7 +13,7 @@
   padding: 1px var(--space-4); border-radius: var(--radius-pill); font-size: var(--text-2xs); font-weight: 500;
   background: var(--tone-bg);
   color: var(--tone-ink);
-  border: 1px solid var(--tone-line);
+  border-color: var(--tone-line);
   letter-spacing: .01em;
   /* A pill is one short state; it never wraps. */
   white-space: nowrap;
@@ -46,7 +46,7 @@
   z-index: 60;
   pointer-events: none;
   padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-sm);
+  border-color: var(--ink);
   background: var(--ink);
   color: var(--accent-ink);
   font-size: var(--text-xs);
@@ -54,7 +54,6 @@
   line-height: 1.45;
   /* One line for a chart mark; a line per fact where a tip has several. */
   white-space: pre;
-  box-shadow: var(--shadow);
   font-feature-settings: "tnum";
 }
 .bar-chart:hover rect:not(:hover) { opacity: .78; }
